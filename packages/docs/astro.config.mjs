@@ -4,10 +4,11 @@ import starlight from '@astrojs/starlight';
 import { defineConfig } from 'astro/config';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const docsSite = process.env.DOCS_SITE_URL ?? 'https://last-shot-labs.github.io/slingshot/';
+const docsSite = process.env.DOCS_SITE_URL ?? 'https://lastshotlabs.github.io/slingshot/';
 
 export default defineConfig({
   site: docsSite,
+  base: '/slingshot/',
   vite: {
     resolve: {
       alias: {

@@ -414,7 +414,7 @@ const projects = await db
   .where(eq(projectsTable.organizationId, tenantId));
 ```
 
-For hard row-level isolation (separate schemas or databases per tenant), see the platform config `multiTenancy` options in [slingshot-infra](/packages/slingshot-infra/).
+For hard row-level isolation (separate schemas or databases per tenant), see the platform config `multiTenancy` options in [slingshot-infra](/slingshot/packages/slingshot-infra/).
 
 ## Adding optional features
 
@@ -545,9 +545,9 @@ In-memory adapters reset on every restart. Never use them in production.
 
 ## Where to go next
 
-- [Auth Setup](/examples/with-auth/) — OAuth providers, MFA, magic links, passkeys
-- [slingshot-organizations](/packages/slingshot-organizations/) — full config reference, invite flows, org deletion
-- [slingshot-permissions](/packages/slingshot-permissions/) — permission registry API, role hierarchies, adapter contracts
-- [slingshot-search](/packages/slingshot-search/) — search adapter config, indexing hooks, query API
-- [slingshot-m2m](/packages/slingshot-m2m/) — machine-to-machine token scopes and rotation
-- [Config-Driven Domain](/examples/config-driven-domain/) — build org-scoped entity packages with zero boilerplate
+- [Auth Setup](/slingshot/examples/with-auth/) — OAuth providers, MFA, magic links, passkeys
+- [slingshot-organizations](/slingshot/packages/slingshot-organizations/) — full config reference, invite flows, org deletion
+- [slingshot-permissions](/slingshot/packages/slingshot-permissions/) — permission registry API, role hierarchies, adapter contracts
+- [slingshot-search](/slingshot/packages/slingshot-search/) — search adapter config, indexing hooks, query API
+- [slingshot-m2m](/slingshot/packages/slingshot-m2m/) — machine-to-machine token scopes and rotation
+- [Config-Driven Domain](/slingshot/examples/config-driven-domain/) — build org-scoped entity packages with zero boilerplate

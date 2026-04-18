@@ -122,7 +122,7 @@ Plugins can implement `teardown()` for graceful shutdown:
 
 ## Tracing visibility
 
-When [distributed tracing](/guides/observability/) is enabled, each plugin lifecycle call produces an individual OTel span named `slingshot.plugin.<name>.<phase>` (e.g. `slingshot.plugin.auth.setupMiddleware`). The spans include `slingshot.plugin.name`, `slingshot.plugin.phase`, and `slingshot.plugin.dependency_count` attributes, making slow plugins visible in your trace backend. Plugin authors can also create child spans within request handlers using `createChildSpan`.
+When [distributed tracing](/slingshot/guides/observability/) is enabled, each plugin lifecycle call produces an individual OTel span named `slingshot.plugin.<name>.<phase>` (e.g. `slingshot.plugin.auth.setupMiddleware`). The spans include `slingshot.plugin.name`, `slingshot.plugin.phase`, and `slingshot.plugin.dependency_count` attributes, making slow plugins visible in your trace backend. Plugin authors can also create child spans within request handlers using `createChildSpan`.
 
 ## Validation notes
 
@@ -132,6 +132,6 @@ Standalone-only plugins are also treated explicitly: a package that defines only
 
 ## See also
 
-- [Context and Registrar](/internals/context-registrar/) — what's inside `SlingshotContext`
-- [Plugin Interface](/authoring/plugin-interface/) — the full `SlingshotPlugin` contract
-- [Observability & Distributed Tracing](/guides/observability/) — bootstrap, request, and plugin lifecycle spans
+- [Context and Registrar](/slingshot/internals/context-registrar/) — what's inside `SlingshotContext`
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — the full `SlingshotPlugin` contract
+- [Observability & Distributed Tracing](/slingshot/guides/observability/) — bootstrap, request, and plugin lifecycle spans

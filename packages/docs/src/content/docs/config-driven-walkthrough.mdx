@@ -5,7 +5,7 @@ description: Define an entity once. Get routes, adapters, events, and permission
 
 The core Slingshot authoring pattern, end to end. The result is a domain package that works exactly like `slingshot-community` does internally.
 
-Entity and operation definitions are **JSON config objects** — the same data that lives in `app.manifest.json`. You can define entities entirely in JSON (see [Config-Driven Overview](/config-driven/)), or use the TypeScript builders below when you need compile-time type safety, IDE autocomplete, or access to the latest operations not yet in the manifest schema.
+Entity and operation definitions are **JSON config objects** — the same data that lives in `app.manifest.json`. You can define entities entirely in JSON (see [Config-Driven Overview](/slingshot/config-driven/)), or use the TypeScript builders below when you need compile-time type safety, IDE autocomplete, or access to the latest operations not yet in the manifest schema.
 
 The flow is linear: entity → operations → plugin → app.
 
@@ -329,8 +329,8 @@ When building with Slingshot, reach for tools in this order:
 
 ## Go deeper
 
-- [Operations Reference](/config-driven/operations/) — all 17 operation kinds with full config options
-- [Config-Driven Overview](/config-driven/) — the full system: app layer + infrastructure layer
-- [Config-Driven Infrastructure](/config-driven/infra/) — `definePlatform`, `defineInfra`, the deploy pipeline
-- [Config-Driven Domain Example](/examples/config-driven-domain/) — step-by-step from a blank file
-- [slingshot-entity](/packages/slingshot-entity/) — full API reference for `defineEntity`, `defineOperations`, `createEntityPlugin`
+- [Operations Reference](/slingshot/config-driven/operations/) — all 17 operation kinds with full config options
+- [Config-Driven Overview](/slingshot/config-driven/) — the full system: app layer + infrastructure layer
+- [Config-Driven Infrastructure](/slingshot/config-driven/infra/) — `definePlatform`, `defineInfra`, the deploy pipeline
+- [Config-Driven Domain Example](/slingshot/examples/config-driven-domain/) — step-by-step from a blank file
+- [slingshot-entity](/slingshot/packages/slingshot-entity/) — full API reference for `defineEntity`, `defineOperations`, `createEntityPlugin`

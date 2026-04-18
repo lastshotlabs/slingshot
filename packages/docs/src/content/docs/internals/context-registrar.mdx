@@ -108,7 +108,7 @@ export const CONTEXT_STORE_INFRA = Symbol.for('slingshot.contextStoreInfra');
 
 `createContextStoreInfra()` injects concrete implementations for both categories onto the infra object. Plugin packages never call the framework-internal symbols directly — registering an entity into the `EntityRegistry`, wiring its search sync, and resolving its search client all happen as side effects when the framework's implementation of `RESOLVE_ENTITY_FACTORIES` runs.
 
-See [Reflect Symbol DI](/internals/reflect-di/) for the full pattern, the rationale behind the split, and guidance on adding a new cross-cutting concern.
+See [Reflect Symbol DI](/slingshot/internals/reflect-di/) for the full pattern, the rationale behind the split, and guidance on adding a new cross-cutting concern.
 
 ## `pluginState` — cross-plugin runtime state
 
@@ -128,5 +128,5 @@ const authState = ctx.pluginState.get('slingshot-auth') as AuthPluginState;
 
 ## See also
 
-- [Plugin Lifecycle](/internals/plugin-lifecycle/) — when context is created and how plugins access it
-- [Reflect Symbol DI](/internals/reflect-di/) — deep dive on the symbol injection pattern
+- [Plugin Lifecycle](/slingshot/internals/plugin-lifecycle/) — when context is created and how plugins access it
+- [Reflect Symbol DI](/slingshot/internals/reflect-di/) — deep dive on the symbol injection pattern

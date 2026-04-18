@@ -261,12 +261,12 @@ const source = new EventSource(`/events?token=${jwt}&events=post.created,post.up
 Slingshot plugins can self-wire WebSocket endpoints during `setupPost`. The `slingshot-community` and
 `slingshot-game-engine` packages both use this pattern — they register incoming handlers, room
 routing, and presence tracking on a named WS endpoint declared in your manifest or server config.
-See the [WebSockets guide](/guides/websockets/) for the entity channel config and self-wiring
+See the [WebSockets guide](/slingshot/guides/websockets/) for the entity channel config and self-wiring
 patterns these plugins follow.
 
 ## See also
 
-- [WebSockets guide](/guides/websockets/) — subscription guards, heartbeat config, connection lifecycle
-- [Realtime with SSE](/examples/realtime-sse/) — complete working example
-- [Custom Event Bus](/examples/custom-event-bus/) — BullMQ for multi-instance event delivery
-- [Horizontal Scaling](/guides/horizontal-scaling/) — Redis transport, sticky sessions, connection pooling
+- [WebSockets guide](/slingshot/guides/websockets/) — subscription guards, heartbeat config, connection lifecycle
+- [Realtime with SSE](/slingshot/examples/realtime-sse/) — complete working example
+- [Custom Event Bus](/slingshot/examples/custom-event-bus/) — BullMQ for multi-instance event delivery
+- [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) — Redis transport, sticky sessions, connection pooling

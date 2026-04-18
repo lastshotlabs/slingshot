@@ -162,7 +162,7 @@ Infrastructure config is the same: plain JSON-shaped objects frozen at definitio
 }
 ```
 
-Today this is authored as TypeScript (`defineInfra()`, `definePlatform()`) with the same frozen-object approach. `slingshot deploy --stage prod` reads the config and generates Dockerfiles, cloud configs, CI workflows, and provisions real infrastructure. See [Config-Driven Infrastructure](/config-driven/infra/).
+Today this is authored as TypeScript (`defineInfra()`, `definePlatform()`) with the same frozen-object approach. `slingshot deploy --stage prod` reads the config and generates Dockerfiles, cloud configs, CI workflows, and provisions real infrastructure. See [Config-Driven Infrastructure](/slingshot/config-driven/infra/).
 
 ---
 
@@ -182,8 +182,8 @@ All three layers are data. All three are consumed by the same CLI. All three are
 
 ## Where to go next
 
-- [Operations Reference](/config-driven/operations/) — every operation kind, its JSON config shape, and examples
-- [Config-Driven Walkthrough](/config-driven-walkthrough/) — entity → operations → plugin → app, using the TypeScript builders
-- [Config-Driven Infrastructure](/config-driven/infra/) — `definePlatform`, `defineInfra`, and the deploy pipeline
-- [Manifest vs Code](/manifest-vs-code/) — current manifest capabilities and the handlers file pattern
-- [slingshot-entity](/packages/slingshot-entity/) — `defineEntity`, `defineOperations`, `createEntityPlugin` API reference
+- [Operations Reference](/slingshot/config-driven/operations/) — every operation kind, its JSON config shape, and examples
+- [Config-Driven Walkthrough](/slingshot/config-driven-walkthrough/) — entity → operations → plugin → app, using the TypeScript builders
+- [Config-Driven Infrastructure](/slingshot/config-driven/infra/) — `definePlatform`, `defineInfra`, and the deploy pipeline
+- [Manifest vs Code](/slingshot/manifest-vs-code/) — current manifest capabilities and the handlers file pattern
+- [slingshot-entity](/slingshot/packages/slingshot-entity/) — `defineEntity`, `defineOperations`, `createEntityPlugin` API reference

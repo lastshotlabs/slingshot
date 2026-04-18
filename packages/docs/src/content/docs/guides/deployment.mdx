@@ -7,7 +7,7 @@ import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
 
 Describe infrastructure in TypeScript. The CLI generates Dockerfiles, cloud configs, and GitHub Actions workflows — then runs the deploy. `slingshot-infra` owns the infrastructure config. The `slingshot` CLI owns the build, push, and deploy.
 
-This page is a step-by-step deploy guide. For a deeper walkthrough of the config-driven infrastructure design — provisioners, the registry, multi-stage resource management, EC2 vs ECS — see [Config-Driven Infrastructure](/config-driven/infra/).
+This page is a step-by-step deploy guide. For a deeper walkthrough of the config-driven infrastructure design — provisioners, the registry, multi-stage resource management, EC2 vs ECS — see [Config-Driven Infrastructure](/slingshot/config-driven/infra/).
 
 ## Install
 
@@ -353,7 +353,7 @@ Verify all required secrets are present:
 slingshot secrets check --stage prod
 ```
 
-See [Secrets](/guides/secrets/) for full documentation.
+See [Secrets](/slingshot/guides/secrets/) for full documentation.
 
 ---
 
@@ -369,7 +369,7 @@ Configure `platform.dns` and Slingshot updates DNS records automatically after e
 
 ## See also
 
-- [Config-Driven Infrastructure](/config-driven/infra/) — deep walkthrough of `definePlatform`, `defineInfra`, provisioners, registry, and the deploy pipeline
-- [slingshot-infra](/packages/slingshot-infra/) — full platform and infra config reference
-- [Horizontal Scaling](/guides/horizontal-scaling/) — multi-instance deployments with shared state
-- [Secrets](/guides/secrets/) — managing secrets across environments
+- [Config-Driven Infrastructure](/slingshot/config-driven/infra/) — deep walkthrough of `definePlatform`, `defineInfra`, provisioners, registry, and the deploy pipeline
+- [slingshot-infra](/slingshot/packages/slingshot-infra/) — full platform and infra config reference
+- [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) — multi-instance deployments with shared state
+- [Secrets](/slingshot/guides/secrets/) — managing secrets across environments

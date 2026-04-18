@@ -210,7 +210,7 @@ No extra config needed. They read `c.get('tenantId')` from the request context.
 <Aside type="tip" title="dataScope vs policy">
   `dataScope` handles tenant isolation (row-level filtering by `tenantId` or `authorId`). For
   cross-consumer authorization — e.g., polls checking room membership via the chat plugin — use
-  [`permission.policy`](/packages/slingshot-entity/permission-policy/) dispatch instead.
+  [`permission.policy`](/slingshot/packages/slingshot-entity/permission-policy/) dispatch instead.
 </Aside>
 
 ## Auth in multi-tenant apps
@@ -245,7 +245,7 @@ Users switch organizations by changing the `X-Organization-ID` header. Their aut
 
 ## See also
 
-- [Auth Setup](/examples/with-auth/) — session and role configuration
-- [Forum App](/examples/forum-app/) — community scoped to containers
-- [SaaS Foundations](/examples/saas-foundations/) — organizations as tenant boundaries
-- [Horizontal Scaling](/guides/horizontal-scaling/) — sharing tenant data across instances
+- [Auth Setup](/slingshot/examples/with-auth/) — session and role configuration
+- [Forum App](/slingshot/examples/forum-app/) — community scoped to containers
+- [SaaS Foundations](/slingshot/examples/saas-foundations/) — organizations as tenant boundaries
+- [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) — sharing tenant data across instances

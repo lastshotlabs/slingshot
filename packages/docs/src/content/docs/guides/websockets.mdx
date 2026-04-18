@@ -5,7 +5,7 @@ description: Bidirectional realtime connections — rooms, pub/sub, auth, and sc
 
 import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
 
-Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets are bidirectional — clients send messages, not just receive them. Use them for chat, collaborative editing, live cursors, and anything that needs low-latency two-way communication. For one-way event streams, use [SSE](/examples/realtime-sse/) instead.
+Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets are bidirectional — clients send messages, not just receive them. Use them for chat, collaborative editing, live cursors, and anything that needs low-latency two-way communication. For one-way event streams, use [SSE](/slingshot/examples/realtime-sse/) instead.
 
 ## Define a WebSocket endpoint
 
@@ -255,7 +255,7 @@ Bun's pub/sub is in-process. Multiple instances require a shared WebSocket trans
 
 With a Redis transport, `ws.publish()` broadcasts across all instances - clients on any instance receive messages published on any other.
 
-See [Horizontal Scaling](/guides/horizontal-scaling/) for the full multi-instance setup.
+See [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) for the full multi-instance setup.
 
 <Aside>
   `websocketScalingAudit` in `slingshot-infra` checks whether your WebSocket config needs a
@@ -397,6 +397,6 @@ from that same endpoint map.
 
 ## See also
 
-- [Realtime with SSE](/examples/realtime-sse/) — one-way event streams, simpler client setup
-- [Horizontal Scaling](/guides/horizontal-scaling/) — multi-instance WebSocket scaling
-- [Custom Event Bus](/examples/custom-event-bus/) - event-bus options for SSE and plugin events
+- [Realtime with SSE](/slingshot/examples/realtime-sse/) — one-way event streams, simpler client setup
+- [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) — multi-instance WebSocket scaling
+- [Custom Event Bus](/slingshot/examples/custom-event-bus/) - event-bus options for SSE and plugin events

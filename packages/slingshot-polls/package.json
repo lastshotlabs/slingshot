@@ -2,6 +2,7 @@
   "name": "@lastshotlabs/slingshot-polls",
   "version": "0.1.0",
   "description": "Multiple-choice polls attachable to any user content for slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -15,19 +16,24 @@
       "import": "./dist/src/testing.js"
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-polls"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src/ --cache",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
     "prepublishOnly": "bun run build"
-  },
-  "files": [
-    "dist",
-    "src"
-  ],
-  "publishConfig": {
-    "access": "public"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0",

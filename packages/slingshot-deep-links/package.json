@@ -2,6 +2,7 @@
   "name": "@lastshotlabs/slingshot-deep-links",
   "version": "0.1.0",
   "description": "Universal links, Android app links, and fallback redirects for slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -16,19 +17,24 @@
       "import": "./dist/src/testing.js"
     }
   },
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache",
-    "prepublishOnly": "bun run build"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-deep-links"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src",
     "schema.json"
   ],
-  "publishConfig": {
-    "access": "public"
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0",

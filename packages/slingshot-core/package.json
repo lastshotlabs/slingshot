@@ -1,6 +1,8 @@
 {
   "name": "@lastshotlabs/slingshot-core",
   "version": "0.1.0",
+  "description": "Core plugin contract, context, event bus, and shared types for Slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -19,18 +21,23 @@
       "import": "./dist/src/content.public.js"
     }
   },
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache",
-    "prepublishOnly": "bun run build"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-core"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src"
   ],
-  "publishConfig": {
-    "access": "public"
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@hono/zod-openapi": ">=0.18",

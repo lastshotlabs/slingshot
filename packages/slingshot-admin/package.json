@@ -2,6 +2,7 @@
   "name": "@lastshotlabs/slingshot-admin",
   "version": "0.1.1",
   "description": "Admin plugin for Slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -15,18 +16,23 @@
       "import": "./dist/src/testing.js"
     }
   },
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache",
-    "prepublishOnly": "bun run build"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-admin"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src"
   ],
-  "publishConfig": {
-    "access": "public"
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0"

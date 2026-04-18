@@ -97,6 +97,8 @@
     "lint:deps": "depcruise packages/ src/ --config .dependency-cruiser.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "hardening:core": "bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run build && bun run test",
+    "hardening:full": "bun run hardening:core && bun run lint:deps && bun run test:docker && bun run test:e2e && bun run test:coverage:check && bun run docs:ci",
     "docs:sync": "bun packages/docs/sync-workspace-docs.ts",
     "docs:api": "bun packages/docs/generate-api.ts",
     "docs:typecheck": "bun packages/docs/typecheck-docs.ts",

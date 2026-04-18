@@ -1,6 +1,8 @@
 {
   "name": "@lastshotlabs/slingshot-mail",
   "version": "0.0.2",
+  "description": "Transactional mail with provider drivers, queues, and renderer integration for Slingshot",
+  "license": "MIT",
   "type": "module",
   "main": "./dist/src/index.js",
   "exports": {
@@ -10,18 +12,23 @@
       "import": "./dist/src/index.js"
     }
   },
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache",
-    "prepublishOnly": "bun run build"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-mail"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src"
   ],
-  "publishConfig": {
-    "access": "public"
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0"

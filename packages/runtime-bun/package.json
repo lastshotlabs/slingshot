@@ -1,6 +1,8 @@
 {
   "name": "@slingshot/runtime-bun",
   "version": "0.0.1",
+  "description": "Bun-native runtime implementation for Slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -9,10 +11,23 @@
       "import": "./dist/src/index.js"
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/runtime-bun"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsc --noEmit",
     "lint": "eslint src/ --cache",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "tsc -b tsconfig.build.json"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"

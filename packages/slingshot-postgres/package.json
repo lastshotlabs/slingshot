@@ -1,6 +1,8 @@
 {
   "name": "@lastshotlabs/slingshot-postgres",
   "version": "0.1.1",
+  "description": "Postgres adapter and connection helper for Slingshot auth",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -14,6 +16,14 @@
       "types": "./dist/src/testing.d.ts"
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-postgres"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist",
     "src",
@@ -24,9 +34,6 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ --cache",
     "prepublishOnly": "bun run build"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0"

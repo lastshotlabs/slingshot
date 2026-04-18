@@ -2,6 +2,7 @@
   "name": "@lastshotlabs/slingshot-scim",
   "version": "0.1.0",
   "description": "SCIM 2.0 user provisioning plugin for Slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -10,18 +11,23 @@
       "import": "./dist/src/index.js"
     }
   },
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "lint": "eslint src/ --cache",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run build"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-scim"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src"
   ],
-  "publishConfig": {
-    "access": "public"
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src/ --cache",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0"

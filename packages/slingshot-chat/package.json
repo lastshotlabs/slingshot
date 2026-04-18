@@ -1,6 +1,8 @@
 {
   "name": "@lastshotlabs/slingshot-chat",
   "version": "0.1.0",
+  "description": "Real-time chat with rooms, messages, membership, and encryption for Slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -14,18 +16,23 @@
       "import": "./dist/src/testing/index.js"
     }
   },
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache",
-    "prepublishOnly": "bun run build"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-chat"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src"
   ],
-  "publishConfig": {
-    "access": "public"
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0",

@@ -1,6 +1,8 @@
 {
   "name": "@lastshotlabs/slingshot-assets",
   "version": "0.1.0",
+  "description": "Entity-backed asset storage, upload metadata, and storage adapter resolution for Slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -14,18 +16,23 @@
       "import": "./dist/src/testing/index.js"
     }
   },
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache",
-    "prepublishOnly": "bun run build"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-assets"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src"
   ],
-  "publishConfig": {
-    "access": "public"
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0",

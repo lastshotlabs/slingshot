@@ -1,12 +1,22 @@
 {
   "name": "@lastshotlabs/slingshot-bullmq",
   "version": "0.1.1",
+  "description": "Durable BullMQ-backed event bus adapter for Slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
       "import": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-bullmq"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
@@ -19,9 +29,6 @@
     "lint": "eslint src/ --cache",
     "test": "cd ../.. && bun test tests/unit/bullmq-adapter.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts",
     "test:redis": "cd ../.. && BULLMQ_INTEGRATION_REDIS_URL=redis://localhost:6380 bun test tests/docker/bullmq-adapter-redis-integration.test.ts"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0"

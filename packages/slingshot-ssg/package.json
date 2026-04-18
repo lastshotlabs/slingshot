@@ -1,7 +1,12 @@
 {
   "name": "@lastshotlabs/slingshot-ssg",
   "version": "0.1.0",
+  "description": "Static site generation helpers built on Slingshot SSR",
+  "license": "MIT",
   "type": "module",
+  "bin": {
+    "slingshot-ssg": "./src/cli.ts"
+  },
   "exports": {
     ".": {
       "bun": "./src/index.ts",
@@ -9,21 +14,23 @@
       "import": "./dist/src/index.js"
     }
   },
-  "bin": {
-    "slingshot-ssg": "./src/cli.ts"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-ssg"
   },
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache",
-    "prepublishOnly": "bun run build"
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src"
   ],
-  "publishConfig": {
-    "access": "public"
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-ssr": "^0.1.0"

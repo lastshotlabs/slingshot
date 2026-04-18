@@ -2,6 +2,7 @@
   "name": "@lastshotlabs/slingshot-notifications",
   "version": "0.1.0",
   "description": "Shared notification storage, scheduling, and delivery events for slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -20,19 +21,24 @@
       "import": "./dist/src/rateLimit/index.js"
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-notifications"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
     "lint": "eslint src/ --cache",
     "prepublishOnly": "bun run build"
-  },
-  "files": [
-    "dist",
-    "src"
-  ],
-  "publishConfig": {
-    "access": "public"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0",

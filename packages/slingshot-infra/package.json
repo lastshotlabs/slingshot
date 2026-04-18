@@ -2,6 +2,7 @@
   "name": "@lastshotlabs/slingshot-infra",
   "version": "0.1.0",
   "description": "Infrastructure configuration, deploy planning, and platform tooling for Slingshot apps",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -9,6 +10,14 @@
       "import": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-infra"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
@@ -19,9 +28,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "prepublishOnly": "bun run build",
     "lint": "eslint src/ --cache"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "^0.1.0",

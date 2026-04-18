@@ -1,6 +1,8 @@
 {
   "name": "@lastshotlabs/slingshot-entity",
   "version": "0.1.0",
+  "description": "Config-driven entity CRUD, code generation, and search for Slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -14,15 +16,24 @@
       "import": "./dist/src/routing/index.js"
     }
   },
-  "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-entity"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src"
   ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "tsc -b tsconfig.build.json"
+  },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"
   },
@@ -30,8 +41,5 @@
     "@hono/zod-openapi": ">=0.18",
     "hono": ">=4.12.12 <5",
     "zod": ">=4.0 <5"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

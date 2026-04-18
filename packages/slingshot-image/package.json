@@ -1,6 +1,8 @@
 {
   "name": "@lastshotlabs/slingshot-image",
   "version": "0.1.0",
+  "description": "On-the-fly image optimization and transform pipeline for Slingshot",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -9,18 +11,23 @@
       "import": "./dist/src/index.js"
     }
   },
-  "scripts": {
-    "build": "tsc -b tsconfig.build.json",
-    "lint": "eslint src/ --cache",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run build"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-image"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "files": [
     "dist",
     "src"
   ],
-  "publishConfig": {
-    "access": "public"
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "lint": "eslint src/ --cache",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
   },
   "optionalDependencies": {
     "sharp": ">=0.33"

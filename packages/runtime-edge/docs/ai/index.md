@@ -1,13 +1,13 @@
 ---
 title: AI Draft
-description: AI-assisted starting point for @lastshotlabs/runtime-edge
+description: AI-assisted starting point for @lastshotlabs/slingshot-runtime-edge
 ---
 
 > AI-assisted draft. Use this page for fast orientation, then harden important details in the human guide.
 
 ## Summary
 
-@lastshotlabs/runtime-edge is the runtime package in the Slingshot workspace.
+@lastshotlabs/slingshot-runtime-edge is the runtime package in the Slingshot workspace.
 
 Package documentation for this Slingshot workspace module.
 

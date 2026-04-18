@@ -25,13 +25,13 @@ Everything else - routing, plugins, database adapters, event bus, auth - is runt
 ## Bun runtime
 
 ```bash
-bun add @lastshotlabs/runtime-bun
+bun add @lastshotlabs/slingshot-runtime-bun
 ```
 
 No extra dependencies. Bun includes SQLite, password hashing, HTTP serving, and file I/O built-in.
 
 ```typescript
-import { bunRuntime } from '@lastshotlabs/runtime-bun';
+import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
 import { createServer } from '@lastshotlabs/slingshot';
 
 await createServer({
@@ -44,14 +44,14 @@ await createServer({
 ## Node.js runtime
 
 ```bash
-bun add @lastshotlabs/runtime-node
+bun add @lastshotlabs/slingshot-runtime-node
 bun add better-sqlite3 argon2 @hono/node-server ws fast-glob
 ```
 
 <Aside>`ws` adds WebSocket support on Node. `fast-glob` handles route discovery.</Aside>
 
 ```typescript
-import { nodeRuntime } from '@lastshotlabs/runtime-node';
+import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 import { createServer } from '@lastshotlabs/slingshot';
 
 await createServer({
@@ -64,14 +64,14 @@ await createServer({
 ## Edge runtime
 
 ```bash
-bun add @lastshotlabs/runtime-edge
+bun add @lastshotlabs/slingshot-runtime-edge
 ```
 
-Use `@lastshotlabs/runtime-edge` when Slingshot is hosted inside a worker platform such as Cloudflare
+Use `@lastshotlabs/slingshot-runtime-edge` when Slingshot is hosted inside a worker platform such as Cloudflare
 Workers or Deno Deploy.
 
 ```typescript
-import { edgeRuntime } from '@lastshotlabs/runtime-edge';
+import { edgeRuntime } from '@lastshotlabs/slingshot-runtime-edge';
 
 const runtime = edgeRuntime();
 ```
@@ -85,7 +85,7 @@ The edge runtime intentionally omits several host features:
 - `supportsAsyncLocalStorage: false`
 
 If you need bundled file reads, pass `fileStore`. If you need ISR in a multi-instance worker
-deployment, pair `slingshot-ssr` with `createKvIsrCache()` from `@lastshotlabs/runtime-edge/kv`.
+deployment, pair `slingshot-ssr` with `createKvIsrCache()` from `@lastshotlabs/slingshot-runtime-edge/kv`.
 
 ## Choosing a runtime
 
@@ -166,8 +166,8 @@ a listener, while Bun and Node still consume the exact same endpoint draft when 
 Switching from Bun to Node requires one line:
 
 ```typescript
-import { bunRuntime } from '@lastshotlabs/runtime-bun';
-import { nodeRuntime } from '@lastshotlabs/runtime-node';
+import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
+import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
 const runtime = bunRuntime();
 const migratedRuntime = nodeRuntime();
@@ -177,7 +177,7 @@ Switching from Bun or Node to a worker host typically means replacing the runtim
 server bootstrap into a `fetch` entry module:
 
 ```typescript
-import { edgeRuntime } from '@lastshotlabs/runtime-edge';
+import { edgeRuntime } from '@lastshotlabs/slingshot-runtime-edge';
 
 const runtime = edgeRuntime();
 ```

@@ -1,7 +1,8 @@
 import { AUTH_RUNTIME_KEY } from '@auth/runtime';
 import type { AuthRuntimeContext } from '@auth/runtime';
 import { describe, expect, mock, test } from 'bun:test';
-import { type SlingshotContext, createRouter } from '@lastshotlabs/slingshot-core';
+import { attachContext, createRouter } from '@lastshotlabs/slingshot-core';
+import type { SlingshotContext } from '@lastshotlabs/slingshot-core';
 import { createJobsRouter } from '../../src/framework/routes/jobs';
 
 interface FakeJob {
@@ -97,10 +98,7 @@ function makeApp(
   } as unknown as SlingshotContext;
 
   const app = createRouter();
-  app.use('*', async (c, next) => {
-    c.set('slingshotCtx', slingshotCtx);
-    await next();
-  });
+  attachContext(app, slingshotCtx);
   app.route('/', createJobsRouter(config, queueFactory as any, false));
   return { app, requireRoleSpy };
 }

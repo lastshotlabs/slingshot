@@ -555,7 +555,7 @@ function createNodeGlob(): RuntimeGlob {
  *
  * @remarks
  * This runtime is intended for use in Node.js environments only. For Bun, use
- * `bunRuntime()` from `@lastshotlabs/runtime-bun`.
+ * `bunRuntime()` from `@lastshotlabs/slingshot-runtime-bun`.
  *
  * Peer dependency failures (missing `argon2`, `better-sqlite3`, `@hono/node-server`,
  * or `fast-glob`) surface at **first use** of the respective capability, not when
@@ -565,7 +565,7 @@ function createNodeGlob(): RuntimeGlob {
  *
  * @example
  * ```ts
- * import { nodeRuntime } from '@lastshotlabs/runtime-node';
+ * import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
  * import { createServer } from '@lastshotlabs/slingshot-core';
  *
  * const server = await createServer({ runtime: nodeRuntime(), ...config });

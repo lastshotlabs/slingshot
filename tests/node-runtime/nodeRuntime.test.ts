@@ -1,6 +1,6 @@
 /**
  * Node.js runtime adapter verification tests.
- * Runs under vitest (Node.js process) to prove @lastshotlabs/runtime-node
+ * Runs under vitest (Node.js process) to prove @lastshotlabs/slingshot-runtime-node
  * works correctly against real implementations (better-sqlite3, argon2,
  * fast-glob, @hono/node-server, ws).
  */

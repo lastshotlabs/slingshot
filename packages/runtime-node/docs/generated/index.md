@@ -1,13 +1,13 @@
 ---
 title: Generated
-description: Auto-generated workspace facts for @lastshotlabs/runtime-node
+description: Auto-generated workspace facts for @lastshotlabs/slingshot-runtime-node
 ---
 
 > Generated from package metadata by `bun run docs:sync`. Re-run the command to refresh this page.
 
 ## Package Facts
 
-- Package: `@lastshotlabs/runtime-node`
+- Package: `@lastshotlabs/slingshot-runtime-node`
 - Version: `0.0.1`
 - Kind: Workspace package
 - Role: runtime package
@@ -18,7 +18,7 @@ description: Auto-generated workspace facts for @lastshotlabs/runtime-node
 ## Install
 
 ```bash
-bun add @lastshotlabs/runtime-node
+bun add @lastshotlabs/slingshot-runtime-node
 ```
 
 ## Export Paths

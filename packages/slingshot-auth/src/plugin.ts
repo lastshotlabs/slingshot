@@ -106,6 +106,8 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
   // detect failure and return early rather than deadlocking on bootstrapReady.
   // The .catch(() => {}) suppresses the unhandled-rejection warning in cases
   // where setupMiddleware throws before teardown() attaches its own catch.
+  let bootstrapStarted = false;
+  let bootstrapCompleted = false;
   let resolveBootstrap!: (result: BootstrapResult) => void;
   let rejectBootstrap!: (err: unknown) => void;
   const bootstrapReady = new Promise<BootstrapResult>((resolve, reject) => {
@@ -118,6 +120,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
     name: 'slingshot-auth',
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+      bootstrapStarted = true;
       try {
         const registrar = frameworkConfig.registrar;
 
@@ -135,6 +138,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
           password: resolvedPassword,
           sqlite: frameworkConfig.sqlite ?? config.runtime?.sqlite,
         });
+        bootstrapCompleted = true;
         resolveBootstrap(result);
 
         const ctx = getContextOrNull(app);
@@ -291,7 +295,9 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
 
         // Config is already deep-frozen by createAuthResolvedConfig in bootstrap
       } catch (err) {
-        rejectBootstrap(err);
+        if (!bootstrapCompleted) {
+          rejectBootstrap(err);
+        }
         throw err;
       }
     },
@@ -566,6 +572,9 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
     },
 
     async teardown() {
+      if (!bootstrapStarted) {
+        return;
+      }
       let result: BootstrapResult;
       try {
         result = await bootstrapReady;

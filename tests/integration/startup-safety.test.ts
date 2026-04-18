@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { createTestApp } from '../setup';
 
 // ---------------------------------------------------------------------------
@@ -7,6 +7,18 @@ import { createTestApp } from '../setup';
 // ---------------------------------------------------------------------------
 
 const baseRoutes = import.meta.dir + '/../fixtures/routes';
+const createdApps: Array<{ destroy(): Promise<void> }> = [];
+
+afterEach(async () => {
+  for (const ctx of createdApps.splice(0)) {
+    await ctx.destroy().catch(() => {});
+  }
+});
+
+function trackApp<T>(app: T): T {
+  createdApps.push((app as T & { ctx: { destroy(): Promise<void> } }).ctx);
+  return app;
+}
 
 // ---------------------------------------------------------------------------
 // emailVerification + non-email primaryField
@@ -120,8 +132,8 @@ describe('startup safety — OAuth allowedRedirectUrls', () => {
   // The plugin resolves successfully regardless of oauth config at app startup.
 
   it('does not throw when postRedirect is in allowedRedirectUrls', async () => {
-    await expect(
-      createTestApp(
+    const app = trackApp(
+      await createTestApp(
         {},
         {
           auth: {
@@ -133,12 +145,13 @@ describe('startup safety — OAuth allowedRedirectUrls', () => {
           },
         },
       ),
-    ).resolves.toBeDefined();
+    );
+    expect(app).toBeDefined();
   });
 
   it('does not throw for relative postRedirect (always allowed)', async () => {
-    await expect(
-      createTestApp(
+    const app = trackApp(
+      await createTestApp(
         {},
         {
           auth: {
@@ -150,7 +163,8 @@ describe('startup safety — OAuth allowedRedirectUrls', () => {
           },
         },
       ),
-    ).resolves.toBeDefined();
+    );
+    expect(app).toBeDefined();
   });
 });
 
@@ -173,7 +187,8 @@ describe('startup safety — tenancy in production', () => {
 
   it('does not throw in development when tenancy has no onResolve (warns only)', async () => {
     // NODE_ENV is "development" in tests (set by bunfig preload)
-    await expect(createTestApp({ tenancy: { resolution: 'header' } })).resolves.toBeDefined();
+    const app = trackApp(await createTestApp({ tenancy: { resolution: 'header' } }));
+    expect(app).toBeDefined();
   });
 });
 
@@ -190,9 +205,8 @@ describe('startup safety — CORS + CSRF', () => {
     process.env.NODE_ENV = 'production';
     try {
       // Should warn but not throw
-      const app = await createTestApp(
-        { security: { cors: '*' } },
-        { security: { csrf: { enabled: true } } },
+      const app = trackApp(
+        await createTestApp({ security: { cors: '*' } }, { security: { csrf: { enabled: true } } }),
       );
       expect(app).toBeDefined();
     } finally {
@@ -204,9 +218,8 @@ describe('startup safety — CORS + CSRF', () => {
     const orig = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';
     try {
-      const app = await createTestApp(
-        { security: { cors: '*' } },
-        { security: { csrf: { enabled: true } } },
+      const app = trackApp(
+        await createTestApp({ security: { cors: '*' } }, { security: { csrf: { enabled: true } } }),
       );
       expect(app).toBeDefined();
     } finally {
@@ -215,9 +228,11 @@ describe('startup safety — CORS + CSRF', () => {
   });
 
   it('does not throw when csrf.enabled and cors is specific origin', async () => {
-    const app = await createTestApp(
-      { security: { cors: ['https://example.com'] } },
-      { security: { csrf: { enabled: true } } },
+    const app = trackApp(
+      await createTestApp(
+        { security: { cors: ['https://example.com'] } },
+        { security: { csrf: { enabled: true } } },
+      ),
     );
     expect(app).toBeDefined();
   });
@@ -240,9 +255,11 @@ describe('startup safety — jobs endpoint', () => {
     const orig = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
-      const app = await createTestApp({
-        jobs: { statusEndpoint: true, auth: 'none', unsafePublic: true },
-      });
+      const app = trackApp(
+        await createTestApp({
+          jobs: { statusEndpoint: true, auth: 'none', unsafePublic: true },
+        }),
+      );
       expect(app).toBeDefined();
     } finally {
       process.env.NODE_ENV = orig;
@@ -267,9 +284,11 @@ describe('startup safety — metrics endpoint', () => {
     const orig = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
     try {
-      const app = await createTestApp({
-        metrics: { enabled: true, auth: 'none', unsafePublic: true },
-      });
+      const app = trackApp(
+        await createTestApp({
+          metrics: { enabled: true, auth: 'none', unsafePublic: true },
+        }),
+      );
       expect(app).toBeDefined();
     } finally {
       process.env.NODE_ENV = orig;

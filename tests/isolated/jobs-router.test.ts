@@ -8,7 +8,8 @@
 import { AUTH_RUNTIME_KEY } from '@auth/runtime';
 import type { AuthRuntimeContext } from '@auth/runtime';
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { createRouter } from '@lastshotlabs/slingshot-core';
+import { attachContext, createRouter } from '@lastshotlabs/slingshot-core';
+import type { SlingshotContext } from '@lastshotlabs/slingshot-core';
 import type { JobsConfig } from '../../src/app';
 import { createJobsRouter } from '../../src/framework/routes/jobs';
 
@@ -130,6 +131,11 @@ function makeRouter(
   };
 
   const app = createRouter();
+  const slingshotCtx = {
+    routeAuth,
+    pluginState: new Map([[AUTH_RUNTIME_KEY, authRuntime]]),
+  } as unknown as SlingshotContext;
+  attachContext(app, slingshotCtx);
   const router = createJobsRouter(
     {
       allowedQueues: ['my-queue'],
@@ -142,14 +148,6 @@ function makeRouter(
     } as any,
     false,
   );
-
-  app.use('*', async (c, next) => {
-    c.set('slingshotCtx', {
-      routeAuth,
-      pluginState: new Map([[AUTH_RUNTIME_KEY, authRuntime]]),
-    } as any);
-    await next();
-  });
   app.route('/', router);
   return app;
 }

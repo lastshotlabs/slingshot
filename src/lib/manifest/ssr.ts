@@ -83,7 +83,7 @@ export const ssrSectionSchema = z.object({
         .enum(['bun', 'node', 'edge'])
         .describe(
           'Built-in SSR runtime. Resolved to the corresponding runtime package ' +
-            '(@lastshotlabs/runtime-bun, runtime-node, or runtime-edge).',
+            '(@lastshotlabs/slingshot-runtime-bun, slingshot-runtime-node, or slingshot-runtime-edge).',
         ),
       appManifestHandlerRefSchema,
     ])

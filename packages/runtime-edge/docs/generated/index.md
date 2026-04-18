@@ -1,13 +1,13 @@
 ---
 title: Generated
-description: Auto-generated workspace facts for @lastshotlabs/runtime-edge
+description: Auto-generated workspace facts for @lastshotlabs/slingshot-runtime-edge
 ---
 
 > Generated from package metadata by `bun run docs:sync`. Re-run the command to refresh this page.
 
 ## Package Facts
 
-- Package: `@lastshotlabs/runtime-edge`
+- Package: `@lastshotlabs/slingshot-runtime-edge`
 - Version: `0.1.0`
 - Kind: Workspace package
 - Role: runtime package
@@ -18,7 +18,7 @@ description: Auto-generated workspace facts for @lastshotlabs/runtime-edge
 ## Install
 
 ```bash
-bun add @lastshotlabs/runtime-edge
+bun add @lastshotlabs/slingshot-runtime-edge
 ```
 
 ## Export Paths

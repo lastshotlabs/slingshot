@@ -123,8 +123,8 @@
       },
     },
     "packages/runtime-bun": {
-      "name": "@lastshotlabs/runtime-bun",
-      "version": "0.1.0",
+      "name": "@lastshotlabs/slingshot-runtime-bun",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -133,7 +133,7 @@
       },
     },
     "packages/runtime-edge": {
-      "name": "@lastshotlabs/runtime-edge",
+      "name": "@lastshotlabs/slingshot-runtime-edge",
       "version": "0.0.1",
       "devDependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
@@ -149,8 +149,8 @@
       ],
     },
     "packages/runtime-node": {
-      "name": "@lastshotlabs/runtime-node",
-      "version": "0.1.0",
+      "name": "@lastshotlabs/slingshot-runtime-node",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -170,7 +170,7 @@
     },
     "packages/slingshot-admin": {
       "name": "@lastshotlabs/slingshot-admin",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
       },
@@ -181,7 +181,7 @@
     },
     "packages/slingshot-assets": {
       "name": "@lastshotlabs/slingshot-assets",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
         "@lastshotlabs/slingshot-entity": "^0.1.0",
@@ -245,7 +245,7 @@
     },
     "packages/slingshot-chat": {
       "name": "@lastshotlabs/slingshot-chat",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -259,7 +259,7 @@
     },
     "packages/slingshot-community": {
       "name": "@lastshotlabs/slingshot-community",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
         "@lastshotlabs/slingshot-entity": "^0.1.0",
@@ -281,7 +281,7 @@
     },
     "packages/slingshot-core": {
       "name": "@lastshotlabs/slingshot-core",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@asteasolutions/zod-to-openapi": ">=7.0",
         "@hono/zod-openapi": ">=0.18",
@@ -335,7 +335,7 @@
     },
     "packages/slingshot-entity": {
       "name": "@lastshotlabs/slingshot-entity",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -402,7 +402,7 @@
     },
     "packages/slingshot-interactions": {
       "name": "@lastshotlabs/slingshot-interactions",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -442,7 +442,7 @@
     },
     "packages/slingshot-notifications": {
       "name": "@lastshotlabs/slingshot-notifications",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
         "@lastshotlabs/slingshot-entity": "workspace:*",
@@ -480,7 +480,7 @@
     },
     "packages/slingshot-organizations": {
       "name": "@lastshotlabs/slingshot-organizations",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
         "@lastshotlabs/slingshot-entity": "^0.1.0",
@@ -497,7 +497,7 @@
     },
     "packages/slingshot-permissions": {
       "name": "@lastshotlabs/slingshot-permissions",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
       },
@@ -524,7 +524,7 @@
     },
     "packages/slingshot-postgres": {
       "name": "@lastshotlabs/slingshot-postgres",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "workspace:*",
       },
@@ -576,7 +576,7 @@
     },
     "packages/slingshot-search": {
       "name": "@lastshotlabs/slingshot-search",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
       },
@@ -610,7 +610,7 @@
     },
     "packages/slingshot-webhooks": {
       "name": "@lastshotlabs/slingshot-webhooks",
-      "version": "0.1.0",
+      "version": "0.0.1",
       "dependencies": {
         "@lastshotlabs/slingshot-core": "^0.1.0",
         "@lastshotlabs/slingshot-entity": "^0.1.0",
@@ -977,12 +977,6 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@lastshotlabs/runtime-bun": ["@lastshotlabs/runtime-bun@workspace:packages/runtime-bun"],
-
-    "@lastshotlabs/runtime-edge": ["@lastshotlabs/runtime-edge@workspace:packages/runtime-edge"],
-
-    "@lastshotlabs/runtime-node": ["@lastshotlabs/runtime-node@workspace:packages/runtime-node"],
-
     "@lastshotlabs/slingshot-admin": ["@lastshotlabs/slingshot-admin@workspace:packages/slingshot-admin"],
 
     "@lastshotlabs/slingshot-assets": ["@lastshotlabs/slingshot-assets@workspace:packages/slingshot-assets"],
@@ -1036,6 +1030,12 @@
     "@lastshotlabs/slingshot-postgres": ["@lastshotlabs/slingshot-postgres@workspace:packages/slingshot-postgres"],
 
     "@lastshotlabs/slingshot-push": ["@lastshotlabs/slingshot-push@workspace:packages/slingshot-push"],
+
+    "@lastshotlabs/slingshot-runtime-bun": ["@lastshotlabs/slingshot-runtime-bun@workspace:packages/runtime-bun"],
+
+    "@lastshotlabs/slingshot-runtime-edge": ["@lastshotlabs/slingshot-runtime-edge@workspace:packages/runtime-edge"],
+
+    "@lastshotlabs/slingshot-runtime-node": ["@lastshotlabs/slingshot-runtime-node@workspace:packages/runtime-node"],
 
     "@lastshotlabs/slingshot-scim": ["@lastshotlabs/slingshot-scim@workspace:packages/slingshot-scim"],
 
@@ -2971,17 +2971,17 @@
 
     "@inquirer/search/@inquirer/type": ["@inquirer/type@3.0.10", "", { "peerDependencies": { "@types/node": ">=18" }, "optionalPeers": ["@types/node"] }, "sha512-BvziSRxfz5Ov8ch0z/n3oijRSEcEsHnhggm4xFZe93DHcUCTlutlq9Ox4SVENAfcRD22UQq7T/atg9Wr3k09eA=="],
 
-    "@lastshotlabs/runtime-bun/typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
-
-    "@lastshotlabs/runtime-edge/typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
-
-    "@lastshotlabs/runtime-node/typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
-
     "@lastshotlabs/slingshot-docs/sharp": ["sharp@0.33.5", "", { "dependencies": { "color": "^4.2.3", "detect-libc": "^2.0.3", "semver": "^7.6.3" }, "optionalDependencies": { "@img/sharp-darwin-arm64": "0.33.5", "@img/sharp-darwin-x64": "0.33.5", "@img/sharp-libvips-darwin-arm64": "1.0.4", "@img/sharp-libvips-darwin-x64": "1.0.4", "@img/sharp-libvips-linux-arm": "1.0.5", "@img/sharp-libvips-linux-arm64": "1.0.4", "@img/sharp-libvips-linux-s390x": "1.0.4", "@img/sharp-libvips-linux-x64": "1.0.4", "@img/sharp-libvips-linuxmusl-arm64": "1.0.4", "@img/sharp-libvips-linuxmusl-x64": "1.0.4", "@img/sharp-linux-arm": "0.33.5", "@img/sharp-linux-arm64": "0.33.5", "@img/sharp-linux-s390x": "0.33.5", "@img/sharp-linux-x64": "0.33.5", "@img/sharp-linuxmusl-arm64": "0.33.5", "@img/sharp-linuxmusl-x64": "0.33.5", "@img/sharp-wasm32": "0.33.5", "@img/sharp-win32-ia32": "0.33.5", "@img/sharp-win32-x64": "0.33.5" } }, "sha512-haPVm1EkS9pgvHrQ/F3Xy+hgcuMV0Wm9vfIBSiwZ05k+xgb0PkBQpGsAA/oWdDobNaZTH5ppvHtzCFbnSEwHVw=="],
 
     "@lastshotlabs/slingshot-docs/typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
 
     "@lastshotlabs/slingshot-docs/zod": ["zod@3.25.76", "", {}, "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ=="],
+
+    "@lastshotlabs/slingshot-runtime-bun/typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
+
+    "@lastshotlabs/slingshot-runtime-edge/typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
+
+    "@lastshotlabs/slingshot-runtime-node/typescript": ["typescript@6.0.2", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ=="],
 
     "@oclif/core/minimatch": ["minimatch@10.2.4", "", { "dependencies": { "brace-expansion": "^5.0.2" } }, "sha512-oRjTw/97aTBN0RHbYCdtF1MQfvusSIBQM0IZEgzl6426+8jSC0nF1a/GmnVLpfB9yyr6g6FTqWqiZVbxrtaCIg=="],
 

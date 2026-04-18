@@ -32,7 +32,7 @@ bun add @lastshotlabs/slingshot \
         @lastshotlabs/slingshot-search \
         @lastshotlabs/slingshot-ssg \
         @lastshotlabs/slingshot-ssr \
-        @lastshotlabs/runtime-edge
+        @lastshotlabs/slingshot-runtime-edge
 ```
 
 ## App composition
@@ -49,8 +49,8 @@ bun add @lastshotlabs/slingshot \
     import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
     import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
     import { createSsrPlugin, type SlingshotSsrRenderer } from '@lastshotlabs/slingshot-ssr';
-    import { edgeRuntime } from '@lastshotlabs/runtime-edge';
-    import { createKvIsrCache, type KvNamespace } from '@lastshotlabs/runtime-edge/kv';
+    import { edgeRuntime } from '@lastshotlabs/slingshot-runtime-edge';
+    import { createKvIsrCache, type KvNamespace } from '@lastshotlabs/slingshot-runtime-edge/kv';
 
     declare const renderer: SlingshotSsrRenderer;
     declare const ISR_CACHE: KvNamespace;

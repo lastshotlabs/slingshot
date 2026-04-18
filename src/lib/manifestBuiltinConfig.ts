@@ -46,9 +46,9 @@ function resolveSsrRuntimeStrategy(strategy: string): unknown {
       // Lazy runtime resolution — returns a proxy that loads the runtime package on first use.
       // The real runtime is created when the SSR plugin accesses it during setup.
       const pkgMap: Record<string, { pkg: string; factory: string }> = {
-        bun: { pkg: '@lastshotlabs/runtime-bun', factory: 'bunRuntime' },
-        node: { pkg: '@lastshotlabs/runtime-node', factory: 'nodeRuntime' },
-        edge: { pkg: '@lastshotlabs/runtime-edge', factory: 'edgeRuntime' },
+        bun: { pkg: '@lastshotlabs/slingshot-runtime-bun', factory: 'bunRuntime' },
+        node: { pkg: '@lastshotlabs/slingshot-runtime-node', factory: 'nodeRuntime' },
+        edge: { pkg: '@lastshotlabs/slingshot-runtime-edge', factory: 'edgeRuntime' },
       };
       const entry = pkgMap[strategy];
       let resolved: unknown = null;

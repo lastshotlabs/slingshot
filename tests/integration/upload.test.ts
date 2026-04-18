@@ -90,10 +90,7 @@ const createUploadApp = (adapter: any = memoryStorage(), config: Record<string, 
     },
     signing: null,
   } as any;
-  app.use('*', async (c, next) => {
-    c.set('slingshotCtx', slingshotCtx);
-    await next();
-  });
+  attachContext(app, slingshotCtx);
   return { app, slingshotCtx };
 };
 
@@ -286,8 +283,8 @@ describe('presigned URL route', () => {
       trustProxy: false,
       persistence: {},
     } as any;
+    attachContext(app, slingshotCtx);
     app.use('*', async (c, next) => {
-      c.set('slingshotCtx', slingshotCtx);
       c.set('authUserId', 'user-1');
       c.set('roles', ['user']);
       c.set('sessionId', 'sess-1');

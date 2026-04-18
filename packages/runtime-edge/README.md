@@ -1,9 +1,9 @@
 ---
 title: Human Guide
-description: Human-maintained guidance for @lastshotlabs/runtime-edge
+description: Human-maintained guidance for @lastshotlabs/slingshot-runtime-edge
 ---
 
-`@lastshotlabs/runtime-edge` provides a `SlingshotRuntime` implementation for edge and worker
+`@lastshotlabs/slingshot-runtime-edge` provides a `SlingshotRuntime` implementation for edge and worker
 deployments. It swaps Bun or Node assumptions for Web Crypto, bundled file access, and explicit
 runtime stubs where edge platforms do not support filesystem, SQLite, or `listen()`.
 

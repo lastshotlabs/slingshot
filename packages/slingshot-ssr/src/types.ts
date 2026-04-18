@@ -1167,11 +1167,11 @@ export interface SsrPluginConfig {
    * When omitted, the plugin falls back to Node.js/Bun filesystem APIs (`node:fs`).
    * The Bun runtime's `Bun.file()` API is used automatically when running on Bun.
    *
-   * Provide `edgeRuntime()` from `@lastshotlabs/runtime-edge` for edge deployments.
+   * Provide `edgeRuntime()` from `@lastshotlabs/slingshot-runtime-edge` for edge deployments.
    *
    * @example Edge deployment
    * ```ts
-   * import { edgeRuntime } from '@lastshotlabs/runtime-edge';
+   * import { edgeRuntime } from '@lastshotlabs/slingshot-runtime-edge';
    *
    * createSsrPlugin({
    *   runtime: edgeRuntime({

@@ -1,6 +1,6 @@
 ---
 title: Notes
-description: Working notes for @lastshotlabs/runtime-edge
+description: Working notes for @lastshotlabs/slingshot-runtime-edge
 ---
 
 > Notes lane for rough ideas, investigation breadcrumbs, and hand-written reminders.

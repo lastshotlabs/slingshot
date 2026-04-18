@@ -182,7 +182,7 @@ function removeFromTagIndex(kv: KvNamespace, tag: string, path: string): Promise
  *
  * @example
  * ```ts
- * import { createKvIsrCache } from '@lastshotlabs/runtime-edge/kv';
+ * import { createKvIsrCache } from '@lastshotlabs/slingshot-runtime-edge/kv';
  *
  * interface Env {
  *   ISR_CACHE: KVNamespace;

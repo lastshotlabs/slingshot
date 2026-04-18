@@ -16,7 +16,7 @@
       "@lastshotlabs/slingshot-oidc": ["../slingshot-oidc/src/index.ts"],
       "@lastshotlabs/slingshot-auth/plugin": ["./src/plugin-api.ts"],
       "@lastshotlabs/slingshot-auth/testing": ["./src/testing.ts"],
-      "@lastshotlabs/runtime-bun": ["../runtime-bun/src/index.ts"]
+      "@lastshotlabs/slingshot-runtime-bun": ["../runtime-bun/src/index.ts"]
     }
   },
   "include": ["src"],

@@ -241,7 +241,7 @@ const edgeServer = Object.freeze({
  *
  * @example Cloudflare Workers
  * ```ts
- * import { edgeRuntime } from '@lastshotlabs/runtime-edge';
+ * import { edgeRuntime } from '@lastshotlabs/slingshot-runtime-edge';
  *
  * export default {
  *   async fetch(request: Request, env: Env): Promise<Response> {
@@ -257,7 +257,7 @@ const edgeServer = Object.freeze({
  *
  * @example No file store (manifest inlined at build time)
  * ```ts
- * import { edgeRuntime } from '@lastshotlabs/runtime-edge';
+ * import { edgeRuntime } from '@lastshotlabs/slingshot-runtime-edge';
  * const runtime = edgeRuntime(); // readFile() always returns null
  * ```
  */

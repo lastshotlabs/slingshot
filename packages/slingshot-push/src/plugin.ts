@@ -28,6 +28,7 @@ import {
   type PushPluginConfig,
   pushPluginConfigSchema,
 } from './types/config';
+import { getUserAuthAccountGuardFailure } from './userAuthAccountGuard';
 
 function parseServiceAccount(value: FirebaseServiceAccount | string): FirebaseServiceAccount {
   if (typeof value !== 'string') return value;
@@ -111,7 +112,19 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
         if (!userAuth) {
           return c.json({ error: 'Unauthorized' }, 401);
         }
-        return userAuth(c, next);
+        return userAuth(c, async () => {
+          const authUserId = c.get('authUserId');
+          if (typeof authUserId !== 'string' || authUserId.length === 0) {
+            c.res = c.json({ error: 'Unauthorized' }, 401);
+            return;
+          }
+          const guardFailure = await getUserAuthAccountGuardFailure(c);
+          if (guardFailure) {
+            c.res = c.json({ error: guardFailure.error }, guardFailure.status);
+            return;
+          }
+          await next();
+        });
       };
 
       app.post(`${config.mountPath}/topics/:topicName/subscribe`, requireUserAuth, async c => {

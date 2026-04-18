@@ -101,6 +101,23 @@ interface PushHarness {
   teardown: () => void;
 }
 
+type TestAuthRuntime = {
+  adapter: {
+    getSuspended?: (
+      userId: string,
+    ) => Promise<{ suspended: boolean; suspendedReason?: string } | null>;
+    getEmailVerified?: (userId: string) => Promise<boolean | null | undefined>;
+    setSuspended?: (userId: string, suspended: boolean, reason?: string) => Promise<void>;
+    setEmailVerified?: (userId: string, verified: boolean) => Promise<void>;
+  };
+  config: {
+    primaryField?: string;
+    emailVerification?: {
+      required?: boolean;
+    };
+  };
+};
+
 function toSetupContext(args: {
   app: Hono;
   config: SlingshotFrameworkConfig;
@@ -112,6 +129,7 @@ function toSetupContext(args: {
 async function createPushHarness(opts?: {
   userId?: string;
   withNotificationsPlugin?: boolean;
+  authRuntime?: TestAuthRuntime;
 }): Promise<PushHarness> {
   const userId = opts?.userId ?? 'user-1';
   const bus = new InProcessAdapter();
@@ -149,6 +167,9 @@ async function createPushHarness(opts?: {
   if (notificationsPluginState) {
     pluginState.set('slingshot-notifications', notificationsPluginState);
   }
+  if (opts?.authRuntime) {
+    pluginState.set('slingshot-auth', opts.authRuntime);
+  }
 
   const plugin = createPushPlugin({
     enabledPlatforms: ['web'],
@@ -179,7 +200,10 @@ async function createPushHarness(opts?: {
   };
 
   app.use('*', async (c, next) => {
-    (c as unknown as { set(k: string, v: unknown): void }).set('slingshotCtx', { routeAuth });
+    (c as unknown as { set(k: string, v: unknown): void }).set('slingshotCtx', {
+      routeAuth,
+      pluginState,
+    });
     await next();
   });
 
@@ -195,6 +219,49 @@ async function createPushHarness(opts?: {
     bus,
     pluginState: state,
     teardown() {},
+  };
+}
+
+function createTestAuthRuntime(
+  options: {
+    suspended?: boolean;
+    emailVerificationRequired?: boolean;
+    emailVerified?: boolean;
+  } = {},
+): TestAuthRuntime {
+  const suspendedUsers = new Map<string, { suspended: boolean; suspendedReason?: string }>();
+  if (options.suspended) {
+    suspendedUsers.set('user-1', {
+      suspended: true,
+      suspendedReason: 'security review',
+    });
+  }
+
+  const emailVerifiedUsers = new Map<string, boolean>();
+  emailVerifiedUsers.set('user-1', options.emailVerified ?? true);
+
+  return {
+    adapter: {
+      async getSuspended(userId: string) {
+        return suspendedUsers.get(userId) ?? { suspended: false };
+      },
+      async getEmailVerified(userId: string) {
+        return emailVerifiedUsers.get(userId) ?? false;
+      },
+      async setSuspended(userId: string, suspended: boolean, reason?: string) {
+        suspendedUsers.set(
+          userId,
+          suspended ? { suspended: true, suspendedReason: reason } : { suspended: false },
+        );
+      },
+      async setEmailVerified(userId: string, verified: boolean) {
+        emailVerifiedUsers.set(userId, verified);
+      },
+    },
+    config: {
+      primaryField: 'email',
+      emailVerification: options.emailVerificationRequired ? { required: true } : undefined,
+    },
   };
 }
 
@@ -384,6 +451,32 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
     // Without authUserId set, the route should return 401
     expect(res.status).toBe(401);
   });
+
+  test('subscribe to topic fails closed for suspended authenticated users', async () => {
+    const authRuntime = createTestAuthRuntime();
+    harness = await createPushHarness({ authRuntime });
+
+    const subRes = await json(harness.app, 'POST', '/push/subscriptions', {
+      body: {
+        userId: 'user-1',
+        deviceId: 'device-suspended',
+        platform: 'web',
+        platformData: {
+          platform: 'web',
+          endpoint: 'https://push.example.com/suspended',
+          keys: { p256dh: 'k', auth: 'a' },
+        },
+      },
+    });
+    expect(subRes.status).toBe(201);
+    await authRuntime.adapter.setSuspended?.('user-1', true, 'security review');
+
+    const res = await json(harness.app, 'POST', '/push/topics/announcements/subscribe', {
+      body: { deviceId: 'device-suspended' },
+    });
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'Account suspended' });
+  });
 });
 
 describe('createPushPlugin — delivery ack', () => {
@@ -433,6 +526,50 @@ describe('createPushPlugin — delivery ack', () => {
   test('POST /push/ack/:deliveryId returns 404 for unknown ID', async () => {
     const res = await json(harness.app, 'POST', '/push/ack/nonexistent-delivery-id');
     expect(res.status).toBe(404);
+  });
+
+  test('POST /push/ack/:deliveryId fails closed for newly-unverified sessions', async () => {
+    const authRuntime = createTestAuthRuntime({
+      emailVerificationRequired: true,
+      emailVerified: true,
+    });
+    harness = await createPushHarness({ authRuntime });
+    mockSendNotification.mockReset();
+    mockSendNotification.mockImplementation(() => Promise.resolve());
+
+    const subRes = await json(harness.app, 'POST', '/push/subscriptions', {
+      body: {
+        userId: 'user-1',
+        deviceId: 'device-unverified',
+        platform: 'web',
+        platformData: {
+          platform: 'web',
+          endpoint: 'https://push.example.com/unverified',
+          keys: { p256dh: 'k', auth: 'a' },
+        },
+      },
+    });
+    expect(subRes.status).toBe(201);
+
+    let capturedDeliveryId: string | undefined;
+    mockSendNotification.mockReset();
+    mockSendNotification.mockImplementation((...args: unknown[]) => {
+      const payload = args[1];
+      const parsed =
+        typeof payload === 'string'
+          ? (JSON.parse(payload) as { data?: { __slingshotDeliveryId?: string } })
+          : {};
+      capturedDeliveryId = parsed.data?.__slingshotDeliveryId;
+      return Promise.resolve();
+    });
+
+    await harness.pluginState.router.sendToUser('user-1', { title: 'Verify gate' });
+    expect(capturedDeliveryId).toBeDefined();
+    await authRuntime.adapter.setEmailVerified?.('user-1', false);
+
+    const res = await json(harness.app, 'POST', `/push/ack/${capturedDeliveryId}`);
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'Email not verified' });
   });
 });
 

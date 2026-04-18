@@ -95,6 +95,13 @@ export interface WalkOptions {
   _path?: string;
   /** Current recursion depth (internal). */
   _depth?: number;
+  /**
+   * When true, the `optional` case handler skips its probability roll.
+   * Set by the object handler after it already decided to include the field,
+   * preventing double-roll for any wrapper ordering (e.g. `.optional().nullable()`).
+   * @internal
+   */
+  _optionalDecided?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,15 +159,25 @@ function extractNumberConstraints(def: ZodDef): {
   for (const check of def.checks) {
     const cd = check._zod.def;
     switch (cd.check) {
-      case 'greater_than':
-        result.min = cd.inclusive ? (cd.value as number) : (cd.value as number) + 1;
+      case 'greater_than': {
+        const base = cd.value as number;
+        // For exclusive bounds, nudge by a tiny amount rather than +1
+        // (which is wildly wrong for floats like z.number().gt(0.5))
+        result.min = cd.inclusive ? base : base + 0.01;
         break;
-      case 'less_than':
-        result.max = cd.inclusive ? (cd.value as number) : (cd.value as number) - 1;
+      }
+      case 'less_than': {
+        const base = cd.value as number;
+        result.max = cd.inclusive ? base : base - 0.01;
         break;
-      case 'number_format':
-        if ((cd as Record<string, unknown>).format === 'safeint') result.isInt = true;
+      }
+      case 'number_format': {
+        const fmt = (cd as Record<string, unknown>).format as string | undefined;
+        if (fmt === 'safeint' || fmt === 'int32' || fmt === 'uint32') {
+          result.isInt = true;
+        }
         break;
+      }
     }
   }
   return result;
@@ -298,17 +315,19 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
 
     case 'number': {
       const c = extractNumberConstraints(def);
-      const min = c.min ?? 0;
-      const max = c.max ?? 10000;
-      if (c.isInt) return f.number.int({ min, max });
+      // Derive sane defaults: if only one bound is set, pick the other
+      // relative to it so the range is always valid.
+      const min = c.min ?? (c.max !== undefined && c.max < 0 ? c.max - 10000 : 0);
+      const max = c.max ?? (c.min !== undefined && c.min > 10000 ? c.min + 10000 : 10000);
+      if (c.isInt) return f.number.int({ min: Math.ceil(min), max: Math.floor(max) });
       return f.number.float({ min, max, multipleOf: 0.01 });
     }
 
     case 'int': {
       const c = extractNumberConstraints(def);
-      const min = c.min ?? 0;
-      const max = c.max ?? 10000;
-      return f.number.int({ min, max });
+      const min = c.min ?? (c.max !== undefined && c.max < 0 ? c.max - 10000 : 0);
+      const max = c.max ?? (c.min !== undefined && c.min > 10000 ? c.min + 10000 : 10000);
+      return f.number.int({ min: Math.ceil(min), max: Math.floor(max) });
     }
 
     case 'boolean':
@@ -349,15 +368,26 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       const result: Record<string, unknown> = {};
       for (const [key, fieldSchema] of Object.entries(shape)) {
         const fieldPath = path ? `${path}.${key}` : key;
-        // Check if the field is optional (via its optout marker)
-        const isOptional = fieldSchema._zod.def.type === 'optional'
-          || (fieldSchema._zod as Record<string, unknown>).optout === 'optional';
+        const hasOverride = opts.overrides && fieldPath in opts.overrides;
 
-        if (isOptional && !(opts.overrides && fieldPath in opts.overrides)) {
+        // Detect optional wrapper — the field's def.type is 'optional' or
+        // Zod 4 marks it with the optout sentinel on the internals.
+        const isWrappedOptional = fieldSchema._zod.def.type === 'optional';
+        const isMarkedOptional = (fieldSchema._zod as Record<string, unknown>).optout === 'optional';
+        const isOptional = isWrappedOptional || isMarkedOptional;
+
+        if (isOptional && !hasOverride) {
           if (f.number.float({ min: 0, max: 1 }) > optionalRate) continue;
         }
 
-        result[key] = walkSchema(fieldSchema, {
+        // If the field is wrapped in z.optional(), unwrap it so the optional
+        // handler doesn't roll the dice a second time. We already decided
+        // above that the field should be present.
+        const schemaToWalk = isWrappedOptional && fieldSchema._zod.def.innerType
+          ? fieldSchema._zod.def.innerType
+          : fieldSchema;
+
+        result[key] = walkSchema(schemaToWalk as ZodSchema, {
           ...opts,
           _path: fieldPath,
           _depth: depth,

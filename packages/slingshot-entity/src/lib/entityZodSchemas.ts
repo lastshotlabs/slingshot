@@ -27,9 +27,10 @@ function isUnknownArray(value: unknown): value is unknown[] {
  * serialized string representation.
  *
  * @param def - The field definition to map.
+ * @param nullable - Whether the field should accept explicit `null`.
  * @returns A Zod schema matching the field's type and optionality.
  */
-function fieldToZod(def: FieldDef): z.ZodType {
+function fieldToZod(def: FieldDef, nullable = false): z.ZodType {
   let schema: z.ZodType;
   switch (def.type) {
     case 'string':
@@ -63,7 +64,8 @@ function fieldToZod(def: FieldDef): z.ZodType {
     default:
       schema = z.unknown();
   }
-  return def.optional ? schema.optional() : schema;
+  const nullableSchema = nullable ? schema.nullable() : schema;
+  return def.optional ? nullableSchema.optional() : nullableSchema;
 }
 
 /**
@@ -144,6 +146,16 @@ export interface EntityZodSchemas {
 export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSchemas {
   const fieldDefs = Object.entries(config.fields);
 
+  // Optional belongsTo relations make the FK nullable at the HTTP boundary.
+  const nullableFkFields = new Set<string>();
+  if (config.relations) {
+    for (const rel of Object.values(config.relations)) {
+      if (rel.kind === 'belongsTo' && rel.optional) {
+        nullableFkFields.add(rel.foreignKey);
+      }
+    }
+  }
+
   // Collect fields that are server-injected via dataScope on create — these
   // must be optional in the create input schema because the client does not
   // (and should not) supply them; the route handler injects them from context.
@@ -163,7 +175,8 @@ export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSc
   // Full entity schema
   const entityShape: Record<string, z.ZodType> = {};
   for (const [fieldName, def] of fieldDefs) {
-    entityShape[fieldName] = fieldToZod(def);
+    const isNullable = nullableFkFields.has(fieldName) || def.optional;
+    entityShape[fieldName] = fieldToZod(def, isNullable);
   }
   const entityRaw = z.object(entityShape);
   // Register so the schema appears as a named component in the OpenAPI spec
@@ -175,11 +188,12 @@ export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSc
   for (const [fieldName, def] of fieldDefs) {
     if (def.onUpdate === 'now') continue;
     if (isAutoDefault(def.default)) continue;
+    const isNullable = nullableFkFields.has(fieldName) || def.optional;
     const hasLiteralDefault = def.default !== undefined && !isAutoDefault(def.default);
-    const base = fieldToZod({ ...def, optional: false });
+    const base = fieldToZod({ ...def, optional: false }, isNullable);
     const isInjected = dataScopeCreateFields.has(fieldName);
     createShape[fieldName] =
-      def.optional || hasLiteralDefault || isInjected ? base.optional() : base;
+      isNullable || hasLiteralDefault || isInjected ? base.optional() : base;
   }
   const create = z.object(createShape);
 
@@ -188,7 +202,8 @@ export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSc
   for (const [fieldName, def] of fieldDefs) {
     if (def.immutable) continue;
     if (def.onUpdate === 'now') continue;
-    const base = fieldToZod({ ...def, optional: false });
+    const isNullable = nullableFkFields.has(fieldName) || def.optional;
+    const base = fieldToZod({ ...def, optional: false }, isNullable);
     updateShape[fieldName] = base.optional();
   }
   const update = z.object(updateShape);

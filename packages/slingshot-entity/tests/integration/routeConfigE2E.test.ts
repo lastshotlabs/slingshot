@@ -300,6 +300,50 @@ describe('buildBareEntityRoutes + applyRouteConfig E2E', () => {
     expect(webhookEventKeys).toContain('note:created');
     expect(webhookEventKeys).toContain('note:deleted');
   });
+
+  it('accepts null for optional belongsTo foreign keys on create and update', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const relatedEntityConfig: ResolvedEntityConfig = {
+      ...testEntityConfig,
+      fields: {
+        ...testEntityConfig.fields,
+        projectId: { type: 'string', primary: false, immutable: false, optional: false },
+      },
+      relations: {
+        project: {
+          kind: 'belongsTo',
+          target: 'Project',
+          foreignKey: 'projectId',
+          optional: true,
+        },
+      },
+    };
+    const router = buildBareEntityRoutes(relatedEntityConfig, undefined, adapter);
+
+    const createdRes = await router.fetch(
+      new Request('http://localhost/notes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'hello', projectId: null }),
+      }),
+    );
+    expect(createdRes.status).toBe(201);
+    const created = (await createdRes.json()) as Record<string, unknown>;
+    expect(created.projectId).toBeNull();
+
+    const updatedRes = await router.fetch(
+      new Request(`http://localhost/notes/${created.id as string}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ projectId: null }),
+      }),
+    );
+    expect(updatedRes.status).toBe(200);
+    const updated = (await updatedRes.json()) as Record<string, unknown>;
+    expect(updated.projectId).toBeNull();
+  });
 });
 
 describe('routePath override — HTTP round-trip', () => {

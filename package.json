@@ -60,9 +60,9 @@
     "topicSeparator": " "
   },
   "scripts": {
-    "typecheck": "tsc -b tsconfig.typecheck.json --pretty false",
-    "typecheck:tests": "tsc -b tsconfig.tests.typecheck.json --pretty false",
-    "typecheck:root": "tsc -b tsconfig.root.typecheck.json --pretty false",
+    "typecheck": "node --max-old-space-size=4096 ./node_modules/.bin/tsc -b tsconfig.typecheck.json --pretty false",
+    "typecheck:tests": "node --max-old-space-size=4096 ./node_modules/.bin/tsc -b tsconfig.tests.typecheck.json --pretty false",
+    "typecheck:root": "node --max-old-space-size=4096 ./node_modules/.bin/tsc -b tsconfig.root.typecheck.json --pretty false",
     "examples:typecheck": "tsc -p tsconfig.examples.json --pretty false",
     "examples:coverage": "bun scripts/examples-coverage.ts",
     "examples:smoke": "bun scripts/examples-smoke.ts",

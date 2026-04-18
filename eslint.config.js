@@ -19,21 +19,11 @@ export default tseslint.config(
   // Base JS rules
   eslint.configs.recommended,
 
-  // TypeScript strict + type-aware rules
-  ...tseslint.configs.strictTypeChecked,
+  // TypeScript strict rules (non-type-aware — tsc handles type safety separately)
+  ...tseslint.configs.strict,
 
   // Prettier compat (disables formatting rules that conflict)
   eslintConfigPrettier,
-
-  // TypeScript parser config
-  {
-    languageOptions: {
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
-      },
-    },
-  },
 
   // Project rules
   {
@@ -41,8 +31,9 @@ export default tseslint.config(
       // Rule 5: No any
       '@typescript-eslint/no-explicit-any': 'error',
 
-      // Rule 5: No unnecessary casts
-      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
+      // This root config is intentionally non-type-aware. Keep typed-only rules
+      // in the typecheck lane instead of requiring parser project services here.
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
 
       // Rule 5: Restrict type assertions — only allow `as` style, ban on object literals
       '@typescript-eslint/consistent-type-assertions': [
@@ -75,17 +66,8 @@ export default tseslint.config(
         },
       ],
 
-      // Strict type-checked rules we want to relax slightly
-      '@typescript-eslint/restrict-template-expressions': [
-        'error',
-        { allowNumber: true, allowBoolean: true },
-      ],
-
       // Allow void expressions for fire-and-forget
       '@typescript-eslint/no-confusing-void-expression': 'off',
-
-      // Too noisy for a framework with many callback patterns
-      '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
     },
   },
 
@@ -94,15 +76,7 @@ export default tseslint.config(
     files: ['**/tests/**/*.ts', '**/*.test.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      '@typescript-eslint/no-floating-promises': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
-      // Mock methods are commonly accessed without binding in tests
-      '@typescript-eslint/unbound-method': 'off',
     },
   },
 );

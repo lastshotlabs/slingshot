@@ -12,6 +12,8 @@ Slingshot is a backend framework built on Hono with runtime adapters for Bun and
 bun add @lastshotlabs/slingshot
 ```
 
+### Manifest (zero-code)
+
 Create `app.manifest.json`:
 
 ```json
@@ -38,6 +40,28 @@ slingshot start
 ```
 
 For custom behavior (middleware, event handlers, tenant resolvers), export named functions from `slingshot.handlers.ts`. The manifest references them by name.
+
+### Code
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+
+await createServer({
+  port: 3000,
+  security: { signing: { secret: process.env.SECRET! } },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+    createCommunityPlugin({ containerCreation: 'user' }),
+  ],
+});
+```
+
+Both paths produce identical runtime behavior.
 
 ## Features
 

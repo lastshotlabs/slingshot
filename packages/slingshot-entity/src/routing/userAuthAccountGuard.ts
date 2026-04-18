@@ -1,0 +1,80 @@
+import type { Context } from 'hono';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { getSlingshotCtx } from '@lastshotlabs/slingshot-core';
+
+type AccountGuardFailure = {
+  error: 'Account suspended' | 'Email not verified';
+  status: 403;
+};
+
+type AuthAdapterLike = {
+  getSuspended?: (
+    userId: string,
+  ) => Promise<{ suspended: boolean; suspendedReason?: string } | null>;
+  getEmailVerified?: (userId: string) => Promise<boolean | null | undefined>;
+};
+
+type AuthRuntimeLike = {
+  adapter?: AuthAdapterLike;
+  config?: {
+    primaryField?: string;
+    emailVerification?: {
+      required?: boolean;
+    } | null;
+  };
+};
+
+const AUTH_RUNTIME_KEY = 'slingshot-auth';
+
+function getAuthRuntime(c: Context<AppEnv, string>): AuthRuntimeLike | null {
+  const slingshotCtx = getSlingshotCtx(c as unknown as Parameters<typeof getSlingshotCtx>[0]);
+  const runtime = slingshotCtx.pluginState.get(AUTH_RUNTIME_KEY);
+  if (!runtime || typeof runtime !== 'object') {
+    return null;
+  }
+  return runtime as AuthRuntimeLike;
+}
+
+/**
+ * Re-check suspension and required email verification after `userAuth`.
+ *
+ * Entity routes can be mounted in apps that disable identify-time suspension
+ * checks. When auth runtime state is available, fail closed on stale sessions
+ * before the route handler runs. If auth is not installed, treat this as a
+ * no-op so entity-only usage remains decoupled from slingshot-auth.
+ */
+export async function getUserAuthAccountGuardFailure(
+  c: Context<AppEnv, string>,
+): Promise<AccountGuardFailure | null> {
+  const userId = c.get('authUserId' as never) as unknown;
+  if (typeof userId !== 'string' || userId.length === 0) {
+    throw new Error(
+      '[security] entity userAuth account guard requires an authenticated authUserId context',
+    );
+  }
+
+  const runtime = getAuthRuntime(c);
+  if (!runtime?.adapter) {
+    return null;
+  }
+
+  const suspensionStatus = runtime.adapter.getSuspended
+    ? ((await runtime.adapter.getSuspended(userId)) ?? { suspended: false })
+    : { suspended: false };
+  if (suspensionStatus.suspended) {
+    return { error: 'Account suspended', status: 403 };
+  }
+
+  const requiresVerifiedEmail =
+    runtime.config?.primaryField === 'email' && runtime.config.emailVerification?.required === true;
+  if (!requiresVerifiedEmail || !runtime.adapter.getEmailVerified) {
+    return null;
+  }
+
+  const verified = await runtime.adapter.getEmailVerified(userId);
+  if (!verified) {
+    return { error: 'Email not verified', status: 403 };
+  }
+
+  return null;
+}

@@ -72,7 +72,59 @@ const testEntityConfig: ResolvedEntityConfig = {
   _storageName: 'notes',
 };
 
-function attachSlingshotCtx(router: OpenAPIHono<AppEnv>, tenantId?: string) {
+type TestAuthRuntime = {
+  adapter: {
+    getSuspended?: (
+      userId: string,
+    ) => Promise<{ suspended: boolean; suspendedReason?: string } | null>;
+    getEmailVerified?: (userId: string) => Promise<boolean | null | undefined>;
+  };
+  config: {
+    primaryField?: string;
+    emailVerification?: {
+      required?: boolean;
+    };
+  };
+};
+
+function createTestAuthRuntime(
+  options: {
+    suspended?: boolean;
+    emailVerificationRequired?: boolean;
+    emailVerified?: boolean;
+  } = {},
+): TestAuthRuntime {
+  const suspendedUsers = new Map<string, { suspended: boolean; suspendedReason?: string }>();
+  if (options.suspended) {
+    suspendedUsers.set('user-1', {
+      suspended: true,
+      suspendedReason: 'security review',
+    });
+  }
+
+  const emailVerifiedUsers = new Map<string, boolean>();
+  emailVerifiedUsers.set('user-1', options.emailVerified ?? true);
+
+  return {
+    adapter: {
+      async getSuspended(userId: string) {
+        return suspendedUsers.get(userId) ?? { suspended: false };
+      },
+      async getEmailVerified(userId: string) {
+        return emailVerifiedUsers.get(userId) ?? false;
+      },
+    },
+    config: {
+      primaryField: 'email',
+      emailVerification: options.emailVerificationRequired ? { required: true } : undefined,
+    },
+  };
+}
+
+function attachSlingshotCtx(
+  router: OpenAPIHono<AppEnv>,
+  options: { tenantId?: string; authRuntime?: TestAuthRuntime } = {},
+) {
   const idempotencyStore = new Map<
     string,
     {
@@ -84,9 +136,13 @@ function attachSlingshotCtx(router: OpenAPIHono<AppEnv>, tenantId?: string) {
     }
   >();
   router.use('*', async (_c: Context, next: Next) => {
+    const pluginState = new Map<string, unknown>();
+    if (options.authRuntime) {
+      pluginState.set('slingshot-auth', options.authRuntime);
+    }
     const slingshotCtx = {
-      tenantId,
-      pluginState: new Map<string, unknown>(),
+      tenantId: options.tenantId,
+      pluginState,
       routeAuth: {
         userAuth: async (_c: Context, nextAuth: Next) => {
           _c.set('authUserId', 'user-1');
@@ -672,7 +728,80 @@ describe('named operation inference — HTTP round-trip', () => {
     );
 
     expect(res.status).toBe(201);
-    expect(sawAuthUserId).toBe('user-1');
+    expect(sawAuthUserId === 'user-1').toBe(true);
+  });
+
+  it('rejects entity writes when the authenticated account is suspended after session issue', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    attachSlingshotCtx(router, {
+      authRuntime: createTestAuthRuntime({ suspended: true }),
+    });
+
+    applyRouteConfig(
+      router,
+      testEntityConfig,
+      {
+        create: {
+          auth: 'userAuth',
+        },
+      },
+      {},
+    );
+    buildBareEntityRoutes(testEntityConfig, undefined, adapter, router);
+
+    const res = await router.fetch(
+      new Request('http://localhost/notes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'blocked' }),
+      }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'Account suspended' });
+    expect(records.size).toBe(0);
+  });
+
+  it('rejects entity writes when required login email verification is no longer satisfied', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    attachSlingshotCtx(router, {
+      authRuntime: createTestAuthRuntime({
+        emailVerificationRequired: true,
+        emailVerified: false,
+      }),
+    });
+
+    applyRouteConfig(
+      router,
+      testEntityConfig,
+      {
+        create: {
+          auth: 'userAuth',
+        },
+      },
+      {},
+    );
+    buildBareEntityRoutes(testEntityConfig, undefined, adapter, router);
+
+    const res = await router.fetch(
+      new Request('http://localhost/notes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'blocked' }),
+      }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'Email not verified' });
+    expect(records.size).toBe(0);
   });
 
   it('replays entity create responses when first-class idempotency is enabled', async () => {

@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-notifications",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Shared notification storage, scheduling, and delivery events for slingshot",
   "license": "MIT",
   "type": "module",
@@ -31,8 +31,7 @@
     "access": "public"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-infra",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Infrastructure configuration, deploy planning, and platform tooling for Slingshot apps",
   "license": "MIT",
   "type": "module",
@@ -21,8 +21,7 @@
     "access": "public"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

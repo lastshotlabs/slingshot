@@ -15,6 +15,7 @@
       "@config/*": ["./src/config/*"],
       "@app": ["./src/app.ts"],
       "@lastshotlabs/slingshot-core": ["./packages/slingshot-core/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-core/faker": ["./packages/slingshot-core/dist/src/faker/index.d.ts"],
       "@lastshotlabs/slingshot-core/testing": ["./packages/slingshot-core/dist/src/testing.d.ts"],
       "@lastshotlabs/slingshot-auth": ["./packages/slingshot-auth/dist/src/index.d.ts"],
       "@lastshotlabs/slingshot-auth/testing": ["./packages/slingshot-auth/dist/src/testing.d.ts"],
@@ -45,6 +46,9 @@
       "@lastshotlabs/slingshot-push": ["./packages/slingshot-push/dist/src/index.d.ts"],
       "@lastshotlabs/slingshot-push/testing": ["./packages/slingshot-push/dist/src/testing.d.ts"],
       "@lastshotlabs/slingshot-entity": ["./packages/slingshot-entity/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-entity/seeder": [
+        "./packages/slingshot-entity/dist/src/seeder/index.d.ts"
+      ],
       "@lastshotlabs/slingshot-entity/routing": [
         "./packages/slingshot-entity/dist/src/routing/index.d.ts"
       ],

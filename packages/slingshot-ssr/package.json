@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-ssr",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "SSR, ISR, and page-routing plugin for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -36,8 +36,7 @@
     "access": "public"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

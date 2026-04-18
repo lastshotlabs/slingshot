@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-community",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Community forum plugin for Slingshot — containers, threads, replies, reactions, moderation",
   "license": "MIT",
   "type": "module",
@@ -26,8 +26,7 @@
     "access": "public"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

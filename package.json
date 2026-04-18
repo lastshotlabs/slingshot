@@ -3,7 +3,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Config-driven backend framework built on Hono. Plugin-driven, manifest-first.",
   "repository": {
     "type": "git",
@@ -221,6 +221,7 @@
     "@aws-sdk/client-sesv2": "^3.1017.0",
     "@aws-sdk/client-ssm": "^3.1014.0",
     "@eslint/js": "^10.0.1",
+    "@faker-js/faker": "^10.4.0",
     "@react-email/render": "^2.0.4",
     "@simplewebauthn/server": "^13.1.1",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",

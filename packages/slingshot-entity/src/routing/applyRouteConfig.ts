@@ -8,19 +8,19 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type {
   AppEnv,
   EntityRouteConfig,
-  RouteIdempotencyConfig,
   EntityRoutePolicyConfig,
   OperationConfig,
   PermissionEvaluator,
   PermissionRegistry,
   PolicyResolver,
   ResolvedEntityConfig,
+  RouteIdempotencyConfig,
   RouteOperationConfig,
   SlingshotEventBus,
 } from '@lastshotlabs/slingshot-core';
 import {
-  getSlingshotCtx,
   HEADER_IDEMPOTENCY_KEY,
+  getSlingshotCtx,
   hmacSign,
   resolveOpConfig,
   sha256,
@@ -30,6 +30,7 @@ import { buildPolicyAction, policyAppliesToOp, resolvePolicy } from '../policy/r
 import { safeReadJsonBody } from '../policy/safeReadJsonBody';
 import { evaluateRouteAuth } from './evaluateRouteAuth';
 import { resolveNamedOperationRoute } from './namedOperationRouting';
+import { getUserAuthAccountGuardFailure } from './userAuthAccountGuard';
 
 /**
  * Operations where the pre-handler policy pass must be skipped.
@@ -104,7 +105,10 @@ function normalizeIdempotencyConfig(
 async function buildRequestFingerprint(c: Context<AppEnv, string>): Promise<string> {
   const url = new URL(c.req.url);
   const contentType = c.req.header('content-type') ?? '';
-  const body = await c.req.raw.clone().text().catch(() => '');
+  const body = await c.req.raw
+    .clone()
+    .text()
+    .catch(() => '');
   return sha256(`${c.req.method}\n${url.pathname}\n${url.search}\n${contentType}\n${body}`);
 }
 
@@ -444,6 +448,14 @@ export function applyRouteConfig(
             // record — running the pre-handler pass for those ops would force
             // dispatch-based resolvers to handle null record + null input,
             // which they cannot do (the discriminator lives on the record).
+            if (opConfig.auth === 'userAuth') {
+              const guardFailure = await getUserAuthAccountGuardFailure(
+                c as Context<AppEnv, string>,
+              );
+              if (guardFailure) {
+                return c.json({ error: guardFailure.error }, guardFailure.status);
+              }
+            }
             const hasPostFetchPolicyPass = SKIP_PRE_HANDLER_POLICY_OPS.has(opName);
             if (!hasPostFetchPolicyPass) {
               const policyConfig = resolvePolicyConfig(opConfig, routeConfig);
@@ -473,7 +485,10 @@ export function applyRouteConfig(
       if (idempotency) {
         router.use(
           opPath,
-          methodGuard(methods, createEntityIdempotencyMiddleware(entityConfig.name, opName, idempotency)),
+          methodGuard(
+            methods,
+            createEntityIdempotencyMiddleware(entityConfig.name, opName, idempotency),
+          ),
         );
       }
 

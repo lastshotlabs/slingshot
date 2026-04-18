@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-deep-links",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Universal links, Android app links, and fallback redirects for slingshot",
   "license": "MIT",
   "type": "module",
@@ -28,7 +28,6 @@
   },
   "files": [
     "dist",
-    "src",
     "schema.json"
   ],
   "scripts": {

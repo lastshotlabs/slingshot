@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-runtime-edge",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Edge runtime implementation with Web Crypto and KV-backed ISR for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -24,8 +24,7 @@
     "access": "public"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

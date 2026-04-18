@@ -194,6 +194,12 @@ function printResult(result: DocumentationImpactResult): void {
 
 export async function main(argv = Bun.argv.slice(2)): Promise<number> {
   const options = parseArgs(argv);
+
+  if (!existsSync(options.mapPath)) {
+    console.log(`[docs:impact] Impact map not found: ${options.mapPath} — skipping.`);
+    return 0;
+  }
+
   const impactMap = loadImpactMap(options.mapPath);
   const changedFiles = options.files.length > 0 ? options.files : gitChangedFiles(options);
   const result = analyzeDocumentationImpact(changedFiles, impactMap);

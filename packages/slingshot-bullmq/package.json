@@ -26,7 +26,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prepublishOnly": "bun run build",
     "lint": "eslint src/ --cache",
     "test": "cd ../.. && bun test tests/unit/bullmq-adapter.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts",
     "test:redis": "cd ../.. && BULLMQ_INTEGRATION_REDIS_URL=redis://localhost:6380 bun test tests/docker/bullmq-adapter-redis-integration.test.ts"

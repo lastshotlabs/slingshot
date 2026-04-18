@@ -37,8 +37,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache",
-    "prepublishOnly": "bun run build"
+    "lint": "eslint src/ --cache"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"

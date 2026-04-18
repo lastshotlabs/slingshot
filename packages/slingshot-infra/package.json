@@ -27,7 +27,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prepublishOnly": "bun run build",
     "lint": "eslint src/ --cache"
   },
   "dependencies": {

@@ -30,8 +30,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src/ --cache",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "tsc -b tsconfig.build.json"
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*",

@@ -37,8 +37,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache",
-    "prepublishOnly": "bun run build"
+    "lint": "eslint src/ --cache"
   },
   "dependencies": {
     "@hono/zod-openapi": ">=0.18",

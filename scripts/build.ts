@@ -256,6 +256,16 @@ for (let index = 0; index < packageStepsByLayer.length; index += 1) {
   await runPackageLayer(index, packageStepsByLayer[index]!);
 }
 
+// Sync README.md from docs/human/index.md for each workspace package
+for (const entry of fs.readdirSync('packages', { withFileTypes: true })) {
+  if (!entry.isDirectory() || entry.name === 'docs') continue;
+  const humanDoc = path.join('packages', entry.name, 'docs', 'human', 'index.md');
+  const readme = path.join('packages', entry.name, 'README.md');
+  if (fs.existsSync(humanDoc)) {
+    fs.copyFileSync(humanDoc, readme);
+  }
+}
+
 for (const step of steps) {
   await runStep(step);
   if (step.name === 'framework alias rewrite') {

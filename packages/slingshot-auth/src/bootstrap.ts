@@ -313,6 +313,7 @@ export async function bootstrapAuth(
     passwordReset: passwordReset ?? null,
     magicLink: authConfig.magicLink ?? null,
     passwordPolicy: authConfig.passwordPolicy ?? {},
+    rateLimit: authConfig.rateLimit ?? {},
     authCookie: authConfig.cookieConfig ?? {},
     csrfCookie: authConfig.csrfCookieConfig ?? {},
     maxSessions,

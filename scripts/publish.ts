@@ -101,6 +101,30 @@ function rewriteDependencySection(
   return rewritten;
 }
 
+/**
+ * Strip the "bun" export condition from all export entries.
+ *
+ * The "bun" condition points to raw .ts source files which rely on monorepo-local
+ * path aliases (e.g. @auth/*) and may sit alongside stale build artifacts.
+ * Published packages should resolve through the compiled dist/ output only.
+ */
+function stripBunExportCondition(
+  exports: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!exports || typeof exports !== 'object') return exports;
+
+  const cleaned: Record<string, unknown> = {};
+  for (const [entrypoint, conditions] of Object.entries(exports)) {
+    if (typeof conditions === 'object' && conditions !== null && !Array.isArray(conditions)) {
+      const { bun: _, ...rest } = conditions as Record<string, unknown>;
+      cleaned[entrypoint] = rest;
+    } else {
+      cleaned[entrypoint] = conditions;
+    }
+  }
+  return cleaned;
+}
+
 function rewriteManifest(manifest: PackageManifest): PackageManifest {
   const rewritten: PackageManifest = {
     ...manifest,
@@ -117,6 +141,13 @@ function rewriteManifest(manifest: PackageManifest): PackageManifest {
     peerDependencies: rewriteDependencySection(manifest.peerDependencies, 'peerDependencies'),
     devDependencies: rewriteDependencySection(manifest.devDependencies, 'devDependencies'),
   };
+
+  // Strip "bun" export condition — consumers should resolve through dist/, not raw src/
+  if ('exports' in rewritten) {
+    (rewritten as Record<string, unknown>).exports = stripBunExportCondition(
+      (rewritten as Record<string, unknown>).exports as Record<string, unknown>,
+    );
+  }
 
   delete rewritten.private;
   delete rewritten.workspaces;

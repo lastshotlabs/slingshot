@@ -892,6 +892,7 @@ export interface AuthResolvedConfig {
   readonly passwordReset: Readonly<PasswordResetConfig> | null;
   readonly magicLink: Readonly<MagicLinkConfig> | null;
   readonly passwordPolicy: Readonly<PasswordPolicyConfig>;
+  readonly rateLimit: Readonly<AuthRateLimitConfig>;
   readonly authCookie: Readonly<AuthCookieConfig>;
   readonly csrfCookie: Readonly<CsrfCookieConfig>;
   readonly maxSessions: number;
@@ -941,6 +942,7 @@ export const DEFAULT_AUTH_CONFIG: AuthResolvedConfig = Object.freeze({
   passwordReset: null,
   magicLink: null,
   passwordPolicy: {},
+  rateLimit: {},
   authCookie: {},
   csrfCookie: {},
   maxSessions: 6,

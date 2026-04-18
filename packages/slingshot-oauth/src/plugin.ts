@@ -88,7 +88,15 @@ export function createOAuthPlugin(options?: OAuthPluginOptions): SlingshotPlugin
       if (providers.length === 0) return;
 
       const postRedirect = options?.postRedirect ?? '/';
-      app.route('/', createOAuthRouter(providers, postRedirect, runtime, options?.rateLimit));
+      app.route(
+        '/',
+        createOAuthRouter(
+          providers,
+          postRedirect,
+          runtime,
+          options?.rateLimit ?? runtime.config.rateLimit,
+        ),
+      );
     },
   };
 }

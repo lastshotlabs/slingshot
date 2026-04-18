@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-permissions",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Policy engine for slingshot — grants, roles, tenant-scoped permission evaluation",
   "license": "MIT",
   "type": "module",

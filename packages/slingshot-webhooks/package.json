@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-webhooks",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Inbound and outbound webhook plugin with entity-backed endpoints for Slingshot",
   "license": "MIT",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-entity",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Config-driven entity CRUD, code generation, and search for Slingshot",
   "license": "MIT",
   "type": "module",

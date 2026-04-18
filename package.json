@@ -3,7 +3,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Config-driven backend framework built on Hono. Plugin-driven, manifest-first.",
   "repository": {
     "type": "git",

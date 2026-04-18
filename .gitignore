@@ -1,0 +1,45 @@
+node_modules
+dist
+.env
+.slingshot/
+.oclif.manifest.json
+coverage
+.npmrc
+.eslintcache
+
+.feature-plans
+.claude
+.claire
+package-lock.json
+lint-results.txt
+
+.tmp-generated-*
+.tmp/domain-registration-tests/
+.tmp/domain-registration-manifests/
+.archive
+packages/docs/.astro
+packages/docs/dist
+packages/docs/.docs-typecheck/
+packages/docs/src/content/docs/api
+packages/docs/src/content/docs/packages
+docs/package/notes/private.md
+packages/*/docs/notes/private.md
+
+# Compiled output in package source dirs (root build artifacts)
+src/**/*.js
+src/**/*.d.ts
+src/**/*.d.ts.map
+src/**/*.js.map
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
+packages/*/src/**/*.js.map
+
+# TypeScript build info files
+packages/*/tsconfig.build.tsbuildinfo
+
+# Local temp build outputs
+.tmp/
+
+# Stray SQLite test artifacts
+file:test-*

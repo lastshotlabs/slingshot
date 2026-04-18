@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://slingshot.dev/schemas/deep-links.json",
+  "title": "@lastshotlabs/slingshot-deep-links config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "apple": {
+      "oneOf": [
+        { "$ref": "#/$defs/appleAppLink" },
+        { "type": "array", "items": { "$ref": "#/$defs/appleAppLink" }, "minItems": 1 }
+      ]
+    },
+    "android": { "$ref": "#/$defs/androidAppLink" },
+    "fallbackBaseUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://.*[^/]$"
+    },
+    "fallbackRedirects": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^/[^*]*$"
+      }
+    }
+  },
+  "$defs": {
+    "appleAppLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["teamId", "bundleId", "paths"],
+      "properties": {
+        "teamId": { "type": "string", "pattern": "^[A-Z0-9]{10}$" },
+        "bundleId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)+$"
+        },
+        "paths": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/.+$" },
+          "minItems": 1
+        }
+      }
+    },
+    "androidAppLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packageName", "sha256Fingerprints"],
+      "properties": {
+        "packageName": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)+$"
+        },
+        "sha256Fingerprints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$"
+          },
+          "minItems": 1
+        }
+      }
+    }
+  }
+}

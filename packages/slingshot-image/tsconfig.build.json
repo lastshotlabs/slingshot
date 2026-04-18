@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "tsBuildInfoFile": ".tmp/tsconfig.build.tsbuildinfo",
+    "declaration": true,
+    "paths": {
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/dist/src/index.d.ts"]
+    },
+    "noEmit": false,
+    "composite": true
+  },
+  "exclude": ["dist", "node_modules", "tests"],
+  "references": [{ "path": "../slingshot-core/tsconfig.build.json" }]
+}

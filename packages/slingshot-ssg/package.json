@@ -1,0 +1,31 @@
+{
+  "name": "@lastshotlabs/slingshot-ssg",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "bin": {
+    "slingshot-ssg": "./src/cli.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-ssr": "^0.1.0"
+  }
+}

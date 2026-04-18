@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ESNext",
+    "types": ["bun"],
+    "paths": {
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/src/index.ts"],
+      "@lastshotlabs/slingshot-core/testing": ["../slingshot-core/src/testing.ts"],
+      "@lastshotlabs/slingshot-entity": ["../slingshot-entity/src/index.ts"],
+      "@lastshotlabs/slingshot-permissions": ["../slingshot-permissions/src/index.ts"],
+      "@lastshotlabs/slingshot-permissions/testing": ["../slingshot-permissions/src/testing.ts"]
+    }
+  },
+  "exclude": ["dist", "node_modules"]
+}

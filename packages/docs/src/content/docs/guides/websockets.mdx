@@ -1,0 +1,402 @@
+---
+title: WebSockets
+description: Bidirectional realtime connections — rooms, pub/sub, auth, and scaling
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets are bidirectional — clients send messages, not just receive them. Use them for chat, collaborative editing, live cursors, and anything that needs low-latency two-way communication. For one-way event streams, use [SSE](/examples/realtime-sse/) instead.
+
+## Define a WebSocket endpoint
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "ws": {
+        "endpoints": {
+          "/ws/chat": {
+            "upgrade": { "handler": "wsUpgrade" },
+            "on": {
+              "open":    { "handler": "wsOpen" },
+              "message": { "handler": "wsMessage" },
+              "close":   { "handler": "wsClose" }
+            }
+          }
+        }
+      },
+      "plugins": [
+        { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user"], "defaultRole": "user" } } }
+      ]
+    }
+    ```
+
+    ```typescript title="slingshot.handlers.ts"
+    import type { ServerWebSocket } from 'bun';
+
+    declare function verifyToken(token: string): string | null;
+
+    export async function wsUpgrade(req: Request, server: unknown) {
+      // Authenticate before upgrading
+      const token = new URL(req.url).searchParams.get('token');
+      if (!token) return new Response('Unauthorized', { status: 401 });
+      const userId = verifyToken(token);
+      if (!userId) return new Response('Unauthorized', { status: 401 });
+      // Data attached to the socket, available in all handlers
+      return { userId };
+    }
+
+    export async function wsOpen(ws: ServerWebSocket<{ userId: string }>) {
+      console.log('Connected:', ws.data.userId);
+    }
+
+    export async function wsMessage(ws: ServerWebSocket<{ userId: string }>, message: string | Buffer) {
+      // Echo back
+      ws.send(message);
+    }
+
+    export async function wsClose(ws: ServerWebSocket<{ userId: string }>) {
+      console.log('Disconnected:', ws.data.userId);
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    declare function verifyToken(token: string): string | null;
+
+    await createServer({
+      port: 3000,
+      ws: {
+        endpoints: {
+          '/ws/chat': {
+            upgrade: async (req) => {
+              const token = new URL(req.url).searchParams.get('token');
+              if (!token) return new Response('Unauthorized', { status: 401 });
+              const userId = verifyToken(token);
+              if (!userId) return new Response('Unauthorized', { status: 401 });
+              return { userId }; // attached to ws.data
+            },
+            on: {
+              open: (ws) => {
+                console.log('Connected:', ws.data.userId);
+              },
+              message: (ws, message) => {
+                ws.send(message);
+              },
+              close: (ws) => {
+                console.log('Disconnected:', ws.data.userId);
+              },
+            },
+          },
+        },
+      },
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## Rooms and pub/sub
+
+Bun's WebSocket server has built-in room support. Clients subscribe to named rooms and publish to them:
+
+```typescript
+export async function wsOpen(ws: ServerWebSocket<{ userId: string; roomId: string }>) {
+  // Subscribe this connection to a room
+  ws.subscribe(ws.data.roomId);
+
+  // Announce to the room
+  ws.publish(
+    ws.data.roomId,
+    JSON.stringify({
+      type: 'joined',
+      userId: ws.data.userId,
+    }),
+  );
+}
+
+export async function wsMessage(
+  ws: ServerWebSocket<{ userId: string; roomId: string }>,
+  msg: string | Buffer,
+) {
+  const data = JSON.parse(msg.toString());
+
+  // Broadcast to everyone in the room
+  ws.publish(
+    ws.data.roomId,
+    JSON.stringify({
+      type: 'message',
+      userId: ws.data.userId,
+      text: data.text,
+    }),
+  );
+}
+
+export async function wsClose(ws: ServerWebSocket<{ userId: string; roomId: string }>) {
+  ws.unsubscribe(ws.data.roomId);
+  ws.publish(
+    ws.data.roomId,
+    JSON.stringify({
+      type: 'left',
+      userId: ws.data.userId,
+    }),
+  );
+}
+```
+
+Pass the room ID through the upgrade data:
+
+```typescript
+declare function verifyToken(token: string): string | null;
+
+export async function wsUpgrade(req: Request) {
+  const url = new URL(req.url);
+  const token = url.searchParams.get('token');
+  const roomId = url.searchParams.get('room');
+
+  if (!token || !roomId) return new Response('Bad Request', { status: 400 });
+  const userId = verifyToken(token);
+  if (!userId) return new Response('Unauthorized', { status: 401 });
+
+  return { userId, roomId };
+}
+```
+
+## Gating room access
+
+Use the `onRoomSubscribe` hook to check permissions before a client joins a room:
+
+```typescript title="app.manifest.json (ws section)"
+{
+  "ws": {
+    "endpoints": {
+      "/ws": {
+        "upgrade": { "handler": "wsUpgrade" },
+        "onRoomSubscribe": { "handler": "wsRoomSubscribe" },
+        "on": { ... }
+      }
+    }
+  }
+}
+```
+
+```typescript title="slingshot.handlers.ts"
+declare function checkPermission(
+  userId: string,
+  action: string,
+  resourceType: string,
+  resourceId: string | undefined,
+): Promise<boolean>;
+
+export async function wsRoomSubscribe(
+  ws: ServerWebSocket<{ userId: string }>,
+  room: string,
+): Promise<boolean> {
+  // Return true to allow, false to deny
+  const [resourceType, resourceId] = room.split(':');
+  return checkPermission(ws.data.userId, 'read', resourceType, resourceId);
+}
+```
+
+## Connecting from the browser
+
+```typescript
+const ws = new WebSocket(`wss://api.example.com/ws/chat?token=${jwt}&room=general`);
+
+ws.onopen = () => {
+  ws.send(JSON.stringify({ text: 'Hello everyone' }));
+};
+
+ws.onmessage = event => {
+  const data = JSON.parse(event.data);
+  console.log(data);
+};
+
+ws.onclose = () => {
+  // Reconnect with exponential backoff
+  setTimeout(connect, 1000);
+};
+```
+
+## Multiple endpoints
+
+Define as many endpoints as you need:
+
+```json
+"ws": {
+  "endpoints": {
+    "/ws/chat":          { "upgrade": { "handler": "chatUpgrade" },    "on": { ... } },
+    "/ws/notifications": { "upgrade": { "handler": "notifUpgrade" },   "on": { ... } },
+    "/ws/collaboration": { "upgrade": { "handler": "colabUpgrade" },   "on": { ... } }
+  }
+}
+```
+
+## Scaling WebSockets
+
+Bun's pub/sub is in-process. Multiple instances require a shared WebSocket transport. Configure Redis on `ws.transport`:
+
+```json
+{
+  "db": { "redis": "${env:REDIS_URL}" },
+  "ws": {
+    "transport": {
+      "type": "redis",
+      "options": {
+        "connection": "${env:REDIS_URL}"
+      }
+    }
+  }
+}
+```
+
+With a Redis transport, `ws.publish()` broadcasts across all instances - clients on any instance receive messages published on any other.
+
+See [Horizontal Scaling](/guides/horizontal-scaling/) for the full multi-instance setup.
+
+<Aside>
+  `websocketScalingAudit` in `slingshot-infra` checks whether your WebSocket config needs a
+  cross-instance transport and warns if it's missing.
+</Aside>
+
+## Entity channel config
+
+Plugins built on `createEntityPlugin()` (such as `slingshot-community`) can declare WebSocket channel
+behaviour directly on entity definitions. This wires presence, pub/sub forwarding, and incoming
+event handling without hand-writing route or socket logic.
+
+### Channel fields
+
+Each channel declaration (`EntityChannelDeclaration`) supports these fields:
+
+| Field        | Type                                                              | Description                                                                                                                                       |
+| ------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth`       | `'userAuth' \| 'none'`                                            | Auth level required to subscribe to this channel                                                                                                  |
+| `permission` | `{ requires: string; scope?: ... }`                               | Permission check run during `onRoomSubscribe`                                                                                                     |
+| `presence`   | `boolean`                                                         | Emit `presence_join` / `presence_leave` events when clients connect or disconnect. Requires `presence: true` on the WS endpoint config.           |
+| `forward`    | `{ events: string[]; idField: string }`                           | Bus events to forward to room subscribers. `idField` identifies the entity ID in the event payload that determines which room receives the event. |
+| `receive`    | `{ events: string[]; toRoom?: boolean; excludeSender?: boolean }` | Client-sent event types the server will relay. Defaults: `toRoom: true`, `excludeSender: true`.                                                   |
+| `middleware` | `string[]`                                                        | Named middleware that runs before subscribe/send                                                                                                  |
+
+### Example: entity with all fields
+
+```typescript
+import { defineEntity, field } from '@lastshotlabs/slingshot-core';
+import type { EntityChannelConfig } from '@lastshotlabs/slingshot-core';
+
+const channels: EntityChannelConfig = {
+  channels: {
+    live: {
+      auth: 'userAuth',
+      permission: { requires: 'app:document.read' },
+      presence: true,
+      forward: {
+        events: ['app:document.updated', 'app:comment.created'],
+        idField: 'documentId',
+      },
+      receive: {
+        events: ['cursor.move', 'document.typing'],
+        toRoom: true,
+        excludeSender: true,
+      },
+    },
+  },
+};
+```
+
+Room names follow the pattern `{storageName}:{entityId}:{channelName}`. For the example above, a
+client subscribes with:
+
+```json
+{ "action": "subscribe", "room": "documents:abc123:live" }
+```
+
+### Forwarding bus events
+
+`forward.idField` tells the entity plugin which field in the bus event payload carries the entity
+ID. When `app:comment.created` fires with `{ documentId: 'abc123', ... }`, the plugin publishes it
+to `documents:abc123:live`.
+
+### Receiving client events
+
+`receive.events` is a whitelist. The server silently drops any client-sent event type not in the
+list. Handlers validate that the sender is actually subscribed to the room they name in the payload
+before relaying. The expected payload shape for a receive event:
+
+```json
+{ "action": "event", "type": "document.typing", "payload": { "room": "documents:abc123:live" } }
+```
+
+### Self-wiring vs manual wiring
+
+**Manifest-first plugins** (like `slingshot-community`) self-wire their WS handlers during
+`setupPost`. They read `SlingshotContext.wsPublish` and `SlingshotContext.ws` lazily, so no
+caller-supplied function references are needed. The manifest endpoint only needs `presence: true`:
+
+```json
+{
+  "plugins": [{ "plugin": "slingshot-community", "config": { "wsEndpoint": "community" } }],
+  "ws": { "endpoints": { "community": { "presence": true } } }
+}
+```
+
+**Custom entity plugins** that do not self-wire expose `buildSubscribeGuard` and
+`buildReceiveIncoming` for manual wiring:
+
+```typescript
+const plugin = createEntityPlugin({
+  name: 'app',
+  entities: [...],
+  wsEndpoint: 'live',
+  publishFn: publish,
+  getWsState: () => getContext(app).ws,
+});
+
+await createServer({
+  plugins: [plugin],
+  ws: {
+    endpoints: {
+      live: {
+        presence: true,
+        onRoomSubscribe: plugin.buildSubscribeGuard({
+          getIdentity: (ws) => (ws as AppWs).user ?? null,
+          checkPermission: (userId, perm, scope) =>
+            evaluator.can({ subjectId: userId, subjectType: 'user' }, perm, scope),
+          middleware: {},
+        }),
+        incoming: plugin.buildReceiveIncoming(),
+      },
+    },
+  },
+});
+```
+
+Call both **after all plugins have initialized** — they read state set during `setupMiddleware`.
+
+To self-wire in your own plugin, declare the endpoint in the root `ws.endpoints` config, then
+write to `getContext(app).wsEndpoints` during `setupPost`:
+
+```typescript
+async setupPost({ app }) {
+  const ctx = getContext(app);
+  if (!ctx.wsEndpoints) return;
+  const ep = ctx.wsEndpoints['my-endpoint'] ??= {};
+  ep.onRoomSubscribe = async (ws, room) => checkAccess(ws, room);
+  ep.incoming = myPlugin.buildReceiveIncoming();
+}
+```
+
+Self-wiring plugins should still declare their endpoint in the root `ws.endpoints` config.
+When `createApp({ ws })` or `createServer({ ws })` receives that config, Slingshot seeds
+`ctx.wsEndpoints` before `setupPost` runs. Plugins can then attach `incoming`,
+`onRoomSubscribe`, or other endpoint hooks during bootstrap, and `createServer()` later boots
+from that same endpoint map.
+
+## See also
+
+- [Realtime with SSE](/examples/realtime-sse/) — one-way event streams, simpler client setup
+- [Horizontal Scaling](/guides/horizontal-scaling/) — multi-instance WebSocket scaling
+- [Custom Event Bus](/examples/custom-event-bus/) - event-bus options for SSE and plugin events

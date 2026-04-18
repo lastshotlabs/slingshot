@@ -1,0 +1,280 @@
+---
+title: Horizontal Scaling
+description: Running multiple Slingshot instances — shared sessions, cross-instance events, WebSocket scaling
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot's HTTP layer is stateless. Add instances freely - but shared storage for sessions, a shared event bus for app events, and a shared WebSocket transport are required so activity on one instance reaches clients on another.
+
+## What needs to be shared
+
+| Concern           | Single instance           | Multiple instances   |
+| ----------------- | ------------------------- | -------------------- |
+| Sessions          | In-memory or local SQLite | Redis or Postgres    |
+| Event bus         | `InProcessAdapter`        | BullMQ or custom bus |
+| Cache             | In-memory                 | Redis                |
+| File uploads      | Local disk                | S3 or shared volume  |
+| WebSocket pub/sub | Bun native (in-process)   | Redis transport      |
+
+## Sessions and storage
+
+Switch auth sessions to Redis. Each instance reads and writes the same session store:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "db": {
+        "postgres": "${env:DATABASE_URL}",
+        "redis": "${env:REDIS_URL}"
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user"], "defaultRole": "user" },
+            "db": {
+              "auth": "postgres",
+              "sessions": "redis",
+              "oauthState": "redis"
+            }
+          }
+        }
+      ]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: { roles: ['user'], defaultRole: 'user' },
+      db: {
+        auth: 'postgres',     // durable records in Postgres
+        sessions: 'redis',    // sessions shared via Redis
+        oauthState: 'redis',  // OAuth flow state shared via Redis
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+## Event bus
+
+The default `InProcessAdapter` is process-local. Events emitted on instance A never reach instance B.
+
+Switch to a shared event bus so app events cross instances. The built-in manifest option is BullMQ:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "eventBus": "bullmq",
+      "secrets": { "provider": "env" }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createBullMQAdapter } from '@lastshotlabs/slingshot-bullmq';
+
+    await createServer({
+      eventBus: createBullMQAdapter({
+        connection: { host: process.env.REDIS_HOST ?? '127.0.0.1', port: 6379 },
+        prefix: 'slingshot:events',
+        attempts: 5,
+      }),
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+With a shared event bus:
+
+- SSE clients on instance A receive events emitted on instance B
+- `setupPost()` event subscriptions in plugins fire on every instance
+
+## WebSockets across instances
+
+Bun's native `ws.publish()` is in-process only. WebSocket room fan-out uses `ws.transport`, not the app event bus. For multi-instance room delivery, configure the Redis WebSocket transport:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "db": {
+        "redis": "${env:REDIS_URL}"
+      },
+      "ws": {
+        "transport": {
+          "type": "redis",
+          "options": {
+            "connection": "${env:REDIS_URL}",
+            "channelPrefix": "ws:room:"
+          }
+        },
+        "endpoints": {
+          "/ws/chat": { "presence": true }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    import { createRedisTransport, createServer } from '@lastshotlabs/slingshot';
+
+    await createServer({
+      ws: {
+        transport: createRedisTransport({
+          connection: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
+          channelPrefix: 'ws:room:',
+        }),
+        endpoints: {
+          '/ws/chat': { presence: true },
+        },
+      },
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+Once `ws.transport` is configured, Slingshot bridges room pub/sub through Redis:
+
+```typescript
+// Client connected to instance A sends a message
+export async function wsMessage(ws: ServerWebSocket<{ roomId: string }>, msg: string | Buffer) {
+  // publish goes to Redis -> received by all instances -> forwarded to subscribers on each
+  ws.publish(ws.data.roomId, msg);
+}
+```
+
+Clients connected to instance B, subscribed to the same room, receive the message.
+
+<Aside>
+  `websocketScalingAudit` in `slingshot-infra` checks your WebSocket config for a cross-instance
+  transport and warns if it's missing.
+</Aside>
+
+## Load balancer config
+
+For sticky sessions, configure session affinity on your load balancer so WebSocket connections stay on the same instance. Not required with a Redis WebSocket transport, but it reduces Redis traffic.
+
+For ECS, the generated `sst.config.ts` sets up ALB with health check routing. For EC2, the `Caddyfile` handles round-robin or least-connections load balancing.
+
+## Rate limiting across instances
+
+In-memory rate limiting doesn't scale. Switch the rate limiter to Redis:
+
+```json title="app.manifest.json"
+{
+  "security": {
+    "rateLimit": {
+      "windowMs": 900000,
+      "max": 100,
+      "store": "redis"
+    }
+  }
+}
+```
+
+With Redis-backed rate limiting, a client making 50 requests on instance A and 50 on instance B is correctly throttled at 100 total.
+
+## Cache
+
+Switch the cache adapter to Redis so all instances share the same cache:
+
+```json
+{
+  "db": {
+    "redis": "${env:REDIS_URL}"
+  },
+  "cache": {
+    "store": "redis"
+  }
+}
+```
+
+## Full multi-instance config
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "port": 3000,
+
+  "db": {
+    "postgres": "${env:DATABASE_URL}",
+    "redis": "${env:REDIS_URL}"
+  },
+
+  "eventBus": "bullmq",
+  "secrets": { "provider": "env" },
+
+  "ws": {
+    "transport": {
+      "type": "redis",
+      "options": {
+        "connection": "${env:REDIS_URL}"
+      }
+    },
+    "endpoints": {
+      "/ws/chat": { "presence": true }
+    }
+  },
+
+  "security": {
+    "signing": { "secret": "${secret:SIGNING_SECRET}" },
+    "rateLimit": {
+      "windowMs": 900000,
+      "max": 100,
+      "store": "redis"
+    }
+  },
+
+  "plugins": [
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": { "roles": ["user"], "defaultRole": "user" },
+        "db": {
+          "auth": "postgres",
+          "sessions": "redis",
+          "oauthState": "redis"
+        }
+      }
+    },
+    { "plugin": "slingshot-community" }
+  ]
+}
+```
+
+## Scaling in production
+
+With `slingshot-infra`, set scaling targets in `slingshot.infra.ts`:
+
+```typescript
+export default defineInfra({
+  stacks: ['main'],
+  size: 'medium',
+
+  scaling: {
+    min: 2, // always at least 2 instances for availability
+    max: 10, // scale up to 10 under load
+    targetCpuPercent: 60,
+  },
+
+  uses: ['db', 'cache'], // DATABASE_URL and REDIS_URL auto-wired
+});
+```
+
+ECS auto-scales on CPU. Traffic spikes spin up new instances; idle periods scale them back down.
+
+## See also
+
+- [Custom Event Bus](/examples/custom-event-bus/) - BullMQ and custom event bus implementations
+- [WebSockets](/guides/websockets/) - WebSocket rooms and pub/sub
+- [Deployment](/guides/deployment/) - slingshot-infra scaling config

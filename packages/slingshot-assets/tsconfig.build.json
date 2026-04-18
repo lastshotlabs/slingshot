@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "noCheck": true,
+    "declaration": true,
+    "outDir": "dist",
+
+    "tsBuildInfoFile": ".tmp/tsconfig.build.tsbuildinfo",
+    "rootDir": ".",
+    "skipLibCheck": true,
+    "paths": {
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-core/testing": ["../slingshot-core/dist/src/testing.d.ts"],
+      "@lastshotlabs/slingshot-entity": ["../slingshot-entity/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-permissions": ["../slingshot-permissions/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-permissions/testing": [
+        "../slingshot-permissions/dist/src/testing.d.ts"
+      ]
+    },
+    "composite": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,34 @@
+{
+  "name": "@lastshotlabs/runtime-edge",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./kv": {
+      "types": "./dist/kv-isr.d.ts",
+      "import": "./dist/kv-isr.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src/ --cache",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@lastshotlabs/slingshot-core": "*",
+    "@lastshotlabs/slingshot-ssr": "*"
+  },
+  "peerDependenciesMeta": {
+    "@lastshotlabs/slingshot-ssr": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@lastshotlabs/slingshot-core": "workspace:*",
+    "@lastshotlabs/slingshot-ssr": "workspace:*",
+    "typescript": "*"
+  }
+}

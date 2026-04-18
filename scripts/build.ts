@@ -1,0 +1,266 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+type BuildStep = {
+  name: string;
+  cwd?: string;
+  command: string[];
+};
+
+type WorkspacePackage = {
+  name: string;
+  dir: string;
+  build: string;
+  dependencies: string[];
+  optionalDependencies: string[];
+  peerDependencies: string[];
+};
+
+const packagesOnly = process.argv.includes('--packages-only');
+const excludedPackages = new Set([
+  '@slingshot/runtime-bun',
+  '@slingshot/runtime-node',
+  '@lastshotlabs/slingshot-docs',
+]);
+
+const workspacePackages: WorkspacePackage[] = fs
+  .readdirSync('packages', { withFileTypes: true })
+  .filter(entry => entry.isDirectory())
+  .flatMap(entry => {
+    const dir = path.join('packages', entry.name);
+    const manifestPath = path.join(dir, 'package.json');
+    if (!fs.existsSync(manifestPath)) return [];
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
+      name?: string;
+      scripts?: { build?: string };
+      dependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+    };
+
+    const build = manifest.scripts?.build;
+    if (!build) return [];
+    if (excludedPackages.has(manifest.name ?? '')) return [];
+    if (build.includes('--noEmit')) return [];
+
+    return [
+      {
+        name: manifest.name ?? entry.name,
+        dir,
+        build,
+        dependencies: [...Object.keys(manifest.dependencies ?? {})],
+        optionalDependencies: Object.keys(manifest.optionalDependencies ?? {}),
+        peerDependencies: Object.keys(manifest.peerDependencies ?? {}),
+      },
+    ];
+  });
+
+const workspacePackageNames = new Set(workspacePackages.map(pkg => pkg.name));
+const packageLookup = new Map(workspacePackages.map(pkg => [pkg.name, pkg]));
+const dependencyGraph = new Map<string, Set<string>>();
+const reverseDependencyGraph = new Map<string, Set<string>>();
+
+for (const pkg of workspacePackages) {
+  const internalDeps = [
+    ...pkg.dependencies,
+    ...pkg.optionalDependencies,
+    ...pkg.peerDependencies,
+  ].filter(dep => workspacePackageNames.has(dep) && dep !== pkg.name);
+  dependencyGraph.set(pkg.name, new Set(internalDeps));
+  for (const dep of internalDeps) {
+    const dependents = reverseDependencyGraph.get(dep) ?? new Set<string>();
+    dependents.add(pkg.name);
+    reverseDependencyGraph.set(dep, dependents);
+  }
+}
+
+const readyQueue = workspacePackages
+  .filter(pkg => (dependencyGraph.get(pkg.name)?.size ?? 0) === 0)
+  .map(pkg => pkg.name)
+  .sort((a, b) => a.localeCompare(b));
+
+const pendingDependencies = new Map(
+  [...dependencyGraph.entries()].map(([name, deps]) => [name, new Set(deps)]),
+);
+
+const packageBuildLayers: string[][] = [];
+
+while (readyQueue.length > 0) {
+  const currentLayer = [...readyQueue];
+  readyQueue.length = 0;
+  packageBuildLayers.push(currentLayer);
+
+  for (const next of currentLayer) {
+    for (const dependent of reverseDependencyGraph.get(next) ?? []) {
+      const deps = pendingDependencies.get(dependent);
+      if (!deps) continue;
+      deps.delete(next);
+      if (deps.size === 0) {
+        readyQueue.push(dependent);
+      }
+    }
+    pendingDependencies.delete(next);
+  }
+
+  readyQueue.sort((a, b) => a.localeCompare(b));
+}
+
+if (pendingDependencies.size > 0) {
+  const remaining = [...pendingDependencies.keys()].sort((a, b) => a.localeCompare(b));
+  throw new Error(
+    `[build] dependency cycle or unresolved hard workspace dependency detected: ${remaining.join(', ')}`,
+  );
+}
+
+const maxParallelPackageBuilds = Math.max(
+  2,
+  Math.min(
+    6,
+    typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length,
+  ),
+);
+
+const packageStepsByLayer: BuildStep[][] = packageBuildLayers.map(layer =>
+  layer.map(name => ({
+    name: `${name} typescript emit`,
+    command: [
+      'bun',
+      'x',
+      'tsc',
+      '-p',
+      path.join(packageLookup.get(name)!.dir, 'tsconfig.build.json'),
+      '--noCheck',
+    ],
+  })),
+);
+
+const authAliasStep: BuildStep[] = workspacePackageNames.has('@lastshotlabs/slingshot-auth')
+  ? [
+      {
+        name: '@lastshotlabs/slingshot-auth alias rewrite',
+        command: [
+          'bun',
+          'x',
+          'tsc-alias',
+          '-p',
+          path.join('packages', 'slingshot-auth', 'tsconfig.build.json'),
+        ],
+      },
+    ]
+  : [];
+
+const frameworkSteps: BuildStep[] = [
+  {
+    name: 'framework typescript emit',
+    command: ['bun', 'x', 'tsc', '-p', 'tsconfig.framework.build.json', '--noCheck'],
+  },
+  {
+    name: 'framework alias rewrite',
+    command: ['bun', 'x', 'tsc-alias', '-p', 'tsconfig.framework.build.json'],
+  },
+];
+
+const rootSteps: BuildStep[] = [
+  {
+    name: 'root typescript emit',
+    command: ['bun', 'x', 'tsc', '-p', 'tsconfig.build.json', '--noCheck'],
+  },
+  { name: 'alias rewrite', command: ['bun', 'x', 'tsc-alias', '-p', 'tsconfig.build.json'] },
+  { name: 'cli bundle', command: ['bun', 'x', 'tsup', '--config', 'tsup.cli.config.ts'] },
+  { name: 'oclif manifest', command: ['bun', 'x', 'oclif', 'manifest', '.'] },
+];
+
+const steps = packagesOnly
+  ? [...authAliasStep]
+  : [...authAliasStep, ...frameworkSteps, ...rootSteps];
+
+const formatSeconds = (startedAt: number): string =>
+  `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+
+function rewriteFrameworkDeclarationImports(): void {
+  const frameworkDistDir = path.join('dist', 'src', 'framework');
+  if (!fs.existsSync(frameworkDistDir)) return;
+
+  const queue = [frameworkDistDir];
+  while (queue.length > 0) {
+    const currentDir = queue.pop()!;
+    for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
+      const fullPath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(fullPath);
+        continue;
+      }
+      if (!entry.isFile() || !fullPath.endsWith('.d.ts')) continue;
+
+      const original = fs.readFileSync(fullPath, 'utf8');
+      const rewritten = original
+        .replace(/(['"])(?:\.\.\/)+config\/([^'"]+)\1/g, '$1@config/$2$1')
+        .replace(/(['"])(?:\.\.\/)+lib\/([^'"]+)\1/g, '$1@lib/$2$1');
+
+      if (rewritten !== original) {
+        fs.writeFileSync(fullPath, rewritten);
+      }
+    }
+  }
+}
+
+async function runStep(step: BuildStep): Promise<void> {
+  const startedAt = Date.now();
+  console.log(`[build] ${step.name}...`);
+  const proc = Bun.spawn({
+    cmd: step.command,
+    cwd: step.cwd,
+    stdout: 'inherit',
+    stderr: 'inherit',
+    stdin: 'inherit',
+  });
+  const heartbeat = setInterval(() => {
+    console.log(`[build] ${step.name} still running after ${formatSeconds(startedAt)}...`);
+  }, 10_000);
+
+  const exitCode = await proc.exited.finally(() => clearInterval(heartbeat));
+  if (exitCode !== 0) {
+    console.error(
+      `[build] ${step.name} failed after ${formatSeconds(startedAt)} (exit ${exitCode})`,
+    );
+    process.exit(exitCode);
+  }
+  console.log(`[build] ${step.name} done in ${formatSeconds(startedAt)}`);
+}
+
+async function runPackageLayer(layerIndex: number, stepsInLayer: BuildStep[]): Promise<void> {
+  const queue = [...stepsInLayer];
+  const running = new Set<Promise<void>>();
+  console.log(
+    `[build] workspace package layer ${layerIndex + 1}/${packageStepsByLayer.length}: ${stepsInLayer.length} package(s)`,
+  );
+
+  while (queue.length > 0 || running.size > 0) {
+    while (queue.length > 0 && running.size < maxParallelPackageBuilds) {
+      const step = queue.shift()!;
+      const task = runStep(step).finally(() => {
+        running.delete(task);
+      });
+      running.add(task);
+    }
+
+    if (running.size > 0) {
+      await Promise.race(running);
+    }
+  }
+}
+
+for (let index = 0; index < packageStepsByLayer.length; index += 1) {
+  await runPackageLayer(index, packageStepsByLayer[index]!);
+}
+
+for (const step of steps) {
+  await runStep(step);
+  if (step.name === 'framework alias rewrite') {
+    console.log('[build] framework declaration import rewrite...');
+    rewriteFrameworkDeclarationImports();
+    console.log('[build] framework declaration import rewrite done');
+  }
+}

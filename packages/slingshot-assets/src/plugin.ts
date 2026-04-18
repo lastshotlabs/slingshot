@@ -1,0 +1,119 @@
+import type {
+  PermissionsState,
+  PluginSetupContext,
+  SlingshotPlugin,
+} from '@lastshotlabs/slingshot-core';
+import {
+  PERMISSIONS_STATE_KEY,
+  getContext,
+  validatePluginConfig,
+} from '@lastshotlabs/slingshot-core';
+import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
+import { resolveStorageAdapter } from './adapters/index';
+import { assetsPluginConfigSchema } from './config.schema';
+import { createMemoryImageCache } from './image/cache';
+import { resolveImageConfig } from './image/serve';
+import type { ImageCacheAdapter } from './image/types';
+import { assetManifest } from './manifest/assetManifest';
+import { createAssetsManifestRuntime } from './manifest/runtime';
+import type { AssetAdapter, AssetsPluginConfig, AssetsPluginState } from './types';
+
+function isImageCacheAdapter(value: unknown): value is ImageCacheAdapter {
+  if (typeof value !== 'object' || value === null) return false;
+  return (
+    typeof Reflect.get(value, 'get') === 'function' &&
+    typeof Reflect.get(value, 'set') === 'function'
+  );
+}
+
+/**
+ * Create the manifest-driven assets plugin.
+ *
+ * Asset persistence is owned by `assetManifest`. Package-specific runtime
+ * behavior such as presign operations, image serving, TTL decoration, and
+ * delete-to-storage cleanup is resolved through the manifest runtime.
+ *
+ * @param rawConfig - Assets plugin configuration.
+ * @returns A Slingshot plugin instance for app registration.
+ */
+export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlugin {
+  const config = Object.freeze(
+    validatePluginConfig('slingshot-assets', rawConfig, assetsPluginConfigSchema),
+  );
+  const mountPath = config.mountPath ?? '/assets';
+  const storage = resolveStorageAdapter(config.storage);
+  const imageConfig = resolveImageConfig(config.image);
+  const imageCache =
+    imageConfig != null
+      ? isImageCacheAdapter(config.image?.cache)
+        ? config.image.cache
+        : createMemoryImageCache()
+      : null;
+
+  type LazyMiddleware = { handler: import('hono').MiddlewareHandler };
+  const noop: import('hono').MiddlewareHandler = async (_c, next) => next();
+  const deleteStorageFileRef: LazyMiddleware = { handler: noop };
+
+  let assetAdapterRef: AssetAdapter | undefined;
+  let innerPlugin: EntityPlugin | undefined;
+
+  const manifestRuntime = createAssetsManifestRuntime({
+    config,
+    storage,
+    imageCache,
+    imageConfig,
+    setDeleteStorageMiddleware(handler) {
+      deleteStorageFileRef.handler = handler;
+    },
+    setAssetAdapter(adapter) {
+      assetAdapterRef = adapter;
+    },
+  });
+
+  return {
+    name: 'slingshot-assets',
+    dependencies: ['slingshot-auth', 'slingshot-permissions'],
+
+    async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+      const permissions: PermissionsState =
+        (getContext(app).pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined) ??
+        (() => {
+          throw new Error(
+            '[slingshot-assets] No permissions available. Register createPermissionsPlugin() ' +
+              'before this plugin.',
+          );
+        })();
+
+      innerPlugin = createEntityPlugin({
+        name: 'slingshot-assets',
+        mountPath,
+        manifest: assetManifest,
+        manifestRuntime,
+        middleware: {
+          deleteStorageFile: async (c, next) => deleteStorageFileRef.handler(c, next),
+        },
+        permissions,
+      });
+
+      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
+    },
+
+    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus });
+
+      if (assetAdapterRef) {
+        const state: AssetsPluginState = Object.freeze({
+          assets: assetAdapterRef,
+          storage,
+          config,
+        });
+        getContext(app).pluginState.set('slingshot-assets', state);
+      }
+    },
+
+    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    },
+  };
+}

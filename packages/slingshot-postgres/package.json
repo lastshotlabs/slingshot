@@ -1,0 +1,51 @@
+{
+  "name": "@lastshotlabs/slingshot-postgres",
+  "version": "0.1.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    },
+    "./testing": {
+      "bun": "./src/testing.ts",
+      "import": "./dist/src/testing.js",
+      "types": "./dist/src/testing.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "drizzle"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0"
+  },
+  "peerDependencies": {
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.20.0"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": false
+    },
+    "pg": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@types/pg": "^8.18.0",
+    "drizzle-orm": "^0.45.2",
+    "pg": "^8.20.0"
+  }
+}

@@ -1,0 +1,528 @@
+---
+title: Testing Plugins
+description: A practical guide to testing Slingshot plugins — from basic route assertions to event verification, cross-plugin state, and SQLite integration tests.
+---
+
+import { Aside, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot plugins run inside a Hono app. The test model matches that: create the app, drive requests through it using Hono's built-in test client, assert responses. No HTTP server, no ports, no teardown complexity.
+
+`app.request()` dispatches through the full middleware chain and returns a `Response` — same as a real request, minus the network. You get realistic behavior without the overhead.
+
+<Aside type="note">
+  Use `createApp()` (or a bare `new Hono()` + `plugin.setup()`) for plugin tests — not
+  `createServer()`. `createServer()` starts a real Bun server on a port. For tests you want the
+  in-process path only.
+</Aside>
+
+```typescript
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { Hono } from 'hono';
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+```
+
+## Basic plugin test
+
+A complete, working example. The plugin adds a single route. The test drives a request against it and asserts the response.
+
+```typescript title="tests/integration/myPlugin.test.ts"
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { Hono } from 'hono';
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+import type {
+  PluginSetupContext,
+  SlingshotFrameworkConfig,
+  StandalonePlugin,
+} from '@lastshotlabs/slingshot-core';
+
+declare function createMyPlugin(config?: Record<string, unknown>): StandalonePlugin;
+
+// A minimal framework config stub — only populate what your plugin actually reads.
+const config = {} as SlingshotFrameworkConfig;
+
+async function buildApp() {
+  const app = new Hono() as unknown as PluginSetupContext['app'];
+  const bus = new InProcessAdapter();
+  const plugin = createMyPlugin({ greeting: 'hello' });
+
+  // For a StandalonePlugin, call setup() directly.
+  // setup() calls setupMiddleware then setupRoutes in order.
+  await plugin.setup!({ app, config, bus });
+
+  return { app, bus };
+}
+
+describe('my-plugin routes', () => {
+  test('GET /my-plugin/status returns 200 with greeting', async () => {
+    const { app } = await buildApp();
+    const res = await app.request('/my-plugin/status');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { message: string };
+    expect(body.message).toBe('hello');
+  });
+
+  test('POST /my-plugin/items returns 201 with the created item', async () => {
+    const { app } = await buildApp();
+    const res = await app.request('/my-plugin/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'widget' }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string; name: string };
+    expect(body.name).toBe('widget');
+    expect(typeof body.id).toBe('string');
+  });
+
+  test('POST /my-plugin/items returns 400 for missing name', async () => {
+    const { app } = await buildApp();
+    const res = await app.request('/my-plugin/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+```
+
+<Aside type="tip">
+  Build a `buildApp()` helper per test file. Keeps setup out of test bodies and makes it trivial to
+  create variations (different config, different adapters) without repeating boilerplate.
+</Aside>
+
+## Testing authenticated endpoints
+
+Your plugin's protected routes need a valid session token. The simplest way to get one: run the register and login flow against the same in-process app.
+
+```typescript title="tests/integration/protectedRoutes.test.ts"
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { Hono } from 'hono';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+import type {
+  PluginSetupContext,
+  SlingshotFrameworkConfig,
+  StandalonePlugin,
+} from '@lastshotlabs/slingshot-core';
+
+declare function createMyPlugin(config?: Record<string, unknown>): StandalonePlugin;
+
+const config = {} as SlingshotFrameworkConfig;
+
+async function buildAuthenticatedApp() {
+  const app = new Hono() as unknown as PluginSetupContext['app'];
+  const bus = new InProcessAdapter();
+
+  const authPlugin = createAuthPlugin({
+    auth: { roles: ['user'], defaultRole: 'user' },
+    db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    security: { signing: { secret: 'test-secret-32-chars-minimum-ok!' } },
+  });
+  const myPlugin = createMyPlugin();
+
+  await authPlugin.setup!({ app, config, bus });
+  await myPlugin.setup!({ app, config, bus });
+
+  return { app, bus };
+}
+
+// Register a user and return their session token
+async function loginAs(
+  app: PluginSetupContext['app'],
+  email: string,
+  password: string,
+): Promise<string> {
+  // Register
+  await app.request('/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+
+  // Login
+  const loginRes = await app.request('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+
+  expect(loginRes.status).toBe(200);
+  const body = (await loginRes.json()) as { token: string };
+  return body.token;
+}
+
+describe('my-plugin protected routes', () => {
+  test('GET /my-plugin/private returns 401 without token', async () => {
+    const { app } = await buildAuthenticatedApp();
+    const res = await app.request('/my-plugin/private');
+    expect(res.status).toBe(401);
+  });
+
+  test('GET /my-plugin/private returns 200 with valid token', async () => {
+    const { app } = await buildAuthenticatedApp();
+    const token = await loginAs(app, 'alice@example.com', 'StrongPass1!');
+
+    const res = await app.request('/my-plugin/private', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test('GET /my-plugin/admin returns 403 for non-admin user', async () => {
+    const { app } = await buildAuthenticatedApp();
+    const token = await loginAs(app, 'bob@example.com', 'StrongPass1!');
+
+    const res = await app.request('/my-plugin/admin', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(403);
+  });
+});
+```
+
+<Aside type="note">
+The token returned by `/auth/login` is a JWT. Pass it as `Authorization: Bearer <token>`. For cookie-based sessions, extract the `Set-Cookie` header from the login response and pass it back in subsequent requests.
+</Aside>
+
+## Testing plugin events
+
+To verify that your plugin emits the right events, subscribe before the action, trigger it, then call `bus.drain()` to flush all in-flight async handlers before asserting.
+
+`bus.drain()` is only available on `InProcessAdapter` — which is exactly what you should use for unit and integration tests.
+
+```typescript title="tests/integration/events.test.ts"
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { Hono } from 'hono';
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+import type {
+  PluginSetupContext,
+  SlingshotEventMap,
+  SlingshotFrameworkConfig,
+  StandalonePlugin,
+} from '@lastshotlabs/slingshot-core';
+
+declare function createMyPlugin(config?: Record<string, unknown>): StandalonePlugin;
+
+const config = {} as SlingshotFrameworkConfig;
+
+describe('my-plugin event emission', () => {
+  test('creating an item emits my-plugin:item.created', async () => {
+    const app = new Hono() as unknown as PluginSetupContext['app'];
+    const bus = new InProcessAdapter();
+    const plugin = createMyPlugin();
+    await plugin.setup!({ app, config, bus });
+
+    // Collect emitted events before driving the request
+    const emitted: Array<{ name: string; orgId: string }> = [];
+    bus.on('my-plugin:item.created' as keyof SlingshotEventMap, (payload: unknown) => {
+      emitted.push(payload as { name: string; orgId: string });
+    });
+
+    await app.request('/my-plugin/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'widget', orgId: 'org-123' }),
+    });
+
+    // Flush async handlers before asserting
+    await bus.drain();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].name).toBe('widget');
+    expect(emitted[0].orgId).toBe('org-123');
+  });
+
+  test('deleting an item emits my-plugin:item.deleted', async () => {
+    const app = new Hono() as unknown as PluginSetupContext['app'];
+    const bus = new InProcessAdapter();
+    const plugin = createMyPlugin();
+    await plugin.setup!({ app, config, bus });
+
+    const deleted: string[] = [];
+    bus.on('my-plugin:item.deleted' as keyof SlingshotEventMap, (payload: unknown) => {
+      deleted.push((payload as { id: string }).id);
+    });
+
+    // Create then delete
+    const createRes = await app.request('/my-plugin/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'widget' }),
+    });
+    const { id } = (await createRes.json()) as { id: string };
+
+    await app.request(`/my-plugin/items/${id}`, { method: 'DELETE' });
+    await bus.drain();
+
+    expect(deleted).toContain(id);
+  });
+});
+```
+
+<Aside type="caution">
+  Always `await bus.drain()` before asserting on events. Without it you're asserting on a state that
+  may not have settled yet.
+</Aside>
+
+## Testing cross-plugin state
+
+Plugins store runtime state in `ctx.pluginState`. To test that your plugin correctly sets state — and that another plugin can read it — get the context after setup and inspect the map directly.
+
+```typescript title="tests/integration/pluginState.test.ts"
+import { describe, expect, test } from 'bun:test';
+import { Hono } from 'hono';
+import { InProcessAdapter, getContext } from '@lastshotlabs/slingshot-core';
+import type {
+  PluginSetupContext,
+  SlingshotFrameworkConfig,
+  StandalonePlugin,
+} from '@lastshotlabs/slingshot-core';
+
+declare function createDependentPlugin(): StandalonePlugin;
+declare function createMyPlugin(config?: Record<string, unknown>): StandalonePlugin;
+
+const config = {} as SlingshotFrameworkConfig;
+
+describe('cross-plugin state via pluginState', () => {
+  test('my-plugin registers its runtime under its key', async () => {
+    const app = new Hono() as unknown as PluginSetupContext['app'];
+    const bus = new InProcessAdapter();
+
+    const myPlugin = createMyPlugin({ featureFlag: true });
+    await myPlugin.setup!({ app, config, bus });
+
+    // After setup, the plugin must have stored its state on ctx.pluginState
+    const ctx = getContext(app);
+    const runtime = ctx.pluginState.get('my-plugin') as { featureFlag: boolean } | undefined;
+
+    expect(runtime).toBeDefined();
+    expect(runtime!.featureFlag).toBe(true);
+  });
+
+  test('dependent-plugin reads my-plugin state during its own setup', async () => {
+    const app = new Hono() as unknown as PluginSetupContext['app'];
+    const bus = new InProcessAdapter();
+
+    // my-plugin must be set up first — dependent-plugin reads from pluginState during setup
+    await createMyPlugin({ featureFlag: true }).setup!({ app, config, bus });
+    await createDependentPlugin().setup!({ app, config, bus });
+
+    const ctx = getContext(app);
+    // Verify the dependent plugin picked up the state
+    const dependentState = ctx.pluginState.get('dependent-plugin') as
+      | { myPluginFeatureEnabled: boolean }
+      | undefined;
+
+    expect(dependentState?.myPluginFeatureEnabled).toBe(true);
+  });
+});
+```
+
+Plugin order matters here. Plugins that read from `pluginState` must run after the plugins that write to it. Use `dependencies` in your plugin definition and the framework handles the ordering automatically:
+
+```typescript
+import { getContext } from '@lastshotlabs/slingshot-core';
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+export function createDependentPlugin(): SlingshotPlugin {
+  return {
+    name: 'dependent-plugin',
+    dependencies: ['my-plugin'], // framework resolves this order automatically
+    async setupPost({ app }) {
+      const ctx = getContext(app);
+      const myRuntime = ctx.pluginState.get('my-plugin');
+      ctx.pluginState.set('dependent-plugin', {
+        myPluginFeatureEnabled: (myRuntime as any)?.featureFlag ?? false,
+      });
+    },
+  };
+}
+```
+
+## Test isolation
+
+In-memory adapters hold state in closure variables. State leaks across tests if you share plugin instances. The fix is simple: either create a fresh app per test, or call `ctx.clear()` in `afterEach`.
+
+<Tabs>
+  <TabItem label="Fresh app per test (preferred)">
+    ```typescript
+    // preferred — no shared state at all
+    import { beforeEach, describe, test, expect } from 'bun:test';
+    import { Hono } from 'hono';
+    import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+    import type {
+      SlingshotFrameworkConfig,
+      PluginSetupContext,
+      StandalonePlugin,
+    } from '@lastshotlabs/slingshot-core';
+
+    declare function createMyPlugin(config?: Record<string, unknown>): StandalonePlugin;
+    const config = {} as SlingshotFrameworkConfig;
+
+    describe('my-plugin', () => {
+      // buildApp is called inside each test — completely fresh instances
+      async function buildApp() {
+        const app = new Hono() as unknown as PluginSetupContext['app'];
+        const bus = new InProcessAdapter();
+        const plugin = createMyPlugin();
+        await plugin.setup!({ app, config, bus });
+        return { app, bus };
+      }
+
+      test('item count starts at zero', async () => {
+        const { app } = await buildApp();
+        const res = await app.request('/my-plugin/items');
+        const body = await res.json() as { total: number };
+        expect(body.total).toBe(0);
+      });
+
+      test('creating an item increments count', async () => {
+        const { app } = await buildApp();  // fresh instance — no item from previous test
+        await app.request('/my-plugin/items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'widget' }),
+        });
+        const res = await app.request('/my-plugin/items');
+        const body = await res.json() as { total: number };
+        expect(body.total).toBe(1);
+      });
+    });
+    ```
+
+  </TabItem>
+  <TabItem label="ctx.clear() in beforeEach">
+    ```typescript
+    // use when re-creating the app is expensive (many plugins, slow setup)
+    import { afterEach, beforeEach, describe, test, expect } from 'bun:test';
+    import { Hono } from 'hono';
+    import { InProcessAdapter, getContext } from '@lastshotlabs/slingshot-core';
+    import type {
+      SlingshotFrameworkConfig,
+      PluginSetupContext,
+      StandalonePlugin,
+    } from '@lastshotlabs/slingshot-core';
+
+    declare function createMyPlugin(config?: Record<string, unknown>): StandalonePlugin;
+
+    describe('my-plugin with ctx.clear()', () => {
+      let app: PluginSetupContext['app'];
+      const config = {} as SlingshotFrameworkConfig;
+
+      beforeEach(async () => {
+        app = new Hono() as unknown as PluginSetupContext['app'];
+        const bus = new InProcessAdapter();
+        await createMyPlugin().setup!({ app, config, bus });
+      });
+
+      afterEach(async () => {
+        // Reset all in-memory state on this context — adapters, caches, registries
+        const ctx = getContext(app);
+        await ctx.clear();
+      });
+
+      test('item count starts at zero after clear', async () => {
+        const res = await app.request('/my-plugin/items');
+        const body = await res.json() as { total: number };
+        expect(body.total).toBe(0);
+      });
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+<Aside type="caution">
+  Never share a plugin instance or app instance across test files that mutate state. Each test file
+  should own its own setup. `ctx.clear()` resets in-memory state — it does not close database
+  connections. Use `ctx.destroy()` in a global teardown hook for that.
+</Aside>
+
+## Integration tests with SQLite
+
+In-memory adapters cover most cases. Step up to SQLite when you need to verify actual SQL schemas, cursor-based pagination, or SQLite-specific semantics like `ON CONFLICT` and `RETURNING`.
+
+Use a `tmp` file path unique per test run so parallel workers don't collide:
+
+```typescript title="tests/integration/sqlite.test.ts"
+import { unlinkSync } from 'node:fs';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { Hono } from 'hono';
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+import type {
+  PluginSetupContext,
+  SlingshotFrameworkConfig,
+  StandalonePlugin,
+} from '@lastshotlabs/slingshot-core';
+
+declare function createMyPlugin(config?: Record<string, unknown>): StandalonePlugin;
+
+// Unique per test run — avoids collisions with parallel bun test workers
+const DB_PATH = `/tmp/my-plugin-test-${Date.now()}.db`;
+
+afterAll(() => {
+  try {
+    unlinkSync(DB_PATH);
+  } catch {}
+});
+
+describe('my-plugin with SQLite', () => {
+  test('items persist across separate request cycles', async () => {
+    const app = new Hono() as unknown as PluginSetupContext['app'];
+    const bus = new InProcessAdapter();
+    const config = { sqlite: DB_PATH } as unknown as SlingshotFrameworkConfig;
+
+    await createMyPlugin({ db: { items: 'sqlite' } }).setup!({ app, config, bus });
+
+    // Create
+    const createRes = await app.request('/my-plugin/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'persisted-widget' }),
+    });
+    expect(createRes.status).toBe(201);
+    const { id } = (await createRes.json()) as { id: string };
+
+    // Fetch — same connection, verifies the row was written
+    const getRes = await app.request(`/my-plugin/items/${id}`);
+    expect(getRes.status).toBe(200);
+    const item = (await getRes.json()) as { name: string };
+    expect(item.name).toBe('persisted-widget');
+  });
+});
+```
+
+For Docker-backed Postgres and Mongo tests, see the root `tests/docker/` directory and `bunfig.docker.toml` for the pattern the framework itself uses.
+
+## Using package testing subpaths
+
+Some packages expose a `/testing` subpath with pre-built helpers for common test setup. Use them when the setup required to test that package in isolation would otherwise be too verbose to repeat everywhere.
+
+```typescript
+// @lastshotlabs/slingshot-auth/testing exports memory adapters and runtime builders
+import {
+  createAuthRateLimitService,
+  createMemoryAuthAdapter,
+  createMemoryAuthRateLimitRepository,
+  createMemorySessionRepository,
+} from '@lastshotlabs/slingshot-auth/testing';
+```
+
+The root `@lastshotlabs/slingshot/testing` subpath exports two higher-level helpers:
+
+- **`createTestFullServer(config)`** — boots the full framework stack (all plugins, full config validation, real bootstrap). Use this for framework-level integration tests where you need to verify the complete boot path and routing setup.
+
+- **`wrapAppAsTestServer(app)`** — wraps an already-assembled Hono app, adding a request helper that mimics `app.request()` but logs failures with richer diagnostics. Use this when you have already set up your app and want nicer error output without re-running setup.
+
+When to use each:
+
+| Scenario                                                     | Use                                      |
+| ------------------------------------------------------------ | ---------------------------------------- |
+| Testing your plugin's routes and logic                       | `new Hono()` + `plugin.setup()` directly |
+| Testing cross-plugin integration                             | `new Hono()` + both plugins' `setup()`   |
+| Testing full framework boot (all plugins, config validation) | `createTestFullServer()`                 |
+| Wrapping an existing assembled app                           | `wrapAppAsTestServer()`                  |
+| Testing a package's internal services                        | Package's own `/testing` subpath         |
+
+The framework itself uses `createTestFullServer()` in `tests/integration/` to verify the full boot path works end-to-end. Your plugin tests almost never need this — prefer the lighter-weight `new Hono()` + `plugin.setup()` path.

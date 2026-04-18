@@ -1,0 +1,386 @@
+---
+title: Building a Custom Plugin
+description: Add new routes, middleware, and event handling to a Slingshot app using the plugin pattern
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Plugins extend Slingshot with your own routes, state, and event behavior. Use them when you need something outside an entity definition — custom middleware, cross-plugin coordination, external integrations. The example below builds a product catalog plugin from scratch.
+
+## What you're building
+
+A `catalog` plugin that:
+
+- Mounts `GET /catalog/products` and `POST /catalog/products`
+- Emits `entity:products.created` when a product is added
+- Requires the caller to be authenticated
+- Stores its state in `pluginState` for other plugins to read
+
+## The plugin structure
+
+```
+src/plugins/catalog/
+  index.ts        ← createCatalogPlugin() — the factory
+  router.ts       ← HTTP routes
+  store.ts        ← in-memory store (swap for a DB later)
+  types.ts        ← shared types
+```
+
+## Step 1: Define the store
+
+The store is a plain factory — closure-owned state, no singletons:
+
+```typescript title="src/plugins/catalog/store.ts"
+export interface Product {
+  id: string;
+  name: string;
+  price: number;
+  createdAt: string;
+}
+
+export function createProductStore() {
+  const products = new Map<string, Product>();
+
+  return {
+    list(): Product[] {
+      return Array.from(products.values());
+    },
+    get(id: string): Product | undefined {
+      return products.get(id);
+    },
+    create(data: { name: string; price: number }): Product {
+      const product: Product = {
+        id: crypto.randomUUID(),
+        name: data.name,
+        price: data.price,
+        createdAt: new Date().toISOString(),
+      };
+      products.set(product.id, product);
+      return product;
+    },
+  };
+}
+
+export type ProductStore = ReturnType<typeof createProductStore>;
+```
+
+## Step 2: Mount the routes
+
+The router receives the store and event bus — no globals, no imports from outer scope:
+
+```typescript title="src/plugins/catalog/router.ts"
+import { createRoute, createRouter, errorResponse } from '@lastshotlabs/slingshot-core';
+import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import type { Product, ProductStore } from './store';
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'entity:products.created': { product: Product; userId: string };
+  }
+}
+
+export function createCatalogRouter(store: ProductStore, bus: SlingshotEventBus) {
+  const router = createRouter();
+
+  router.openapi(
+    createRoute({
+      method: 'get',
+      path: '/catalog/products',
+      tags: ['Catalog'],
+      responses: {
+        200: {
+          description: 'List of products',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  products: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        name: { type: 'string' },
+                        price: { type: 'number' },
+                        createdAt: { type: 'string' },
+                      },
+                      required: ['id', 'name', 'price', 'createdAt'],
+                    },
+                  },
+                },
+                required: ['products'],
+              },
+            },
+          },
+        },
+      },
+    }),
+    async c => {
+      return c.json({ products: store.list() }) as never;
+    },
+  );
+
+  router.openapi(
+    createRoute({
+      method: 'post',
+      path: '/catalog/products',
+      tags: ['Catalog'],
+      request: {
+        body: {
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string', minLength: 1 },
+                  price: { type: 'number', exclusiveMinimum: 0 },
+                },
+                required: ['name', 'price'],
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        201: {
+          description: 'Created product',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  price: { type: 'number' },
+                  createdAt: { type: 'string' },
+                },
+                required: ['id', 'name', 'price', 'createdAt'],
+              },
+            },
+          },
+        },
+        401: { description: 'Not authenticated' },
+      },
+    }),
+    async c => {
+      const userId = c.get('authUserId');
+      if (!userId) return errorResponse(c, 'Unauthorized', 401);
+
+      const body = (await c.req.json()) as { name: string; price: number };
+      const product = store.create(body);
+
+      // Emit to the event bus — other plugins and SSE clients can subscribe
+      bus.emit('entity:products.created', { product, userId });
+
+      return c.json(product, 201) as never;
+    },
+  );
+
+  return router;
+}
+```
+
+## Step 3: Implement the plugin lifecycle
+
+A plugin runs in four phases. `setupMiddleware` fires first (before tenant middleware). `setupRoutes` fires after tenant middleware — handlers can read `tenantId` and other context values. `setupPost` fires last, after all routes register — subscribe to events and write to `pluginState` here.
+
+```typescript title="src/plugins/catalog/index.ts"
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { createCatalogRouter } from './router';
+import { createProductStore } from './store';
+
+export function createCatalogPlugin(): SlingshotPlugin {
+  // Store is created once per plugin instance — no shared state
+  const store = createProductStore();
+
+  return {
+    name: 'catalog',
+    dependencies: ['slingshot-auth'], // auth must run before catalog
+
+    async setupMiddleware() {
+      // No middleware needed for this plugin
+    },
+
+    async setupRoutes({ app, bus }) {
+      // Routes are mounted after tenant middleware — they get tenantId on context
+      app.route('/', createCatalogRouter(store, bus));
+    },
+
+    async setupPost({ app, bus }) {
+      // Publish the store so other plugins can read product data
+      const { getContext } = await import('@lastshotlabs/slingshot-core');
+      const ctx = getContext(app);
+      ctx.pluginState.set('catalog', { store });
+
+      // Subscribe to product events — log them for now
+      bus.on('entity:products.created', async ({ product }) => {
+        console.log(`Product created: ${product.name} ($${product.price})`);
+      });
+
+      // Register as a client-safe event so SSE clients can receive it
+      bus.registerClientSafeEvents(['entity:products.created']);
+    },
+  };
+}
+```
+
+## Step 4: Wire it into the app
+
+<Tabs>
+  <TabItem label="Manifest">
+    The manifest can't reference local plugin factories — use `createManifestHandlerRegistry()` to register it:
+
+    ```typescript title="src/index.ts"
+    import { createManifestHandlerRegistry, createServerFromManifest } from '@lastshotlabs/slingshot';
+    import { createCatalogPlugin } from './plugins/catalog';
+
+    const registry = createManifestHandlerRegistry();
+    registry.registerPlugin('catalog', createCatalogPlugin);
+
+    await createServerFromManifest('./app.manifest.json', registry);
+    ```
+
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "security": {
+        "signing": { "secret": "${secret:JWT_SECRET}" }
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user"], "defaultRole": "user" },
+            "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
+          }
+        },
+        { "plugin": "catalog" }
+      ]
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+    import { createCatalogPlugin } from './plugins/catalog';
+
+    await createServer({
+      port: 3000,
+      security: {
+        signing: { secret: process.env.JWT_SECRET! },
+      },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user'], defaultRole: 'user' },
+          db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
+        }),
+        createCatalogPlugin(),
+      ],
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## The routes you get
+
+```bash
+# List products (no auth required)
+curl http://localhost:3000/catalog/products
+
+# Create a product (requires auth)
+curl -X POST http://localhost:3000/catalog/products \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <jwt>' \
+  -d '{ "name": "Widget", "price": 9.99 }'
+```
+
+## Add realtime updates
+
+`entity:products.created` is already registered as a client-safe event. Add an SSE endpoint and browser clients receive it automatically:
+
+```json title="app.manifest.json (add to existing)"
+{
+  "sse": {
+    "endpoints": {
+      "/__sse": { "auth": true }
+    }
+  }
+}
+```
+
+```typescript
+// Browser: subscribe to catalog events
+const es = new EventSource('/__sse', { withCredentials: true });
+es.addEventListener('entity:products.created', e => {
+  const { product } = JSON.parse(e.data);
+  console.log('New product:', product.name);
+});
+```
+
+If you also need a plugin-owned WebSocket hook, declare the endpoint in the root `ws.endpoints`
+config and then patch the seeded draft during `setupPost`:
+
+```typescript
+import { getContext } from '@lastshotlabs/slingshot-core';
+
+const plugin = {
+  async setupPost({ app }: { app: object }) {
+    const ctx = getContext(app);
+    const endpoint = ctx.wsEndpoints?.['/__ws/catalog'];
+    if (!endpoint) return;
+
+    endpoint.incoming = {
+      'catalog:ping': {
+        handler: async (ws, _payload, _context) => {
+          const socket = ws as { send(message: string): void };
+          socket.send(JSON.stringify({ event: 'catalog:pong' }));
+        },
+      },
+    };
+  },
+};
+
+void plugin;
+```
+
+That draft is the same endpoint map `createServer()` later boots, so the handler is live once the
+server starts.
+`createApp()` also seeds the same draft during tests and non-server bootstrap, so plugin WebSocket
+registration code does not need a separate path outside live server startup.
+
+## Read catalog state from another plugin
+
+Cross-plugin communication goes through `pluginState`. If catalog isn't installed, the check returns `undefined` — no hard dependency:
+
+```typescript
+import { getContext } from '@lastshotlabs/slingshot-core';
+
+interface ProductStore {
+  list(): Array<{ id: string; name: string; price: number; createdAt: string }>;
+}
+
+// In another plugin's setupPost or a route handler:
+declare const app: object;
+
+const ctx = getContext(app);
+const catalogState = ctx.pluginState.get('catalog') as { store: ProductStore } | undefined;
+if (catalogState) {
+  const products = catalogState.store.list();
+}
+```
+
+## Framework note
+
+Framework-managed plugins should put real work in `setupMiddleware`, `setupRoutes`, and `setupPost`. The optional `setup()` hook is only a standalone convenience for plain Hono integration and is not part of the `createApp()` or `createServer()` lifecycle.
+
+## Next steps
+
+- Add a Postgres or SQLite adapter to replace the in-memory store — see [Config-Driven Walkthrough](/config-driven-walkthrough/)
+- Publish the plugin as an npm package — see [Publishing](/authoring/publishing/)
+- Add a migration generator for your schema — see [Build a Package](/plugins/overview/)
+- Add observability to your plugin with `createChildSpan` — see [Observability & Distributed Tracing](/guides/observability/)

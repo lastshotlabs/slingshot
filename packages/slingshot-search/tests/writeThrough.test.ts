@@ -1,0 +1,131 @@
+/**
+ * Write-through sync tests.
+ *
+ * Tests EntitySearchClient (the WriteThroughSearchSync interface) via the
+ * search manager's getSearchClient() method. Uses the DB-native provider.
+ */
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
+import { createSearchManager } from '../src/searchManager';
+import type { SearchManager } from '../src/searchManager';
+import { createSearchTransformRegistry } from '../src/transformRegistry';
+import type { SearchPluginConfig } from '../src/types/config';
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+const PLUGIN_CONFIG: SearchPluginConfig = {
+  providers: { default: { provider: 'db-native' } },
+};
+
+function makeEntity(storageName: string): ResolvedEntityConfig {
+  return {
+    name: storageName,
+    _pkField: 'id',
+    _storageName: storageName,
+    fields: {
+      id: { type: 'string', optional: false, primary: true, immutable: true },
+      title: { type: 'string', optional: false, primary: false, immutable: false },
+      category: { type: 'string', optional: false, primary: false, immutable: false },
+    },
+    search: {
+      fields: {
+        title: { searchable: true },
+        category: { searchable: false, filterable: true },
+      },
+    },
+  };
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+describe('write-through sync (EntitySearchClient)', () => {
+  let manager: SearchManager;
+
+  beforeEach(async () => {
+    manager = createSearchManager({
+      pluginConfig: PLUGIN_CONFIG,
+      transformRegistry: createSearchTransformRegistry(),
+    });
+    await manager.initialize([makeEntity('widgets')]);
+  });
+
+  afterEach(async () => {
+    await manager.teardown();
+  });
+
+  it('indexDocument() calls provider indexDocument — document is findable after indexing', async () => {
+    const client = manager.getSearchClient('widgets');
+    await client.indexDocument({ id: 'w1', title: 'Blue Widget', category: 'tools' });
+
+    const provider = manager.getProvider('widgets');
+    expect(provider).toBeDefined();
+    const result = await provider!.search('widgets', { q: 'Blue Widget' });
+    expect(result.totalHits).toBeGreaterThanOrEqual(1);
+    expect((result.hits[0].document as Record<string, unknown>).id).toBe('w1');
+  });
+
+  it('deleteDocument() removes document from index', async () => {
+    const client = manager.getSearchClient('widgets');
+    await client.indexDocument({ id: 'w-del', title: 'Remove Me', category: 'tools' });
+    await client.removeDocument('w-del');
+
+    const provider = manager.getProvider('widgets');
+    expect(provider).toBeDefined();
+    const result = await provider!.search('widgets', { q: 'Remove Me' });
+    const found = result.hits.find(h => (h.document as Record<string, unknown>).id === 'w-del');
+    expect(found).toBeUndefined();
+  });
+
+  it('ensureReady() — index is initialized on manager.initialize, no double-init error', async () => {
+    // The search manager initializes indexes on startup (ensureConfigEntity / initialize).
+    // Calling initialize again should be idempotent.
+    await manager.initialize([makeEntity('widgets')]);
+    // Should not throw — already initialized
+    const client = manager.getSearchClient('widgets');
+    await client.indexDocument({ id: 'ready-1', title: 'Ready Test', category: 'tools' });
+
+    const provider = manager.getProvider('widgets');
+    const result = await provider!.search('widgets', { q: 'Ready Test' });
+    expect(result.totalHits).toBeGreaterThanOrEqual(1);
+  });
+
+  it('indexDocuments() indexes a batch', async () => {
+    const client = manager.getSearchClient('widgets');
+    await client.indexDocuments([
+      { id: 'batch-1', title: 'First Batch Item', category: 'tools' },
+      { id: 'batch-2', title: 'Second Batch Item', category: 'tools' },
+    ]);
+
+    const provider = manager.getProvider('widgets');
+    const result = await provider!.search('widgets', { q: 'Batch Item' });
+    expect(result.totalHits).toBe(2);
+  });
+
+  it('provider failure — indexDocument throws with a descriptive error', async () => {
+    const failingManager = createSearchManager({
+      pluginConfig: PLUGIN_CONFIG,
+      transformRegistry: createSearchTransformRegistry(),
+    });
+
+    const entity = makeEntity('fail_widgets');
+    await failingManager.initialize([entity]);
+
+    // Force a failure by deleting the underlying index, then trying to index
+    const failProvider = failingManager.getProvider('fail_widgets');
+    if (failProvider) {
+      await failProvider.deleteIndex('fail_widgets');
+    }
+
+    // Indexing to a non-existent index should throw
+    const failClient = failingManager.getSearchClient('fail_widgets');
+    await expect(
+      failClient.indexDocument({ id: 'err-1', title: 'Error Doc', category: 'test' }),
+    ).rejects.toThrow();
+
+    await failingManager.teardown();
+  });
+});

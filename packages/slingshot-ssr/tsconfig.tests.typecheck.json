@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "tsBuildInfoFile": ".tmp/tsconfig.tests.typecheck.tsbuildinfo",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": ".",
+    "outDir": ".tmp/typecheck/tests",
+    "noEmit": false
+  },
+  "include": ["tests"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    {
+      "path": "./tsconfig.typecheck.json"
+    }
+  ]
+}

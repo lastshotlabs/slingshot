@@ -1,0 +1,152 @@
+---
+title: Installation
+description: Install Slingshot and the packages you actually need
+---
+
+## Core
+
+Every Slingshot app starts here:
+
+```bash
+bun add @lastshotlabs/slingshot hono zod
+```
+
+Installs `createServer()`, `createApp()`, the manifest bootstrap, route discovery, OpenAPI helpers, and the entity/operations authoring tools.
+
+## Feature packages
+
+Install only what your app needs:
+
+```bash
+bun add @lastshotlabs/slingshot-auth          # accounts, sessions, JWT, MFA, OAuth, passkeys
+bun add @lastshotlabs/slingshot-community     # forums, threads, replies, reactions, moderation
+bun add @lastshotlabs/slingshot-permissions   # RBAC/ABAC — required when using community or orgs
+bun add @lastshotlabs/slingshot-organizations # teams, membership, invite flows
+bun add @lastshotlabs/slingshot-search        # full-text search across entities
+bun add @lastshotlabs/slingshot-mail          # transactional email
+bun add @lastshotlabs/slingshot-push          # push notifications
+bun add @lastshotlabs/slingshot-webhooks      # outbound webhook delivery
+bun add @lastshotlabs/slingshot-admin         # admin panel surface
+bun add @lastshotlabs/slingshot-m2m           # machine-to-machine tokens
+bun add @lastshotlabs/slingshot-scim          # SCIM provisioning for enterprise SSO
+```
+
+## Building your own domain packages
+
+If you're building config-driven domain packages with `defineEntity()` and `createEntityPlugin()`:
+
+```bash
+bun add @lastshotlabs/slingshot-entity
+```
+
+## Runtime
+
+Slingshot runs on Bun or Node.js. **On Bun, the runtime is auto-detected** — no extra install needed. For Node.js, install the Node runtime package and its dependencies:
+
+```bash
+# Node.js only — Bun users can skip this
+bun add @slingshot/runtime-node
+bun add better-sqlite3 argon2 @hono/node-server ws fast-glob
+```
+
+```typescript
+// Node.js only — pass the runtime explicitly
+import { nodeRuntime } from '@slingshot/runtime-node';
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({ runtime: nodeRuntime(), port: 3000 });
+```
+
+On Bun, `createServer` without a `runtime` argument uses `@slingshot/runtime-bun` automatically.
+
+## Database drivers
+
+Slingshot adapters are peer dependencies — install the driver for the databases you use:
+
+```bash
+# MongoDB
+bun add mongoose
+
+# Redis (for sessions, cache, queues)
+bun add ioredis
+
+# PostgreSQL
+bun add @lastshotlabs/slingshot-postgres
+```
+
+SQLite is handled by the runtime package — `bun:sqlite` on Bun, `better-sqlite3` on Node.
+
+## Optional auth features
+
+These are peer dependencies — install only when the feature is enabled in your config:
+
+```bash
+# OAuth social login
+bun add @lastshotlabs/slingshot-oauth arctic
+
+# TOTP / time-based MFA
+bun add otpauth
+
+# WebAuthn passkeys
+bun add @simplewebauthn/server
+
+# File uploads to S3 / R2 / GCS
+bun add @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @aws-sdk/lib-storage
+
+# Durable queues (BullMQ event bus)
+bun add bullmq
+```
+
+## Search providers
+
+```bash
+# Meilisearch
+bun add meilisearch
+
+# Typesense
+bun add typesense
+
+# Elasticsearch
+bun add @elastic/elasticsearch
+
+# Algolia
+bun add algoliasearch
+```
+
+## Email providers
+
+```bash
+# Resend
+bun add resend
+
+# Postmark
+bun add postmark
+
+# SendGrid
+bun add @sendgrid/mail
+
+# Nodemailer (SMTP)
+bun add nodemailer
+```
+
+## CLI
+
+`@lastshotlabs/slingshot` ships the `slingshot` CLI. After installing:
+
+```bash
+# Start with a manifest
+slingshot start
+
+# Run database migrations
+slingshot migrate
+
+# Check infrastructure config
+slingshot infra check
+```
+
+## Prerequisites
+
+- **Bun** v1.2 or later — recommended. Use Bun as your package manager and runtime.
+- **Node.js** 20+ — only if using the Node.js runtime adapter (`@slingshot/runtime-node`).
+
+All examples in these docs use Bun. The only difference on Node.js is passing `runtime: nodeRuntime()` to `createServer`.

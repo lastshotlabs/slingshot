@@ -1,0 +1,270 @@
+{
+  "name": "@lastshotlabs/slingshot",
+  "workspaces": [
+    "packages/*"
+  ],
+  "version": "0.2.0",
+  "description": "Composable Slingshot app-assembly package for Bun and Hono - plugins, config-driven entities, realtime, and platform tooling",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Last-Shot-Labs/slingshot.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "bun",
+    "hono",
+    "api",
+    "framework",
+    "auth",
+    "websocket",
+    "openapi"
+  ],
+  "type": "module",
+  "module": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    },
+    "./mongo": {
+      "import": "./dist/src/entrypoints/mongo.js",
+      "types": "./dist/src/entrypoints/mongo.d.ts"
+    },
+    "./redis": {
+      "import": "./dist/src/entrypoints/redis.js",
+      "types": "./dist/src/entrypoints/redis.d.ts"
+    },
+    "./queue": {
+      "import": "./dist/src/entrypoints/queue.js",
+      "types": "./dist/src/entrypoints/queue.d.ts"
+    },
+    "./testing": {
+      "import": "./dist/src/testing.js",
+      "types": "./dist/src/testing.d.ts"
+    },
+    "./docs/*": "./docs/sections/*"
+  },
+  "bin": {
+    "slingshot": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "docs/sections",
+    ".oclif.manifest.json"
+  ],
+  "oclif": {
+    "bin": "slingshot",
+    "dirname": "slingshot",
+    "commands": "./dist/cli/commands",
+    "topicSeparator": " "
+  },
+  "scripts": {
+    "typecheck": "tsc -b tsconfig.typecheck.json --pretty false",
+    "typecheck:tests": "tsc -b tsconfig.tests.typecheck.json --pretty false",
+    "typecheck:root": "tsc -b tsconfig.root.typecheck.json --pretty false",
+    "examples:typecheck": "tsc -p tsconfig.examples.json --pretty false",
+    "examples:coverage": "bun scripts/examples-coverage.ts",
+    "examples:smoke": "bun scripts/examples-smoke.ts",
+    "build": "bun scripts/build.ts",
+    "build:packages": "bun scripts/build.ts --packages-only",
+    "prepublishOnly": "bun run build",
+    "release": "bun run build && bun publish --access public && bun run --filter '*' publish",
+    "release:patch": "bun run --filter '*' version patch && npm version patch && bun run release",
+    "release:minor": "bun run --filter '*' version minor && npm version minor && bun run release",
+    "release:major": "bun run --filter '*' version major && npm version major && bun run release",
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "test": "bun run test:root && bun run test:isolated && bun test --config packages/slingshot-core/bunfig.toml packages/slingshot-core/tests && bun test --config packages/slingshot-permissions/bunfig.toml packages/slingshot-permissions/tests",
+    "test:root": "bun scripts/run-root-tests.ts",
+    "test:docs": "bun test packages/docs/tests",
+    "test:isolated": "bun test tests/isolated/config-lock.test.ts tests/isolated/memoryCache.test.ts tests/isolated/zodToMongoose.test.ts && bun test tests/isolated/optional-deps.test.ts && bun test tests/isolated/jwt-signing-singleton.test.ts && bun test tests/isolated/csrf-signing-singleton.test.ts && bun test tests/isolated/auth0Access.test.ts && bun test tests/isolated/queue.test.ts && bun test tests/isolated/jobs-router.test.ts && bun test tests/isolated/queued-deletion.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts && bun test tests/isolated/passkey-e2e.test.ts && bun run test:docs",
+    "test:coverage": "bun scripts/run-coverage.ts",
+    "test:coverage:check": "bun run test:coverage && bun scripts/check-coverage.ts",
+    "test:docker:up": "docker compose -f docker-compose.test.yml up -d --wait",
+    "test:docker:down": "docker compose -f docker-compose.test.yml down",
+    "test:docker": "bun run test:docker:up && bun test --config bunfig.docker.toml --concurrency=1 tests/docker/",
+    "test:e2e": "bun run test:docker:up && bun test --config bunfig.e2e.toml tests/e2e/; bun run test:docker:down",
+    "test:e2e:ci": "bun test --config bunfig.e2e.toml tests/e2e/",
+    "test:e2e:sqlite": "TEST_BACKEND=sqlite bun run test:e2e:ci",
+    "test:e2e:mongo": "TEST_BACKEND=mongo bun run test:e2e:ci",
+    "test:e2e:postgres": "TEST_BACKEND=postgres bun run test:e2e:ci",
+    "test:node": "vitest run --config vitest.config.ts",
+    "test:all": "bun test tests/unit tests/integration && bun run test:docker:up && bun test --config bunfig.docker.toml --concurrency=1 tests/docker/ && bun test --config bunfig.e2e.toml tests/e2e/; bun run test:docker:down",
+    "test:coverage:full": "bun run test:docker:up && bun test --coverage --config bunfig.ci.toml tests/unit tests/integration tests/docker; bun run test:docker:down",
+    "lint": "eslint src/ --cache && bun run --filter '*' lint",
+    "lint:fix": "eslint src/ --cache --fix && bun run --filter '*' lint -- --fix",
+    "lint:deps": "depcruise packages/ src/ --config .dependency-cruiser.cjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "docs:sync": "bun packages/docs/sync-workspace-docs.ts",
+    "docs:api": "bun packages/docs/generate-api.ts",
+    "docs:typecheck": "bun packages/docs/typecheck-docs.ts",
+    "docs:impact": "bun packages/docs/docs-impact.ts",
+    "docs:coverage": "bun packages/docs/coverage-docs.ts",
+    "docs:generate": "bun run docs:sync && bun run docs:api",
+    "docs:ci": "bun run docs:generate && bun run docs:typecheck && bun run docs:impact && bun run docs:coverage && bun run examples:typecheck && bun run examples:coverage && bun run examples:smoke",
+    "docs:dev": "bun run docs:generate && cd packages/docs && bun run dev",
+    "docs:build": "bun run docs:generate && cd packages/docs && bun run build",
+    "docs:preview": "bun run docs:build && cd packages/docs && bun run preview"
+  },
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^8.4.1",
+    "@hono/zod-openapi": "1.2.2",
+    "@lastshotlabs/slingshot-auth": "workspace:*",
+    "@lastshotlabs/slingshot-core": "workspace:*",
+    "@lastshotlabs/slingshot-entity": "workspace:*",
+    "@lastshotlabs/slingshot-organizations": "workspace:*",
+    "@oclif/core": "^4.10.2",
+    "@opentelemetry/api": "^1.9.1",
+    "@scalar/hono-api-reference": "0.10.0"
+  },
+  "peerDependencies": {
+    "arctic": "^3.7.0",
+    "hono": ">=4.12.12 <5",
+    "jose": "6.2.0",
+    "samlify": "^2.8",
+    "zod": ">=4.0 <5",
+    "mongoose": ">=9.0 <10",
+    "ioredis": ">=5.0 <6",
+    "bullmq": ">=5.0 <6",
+    "otpauth": ">=9.0 <10",
+    "@simplewebauthn/server": ">=10.0.0",
+    "@aws-sdk/client-ssm": ">=3.0",
+    "@aws-sdk/client-s3": ">=3.0",
+    "@aws-sdk/s3-request-presigner": ">=3.0",
+    "@aws-sdk/lib-storage": ">=3.0",
+    "@lastshotlabs/slingshot-admin": ">=0.1.0",
+    "@lastshotlabs/slingshot-bullmq": ">=0.1.0",
+    "@lastshotlabs/slingshot-community": ">=0.1.0",
+    "@lastshotlabs/slingshot-deep-links": ">=0.1.0",
+    "@lastshotlabs/slingshot-interactions": ">=0.1.0",
+    "@lastshotlabs/slingshot-mail": ">=0.0.1",
+    "@lastshotlabs/slingshot-notifications": ">=0.1.0",
+    "@lastshotlabs/slingshot-permissions": ">=0.1.0",
+    "@lastshotlabs/slingshot-postgres": ">=0.1.0",
+    "@lastshotlabs/slingshot-push": ">=0.1.0",
+    "@lastshotlabs/slingshot-webhooks": ">=0.0.1"
+  },
+  "peerDependenciesMeta": {
+    "arctic": {
+      "optional": true
+    },
+    "jose": {
+      "optional": true
+    },
+    "samlify": {
+      "optional": true
+    },
+    "mongoose": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    },
+    "bullmq": {
+      "optional": true
+    },
+    "otpauth": {
+      "optional": true
+    },
+    "@simplewebauthn/server": {
+      "optional": true
+    },
+    "@aws-sdk/client-ssm": {
+      "optional": true
+    },
+    "@aws-sdk/client-s3": {
+      "optional": true
+    },
+    "@aws-sdk/s3-request-presigner": {
+      "optional": true
+    },
+    "@aws-sdk/lib-storage": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-admin": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-bullmq": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-community": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-deep-links": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-interactions": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-mail": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-notifications": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-permissions": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-postgres": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-push": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-webhooks": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@aws-sdk/client-sesv2": "^3.1017.0",
+    "@aws-sdk/client-ssm": "^3.1014.0",
+    "@eslint/js": "^10.0.1",
+    "@react-email/render": "^2.0.4",
+    "@simplewebauthn/server": "^13.1.1",
+    "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/bun": "1.3.10",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.18.0",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.57.2",
+    "@typescript-eslint/parser": "^8.57.2",
+    "argon2": "^0.44.0",
+    "better-sqlite3": "^12.8.0",
+    "bullmq": "^5.70.4",
+    "dependency-cruiser": "^17.3.9",
+    "eslint": "^10.1.0",
+    "eslint-config-prettier": "^10.1.8",
+    "fast-glob": "^3.3.3",
+    "hono": "4.12.12",
+    "ioredis": "5.10.0",
+    "mongoose": "9.2.4",
+    "oclif": "^4.22.96",
+    "otpauth": "^9.5.0",
+    "pagefind": "^1.4.0",
+    "pg": "^8.20.0",
+    "prettier": "^3.3.3",
+    "samlify": "^2.8.0",
+    "tsc-alias": "^1.8.16",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.2",
+    "vitest": "^4.1.2",
+    "ws": "^8.20.0",
+    "zod": ">=4.0"
+  },
+  "overrides": {
+    "brace-expansion": "^2.0.3",
+    "defu": "^6.1.7",
+    "lodash": "^4.18.1",
+    "lodash-es": "^4.18.1",
+    "picomatch": "^4.0.4",
+    "vite": "^6.4.2",
+    "yaml": "^2.8.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

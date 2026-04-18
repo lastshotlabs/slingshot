@@ -1,0 +1,146 @@
+---
+title: Reflect Symbol DI
+description: How cross-cutting framework concerns are injected via Reflect symbols — without function arguments or global state
+---
+
+Some framework concerns need to flow through the entire persistence layer without cluttering every function signature. Slingshot uses `Symbol.for(...)` Reflect symbols on `StoreInfra` for this.
+
+## The problem it solves
+
+Consider building entity factories. When a plugin wires up an entity, the framework needs to:
+
+1. Produce repository factory functions for each backend (memory, sqlite, postgres, mongo, redis)
+2. Register the entity into the app's `EntityRegistry`
+3. Wire up search sync when a search provider is available
+4. Resolve the search client at query time
+5. Expose a reindex source for admin rebuild routes
+
+These concerns cut across every plugin and every adapter. Passing them explicitly means every factory signature needs to accept them — even when they're irrelevant. Threading optional concerns through 10 layers of function calls is noise.
+
+Reflect symbols, keyed with `Symbol.for(...)` so they're shared across the global symbol registry, are the alternative.
+
+## Two categories of symbols
+
+Slingshot's Reflect symbols fall into **two distinct categories**, and the distinction matters for anyone adding a new one.
+
+### Plugin-facing DI
+
+Defined and exported from `packages/slingshot-core/src/storeInfra.ts`:
+
+```typescript
+// packages/slingshot-core/src/storeInfra.ts
+export const RESOLVE_ENTITY_FACTORIES: symbol = Symbol.for('slingshot.resolveEntityFactories');
+export const RESOLVE_COMPOSITE_FACTORIES: symbol = Symbol.for(
+  'slingshot.resolveCompositeFactories',
+);
+export const RESOLVE_REINDEX_SOURCE: symbol = Symbol.for('slingshot.resolveReindexSource');
+```
+
+Plugin packages import these from `@lastshotlabs/slingshot-core` and read them via `Reflect.get(infra, SYMBOL)`. In practice, most plugins reach them through the `createEntityPlugin` wrapper in `@lastshotlabs/slingshot-entity` rather than calling them directly:
+
+```typescript
+// packages/slingshot-entity/src/createEntityPlugin.ts
+import { RESOLVE_ENTITY_FACTORIES } from '@lastshotlabs/slingshot-core';
+import type {
+  OperationConfig,
+  RepoFactories,
+  ResolvedEntityConfig,
+  StoreInfra,
+} from '@lastshotlabs/slingshot-core';
+
+function buildFactories(
+  infra: StoreInfra,
+  config: ResolvedEntityConfig,
+  operations?: Record<string, OperationConfig>,
+) {
+  const factoryCreator = Reflect.get(infra, RESOLVE_ENTITY_FACTORIES) as
+    | ((
+        c: ResolvedEntityConfig,
+        o?: Record<string, OperationConfig>,
+      ) => RepoFactories<Record<string, unknown>>)
+    | undefined;
+  if (!factoryCreator) {
+    throw new Error('RESOLVE_ENTITY_FACTORIES not injected on StoreInfra');
+  }
+  return factoryCreator(config, operations);
+}
+```
+
+### Framework-internal plumbing
+
+Defined in the app-level `src/framework/persistence/internalRepoResolution.ts` and **not exported from any package**:
+
+```typescript
+// src/framework/persistence/internalRepoResolution.ts — app-level
+export const REGISTER_ENTITY = Symbol.for('slingshot.registerEntity');
+export const RESOLVE_SEARCH_SYNC = Symbol.for('slingshot.resolveSearchSync');
+export const RESOLVE_SEARCH_CLIENT = Symbol.for('slingshot.resolveSearchClient');
+export const CONTEXT_STORE_INFRA = Symbol.for('slingshot.contextStoreInfra');
+```
+
+These are called only by the framework's own bootstrap and by the implementations of the plugin-facing symbols above. **Plugin packages never call these directly.** Registering an entity into the `EntityRegistry`, wiring its search sync, and resolving its search client all happen as side effects of the framework's implementation of `RESOLVE_ENTITY_FACTORIES` — plugins get those behaviours for free via `createEntityPlugin`.
+
+If you think your plugin needs to call `REGISTER_ENTITY` or `RESOLVE_SEARCH_SYNC` directly, the `createEntityPlugin` wrapper is missing something. Fix the wrapper, don't reach for the bootstrap-only symbol.
+
+## How bootstrap attaches the implementations
+
+`createContextStoreInfra()` in the app-level framework layer injects concrete implementations onto the `StoreInfra` object before the plugin lifecycle starts:
+
+```typescript
+// src/framework/persistence/createContextStoreInfra.ts — schematic
+Reflect.set(infra, RESOLVE_ENTITY_FACTORIES, (entityConfig, operations) => {
+  // Side-effect: calls REGISTER_ENTITY internally to register the entity
+  // into the EntityRegistry, wires search sync, etc.
+  return createEntityFactories(entityConfig, operations, infra, bus);
+});
+
+Reflect.set(infra, REGISTER_ENTITY, entityConfig => {
+  entityRegistry.register(entityConfig);
+});
+
+Reflect.set(infra, RESOLVE_SEARCH_SYNC, entityConfig => {
+  return searchSyncAdapterForEntity(entityConfig);
+});
+```
+
+Plugin-facing symbols are attached so plugins can read them. Framework-internal symbols are attached so the plugin-facing implementations can call them as side effects.
+
+## Why `Symbol.for` specifically
+
+Using `Symbol.for('slingshot.xxx')` (not plain `Symbol('xxx')`) puts the symbols in the global symbol registry. Any module anywhere in the process can call `Symbol.for('slingshot.xxx')` and get the same symbol — there's no "my copy vs. your copy" issue across package boundaries.
+
+This matters because some symbols are defined in app-level code (`src/framework/...`) and referenced from test fixtures that can't `import` across the package/app boundary. `Symbol.for` makes the symbol identity process-global instead of module-global.
+
+## Why `Reflect` instead of a plain object property
+
+Symbol keys give you:
+
+1. **No name collisions** — symbols are unique by identity, not by string name
+2. **No accidental reads** — nothing iterates over symbol-keyed properties by default
+3. **Clear ownership** — only code with access to the symbol constant can set or read the value
+4. **No contract pollution** — `StoreInfra`'s TypeScript interface stays clean; symbol properties don't appear in the public type
+
+The tradeoff: you use `Reflect.get` / `Reflect.set` instead of dot notation. That verbosity is intentional — it makes the DI pattern visible at every usage site.
+
+## Adding a new cross-cutting concern
+
+First, decide which category your concern belongs to:
+
+- **Will plugin packages consume it?** → Define and export it from `packages/slingshot-core/src/storeInfra.ts`. Inject the concrete implementation in `createContextStoreInfra()`. Plugin packages will `import { YOUR_SYMBOL } from '@lastshotlabs/slingshot-core'` and `Reflect.get(infra, YOUR_SYMBOL)` at factory usage sites.
+- **Will only framework bootstrap touch it?** → Define it in `src/framework/persistence/internalRepoResolution.ts` and leave it unexported. Call it from the framework's own implementation of the plugin-facing symbols.
+
+Do not export a framework-internal symbol from `slingshot-core` "to make it easier for plugins to call." That invites plugins to bypass the wrapper machinery (entity routes, auto-grants, search sync, event wiring) and produces half-registered entities. If a plugin is reaching for a bootstrap-only symbol, the wrapper is missing something — fix the wrapper, don't leak the symbol.
+
+Never pass cross-cutting concerns as explicit function arguments through the adapter layer. That's exactly what the symbol mechanism is for.
+
+This split is also why Slingshot does not put bootstrap-only WebSocket endpoint drafts on
+`StoreInfra`. The root `ws` config is carried on `frameworkConfig`, cloned onto
+`SlingshotContext.wsEndpoints` before plugin `setupPost`, and later consumed by `createServer()`.
+That is app bootstrap state, not persistence DI.
+The clone happens during context construction, not during repository factory resolution, so Reflect
+symbol plumbing stays focused on persistence and entity registration only.
+
+## See also
+
+- [Persistence Resolution](/internals/persistence/) — how `StoreInfra` is created and used
+- [Context and Registrar](/internals/context-registrar/) — higher-level plugin-to-plugin sharing via registrar and pluginState

@@ -1,0 +1,47 @@
+{
+  "name": "@lastshotlabs/slingshot-mail",
+  "version": "0.0.2",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0"
+  },
+  "peerDependencies": {
+    "hono": ">=4.12.12 <5",
+    "zod": ">=4.0 <5"
+  },
+  "peerDependenciesMeta": {
+    "@react-email/render": {
+      "optional": true
+    },
+    "@aws-sdk/client-ses": {
+      "optional": true
+    },
+    "bullmq": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    }
+  }
+}

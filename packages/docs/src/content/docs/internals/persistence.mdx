@@ -1,0 +1,115 @@
+---
+title: Persistence Resolution
+description: RepoFactories, resolveRepo(), and how the framework dispatches to the right adapter at startup
+---
+
+Slingshot's adapter model lets you write business logic once and run it against any supported database. Here's how the dispatch works.
+
+## The shape
+
+Every persistence concern is expressed as `RepoFactories<T>`:
+
+```typescript
+type RepoFactories<T> = Record<StoreType, (infra: StoreInfra) => T>;
+
+type StoreType = 'memory' | 'redis' | 'sqlite' | 'postgres' | 'mongo';
+```
+
+A `RepoFactories<T>` maps every supported store type to a factory that produces a fresh adapter. Business logic receives the adapter as `T` and never sees the store type.
+
+## `resolveRepo()`
+
+At startup, `resolveRepo()` reads the configured store type, calls the matching factory, and returns a fresh adapter:
+
+```typescript
+import { resolveRepo } from '@lastshotlabs/slingshot-core';
+
+declare const factories: import('@lastshotlabs/slingshot-core').RepoFactories<unknown>;
+declare const storeType: import('@lastshotlabs/slingshot-core').StoreType;
+declare const infra: import('@lastshotlabs/slingshot-core').StoreInfra;
+
+const adapter = resolveRepo(factories, storeType, infra);
+// Returns a fresh T — no shared state, no singletons
+```
+
+`infra` provides connection handles: `getRedis()`, `getMongo()`, `getSqliteDb()`, `getPostgres()`. Factories use them to create adapters against real connections in production and in-memory state in tests.
+
+`StoreInfra` is intentionally scoped to persistence concerns only. Other bootstrap-time framework
+data, such as the opaque root `ws` config draft and the cloned `ctx.wsEndpoints` map that plugins
+can patch during `setupPost`, travels alongside infra on `frameworkConfig` / `SlingshotContext`
+instead of being injected through repository factories.
+`buildContext()` is the boundary where that app-level runtime draft is copied into context; adapter
+factories never receive it through `StoreInfra`.
+
+## Writing a set of factories
+
+```typescript
+import type { RepoFactories } from '@lastshotlabs/slingshot-core';
+
+interface PostAdapter {
+  readonly kind: 'post-adapter';
+}
+declare function createMemoryPostAdapter(): PostAdapter;
+declare function createSqlitePostAdapter(
+  db: ReturnType<import('@lastshotlabs/slingshot-core').StoreInfra['getSqliteDb']>,
+): PostAdapter;
+declare function createPostgresPostAdapter(
+  db: ReturnType<import('@lastshotlabs/slingshot-core').StoreInfra['getPostgres']>,
+): PostAdapter;
+declare function createMongoPostAdapter(
+  db: ReturnType<import('@lastshotlabs/slingshot-core').StoreInfra['getMongo']>,
+): PostAdapter;
+
+export const postAdapterFactories: RepoFactories<PostAdapter> = {
+  memory: _infra => createMemoryPostAdapter(),
+  sqlite: infra => createSqlitePostAdapter(infra.getSqliteDb()),
+  postgres: infra => createPostgresPostAdapter(infra.getPostgres()),
+  mongo: infra => createMongoPostAdapter(infra.getMongo()),
+  redis: _infra => {
+    throw new Error('Redis is not supported for post storage');
+  },
+};
+```
+
+If a store type doesn't make sense for a given concern (Redis for relational data, for instance), throw at startup. Don't silently fall back.
+
+## Using with `createEntityPlugin()`
+
+Call `resolveRepo()` inside the `buildAdapter` callback:
+
+```typescript
+createEntityPlugin({
+  name: 'blog',
+  entities: [
+    {
+      config: Post,
+      operations: postOperations.operations,
+      buildAdapter: (storeType, infra) =>
+        resolveRepo(createEntityFactories(Post, postOperations.operations), storeType, infra),
+    },
+  ],
+});
+```
+
+`createEntityFactories()` generates a `RepoFactories<EntityAdapter>` from an entity definition and its operations. The adapters are pure TypeScript — no ORM required. (MongoDB and Postgres adapters use Mongoose and Drizzle internally.)
+
+## No shared state between adapter instances
+
+Each `resolveRepo()` call returns a fresh adapter. Two concurrent requests don't share state. Two parallel test suites don't share state. That's the factory pattern's guarantee.
+
+## Test isolation
+
+Use `ctx.clear()` to reset in-memory adapters between test cases:
+
+```typescript
+afterEach(() => {
+  ctx.clear(); // wipes all in-memory stores, resets event subscriptions
+});
+```
+
+`ctx.destroy()` is the full app cleanup path. It runs plugin teardown first, shuts down the event bus and any WS transport, then closes DB connections. Call it in `afterAll` or process teardown handlers.
+
+## See also
+
+- [Context and Registrar](/internals/context-registrar/) — how `StoreInfra` is provided
+- [Reflect Symbol DI](/internals/reflect-di/) — how entity registration flows through infra

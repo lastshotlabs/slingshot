@@ -1,0 +1,77 @@
+{
+  "name": "@lastshotlabs/slingshot-auth",
+  "version": "0.1.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./testing": {
+      "bun": "./src/testing.ts",
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
+    },
+    "./plugin": {
+      "bun": "./src/plugin-api.ts",
+      "types": "./dist/src/plugin-api.d.ts",
+      "import": "./dist/src/plugin-api.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0"
+  },
+  "optionalDependencies": {
+    "@lastshotlabs/slingshot-postgres": "workspace:*"
+  },
+  "peerDependencies": {
+    "hono": ">=4.12.12 <5",
+    "zod": ">=4.0 <5",
+    "pg": "^8.20.0",
+    "samlify": "^2.8",
+    "mongoose": ">=9.0 <10",
+    "ioredis": ">=5.0 <6",
+    "jose": ">=6.0",
+    "arctic": ">=3.0",
+    "otpauth": ">=9.0 <10",
+    "@simplewebauthn/server": ">=10.0.0",
+    "@lastshotlabs/slingshot-postgres": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "mongoose": {
+      "optional": true
+    },
+    "ioredis": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "samlify": {
+      "optional": true
+    },
+    "otpauth": {
+      "optional": true
+    },
+    "@simplewebauthn/server": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-postgres": {
+      "optional": true
+    }
+  }
+}

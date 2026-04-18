@@ -1,0 +1,63 @@
+---
+title: 'Community Plugin — Breaking Changes'
+description: 'Internal breaking-changes reference for slingshot-community. No migration guide — this is pre-production.'
+---
+
+This project is **pre-production**. There are no external consumers and no deprecation cycles.
+This page is a bullet-point list of breaking changes aimed at internal consumers updating against
+main.
+
+## Recent Breaking Changes
+
+### Notification entity removed
+
+- `Notification` entity no longer exists in `slingshot-community`.
+- Routes previously at `/community/notifications/*` are gone.
+- Notification delivery is now handled entirely by `@lastshotlabs/slingshot-notifications`.
+- `createNotificationSseConfig()` helper is deleted — use `slingshot-notifications` SSE route.
+
+### `ContentType` alias deleted
+
+- Import `ContentFormat` from `@lastshotlabs/slingshot-core` instead.
+- Values: `'plain'` | `'markdown'`. The `'rich'` option was removed.
+
+### `scoringFn` / `rankingFn` superseded by `scoring`
+
+- The declarative `scoring` config block replaces `scoringFn` for most use cases.
+- `scoringFn` and `rankingFn` are removed from the manifest-safe config path.
+- The `listByContainerSorted` operation's `sort` presets (`new`, `active`, `hot`, `top`,
+  `controversial`) replace custom `rankingFn` usage in list routes.
+
+### Removed callback config
+
+- `tenantResolver` is removed from `CommunityPluginConfig`; tenant scoping now comes from the
+  standard Slingshot request context.
+- `autoModerationHook` is removed from `CommunityPluginConfig`; use declarative `AutoModRule`
+  records instead.
+- `adminGate` is removed from `CommunityPluginConfig`; moderator/admin access is handled through
+  the standard permission model.
+
+### Thread and Reply content fields added
+
+- `Thread` and `Reply` now include: `mentions`, `broadcastMentions`, `mentionedRoleIds`,
+  `attachments`, `embeds`.
+- `Thread` adds: `pollId`, `solutionReplyId`, `solutionMarkedAt`.
+- `Reply` adds: `quotedReplyId`, `quotePreview`.
+
+### New entities
+
+The following entities were added. If you are syncing a running database, add the corresponding
+tables / collections:
+
+- `Tag`, `ThreadTag`
+- `ContainerSubscription`, `ThreadSubscription`
+- `UserMute`, `Bookmark`
+- `AutoModRule`, `Warning`, `AuditLogEntry`
+- `ContainerInvite`
+
+### `threads` list route — dataScope auth required
+
+`GET /community/threads` and `GET /community/threads/:id` use `dataScope: { field: 'authorId',
+from: 'ctx:authUserId' }`. Auth-none routes still require the `authUserId` context value to be
+set for the dataScope filter. Ensure your auth middleware (or test harness) sets `authUserId`
+before the route handler runs, even on `auth: 'none'` routes.

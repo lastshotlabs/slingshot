@@ -1,0 +1,68 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.root.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-admin/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-assets/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-auth/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-chat/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-community/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-core/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-entity/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-image/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-mail/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-notifications/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-oauth/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-permissions/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-polls/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-postgres/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-push/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-search/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-ssg/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-ssr/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-webhooks/tsconfig.tests.typecheck.json"
+    },
+    {
+      "path": "./packages/runtime-edge/tsconfig.tests.typecheck.json"
+    }
+  ]
+}

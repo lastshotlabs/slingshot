@@ -1,0 +1,254 @@
+---
+title: Config-Driven Domain
+description: Define an entity, express operations, ship it as a plugin - the core Slingshot authoring pattern
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Describe the domain in config and let the framework wire the runtime around it. The result is a
+package that works the same way Slingshot's built-in domain packages work: one source of truth for
+data shape, route policy, permissions, events, and generated adapters.
+
+Source-backed example app: `examples/config-driven-domain/`
+
+## What this demonstrates
+
+- entity schema, indexes, route policy, and events in one definition
+- operations as the domain transition layer beyond CRUD
+- package-local plugin composition instead of app-local route sprawl
+- how config-driven authoring turns into a real mounted HTTP surface
+
+## The authoring loop
+
+1. Define the entity shape and route contract.
+2. Add operations for transitions, lookups, search, or aggregates.
+3. Wrap the entity in a plugin so app composition stays clean.
+4. Compose the plugin beside platform packages such as auth, search, or notifications.
+5. Let Slingshot generate routes, adapters, policy checks, and event plumbing from that one source of truth.
+
+## Install
+
+```bash
+bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-core @lastshotlabs/slingshot-entity
+```
+
+## Define the entity
+
+One definition carries the data model, index strategy, route policy, permission scoping, and event
+configuration. Nothing drifts from anything else.
+
+```typescript title="src/entities/post.ts"
+import { defineEntity, field, index } from '@lastshotlabs/slingshot';
+
+export const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    authorId: field.string(),
+    title: field.string(),
+    body: field.string(),
+    status: field.enum(['draft', 'published', 'archived'] as const, { default: 'draft' }),
+    publishedAt: field.date({ optional: true }),
+    createdAt: field.date({ default: 'now' }),
+    updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
+  },
+  indexes: [
+    index(['status', 'createdAt'], { direction: 'desc' }),
+    index(['authorId', 'createdAt'], { direction: 'desc' }),
+  ],
+  routes: {
+    defaults: { auth: 'userAuth' },
+    get: { auth: 'none' },
+    list: { auth: 'none' },
+    create: {
+      permission: {
+        requires: 'blog:post.write',
+        scope: { resourceType: 'blog:author', resourceId: 'param:authorId' },
+      },
+      event: { key: 'blog:post.created', payload: ['id', 'authorId', 'title'] },
+    },
+    clientSafeEvents: ['blog:post.created'],
+    permissions: {
+      resourceType: 'blog:author',
+      scopeField: 'authorId',
+      actions: ['read', 'write', 'publish'],
+      roles: { owner: ['*'], editor: ['read', 'write'] },
+    },
+  },
+});
+```
+
+## Operations beyond CRUD
+
+Operations are the domain transition layer: state changes, search, aggregates, and bulk actions
+that do not fit plain CRUD.
+
+```typescript title="src/entities/postOperations.ts"
+import { defineOperations, op } from '@lastshotlabs/slingshot';
+import { Post } from './post.js';
+
+export const postOperations = defineOperations(Post, {
+  publish: op.transition({
+    field: 'status',
+    from: 'draft',
+    to: 'published',
+    match: { id: 'param:id' },
+    set: { publishedAt: 'now' },
+    returns: 'entity',
+  }),
+  archive: op.transition({
+    field: 'status',
+    from: ['draft', 'published'],
+    to: 'archived',
+    match: { id: 'param:id' },
+    returns: 'entity',
+  }),
+  search: op.search({
+    fields: ['title', 'body'],
+    filter: { status: 'published' },
+    paginate: true,
+  }),
+});
+```
+
+## Build the plugin
+
+```typescript title="src/plugin.ts"
+import { createEntityFactories } from '@lastshotlabs/slingshot';
+import { type SlingshotPlugin, resolveRepo } from '@lastshotlabs/slingshot-core';
+import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
+import { Post } from './entities/post.js';
+import { postOperations } from './entities/postOperations.js';
+
+export interface BlogPluginConfig {
+  mountPath?: string;
+}
+
+export function createBlogPlugin(config: BlogPluginConfig = {}): SlingshotPlugin {
+  return createEntityPlugin({
+    name: 'blog',
+    dependencies: ['slingshot-auth'],
+    mountPath: config.mountPath ?? '/blog',
+    entities: [
+      {
+        config: Post,
+        operations: postOperations.operations,
+        buildAdapter: (storeType, infra): BareEntityAdapter =>
+          resolveRepo(
+            createEntityFactories(Post, postOperations.operations),
+            storeType,
+            infra,
+          ) as unknown as BareEntityAdapter,
+      },
+    ],
+  });
+}
+```
+
+The important point is ownership: the package owns its entity config, operations, and plugin
+assembly together. The app imports one factory instead of re-implementing route shape every time.
+
+## Compose at the app layer
+
+```typescript title="src/index.ts"
+import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createBlogPlugin } from './plugin.js';
+
+await createServer({
+  port: 3000,
+  security: { signing: { secret: process.env.JWT_SECRET! } },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+    createBlogPlugin({ mountPath: '/posts' }),
+  ],
+});
+```
+
+## What the framework generates
+
+From those definitions, Slingshot mounts:
+
+| Method   | Path                 | Auth | Notes                                                             |
+| -------- | -------------------- | ---- | ----------------------------------------------------------------- |
+| `GET`    | `/posts`             | none | List posts                                                        |
+| `POST`   | `/posts`             | user | Checks `blog:post.write` permission and fires `blog:post.created` |
+| `GET`    | `/posts/:id`         | none | Get a post                                                        |
+| `PUT`    | `/posts/:id`         | user | Update a post                                                     |
+| `DELETE` | `/posts/:id`         | user | Delete a post                                                     |
+| `POST`   | `/posts/:id/publish` | user | `draft` to `published` transition                                 |
+| `POST`   | `/posts/:id/archive` | user | Archive transition                                                |
+| `GET`    | `/posts/search`      | none | Full-text search over published posts                             |
+
+No route files. No adapter boilerplate. No event wiring by hand.
+
+## Why this matters
+
+The config-driven path is not just a convenience DSL. It is the mechanism that keeps these surfaces
+aligned:
+
+- storage shape
+- generated adapters
+- route inputs and outputs
+- permission checks
+- emitted events
+- generated docs and API reference
+
+When teams bypass this pattern for entity-shaped domains, drift usually shows up first in routes,
+permissions, or docs.
+
+## Add custom middleware
+
+Declare named middleware in the plugin and reference it by name in entity route config:
+
+```typescript
+declare function getPost(id: string): Promise<{ authorId: string }>;
+
+const middleware = {
+  ownerOnly: async (c: import('hono').Context, next: import('hono').Next) => {
+    const userId = c.get('authUserId');
+    const post = await getPost(c.req.param('id'));
+    if (post.authorId !== userId) return c.json({ error: 'Forbidden' }, 403);
+    await next();
+  },
+};
+
+void middleware;
+```
+
+Then reference that middleware by name in the entity route config:
+
+```typescript
+const routes = {
+  update: { middleware: ['ownerOnly'] },
+  delete: { middleware: ['ownerOnly'] },
+};
+
+void routes;
+```
+
+## When to use this pattern
+
+Use `createEntityPlugin()` when the domain has a clear entity model and you want routes,
+permissions, and events to stay synchronized. Use hand-written routes for endpoints that genuinely
+do not map to an entity: health checks, webhook receivers, or one-off transformations.
+
+`slingshot-community` is the flagship implementation of this pattern. Read its source alongside this
+example when you need a complex, production-grade reference.
+
+<Aside type="tip">
+  If a new domain needs CRUD, search, role checks, and emitted events, the default answer should be
+  "model it config-first" until proven otherwise.
+</Aside>
+
+## Where to go next
+
+- [Config-Driven](/config-driven/) for the higher-level mental model
+- [Operations Reference](/config-driven/operations/) for every built-in operation kind
+- [Config-Driven Walkthrough](/config-driven-walkthrough/) for a real community-oriented walkthrough
+- [slingshot-entity](/packages/slingshot-entity/) for the full API surface
+- [slingshot-community source](https://github.com/Last-Shot-Labs/slingshot/tree/main/packages/slingshot-community/src) for the flagship implementation

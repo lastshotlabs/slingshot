@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "noCheck": true,
+    "declaration": true,
+    "stripInternal": true,
+    "outDir": "dist",
+    "tsBuildInfoFile": ".tmp/tsconfig.build.tsbuildinfo",
+    "rootDir": ".",
+    "skipLibCheck": true,
+    "paths": {
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-auth": ["../slingshot-auth/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-entity": ["../slingshot-entity/dist/src/index.d.ts"]
+    },
+    "composite": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "src/models"]
+}

@@ -1,0 +1,137 @@
+---
+title: The Plugin Lifecycle
+description: How plugins boot, in what order, and why the three phases exist
+---
+
+Understanding the plugin lifecycle makes it clear why code goes where it goes — and what breaks when it doesn't.
+
+## What happens when you call `createServer()`
+
+```
+createServer(config)
+  │
+  ├── 1. Validate config
+  ├── 2. Create SlingshotContext (per-app state container, including any WS endpoint drafts)
+  ├── 3. Initialize infrastructure (DB connections, event bus)
+  ├── 4. Topologically sort plugins by dependency declarations
+  │
+  ├── 5. Run setupMiddleware() on all plugins, in order
+  │      └── Auth middleware, CSRF, request guards, tenant resolution
+  │
+  ├── 6. Mount tenant middleware
+  │
+  ├── 7. Run setupRoutes() on all plugins, in order
+  │      └── Auth routes, entity routes, package-owned routers
+  │
+  ├── 8. Mount error handlers
+  │
+  ├── 9. Run setupPost() on all plugins, in order
+  │      └── Event subscriptions, cross-plugin discovery, permission registration
+  │
+  └── 10. Start the HTTP server
+```
+
+## The three phases
+
+### `setupMiddleware` — run early, before route matching
+
+Runs after framework core middleware, before tenant resolution. Use it for:
+
+- Auth middleware that sets user context on every request
+- CSRF protection
+- Request guards that intercept before any route matches
+- Security fingerprinting and rate limit state
+
+`slingshot-auth` uses this phase — it has to. Downstream packages call `c.get('authUserId')` from their route handlers, so auth must run first.
+
+### `setupRoutes` — mount routes after tenant context is available
+
+Runs after tenant middleware — routes registered here have tenant context. Use it for:
+
+- Mounting Hono routers
+- Entity-driven plugin routes via `createEntityPlugin()`
+- Package-owned route families
+
+Order matters here. If plugin A's routes depend on middleware mounted by plugin B, A must declare B as a dependency so B boots first.
+
+### `setupPost` — after everything is wired
+
+Runs after all routes and error handlers are registered. The app is fully assembled — not yet serving requests. Use it for:
+
+- Event bus subscriptions
+- Publishing capabilities to the registrar for other plugins to consume
+- Cross-plugin discovery (finding what other plugins have registered)
+- Initial state setup that depends on the full plugin graph being present
+
+This phase is also the last bootstrap point before the WS server starts. When the root config
+includes `ws`, `createApp()` copies the declared endpoint map into `ctx.wsEndpoints` before
+`setupPost`, so plugins can attach `incoming` and `onRoomSubscribe` handlers here. `createServer()`
+then boots from that same live endpoint map instead of rebuilding it from scratch later.
+The root `ws` field is typed as the normal `WsConfig` shape on both `createApp()` and
+`createServer()`, so plugin authors are mutating the same typed draft regardless of whether the
+app is being assembled for tests, manifest bootstrap, or a live server process.
+App assembly owns seeding the endpoint draft into context; server bootstrap owns turning that draft
+into a live transport listener.
+
+Do not mount routes in `setupPost`. They'll miss tenant middleware and other assumptions the app makes about route registration order.
+
+## Dependency ordering
+
+Plugins declare their dependencies by name:
+
+```typescript
+export function createCommunityPlugin() {
+  return {
+    name: 'slingshot-community',
+    dependencies: ['slingshot-auth'],
+    // ...
+  };
+}
+```
+
+Slingshot validates that all declared dependencies are present and topologically sorts execution order. Missing `slingshot-auth`? It throws at startup — not at the first request.
+
+## Plugin state
+
+Plugins store runtime state in `getContext(app).pluginState`, keyed by plugin name. Cross-plugin communication goes through this map:
+
+```typescript
+// Plugin A stores something (in setupRoutes or setupPost)
+getContext(app).pluginState.set('my-plugin', { someCapability: ... });
+
+// Plugin B reads it in setupPost
+const pluginAState = getContext(app).pluginState.get('my-plugin');
+```
+
+`slingshot-auth` publishes user resolution for `slingshot-community` to consume — without either package importing the other's internals.
+
+## Teardown
+
+Plugins can implement `teardown()` for graceful shutdown:
+
+```typescript
+{
+  name: 'my-plugin',
+  teardown: async () => {
+    await closeConnections();
+  },
+}
+```
+
+`ctx.destroy()` calls teardown on all plugins and closes DB connections. Use it in tests and in process signal handlers.
+
+## Tracing visibility
+
+When [distributed tracing](/guides/observability/) is enabled, each plugin lifecycle call produces an individual OTel span named `slingshot.plugin.<name>.<phase>` (e.g. `slingshot.plugin.auth.setupMiddleware`). The spans include `slingshot.plugin.name`, `slingshot.plugin.phase`, and `slingshot.plugin.dependency_count` attributes, making slow plugins visible in your trace backend. Plugin authors can also create child spans within request handlers using `createChildSpan`.
+
+## Validation notes
+
+Dependency ordering is enforced before any plugin code runs. Slingshot rejects missing dependencies, circular graphs, and impossible cross-phase edges instead of trying to continue with a partially valid plugin graph.
+
+Standalone-only plugins are also treated explicitly: a package that defines only `setup()` can still support plain Hono usage, but `createApp()` and `createServer()` skip it unless it also exposes one of the framework lifecycle phases.
+
+## See also
+
+- [Context and Registrar](/internals/context-registrar/) — what's inside `SlingshotContext`
+- [Plugin Interface](/authoring/plugin-interface/) — the full `SlingshotPlugin` contract
+- [Observability & Distributed Tracing](/guides/observability/) — bootstrap, request, and plugin lifecycle spans

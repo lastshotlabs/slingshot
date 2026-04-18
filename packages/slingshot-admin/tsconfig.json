@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ESNext",
+    "types": ["bun"],
+    "paths": {
+      "@admin/*": ["./src/*"],
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/src/index.ts"]
+    }
+  }
+}

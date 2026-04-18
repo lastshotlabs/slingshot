@@ -1,0 +1,223 @@
+---
+title: Plugin Interface
+description: The SlingshotPlugin contract - lifecycle phases, dependency ordering, and a complete example
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`SlingshotPlugin` is the integration contract between the framework and feature packages. It lives in `@lastshotlabs/slingshot-core`.
+
+## The interface
+
+```typescript
+import type { Hono } from 'hono';
+import type { PluginSetupContext } from '@lastshotlabs/slingshot-core';
+
+interface SlingshotPluginShape {
+  name: string;
+  dependencies?: string[];
+  tenantExemptPaths?: string[];
+  csrfExemptPaths?: string[];
+  publicPaths?: string[];
+
+  setupMiddleware?(ctx: PluginSetupContext): void | Promise<void>;
+  setupRoutes?(ctx: PluginSetupContext): void | Promise<void>;
+  setupPost?(ctx: PluginSetupContext): void | Promise<void>;
+  setup?(ctx: PluginSetupContext): void | Promise<void>;
+  teardown?(): void | Promise<void>;
+}
+
+type StandaloneApp = Hono;
+void (0 as unknown as StandaloneApp);
+```
+
+## A complete plugin example
+
+```typescript title="src/notes-plugin.ts"
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { getContext } from '@lastshotlabs/slingshot-core';
+
+type Note = {
+  id: string;
+  text: string;
+};
+
+type NotesAdapter = {
+  list(userId: string | null): Promise<Note[]>;
+  deleteAll(userId: string): Promise<void>;
+};
+
+export interface NotesPluginConfig {
+  maxNotesPerUser: number;
+}
+
+export function createNotesPlugin(config: NotesPluginConfig): SlingshotPlugin {
+  return {
+    name: 'notes',
+    dependencies: ['slingshot-auth'],
+
+    setupRoutes({ app }) {
+      app.get('/notes', async c => {
+        const ctx = getContext(app);
+        const adapter = ctx.pluginState.get('notes.adapter') as NotesAdapter | undefined;
+
+        if (!adapter) {
+          return c.json({ error: 'Notes adapter not initialized' }, 500);
+        }
+
+        const authUserId = c.get('authUserId');
+        const notes = await adapter.list(authUserId ?? null);
+        return c.json(notes, 200);
+      });
+    },
+
+    setupPost({ app, bus }) {
+      const ctx = getContext(app);
+      const adapter = ctx.pluginState.get('notes.adapter') as NotesAdapter | undefined;
+
+      ctx.pluginState.set('notes.config', config);
+
+      bus.on('auth:user.deleted', async ({ userId }) => {
+        if (adapter) {
+          await adapter.deleteAll(userId);
+        }
+      });
+
+      bus.registerClientSafeEvents(['note.created', 'note.deleted']);
+    },
+
+    teardown() {
+      // Close plugin-owned resources here when needed.
+    },
+  };
+}
+```
+
+## Lifecycle phases
+
+The framework runs three phases in order across all plugins - finishing every plugin's `setupMiddleware` before starting any plugin's `setupRoutes`. Order within a phase follows your `dependencies` declaration.
+
+The framework validates dependency presence and cross-phase ordering before boot. A plugin that only defines `setupRoutes` cannot safely depend on a plugin whose first active phase is `setupPost`, and standalone-only plugins that define only `setup()` are skipped by framework-managed boot entirely.
+
+### `setupMiddleware` - global middleware
+
+Runs before any route is matched. Mount middleware that must intercept every request: JWT verification, CSRF validation, tenant identification, request guards.
+
+The auth plugin mounts `userAuth` here so it is available across all subsequent route files, regardless of which plugin registered those routes.
+
+### `setupRoutes` - mount your routes
+
+Runs after `setupMiddleware` finishes on all plugins, and after tenant middleware. Mount your Hono routers, register OpenAPI routes, and do any setup that needs tenant context.
+
+<Aside type="caution">
+  Do not mount routes in `setupPost`. Routes registered there may miss middleware that another
+  plugin's `setupMiddleware` phase established, including the auth middleware that makes
+  `c.get('authUserId')` work.
+</Aside>
+
+### `setupPost` - wire up the fully assembled app
+
+Runs after all routes across all plugins are registered. The app is fully assembled at this point. Use it for:
+
+- Subscribing to event bus events
+- Reading state other plugins published through `pluginState`
+- Cross-plugin capability registration such as permissions, channels, or search sync
+
+If the root app or server config includes `ws`, Slingshot also seeds `getContext(app).wsEndpoints`
+before `setupPost` runs. That lets a plugin attach `incoming`, `onRoomSubscribe`, or other
+endpoint hooks during bootstrap, and `createServer()` later starts from that same endpoint map.
+Declare the endpoint path in the root `ws.endpoints` config first, then mutate that draft in
+`setupPost` rather than inventing ad hoc endpoint keys inside the plugin.
+The root `ws` config uses the same `WsConfig` shape whether you call `createApp()` or
+`createServer()`, so these bootstrap mutations stay type-checked even when the app never starts a
+live transport in the current process.
+`createApp()` carries that root `ws` draft only far enough for plugin lifecycle wiring and context
+assembly. `createServer()` reuses the same typed draft later when it owns transport startup.
+
+### `teardown` - graceful shutdown
+
+Called on SIGTERM and SIGINT. Close database connections, cancel background timers, and flush queues.
+
+## Dependency ordering
+
+```typescript
+export function createNotesPlugin(config: NotesPluginConfig): SlingshotPlugin {
+  return {
+    name: 'notes',
+    dependencies: ['slingshot-auth', 'slingshot-permissions'],
+  };
+}
+```
+
+Slingshot validates and topologically sorts plugins before running the lifecycle. If `slingshot-auth` has not booted yet when `notes` tries to read from `ctx.pluginState`, bootstrap fails instead of silently producing `undefined`.
+
+Declare everything you depend on. Leave off what you do not.
+
+## Publishing state to other plugins
+
+Use `pluginState` to make your plugin's runtime available to sibling plugins:
+
+```typescript
+type NotesAdapter = {
+  list(userId: string | null): Promise<unknown[]>;
+};
+
+declare function createNotesAdapter(): NotesAdapter;
+declare const config: { maxNotesPerUser: number };
+
+setupRoutes({ app }) {
+  const ctx = getContext(app);
+
+  ctx.pluginState.set('notes.adapter', createNotesAdapter());
+  ctx.pluginState.set('notes.config', config);
+}
+```
+
+Another plugin reads it:
+
+```typescript
+type NotesAdapter = {
+  list(userId: string | null): Promise<unknown[]>;
+};
+
+setupPost({ app }) {
+  const ctx = getContext(app);
+  const notesAdapter = ctx.pluginState.get('notes.adapter') as NotesAdapter | undefined;
+  if (notesAdapter) {
+    void notesAdapter;
+  }
+}
+```
+
+## Standalone `setup()`
+
+The framework never calls `setup()`. It exists for packages that also support a plain Hono integration outside `createApp()`:
+
+```typescript
+import { Hono } from 'hono';
+import {
+  type PluginSetupContext,
+  type SlingshotPlugin,
+  createInProcessAdapter,
+} from '@lastshotlabs/slingshot-core';
+
+declare const notesPlugin: SlingshotPlugin;
+
+const app = new Hono() as PluginSetupContext['app'];
+const config = {} as PluginSetupContext['config'];
+const bus = createInProcessAdapter();
+
+await notesPlugin.setup?.({ app, config, bus });
+```
+
+Framework usage is different: the framework calls `setupMiddleware`, `setupRoutes`, and `setupPost` in order, and it never calls `setup()`.
+
+When the framework does call lifecycle methods, it invokes them on the plugin instance itself. That means plugin authors can safely read closure-owned config or instance state from `this` if they deliberately choose method syntax, although most Slingshot plugins still prefer closure-owned factories over instance mutation.
+
+## See also
+
+- [SlingshotContext](/authoring/context/) - reading and writing instance-scoped runtime state
+- [CoreRegistrar](/authoring/registrar/) - the registrar contract and what it publishes
+- [Event Bus](/authoring/event-bus/) - emitting and subscribing to events
+- [Internals: Plugin Lifecycle](/internals/plugin-lifecycle/) - deep dive into boot ordering and phase execution
+- [Observability & Distributed Tracing](/guides/observability/) - plugin lifecycle spans and `createChildSpan` for request-level tracing

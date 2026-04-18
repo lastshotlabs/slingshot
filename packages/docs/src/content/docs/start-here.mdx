@@ -1,0 +1,75 @@
+---
+title: Start Here
+description: 'Choose the right Slingshot workflow before reading anything else: contribute to Slingshot itself, or build an app with Slingshot.'
+---
+
+Slingshot has two distinct agent and developer workflows.
+
+Do not mix them.
+
+## Working on Slingshot Itself
+
+Use this flow when you are modifying the Slingshot framework, packages, docs tooling, manifest
+system, examples, or generated reference.
+
+Read in this order:
+
+1. `slingshot-docs/engineering-rules.md`
+2. root `CLAUDE.md`
+3. owning package `CLAUDE.md`
+4. package `src/index.ts`
+5. one schema/config file
+6. one primary runtime/plugin file
+
+Then implement the change and publish it to the downstream surfaces that future app-building
+agents will rely on:
+
+- JSDoc
+- Zod `.describe()` strings
+- package human guides
+- top-level docs
+- source-backed examples
+- `CLAUDE.md` when ownership or routing changes
+
+Required verification:
+
+```bash
+bun run typecheck
+bun run format:check
+bun run docs:ci
+```
+
+Next page:
+
+- [/agent-flows/framework-contributor/](/agent-flows/framework-contributor/)
+
+## Building an App with Slingshot
+
+Use this flow when you are consuming Slingshot to build a product or internal app.
+
+Start from the docs and examples, not Slingshot internals.
+
+Read in this order:
+
+1. docs home
+2. examples index
+3. the closest source-backed example
+4. relevant package overview pages
+5. package reference pages only for the packages you are actually composing
+
+Only read Slingshot internals if you are:
+
+- authoring a custom plugin
+- debugging lifecycle behavior
+- debugging manifest conversion
+- debugging runtime or SSR behavior
+
+Next pages:
+
+- [/agent-flows/app-builder/](/agent-flows/app-builder/)
+- [/examples/](/examples/)
+
+## Rule Of Thumb
+
+- If you are changing Slingshot, start with repo guidance and code.
+- If you are using Slingshot, start with docs, packages, and examples.

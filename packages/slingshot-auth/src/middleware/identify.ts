@@ -1,0 +1,243 @@
+import { getSecureCookieName } from '@auth/lib/cookieOptions';
+import { isProd } from '@auth/lib/env';
+import { verifyToken } from '@auth/lib/jwt';
+import { authTrace, log } from '@auth/lib/logger';
+import { getSuspended } from '@auth/lib/suspension';
+import type { MiddlewareHandler } from 'hono';
+import { getCookie } from 'hono/cookie';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import {
+  COOKIE_TOKEN,
+  HEADER_USER_TOKEN,
+  HttpError,
+  isPublicPath,
+  sha256,
+  timingSafeEqual,
+} from '@lastshotlabs/slingshot-core';
+import { getClientIp } from '@lastshotlabs/slingshot-core';
+import type { AuthRuntimeContext } from '../runtime';
+
+function computeFingerprint(
+  c: Parameters<MiddlewareHandler<AppEnv>>[0],
+  fields: Array<'ip' | 'ua' | 'accept-language'>,
+): string {
+  const parts = fields.map(f => {
+    if (f === 'ip') return getClientIp(c);
+    if (f === 'ua') return c.req.header('user-agent') ?? '';
+    return c.req.header('accept-language') ?? '';
+  });
+  return sha256(parts.join(':'));
+}
+
+/**
+ * Creates the identity-resolution middleware for a given auth runtime.
+ *
+ * On every request this middleware reads the session token (from the `session` cookie or the
+ * `x-user-token` header for non-browser clients) and resolves the authenticated user identity.
+ * The result is stored in the Hono context variables so downstream middleware and route handlers
+ * can read `c.get('authUserId')`, `c.get('sessionId')`, etc.
+ *
+ * Processing steps (in order):
+ * 1. **Token extraction** — checks `COOKIE_TOKEN` first, falls back to `HEADER_USER_TOKEN`.
+ *    Initialises all identity context variables to `null` before processing.
+ * 2. **JWT verification** — verifies the token's signature and expiry using the configured
+ *    signing secret (supports rotating secrets via `string[]`).
+ * 3. **M2M token detection** — if the JWT contains a `scope` claim but no `sid` claim, the
+ *    caller is treated as a machine-to-machine client and `authClientId` is set to `sub`.
+ * 4. **Session lookup** — retrieves the stored token from the session repository and performs
+ *    a timing-safe comparison to ensure the token has not been superseded (e.g., by a logout
+ *    or session rotation on another device).
+ * 5. **Fingerprint binding** (optional) — when `signing.sessionBinding` is configured, the
+ *    middleware hashes the request's IP address, User-Agent, and/or Accept-Language header.
+ *    - On the first authenticated request the fingerprint is stored.
+ *    - On subsequent requests the fingerprint is compared. Mismatch handling is controlled
+ *      by `onMismatch`: `'unauthenticate'` (default), `'reject'` (throws `HttpError 401`),
+ *      or `'log-only'` (sets `authUserId` but emits a log warning).
+ * 6. **Suspension check** — unless `auth.checkSuspensionOnIdentify` is explicitly set to
+ *    `false`, the adapter's `getSuspended` is called. Suspended users are treated as
+ *    unauthenticated (`authUserId` and `sessionId` reset to `null`).
+ * 7. **Idle timeout tracking** — when `auth.trackLastActive` or `auth.sessionPolicy.idleTimeout`
+ *    is configured, `sessionRepo.updateSessionLastActive` is called asynchronously (fire-and-
+ *    forget, errors are logged but not propagated).
+ *
+ * This middleware never rejects a request on its own — it only sets or clears the identity
+ * context variables. Use `userAuth` (or `requireStepUp`, `requireVerifiedEmail`) after
+ * `createIdentifyMiddleware` to gate access.
+ *
+ * @param authRuntime - The auth runtime context providing config, session repo, adapter, and
+ *   signing config. Obtained from `getAuthRuntimeFromRequest(c)` or injected during plugin setup.
+ * @returns A Hono `MiddlewareHandler<AppEnv>` that populates `authUserId`, `sessionId`,
+ *   `authClientId`, `tokenPayload`, and `roles` on the context, then calls `next()`.
+ *
+ * @remarks
+ * **Timing-safe token handling**: all comparisons that involve a secret or stored value
+ * use `timingSafeEqual` from `slingshot-core` to prevent timing-oracle attacks:
+ * - Session token comparison (`stored ?? ''` vs the presented JWT) — the empty-string
+ *   fallback ensures the comparison runs even when the session is not found, preventing
+ *   a fast-path timing leak that would reveal whether a session ID is valid.
+ * - Fingerprint comparison (`storedFp` vs `current`) — avoids a timing difference between
+ *   matching and non-matching fingerprints.
+ *
+ * JWT verification errors (expired token, bad signature, malformed token) are caught
+ * silently via a `try/catch` and treated as unauthenticated — they do not propagate to
+ * the error handler. The only exception is `HttpError`, which is re-thrown so
+ * `onMismatch: 'reject'` fingerprint violations produce a proper 401 response.
+ *
+ * The middleware never short-circuits (it always calls `next()`). Downstream handlers
+ * must check `c.get('authUserId')` and reject requests themselves if authentication is
+ * required. Use the `userAuth` middleware (which wraps `identify`) for protected routes.
+ *
+ * @example
+ * import { createIdentifyMiddleware } from '@lastshotlabs/slingshot-auth/plugin';
+ *
+ * // Applied automatically by createAuthPlugin — manual usage example:
+ * const identify = createIdentifyMiddleware(authRuntime);
+ * app.use('/api/*', identify);
+ * app.get('/api/me', (c) => {
+ *   const userId = c.get('authUserId');
+ *   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+ *   return c.json({ userId });
+ * });
+ */
+export const createIdentifyMiddleware =
+  (authRuntime: AuthRuntimeContext): MiddlewareHandler<AppEnv> =>
+  async (c, next) => {
+    const slingshotCtx =
+      typeof (c as { get?: unknown }).get === 'function'
+        ? ((c as { get(name: string): unknown }).get('slingshotCtx') as
+            | { publicPaths?: Iterable<string> }
+            | undefined)
+        : undefined;
+
+    if (isPublicPath(c.req.path, slingshotCtx?.publicPaths)) {
+      c.set('authUserId', null);
+      c.set('roles', null);
+      c.set('sessionId', null);
+      c.set('authClientId', null);
+      c.set('tokenPayload', null);
+      await next();
+      return;
+    }
+
+    const authConfig = authRuntime.config;
+    const sessionRepo = authRuntime.repos.session;
+    c.set('authUserId', null);
+    c.set('roles', null);
+    c.set('sessionId', null);
+    c.set('authClientId', null);
+    c.set('tokenPayload', null);
+
+    // cookie for browsers, x-user-token header for non-browser clients
+    // Try the __Host- prefixed name first (production), then fall back to the plain name
+    const cookieName = getSecureCookieName(COOKIE_TOKEN, isProd(), authConfig);
+    const token =
+      getCookie(c, cookieName) ??
+      getCookie(c, COOKIE_TOKEN) ??
+      c.req.header(HEADER_USER_TOKEN) ??
+      null;
+    log(`[identify] token=${token ? 'present' : 'absent'}`);
+
+    if (token) {
+      try {
+        const payload = await verifyToken(
+          token,
+          authConfig,
+          authRuntime.signing ?? c.get('slingshotCtx').signing ?? null,
+        );
+        c.set('tokenPayload', payload);
+        const sessionId = payload.sid as string | undefined;
+        if (!sessionId) {
+          // Check for M2M token (scope present, no sid)
+          if (payload.scope && payload.sub) {
+            c.set('authClientId', payload.sub);
+            log(`[identify] M2M token for clientId=${payload.sub}`);
+          } else {
+            log('[identify] token missing sid claim — unauthenticated');
+          }
+        } else {
+          const sub = payload.sub;
+          if (!sub) {
+            log('[identify] token missing sub claim — unauthenticated');
+          } else {
+            const stored = await sessionRepo.getSession(sessionId, authConfig);
+            log('[identify] token verified, checking session...');
+            authTrace(`[identify] authUserId=${sub}`);
+            if (timingSafeEqual(stored ?? '', token)) {
+              const signingCfg = authRuntime.signing ?? c.get('slingshotCtx').signing ?? null;
+              const bindingCfg = signingCfg?.sessionBinding;
+
+              if (bindingCfg) {
+                const bindingOpts = typeof bindingCfg === 'object' ? bindingCfg : {};
+                const fields: Array<'ip' | 'ua' | 'accept-language'> = bindingOpts.fields ?? [
+                  'ip',
+                  'ua',
+                ];
+                const onMismatch = bindingOpts.onMismatch ?? 'unauthenticate';
+
+                const current = computeFingerprint(c, fields);
+                const storedFp = await sessionRepo.getSessionFingerprint(sessionId);
+
+                if (storedFp === null) {
+                  // First authenticated request — store the fingerprint
+                  sessionRepo.setSessionFingerprint(sessionId, current).catch(() => {
+                    log('[identify] failed to store session fingerprint');
+                  });
+                  c.set('authUserId', sub);
+                  c.set('sessionId', sessionId);
+                } else if (timingSafeEqual(storedFp, current)) {
+                  c.set('authUserId', sub);
+                  c.set('sessionId', sessionId);
+                } else {
+                  log(`[identify] fingerprint mismatch, onMismatch=${onMismatch}`);
+                  authTrace(`[identify] sessionId=${sessionId}`);
+                  if (onMismatch === 'reject') {
+                    throw new HttpError(401, 'Unauthorized', 'FINGERPRINT_MISMATCH');
+                  } else if (onMismatch === 'log-only') {
+                    c.set('authUserId', sub);
+                    c.set('sessionId', sessionId);
+                  }
+                  // onMismatch === "unauthenticate" — leave authUserId null (already null)
+                }
+              } else {
+                c.set('authUserId', sub);
+                c.set('sessionId', sessionId);
+              }
+
+              if (c.get('authUserId')) {
+                if (authConfig.checkSuspensionOnIdentify) {
+                  const suspensionStatus = await getSuspended(authRuntime.adapter, sub).catch(
+                    () => ({ suspended: false }),
+                  );
+                  if (suspensionStatus.suspended) {
+                    c.set('authUserId', null);
+                    c.set('sessionId', null);
+                    c.set('roles', null);
+                    log(`[identify] userId=${sub} is suspended — unauthenticated`);
+                  }
+                }
+              }
+
+              if (c.get('authUserId')) {
+                authTrace(`[identify] authUserId=${sub} sessionId=${sessionId}`);
+                // Auto-enable lastActiveAt tracking when idleTimeout is configured
+                if (authConfig.trackLastActive || authConfig.sessionPolicy.idleTimeout) {
+                  sessionRepo.updateSessionLastActive(sessionId, authConfig).catch(() => {
+                    log('[identify] failed to update session lastActiveAt');
+                  });
+                }
+              }
+            } else {
+              log('[identify] token/session mismatch — unauthenticated');
+            }
+          }
+        }
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        log('[identify] invalid token — unauthenticated');
+      }
+    } else {
+      log('[identify] no token — unauthenticated');
+    }
+
+    await next();
+  };

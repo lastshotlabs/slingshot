@@ -1,0 +1,2 @@
+[test]
+# no preload — pure unit tests, no app wiring needed

@@ -1,0 +1,176 @@
+---
+title: Config-Driven Workflow
+description: 'The practical Slingshot workflow for shipping a config-driven package: entity, operations, plugin, app, tests, and docs.'
+---
+
+The config-driven path is not just a DSL. It is a delivery workflow.
+
+Start from the domain model, then move outward in a fixed order:
+
+1. entity
+2. operations
+3. plugin
+4. app
+5. tests
+6. docs
+
+The source-backed reference for this guide lives in `examples/config-driven-domain/`.
+Use it together with the walkthrough page when you want the exact code, not just the process.
+
+## 1. Entity
+
+Start with the record shape and route policy, not the plugin wrapper.
+
+Your entity is where Slingshot expects the durable contract to live:
+
+- fields and defaults
+- indexes
+- auth defaults
+- route permissions
+- events
+- search config
+- row scoping
+
+Keep the entity definition narrow and declarative. If a concern can be expressed in entity config,
+put it there first instead of reaching for handwritten routes.
+
+Reference files:
+
+- `examples/config-driven-domain/src/entities/post.ts`
+- [/examples/config-driven-domain/](/examples/config-driven-domain/)
+- [/config-driven-walkthrough/](/config-driven-walkthrough/)
+
+## 2. Operations
+
+Add operations only for behavior that does not fit plain CRUD.
+
+Good operation candidates:
+
+- filtered lookups
+- state transitions
+- field or array mutations
+- aggregates
+- search
+- batch behavior
+
+This is where you decide whether the domain behavior stays declarative or needs a custom route.
+If you can express it with `op.*`, do that first. It keeps adapter methods, route shapes, and
+validation aligned.
+
+Reference files:
+
+- `examples/config-driven-domain/src/entities/postOperations.ts`
+- [/config-driven/operations/](/config-driven/operations/)
+
+## 3. Plugin
+
+The plugin is assembly, not the place to redefine the domain.
+
+Use `createEntityPlugin()` to bind the entity and operation config to the app runtime:
+
+- choose the mount path
+- declare dependencies
+- resolve the adapter from `createEntityFactories(...)`
+- register named middleware only when the entity config references it
+- add `setupPost()` only for real cross-entity or cross-package behavior
+
+If the plugin grows business logic that duplicates the entity or operations config, that is usually
+drift.
+
+Reference files:
+
+- `examples/config-driven-domain/src/plugin.ts`
+- [/authoring/plugin-interface/](/authoring/plugin-interface/)
+- [/authoring/testing-plugins/](/authoring/testing-plugins/)
+
+## 4. App
+
+Compose the package in a real app before polishing the package docs.
+
+The app layer proves that the package works in the same composition model as the rest of Slingshot:
+
+- auth and signing
+- plugin order
+- mount path
+- runtime wiring
+- any feature-package dependencies
+
+The source-backed examples now expose importable `buildAppConfig()` helpers so automation can boot
+them through `createApp()` without opening a network port. Treat that as the preferred shape for
+example entrypoints.
+
+Reference files:
+
+- `examples/config-driven-domain/src/index.ts`
+- `examples/with-auth/src/index.ts`
+- [/examples/config-driven-domain/](/examples/config-driven-domain/)
+
+## 5. Tests
+
+Test the package at the same abstraction level where failures are most likely.
+
+Use three layers:
+
+- entity and operation validation when the change is purely declarative
+- plugin assembly tests with `createApp()` when the risk is lifecycle, dependency order, or route mounting
+- route-level tests when the risk is auth, permissions, middleware, or handler behavior
+
+Do not start with `createServer()` unless the behavior requires a real server. `createApp()` is the
+fastest way to catch plugin-assembly drift.
+
+For examples, the repo now enforces two checks:
+
+- `bun run examples:typecheck`
+- `bun run examples:smoke`
+
+`examples:smoke` boots code-backed examples through `createApp()` and validates manifest-backed
+examples, so docs can drift less quietly.
+
+Reference pages:
+
+- [/guides/testing/](/guides/testing/)
+- [/authoring/testing-plugins/](/authoring/testing-plugins/)
+
+## 6. Docs
+
+Documentation closes the loop. If the package changed, the docs need to change in the same diff.
+
+Update the layers in this order:
+
+- JSDoc on the exported symbols
+- package human guide
+- source-backed example docs page
+- cross-cutting guides if the feature touches shared framework surfaces
+
+For config-driven work, treat `@lastshotlabs/slingshot-entity` entrypoint JSDoc as part of the
+shipped contract. The generated package reference is derived from `packages/slingshot-entity/src/index.ts`,
+so export-level comment drift is user-facing drift.
+
+The repo policy for this lives in:
+
+- `slingshot-docs/documentation-policy.md`
+- `CLAUDE.md`
+
+Required commands for config-driven changes:
+
+```bash
+bun run docs:ci
+```
+
+## Recommended Sequence
+
+Use this sequence for implementation work:
+
+1. Define the entity.
+2. Add operations.
+3. Assemble the plugin.
+4. Compose it in a real app.
+5. Add or update tests.
+6. Update JSDoc, package docs, and example docs.
+7. Run the doc and example verification commands.
+
+## Related Reading
+
+- [/config-driven-walkthrough/](/config-driven-walkthrough/)
+- [/examples/config-driven-domain/](/examples/config-driven-domain/)
+- [/packages/slingshot-entity/](/packages/slingshot-entity/)

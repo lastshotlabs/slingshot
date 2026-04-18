@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "dist",
+    "tsBuildInfoFile": ".tmp/tsconfig.build.tsbuildinfo",
+    "rootDir": ".",
+    "skipLibCheck": true,
+    "paths": {
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/dist/src/index.d.ts"]
+    },
+    "composite": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

@@ -1,0 +1,270 @@
+---
+title: Slingshot
+description: The backend platform for Bun - auth, community, chat, organizations, search, SSR, SSG, assets, emoji, and integrations as drop-in plugins.
+template: splash
+hero:
+  tagline: Drop-in backend for Bun. Auth, community, chat, organizations, search, SSR, SSG, assets, emoji, and integrations as plugins - configured in a manifest, or composed in code.
+  actions:
+    - text: Start Here
+      link: /start-here/
+      icon: right-arrow
+      variant: primary
+    - text: Quick Start
+      link: /quick-start/
+      icon: right-arrow
+      variant: secondary
+    - text: Browse Examples
+      link: /examples/
+      icon: document
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard, TabItem, Tabs } from '@astrojs/starlight/components';
+
+## Choose the right workflow first
+
+<CardGrid>
+  <LinkCard
+    title="Working on Slingshot"
+    href="/agent-flows/framework-contributor/"
+    description="Contributor flow for agents and developers modifying the framework, packages, docs, examples, or internals."
+  />
+  <LinkCard
+    title="Building with Slingshot"
+    href="/agent-flows/app-builder/"
+    description="Consumer flow for agents and developers composing an app from packages, examples, manifests, and guides."
+  />
+</CardGrid>
+
+## Get a full backend running in seconds
+
+<Tabs>
+  <TabItem label="Manifest (zero-code)">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "plugins": [
+        { "plugin": "slingshot-auth" },
+        { "plugin": "slingshot-community" }
+      ]
+    }
+    ```
+
+    ```bash
+    slingshot start
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+    import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+
+    await createServer({
+      port: 3000,
+      security: { signing: { secret: process.env.SECRET! } },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user'], defaultRole: 'user' },
+          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+        }),
+        createCommunityPlugin({ containerCreation: 'user' }),
+      ],
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+Either way, you get the framework assembly layer plus a broader plugin ecosystem: auth and
+identity, community and chat, organizations and permissions, search, SSR/SSG, assets and media,
+and integration plugins such as webhooks, mail, and push.
+
+## What's included
+
+<CardGrid>
+  <Card title="Identity and Access" icon="approve-check-circle">
+    `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`,
+    `slingshot-permissions`, and `slingshot-organizations` cover authentication, sessions, machine
+    access, provisioning, roles, grants, and tenant-aware authorization.
+  </Card>
+  <Card title="Community and Chat" icon="comment-alt">
+    `slingshot-community`, `slingshot-chat`, `slingshot-notifications`, `slingshot-polls`,
+    `slingshot-game-engine`, and `slingshot-push` provide forums, rooms, messages, reactions,
+    moderation, notification fan-out, polls, multiplayer game state, and realtime delivery patterns.
+  </Card>
+  <Card title="Search and Discovery" icon="magnifying-glass">
+    `slingshot-search` adds per-entity search with swappable providers so apps can move from simple
+    local search to dedicated engines without rewriting domain logic.
+  </Card>
+  <Card title="Rendering and Delivery" icon="seti:html">
+    `slingshot-ssr` and `slingshot-ssg` cover server rendering, static generation, metadata routes,
+    draft mode, static params, and page-oriented application delivery.
+  </Card>
+  <Card title="Assets and Media" icon="seti:image">
+    `slingshot-assets`, `slingshot-image`, `slingshot-emoji`, `slingshot-embeds`, `slingshot-gifs`,
+    and `slingshot-deep-links` cover storage, image handling, custom emoji, unfurls, GIF providers,
+    and mobile/web deep-link flows.
+  </Card>
+  <Card title="Integrations and Ops" icon="seti:docker">
+    `slingshot-webhooks`, `slingshot-interactions`, `slingshot-mail`, `slingshot-admin`,
+    `runtime-bun`, `runtime-node`, `runtime-edge`, and infra tooling cover outbound integration
+    surfaces, interactive workflows, email, admin surfaces, deployment planning, and runtime
+    hosting.
+  </Card>
+  <Card title="Your Own Domains" icon="seti:config">
+    `slingshot-entity` lets you define entities, route policy, operations, adapters, and events from
+    config, then compose them into plugins beside the built-in product packages.
+  </Card>
+</CardGrid>
+
+## Capability map
+
+<CardGrid>
+  <LinkCard
+    title="Auth and Access"
+    href="/packages/slingshot-auth/"
+    description="Start with auth, then branch into organizations, permissions, OAuth, OIDC, SCIM, or M2M."
+  />
+  <LinkCard
+    title="Community"
+    href="/packages/slingshot-community/"
+    description="Forum-style domains: containers, threads, replies, moderation, and notification hooks."
+  />
+  <LinkCard
+    title="Chat"
+    href="/packages/slingshot-chat/"
+    description="Rooms, messages, membership, reactions, DM topology, and realtime chat delivery."
+  />
+  <LinkCard
+    title="Search"
+    href="/packages/slingshot-search/"
+    description="Provider-backed application search with shared entity metadata and ranking config."
+  />
+  <LinkCard
+    title="SSR"
+    href="/packages/slingshot-ssr/"
+    description="Server-rendered pages, loaders, route declarations, metadata, draft mode, and ISR/PPR hooks."
+  />
+  <LinkCard
+    title="SSG"
+    href="/packages/slingshot-ssg/"
+    description="Static route collection and page rendering for generated sites."
+  />
+  <LinkCard
+    title="Assets and Emoji"
+    href="/packages/slingshot-assets/"
+    description="Storage adapters, asset metadata, image handling, and org-scoped custom emoji."
+  />
+  <LinkCard
+    title="Interactions"
+    href="/packages/slingshot-interactions/"
+    description="Interactive actions, dispatch handlers, audit events, and chat/community peer integrations."
+  />
+  <LinkCard
+    title="Polls"
+    href="/packages/slingshot-polls/"
+    description="Content-attached multiple-choice polls with policy hooks and shared poll infrastructure."
+  />
+  <LinkCard
+    title="Game Engine"
+    href="/packages/slingshot-game-engine/"
+    description="Multiplayer game state with config-driven phases, channels, turns, scoring, and replay."
+  />
+  <LinkCard
+    title="Embeds and GIFs"
+    href="/packages/slingshot-embeds/"
+    description="Server-side unfurls, GIF-provider proxies, and media enrichment for user-generated content."
+  />
+  <LinkCard
+    title="Deep Links"
+    href="/packages/slingshot-deep-links/"
+    description="Apple/Android app-link ownership plus browser fallback redirects for mobile entry flows."
+  />
+  <LinkCard
+    title="Webhooks and Integrations"
+    href="/packages/slingshot-webhooks/"
+    description="Outbound platform integration surfaces alongside interactions, mail, push, and admin plugins."
+  />
+  <LinkCard
+    title="Edge Runtime"
+    href="/packages/runtime-edge/"
+    description="Worker-friendly runtime hosting with Web Crypto, bundled file reads, and KV-backed ISR support."
+  />
+</CardGrid>
+
+## Adapters swap without touching your logic
+
+Start with in-memory storage. Switch to SQLite, Postgres, MongoDB, or Redis with a one-line change - nothing else changes.
+
+```json
+"plugins": [{
+  "plugin": "slingshot-auth",
+  "config": { "db": { "auth": "sqlite", "sessions": "redis" } }
+}]
+```
+
+## Define your own domains the same way
+
+The platform packages aren't special. Any domain can work this way:
+
+```typescript title="src/entities/post.ts"
+export const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    authorId: field.string(),
+    title: field.string(),
+    body: field.string(),
+    status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' },
+    get: { auth: 'none' },
+    list: { auth: 'none' },
+    create: {
+      permission: { requires: 'blog:post.write' },
+      event: { key: 'blog:post.created', payload: ['id', 'authorId', 'title'] },
+    },
+  },
+});
+```
+
+One definition. CRUD routes, a typed adapter for every supported database, permission enforcement, and event emission - all wired automatically.
+
+## Examples
+
+<CardGrid>
+  <LinkCard
+    title="Auth Setup"
+    href="/examples/with-auth/"
+    description="Email/password, JWT sessions, OAuth, MFA, passkeys. Everything in one working example."
+  />
+  <LinkCard
+    title="Forum App"
+    href="/examples/forum-app/"
+    description="Auth + community + permissions. Full working composition with realtime notifications."
+  />
+  <LinkCard
+    title="Config-Driven Domain"
+    href="/examples/config-driven-domain/"
+    description="Define an entity, add operations, wrap it in a plugin. Step by step."
+  />
+  <LinkCard
+    title="SaaS Foundations"
+    href="/examples/saas-foundations/"
+    description="Auth + organizations + per-resource permissions + search. Multi-tenant from the start."
+  />
+  <LinkCard
+    title="Collaboration Workspace"
+    href="/examples/collaboration-workspace/"
+    description="Chat, community, interactions, polls, uploads, emoji, embeds, GIFs, and deep links in one app."
+  />
+  <LinkCard
+    title="Content Platform"
+    href="/examples/content-platform/"
+    description="Search, assets, SSR, SSG, and edge-ready delivery for docs, media, and publishing products."
+  />
+</CardGrid>

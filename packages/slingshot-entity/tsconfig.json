@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ESNext",
+    "skipLibCheck": true,
+    "types": ["bun", "node"],
+    "paths": {
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/src/index.ts"],
+      "@lastshotlabs/slingshot-core/testing": ["../slingshot-core/src/testing.ts"]
+    }
+  }
+}

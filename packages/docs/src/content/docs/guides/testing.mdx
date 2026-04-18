@@ -1,0 +1,398 @@
+---
+title: Testing
+description: Testing Slingshot apps and generated routes with createApp, in-memory adapters, and SQLite integration
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+Use `createApp()` for tests. It assembles the Slingshot app and returns `{ app, ctx }` without binding a network port, which makes request-driven tests fast and deterministic.
+
+## Basic app tests
+
+The standard pattern is:
+
+1. build a fresh app in `beforeEach`
+2. call `app.request(...)`
+3. assert on the HTTP response
+
+```typescript title="tests/auth.test.ts"
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { createApp } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+async function buildApp() {
+  const { app } = await createApp({
+    security: {
+      signing: { secret: 'test-signing-secret-32-chars-ok!' },
+    },
+    plugins: [
+      createAuthPlugin({
+        auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+        db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+      }),
+    ],
+  });
+
+  return app;
+}
+
+describe('auth routes', () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+
+  beforeEach(async () => {
+    app = await buildApp();
+  });
+
+  test('POST /auth/register returns a session token', async () => {
+    const res = await app.request('/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'alice@example.com',
+        password: 'Secure1234!',
+      }),
+    });
+
+    expect(res.status).toBe(201);
+
+    const body = (await res.json()) as { token: string; userId: string };
+    expect(typeof body.token).toBe('string');
+    expect(typeof body.userId).toBe('string');
+  });
+
+  test('POST /auth/login with a bad password returns 401', async () => {
+    await app.request('/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'bob@example.com',
+        password: 'Secure1234!',
+      }),
+    });
+
+    const res = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'bob@example.com',
+        password: 'wrong-password',
+      }),
+    });
+
+    expect(res.status).toBe(401);
+  });
+});
+```
+
+## Testing authenticated routes
+
+Use the real auth flow in tests: register or log in, then pass the returned token in the `x-user-token` header.
+
+```typescript title="tests/protected-routes.test.ts"
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { createApp, createRouter } from '@lastshotlabs/slingshot';
+import { createAuthPlugin, userAuth } from '@lastshotlabs/slingshot-auth';
+
+async function buildApp() {
+  const { app } = await createApp({
+    security: {
+      signing: { secret: 'test-signing-secret-32-chars-ok!' },
+    },
+    plugins: [
+      createAuthPlugin({
+        auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+        db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+      }),
+    ],
+  });
+
+  const router = createRouter();
+  router.use('/me/profile', userAuth);
+  router.get('/me/profile', c => c.json({ userId: c.get('authUserId')! }, 200));
+
+  app.route('/', router);
+  return app;
+}
+
+async function authenticate(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  email: string,
+  password: string,
+): Promise<string> {
+  await app.request('/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const loginRes = await app.request('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const body = (await loginRes.json()) as { token: string };
+  return body.token;
+}
+
+describe('protected routes', () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+
+  beforeEach(async () => {
+    app = await buildApp();
+  });
+
+  test('GET /me/profile returns 401 without a token', async () => {
+    const res = await app.request('/me/profile');
+    expect(res.status).toBe(401);
+  });
+
+  test('GET /me/profile returns 200 with x-user-token', async () => {
+    const token = await authenticate(app, 'alice@example.com', 'Secure1234!');
+
+    const res = await app.request('/me/profile', {
+      headers: {
+        'x-user-token': token,
+      },
+    });
+
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as { userId: string };
+    expect(typeof body.userId).toBe('string');
+  });
+});
+```
+
+## Test isolation
+
+The safest default is a new app per test. That guarantees fresh in-memory repositories, a fresh event bus, and a fresh context.
+
+If you intentionally share an app across tests in one file, clear the context between cases:
+
+```typescript
+import { afterAll, beforeEach } from 'bun:test';
+import { getContext } from '@lastshotlabs/slingshot';
+
+declare const app: object;
+
+beforeEach(async () => {
+  await getContext(app).clear();
+});
+
+afterAll(async () => {
+  await getContext(app).destroy();
+});
+```
+
+`ctx.clear()` resets in-memory state. `ctx.destroy()` closes resources such as SQLite, Redis, MongoDB, and other teardown-aware infrastructure.
+
+<Aside type="caution">
+  Sharing one app across many tests makes failures harder to reason about. Rebuilding in
+  `beforeEach` is slower only when startup is genuinely expensive, and it removes an entire class of
+  state-leak bugs.
+</Aside>
+
+## Testing generated entity routes
+
+Entity routes created by `createEntityPlugin()` can be tested through ordinary HTTP requests. Use a small in-memory adapter that satisfies `BareEntityAdapter`.
+
+```typescript title="tests/entity-routes.test.ts"
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { createApp, defineEntity, field } from '@lastshotlabs/slingshot';
+import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
+import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
+
+const Note = defineEntity('Note', {
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    text: field.string(),
+  },
+  routes: {
+    create: { event: 'note:created' },
+    list: {},
+    get: {},
+    update: {},
+    delete: {},
+  },
+});
+
+function createMemoryAdapter(): BareEntityAdapter {
+  const records = new Map<string, Record<string, unknown>>();
+
+  return {
+    async create(data: unknown) {
+      const id = crypto.randomUUID();
+      const record = { id, ...(data as Record<string, unknown>) };
+      records.set(id, record);
+      return record;
+    },
+    async getById(id: string) {
+      return records.get(id) ?? null;
+    },
+    async list() {
+      return { items: [...records.values()], hasMore: false };
+    },
+    async update(id: string, data: unknown) {
+      const existing = records.get(id);
+      if (!existing) return null;
+      const updated = { ...existing, ...(data as Record<string, unknown>) };
+      records.set(id, updated);
+      return updated;
+    },
+    async delete(id: string) {
+      return records.delete(id);
+    },
+  };
+}
+
+async function buildApp() {
+  const adapter = createMemoryAdapter();
+
+  const { app } = await createApp({
+    plugins: [
+      createEntityPlugin({
+        name: 'notes-plugin',
+        entities: [
+          {
+            config: Note,
+            buildAdapter: (_storeType, _infra) => adapter,
+          },
+        ],
+      }),
+    ],
+  });
+
+  return app;
+}
+
+describe('note entity routes', () => {
+  let app: Awaited<ReturnType<typeof buildApp>>;
+
+  beforeEach(async () => {
+    app = await buildApp();
+  });
+
+  test('GET /notes returns an empty list initially', async () => {
+    const res = await app.request('/notes');
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as { items: unknown[] };
+    expect(body.items).toEqual([]);
+  });
+
+  test('POST /notes creates a record', async () => {
+    const res = await app.request('/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: 'Hello, world' }),
+    });
+
+    expect(res.status).toBe(201);
+
+    const body = (await res.json()) as { id: string; text: string };
+    expect(typeof body.id).toBe('string');
+    expect(body.text).toBe('Hello, world');
+  });
+});
+```
+
+## Testing with SQLite
+
+SQLite is the easiest way to add real persistence to integration tests without introducing external services.
+
+<Steps>
+
+1. Create a temporary database path.
+
+   ```typescript title="tests/sqlite-auth.test.ts"
+   import { mkdtemp, rm } from 'node:fs/promises';
+   import { tmpdir } from 'node:os';
+   import { join } from 'node:path';
+   import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+   import { createApp, getContext } from '@lastshotlabs/slingshot';
+   import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+   let tmpDir: string;
+   let app: Awaited<ReturnType<typeof buildApp>>;
+
+   async function buildApp(dbPath: string) {
+     const { app } = await createApp({
+       db: { sqlite: dbPath },
+       security: {
+         signing: { secret: 'test-signing-secret-32-chars-ok!' },
+       },
+       plugins: [
+         createAuthPlugin({
+           auth: { roles: ['user'], defaultRole: 'user' },
+           db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
+         }),
+       ],
+     });
+
+     return app;
+   }
+
+   beforeAll(async () => {
+     tmpDir = await mkdtemp(join(tmpdir(), 'slingshot-test-'));
+     app = await buildApp(join(tmpDir, 'auth.db'));
+   });
+
+   afterAll(async () => {
+     await getContext(app).destroy();
+     await rm(tmpDir, { recursive: true, force: true });
+   });
+   ```
+
+2. Test through the same HTTP routes you use in memory.
+
+   ```typescript
+   describe('sqlite persistence', () => {
+     test('a registered user can be read back on login', async () => {
+       await app.request('/auth/register', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           email: 'persist@example.com',
+           password: 'Secure1234!',
+         }),
+       });
+
+       const loginRes = await app.request('/auth/login', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({
+           email: 'persist@example.com',
+           password: 'Secure1234!',
+         }),
+       });
+
+       expect(loginRes.status).toBe(200);
+     });
+   });
+   ```
+
+</Steps>
+
+For Postgres or other external systems, gate those tests behind environment variables so the default suite stays fast.
+
+```typescript
+const TEST_POSTGRES_URL = process.env['TEST_POSTGRES_URL'];
+
+describe.skipIf(!TEST_POSTGRES_URL)('postgres integration', () => {
+  // Runs only when TEST_POSTGRES_URL is set.
+});
+```
+
+## Practical rules
+
+- Prefer `beforeEach` to `beforeAll` for stateful tests.
+- Test through `app.request()` instead of reaching into plugin internals.
+- Use real auth headers such as `x-user-token` when a route depends on `userAuth`.
+- Keep external-service tests opt-in. Most coverage should come from in-memory or SQLite-backed tests.
+
+## See also
+
+- [Error Handling](/guides/error-handling/) for asserting on Slingshot error responses
+- [OpenAPI](/guides/openapi/) for route definitions used in request tests
+- [Plugin Lifecycle](/internals/plugin-lifecycle/) for the order Slingshot runs plugin hooks

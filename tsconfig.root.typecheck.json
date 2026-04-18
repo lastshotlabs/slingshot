@@ -1,0 +1,123 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "tsBuildInfoFile": ".tmp/tsconfig.root.typecheck.tsbuildinfo",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": ".",
+    "outDir": ".tmp/typecheck/root",
+    "noEmit": false
+  },
+  "include": ["src"],
+  "exclude": ["src/framework", "tests", "node_modules", "dist"],
+  "references": [
+    {
+      "path": "./tsconfig.framework.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-admin/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-assets/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-auth/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-bullmq/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-chat/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-community/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-core/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-deep-links/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-embeds/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-emoji/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-entity/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-gifs/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-image/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-infra/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-interactions/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-m2m/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-mail/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-notifications/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-oauth/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-oidc/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-organizations/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-permissions/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-polls/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-postgres/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-push/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-scim/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-search/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-ssg/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-ssr/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-webhooks/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/runtime-bun/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/runtime-edge/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/runtime-node/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-game-engine/tsconfig.typecheck.json"
+    }
+  ]
+}

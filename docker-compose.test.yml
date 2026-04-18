@@ -1,0 +1,45 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ['6380:6379']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      retries: 5
+  mongo:
+    image: mongo:7
+    ports: ['27018:27017']
+    environment:
+      MONGO_INITDB_DATABASE: slingshot_test
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 2s
+      retries: 5
+  postgres:
+    image: postgres:16-alpine
+    ports: ['5433:5432']
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: slingshot_test
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'postgres']
+      interval: 2s
+      retries: 5
+  localstack:
+    image: localstack/localstack:3
+    ports: ['4566:4566']
+    environment:
+      SERVICES: s3
+      AWS_DEFAULT_REGION: us-east-1
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bash',
+          '-c',
+          'curl -sf http://localhost:4566/_localstack/health | grep -q "running"',
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 10

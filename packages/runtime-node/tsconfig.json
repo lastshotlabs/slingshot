@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ESNext",
+    "types": ["node", "better-sqlite3"],
+    "paths": {
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}

@@ -1,0 +1,132 @@
+---
+title: Context and Registrar
+description: SlingshotContext, the per-app state container, and how CoreRegistrar lets packages share capabilities without coupling
+---
+
+## SlingshotContext — per-app state, no globals
+
+Every `createApp()` call creates a fresh `SlingshotContext` — the single container for everything the framework knows about a running app instance.
+
+```typescript
+interface SlingshotContext {
+  config: SlingshotResolvedConfig; // frozen at creation time
+  bus: SlingshotEventBus; // event bus instance
+  plugins: readonly SlingshotPlugin[]; // registered plugins, in boot order
+  pluginState: Map<string, unknown>; // cross-plugin runtime state
+
+  // DB handles — null when not configured
+  redis: unknown | null;
+  mongo: { auth: unknown | null; app: unknown | null } | null;
+  sqlite: string | null; // path to the SQLite file
+  sqliteDb: RuntimeSqliteDatabase | null; // open handle
+
+  // Capabilities — drained from CoreRegistrar after setupPost
+  routeAuth: RouteAuthRegistry | null;
+  userResolver: UserResolver | null;
+  rateLimitAdapter: RateLimitAdapter | null;
+  fingerprintBuilder: FingerprintBuilder | null;
+  cacheAdapters: ReadonlyMap<CacheStoreName, CacheAdapter>;
+  emailTemplates: ReadonlyMap<string, EmailTemplate>;
+
+  clear(): Promise<void>; // reset in-memory state (test isolation)
+  destroy(): Promise<void>; // teardown plugins, shut down the bus, close connections
+}
+```
+
+Context is stored in a `WeakMap` keyed by the Hono `app` instance. No globals. Every app gets its own isolated context.
+
+```typescript
+import { getContext } from '@lastshotlabs/slingshot-core';
+
+declare const app: object;
+
+const ctx = getContext(app);
+const bus = ctx.bus;
+const config = ctx.config;
+```
+
+When root bootstrap includes `ws`, context also carries a cloned `wsEndpoints` draft before plugin
+`setupPost` runs. Plugins can attach `incoming` and `onRoomSubscribe` handlers onto that map during
+bootstrap, and `createServer()` later reuses the same endpoint object when it starts the realtime
+transport.
+That draft comes from the root `WsConfig` during app assembly, so plugin bootstrap and live server
+startup stay aligned without storing transport state on `StoreInfra`.
+
+## Why no globals?
+
+Global state means test pollution. If `createAuthPlugin()` stored the current user resolver in a module-level variable, two concurrent test suites would step on each other. WeakMap-backed context means each `createApp()` is fully isolated — run fifty app instances in the same process without interference.
+
+That's why Slingshot tests use `new Hono()` + plugin setup per suite, not a shared singleton. `ctx.clear()` resets in-memory state. `ctx.destroy()` runs plugin teardown, shuts down the event bus, and then closes connections.
+
+## Config is frozen
+
+Config objects are `Object.freeze()`d at creation time — deep-frozen with `deepFreeze()`. Plugins receive an immutable view of their configuration. Nothing downstream can accidentally mutate a config object and create invisible shared state.
+
+## CoreRegistrar — capability publishing without coupling
+
+The registrar lets packages share capabilities without direct import dependencies.
+
+```typescript
+interface CoreRegistrar {
+  setRouteAuth(registry: RouteAuthRegistry): void;
+  setUserResolver(resolver: UserResolver): void;
+  setRateLimitAdapter(adapter: RateLimitAdapter): void;
+  setFingerprintBuilder(builder: FingerprintBuilder): void;
+  addCacheAdapter(store: CacheStoreName, adapter: CacheAdapter): void;
+  addEmailTemplates(templates: Record<string, EmailTemplate>): void;
+}
+```
+
+`slingshot-auth` calls `config.registrar.setUserResolver(...)` in its `setupPost`. After all `setupPost` hooks complete, `createApp()` drains the registrar and writes its values immutably into `SlingshotContext`. `slingshot-community` reads `ctx.userResolver` (or calls `getUserResolver(ctx)`) to resolve user identity for community-specific operations.
+
+Neither package imports the other. They share a contract through the registrar.
+
+## Reflect symbol injection for framework internals
+
+For cross-cutting concerns below the registrar level — entity factory resolution, composite factory resolution, reindex source discovery — Slingshot injects `Symbol.for(...)` Reflect symbols onto `StoreInfra`. These symbols come in two categories:
+
+**Plugin-facing DI** — defined and exported from `packages/slingshot-core/src/storeInfra.ts`:
+
+```typescript
+export const RESOLVE_ENTITY_FACTORIES: symbol = Symbol.for('slingshot.resolveEntityFactories');
+export const RESOLVE_COMPOSITE_FACTORIES: symbol = Symbol.for(
+  'slingshot.resolveCompositeFactories',
+);
+export const RESOLVE_REINDEX_SOURCE: symbol = Symbol.for('slingshot.resolveReindexSource');
+```
+
+Plugin packages import these from `@lastshotlabs/slingshot-core` and read them via `Reflect.get(infra, SYMBOL)` — in practice through the `createEntityPlugin` wrapper in `@lastshotlabs/slingshot-entity`, not directly.
+
+**Framework-internal plumbing** — defined in the app-level `src/framework/persistence/internalRepoResolution.ts`, not exported from any package:
+
+```typescript
+export const REGISTER_ENTITY = Symbol.for('slingshot.registerEntity');
+export const RESOLVE_SEARCH_SYNC = Symbol.for('slingshot.resolveSearchSync');
+export const RESOLVE_SEARCH_CLIENT = Symbol.for('slingshot.resolveSearchClient');
+export const CONTEXT_STORE_INFRA = Symbol.for('slingshot.contextStoreInfra');
+```
+
+`createContextStoreInfra()` injects concrete implementations for both categories onto the infra object. Plugin packages never call the framework-internal symbols directly — registering an entity into the `EntityRegistry`, wiring its search sync, and resolving its search client all happen as side effects when the framework's implementation of `RESOLVE_ENTITY_FACTORIES` runs.
+
+See [Reflect Symbol DI](/internals/reflect-di/) for the full pattern, the rationale behind the split, and guidance on adding a new cross-cutting concern.
+
+## `pluginState` — cross-plugin runtime state
+
+When state is too plugin-specific for the registrar, use `ctx.pluginState`:
+
+```typescript
+// slingshot-auth stores its runtime state
+ctx.pluginState.set('slingshot-auth', {
+  sessionStore,
+  tokenVerifier,
+  rateLimiter,
+});
+
+// Another plugin reads it
+const authState = ctx.pluginState.get('slingshot-auth') as AuthPluginState;
+```
+
+## See also
+
+- [Plugin Lifecycle](/internals/plugin-lifecycle/) — when context is created and how plugins access it
+- [Reflect Symbol DI](/internals/reflect-di/) — deep dive on the symbol injection pattern

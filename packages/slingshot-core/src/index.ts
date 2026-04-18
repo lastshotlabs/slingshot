@@ -1,0 +1,497 @@
+/** Core plugin lifecycle contracts implemented by Slingshot feature packages. */
+export type { SlingshotPlugin, StandalonePlugin, PluginSetupContext } from './plugin';
+/** Runtime abstraction types used by Slingshot hosts and server bootstrap. */
+export type {
+  SlingshotRuntime,
+  RuntimePassword,
+  RuntimeSqliteDatabase,
+  RuntimeSqliteStatement,
+  RuntimeSqlitePreparedStatement,
+  RuntimeSqliteRunResult,
+  RuntimeFs,
+  RuntimeGlob,
+  RuntimeServerOptions,
+  RuntimeWebSocketHandler,
+  RuntimeWebSocket,
+  RuntimeServerInstance,
+  RuntimeServerFactory,
+} from './runtime';
+/** Event-bus contracts and event-key typing shared across framework packages. */
+export type {
+  SlingshotEventBus,
+  SlingshotEventMap,
+  DynamicEventBus,
+  SecurityEventKey,
+  SubscriptionOpts,
+  ClientSafeEventKey,
+} from './eventBus';
+/** In-process event bus primitives and the built-in client-safe event allowlist. */
+export {
+  InProcessAdapter,
+  createInProcessAdapter,
+  SECURITY_EVENT_TYPES,
+  BUILTIN_CLIENT_SAFE_KEYS,
+  FORBIDDEN_CLIENT_PREFIXES,
+} from './eventBus';
+/** Adapter that normalizes router behavior across Slingshot runtimes. */
+export { createRouterAdapter } from './routerAdapter';
+export type { RouterAdapterOptions } from './routerAdapter';
+/** Server-sent-event payload and endpoint contracts shared by realtime integrations. */
+export type { SseClientData, SseFilter, SseEndpointConfig } from './sse';
+/** Permission evaluation, grants, and adapter contracts used across access-control packages. */
+export type {
+  SubjectType,
+  GrantEffect,
+  SubjectRef,
+  PermissionGrant,
+  EvaluationScope,
+  PermissionsAdapter,
+  TestablePermissionsAdapter,
+  ResourceTypeDefinition,
+  PermissionRegistry,
+  GroupResolver,
+  PermissionEvaluator,
+} from './permissions';
+export { validateGrant, SUPER_ADMIN_ROLE, PERMISSIONS_STATE_KEY } from './permissions';
+export type { PermissionsState } from './permissions';
+export type { RenderResult, MailRenderer } from './mail';
+export { TemplateNotFoundError } from './mail';
+/** Auth-adapter record and repository contracts shared by auth and admin packages. */
+export type {
+  IdentityProfile,
+  WebAuthnCredential,
+  M2MClientRecord,
+  UserQuery,
+  UserRecord,
+  GroupRecord,
+  GroupMembershipRecord,
+  TenantScopedOpts,
+  PaginationOptions,
+  PaginatedResult,
+  CoreAuthAdapter,
+  OAuthAdapter,
+  MfaAdapter,
+  WebAuthnAdapter,
+  RolesAdapter,
+  GroupsAdapter,
+  SuspensionAdapter,
+  EnterpriseAdapter,
+  AuthAdapter,
+} from './auth-adapter';
+/** OpenAPI-aware route builders used by framework and plugin packages. */
+export {
+  createRoute,
+  withSecurity,
+  registerSchema,
+  registerSchemas,
+  maybeAutoRegister,
+} from './createRoute';
+/** Offset and cursor pagination helpers shared by generated and handwritten routes. */
+export { offsetParams, parseOffsetParams, paginatedResponse } from './pagination';
+export { cursorParams, parseCursorParams, cursorPaginatedResponse } from './pagination';
+export type { OffsetParamDefaults, ParsedOffsetParams } from './pagination';
+export type { CursorParamDefaults, ParsedCursorParams } from './pagination';
+/** Audit, captcha, and CSRF contracts consumed by auth and framework middleware. */
+export type { AuditLogEntry, AuditLogQuery, AuditLogProvider } from './auditLog';
+export type { CaptchaProvider, CaptchaConfig } from './captcha';
+export type { CsrfConfig } from './csrf';
+
+// --- errors ---
+/** Framework error types used for HTTP, validation, and adapter capability failures. */
+export { HttpError, ValidationError, UnsupportedAdapterFeatureError } from './errors';
+export { errorResponse } from './errorResponse';
+
+// --- utilities ---
+export { deepFreeze } from './deepFreeze';
+export { bestEffort } from './bestEffort';
+export { encodeCursor, decodeCursor } from './cursor';
+export {
+  evaluateFilter,
+  extractFilterParams,
+  extractMatchParams,
+  resolveMatch,
+} from './filterEvaluator';
+
+// --- crypto ---
+/** Crypto and token helpers used by auth, signing, and secure request flows. */
+export {
+  sha256,
+  timingSafeEqual,
+  hashToken,
+  encryptField,
+  decryptField,
+  isEncryptedField,
+  generateSecureToken,
+} from './crypto';
+export type { DataEncryptionKey } from './crypto';
+
+// --- constants ---
+/** Shared request and cookie header constants used across Slingshot packages. */
+export {
+  COOKIE_TOKEN,
+  HEADER_USER_TOKEN,
+  COOKIE_REFRESH_TOKEN,
+  HEADER_REFRESH_TOKEN,
+  COOKIE_CSRF_TOKEN,
+  HEADER_CSRF_TOKEN,
+  HEADER_REQUEST_ID,
+  HEADER_IDEMPOTENCY_KEY,
+  HEADER_SIGNATURE,
+  HEADER_TIMESTAMP,
+} from './constants';
+
+// --- signing ---
+export type { SigningConfig } from './signing';
+
+// --- redis ---
+export type { RedisLike } from './redis';
+
+// --- clientIp ---
+/** Client IP helpers for runtime-aware proxy and standalone request handling. */
+export {
+  getClientIp,
+  getClientIpFromRequest,
+  setStandaloneClientIp,
+  setStandaloneTrustProxy,
+} from './clientIp';
+
+// --- authVariables ---
+/** Request-context variable typing for auth-aware Hono handlers. */
+export type { AuthVariables } from './authVariables';
+
+// --- storageAdapter ---
+/** Upload storage adapter interfaces used by framework and media packages. */
+export type { StorageAdapter, UploadResult } from './storageAdapter';
+
+// --- idempotency ---
+/** Idempotency repository contract for write endpoints and action handlers. */
+export type { IdempotencyAdapter } from './idempotency';
+
+// --- uploadRegistry ---
+/** Upload-registry persistence contracts for staged or completed file uploads. */
+export type { UploadRecord, UploadRegistryRepository } from './uploadRegistry';
+
+// --- wsMessages ---
+/** Durable WebSocket message and room persistence contracts. */
+export type {
+  StoredMessage,
+  WsMessageDefaults,
+  RoomPersistenceConfig,
+  WsMessageRepository,
+} from './wsMessages';
+
+// --- context (AppEnv, createRouter, validation) ---
+/** Router-context helpers and default validation formatting for Slingshot apps. */
+export {
+  createRouter,
+  defaultHook,
+  defaultValidationErrorFormatter,
+  getSlingshotCtx,
+} from './context';
+export type {
+  AppEnv,
+  AppVariables,
+  ValidationErrorFormatter,
+  DefaultValidationErrorBody,
+  ValidationErrorDetail,
+} from './context';
+
+// --- memoryEviction ---
+export {
+  evictOldest,
+  createEvictExpired,
+  evictOldestArray,
+  DEFAULT_MAX_ENTRIES,
+} from './memoryEviction';
+
+// --- Auth boundary contracts ---
+export type { UserResolver } from './userResolver';
+/** Access the auth-published user resolver from Slingshot context. */
+export { getUserResolver, getUserResolverOrNull } from './userResolver';
+
+export type { RouteAuthRegistry } from './routeAuth';
+/** Access route-auth helpers published through the Slingshot registrar. */
+export { getRouteAuth, getRouteAuthOrNull } from './routeAuth';
+
+export type { RateLimitAdapter, FingerprintBuilder } from './rateLimit';
+/** Access shared rate-limit and fingerprint services from Slingshot context. */
+export { getRateLimitAdapter, getFingerprintBuilder } from './rateLimit';
+
+export type { CacheAdapter, CacheStoreName } from './cache';
+/** Access cache adapters published through the Slingshot registrar. */
+export { getCacheAdapter, getCacheAdapterOrNull } from './cache';
+
+export type { EmailTemplate } from './emailTemplates';
+/** Access email templates registered by auth or other plugins. */
+export { getEmailTemplates, getEmailTemplate } from './emailTemplates';
+
+/** Neutral cross-plugin notifications contracts published via `ctx.pluginState`. */
+export type {
+  DeliveryAdapter,
+  NotificationBuilder,
+  NotificationCreatedEventPayload,
+  NotificationPriority,
+  NotificationRecord,
+  NotificationsPeerState,
+  NotifyInput,
+  NotifyManyInput,
+  ResolvedPreference,
+} from './notificationsPeer';
+export { NOTIFICATIONS_PLUGIN_STATE_KEY } from './notificationsPeer';
+
+// --- Auth boundary defaults ---
+/** Default in-memory infrastructure adapters used by local and test deployments. */
+export { createMemoryRateLimitAdapter } from './defaults/memoryRateLimit';
+export { createDefaultFingerprintBuilder } from './defaults/defaultFingerprint';
+export { createMemoryCacheAdapter } from './defaults/memoryCacheAdapter';
+
+// --- configValidation ---
+/** Validation helpers for plugin config, adapter shapes, and public route behavior. */
+export {
+  validatePluginConfig,
+  validateAdapterShape,
+  disableRoutesSchema,
+} from './configValidation';
+export { isPublicPath } from './publicPath';
+
+// --- routeOverrides ---
+export type { RouteKey } from './routeOverrides';
+/** Utilities for stable entity-route keys and route-override checks. */
+export { routeKey, shouldMountRoute } from './routeOverrides';
+
+// --- SlingshotContext (instance-scoped state) ---
+export type {
+  SlingshotContext,
+  SlingshotResolvedConfig,
+  SlingshotFrameworkConfig,
+  ResolvedStores,
+  WsState,
+  WsTransportHandle,
+  WsRateLimitBucket,
+  WsRateLimitConfig,
+  WsRecoveryConfig,
+  WsSessionEntry,
+  UploadRuntimeState,
+  ResolvedPersistence,
+} from './context/index';
+/** Attach and read the instance-scoped Slingshot context for a running app. */
+export { attachContext, getContext, getContextOrNull, resolveContext } from './context/index';
+export type { CoreRegistrar, CoreRegistrarSnapshot } from './coreRegistrar';
+/** Create the registrar that plugins use to publish shared runtime capabilities during boot. */
+export { createCoreRegistrar } from './coreRegistrar';
+
+// --- Secrets ---
+/** Secret storage contracts used by framework secret resolution and plugin consumers. */
+export type {
+  SecretRepository,
+  SecretStoreType,
+  SecretDefinition,
+  SecretSchema,
+  ResolvedSecrets,
+} from './secrets';
+
+// --- Queue lifecycle (shared contract for domain queues) ---
+/** Queue lifecycle hooks used by packages that own background workers. */
+export type { QueueLifecycle } from './queueLifecycle';
+
+// --- Store type & infrastructure (shared across all slingshot packages) ---
+export type { StoreType } from './storeType';
+export type { CronRegistryRepository } from './cronRegistry';
+/** Shared infrastructure and repository-factory contracts used during app assembly. */
+export type {
+  StoreInfra,
+  RepoFactories,
+  TestableRepoFactories,
+  PostgresBundle,
+} from './storeInfra';
+/** Store-type resolution and plugin-facing DI symbols for infrastructure factories. */
+export {
+  resolveRepo,
+  resolveRepoAsync,
+  RESOLVE_ENTITY_FACTORIES,
+  RESOLVE_COMPOSITE_FACTORIES,
+  RESOLVE_REINDEX_SOURCE,
+} from './storeInfra';
+
+// --- Config-driven entity persistence (shared type contracts) ---
+export type {
+  FieldType,
+  FieldTypeMap,
+  FieldDef,
+  FieldOptions,
+  AutoDefault,
+  IndexDef,
+  RelationDef,
+  SoftDeleteConfig,
+  PaginationConfig,
+  TenantConfig,
+  EntityStorageHints,
+  EntityTtlConfig,
+  EntityConfig,
+  ResolvedEntityConfig,
+  InferEntity,
+  InferFieldType,
+  InferCreateInput,
+  InferUpdateInput,
+  CursorPaginationOptions,
+  PaginatedResult as EntityPaginatedResult,
+  EntityAdapter,
+  EntitySearchConfig,
+  SearchFieldConfig,
+  GeoSearchConfig,
+} from './entityConfig';
+/** Entity-definition DSL primitives re-exported for cross-package authoring. */
+export { defineEntity, field, index, relation } from './entityConfig';
+
+// --- Entity registry ---
+export type { EntityRegistry } from './entityRegistry';
+/** Per-app registry of resolved entity config used by runtime discovery flows. */
+export { createEntityRegistry } from './entityRegistry';
+
+// --- Search provider contract (minimal, for write-through sync) ---
+/** Minimal search-provider write contract used by entity and search packages. */
+export type { SearchProviderContract } from './searchProvider';
+
+// --- Search plugin runtime contract (framework ↔ search plugin) ---
+export type {
+  SearchPluginRuntime,
+  SearchClientLike,
+  SearchQueryLike,
+  SearchResponseLike,
+} from './searchPluginRuntime';
+
+// --- Config-driven operation types (shared between slingshot-data and framework) ---
+/** Config-driven operation DSL types shared by generators, runtime executors, and route config. */
+export type {
+  FilterExpression,
+  FilterValue,
+  FilterOperator,
+  FilterNe,
+  FilterGt,
+  FilterGte,
+  FilterLt,
+  FilterLte,
+  FilterIn,
+  FilterNin,
+  FilterContains,
+  ComputeSpec,
+  ComputedField,
+  DateTruncation,
+  GroupByConfig,
+  MergeStrategy,
+  LookupOpConfig,
+  ExistsOpConfig,
+  TransitionOpConfig,
+  FieldUpdateOpConfig,
+  AggregateOpConfig,
+  ComputedAggregateOpConfig,
+  BatchOpConfig,
+  UpsertOpConfig,
+  SearchOpConfig,
+  CollectionOpConfig,
+  CollectionOperation,
+  ConsumeOpConfig,
+  DeriveOpConfig,
+  DeriveSource,
+  TransactionOpConfig,
+  TransactionStep,
+  PipeOpConfig,
+  PipeStep,
+  CustomOpConfig,
+  ArrayPushOpConfig,
+  ArrayPushMethod,
+  ArrayPullOpConfig,
+  ArrayPullMethod,
+  ArraySetOpConfig,
+  ArraySetMethod,
+  IncrementOpConfig,
+  IncrementMethod,
+  OperationConfig,
+  ResolvedOperations,
+  InferOperationMethods,
+} from './operations';
+
+// --- Entity route config types ---
+export type {
+  EntityRouteConfig,
+  RouteAuthConfig,
+  RoutePermissionConfig,
+  RouteRateLimitConfig,
+  RouteEventConfig,
+  RouteOperationConfig,
+  RouteNamedOperationConfig,
+  NamedOpHttpMethod,
+  EntityRouteDataScopeConfig,
+  EntityRouteDataScopeSource,
+  EntityDataScopedCrudOp,
+  RouteWebhookConfig,
+  RouteRetentionConfig,
+  EntityPermissionConfig,
+  RouteMiddlewareConfig,
+  RouteCascadeConfig,
+  PolicyAction,
+  PolicyInput,
+  PolicyDecision,
+  PolicyResolver,
+  EntityRoutePolicyConfig,
+} from './entityRouteConfig';
+/** Resolve and validate config-driven entity route declarations. */
+export { resolveOpConfig } from './entityRouteConfig';
+export { entityRouteConfigSchema, validateEntityRouteConfig } from './entityRouteConfigSchema';
+export type { EntityRouteConfigInput } from './entityRouteConfigSchema';
+
+// --- Entity channel config types ---
+export type {
+  EntityChannelConfig,
+  EntityChannelDeclaration,
+  ChannelAuthConfig,
+  ChannelPermissionConfig,
+  ChannelForwardConfig,
+  ChannelReceiveConfig,
+  ChannelIncomingEventDeclaration,
+} from './entityChannelConfig';
+/** Validate config-driven entity channel declarations for realtime wiring. */
+export {
+  entityChannelConfigSchema,
+  validateEntityChannelConfig,
+} from './entityChannelConfigSchema';
+export type { EntityChannelConfigInput } from './entityChannelConfigSchema';
+/** WebSocket helper utilities shared by config-driven channel infrastructure. */
+export { isValidRoomName } from './wsHelpers';
+export type { WsPublishFn, WsPluginEndpoint } from './wsHelpers';
+
+// --- Admin provider contracts (shared between slingshot-admin and slingshot-auth) ---
+/** Admin and managed-user contracts shared between auth and admin packages. */
+export type {
+  AdminPrincipal,
+  AdminAccessProvider,
+  ManagedUserRecord,
+  ManagedUserScope,
+  ListUsersInput,
+  ListUsersResult,
+  SuspendUserInput,
+  UnsuspendUserInput,
+  UpdateUserInput,
+  SessionRecord,
+  ManagedUserCapabilities,
+  ManagedUserProvider,
+} from './adminProvider';
+
+/** Run first-party SQLite subsystem migrations during boot or tests. */
+export { runSubsystemMigrations } from './sqliteMigrations';
+
+// --- Content model types ---
+/** Rich-content payload types used by chat, community, embeds, and renderer integrations. */
+export type {
+  ContentFormat,
+  AssetRef,
+  VoiceMetadata,
+  EmbedData,
+  QuotePreview,
+  LocationData,
+  ContactData,
+  SystemEventData,
+  ParsedContent,
+  ContentSegment,
+} from './content';
+export { MAX_CONTENT_BODY_LENGTH, MAX_CONTENT_MENTIONS, MAX_CONTENT_ATTACHMENTS } from './content';

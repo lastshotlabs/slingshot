@@ -1,0 +1,224 @@
+---
+title: SlingshotContext
+description: Instance-scoped runtime state — how to access it, what it holds, and how plugins use it
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`SlingshotContext` is the per-app runtime container. It replaces module-level singletons with instance-owned state. Every `createApp()` call gets its own context — zero cross-app pollution.
+
+## Accessing context
+
+```typescript
+import { getContext } from '@lastshotlabs/slingshot-core';
+
+declare const app: object;
+
+const ctx = getContext(app);
+```
+
+`getContext` throws if no context is attached. Use `getContextOrNull` when context may not exist:
+
+```typescript
+import { getContextOrNull } from '@lastshotlabs/slingshot-core';
+
+declare const app: object;
+
+const ctx = getContextOrNull(app);
+if (ctx) {
+  void ctx.config;
+}
+```
+
+## What context holds
+
+```typescript
+interface SlingshotContext {
+  app: object; // the Hono instance (typed as object to avoid Hono version pinning)
+  config: SlingshotResolvedConfig; // frozen resolved config
+  bus: SlingshotEventBus; // cross-package event bus
+  pluginState: Map<string, unknown>; // plugin-published runtime state
+  plugins: readonly SlingshotPlugin[]; // registered plugins in boot order
+
+  // DB handles — present when configured
+  redis: unknown | null; // ioredis client
+  mongo: { auth: unknown | null; app: unknown | null } | null; // Mongoose connections
+  sqlite: string | null; // path to the SQLite file
+  sqliteDb: RuntimeSqliteDatabase | null; // open SQLite handle
+
+  // WS — populated by createServer() after boot, null during plugin phases
+  ws: WsState | null;
+  wsEndpoints: Record<string, unknown> | null; // bootstrap endpoint draft when ws config is supplied
+
+  // Internals
+  clear(): Promise<void>; // reset in-memory state (test isolation)
+  destroy(): Promise<void>; // close connections (graceful shutdown)
+}
+```
+
+## Bootstrap-time WebSocket wiring
+
+`ctx.ws` is still `null` during plugin phases because no server exists yet, but `ctx.wsEndpoints`
+can be present during `setupPost` when the caller passed a root `ws` config to `createApp()` or
+`createServer()`.
+
+That endpoint map is the bootstrap draft the server will later use. Framework-managed plugins can
+write `incoming`, `onRoomSubscribe`, and other endpoint hooks onto it during `setupPost`:
+
+```typescript
+setupPost({ app }) {
+  const ctx = getContext(app);
+  if (!ctx.wsEndpoints) return;
+
+  const endpoint = ctx.wsEndpoints['/chat'] ??= {};
+  endpoint.incoming = {
+    ping: {
+      handler: (_ws, payload) => ({ echoed: payload }),
+    },
+  };
+}
+```
+
+`createServer()` then boots from that same endpoint map. This keeps plugin WS wiring testable
+through `createApp()` while preserving the live behavior when a real server starts.
+
+## Reading plugin state
+
+Plugins publish their runtime via `pluginState`. Read it in `setupPost` after dependencies have run:
+
+```typescript
+// Publishing (in the auth plugin's setupRoutes)
+ctx.pluginState.set('auth.runtime', {
+  verifyToken,
+  getUserById,
+  config: authConfig,
+});
+
+// Consuming (in your plugin's setupPost — auth is declared as a dependency)
+const authRuntime = ctx.pluginState.get('auth.runtime') as AuthRuntime;
+if (!authRuntime) throw new Error('auth plugin is required');
+
+const user = await authRuntime.getUserById(userId);
+```
+
+## Accessing DB handles from a plugin
+
+DB handles are available on both `ctx` (the context) and `config` (the framework config passed to lifecycle methods). The config object is simpler to use inside lifecycle methods:
+
+```typescript
+setupRoutes(app, config) {
+  const ctx = getContext(app);
+
+  // Each handle is only present if the corresponding DB is configured
+  const redis = ctx.redis; // ioredis client or null
+  const mongo = ctx.mongo; // { auth, app } or null
+  const sqliteDb = ctx.sqliteDb; // open Database handle or null
+
+  if (!sqliteDb) throw new Error('This plugin requires SQLite (config.db.sqlite)');
+
+  const adapter = createMyAdapter(sqliteDb);
+  ctx.pluginState.set('myplugin.adapter', adapter);
+}
+```
+
+Avoid reaching for DB handles directly in most cases. Use `resolveRepo` from `slingshot-core` to dispatch to the right adapter based on the configured `storeType`:
+
+```typescript
+import { resolveRepo } from '@lastshotlabs/slingshot-core';
+import type { RepoFactories, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
+
+interface NotesRepo {
+  list(): Promise<unknown[]>;
+}
+
+declare const factories: RepoFactories<NotesRepo>;
+declare const storeType: StoreType;
+declare const infra: StoreInfra;
+
+const adapter = resolveRepo(factories, storeType, infra);
+```
+
+## The event bus
+
+```typescript
+const ctx = getContext(app);
+
+// Subscribe in setupPost
+ctx.bus.on('auth:user.created', async payload => {
+  await sendWelcomeEmail(payload.email);
+});
+
+// Emit from anywhere
+ctx.bus.emit('note.created', { userId, noteId });
+
+// Register events as safe to forward to SSE clients
+ctx.bus.registerClientSafeEvents(['note.created', 'note.updated', 'note.deleted']);
+```
+
+## Config access
+
+The app config is frozen at startup. Read it from context rather than prop-drilling it through your plugin factory:
+
+```typescript
+setupRoutes(app) {
+  const ctx = getContext(app);
+  const cors = ctx.config.security.cors;
+  const storeType = ctx.config.resolvedStores.sessions;
+}
+```
+
+<Aside type="caution">
+  Never modify `ctx.config` — it's frozen with `Object.freeze()`. Attempts to write will throw in
+  strict mode.
+</Aside>
+
+## Test isolation
+
+`ctx.clear()` resets all in-memory state between tests without tearing down DB connections:
+
+```typescript
+import { afterEach, describe, expect, test } from 'bun:test';
+import { createApp } from '@lastshotlabs/slingshot';
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { getContext } from '@lastshotlabs/slingshot-core';
+
+const myPlugin: SlingshotPlugin = { name: 'my-plugin' };
+const { app } = await createApp({ plugins: [myPlugin] });
+
+describe('my plugin', () => {
+  afterEach(async () => {
+    await getContext(app).clear(); // reset state between tests
+  });
+
+  test('does something', async () => {
+    const res = await app.request('/my-route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true }),
+    });
+    expect(res.status).toBe(200);
+  });
+});
+```
+
+`ctx.destroy()` closes connections — call it in `afterAll` if you're using real databases:
+
+```typescript
+afterAll(async () => {
+  await getContext(app).destroy();
+});
+```
+
+## Common pitfalls
+
+**Reading context before the app is ready.** `getContext` is only safe after `createApp()` or `createServer()` resolves. Call it at module level or during import and you'll get a throw — the WeakMap entry doesn't exist yet.
+
+**Stashing context in a module variable.** If you run two `createApp()` instances in the same process — common in tests — each gets its own context. Store one in a module-level variable and you've silently wired both apps to the same state. Always call `getContext(app)` at the point of use.
+
+**Missing DB handle with a silent failure.** If `ctx.sqliteDb` is `null` but your adapter requires it, don't let it blow up somewhere deep in your code. Throw early with the expected config key: `throw new Error('This plugin requires a SQLite path at config.db.sqlite')`. The user needs to know what to fix.
+
+## See also
+
+- [Plugin Interface](/authoring/plugin-interface/) — lifecycle phases and when to access context
+- [Internals: Context and Registrar](/internals/context-registrar/) — deep dive into the WeakMap implementation
+- [Testing Plugins](/authoring/testing-plugins/) — `ctx.clear()` in test setup

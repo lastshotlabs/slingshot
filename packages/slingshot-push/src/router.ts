@@ -1,0 +1,343 @@
+import type { PushProvider } from './providers/provider';
+import type {
+  PushMessage,
+  PushPlatform,
+  PushSubscriptionRecord,
+  PushTopicMembershipRecord,
+} from './types/models';
+
+type RouterSubscriptionRecord = {
+  readonly id: string;
+  readonly userId: string;
+  readonly tenantId: string;
+  readonly deviceId: string;
+  readonly platform: string;
+  readonly platformData: unknown;
+  readonly createdAt: Date | string;
+  readonly lastSeenAt: Date | string;
+};
+
+type RouterDeliveryRecord = {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly userId: string;
+  readonly subscriptionId: string;
+  readonly platform: string;
+  readonly notificationId?: string | null;
+  readonly providerMessageId?: string | null;
+  readonly status: string;
+  readonly failureReason?: string | null;
+  readonly attempts: number;
+  readonly sentAt?: Date | string | null;
+  readonly deliveredAt?: Date | string | null;
+  readonly createdAt: Date | string;
+};
+
+type DynamicBus = {
+  emit(event: string, payload: unknown): void;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+interface PushSubscriptionRepo {
+  create(input: Record<string, unknown>): Promise<RouterSubscriptionRecord>;
+  getById(id: string): Promise<RouterSubscriptionRecord | null>;
+  delete(id: string): Promise<boolean>;
+  listByUserId(params: {
+    userId: string;
+    tenantId: string;
+  }): Promise<{ items: RouterSubscriptionRecord[] } | RouterSubscriptionRecord[]>;
+  findByDevice(params: {
+    userId: string;
+    tenantId: string;
+    deviceId: string;
+  }): Promise<RouterSubscriptionRecord | null>;
+  touchLastSeen(
+    params: { id: string },
+    input: { lastSeenAt?: Date | string },
+  ): Promise<RouterSubscriptionRecord>;
+  upsertByDevice(params: Record<string, unknown>): Promise<RouterSubscriptionRecord>;
+}
+
+interface PushTopicRepo {
+  ensureByName(params: {
+    tenantId: string;
+    name: string;
+  }): Promise<{ id: string; name: string; tenantId: string }>;
+  findByName(params: {
+    tenantId: string;
+    name: string;
+  }): Promise<{ id: string; name: string; tenantId: string } | null>;
+}
+
+interface PushTopicMembershipRepo {
+  ensureMembership(params: {
+    topicId: string;
+    subscriptionId: string;
+    userId: string;
+    tenantId: string;
+  }): Promise<PushTopicMembershipRecord>;
+  listByTopic(params: {
+    topicId: string;
+  }): Promise<{ items: PushTopicMembershipRecord[] } | PushTopicMembershipRecord[]>;
+  removeByTopicAndSub(params: {
+    topicId: string;
+    subscriptionId: string;
+  }): Promise<number | { count: number }>;
+  removeBySubscription(params: { subscriptionId: string }): Promise<number | { count: number }>;
+}
+
+interface PushDeliveryRepo {
+  create(input: Record<string, unknown>): Promise<RouterDeliveryRecord>;
+  getById(id: string): Promise<RouterDeliveryRecord | null>;
+  markSent(params: {
+    id: string;
+    providerMessageId?: string;
+  }): Promise<RouterDeliveryRecord | null>;
+  markDelivered(params: { id: string; authUserId: string }): Promise<RouterDeliveryRecord | null>;
+  markFailed(params: { id: string; failureReason: string }): Promise<RouterDeliveryRecord | null>;
+  incrementAttempts(id: string, by?: number): Promise<Record<string, unknown>>;
+}
+
+/** Repository bundle required by the push router. */
+export interface PushRouterRepos {
+  readonly subscriptions: PushSubscriptionRepo;
+  readonly topics: PushTopicRepo;
+  readonly topicMemberships: PushTopicMembershipRepo;
+  readonly deliveries: PushDeliveryRepo;
+}
+
+/** Router API used for user fan-out and topic publishes. */
+export interface PushRouter {
+  sendToUser(
+    userId: string,
+    message: PushMessage,
+    opts?: { tenantId?: string; notificationId?: string },
+  ): Promise<number>;
+  sendToUsers(
+    userIds: readonly string[],
+    message: PushMessage,
+    opts?: { tenantId?: string; notificationId?: string },
+  ): Promise<number>;
+  publishTopic(
+    topicName: string,
+    message: PushMessage,
+    opts?: { tenantId?: string; notificationId?: string },
+  ): Promise<number>;
+}
+
+function asItems<T>(result: { items: T[] } | T[]): T[] {
+  return Array.isArray(result) ? result : result.items;
+}
+
+function toPushPlatform(value: string): PushPlatform | null {
+  return value === 'web' || value === 'ios' || value === 'android' ? value : null;
+}
+
+function toProviderSubscription(
+  subscription: RouterSubscriptionRecord,
+  platform: PushPlatform,
+): PushSubscriptionRecord {
+  return {
+    ...subscription,
+    platform,
+    platformData: subscription.platformData as PushSubscriptionRecord['platformData'],
+  };
+}
+
+/**
+ * Create the push router used for user and topic fan-out.
+ *
+ * @param options - Provider, repository, retry, and event-bus dependencies.
+ * @returns A router that persists deliveries and dispatches them by
+ *   subscription platform.
+ */
+export function createPushRouter(options: {
+  providers: Readonly<Partial<Record<PushPlatform, PushProvider>>>;
+  repos: PushRouterRepos;
+  retries?: { maxAttempts?: number; initialDelayMs?: number };
+  bus?: DynamicBus;
+}): PushRouter {
+  const maxAttempts = options.retries?.maxAttempts ?? 3;
+  const initialDelayMs = options.retries?.initialDelayMs ?? 1_000;
+
+  async function sendToSubscriptions(
+    subscriptions: readonly RouterSubscriptionRecord[],
+    message: PushMessage,
+    opts: { tenantId: string; notificationId?: string },
+  ): Promise<number> {
+    let deliveredCount = 0;
+
+    for (const subscription of subscriptions) {
+      const platform = toPushPlatform(subscription.platform);
+      if (!platform) continue;
+
+      const provider = options.providers[platform];
+      if (!provider) continue;
+
+      const delivery = await options.repos.deliveries.create({
+        tenantId: opts.tenantId,
+        userId: subscription.userId,
+        subscriptionId: subscription.id,
+        platform,
+        notificationId: opts.notificationId,
+      });
+
+      const payload: PushMessage = {
+        ...message,
+        data: {
+          ...(message.data ?? {}),
+          __slingshotDeliveryId: delivery.id,
+        },
+      };
+
+      let attempts = 0;
+      let sent = false;
+
+      while (attempts < maxAttempts) {
+        attempts += 1;
+        await options.repos.deliveries.incrementAttempts(delivery.id, 1);
+
+        const result = await provider.send(toProviderSubscription(subscription, platform), payload);
+        if (result.ok) {
+          await options.repos.deliveries.markSent({
+            id: delivery.id,
+            providerMessageId: result.providerMessageId,
+          });
+          options.bus?.emit('push:delivery.sent', {
+            deliveryId: delivery.id,
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+            providerMessageId: result.providerMessageId,
+          });
+          deliveredCount += 1;
+          sent = true;
+          break;
+        }
+
+        if (result.reason === 'invalidToken') {
+          await options.repos.deliveries.markFailed({
+            id: delivery.id,
+            failureReason: 'invalidToken',
+          });
+          await options.repos.subscriptions.delete(subscription.id);
+          await options.repos.topicMemberships.removeBySubscription({
+            subscriptionId: subscription.id,
+          });
+          options.bus?.emit('push:delivery.failed', {
+            deliveryId: delivery.id,
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+            reason: 'invalidToken',
+          });
+          options.bus?.emit('push:subscription.invalidated', {
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+            platform,
+            reason: result.error ?? 'invalidToken',
+          });
+          sent = true;
+          break;
+        }
+
+        if (result.reason === 'payloadTooLarge') {
+          await options.repos.deliveries.markFailed({
+            id: delivery.id,
+            failureReason: 'payloadTooLarge',
+          });
+          options.bus?.emit('push:delivery.failed', {
+            deliveryId: delivery.id,
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+            reason: 'payloadTooLarge',
+          });
+          options.bus?.emit('push:message.payload_too_large', {
+            platform,
+            bytes: JSON.stringify(payload).length,
+          });
+          sent = true;
+          break;
+        }
+
+        if (attempts >= maxAttempts) {
+          await options.repos.deliveries.markFailed({
+            id: delivery.id,
+            failureReason: result.reason ?? 'transient',
+          });
+          options.bus?.emit('push:delivery.failed', {
+            deliveryId: delivery.id,
+            subscriptionId: subscription.id,
+            userId: subscription.userId,
+            reason: result.reason ?? 'transient',
+          });
+          sent = true;
+          break;
+        }
+
+        const delay =
+          result.retryAfterMs ?? initialDelayMs * Math.pow(2, Math.max(0, attempts - 1));
+        await sleep(delay);
+      }
+
+      if (!sent) {
+        await options.repos.deliveries.markFailed({
+          id: delivery.id,
+          failureReason: 'transient',
+        });
+        options.bus?.emit('push:delivery.failed', {
+          deliveryId: delivery.id,
+          subscriptionId: subscription.id,
+          userId: subscription.userId,
+          reason: 'transient',
+        });
+      }
+    }
+
+    return deliveredCount;
+  }
+
+  return {
+    async sendToUser(userId, message, opts = {}) {
+      const tenantId = opts.tenantId ?? '';
+      const subscriptions = asItems(
+        await options.repos.subscriptions.listByUserId({ userId, tenantId }),
+      );
+      return sendToSubscriptions(subscriptions, message, {
+        tenantId,
+        notificationId: opts.notificationId,
+      });
+    },
+    async sendToUsers(userIds, message, opts = {}) {
+      const tenantId = opts.tenantId ?? '';
+      let count = 0;
+      for (const userId of [...new Set(userIds)]) {
+        count += await this.sendToUser(userId, message, {
+          tenantId,
+          notificationId: opts.notificationId,
+        });
+      }
+      return count;
+    },
+    async publishTopic(topicName, message, opts = {}) {
+      const tenantId = opts.tenantId ?? '';
+      const topic = await options.repos.topics.findByName({ tenantId, name: topicName });
+      if (!topic) return 0;
+
+      const memberships = asItems(
+        await options.repos.topicMemberships.listByTopic({ topicId: topic.id }),
+      );
+      const subscriptions: RouterSubscriptionRecord[] = [];
+      for (const membership of memberships) {
+        const subscription = await options.repos.subscriptions.getById(membership.subscriptionId);
+        if (subscription) subscriptions.push(subscription);
+      }
+
+      return sendToSubscriptions(subscriptions, message, {
+        tenantId,
+        notificationId: opts.notificationId,
+      });
+    },
+  };
+}

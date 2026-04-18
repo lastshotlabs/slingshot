@@ -1,0 +1,756 @@
+---
+title: Game Engine
+description: Define multiplayer games with phases, channels, scoring, and hooks - all config-driven
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Define complete multiplayer game types declaratively and let the framework handle sessions,
+state machines, input collection, scoring, and real-time sync. This example builds three
+games — trivia, draw-and-guess, and blackjack — to show the range of engine features.
+
+Source-backed example app: `examples/game-engine/`
+
+## What this demonstrates
+
+- `defineGame()` DSL for declarative game type definitions
+- phase state machine with conditional transitions and timeouts
+- 3 channel modes: collect, stream, race, and turn
+- cumulative scoring with leaderboard computation
+- scoped state sync (per-player visibility filtering)
+- custom relay filters
+- `standardDeck` recipe for card game logic
+- disconnect handling with auto-action
+- lifecycle hooks for session and game start initialization
+- rule schema with Zod validation and named presets
+- multiple game types composed into one plugin
+
+## Install
+
+```bash
+bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-core @lastshotlabs/slingshot-entity @lastshotlabs/slingshot-game-engine
+```
+
+## Define the game
+
+One `defineGame()` call declares everything the engine needs: rules, phases, channels, handlers,
+scoring, and hooks. The engine validates all handler references at startup.
+
+```typescript title="src/trivia.ts"
+import { z } from 'zod';
+import { defineGame } from '@lastshotlabs/slingshot-game-engine';
+import type { ProcessHandlerContext } from '@lastshotlabs/slingshot-game-engine';
+
+const triviaRules = z.object({
+  rounds: z.number().min(1).max(20).default(5),
+  timePerQuestion: z.number().min(5000).max(60000).default(15000),
+  pointsCorrect: z.number().default(100),
+  pointsSpeed: z.number().default(50),
+});
+
+export const trivia = defineGame({
+  name: 'trivia',
+  display: 'Trivia Night',
+  description: 'Answer questions fast to earn the most points.',
+  minPlayers: 2,
+  maxPlayers: 8,
+  rules: triviaRules,
+
+  presets: {
+    quick: { rounds: 3, timePerQuestion: 10000 },
+    standard: { rounds: 5, timePerQuestion: 15000 },
+    marathon: { rounds: 15, timePerQuestion: 20000 },
+  },
+
+  playerStates: ['answering', 'waiting', 'correct', 'wrong'],
+  initialPlayerState: 'waiting',
+
+  scoring: {
+    mode: 'cumulative',
+    display: { label: 'Points', showChange: true, showRank: true },
+  },
+
+  phases: {
+    question: {
+      next: 'answer',
+      advance: 'all-channels-complete',
+      timeout: ctx => (ctx.rules as { timePerQuestion: number }).timePerQuestion,
+      channels: {
+        answer: {
+          mode: 'collect',
+          from: 'all-players',
+          relay: 'none',
+          schema: z.string().min(1),
+          revealMode: 'after-close',
+        },
+      },
+      onEnter: 'onQuestionEnter',
+    },
+    answer: {
+      next: ctx => {
+        const rules = ctx.rules as { rounds: number };
+        return ctx.currentRound >= rules.rounds ? 'results' : 'question';
+      },
+      advance: 'timeout',
+      timeout: 5000,
+      onEnter: 'onAnswerReveal',
+      onExit: 'onAnswerExit',
+    },
+    results: {
+      next: null,
+      advance: 'timeout',
+      timeout: 10000,
+      onEnter: 'onResults',
+    },
+  },
+
+  handlers: {
+    onQuestionEnter(ctx: ProcessHandlerContext) {
+      ctx.setPlayerStates(
+        ctx.getPlayers().map(p => p.userId),
+        'answering',
+      );
+      ctx.broadcastState({
+        event: 'newQuestion',
+        round: ctx.currentRound,
+        question: (ctx.gameState.questions as string[])?.[ctx.currentRound - 1],
+      });
+      return undefined;
+    },
+
+    onAnswerReveal(ctx: ProcessHandlerContext) {
+      const rules = ctx.rules as { pointsCorrect: number };
+      const inputs = ctx.getChannelInputs('answer');
+      const correctAnswer = (ctx.gameState.answers as string[])?.[ctx.currentRound - 1] ?? '';
+
+      for (const [userId, { input }] of inputs) {
+        if (String(input).toLowerCase() === correctAnswer.toLowerCase()) {
+          ctx.addScore(userId, rules.pointsCorrect);
+          ctx.setPlayerState(userId, 'correct');
+        } else {
+          ctx.setPlayerState(userId, 'wrong');
+        }
+      }
+
+      ctx.broadcastState({
+        event: 'answerRevealed',
+        correctAnswer,
+        leaderboard: ctx.getLeaderboard(),
+      });
+      return undefined;
+    },
+
+    onAnswerExit(ctx: ProcessHandlerContext) {
+      ctx.incrementRound();
+      return undefined;
+    },
+
+    onResults(ctx: ProcessHandlerContext) {
+      const leaderboard = ctx.getLeaderboard();
+      ctx.endGame({
+        winners: leaderboard[0] ? [leaderboard[0].userId] : [],
+        reason: 'All rounds complete',
+        rankings: leaderboard.map(e => ({
+          userId: e.userId,
+          rank: e.rank,
+          score: e.score,
+        })),
+      });
+      return undefined;
+    },
+  },
+
+  hooks: {
+    onGameStart(ctx) {
+      const rules = ctx.rules as { rounds: number };
+      const questions: string[] = [];
+      const answers: string[] = [];
+      for (let i = 0; i < rules.rounds; i++) {
+        questions.push(`Sample question ${i + 1}`);
+        answers.push(`answer${i + 1}`);
+      }
+      ctx.gameState.questions = questions;
+      ctx.gameState.answers = answers;
+      return undefined;
+    },
+  },
+
+  rngSeed: 'session-id',
+});
+```
+
+## Draw & Guess — stream and race channels
+
+A drawing game where players take turns sketching while others race to guess the word.
+This definition demonstrates stream channels (continuous drawing input), race channels
+(first correct guesser wins), scoped state sync, and custom relay filters.
+
+```typescript title="src/drawing.ts"
+import { z } from 'zod';
+import { defineGame } from '@lastshotlabs/slingshot-game-engine';
+import type {
+  ProcessHandlerContext,
+  ReadonlyHandlerContext,
+} from '@lastshotlabs/slingshot-game-engine';
+
+const drawingRules = z.object({
+  rounds: z.number().min(1).max(10).default(3),
+  turnsPerRound: z.number().min(1).max(8).default(0),
+  drawTimeMs: z.number().min(10000).max(120000).default(60000),
+  pointsCorrectGuess: z.number().default(200),
+  pointsDrawer: z.number().default(100),
+  pointsSpeedBonus: z.number().default(50),
+});
+
+const strokeSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  color: z.string(),
+  size: z.number().min(1).max(50),
+  type: z.enum(['start', 'move', 'end', 'clear']),
+});
+
+export const drawing = defineGame({
+  name: 'drawing',
+  display: 'Draw & Guess',
+  description: 'Take turns drawing while others race to guess the word.',
+  minPlayers: 3,
+  maxPlayers: 12,
+  rules: drawingRules,
+
+  presets: {
+    quick: { rounds: 1, drawTimeMs: 30000 },
+    standard: { rounds: 3, drawTimeMs: 60000 },
+  },
+
+  playerStates: ['drawing', 'guessing', 'guessed', 'waiting'],
+  initialPlayerState: 'waiting',
+
+  scoring: {
+    mode: 'cumulative',
+    display: { label: 'Points', showChange: true, showRank: true, showStreak: true },
+  },
+
+  // Scoped sync: drawer sees the word, guessers see only the hint
+  sync: {
+    mode: 'event',
+    scopedSync: true,
+    scopeHandler: 'scopeState',
+  },
+
+  phases: {
+    drawing: {
+      next: 'reveal',
+      advance: 'all-channels-complete',
+      timeout: ctx => (ctx.rules as { drawTimeMs: number }).drawTimeMs,
+      channels: {
+        // Stream channel: continuous drawing data from the active drawer
+        strokes: {
+          mode: 'stream',
+          from: { state: 'drawing' },
+          relay: 'custom',
+          schema: strokeSchema,
+          buffer: true,
+          rateLimit: { max: 60, per: 1000 },
+        },
+        // Race channel: first player to guess the word correctly
+        guess: {
+          mode: 'race',
+          from: { state: 'guessing' },
+          relay: 'none',
+          schema: z.string().min(1).max(100),
+          count: ctx => ctx.getPlayers().filter(p => p.playerState === 'guessing').length,
+          onClaimed: 'onCorrectGuess',
+          process: 'validateGuess',
+        },
+      },
+      onEnter: 'onDrawingEnter',
+    },
+    reveal: {
+      next: ctx => {
+        const rules = ctx.rules as { rounds: number; turnsPerRound: number };
+        const playerCount = ctx.getPlayers().filter(p => !p.isSpectator).length;
+        const turnsPerRound = rules.turnsPerRound || playerCount;
+        return ctx.currentRound >= rules.rounds * turnsPerRound ? 'results' : 'drawing';
+      },
+      advance: 'timeout',
+      timeout: 5000,
+      onEnter: 'onReveal',
+      onExit: 'onRevealExit',
+    },
+    results: { next: null, advance: 'timeout', timeout: 10000, onEnter: 'onResults' },
+  },
+
+  handlers: {
+    onDrawingEnter(ctx: ProcessHandlerContext) {
+      const players = ctx.getPlayers().filter(p => !p.isSpectator);
+      const drawerIndex = (ctx.currentRound - 1) % players.length;
+      const drawer = players[drawerIndex];
+      const wordBank = ctx.gameState.wordBank as string[];
+      const word = wordBank[(ctx.currentRound - 1) % wordBank.length];
+
+      ctx.gameState.currentWord = word;
+      ctx.gameState.currentDrawer = drawer.userId;
+      ctx.gameState.guessedPlayers = [];
+
+      ctx.setPlayerState(drawer.userId, 'drawing');
+      for (const p of players) {
+        if (p.userId !== drawer.userId) ctx.setPlayerState(p.userId, 'guessing');
+      }
+
+      ctx.broadcastState({
+        event: 'drawingStarted',
+        round: ctx.currentRound,
+        drawer: drawer.userId,
+        hint: word[0] + '_'.repeat(word.length - 1),
+      });
+      return undefined;
+    },
+
+    validateGuess(ctx: ProcessHandlerContext, input: unknown) {
+      const guess = String(input).toLowerCase().trim();
+      const word = (ctx.gameState.currentWord as string).toLowerCase();
+      return { valid: guess === word, reject: guess !== word };
+    },
+
+    onCorrectGuess(ctx: ProcessHandlerContext, userId: unknown) {
+      const guesserId = String(userId);
+      const rules = ctx.rules as {
+        pointsCorrectGuess: number;
+        pointsDrawer: number;
+        pointsSpeedBonus: number;
+      };
+      const drawerId = ctx.gameState.currentDrawer as string;
+      const guessedPlayers = (ctx.gameState.guessedPlayers as string[]) ?? [];
+      const speedBonus = Math.max(0, rules.pointsSpeedBonus - guessedPlayers.length * 10);
+
+      ctx.addScore(guesserId, rules.pointsCorrectGuess + speedBonus);
+      ctx.addScore(drawerId, rules.pointsDrawer);
+      ctx.setPlayerState(guesserId, 'guessed');
+      guessedPlayers.push(guesserId);
+      ctx.gameState.guessedPlayers = guessedPlayers;
+      return undefined;
+    },
+
+    onReveal(ctx: ProcessHandlerContext) {
+      ctx.broadcastState({
+        event: 'wordRevealed',
+        word: ctx.gameState.currentWord,
+        leaderboard: ctx.getLeaderboard(),
+      });
+      return undefined;
+    },
+
+    onRevealExit(ctx: ProcessHandlerContext) {
+      ctx.incrementRound();
+      for (const p of ctx.getPlayers()) ctx.setPlayerState(p.userId, 'waiting');
+      return undefined;
+    },
+
+    onResults(ctx: ProcessHandlerContext) {
+      const leaderboard = ctx.getLeaderboard();
+      ctx.endGame({
+        winners: leaderboard[0] ? [leaderboard[0].userId] : [],
+        reason: 'All rounds complete',
+        rankings: leaderboard.map(e => ({ userId: e.userId, rank: e.rank, score: e.score })),
+      });
+      return undefined;
+    },
+  },
+
+  // Custom relay: strokes go to everyone except the drawer
+  relayFilters: {
+    strokeRelay(_sender, _input, players, ctx: ReadonlyHandlerContext) {
+      const drawerId = ctx.gameState.currentDrawer as string;
+      return players.filter(p => p.userId !== drawerId).map(p => p.userId);
+    },
+  },
+
+  hooks: {
+    onGameStart(ctx) {
+      const words = [
+        'elephant',
+        'guitar',
+        'volcano',
+        'bicycle',
+        'castle',
+        'penguin',
+        'rainbow',
+        'telescope',
+        'pirate',
+        'dinosaur',
+      ];
+      const shuffled = [...words];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = ctx.random.int(0, i);
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      ctx.gameState.wordBank = shuffled;
+      return undefined;
+    },
+  },
+
+  rngSeed: 'session-id',
+});
+```
+
+## Blackjack — turn channel and deck recipe
+
+A multi-player blackjack table demonstrating the `standardDeck` recipe, turn-based input
+channels, disconnect auto-action, and multi-phase dealer logic.
+
+```typescript title="src/blackjack.ts"
+import { z } from 'zod';
+import { defineGame } from '@lastshotlabs/slingshot-game-engine';
+import type { ProcessHandlerContext } from '@lastshotlabs/slingshot-game-engine';
+import { standardDeck } from '@lastshotlabs/slingshot-game-engine/recipes';
+import type { DeckCard } from '@lastshotlabs/slingshot-game-engine/recipes';
+
+const blackjackRules = z.object({
+  hands: z.number().min(1).max(20).default(5),
+  turnTimeMs: z.number().min(5000).max(60000).default(20000),
+  startingChips: z.number().min(100).default(1000),
+  minBet: z.number().min(1).default(10),
+});
+
+function handValue(cards: DeckCard[]): number {
+  let value = 0;
+  let aces = 0;
+  for (const card of cards) {
+    if (card.suit === 'joker') continue;
+    if (card.rank === 'A') {
+      aces++;
+      value += 11;
+    } else if (['K', 'Q', 'J'].includes(card.rank)) value += 10;
+    else value += card.value;
+  }
+  while (value > 21 && aces > 0) {
+    value -= 10;
+    aces--;
+  }
+  return value;
+}
+
+export const blackjack = defineGame({
+  name: 'blackjack',
+  display: 'Blackjack Table',
+  description: 'Beat the dealer without going over 21.',
+  minPlayers: 1,
+  maxPlayers: 6,
+  rules: blackjackRules,
+
+  presets: {
+    quick: { hands: 3, turnTimeMs: 15000, startingChips: 500 },
+    standard: { hands: 5, turnTimeMs: 20000, startingChips: 1000 },
+    highRoller: { hands: 10, turnTimeMs: 30000, startingChips: 5000 },
+  },
+
+  playerStates: ['betting', 'playing', 'standing', 'bust', 'blackjack', 'waiting'],
+  initialPlayerState: 'waiting',
+
+  scoring: {
+    mode: 'cumulative',
+    display: { label: 'Chips', showChange: true, showRank: true, sortDirection: 'desc' },
+  },
+
+  // Auto-stand when a player disconnects or times out
+  disconnect: {
+    gracePeriodMs: 30000,
+    turnBehavior: 'auto-action',
+    autoActionHandler: 'onAutoStand',
+  },
+
+  phases: {
+    deal: {
+      next: 'playerTurns',
+      advance: 'timeout',
+      timeout: 2000,
+      onEnter: 'onDeal',
+    },
+    playerTurns: {
+      next: 'dealerPlay',
+      advance: 'all-channels-complete',
+      channels: {
+        // Turn channel: each player decides hit or stand in sequence
+        action: {
+          mode: 'turn',
+          from: { state: 'playing' },
+          relay: 'all',
+          schema: z.enum(['hit', 'stand']),
+          turnOrder: 'sequential',
+          turnTimeout: ctx => (ctx.rules as { turnTimeMs: number }).turnTimeMs,
+          onTurnTimeout: 'onAutoStand',
+          completeWhen: 'one-round',
+          process: 'processAction',
+        },
+      },
+      onEnter: 'onPlayerTurnsEnter',
+    },
+    dealerPlay: {
+      next: 'settle',
+      advance: 'timeout',
+      timeout: 3000,
+      onEnter: 'onDealerPlay',
+    },
+    settle: {
+      next: ctx => {
+        const rules = ctx.rules as { hands: number };
+        return ctx.currentRound >= rules.hands ? 'results' : 'deal';
+      },
+      advance: 'timeout',
+      timeout: 4000,
+      onEnter: 'onSettle',
+      onExit: 'onSettleExit',
+    },
+    results: { next: null, advance: 'timeout', timeout: 10000, onEnter: 'onResults' },
+  },
+
+  handlers: {
+    onDeal(ctx: ProcessHandlerContext) {
+      const deck = standardDeck.create({ decks: 2 });
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = ctx.random.int(0, i);
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+
+      const players = ctx.getPlayers().filter(p => !p.isSpectator);
+      const hands: Record<string, DeckCard[]> = {};
+      let idx = 0;
+
+      for (const p of players) {
+        hands[p.userId] = [deck[idx++], deck[idx++]];
+        ctx.setPlayerState(p.userId, 'playing');
+      }
+      const dealerHand = [deck[idx++], deck[idx++]];
+
+      ctx.gameState.deck = deck;
+      ctx.gameState.deckIndex = idx;
+      ctx.gameState.hands = hands;
+      ctx.gameState.dealerHand = dealerHand;
+
+      for (const p of players) {
+        if (handValue(hands[p.userId]) === 21) ctx.setPlayerState(p.userId, 'blackjack');
+      }
+
+      ctx.broadcastState({
+        event: 'cardsDealt',
+        round: ctx.currentRound,
+        dealerShowing: dealerHand[0],
+      });
+      return undefined;
+    },
+
+    onPlayerTurnsEnter(ctx: ProcessHandlerContext) {
+      for (const p of ctx.getPlayers()) {
+        if (p.playerState === 'blackjack') ctx.setPlayerState(p.userId, 'standing');
+      }
+      return undefined;
+    },
+
+    processAction(ctx: ProcessHandlerContext, input: unknown) {
+      const action = input as string;
+      const userId = ctx.getActivePlayer();
+      if (!userId) return { valid: false, reason: 'No active player' };
+
+      const hands = ctx.gameState.hands as Record<string, DeckCard[]>;
+      const hand = hands[userId];
+      if (!hand) return { valid: false, reason: 'No hand found' };
+
+      if (action === 'hit') {
+        const deck = ctx.gameState.deck as DeckCard[];
+        let deckIndex = ctx.gameState.deckIndex as number;
+        hand.push(deck[deckIndex++]);
+        ctx.gameState.deckIndex = deckIndex;
+        const value = handValue(hand);
+        if (value > 21) ctx.setPlayerState(userId, 'bust');
+        else if (value === 21) ctx.setPlayerState(userId, 'standing');
+      } else {
+        ctx.setPlayerState(userId, 'standing');
+      }
+      return undefined;
+    },
+
+    onAutoStand(ctx: ProcessHandlerContext) {
+      const player = ctx.getActivePlayer();
+      if (player) ctx.setPlayerState(player, 'standing');
+      return undefined;
+    },
+
+    onDealerPlay(ctx: ProcessHandlerContext) {
+      const dealerHand = ctx.gameState.dealerHand as DeckCard[];
+      const deck = ctx.gameState.deck as DeckCard[];
+      let deckIndex = ctx.gameState.deckIndex as number;
+      while (handValue(dealerHand) < 17) dealerHand.push(deck[deckIndex++]);
+      ctx.gameState.deckIndex = deckIndex;
+      ctx.gameState.dealerFinalValue = handValue(dealerHand);
+      ctx.broadcastState({ event: 'dealerPlayed', dealerValue: ctx.gameState.dealerFinalValue });
+      return undefined;
+    },
+
+    onSettle(ctx: ProcessHandlerContext) {
+      const dealerValue = ctx.gameState.dealerFinalValue as number;
+      const dealerBust = dealerValue > 21;
+      const hands = ctx.gameState.hands as Record<string, DeckCard[]>;
+      const rules = ctx.rules as { minBet: number };
+
+      for (const p of ctx.getPlayers().filter(pl => !pl.isSpectator)) {
+        const hand = hands[p.userId];
+        if (!hand) continue;
+        const value = handValue(hand);
+        let delta = 0;
+        if (p.playerState === 'bust') delta = -rules.minBet;
+        else if (p.playerState === 'blackjack') delta = Math.floor(rules.minBet * 1.5);
+        else if (dealerBust || value > dealerValue) delta = rules.minBet;
+        else if (value < dealerValue) delta = -rules.minBet;
+        if (delta !== 0) ctx.addScore(p.userId, delta);
+      }
+      ctx.broadcastState({ event: 'handSettled', dealerValue, leaderboard: ctx.getLeaderboard() });
+      return undefined;
+    },
+
+    onSettleExit(ctx: ProcessHandlerContext) {
+      ctx.incrementRound();
+      for (const p of ctx.getPlayers()) ctx.setPlayerState(p.userId, 'waiting');
+      return undefined;
+    },
+
+    onResults(ctx: ProcessHandlerContext) {
+      const leaderboard = ctx.getLeaderboard();
+      ctx.endGame({
+        winners: leaderboard[0] ? [leaderboard[0].userId] : [],
+        reason: 'All hands complete',
+        rankings: leaderboard.map(e => ({ userId: e.userId, rank: e.rank, score: e.score })),
+      });
+      return undefined;
+    },
+  },
+
+  hooks: {
+    onGameStart(ctx) {
+      const rules = ctx.rules as { startingChips: number };
+      for (const p of ctx.getPlayers().filter(pl => !pl.isSpectator)) {
+        ctx.addScore(p.userId, rules.startingChips);
+      }
+      ctx.gameState.hands = {};
+      ctx.gameState.dealerHand = [];
+      ctx.gameState.deck = [];
+      ctx.gameState.deckIndex = 0;
+      return undefined;
+    },
+  },
+
+  rngSeed: 'session-id',
+});
+```
+
+## Compose at the app layer
+
+Register all game types with a single plugin instance:
+
+```typescript title="src/index.ts"
+import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createGameEnginePlugin } from '@lastshotlabs/slingshot-game-engine';
+import { blackjack } from './blackjack.js';
+import { drawing } from './drawing.js';
+import { trivia } from './trivia.js';
+
+await createServer({
+  port: 3000,
+  security: { signing: { secret: process.env.JWT_SECRET! } },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+    createGameEnginePlugin({
+      games: [trivia, drawing, blackjack],
+      mountPath: '/game',
+    }),
+  ],
+});
+```
+
+## What the framework generates
+
+From the game definitions and plugin config, Slingshot mounts:
+
+| Method  | Path                       | Auth | Notes                           |
+| ------- | -------------------------- | ---- | ------------------------------- |
+| `POST`  | `/game/sessions`           | user | Create a session (lobby)        |
+| `GET`   | `/game/sessions/:id`       | user | Get session state               |
+| `POST`  | `/game/sessions/:id/join`  | user | Join session                    |
+| `POST`  | `/game/sessions/:id/leave` | user | Leave session                   |
+| `POST`  | `/game/sessions/:id/start` | user | Start game (host only)          |
+| `PATCH` | `/game/sessions/:id/rules` | user | Update lobby rules (host only)  |
+| `POST`  | `/game/sessions/:id/kick`  | user | Kick player (host only)         |
+| `WS`    | `/game` (upgrade)          | user | Real-time game events and input |
+
+The WS endpoint handles `game:subscribe`, `game:input`, `game:reconnect`, and stream messages.
+The REST surface covers session lifecycle; the WS surface handles in-game interaction.
+
+## Key concepts
+
+### Phases
+
+Phases form a directed graph. Each phase declares its `next` (static string, conditional, or
+function), an `advance` trigger (timeout, all-channels-complete, manual), and optional
+`onEnter`/`onExit` handler references.
+
+### Channels
+
+Channels collect player input during a phase. Each of the three examples uses a different mode:
+
+- **Trivia** uses `collect` — one answer per player, revealed after close
+- **Draw & Guess** uses `stream` (continuous drawing data) and `race` (first correct guess wins)
+- **Blackjack** uses `turn` — sequential hit/stand decisions with per-turn timeouts
+
+Other modes include `vote` (tally votes) and `free` (any-time input).
+
+### Recipes
+
+The engine ships reusable game logic recipes. The blackjack example uses `standardDeck` for
+card creation and shuffling. Other recipes include `gridBoard` (2D grids with pathfinding),
+`elimination` (last-standing win conditions), `blindSchedule` (poker blind escalation),
+and `wordValidator` (fuzzy answer matching).
+
+### Scoped State Sync
+
+The drawing example uses `scopedSync: true` with a `scopeHandler` so the drawer sees the
+word while guessers only see a hint. The engine filters broadcast payloads per-player
+before sending over WebSocket.
+
+### Disconnect Handling
+
+The blackjack example configures `disconnect.turnBehavior: 'auto-action'` with an
+`autoActionHandler`, so a disconnected player automatically stands instead of stalling the
+table. The engine supports grace periods, pause-on-disconnect, and player replacement.
+
+### Handlers
+
+Handlers receive a `ProcessHandlerContext` with methods for state mutation, scoring, turn
+control, timers, and broadcasting. All methods are pre-bound to the active session.
+
+### Presets
+
+Rule presets are named configurations (quick, standard, marathon) that session creators can
+select at lobby time. The engine validates the preset output against the rules schema.
+
+## Why this matters
+
+The game engine follows the same config-driven philosophy as the rest of Slingshot. A single
+`defineGame()` call replaces hand-written session management, input validation, state machines,
+scoring, and real-time sync. Adding a new game type means writing one definition file, not
+building a new backend. All three games above share the same session lifecycle, REST API,
+and WebSocket infrastructure with zero additional wiring.
+
+<Aside type="tip">
+  For production games, replace the sample questions with a content provider. The engine's content
+  system loads, validates, and freezes game content at session start.
+</Aside>
+
+## Where to go next
+
+- [slingshot-game-engine](/packages/slingshot-game-engine/) for the full package overview
+- [slingshot-game-engine API](/api/slingshot-game-engine/) for the complete API reference
+- [Config-Driven Domain](/examples/config-driven-domain/) for the foundational entity authoring pattern

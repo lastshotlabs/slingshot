@@ -1,0 +1,275 @@
+---
+title: Publishing
+description: A concrete checklist for publishing Slingshot workspace packages — exports map, versioning, peer dependencies, and the npm publish workflow.
+---
+
+import { Aside, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Publishing is the finish line. Get the `package.json` right, verify everything's clean, ship it. Here's exactly how.
+
+## Before you publish
+
+<Steps>
+
+1. **TypeScript compiles clean.**
+
+   ```bash
+   bun run build:packages   # builds every workspace package
+   bun run typecheck        # type-checks all packages
+   bun run typecheck:root   # type-checks the root package
+   ```
+
+   Both must exit 0. A package with type errors is broken for every TypeScript consumer before they even run it.
+
+2. **Tests pass.**
+
+   ```bash
+   bun test
+   ```
+
+   Fix failing tests or delete them — don't publish knowing something is broken. A red test is a promise you're breaking.
+
+3. **Formatting is clean.**
+
+   ```bash
+   bun run format:check
+   ```
+
+   Run `bun run format` to auto-fix, then commit the result.
+
+4. **JSDoc on every export.**
+
+   Every function, interface, type, and class in the public API needs a JSDoc comment. If you changed a signature, updated params, or changed behavior, update the JSDoc in the same commit. Stale docs on public exports are a bug — consumers read them.
+
+5. **Public API surface is minimal.**
+
+   Open `src/index.ts`. Does every export actually need to be public? Internal helpers, test utilities, and intermediate types belong on internal modules or a `/testing` subpath — not the main entry. The less you export, the less you have to support forever.
+
+</Steps>
+
+## package.json essentials
+
+A correctly shaped `package.json` for a Slingshot workspace package:
+
+```json title="packages/my-plugin/package.json"
+{
+  "name": "@lastshotlabs/slingshot-my-plugin",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./testing": {
+      "bun": "./src/testing.ts",
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0"
+  },
+  "peerDependencies": {
+    "hono": ">=4.12.12 <5",
+    "zod": ">=4.0 <5"
+  }
+}
+```
+
+Key decisions:
+
+**`"type": "module"`** — All Slingshot packages are pure ESM. Do not ship CJS.
+
+**`"files": ["dist", "src"]`** — Include `src` alongside `dist`. The `bun` condition in the exports map points directly to TypeScript source, so Bun users get the unbuilt source for zero-overhead imports. Never include `tests/`, `node_modules/`, or `.env` files.
+
+**`"prepublishOnly": "bun run build"`** — Ensures the `dist/` is fresh every time you publish. Never publish a stale build.
+
+**`"publishConfig": { "access": "public" }`** — Required for scoped packages (`@lastshotlabs/*`) on the public npm registry.
+
+## The exports map
+
+The `exports` field is your package's public API at the module resolution level — if a path isn't in there, consumers can't import it. That's the feature, not the limitation.
+
+Slingshot packages use three conditions per entry:
+
+- **`bun`** — Points to the TypeScript source in `src/`. Used when the consumer is running under Bun directly. Zero build step, zero overhead.
+- **`types`** — The `.d.ts` file for the compiled output. Used by TypeScript's type checker.
+- **`import`** — The compiled `.js` in `dist/`. Used everywhere else (Node.js, bundlers, Vitest in Node mode).
+
+**Main entry point:**
+
+```json
+".": {
+  "bun": "./src/index.ts",
+  "types": "./dist/src/index.d.ts",
+  "import": "./dist/src/index.js"
+}
+```
+
+**Testing subpath** — test helpers that consumers must not accidentally import in production code:
+
+```json
+"./testing": {
+  "bun": "./src/testing.ts",
+  "types": "./dist/src/testing.d.ts",
+  "import": "./dist/src/testing.js"
+}
+```
+
+**Optional feature subpaths** — for packages that have opt-in integration code:
+
+```json
+"./mongo": {
+  "bun": "./src/entrypoints/mongo.ts",
+  "types": "./dist/src/entrypoints/mongo.d.ts",
+  "import": "./dist/src/entrypoints/mongo.js"
+}
+```
+
+<Aside type="caution">
+  Do not add a path to `exports` because it is convenient for internal use. The exports map is a
+  public contract. Every entry you add is a path you are committing to keep working for consumers.
+  Add the minimum required to make the package usable.
+</Aside>
+
+## Dependencies vs. peerDependencies
+
+Get this wrong and consumers either get duplicate installs or broken type checking.
+
+**`dependencies`** — Packages your code imports at runtime that should be installed automatically when a consumer installs your package. Use this for packages consumers do not use directly (internal utilities, your own sub-packages).
+
+```json
+"dependencies": {
+  "@lastshotlabs/slingshot-core": "^0.1.0"
+}
+```
+
+**`peerDependencies`** — Packages your code imports that the consumer must also have installed. Use this for host-framework packages like `hono` and `zod`. A consumer that already has `hono` installed should not get a second copy from your package.
+
+```json
+"peerDependencies": {
+  "hono": ">=4.12.12 <5",
+  "zod": ">=4.0 <5"
+},
+"peerDependenciesMeta": {
+  "mongoose": { "optional": true }
+}
+```
+
+Mark optional integrations (database drivers, cloud SDKs) as `optional: true` in `peerDependenciesMeta`. The package still works without them — they are only required when the consumer uses that specific feature.
+
+## Versioning policy
+
+Pre-production, no external consumers. The rules are practical:
+
+| Change                                                                           | Version bump    |
+| -------------------------------------------------------------------------------- | --------------- |
+| Bug fix, documentation, internal refactor (no interface change)                  | Patch (`0.1.x`) |
+| New exported function, new config option, new subpath (additive)                 | Minor (`0.x.0`) |
+| Removed export, renamed export, changed required parameter, changed return shape | Major (`x.0.0`) |
+
+No deprecation cycles. If an API is wrong, rename or remove it and update every call site in the same commit.
+
+**Keep a CHANGELOG.** Every minor and major bump needs an entry that says what changed and why — not just "updated API". You'll want that context six months from now.
+
+**Bumping versions in the workspace:**
+
+```bash
+# Bump a single package
+cd packages/my-plugin && npm version patch
+
+# Bump all packages at once (root scripts)
+bun run release:patch   # patch across the board + publish
+bun run release:minor   # minor across the board + publish
+```
+
+## Publishing to npm
+
+<Steps>
+
+1. **Dry run first.** Inspect what will actually be included:
+
+   ```bash
+   cd packages/my-plugin
+   npm publish --dry-run
+   ```
+
+   Check the file list. Verify `dist/` is present and `src/` is included. Verify `tests/` and `node_modules/` are absent.
+
+2. **Publish.**
+
+   ```bash
+   # Using npm
+   npm publish --access public
+
+   # Using bun publish (Bun 1.1+)
+   bun publish --access public
+   ```
+
+   The root `package.json` has a `release` script that builds everything and publishes all packages in sequence:
+
+   ```bash
+   bun run release       # build + publish root + all workspace packages
+   ```
+
+3. **Verify on npm.** Check `https://www.npmjs.com/package/@lastshotlabs/slingshot-my-plugin` to confirm the version is live and the `exports` map is correct.
+
+</Steps>
+
+<Aside type="note">
+  The `prepublishOnly` script in each package runs `bun run build` automatically when you run `npm
+  publish` from the package directory. You do not need to manually build before publishing if you
+  use `npm publish` or `bun publish`.
+</Aside>
+
+## Workspace packages
+
+When one workspace package depends on another, reference it with the `workspace:*` protocol rather than a version range:
+
+```json title="packages/my-plugin/package.json"
+{
+  "optionalDependencies": {
+    "@lastshotlabs/slingshot-postgres": "workspace:*"
+  }
+}
+```
+
+`workspace:*` tells Bun to use the local version from the monorepo rather than resolving from npm. This means changes to `slingshot-postgres` are immediately visible in `my-plugin` without publishing intermediately.
+
+When you publish, Bun replaces `workspace:*` with the actual resolved version number automatically.
+
+**Building all packages from the root:**
+
+```bash
+bun run build:packages   # runs `bun run --filter '*' build`
+```
+
+This uses Bun's workspace filter to run `build` in every package simultaneously. The `--filter '*'` wildcard matches all packages in the `workspaces` array of the root `package.json`.
+
+## Pre-publish checklist
+
+Run through this before `npm publish`:
+
+- [ ] `bun run build:packages` exits 0 — broken types break every consumer immediately
+- [ ] `bun run typecheck` exits 0 — catches cross-package type errors the build step misses
+- [ ] `bun test` exits 0 — don't publish a known broken state
+- [ ] `bun run format:check` exits 0 — code is formatted
+- [ ] `package.json` has the correct `version`
+- [ ] CHANGELOG has an entry for this version
+- [ ] Every export in `src/index.ts` has a JSDoc comment — stale or missing docs on public API is a bug
+- [ ] `exports` map covers all public entry points (main + subpaths)
+- [ ] `files` includes `dist` and `src`, excludes `tests` and `.env`
+- [ ] `peerDependencies` lists `hono` and `zod` (and any other host-framework packages)
+- [ ] Optional integrations are marked `optional: true` in `peerDependenciesMeta`
+- [ ] `npm publish --dry-run` shows the expected file list — no secrets, no test artifacts

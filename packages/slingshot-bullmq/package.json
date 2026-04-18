@@ -1,0 +1,46 @@
+{
+  "name": "@lastshotlabs/slingshot-bullmq",
+  "version": "0.1.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "bun run build",
+    "lint": "eslint src/ --cache",
+    "test": "cd ../.. && bun test tests/unit/bullmq-adapter.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts",
+    "test:redis": "cd ../.. && BULLMQ_INTEGRATION_REDIS_URL=redis://localhost:6380 bun test tests/docker/bullmq-adapter-redis-integration.test.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0"
+  },
+  "peerDependencies": {
+    "bullmq": ">=5",
+    "ioredis": ">=5",
+    "zod": ">=4.0 <5"
+  },
+  "peerDependenciesMeta": {
+    "bullmq": {
+      "optional": false
+    },
+    "ioredis": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "bullmq": "^5.70.4",
+    "ioredis": "5.10.0"
+  }
+}

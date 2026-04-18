@@ -1,0 +1,436 @@
+---
+title: Config-Driven Infrastructure
+description: Declare infrastructure in TypeScript. Slingshot generates Dockerfiles, cloud configs, and CI workflows — then provisions and deploys everything.
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Infrastructure in Slingshot follows the same config-driven philosophy as the application layer. You declare what you need in TypeScript; the CLI generates and applies everything else.
+
+Two config files drive the entire deploy pipeline:
+
+- **`slingshot.platform.ts`** — org-level infrastructure: cloud provider, shared resources (databases, caches), secrets backend, deployment stacks, stages, DNS
+- **`slingshot.infra.ts`** — app-level config: which stacks to deploy to, container sizing, scaling policy, health check, which resources the app uses
+
+```
+slingshot.platform.ts   defines what infrastructure exists
+slingshot.infra.ts      defines how this app uses it
+slingshot deploy        generates and applies everything
+```
+
+---
+
+## Install
+
+```bash
+bun add --dev @lastshotlabs/slingshot-infra
+```
+
+`slingshot-infra` is a dev dependency — it has no runtime footprint. It is a deploy-time tooling package, not a runtime package.
+
+---
+
+## slingshot.platform.ts
+
+`definePlatform()` declares org-level infrastructure. It is shared across all services that deploy to the same platform.
+
+```typescript title="slingshot.platform.ts"
+import { definePlatform } from '@lastshotlabs/slingshot-infra';
+
+export default definePlatform({
+  org: 'acme',
+  provider: 'aws',
+  region: 'us-east-1',
+
+  // Where to store deployment metadata (registry)
+  registry: {
+    provider: 's3',
+    bucket: 'acme-slingshot-registry',
+  },
+
+  // Secrets backend — where secrets are pushed/pulled
+  secrets: {
+    provider: 'ssm',
+    pathPrefix: '/acme/',
+  },
+
+  // Shared resources (databases, caches, etc.) provisioned once and used by all services
+  resources: {
+    db: {
+      type: 'postgres',
+      provision: true,
+      stages: {
+        dev: { instanceClass: 'db.t3.micro', storageGb: 20 },
+        prod: { instanceClass: 'db.r6g.large', storageGb: 200, multiAz: true },
+      },
+    },
+    cache: {
+      type: 'redis',
+      provision: true,
+    },
+    search: {
+      type: 'opensearch',
+      provision: true,
+      stages: {
+        dev: { instanceType: 't3.small.search' },
+        prod: { instanceType: 'r6g.large.search', dedicatedMaster: true },
+      },
+    },
+  },
+
+  // Deployment stacks — choose ECS (managed) or EC2 (self-managed)
+  stacks: {
+    main: { preset: 'ecs' },
+  },
+
+  // Stages — dev, staging, prod — each with a domain suffix and optional overrides
+  stages: {
+    dev: { domainSuffix: '.dev.acme.com' },
+    staging: { domainSuffix: '.staging.acme.com' },
+    prod: { domainSuffix: '.acme.com' },
+  },
+
+  // Org-wide defaults — overridable per service in slingshot.infra.ts
+  defaults: {
+    scaling: { min: 1, max: 3, targetCpuPercent: 70 },
+    logging: { driver: 'cloudwatch', retentionDays: 30 },
+  },
+
+  // DNS management
+  dns: {
+    provider: 'cloudflare',
+    apiToken: process.env.CLOUDFLARE_API_TOKEN,
+  },
+});
+```
+
+### Resources
+
+The `resources` map declares shared infrastructure. Each resource has a `type` and a `provision` flag:
+
+| Type         | What it provisions                          |
+| ------------ | ------------------------------------------- |
+| `postgres`   | RDS Aurora PostgreSQL (SST/CloudFormation)  |
+| `redis`      | ElastiCache Redis (SST/CloudFormation)      |
+| `mongo`      | MongoDB Atlas cluster (Atlas API)           |
+| `documentdb` | AWS DocumentDB cluster (SST/CloudFormation) |
+| `opensearch` | AWS OpenSearch domain (SST/CloudFormation)  |
+
+When `provision: true`, `slingshot platform deploy --stage <name>` creates the resource if it doesn't exist. Subsequent runs update it in place.
+
+### Stacks
+
+Stacks map to deployment targets. Each stack has a `preset`:
+
+| Preset      | Description                                            |
+| ----------- | ------------------------------------------------------ |
+| `ecs`       | AWS ECS Fargate — managed containers, auto-scaling ALB |
+| `ec2-nginx` | EC2 + Docker Compose + Caddy (or nginx)                |
+
+### Registry
+
+The registry tracks deployed images, service metadata, and previous image tags (for rollback). Available backends:
+
+| Provider   | Config                                               |
+| ---------- | ---------------------------------------------------- |
+| `s3`       | `{ provider: 's3', bucket: '...' }`                  |
+| `redis`    | `{ provider: 'redis', url: '...' }`                  |
+| `postgres` | `{ provider: 'postgres', connectionString: '...' }`  |
+| `local`    | `{ provider: 'local', path: '.slingshot-registry' }` |
+
+For multi-repo organizations, the S3, Redis, or Postgres backends provide cross-repo locking and visibility. The local backend is sufficient for single-repo setups.
+
+### Secrets
+
+Secrets backends manage where `slingshot secrets push/pull/check` reads and writes:
+
+| Provider | Notes                                                                      |
+| -------- | -------------------------------------------------------------------------- |
+| `ssm`    | AWS SSM Parameter Store — standard choice for AWS deployments              |
+| `env`    | Read from environment variables — no push/pull, values provided externally |
+| `file`   | Read from a local `.env` file — not for production                         |
+
+---
+
+## slingshot.infra.ts
+
+`defineInfra()` declares how this specific service deploys. It references stacks, resources, and scaling config from the platform.
+
+```typescript title="slingshot.infra.ts"
+import { defineInfra } from '@lastshotlabs/slingshot-infra';
+
+export default defineInfra({
+  stacks: ['main'],
+
+  // Domain — resolves to api.dev.acme.com / api.acme.com per stage
+  domain: 'api',
+
+  // Container config
+  port: 3000,
+  size: 'medium', // small | medium | large | xlarge
+
+  // Which shared resources this service uses — auto-wires env vars
+  uses: ['db', 'cache'],
+
+  // Health check path
+  healthCheck: '/health',
+
+  // Scaling overrides (inherits platform defaults when omitted)
+  scaling: {
+    min: 2,
+    max: 10,
+    targetCpuPercent: 60,
+  },
+});
+```
+
+### Container sizes
+
+| Size     | CPU  | Memory | Good for                       |
+| -------- | ---- | ------ | ------------------------------ |
+| `small`  | 256  | 512 MB | Dev, low traffic               |
+| `medium` | 512  | 1 GB   | Moderate traffic               |
+| `large`  | 1024 | 2 GB   | Production workloads           |
+| `xlarge` | 2048 | 4 GB   | High traffic, memory-intensive |
+
+### Resource auto-wiring
+
+`uses` tells the deploy pipeline which platform resources this service needs. Connection strings are injected into the container automatically — no manual env var setup:
+
+```typescript
+uses: ['db', 'cache'];
+// → DATABASE_URL  (from provisioned RDS/Postgres output)
+// → REDIS_URL     (from provisioned ElastiCache/Redis output)
+```
+
+Reference them in your app config:
+
+```typescript
+createServer({
+  db: {
+    postgres: process.env.DATABASE_URL,
+    redis: process.env.REDIS_URL,
+  },
+});
+```
+
+### Multi-service apps
+
+When an app has multiple services (API, worker, scheduler), declare them in a `services` map:
+
+```typescript title="slingshot.infra.ts"
+export default defineInfra({
+  services: {
+    api: {
+      path: './services/api',
+      stacks: ['main'],
+      domain: 'api',
+      port: 3000,
+      size: 'medium',
+      uses: ['db', 'cache'],
+      healthCheck: '/health',
+      scaling: { min: 2, max: 8 },
+    },
+    worker: {
+      path: './services/worker',
+      stacks: ['main'],
+      size: 'small',
+      uses: ['db', 'cache'],
+      scaling: { min: 1, max: 3 },
+    },
+  },
+});
+```
+
+Each service gets its own Dockerfile, task definition, and scaling policy.
+
+---
+
+## The deploy pipeline
+
+Running `slingshot deploy --stage prod` executes this sequence:
+
+1. **Load configs** — reads `slingshot.platform.ts` and `slingshot.infra.ts`, validates both
+2. **Generate files** — emits `Dockerfile`, `sst.config.ts` (ECS) or `docker-compose.yml` + `Caddyfile` (EC2), and `.github/workflows/deploy.yml`
+3. **Resolve secrets** — pulls required secrets from the configured backend and confirms all required values are present
+4. **Auto-wire connections** — reads provisioned resource outputs (RDS endpoint, ElastiCache endpoint) and injects them as container env vars
+5. **Build and push image** — builds the Docker image and pushes to ECR (or a configured container registry)
+6. **Deploy** — runs `bunx sst deploy --stage prod` (ECS) or SSHes to the EC2 host and updates the Docker Compose stack
+7. **Update DNS** — creates or updates A/CNAME records via the configured DNS provider
+8. **Update registry** — records the deployed image tag per service per stage (enables rollback)
+
+### Preview before deploying
+
+```bash
+# Show the deploy plan without executing
+slingshot deploy --stage prod --plan
+
+# Generate config files without deploying
+slingshot infra generate --stage prod
+
+# Validate config without starting
+slingshot start --dry-run
+```
+
+### CI/CD
+
+The generated `.github/workflows/deploy.yml` runs on push to `main`:
+
+```yaml
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: slingshot deploy --stage prod --yes
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+```
+
+---
+
+## Provisioning shared resources
+
+Create or update the shared resources for a stage:
+
+```bash
+slingshot platform deploy --stage dev
+```
+
+This provisions any resources with `provision: true` that don't already exist. Safe to re-run — existing resources are updated in place, not recreated.
+
+### Destroy a stage
+
+```bash
+slingshot platform destroy --stage dev
+```
+
+Tears down all provisioned resources for the stage. Prompts for confirmation before proceeding.
+
+---
+
+## Rollback
+
+The registry tracks previous image tags per service per stage. Roll back to the prior deploy:
+
+```bash
+slingshot rollback --stage prod
+slingshot rollback --stage prod --service api
+slingshot rollback --stage prod --service api --tag v1.2.3
+```
+
+---
+
+## Secrets management
+
+Push local secrets to the configured backend before deploying:
+
+```bash
+slingshot secrets push --stage prod
+```
+
+Verify all required secrets are present:
+
+```bash
+slingshot secrets check --stage prod
+```
+
+Pull production secrets to a local `.env`:
+
+```bash
+slingshot secrets pull --stage prod
+```
+
+See [Secrets](/guides/secrets/) for the full reference.
+
+---
+
+## Generated files
+
+All generated files use `# --- section:name ---` / `# --- end:name ---` markers so you can override specific sections without replacing the whole file:
+
+```dockerfile title="Dockerfile (generated)"
+# --- section:base ---
+FROM oven/bun:1-alpine AS base
+WORKDIR /app
+# --- end:base ---
+
+# --- section:deps ---
+FROM base AS deps
+COPY package.json bun.lockb ./
+RUN bun install --frozen-lockfile
+# --- end:deps ---
+```
+
+Add your own content outside the markers and it survives regeneration.
+
+---
+
+## EC2 deployments
+
+For self-managed EC2 with Docker Compose:
+
+```typescript title="slingshot.platform.ts"
+import { definePlatform } from '@lastshotlabs/slingshot-infra';
+
+export default definePlatform({
+  org: 'acme',
+  provider: 'aws',
+  region: 'us-east-1',
+  registry: {
+    provider: 'local',
+    path: '.slingshot/registry.json',
+  },
+  stages: {
+    dev: {
+      env: {
+        NODE_ENV: 'development',
+      },
+    },
+  },
+  stacks: {
+    main: {
+      preset: 'ec2-nginx',
+      network: {
+        sshKeyName: 'my-key-pair',
+      },
+    },
+  },
+});
+```
+
+Register your EC2 host:
+
+```bash
+slingshot servers add --host 1.2.3.4 --stage dev
+```
+
+The `ec2-nginx` preset generates `Dockerfile`, `docker-compose.yml`, and a `Caddyfile` with automatic TLS via Let's Encrypt. Pass `proxy: 'nginx'` to use nginx instead of Caddy.
+
+---
+
+## The runtime-to-infra bridge
+
+Slingshot can detect which resources your app uses from your `createServer()` config and compare against `slingshot.infra.ts`:
+
+```bash
+slingshot infra check
+```
+
+This reads both configs and warns if your app declares `db.postgres` but `uses` doesn't include `'db'`, or if `uses` declares a resource that isn't in `slingshot.platform.ts`. Run it during development to catch wiring mismatches before deploy.
+
+---
+
+## See also
+
+- [Deployment Guide](/guides/deployment/) — step-by-step deploy walkthrough
+- [Horizontal Scaling](/guides/horizontal-scaling/) — multi-instance configuration with shared state
+- [Secrets](/guides/secrets/) — managing secrets across environments
+- [slingshot-infra](/packages/slingshot-infra/) — full API reference for `definePlatform` and `defineInfra`

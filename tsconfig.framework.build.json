@@ -1,0 +1,92 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "composite": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "incremental": true,
+    "tsBuildInfoFile": ".tmp/tsconfig.framework.build.tsbuildinfo",
+    "paths": {
+      "@framework/*": ["./src/framework/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@config/*": ["./src/config/*"],
+      "@app": ["./src/app.ts"],
+      "@lastshotlabs/slingshot-core": ["./packages/slingshot-core/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-core/testing": ["./packages/slingshot-core/dist/src/testing.d.ts"],
+      "@lastshotlabs/slingshot-auth": ["./packages/slingshot-auth/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-auth/testing": ["./packages/slingshot-auth/dist/src/testing.d.ts"],
+      "@lastshotlabs/slingshot-auth/plugin": ["./packages/slingshot-auth/dist/src/plugin-api.d.ts"],
+      "@lastshotlabs/slingshot-admin": ["./packages/slingshot-admin/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-permissions": [
+        "./packages/slingshot-permissions/dist/src/index.d.ts"
+      ],
+      "@lastshotlabs/slingshot-permissions/testing": [
+        "./packages/slingshot-permissions/dist/src/testing.d.ts"
+      ],
+      "@lastshotlabs/slingshot-postgres": ["./packages/slingshot-postgres/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-community": ["./packages/slingshot-community/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-community/testing": [
+        "./packages/slingshot-community/dist/src/testing.d.ts"
+      ],
+      "@lastshotlabs/slingshot-organizations": [
+        "./packages/slingshot-organizations/dist/src/index.d.ts"
+      ],
+      "@lastshotlabs/slingshot-m2m": ["./packages/slingshot-m2m/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-scim": ["./packages/slingshot-scim/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-oidc": ["./packages/slingshot-oidc/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-oauth": ["./packages/slingshot-oauth/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-webhooks": ["./packages/slingshot-webhooks/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-webhooks/testing": [
+        "./packages/slingshot-webhooks/dist/src/testing.d.ts"
+      ],
+      "@lastshotlabs/slingshot-push": ["./packages/slingshot-push/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-push/testing": ["./packages/slingshot-push/dist/src/testing.d.ts"],
+      "@lastshotlabs/slingshot-entity": ["./packages/slingshot-entity/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-entity/routing": [
+        "./packages/slingshot-entity/dist/src/routing/index.d.ts"
+      ],
+      "@lastshotlabs/slingshot-infra": ["./packages/slingshot-infra/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-embeds": ["./packages/slingshot-embeds/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-emoji": ["./packages/slingshot-emoji/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-gifs": ["./packages/slingshot-gifs/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-image": ["./packages/slingshot-image/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-mail": ["./packages/slingshot-mail/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-search": ["./packages/slingshot-search/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-ssg": ["./packages/slingshot-ssg/dist/src/index.d.ts"],
+      "@lastshotlabs/slingshot-ssr": ["./packages/slingshot-ssr/dist/src/index.d.ts"],
+      "@slingshot/runtime-bun": ["./packages/runtime-bun/dist/src/index.d.ts"]
+    }
+  },
+  "include": ["src/framework"],
+  "exclude": ["src/cli", "node_modules", "dist"],
+  "references": [
+    { "path": "./packages/slingshot-core/tsconfig.build.json" },
+    { "path": "./packages/slingshot-auth/tsconfig.build.json" },
+    { "path": "./packages/slingshot-admin/tsconfig.build.json" },
+    { "path": "./packages/slingshot-permissions/tsconfig.build.json" },
+    { "path": "./packages/slingshot-postgres/tsconfig.build.json" },
+    { "path": "./packages/slingshot-community/tsconfig.build.json" },
+    { "path": "./packages/slingshot-organizations/tsconfig.build.json" },
+    { "path": "./packages/slingshot-m2m/tsconfig.build.json" },
+    { "path": "./packages/slingshot-scim/tsconfig.build.json" },
+    { "path": "./packages/slingshot-oidc/tsconfig.build.json" },
+    { "path": "./packages/slingshot-oauth/tsconfig.build.json" },
+    { "path": "./packages/slingshot-webhooks/tsconfig.build.json" },
+    { "path": "./packages/slingshot-push/tsconfig.build.json" },
+    { "path": "./packages/slingshot-entity/tsconfig.build.json" },
+    { "path": "./packages/slingshot-infra/tsconfig.build.json" },
+    { "path": "./packages/slingshot-search/tsconfig.build.json" },
+    { "path": "./packages/slingshot-ssg/tsconfig.build.json" },
+    { "path": "./packages/slingshot-ssr/tsconfig.build.json" },
+    { "path": "./packages/slingshot-embeds/tsconfig.build.json" },
+    { "path": "./packages/slingshot-emoji/tsconfig.build.json" },
+    { "path": "./packages/slingshot-gifs/tsconfig.build.json" },
+    { "path": "./packages/slingshot-image/tsconfig.build.json" },
+    { "path": "./packages/slingshot-mail/tsconfig.build.json" },
+    { "path": "./packages/slingshot-bullmq/tsconfig.build.json" },
+    { "path": "./packages/runtime-bun/tsconfig.build.json" }
+  ]
+}

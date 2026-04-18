@@ -1,0 +1,37 @@
+{
+  "name": "@lastshotlabs/slingshot-entity",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./routing": {
+      "bun": "./src/routing/index.ts",
+      "types": "./dist/src/routing/index.d.ts",
+      "import": "./dist/src/routing/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@hono/zod-openapi": ">=0.18",
+    "hono": ">=4.12.12 <5",
+    "zod": ">=4.0 <5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

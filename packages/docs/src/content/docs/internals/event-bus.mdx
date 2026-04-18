@@ -1,0 +1,130 @@
+---
+title: The Event Bus
+description: InProcessAdapter internals, client-safe event filtering, test drain(), and SSE bridging
+---
+
+The event bus lets Slingshot packages communicate without coupling to each other. `slingshot-auth` doesn't know about `slingshot-community` — but when a user logs in, auth emits an event and community reacts.
+
+## The interface
+
+```typescript
+interface SlingshotEventBus {
+  emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void;
+  on<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (payload: SlingshotEventMap[K]) => void | Promise<void>,
+  ): void;
+  off<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (payload: SlingshotEventMap[K]) => void,
+  ): void;
+  shutdown?(): Promise<void>;
+  readonly clientSafeKeys: ReadonlySet<string>;
+  registerClientSafeEvents(keys: string[]): void;
+  ensureClientSafeEventKey(key: string, source?: string): string;
+}
+```
+
+## InProcessAdapter
+
+`InProcessAdapter` is the default — fast, zero-dependency, sufficient for single-instance deployments.
+
+```typescript
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+
+declare function hydrateUserProfile(userId: string): Promise<void>;
+
+const bus = new InProcessAdapter();
+bus.on('auth:user.created', async payload => {
+  await hydrateUserProfile(payload.userId);
+});
+bus.emit('auth:user.created', {
+  userId: 'usr_123',
+  email: 'new-user@example.com',
+  tenantId: null,
+});
+```
+
+The bus calls handlers and moves on — it doesn't await them inline with request handling. Use `drain()` in tests to wait for pending handlers to settle.
+
+## Event namespacing
+
+Event keys use a `namespace:entity.action` pattern. Reserved namespaces:
+
+- `security.*` — internal auth security events, never exposed to clients
+- `auth:*` — auth events, never exposed to clients
+- `community:delivery.*` — delivery status, internal only
+- `push:*` — push notification internals
+- `app:*` — application lifecycle events
+
+Any other key can be registered as client-safe. When it appears in an entity's `clientSafeEvents` list, the bus marks it safe for SSE forwarding.
+
+## Client-safe events and SSE
+
+SSE endpoints filter against the client-safe key set. Plugins declare which events flow through when registering an SSE endpoint:
+
+```typescript
+declare const sseClients: Array<{ send(event: string, payload: unknown): void }>;
+
+// The entity declares which events are safe to forward to browser clients
+routes: {
+  clientSafeEvents: ['community:thread.created', 'community:reply.created'],
+}
+
+bus.registerClientSafeEvents(['community:thread.created', 'community:reply.created']);
+
+const eventKey = bus.ensureClientSafeEventKey('community:thread.created', 'SSE /events');
+sseClients.forEach(client => client.send(eventKey, { id: 'thr_123' }));
+```
+
+This keeps internal events — session invalidation, security events, delivery status — from leaking to browser clients via SSE.
+
+## `drain()` — test isolation
+
+Handlers are fire-and-forget from the request handler's perspective. In tests, wait for them explicitly:
+
+```typescript
+// Emit event
+await app.request('/community/threads', { method: 'POST', ... });
+
+// Wait for all bus handlers to complete
+await bus.drain();
+
+// Now assert on side effects
+expect(notificationStore.notifications).toHaveLength(1);
+```
+
+`drain()` resolves when all currently-enqueued handlers have settled. You'll only need it in tests — production code never awaits the bus.
+
+## Extending to multi-instance
+
+When events need to cross process boundaries, replace `InProcessAdapter` with a shared implementation:
+
+```typescript
+import { createManifestHandlerRegistry, createServerFromManifest } from '@lastshotlabs/slingshot';
+
+declare function createRedisBus(config: {
+  url: string;
+}): import('@lastshotlabs/slingshot-core').SlingshotEventBus;
+
+const registry = createManifestHandlerRegistry();
+registry.registerEventBus('redis', () => createRedisBus({ url: process.env.REDIS_URL! }));
+
+await createServerFromManifest('./app.manifest.json', registry);
+```
+
+BullMQ is also available as a built-in manifest option:
+
+```json
+{
+  "eventBus": "bullmq",
+  "secrets": { "provider": "env" }
+}
+```
+
+The bus interface stays identical. Only the implementation changes.
+
+## See also
+
+- [Context and Registrar](/internals/context-registrar/) — where the bus lives in `SlingshotContext`
+- [Plugin Lifecycle](/internals/plugin-lifecycle/) — `setupPost()` is where event subscriptions belong

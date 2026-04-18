@@ -1,0 +1,49 @@
+{
+  "name": "@slingshot/runtime-node",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@hono/node-server": ">=1.19.13",
+    "argon2": ">=0.31",
+    "better-sqlite3": ">=9.0",
+    "fast-glob": ">=3.0",
+    "ws": ">=8.0"
+  },
+  "peerDependenciesMeta": {
+    "@hono/node-server": {
+      "optional": false
+    },
+    "argon2": {
+      "optional": false
+    },
+    "better-sqlite3": {
+      "optional": false
+    },
+    "fast-glob": {
+      "optional": false
+    },
+    "ws": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@hono/node-server": "1.19.13",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/ws": "^8.18.1",
+    "typescript": "*"
+  }
+}

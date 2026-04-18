@@ -1,0 +1,142 @@
+---
+title: CoreRegistrar
+description: Publishing shared cross-package capabilities at startup — route auth, resolvers, cache, templates
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+`CoreRegistrar` is the startup-time handoff object. Plugins call setter methods during setup to publish shared capabilities into the app. Other plugins consume them without direct cross-package imports.
+
+`slingshot-auth` calls `config.registrar.setRouteAuth(...)` during `setupPost` so other plugins and route files can read `ctx.routeAuth` without importing auth internals directly.
+
+## What the registrar holds
+
+| Capability                                     | Registrar method          | Published by                     | Read from context via                        |
+| ---------------------------------------------- | ------------------------- | -------------------------------- | -------------------------------------------- |
+| Route auth helpers (`userAuth`, `requireRole`) | `setRouteAuth()`          | `slingshot-auth`                 | `getRouteAuth(ctx)` or `ctx.routeAuth`       |
+| User resolver                                  | `setUserResolver()`       | `slingshot-auth`                 | `getUserResolver(ctx)` or `ctx.userResolver` |
+| Email templates                                | `addEmailTemplates()`     | `slingshot-auth`, custom plugins | `ctx.emailTemplates`                         |
+| Rate limit adapter                             | `setRateLimitAdapter()`   | `slingshot-auth`                 | `ctx.rateLimitAdapter`                       |
+| Cache adapters                                 | `addCacheAdapter()`       | Any plugin                       | `ctx.cacheAdapters`                          |
+| Fingerprint builder                            | `setFingerprintBuilder()` | `slingshot-auth`                 | `ctx.fingerprintBuilder`                     |
+
+## Accessing capabilities from the registrar
+
+After the plugin lifecycle completes, the registrar drains its values into `SlingshotContext`. Read published capabilities through the standalone accessor helpers:
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { getContext, getRouteAuth, getUserResolver } from '@lastshotlabs/slingshot-core';
+
+const plugin: SlingshotPlugin = {
+  name: 'example',
+  setupPost({ app }) {
+    const ctx = getContext(app);
+
+    // Read what other plugins have published
+    const userAuth = getRouteAuth(ctx)?.userAuth;
+    const userResolver = getUserResolver(ctx);
+    void userAuth;
+    void userResolver;
+  },
+};
+
+void plugin;
+```
+
+## Publishing a user resolver
+
+If your plugin provides user lookup (for WebSocket auth, admin, etc.), publish it during `setupPost` via `config.registrar`:
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+const adapter = {
+  async verifyToken(token: string): Promise<{ id: string } | null> {
+    return token === 'valid-token' ? { id: 'user-1' } : null;
+  },
+};
+
+const plugin: SlingshotPlugin = {
+  name: 'example',
+  setupPost({ config }) {
+    config.registrar.setUserResolver({
+      async resolveUserId(req: Request): Promise<string | null> {
+        const token = req.headers.get('authorization')?.replace('Bearer ', '');
+        if (!token) return null;
+        const user = await adapter.verifyToken(token);
+        return user?.id ?? null;
+      },
+    });
+  },
+};
+
+void plugin;
+```
+
+## Publishing email templates
+
+Register templates during `setupPost` so `slingshot-mail` picks them up after all plugins have run:
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+const digestHtmlTemplate = '<p>Your weekly digest</p>';
+const digestTextTemplate = 'Your weekly digest';
+
+const plugin: SlingshotPlugin = {
+  name: 'example',
+  setupPost({ config }) {
+    config.registrar.addEmailTemplates({
+      'notes.weekly-digest': {
+        subject: 'Your weekly digest',
+        html: digestHtmlTemplate,
+        text: digestTextTemplate,
+      },
+    });
+  },
+};
+
+void plugin;
+```
+
+## Registrar vs pluginState
+
+They solve different problems.
+
+The registrar holds **shared cross-package capabilities** with a stable contract — things the framework itself consumes, or things that route files import directly. `pluginState` holds arbitrary plugin runtime that sibling plugins discover dynamically at `setupPost` time.
+
+Use the registrar for:
+
+- Route middleware that route files import directly
+- Capabilities the framework consumes (user resolver, cache adapters)
+- Named template registries
+
+Use `pluginState` for:
+
+- Plugin-specific adapters and runtimes
+- Optional integrations other plugins discover in `setupPost`
+
+<Aside>
+  The registrar is mutable only during plugin lifecycle phases. After all `setupPost` hooks
+  complete, `createApp()` drains it into `SlingshotContext`. Call setter methods only from lifecycle
+  phases — never from route handlers or event handlers.
+</Aside>
+
+## Why the registrar exists
+
+Without it, there's no clean way to share runtime capabilities across packages. The alternatives are all worse.
+
+**Module-level singletons** break test isolation and make multiple app instances impossible — two `createApp()` calls stomp on the same state.
+
+**Direct cross-package imports** create tight coupling. `slingshot-notes` importing directly from `slingshot-auth` internals means you can't swap auth implementations without touching every dependent package.
+
+**Hardcoding in the framework** doesn't scale. The framework can't know about your custom plugins, and it shouldn't need to.
+
+The registrar gives startup a structured handoff point. Auth calls `config.registrar.setRouteAuth(...)` during its `setupPost`. After all plugins run, `createApp()` drains those values into `SlingshotContext` — your route files read them via `getRouteAuth(ctx)` without importing auth internals. Each app instance gets its own registrar, so tests that run two apps in the same process don't interfere with each other.
+
+## See also
+
+- [SlingshotContext](/authoring/context/) — where the registrar snapshot lives at runtime
+- [Plugin Interface](/authoring/plugin-interface/) — lifecycle phases where the registrar is populated
+- [Internals: Context and Registrar](/internals/context-registrar/) — implementation details

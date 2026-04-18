@@ -1,0 +1,263 @@
+---
+title: slingshot-chat
+description: Framework-level reusable chat plugin — rooms, messages, DMs, real-time delivery, reactions, pins, blocks, and favorites.
+---
+
+import { Code, TabItem, Tabs } from '@astrojs/starlight/components';
+
+# slingshot-chat
+
+`@lastshotlabs/slingshot-chat` is a framework-level plugin that wires full chat functionality into any Slingshot app in one call. It provides rooms, messages, members, real-time delivery via WebSocket, DM topology, broadcast channels, and full management (mute, block, favorites, pins).
+
+## Installation
+
+```sh
+bun add @lastshotlabs/slingshot-chat
+```
+
+## Basic Setup
+
+```ts
+import { createApp } from '@lastshotlabs/slingshot';
+import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
+
+const { app } = await createApp({
+  plugins: [
+    createChatPlugin({
+      storeType: 'postgres',
+      mountPath: '/chat',
+      permissions: {
+        createRoom: ['admin'],
+        sendMessage: ['member', 'admin'],
+        deleteMessage: ['admin'],
+      },
+      encryption: {
+        provider: 'aes-gcm',
+        keyBase64: process.env.SLINGSHOT_CHAT_KEY_BASE64!,
+      },
+    }),
+  ],
+});
+```
+
+## Room Types
+
+| Type          | Description                                                  | DM ID Format                               |
+| ------------- | ------------------------------------------------------------ | ------------------------------------------ |
+| `'dm'`        | 1:1 direct message. Auto-created on first send.              | `dm-{[userId1, userId2].sort().join('-')}` |
+| `'group'`     | Multi-user private room. Explicit membership. Admin-managed. | UUID                                       |
+| `'broadcast'` | One sender (admin), many readers. Non-admins receive only.   | UUID                                       |
+
+### DM Deterministic IDs
+
+DM room IDs are deterministic: `dm-{sorted(userIds).join('-')}`. No lookup table is needed — the ID is computed from both user IDs. This prevents race conditions on "find or create DM".
+
+```ts
+// These both refer to the same DM room:
+const dmId = 'dm-user-alice-user-bob'; // user-alice < user-bob alphabetically
+```
+
+Use `POST /chat/rooms/find-or-create-dm` to find or create a DM room. Block checks are enforced — if either party has blocked the other, the request returns `403`.
+
+## HTTP API Reference
+
+All routes are mounted under the configured `mountPath` (default: `/chat`). Routes use `x-user-id` for auth (populated by slingshot-auth session middleware).
+
+### Rooms
+
+| Method  | Path                            | Description                                                                |
+| ------- | ------------------------------- | -------------------------------------------------------------------------- |
+| `GET`   | `/chat/rooms`                   | List rooms for the current user                                            |
+| `POST`  | `/chat/rooms`                   | Create a group or broadcast room                                           |
+| `GET`   | `/chat/rooms/:roomId`           | Get a room by ID                                                           |
+| `PATCH` | `/chat/rooms/:roomId`           | Update room (name, retentionDays). Admin only. DM rooms cannot be updated. |
+| `POST`  | `/chat/rooms/find-or-create-dm` | Find or create a DM room. Body: `{ targetUserId }`                         |
+
+### Membership
+
+| Method   | Path                     | Description                                              |
+| -------- | ------------------------ | -------------------------------------------------------- |
+| `GET`    | `/chat/room-members`     | List room memberships scoped to the current user         |
+| `POST`   | `/chat/room-members`     | Add a member. Admin only. Not allowed for DM rooms.      |
+| `PATCH`  | `/chat/room-members/:id` | Update membership (role, nickname, notifyOn, mutedUntil) |
+| `DELETE` | `/chat/room-members/:id` | Remove a member                                          |
+
+### Messages
+
+| Method   | Path                        | Description                                                      |
+| -------- | --------------------------- | ---------------------------------------------------------------- |
+| `GET`    | `/chat/messages`            | List messages visible to the current user                        |
+| `POST`   | `/chat/messages`            | Send a message. Body: `{ roomId, body, type?, replyToId?, ... }` |
+| `PATCH`  | `/chat/messages/:messageId` | Edit a message body. Author only.                                |
+| `DELETE` | `/chat/messages/:messageId` | Soft-delete. Author or room admin.                               |
+
+### Reactions
+
+| Method   | Path                          | Description                        |
+| -------- | ----------------------------- | ---------------------------------- |
+| `GET`    | `/chat/message-reactions`     | List reactions visible to the user |
+| `POST`   | `/chat/message-reactions`     | Add a reaction                     |
+| `DELETE` | `/chat/message-reactions/:id` | Remove a reaction                  |
+
+### Management
+
+| Method   | Path                       | Description                                               |
+| -------- | -------------------------- | --------------------------------------------------------- |
+| `GET`    | `/chat/blocks`             | List blocked users                                        |
+| `POST`   | `/chat/blocks`             | Block a user. Body: `{ targetUserId }`                    |
+| `DELETE` | `/chat/blocks/:id`         | Delete a block row                                        |
+| `GET`    | `/chat/favorite-rooms`     | List favorited rooms                                      |
+| `POST`   | `/chat/favorite-rooms`     | Favorite a room. Body: `{ roomId }`                       |
+| `DELETE` | `/chat/favorite-rooms/:id` | Remove a favorite row                                     |
+| `GET`    | `/chat/pins`               | List pins visible to the user                             |
+| `POST`   | `/chat/pins`               | Pin a message. Body: `{ roomId, messageId }`. Admin only. |
+| `DELETE` | `/chat/pins/:id`           | Delete a pin row. Admin only.                             |
+
+### Encryption (v1 stubs)
+
+| Method | Path                                  | Description                                                |
+| ------ | ------------------------------------- | ---------------------------------------------------------- |
+| `GET`  | `/chat/encryption/status`             | Server encryption capability (`e2eSupported: false` in v1) |
+| `POST` | `/chat/encryption/init`               | Upload key material (v1: returns 501)                      |
+| `GET`  | `/chat/encryption/key-bundle/:userId` | Fetch X3DH key bundle (v1: returns 501)                    |
+| `PUT`  | `/chat/encryption/prekeys`            | Upload prekey batch (v1: returns 501)                      |
+
+## WebSocket Events
+
+### Channel Name Format
+
+```
+messages:{roomId}:live
+```
+
+Subscribe to a room's channel to receive all message events in real time.
+
+### Server → Client Events (forwarded bus events)
+
+| Event                   | Description               | Payload                                      |
+| ----------------------- | ------------------------- | -------------------------------------------- |
+| `chat.message.created`  | New message posted        | Full `Message` object                        |
+| `chat.message.updated`  | Message edited            | Full `Message` object                        |
+| `chat.message.deleted`  | Message soft-deleted      | `{ id, roomId, deletedAt }`                  |
+| `chat.message.reaction` | Reaction added or removed | `{ messageId, roomId, emoji, count, added }` |
+| `chat.read`             | Read receipt broadcast    | `{ userId, roomId, messageId, readAt }`      |
+
+### Client → Server Events (typed incoming)
+
+Send from the client as:
+
+```json
+{ "action": "event", "event": "chat.typing", "payload": { "roomId": "..." }, "ackId": "opt-uuid" }
+```
+
+| Event         | Payload                 | Server behavior                                                                              |
+| ------------- | ----------------------- | -------------------------------------------------------------------------------------------- |
+| `chat.typing` | `{ roomId }`            | Volatile broadcast to room, excluding sender. No ack.                                        |
+| `chat.read`   | `{ roomId, messageId }` | Records receipt, updates lastReadAt, emits `chat.read` to room. Acks `{ ok: true, readAt }`. |
+| `chat.ping`   | `{ ts }`                | Acks `{ ts, serverTs }`. Connection keepalive.                                               |
+
+### Client-Side Example
+
+```ts
+const socket = useChannel(`messages:${roomId}:live`);
+
+socket.on('chat.message.created', msg => appendMessage(msg));
+socket.on('chat.message.updated', msg => replaceMessage(msg));
+socket.on('chat.message.deleted', ({ id }) => softDeleteMessage(id));
+socket.on('chat.message.reaction', ({ messageId, emoji, count }) =>
+  updateReaction(messageId, emoji, count),
+);
+
+// Send typing indicator (volatile, no ack)
+socket.emit('chat.typing', { roomId });
+
+// Mark messages as read
+socket.emit('chat.read', { roomId, messageId: lastSeenId });
+```
+
+## Management
+
+### Mute
+
+Mute is stored on `RoomMember.mutedUntil` (ISO-8601 future timestamp or `null`). Set via `PATCH /chat/rooms/:roomId/members/:userId`:
+
+```json
+{ "mutedUntil": "2025-12-31T00:00:00.000Z" }
+```
+
+When `mutedUntil > now`, push notifications are suppressed. Clients should check this field.
+
+### Block
+
+Blocks are directional. When user A blocks user B:
+
+- B cannot create a DM room targeting A
+- A's existing DM with B is inaccessible to B
+- In shared group rooms, B's messages are visually filtered (client-side)
+
+### Favorites
+
+Favorites appear at the top of the room list. `sortOrder` is stored on the favorite row and lower values sort first.
+
+### Pins
+
+Any room admin can pin or unpin messages. Pins are managed through the `/chat/pins` entity routes.
+
+## Encryption (v1: Manifest-Safe Provider)
+
+v1 provides server-side at-rest encryption through JSON-safe plugin config:
+
+```ts
+createChatPlugin({
+  storeType: 'postgres',
+  encryption: {
+    provider: 'aes-gcm',
+    keyBase64: process.env.SLINGSHOT_CHAT_KEY_BASE64!,
+    aadPrefix: 'prod-chat',
+  },
+});
+```
+
+Encryption is applied when `Room.encrypted = true`. The room ID is attached as authenticated
+data so ciphertext cannot be replayed across rooms.
+
+**v2 E2E encryption (Signal protocol) is @status PENDING.** See Phase 11 spec for requirements (X3DH, Double Ratchet, Sender Keys for groups).
+
+## Testing Utilities
+
+Import from `@lastshotlabs/slingshot-chat/testing` — not from the main export.
+
+```ts
+import { expect } from 'bun:test';
+import {
+  createChatTestApp,
+  createMemoryChatState,
+  seedMember,
+  seedMessage,
+  seedRoom,
+} from '@lastshotlabs/slingshot-chat/testing';
+
+// Create fully wired in-memory state
+const state = createMemoryChatState();
+
+// Seed test data
+const room = await seedRoom(state, { type: 'group', name: 'Test Room' });
+const member = await seedMember(state, { roomId: room.id, userId: 'user-1', role: 'admin' });
+const message = await seedMessage(state, { roomId: room.id, body: 'Hello', authorId: 'user-1' });
+
+// Create a Hono test app for route testing
+const { app, state: appState } = await createChatTestApp();
+
+const res = await app.request('/chat/rooms', {
+  method: 'POST',
+  headers: { 'x-user-id': 'user-1', 'Content-Type': 'application/json' },
+  body: JSON.stringify({ name: 'General', type: 'group' }),
+});
+expect(res.status).toBe(201);
+```
+
+## Known Limitations
+
+- **Durable subscriptions**: The current v1 WS delivery uses `InProcessAdapter`. Messages delivered during disconnect are lost — clients must use `GET /chat/rooms/:roomId/messages?since=cursor` on reconnect to fill gaps.
+- **E2E encryption**: v1 is server-side provider-driven encryption only. True end-to-end encryption (Signal protocol) is v2 and @status PENDING.
+- **`listForUser` in memory backend**: The memory implementation returns all rooms (not just rooms the user is a member of). Production backends use a proper JOIN with the `room_members` table.

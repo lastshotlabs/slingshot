@@ -1,0 +1,83 @@
+---
+title: Packages and Plugins
+description: How the Slingshot package stack fits together
+---
+
+Slingshot is a stack of composable packages. Each layer has a clear role. Understanding the stack makes it obvious where your code should live.
+
+## The stack
+
+### `@lastshotlabs/slingshot` — app assembly
+
+The entry point. `createServer()`, `createApp()`, and `createServerFromManifest()` all live here. It owns boot orchestration, shared middleware, the plugin lifecycle, route loading, WebSocket integration, uploads, and the manifest system.
+
+Start here. Everything else plugs into this layer.
+
+### `@lastshotlabs/slingshot-core` — contracts
+
+The shared contract layer. Houses the plugin lifecycle interface, event bus interface, context model, registrar boundaries, entity types, route config types, and permission interfaces.
+
+You rarely install this directly. Feature packages depend on it to publish shared capabilities without creating direct package-to-package dependencies.
+
+### `@lastshotlabs/slingshot-entity` — config-driven authoring
+
+Turns entity definitions into running packages:
+
+- `defineEntity()` — data model, indexes, route policy, permissions, events
+- `defineOperations()` — transitions, lookups, field updates, search, aggregates
+- `createEntityPlugin()` — mounts an entity-driven plugin with adapters for every supported database
+
+`slingshot-community` is built with this. You build your own domains with this.
+
+### Feature packages
+
+Self-contained product domains:
+
+| Package                   | What it owns                                        |
+| ------------------------- | --------------------------------------------------- |
+| `slingshot-auth`          | Accounts, sessions, JWT, MFA, OAuth, passkeys       |
+| `slingshot-community`     | Forums, threads, replies, reactions, moderation     |
+| `slingshot-organizations` | Teams, membership, roles, invite flows              |
+| `slingshot-permissions`   | RBAC/ABAC — required by community and organizations |
+| `slingshot-search`        | Full-text entity search                             |
+| `slingshot-game-engine`   | Multiplayer game state, phases, turns, and scoring  |
+| `slingshot-mail`          | Transactional email delivery                        |
+| `slingshot-push`          | Push notification delivery                          |
+| `slingshot-webhooks`      | Outbound webhook delivery                           |
+| `slingshot-admin`         | Admin panel surface                                 |
+| `slingshot-m2m`           | Machine-to-machine API tokens                       |
+| `slingshot-scim`          | SCIM provisioning for enterprise SSO                |
+| `slingshot-oidc`          | OpenID Connect provider                             |
+
+Each of these is a plugin that mounts routes, registers capabilities, and participates in the boot lifecycle.
+
+## What counts as a plugin
+
+A plugin is anything that implements `SlingshotPlugin` from `slingshot-core`:
+
+```typescript
+interface SlingshotPlugin {
+  name: string;
+  dependencies?: string[];
+  setupMiddleware?(app, config, bus): void | Promise<void>;
+  setupRoutes?(app, config, bus): void | Promise<void>;
+  setupPost?(app, config, bus): void | Promise<void>;
+  teardown?(): void | Promise<void>;
+}
+```
+
+Slingshot validates dependencies and topologically sorts the boot order. Plugins declare what they need; the framework handles sequencing.
+
+## The plugin lifecycle
+
+Plugins run through three ordered phases:
+
+1. **`setupMiddleware`** — before route matching. Use for auth, CSRF, request guards, anything that must run first.
+2. **`setupRoutes`** — mount routes and route-adjacent behavior. Runs after tenant middleware, so routes have tenant context.
+3. **`setupPost`** — after all routes are registered. Use for event subscriptions, cross-plugin discovery, permission registration, and side-effect wiring.
+
+## Where to go next
+
+- [Plugin Interface](/authoring/plugin-interface/) — full `SlingshotPlugin` contract
+- [slingshot-community source](https://github.com/Last-Shot-Labs/slingshot/tree/main/packages/slingshot-community/src) — the clearest full example
+- [Build Your Own Package](/examples/config-driven-domain/) — step-by-step authoring walkthrough

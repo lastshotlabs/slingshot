@@ -1,0 +1,379 @@
+---
+title: Auth Setup
+description: Email/password login, JWT sessions, OAuth, MFA, passkeys — the full auth surface, one plugin
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Add `slingshot-auth` and you get registration, login, session management, password reset, OAuth, MFA, and passkeys. All from one plugin, zero boilerplate.
+
+Source-backed example app: `examples/with-auth/`
+
+## Install
+
+```bash
+bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth hono zod
+```
+
+## Minimum setup
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "security": {
+        "signing": { "secret": "${secret:JWT_SECRET}" }
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
+            "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
+          }
+        }
+      ]
+    }
+    ```
+
+    ```bash
+    slingshot start
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+    await createServer({
+      port: 3000,
+      security: {
+        signing: { secret: process.env.JWT_SECRET! },
+      },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+        }),
+      ],
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## Mounted routes
+
+| Method  | Path                           | Description                 |
+| ------- | ------------------------------ | --------------------------- |
+| `POST`  | `/auth/register`               | Create an account           |
+| `POST`  | `/auth/login`                  | Log in, receive a JWT       |
+| `POST`  | `/auth/logout`                 | End the session             |
+| `GET`   | `/auth/me`                     | Current user (requires JWT) |
+| `PATCH` | `/auth/me`                     | Update profile fields       |
+| `POST`  | `/auth/refresh`                | Rotate the session token    |
+| `POST`  | `/auth/password-reset/request` | Send a password reset email |
+| `POST`  | `/auth/password-reset/confirm` | Complete the reset          |
+
+Enabling OAuth, MFA, or passkeys adds additional routes (see below).
+
+## Protecting routes
+
+Import `userAuth` and `requireRole` from `slingshot-auth` and apply them as Hono middleware before your handler.
+
+```typescript title="src/routes/account.ts"
+import { createRoute, createRouter } from '@lastshotlabs/slingshot';
+import { requireRole, userAuth } from '@lastshotlabs/slingshot-auth';
+
+declare function getUserCount(): Promise<number>;
+
+export const router = createRouter();
+
+// Require a valid JWT — returns 401 automatically if missing or invalid
+router.use('/account/*', userAuth);
+
+router.openapi(
+  createRoute({
+    method: 'get',
+    path: '/account/profile',
+    responses: {
+      200: {
+        description: 'Current user',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                userId: { type: 'string' },
+                roles: {
+                  type: 'array',
+                  items: { type: 'string' },
+                },
+              },
+              required: ['userId', 'roles'],
+            },
+          },
+        },
+      },
+    },
+  }),
+  c => {
+    return c.json({
+      userId: c.get('authUserId')!,
+      roles: c.get('roles') ?? [],
+    }) as never;
+  },
+);
+
+// Require a specific role — returns 403 if the user doesn't have it
+router.use('/account/admin/*', requireRole('admin'));
+
+router.openapi(
+  createRoute({
+    method: 'get',
+    path: '/account/admin/stats',
+    responses: {
+      200: {
+        description: 'Admin stats',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                userCount: { type: 'number' },
+              },
+              required: ['userCount'],
+            },
+          },
+        },
+      },
+    },
+  }),
+  async c => {
+    const count = await getUserCount();
+    return c.json({ userCount: count }) as never;
+  },
+);
+```
+
+`userAuth` verifies the JWT from the `Authorization: Bearer` header or the `x-user-token` header and sets `authUserId` and `roles` on the context. `requireRole` checks the `roles` value — always mount it after `userAuth`.
+
+## Using the token
+
+Register, log in, then pass the token as a Bearer header:
+
+```bash
+# Register
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "you@example.com", "password": "hunter2" }'
+
+# Log in
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "you@example.com", "password": "hunter2" }'
+# → { "token": "eyJ..." }
+
+# Call a protected route
+curl http://localhost:3000/account/profile \
+  -H "Authorization: Bearer eyJ..."
+```
+
+## Persistent storage
+
+Each adapter is independent. Mix and match:
+
+<Tabs>
+  <TabItem label="SQLite">
+    ```json title="app.manifest.json (db section)"
+    {
+      "db": { "sqlite": "${importMetaDir}/data/app.db" },
+      "plugins": [{
+        "plugin": "slingshot-auth",
+        "config": {
+          "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
+          "db": { "auth": "sqlite", "sessions": "sqlite", "oauthState": "sqlite" }
+        }
+      }]
+    }
+    ```
+
+    SQLite is built into Bun. On Node.js, install `better-sqlite3` first.
+
+  </TabItem>
+  <TabItem label="PostgreSQL">
+    ```bash
+    bun add @lastshotlabs/slingshot-postgres
+    ```
+
+    ```json title="app.manifest.json (db section)"
+    {
+      "db": { "postgres": "${env:DATABASE_URL}" },
+      "plugins": [{
+        "plugin": "slingshot-auth",
+        "config": {
+          "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
+          "db": { "auth": "postgres", "sessions": "postgres", "oauthState": "postgres" }
+        }
+      }]
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Redis sessions">
+    ```bash
+    bun add ioredis
+    ```
+
+    ```json title="app.manifest.json (db section)"
+    {
+      "db": { "sqlite": "${importMetaDir}/data/app.db", "redis": "${env:REDIS_URL}" },
+      "plugins": [{
+        "plugin": "slingshot-auth",
+        "config": {
+          "db": { "auth": "sqlite", "sessions": "redis", "oauthState": "memory" }
+        }
+      }]
+    }
+    ```
+
+    A common production setup: durable user records in SQLite or Postgres, high-throughput sessions in Redis.
+
+  </TabItem>
+</Tabs>
+
+## OAuth
+
+```bash
+bun add @lastshotlabs/slingshot-oauth arctic
+```
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": {
+          "roles": ["user"],
+          "defaultRole": "user",
+          "oauth": {
+            "providers": {
+              "google": {
+                "clientId": "${secret:GOOGLE_CLIENT_ID}",
+                "clientSecret": "${secret:GOOGLE_CLIENT_SECRET}",
+                "redirectUri": "http://localhost:3000/auth/oauth/google/callback"
+              }
+            },
+            "postRedirect": "/dashboard"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: {
+        roles: ['user'],
+        defaultRole: 'user',
+        oauth: {
+          providers: {
+            google: {
+              clientId: process.env.GOOGLE_CLIENT_ID!,
+              clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+              redirectUri: 'http://localhost:3000/auth/oauth/google/callback',
+            },
+          },
+          postRedirect: '/dashboard',
+        },
+      },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+OAuth routes mount automatically: `GET /auth/oauth/:provider` → `GET /auth/oauth/:provider/callback`. Redirect the user to `/auth/oauth/google` to start the flow. After the callback, they have a session.
+
+## MFA (TOTP)
+
+```bash
+bun add otpauth
+```
+
+```typescript
+auth: { roles: ['user'], defaultRole: 'user', mfa: { totp: true } }
+```
+
+Adds `POST /auth/mfa/setup`, `POST /auth/mfa/verify`, and `DELETE /auth/mfa`.
+
+## Passkeys (WebAuthn)
+
+```bash
+bun add @simplewebauthn/server
+```
+
+```typescript
+auth: {
+  roles: ['user'],
+  defaultRole: 'user',
+  passkeys: {
+    rpName: 'My App',
+    rpId: 'localhost',
+    origin: 'http://localhost:3000',
+  },
+}
+```
+
+Adds begin/complete routes for both registration and authentication.
+
+When `emailVerification.required` is enabled, passkey authentication follows the same gate as password login: unverified email accounts cannot sign in with WebAuthn until the address is verified.
+
+## Email verification
+
+Require users to verify their email before they can log in:
+
+```typescript
+auth: {
+  roles: ['user'],
+  defaultRole: 'user',
+  emailVerification: {
+    required: true,
+    tokenExpirySeconds: 86400, // 24 hours
+  },
+}
+```
+
+## Password policy
+
+```typescript
+auth: {
+  passwordPolicy: {
+    minLength: 12,
+    requireUppercase: true,
+    requireNumbers: true,
+  },
+}
+```
+
+## Multiple roles
+
+Declare all roles upfront. Auth stores them in the JWT and sets `c.get('roles')` on every request:
+
+```typescript
+auth: { roles: ['user', 'moderator', 'admin'], defaultRole: 'user' }
+```
+
+Assign roles through the admin plugin or directly through the auth adapter in your own routes.
+
+## Where to go next
+
+- [slingshot-auth](/packages/slingshot-auth/overview/) — full config reference with all options
+- [Forum App](/examples/forum-app/) — add `slingshot-community` on top of auth
+- [SaaS Foundations](/examples/saas-foundations/) — add organizations and per-resource permissions
+- [OpenAPI](/guides/openapi/) — how `userAuth` and `requireRole` appear in the spec

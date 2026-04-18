@@ -1,0 +1,271 @@
+---
+title: File Uploads
+description: Upload files to S3, local disk, or memory - presigned URLs, authorization, and storage configuration
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot's built-in upload system handles presigned URL generation, file authorization, and storage routing. Configure a storage adapter and the upload routes mount automatically at startup.
+
+## Install
+
+For S3 uploads:
+
+```bash
+bun add @aws-sdk/client-s3 @aws-sdk/s3-request-presigner @aws-sdk/lib-storage
+```
+
+## Basic setup
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "upload": {
+        "storage": {
+          "adapter": "s3",
+          "config": {
+            "bucket": "${env:UPLOAD_BUCKET}",
+            "region": "${env:AWS_REGION}"
+          }
+        },
+        "maxFileSize": 10485760,
+        "generateKey": { "handler": "generateUploadKey" },
+        "authorization": {
+          "authorize": { "handler": "authorizeUpload" }
+        }
+      },
+      "plugins": [
+        { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user"], "defaultRole": "user" } } }
+      ]
+    }
+    ```
+
+    ```typescript title="slingshot.handlers.ts"
+    export function generateUploadKey(
+      file: { name: string; type: string },
+      ctx: { userId?: string }
+    ): string {
+      const ext = file.name.split('.').pop();
+      return `uploads/${ctx.userId}/${Date.now()}.${ext}`;
+    }
+
+    export async function authorizeUpload(input: {
+      action: 'upload' | 'read' | 'delete';
+      key: string;
+      userId?: string;
+    }): Promise<boolean> {
+      if (!input.userId) return false;
+      // Only allow users to access their own files
+      return input.key.startsWith(`uploads/${input.userId}/`);
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    await createServer({
+      port: 3000,
+      upload: {
+        storage: {
+          adapter: 's3',
+          config: {
+            bucket: process.env.UPLOAD_BUCKET!,
+            region: process.env.AWS_REGION!,
+          },
+        },
+        maxFileSize: 10 * 1024 * 1024, // 10 MB
+
+        generateKey: (file, ctx) => {
+          const ext = file.name.split('.').pop();
+          return `uploads/${ctx.userId}/${Date.now()}.${ext}`;
+        },
+
+        authorization: {
+          authorize: async ({ action, key, userId }) => {
+            if (!userId) return false;
+            return key.startsWith(`uploads/${userId}/`);
+          },
+        },
+      },
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## What gets mounted
+
+| Method   | Path                    | Description                                      |
+| -------- | ----------------------- | ------------------------------------------------ |
+| `POST`   | `/uploads/presign`      | Get a presigned S3 URL for direct browser upload |
+| `GET`    | `/uploads/presign/:key` | Get a presigned read URL for a file              |
+| `DELETE` | `/uploads/:key`         | Delete a file                                    |
+
+## The upload flow
+
+Slingshot uses presigned URLs - files go directly from the browser to S3, not through your server:
+
+```
+Browser -> POST /uploads/presign -> Slingshot generates presigned URL
+Browser -> PUT <presigned S3 URL> -> S3 stores the file directly
+Browser -> tells your app the key -> app saves it to the database
+```
+
+Large files never touch your server, so upload throughput scales independently.
+
+```typescript
+// Browser: get a presigned URL
+const { url, key } = await fetch('/uploads/presign', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    name: file.name,
+    type: file.type,
+    size: file.size,
+  }),
+}).then(r => r.json());
+
+// Browser: upload directly to S3
+await fetch(url, {
+  method: 'PUT',
+  body: file,
+  headers: { 'Content-Type': file.type },
+});
+
+// Browser: save the key to your app
+await fetch('/api/posts', {
+  method: 'POST',
+  body: JSON.stringify({ title: 'My post', imageKey: key }),
+});
+```
+
+## Storage adapters
+
+<Tabs>
+  <TabItem label="S3">
+    ```json
+    "storage": {
+      "adapter": "s3",
+      "config": {
+        "bucket": "${env:UPLOAD_BUCKET}",
+        "region": "us-east-1"
+      }
+    }
+    ```
+
+    Works with AWS S3 and any S3-compatible service (Cloudflare R2, MinIO, DigitalOcean Spaces).
+
+    For Cloudflare R2:
+    ```json
+    "storage": {
+      "adapter": "s3",
+      "config": {
+        "bucket": "${env:R2_BUCKET}",
+        "region": "auto",
+        "endpoint": "https://<account-id>.r2.cloudflarestorage.com",
+        "accessKeyId": "${secret:R2_ACCESS_KEY_ID}",
+        "secretAccessKey": "${secret:R2_SECRET_ACCESS_KEY}"
+      }
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Local disk">
+    ```json
+    "storage": {
+      "adapter": "local",
+      "config": {
+        "directory": "${importMetaDir}/uploads",
+        "publicPath": "/files"
+      }
+    }
+    ```
+
+    Files are served from `/files/:key`. Good for development and single-server deployments.
+
+  </TabItem>
+  <TabItem label="Memory">
+    ```json
+    "storage": {
+      "adapter": "memory"
+    }
+    ```
+
+    Files are stored in-process. Resets on restart. Development and testing only.
+
+  </TabItem>
+</Tabs>
+
+## File size limits
+
+```json
+"upload": {
+  "maxFileSize": 52428800
+}
+```
+
+Default is 10 MB (10,485,760 bytes). Requests with `Content-Length` exceeding the limit are rejected before the presigned URL generates.
+
+When `upload.allowedMimeTypes` is configured, the presigned upload endpoint also enforces that allowlist and requires the client to send `mimeType` in the presign request. The generated presigned URL carries the effective maximum size, which cannot exceed `upload.maxFileSize`.
+
+Upload routes also fail closed for stale authenticated sessions when the account is suspended or no longer satisfies a required email-verification policy. That guard still applies when `auth.checkSuspensionOnIdentify` is explicitly disabled.
+
+## Allowed file types
+
+```typescript
+authorization: {
+  authorize: async ({ action, key, userId, file }) => {
+    if (!userId) return false;
+
+    // Only allow images and PDFs
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+    if (!allowed.includes(file.type)) return false;
+
+    return key.startsWith(`uploads/${userId}/`);
+  },
+}
+```
+
+## Access control patterns
+
+### Public files
+
+```typescript
+generateKey: (file, ctx) => `public/${Date.now()}-${file.name}`,
+authorization: {
+  authorize: ({ action }) => action === 'read', // anyone can read
+},
+```
+
+### Organization-scoped files
+
+```typescript
+generateKey: (file, ctx) => `orgs/${ctx.organizationId}/${Date.now()}-${file.name}`,
+authorization: {
+  authorize: async ({ action, key, userId }) => {
+    const orgId = key.split('/')[1];
+    return checkOrgMembership(userId, orgId);
+  },
+},
+```
+
+### Temporary uploads
+
+Generate a key with a short-lived prefix, then move it to permanent storage after the browser uploads:
+
+```typescript
+generateKey: (file, ctx) => `tmp/${ctx.userId}/${Date.now()}-${file.name}`,
+```
+
+Your route handler moves the file to its permanent key using the S3 SDK.
+
+## See also
+
+- [Secrets](/guides/secrets/) - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` setup
+- [Deployment](/guides/deployment/) - S3 bucket config in `slingshot.infra.ts`

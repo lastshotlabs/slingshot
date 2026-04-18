@@ -1,0 +1,48 @@
+{
+  "name": "@lastshotlabs/slingshot-ssr",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./isr": {
+      "bun": "./src/isr/index.ts",
+      "types": "./dist/src/isr/index.d.ts",
+      "import": "./dist/src/isr/index.js"
+    },
+    "./actions": {
+      "bun": "./src/actions/index.ts",
+      "types": "./dist/src/actions/index.d.ts",
+      "import": "./dist/src/actions/index.js"
+    },
+    "./draft": {
+      "bun": "./src/draft/index.ts",
+      "types": "./dist/src/draft/index.d.ts",
+      "import": "./dist/src/draft/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0",
+    "@lastshotlabs/slingshot-entity": "^0.1.0"
+  },
+  "peerDependencies": {
+    "hono": ">=4.12.12 <5",
+    "zod": ">=4.0 <5"
+  }
+}

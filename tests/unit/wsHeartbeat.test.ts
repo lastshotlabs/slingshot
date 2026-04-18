@@ -1,0 +1,142 @@
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import type { WsState } from '@lastshotlabs/slingshot-core';
+import {
+  clearHeartbeatState,
+  deregisterSocket,
+  handlePong,
+  registerSocket,
+  startHeartbeat,
+  stopHeartbeat,
+} from '../../src/framework/ws/heartbeat';
+
+const ENDPOINT = '/ws';
+
+/** Create a minimal WsState for testing heartbeat functions. */
+function createWsState(): WsState {
+  return {
+    server: null,
+    transport: null,
+    instanceId: 'test-instance',
+    presenceEnabled: false,
+    roomRegistry: new Map(),
+    heartbeatSockets: new Map(),
+    heartbeatEndpointConfigs: new Map(),
+    heartbeatTimer: null,
+    socketUsers: new Map(),
+    roomPresence: new Map(),
+    socketRegistry: new Map(),
+    rateLimitState: new Map(),
+    sessionRegistry: new Map(),
+    lastEventIds: new Map(),
+  };
+}
+
+/** Minimal mock WebSocket. */
+function mockWs(id: string) {
+  const pings: number[] = [];
+  let closed: { code?: number; reason?: string } | null = null;
+  return {
+    data: { id, endpoint: ENDPOINT, rooms: new Set<string>() },
+    ping() {
+      pings.push(Date.now());
+    },
+    close(code?: number, reason?: string) {
+      closed = { code, reason };
+    },
+    get pings() {
+      return pings;
+    },
+    get closed() {
+      return closed;
+    },
+  } as any;
+}
+
+describe('wsHeartbeat', () => {
+  let state: WsState;
+
+  beforeEach(() => {
+    state = createWsState();
+  });
+
+  afterEach(() => {
+    clearHeartbeatState(state);
+  });
+
+  test('registerSocket and deregisterSocket track sockets', () => {
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+    // No error — just verifying it doesn't throw
+    deregisterSocket(state, 's1');
+    // Deregistering again is safe
+    deregisterSocket(state, 's1');
+  });
+
+  test('handlePong updates last pong timestamp', () => {
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+    handlePong(state, 's1');
+    // No error — just verifying it updates without throwing
+    deregisterSocket(state, 's1');
+  });
+
+  test('startHeartbeat pings registered sockets', async () => {
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+    handlePong(state, 's1'); // initialize pong so it's fresh
+
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 50, timeoutMs: 5000 } });
+
+    // Wait for one interval
+    await new Promise(r => setTimeout(r, 80));
+
+    expect(ws.pings.length).toBeGreaterThanOrEqual(1);
+    expect(ws.closed).toBeNull();
+  });
+
+  test('heartbeat closes stale sockets', async () => {
+    // Start heartbeat first so per-endpoint timeout config is available
+    // when registerSocket calculates timeoutAt
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 30, timeoutMs: 10 } });
+
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+    // Don't call handlePong — lastPong is Date.now() at register time
+
+    // Wait a bit longer than timeout + interval
+    await new Promise(r => setTimeout(r, 80));
+
+    expect(ws.closed).not.toBeNull();
+    expect(ws.closed!.code).toBe(1001);
+    expect(ws.closed!.reason).toBe('Heartbeat timeout');
+  });
+
+  test('stopHeartbeat clears the interval', async () => {
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+    handlePong(state, 's1');
+
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 30, timeoutMs: 5000 } });
+    stopHeartbeat(state);
+
+    const pingsBefore = ws.pings.length;
+    await new Promise(r => setTimeout(r, 80));
+
+    // No new pings after stop
+    expect(ws.pings.length).toBe(pingsBefore);
+  });
+
+  test('startHeartbeat is idempotent', () => {
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 50, timeoutMs: 5000 } });
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 50, timeoutMs: 5000 } }); // second call is no-op
+    stopHeartbeat(state);
+  });
+
+  test('clearHeartbeatState resets everything', () => {
+    const ws = mockWs('s1');
+    registerSocket(state, ws, 's1', ENDPOINT);
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 50, timeoutMs: 5000 } });
+    clearHeartbeatState(state);
+    // No errors, state is clean
+  });
+});

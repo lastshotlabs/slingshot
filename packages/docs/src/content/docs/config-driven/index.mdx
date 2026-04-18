@@ -1,0 +1,189 @@
+---
+title: Config-Driven Overview
+description: Entities and operations are JSON. Declare your domain as data — Slingshot generates routes, adapters, and infrastructure from those declarations.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The config-driven system is built on one idea: **your domain model is data, not code**. Entities, operations, permissions, events, and infrastructure are all plain JSON-shaped objects. The framework reads those objects and generates everything else — routes, backend adapters, validation schemas, and deployment configs.
+
+This is the path to low-code and no-code. Once your domain lives in a manifest, tools — visual editors, AI assistants, CLI scaffolders — can read, modify, and generate it without touching TypeScript. That's the direction.
+
+---
+
+## Everything is a JSON object
+
+An entity definition is a plain object. An operation config is a plain object with a `kind` field. The TypeScript builder functions (`defineEntity()`, `op.lookup()`) just stamp a discriminant onto the config and freeze it — what they return is pure JSON-serializable data:
+
+```json
+{
+  "name": "Message",
+  "namespace": "chat",
+  "fields": {
+    "id": { "type": "string", "primary": true, "default": "uuid" },
+    "roomId": { "type": "string" },
+    "body": { "type": "string" },
+    "status": { "type": "enum", "values": ["sent", "delivered", "read"], "default": "sent" },
+    "createdAt": { "type": "date", "default": "now" }
+  },
+  "indexes": [["roomId", "createdAt"]],
+  "operations": {
+    "byRoom": {
+      "kind": "lookup",
+      "fields": { "roomId": "param:roomId" },
+      "returns": "many"
+    },
+    "markDelivered": {
+      "kind": "transition",
+      "field": "status",
+      "from": "sent",
+      "to": "delivered",
+      "match": { "id": "param:id" }
+    },
+    "roomCount": {
+      "kind": "aggregate",
+      "groupBy": "roomId",
+      "compute": { "total": "count" }
+    },
+    "addTag": {
+      "kind": "arrayPush",
+      "field": "tags",
+      "value": "input:tag"
+    }
+  }
+}
+```
+
+From that object, the framework generates:
+
+- **Five backend adapters** — memory, SQLite, Postgres, MongoDB, Redis — all wired automatically
+- **HTTP routes** — one per operation, mounted via `createEntityPlugin()`
+- **Zod schemas** — input validation and OpenAPI specs
+- **Typed adapter methods** — `adapter.byRoom(...)`, `adapter.markDelivered(...)`, etc.
+
+No adapter files. No route files. No event wiring. The data is the source of truth.
+
+---
+
+## Define entities in JSON
+
+The `entities` section in `app.manifest.json` lets you define your entire domain — fields, indexes, operations, route policies — without any TypeScript. `slingshot start` reads the manifest and the whole app runs:
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "db": { "postgres": "${env:DATABASE_URL}" },
+  "plugins": [{ "plugin": "slingshot-auth" }],
+  "entities": {
+    "Message": {
+      "namespace": "chat",
+      "fields": {
+        "id": { "type": "string", "primary": true, "default": "uuid" },
+        "roomId": { "type": "string" },
+        "body": { "type": "string" },
+        "status": { "type": "enum", "values": ["sent", "delivered", "read"], "default": "sent" },
+        "createdAt": { "type": "date", "default": "now" }
+      },
+      "indexes": [{ "fields": ["roomId", "createdAt"], "direction": "desc" }],
+      "operations": {
+        "byRoom": {
+          "kind": "lookup",
+          "fields": { "roomId": "param:roomId" },
+          "returns": "many"
+        },
+        "markDelivered": {
+          "kind": "transition",
+          "field": "status",
+          "from": "sent",
+          "to": "delivered",
+          "match": { "id": "param:id" }
+        }
+      }
+    }
+  }
+}
+```
+
+A visual editor or AI tool can read this manifest, show the entity graph, add an operation, and write back valid JSON. No TypeScript, no compile step, no entry point file.
+
+---
+
+## TypeScript builders: typed JSON authoring
+
+The TypeScript builder functions (`defineEntity()`, `op.*`) produce the same JSON-shaped objects the manifest accepts. They add IDE autocomplete, compile-time validation, and type inference for adapter methods over the identical data structure:
+
+```typescript
+import { defineEntity, field, index } from '@lastshotlabs/slingshot';
+import { defineOperations, op } from '@lastshotlabs/slingshot';
+
+// This produces the same JSON object shown above — just with TypeScript types
+const Message = defineEntity('Message', {
+  namespace: 'chat',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    roomId: field.string(),
+    body: field.string(),
+    status: field.enum(['sent', 'delivered', 'read'] as const, { default: 'sent' }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  indexes: [index(['roomId', 'createdAt'], { direction: 'desc' })],
+});
+
+const MessageOps = defineOperations(Message, {
+  // op.lookup() returns: { kind: 'lookup', fields: {...}, returns: 'many' }
+  byRoom: op.lookup({ fields: { roomId: 'param:roomId' }, returns: 'many' }),
+  markDelivered: op.transition({
+    field: 'status',
+    from: 'sent',
+    to: 'delivered',
+    match: { id: 'param:id' },
+  }),
+  roomCount: op.aggregate({ groupBy: 'roomId', compute: { total: 'count' } }),
+  addTag: op.arrayPush({ field: 'tags', value: 'input:tag' }),
+});
+```
+
+The underlying data structure is identical to the JSON manifest form. Think of it as a strongly-typed JSON editor — use JSON in the manifest for zero-TypeScript apps, use the builders when you want compile-time guarantees or advanced IDE support.
+
+---
+
+## Infrastructure follows the same pattern
+
+Infrastructure config is the same: plain JSON-shaped objects frozen at definition time.
+
+```json title="Infra config as data"
+{
+  "stacks": ["main"],
+  "domain": "api",
+  "port": 3000,
+  "size": "medium",
+  "uses": ["db", "cache"],
+  "healthCheck": "/health"
+}
+```
+
+Today this is authored as TypeScript (`defineInfra()`, `definePlatform()`) with the same frozen-object approach. `slingshot deploy --stage prod` reads the config and generates Dockerfiles, cloud configs, CI workflows, and provisions real infrastructure. See [Config-Driven Infrastructure](/config-driven/infra/).
+
+---
+
+## The three config layers
+
+```
+entities + operations   → data model, routes, adapters, schemas
+                            (manifest entities section — today: TypeScript builders)
+
+slingshot.infra.ts        → how the app deploys (containers, scaling, domains)
+slingshot.platform.ts     → org infrastructure (databases, caches, secrets, registry)
+```
+
+All three layers are data. All three are consumed by the same CLI. All three are on a path toward full JSON manifest authoring.
+
+---
+
+## Where to go next
+
+- [Operations Reference](/config-driven/operations/) — every operation kind, its JSON config shape, and examples
+- [Config-Driven Walkthrough](/config-driven-walkthrough/) — entity → operations → plugin → app, using the TypeScript builders
+- [Config-Driven Infrastructure](/config-driven/infra/) — `definePlatform`, `defineInfra`, and the deploy pipeline
+- [Manifest vs Code](/manifest-vs-code/) — current manifest capabilities and the handlers file pattern
+- [slingshot-entity](/packages/slingshot-entity/) — `defineEntity`, `defineOperations`, `createEntityPlugin` API reference

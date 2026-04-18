@@ -1,0 +1,41 @@
+---
+title: Internals
+description: How Slingshot works under the hood — for developers who want to understand the runtime, extend the framework, or just satisfy their curiosity
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Go deeper than "drop in a plugin and ship." These pages cover how the pieces fit together — useful when you're building a plugin, writing a custom adapter, extending the manifest system, or curious how it all works.
+
+<CardGrid>
+  <LinkCard
+    title="The Plugin Lifecycle"
+    href="/internals/plugin-lifecycle/"
+    description="How plugins boot, in what order, and why the three phases exist. What happens between createServer() and your first request."
+  />
+  <LinkCard
+    title="Context and Registrar"
+    href="/internals/context-registrar/"
+    description="SlingshotContext, the WeakMap-backed per-app state container, and how CoreRegistrar lets packages share capabilities without importing each other."
+  />
+  <LinkCard
+    title="The Event Bus"
+    href="/internals/event-bus/"
+    description="InProcessAdapter internals, client-safe event filtering, the drain() contract for test isolation, and how SSE bridges to the bus."
+  />
+  <LinkCard
+    title="Reflect Symbol DI"
+    href="/internals/reflect-di/"
+    description="How cross-cutting concerns (entity registration, search sync, search client resolution) are injected via Reflect symbols on StoreInfra — without function arguments."
+  />
+  <LinkCard
+    title="Persistence Resolution"
+    href="/internals/persistence/"
+    description="RepoFactories, resolveRepo(), and how the framework dispatches to the right adapter at startup without any runtime branching in your business logic."
+  />
+  <LinkCard
+    title="The Manifest System"
+    href="/internals/manifest/"
+    description="How app.manifest.json becomes a running server: validation, path resolution, handler registry, plugin dispatch, and the programmatic API."
+  />
+</CardGrid>

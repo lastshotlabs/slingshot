@@ -1,0 +1,264 @@
+import { describe, expect, test } from 'bun:test';
+import { Hono } from 'hono';
+import { getCacheAdapter, getCacheAdapterOrNull } from '../src/cache';
+import { resolveContext } from '../src/context/contextAccess';
+import { attachContext, getContext, getContextOrNull } from '../src/context/contextStore';
+import { createCoreRegistrar } from '../src/coreRegistrar';
+import { getEmailTemplate, getEmailTemplates } from '../src/emailTemplates';
+import { getFingerprintBuilder, getRateLimitAdapter } from '../src/rateLimit';
+import { getRouteAuth, getRouteAuthOrNull } from '../src/routeAuth';
+import { getUserResolver, getUserResolverOrNull } from '../src/userResolver';
+
+function createMiddleware() {
+  return (async (_c: unknown, next: () => Promise<void>) => {
+    await next();
+  }) as never;
+}
+
+function createCacheAdapter(name = 'memory') {
+  return {
+    name,
+    async get(): Promise<string | null> {
+      return null;
+    },
+    async set(): Promise<void> {},
+    async del(): Promise<void> {},
+    async delPattern(): Promise<void> {},
+    isReady(): boolean {
+      return true;
+    },
+  };
+}
+
+function createContextFixture(overrides: Record<string, unknown> = {}) {
+  return {
+    config: {},
+    persistence: {},
+    routeAuth: null,
+    userResolver: null,
+    rateLimitAdapter: null,
+    fingerprintBuilder: null,
+    cacheAdapters: new Map(),
+    emailTemplates: new Map(),
+    pluginState: new Map(),
+    ...overrides,
+  };
+}
+
+describe('slingshot-core context accessors', () => {
+  test('createCoreRegistrar drains registered dependencies into isolated snapshots', async () => {
+    const { registrar, drain } = createCoreRegistrar();
+    const routeAuth = {
+      userAuth: createMiddleware(),
+      requireRole: () => createMiddleware(),
+      bearerAuth: createMiddleware(),
+    };
+    const userResolver = {
+      async resolveUserId(): Promise<string | null> {
+        return 'user-1';
+      },
+    };
+    const rateLimitAdapter = {
+      async trackAttempt(): Promise<boolean> {
+        return false;
+      },
+    };
+    const fingerprintBuilder = {
+      async buildFingerprint(): Promise<string> {
+        return 'abc123def456';
+      },
+    };
+    const cacheAdapter = createCacheAdapter();
+    const template = {
+      subject: 'Welcome',
+      html: '<p>Hello</p>',
+      text: 'Hello',
+    };
+
+    registrar.setRouteAuth(routeAuth);
+    registrar.setUserResolver(userResolver);
+    registrar.setRateLimitAdapter(rateLimitAdapter);
+    registrar.setFingerprintBuilder(fingerprintBuilder);
+    registrar.addCacheAdapter('memory', cacheAdapter);
+    registrar.addEmailTemplates({ welcome: template });
+
+    const snapshot = drain();
+    expect(snapshot.routeAuth).toBe(routeAuth);
+    expect(snapshot.userResolver).toBe(userResolver);
+    expect(snapshot.rateLimitAdapter).toBe(rateLimitAdapter);
+    expect(snapshot.fingerprintBuilder).toBe(fingerprintBuilder);
+    expect(snapshot.cacheAdapters.get('memory')).toBe(cacheAdapter);
+    expect(snapshot.emailTemplates.get('welcome')).toEqual(template);
+
+    snapshot.cacheAdapters.set('redis', createCacheAdapter('redis'));
+    snapshot.emailTemplates.set('other', { subject: 'Other', html: '<p>Other</p>' });
+
+    const nextSnapshot = drain();
+    expect(nextSnapshot.cacheAdapters.has('redis')).toBe(false);
+    expect(nextSnapshot.emailTemplates.has('other')).toBe(false);
+  });
+
+  test('createCoreRegistrar freezes its API shape and rejects late registration after drain', () => {
+    const { registrar, drain } = createCoreRegistrar();
+    const routeAuth = {
+      userAuth: createMiddleware(),
+      requireRole: () => createMiddleware(),
+      bearerAuth: createMiddleware(),
+    };
+    const cacheAdapter = createCacheAdapter();
+
+    expect(Object.isFrozen(registrar)).toBe(true);
+
+    registrar.setRouteAuth(routeAuth);
+    registrar.addCacheAdapter('memory', cacheAdapter);
+
+    const firstSnapshot = drain();
+    expect(firstSnapshot.routeAuth).toBe(routeAuth);
+    expect(firstSnapshot.cacheAdapters.get('memory')).toBe(cacheAdapter);
+
+    expect(() => registrar.setRouteAuth(routeAuth)).toThrow('CoreRegistrar is finalized');
+    expect(() => registrar.addCacheAdapter('redis', createCacheAdapter('redis'))).toThrow(
+      'CoreRegistrar is finalized',
+    );
+    expect(() =>
+      registrar.addEmailTemplates({
+        welcome: { subject: 'Welcome', html: '<p>Hello</p>' },
+      }),
+    ).toThrow('CoreRegistrar is finalized');
+
+    const secondSnapshot = drain();
+    expect(secondSnapshot.routeAuth).toBe(routeAuth);
+    expect(secondSnapshot.cacheAdapters.get('memory')).toBe(cacheAdapter);
+    expect(secondSnapshot.cacheAdapters.has('redis')).toBe(false);
+    expect(secondSnapshot.emailTemplates.has('welcome')).toBe(false);
+  });
+
+  test('attachContext exposes the context on the app and request middleware', async () => {
+    const app = new Hono();
+    const ctx = createContextFixture({ marker: 'ctx-1' });
+
+    expect(getContextOrNull(app)).toBeNull();
+    expect(() => getContext(app)).toThrow('SlingshotContext not found');
+
+    attachContext(app, ctx as never);
+
+    app.get('/ctx', c => {
+      const requestCtx = c.get('slingshotCtx' as never) as { marker: string };
+      return c.json({ marker: requestCtx.marker });
+    });
+
+    expect(getContext(app)).toBe(ctx);
+    expect(getContextOrNull(app)).toBe(ctx);
+    expect(resolveContext(app)).toBe(ctx);
+    expect(resolveContext(ctx as never)).toBe(ctx);
+
+    const response = await app.request('/ctx');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ marker: 'ctx-1' });
+  });
+
+  test('resolveContext rejects lookalike objects that were never branded as framework context', () => {
+    const lookalike = createContextFixture({ marker: 'not-really-context' });
+
+    expect(() => resolveContext(lookalike as never)).toThrow('SlingshotContext not found');
+  });
+
+  test('attachContext rejects attaching a different context to the same app', () => {
+    const app = new Hono();
+    const firstCtx = createContextFixture({ marker: 'ctx-1' });
+    const secondCtx = createContextFixture({ marker: 'ctx-2' });
+
+    attachContext(app, firstCtx as never);
+
+    expect(() => attachContext(app, secondCtx as never)).toThrow(
+      'SlingshotContext is already attached',
+    );
+    expect(getContext(app)).toBe(firstCtx);
+  });
+
+  test('attachContext is idempotent when the same context is attached twice', () => {
+    const app = new Hono();
+    const ctx = createContextFixture({ marker: 'ctx-1' });
+
+    attachContext(app, ctx as never);
+
+    expect(() => attachContext(app, ctx as never)).not.toThrow();
+    expect(getContext(app)).toBe(ctx);
+  });
+
+  test('route, user, cache, rate-limit, fingerprint, and email accessors read from context', async () => {
+    const routeAuth = {
+      userAuth: createMiddleware(),
+      requireRole: () => createMiddleware(),
+      bearerAuth: createMiddleware(),
+    };
+    const userResolver = {
+      async resolveUserId(): Promise<string | null> {
+        return 'user-42';
+      },
+    };
+    const rateLimitAdapter = {
+      async trackAttempt(): Promise<boolean> {
+        return true;
+      },
+    };
+    const fingerprintBuilder = {
+      async buildFingerprint(): Promise<string> {
+        return 'f00dbabe1234';
+      },
+    };
+    const cacheAdapter = createCacheAdapter();
+    const template = { subject: 'Reset', html: '<p>Reset</p>' };
+    const ctx = createContextFixture({
+      routeAuth,
+      userResolver,
+      rateLimitAdapter,
+      fingerprintBuilder,
+      cacheAdapters: new Map([['memory', cacheAdapter]]),
+      emailTemplates: new Map([['password-reset', template]]),
+    });
+    const app = new Hono();
+
+    attachContext(app, ctx as never);
+
+    expect(getRouteAuth(ctx as never)).toBe(routeAuth);
+    expect(getRouteAuthOrNull(ctx as never)).toBe(routeAuth);
+    expect(getUserResolver(ctx as never)).toBe(userResolver);
+    expect(getUserResolverOrNull(ctx as never)).toBe(userResolver);
+    expect(getCacheAdapter(ctx as never, 'memory')).toBe(cacheAdapter);
+    expect(getCacheAdapterOrNull(ctx as never, 'redis')).toBeNull();
+    expect(getRateLimitAdapter(ctx as never)).toBe(rateLimitAdapter);
+    expect(getFingerprintBuilder(ctx as never)).toBe(fingerprintBuilder);
+
+    const templates = getEmailTemplates(ctx as never);
+    expect(templates).toEqual({ 'password-reset': template });
+    templates['password-reset'] = { subject: 'Mutated', html: '<p>Mutated</p>' };
+    expect(getEmailTemplate(ctx as never, 'password-reset')).toEqual(template);
+    expect(getEmailTemplate(ctx as never, 'missing')).toBeNull();
+
+    await expect(userResolver.resolveUserId(new Request('http://example.com'))).resolves.toBe(
+      'user-42',
+    );
+    await expect(
+      rateLimitAdapter.trackAttempt('login:127.0.0.1', { windowMs: 1000, max: 1 }),
+    ).resolves.toBe(true);
+    await expect(
+      fingerprintBuilder.buildFingerprint(new Request('http://example.com')),
+    ).resolves.toBe('f00dbabe1234');
+  });
+
+  test('throwing accessors fail loudly when the dependency was never registered', () => {
+    const ctx = createContextFixture();
+    const app = new Hono();
+
+    attachContext(app, ctx as never);
+
+    expect(() => getRouteAuth(ctx as never)).toThrow('No RouteAuthRegistry registered');
+    expect(() => getUserResolver(ctx as never)).toThrow('No UserResolver registered');
+    expect(() => getCacheAdapter(ctx as never, 'memory')).toThrow(
+      'No CacheAdapter registered for store "memory"',
+    );
+    expect(() => getRateLimitAdapter(ctx as never)).toThrow('No RateLimitAdapter registered');
+    expect(() => getFingerprintBuilder(ctx as never)).toThrow('No FingerprintBuilder registered');
+  });
+});

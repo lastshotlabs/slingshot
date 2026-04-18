@@ -1,0 +1,47 @@
+{
+  "name": "@lastshotlabs/slingshot-infra",
+  "version": "0.1.0",
+  "description": "Infrastructure configuration, deploy planning, and platform tooling for Slingshot apps",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "import": "./dist/src/index.js",
+      "types": "./dist/src/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "bun run build",
+    "lint": "eslint src/ --cache"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0",
+    "yaml": "^2.7.0"
+  },
+  "peerDependencies": {
+    "zod": ">=4.0 <5",
+    "@aws-sdk/client-s3": ">=3.0",
+    "@aws-sdk/client-ssm": ">=3.0"
+  },
+  "peerDependenciesMeta": {
+    "@aws-sdk/client-s3": {
+      "optional": true
+    },
+    "@aws-sdk/client-ssm": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1014.0",
+    "@aws-sdk/client-ssm": "^3.1014.0"
+  }
+}

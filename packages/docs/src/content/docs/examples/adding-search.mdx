@@ -1,0 +1,243 @@
+---
+title: Adding Search
+description: Full-text search across your entities — memory, Elasticsearch, Meilisearch, Typesense
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+
+`slingshot-search` adds full-text entity search to any Slingshot app. It plugs into the entity model so your entities are indexed automatically as they're created and updated.
+
+## Install
+
+```bash
+bun add @lastshotlabs/slingshot-search
+```
+
+## Add the plugin
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "security": {
+        "signing": { "secret": "${secret:JWT_SECRET}" }
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user"], "defaultRole": "user" },
+            "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
+          }
+        },
+        {
+          "plugin": "slingshot-search",
+          "config": {
+            "adapter": "memory"
+          }
+        }
+      ]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+    import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
+
+    await createServer({
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user'], defaultRole: 'user' },
+          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+        }),
+        createSearchPlugin({
+          providers: {
+            default: { provider: 'db-native' },
+          },
+        }),
+      ],
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## Register entities for indexing
+
+Add a `search` block to any entity to make it indexable. Then declare a `search` operation to expose a search endpoint:
+
+```typescript
+import { defineEntity, defineOperations, field, op } from '@lastshotlabs/slingshot';
+
+export const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    tags: field.string({ optional: true }),
+    status: field.enum(['draft', 'published'] as const),
+  },
+  search: {
+    fields: {
+      title: { searchable: true, weight: 3 },
+      body: { searchable: true },
+      tags: { searchable: true },
+      status: { filterable: true },
+    },
+    syncMode: 'event-bus', // keep the index in sync via CRUD events
+  },
+  routes: {
+    defaults: { auth: 'none' },
+  },
+});
+
+// The search endpoint lives in operations, not in the entity routes block
+export const postOperations = defineOperations(Post, {
+  search: op.search({
+    fields: ['title', 'body'],
+    filter: { status: 'published' }, // only surface published posts
+    paginate: true,
+  }),
+});
+```
+
+The operation's `filter` config limits results to published posts. The search plugin keeps the index in sync as entities are created or updated via `syncMode: 'event-bus'`.
+
+## Query the search endpoint
+
+```bash
+# Basic search
+curl "http://localhost:3000/posts/search?q=slingshot"
+
+# With pagination
+curl "http://localhost:3000/posts/search?q=slingshot&page=2&limit=20"
+
+# Filtered (additional filters beyond the entity-level filter)
+curl "http://localhost:3000/posts/search?q=slingshot&authorId=abc123"
+```
+
+Response:
+
+```json
+{
+  "results": [{ "id": "...", "title": "Getting started with Slingshot", "score": 0.92 }],
+  "total": 14,
+  "page": 1,
+  "pages": 2
+}
+```
+
+## Global search across entity types
+
+Register a global search endpoint that queries across multiple entity types:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-search",
+      "config": {
+        "adapter": "memory",
+        "globalSearch": {
+          "enabled": true,
+          "path": "/search",
+          "types": ["post", "thread", "reply"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createSearchPlugin({
+      adapter: 'memory',
+      globalSearch: {
+        enabled: true,
+        path: '/search',
+        types: ['post', 'thread', 'reply'],
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+```bash
+curl "http://localhost:3000/search?q=authentication&types=post,thread"
+```
+
+## Production search backends
+
+Swap the adapter without changing any entity definitions or query code:
+
+<Tabs>
+  <TabItem label="Meilisearch">
+    ```bash
+    bun add meilisearch
+    ```
+
+    ```json
+    {
+      "plugin": "slingshot-search",
+      "config": {
+        "adapter": "meilisearch",
+        "url": "http://localhost:7700",
+        "apiKey": "${secret:MEILI_API_KEY}"
+      }
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Elasticsearch">
+    ```bash
+    bun add @elastic/elasticsearch
+    ```
+
+    ```json
+    {
+      "plugin": "slingshot-search",
+      "config": {
+        "adapter": "elasticsearch",
+        "url": "http://localhost:9200",
+        "apiKey": "${secret:ES_API_KEY}"
+      }
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Typesense">
+    ```bash
+    bun add typesense
+    ```
+
+    ```json
+    {
+      "plugin": "slingshot-search",
+      "config": {
+        "adapter": "typesense",
+        "nodes": [{ "host": "localhost", "port": 8108, "protocol": "http" }],
+        "apiKey": "${secret:TYPESENSE_API_KEY}"
+      }
+    }
+    ```
+
+  </TabItem>
+</Tabs>
+
+## Re-indexing
+
+If you add search to an existing app, trigger a one-time re-index:
+
+```bash
+slingshot reindex --entity post
+slingshot reindex --all
+```
+
+## Where to go next
+
+- [slingshot-search](/packages/slingshot-search/) — full adapter and config reference
+- [Config-Driven Domain](/examples/config-driven-domain/) — defining entities with search operations

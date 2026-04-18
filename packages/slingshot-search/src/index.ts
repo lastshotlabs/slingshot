@@ -1,0 +1,79 @@
+// --- Events (module augmentation — imported for side effects) ---
+import './events';
+
+// --- Plugin ---
+/** Build the search plugin that discovers searchable entities, mounts routes, and wires indexing. */
+export { createSearchPlugin } from './plugin';
+
+// --- Provider factories ---
+/** First-party provider factories for external and hosted search backends. */
+export { createTypesenseProvider } from './providers/typesense';
+export { createElasticsearchProvider } from './providers/elasticsearch';
+export { createAlgoliaProvider } from './providers/algolia';
+
+/** Client-safe event keys emitted by the search package during indexing and sync flows. */
+export { SEARCH_CLIENT_SAFE_KEYS } from './events';
+export type { SearchClientSafeKey } from './events';
+
+// --- Route constants ---
+/** Canonical route ids for the HTTP surface mounted by `createSearchPlugin()`. */
+export { SEARCH_ROUTES } from './routes/index';
+export type { SearchRoute } from './routes/index';
+
+// --- Config types ---
+/** Plugin config and admin-gating types for configuring the search runtime. */
+export type { SearchPluginConfig, SearchAdminGate } from './types/config';
+
+// --- Provider types ---
+/** Provider contracts and provider-specific config types used by the search runtime. */
+export type {
+  SearchProvider,
+  SearchIndexSettings,
+  SearchRankingConfig,
+  SearchRankingRule,
+  TypoToleranceConfig,
+  SynonymDefinition,
+  LanguageConfig,
+  SearchIndexTask,
+  SearchHealthResult,
+  SearchProviderBaseConfig,
+  MeilisearchProviderConfig,
+  TypesenseProviderConfig,
+  ElasticsearchProviderConfig,
+  AlgoliaProviderConfig,
+  DbNativeProviderConfig,
+  AnySearchProviderConfig,
+} from './types/provider';
+
+// --- Query types ---
+/** Query DSL types for search, suggest, filtering, faceting, and federated search requests. */
+export type {
+  SearchQuery,
+  SuggestQuery,
+  SearchFilter,
+  SearchFilterCondition,
+  SearchFilterAnd,
+  SearchFilterOr,
+  SearchFilterNot,
+  SearchFilterOp,
+  SearchFilterValue,
+  SearchFilterGeoRadius,
+  SearchFilterGeoBoundingBox,
+  SearchSort,
+  HighlightConfig,
+  SnippetConfig,
+  FacetOptions,
+  FederatedSearchQuery,
+  FederatedSearchEntry,
+} from './types/query';
+
+// --- Response types ---
+/** Response payload types returned by search, suggest, and federated search endpoints. */
+export type {
+  SearchResponse,
+  SearchHit,
+  FacetStats,
+  SuggestResponse,
+  FederatedSearchResponse,
+  FederatedSearchHit,
+} from './types/response';

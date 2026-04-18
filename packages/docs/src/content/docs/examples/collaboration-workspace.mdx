@@ -1,0 +1,258 @@
+---
+title: Collaboration Workspace
+description: Chat, community, polls, interactions, assets, emoji, embeds, GIFs, and deep links in one app composition
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+This example is the "show me what the product can do" composition. It combines the collaboration,
+media, and interaction packages into one workspace-style backend instead of presenting them as
+isolated plugins.
+
+Source-backed example app: `examples/collaboration-workspace/`
+
+## What this demonstrates
+
+- identity plus role-aware collaboration
+- forum-style community and room-based chat side by side
+- polls and interaction dispatch layered on top of content surfaces
+- uploaded assets, custom emoji, link unfurls, and GIF search
+- mobile and browser entry points through deep links and fallback redirects
+
+## Install
+
+```bash
+bun add @lastshotlabs/slingshot \
+        @lastshotlabs/slingshot-assets \
+        @lastshotlabs/slingshot-auth \
+        @lastshotlabs/slingshot-chat \
+        @lastshotlabs/slingshot-community \
+        @lastshotlabs/slingshot-deep-links \
+        @lastshotlabs/slingshot-embeds \
+        @lastshotlabs/slingshot-emoji \
+        @lastshotlabs/slingshot-gifs \
+        @lastshotlabs/slingshot-interactions \
+        @lastshotlabs/slingshot-notifications \
+        @lastshotlabs/slingshot-permissions \
+        @lastshotlabs/slingshot-polls
+```
+
+## Full setup
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "security": {
+        "signing": { "secret": "${secret:JWT_SECRET}" }
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": {
+              "roles": ["user", "moderator", "admin"],
+              "defaultRole": "user"
+            },
+            "db": {
+              "auth": "memory",
+              "sessions": "memory",
+              "oauthState": "memory"
+            }
+          }
+        },
+        {
+          "plugin": "slingshot-notifications",
+          "config": {
+            "dispatcher": { "enabled": false }
+          }
+        },
+        {
+          "plugin": "slingshot-permissions",
+          "config": {
+            "adapter": "memory"
+          }
+        },
+        {
+          "plugin": "slingshot-community",
+          "config": {
+            "authBridge": "auto",
+            "containerCreation": "user"
+          }
+        },
+        {
+          "plugin": "slingshot-chat",
+          "config": {
+            "storeType": "memory",
+            "permissions": {
+              "createRoom": ["user", "moderator", "admin"],
+              "sendMessage": ["user", "moderator", "admin"]
+            }
+          }
+        },
+        {
+          "plugin": "slingshot-polls",
+          "config": {}
+        },
+        {
+          "plugin": "slingshot-assets",
+          "config": {
+            "storage": { "adapter": "memory" },
+            "presignedUrls": true,
+            "allowedMimeTypes": ["image/png", "image/jpeg", "image/gif", "image/webp"],
+            "image": {
+              "allowedOrigins": ["localhost"]
+            }
+          }
+        },
+        {
+          "plugin": "slingshot-emoji",
+          "config": {}
+        },
+        {
+          "plugin": "slingshot-embeds",
+          "config": {}
+        },
+        {
+          "plugin": "slingshot-gifs",
+          "config": {
+            "provider": "tenor",
+            "apiKey": "${secret:TENOR_API_KEY}",
+            "rating": "pg"
+          }
+        },
+        {
+          "plugin": "slingshot-deep-links",
+          "config": {
+            "fallbackBaseUrl": "https://app.example.com",
+            "fallbackRedirects": {
+              "/join/*": "/workspace/:id",
+              "/share/*": "/thread/:id"
+            }
+          }
+        },
+        {
+          "plugin": "slingshot-interactions",
+          "config": {
+            "handlers": {
+              "polls:vote:": { "kind": "route", "target": "/internal/interactions/poll-vote" },
+              "chat:pin:": { "kind": "queue", "target": "jobs:chat.pin", "fireAndForget": true }
+            }
+          }
+        }
+      ]
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAssetsPlugin } from '@lastshotlabs/slingshot-assets';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+    import { createChatPlugin } from '@lastshotlabs/slingshot-chat';
+    import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+    import { createDeepLinksPlugin } from '@lastshotlabs/slingshot-deep-links';
+    import { createEmbedsPlugin } from '@lastshotlabs/slingshot-embeds';
+    import { createEmojiPlugin } from '@lastshotlabs/slingshot-emoji';
+    import { createGifsPlugin } from '@lastshotlabs/slingshot-gifs';
+    import { createInteractionsPlugin } from '@lastshotlabs/slingshot-interactions';
+    import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
+    import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+    import { createPollsPlugin } from '@lastshotlabs/slingshot-polls';
+
+    await createServer({
+      port: 3000,
+      security: { signing: { secret: process.env.JWT_SECRET! } },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user', 'moderator', 'admin'], defaultRole: 'user' },
+          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+        }),
+        createNotificationsPlugin({
+          dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+        }),
+        createPermissionsPlugin(),
+        createCommunityPlugin({ authBridge: 'auto', containerCreation: 'user' }),
+        createChatPlugin({
+          storeType: 'memory',
+          permissions: {
+            createRoom: ['user', 'moderator', 'admin'],
+            sendMessage: ['user', 'moderator', 'admin'],
+          },
+        }),
+        createPollsPlugin(),
+        createAssetsPlugin({
+          storage: { adapter: 'memory' },
+          presignedUrls: true,
+          allowedMimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+          image: { allowedOrigins: ['localhost'] },
+        }),
+        createEmojiPlugin({}),
+        createEmbedsPlugin({}),
+        createGifsPlugin({
+          provider: 'tenor',
+          apiKey: process.env.TENOR_API_KEY!,
+          rating: 'pg',
+        }),
+        createDeepLinksPlugin({
+          fallbackBaseUrl: 'https://app.example.com',
+          fallbackRedirects: {
+            '/join/*': '/workspace/:id',
+            '/share/*': '/thread/:id',
+          },
+        }),
+        createInteractionsPlugin({
+          handlers: {
+            'polls:vote:': { kind: 'route', target: '/internal/interactions/poll-vote' },
+            'chat:pin:': { kind: 'queue', target: 'jobs:chat.pin', fireAndForget: true },
+          },
+        }),
+      ],
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## What you get
+
+| Capability    | Surface                                                                 |
+| ------------- | ----------------------------------------------------------------------- |
+| Community     | `/community/*` for containers, threads, replies, moderation, reports    |
+| Chat          | `/chat/*` for rooms, messages, membership, pins, receipts               |
+| Notifications | `/notifications/sse` for in-app realtime delivery                       |
+| Polls         | `/polls/*` for attached multiple-choice polls                           |
+| Assets        | `/assets/*` for uploaded files and metadata                             |
+| Emoji         | `/emoji/*` for custom emoji records tied to uploaded assets             |
+| Embeds        | `/embeds/unfurl` for server-side link previews                          |
+| GIFs          | `/gifs/trending` and `/gifs/search` for composer media search           |
+| Deep links    | `/.well-known/*` plus fallback browser redirects                        |
+| Interactions  | `/interactions/dispatch` for buttons, menus, and custom action payloads |
+
+## How the pieces fit together
+
+- `slingshot-auth` establishes the user identity.
+- `slingshot-permissions` publishes shared authorization state for chat, emoji, and other packages.
+- `authBridge: "auto"` on the community plugin adapts auth context into `communityPrincipal` so
+  community routes stay decoupled from auth internals.
+- `slingshot-notifications` gives both chat and community a delivery surface for unread updates,
+  replies, mentions, and invitations.
+- `slingshot-assets` is the byte-storage foundation for uploads, while `slingshot-emoji`,
+  `slingshot-embeds`, and `slingshot-gifs` build media experiences on top.
+- `slingshot-polls` and `slingshot-interactions` are the extension points that let content surfaces feel
+  interactive instead of static.
+
+<Aside type="tip">
+  This is the right example to hand someone who asks, "What can Slingshot actually do out of the
+  box?" It demonstrates product capability breadth better than an auth-only starter.
+</Aside>
+
+## Where to go next
+
+- [Forum App](/examples/forum-app/) for the smaller community-only composition
+- [Auth Setup](/examples/with-auth/) for the identity baseline
+- [slingshot-chat](/packages/slingshot-chat/) for chat-specific config and route behavior
+- [slingshot-assets](/packages/slingshot-assets/) for storage, presigned URLs, and image serving

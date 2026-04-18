@@ -1,0 +1,265 @@
+---
+title: Manifest vs Code
+description: Two paths to the same server — when to use each and how to mix them
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot gives you two ways to configure your server. They produce identical runtime behavior. The choice is about how you prefer to work.
+
+## The manifest
+
+`app.manifest.json` is a JSON configuration file. Declare your plugins, database, security, port, and infrastructure. Run `slingshot start`. No TypeScript entry point.
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "port": 3000,
+  "db": {
+    "postgres": "${env:DATABASE_URL}",
+    "redis": "${env:REDIS_URL}"
+  },
+  "security": {
+    "signing": { "secret": "${env:SIGNING_SECRET}" },
+    "cors": ["https://myapp.com"]
+  },
+  "plugins": [
+    {
+      "plugin": "slingshot-auth",
+      "config": { "auth": { "roles": ["user", "admin"], "defaultRole": "user" } }
+    },
+    { "plugin": "slingshot-community" },
+    { "plugin": "slingshot-organizations" }
+  ],
+  "logging": {
+    "enabled": true,
+    "onLog": { "handler": "onLog" }
+  }
+}
+```
+
+```bash
+slingshot start
+```
+
+Built-in manifest conveniences live on top of the same runtime config surface. For example, `createServerFromManifest()` can auto-register the optional BullMQ event bus when you set `"eventBus": "bullmq"`, while custom buses still go through the handler registry.
+
+Manifest startup also resolves built-in strategy strings and handler refs before plugin factories run. By the time a first-party plugin is instantiated, fields such as admin gates, search tenant resolution, SSR runtime adapters, and webhook handlers have already been converted into their runtime function or object forms.
+
+## Code
+
+`createServer()` is the TypeScript equivalent. Every option the manifest supports is available as a typed config object.
+
+```typescript title="src/index.ts"
+import { createServer } from '@lastshotlabs/slingshot';
+import type { RequestLogEntry } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
+
+declare function sendToDatadog(entry: RequestLogEntry): Promise<void>;
+
+await createServer({
+  port: 3000,
+  db: {
+    redis: true,
+    auth: 'memory',
+    sessions: 'memory',
+    oauthState: 'memory',
+  },
+  security: {
+    signing: { secret: process.env.SIGNING_SECRET! },
+    cors: ['https://myapp.com'],
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+    createCommunityPlugin({
+      containerCreation: 'admin',
+      mountPath: '/community',
+    }),
+    createOrganizationsPlugin({
+      mountPath: '/orgs',
+    }),
+  ],
+  logging: {
+    enabled: true,
+    onLog: entry => sendToDatadog(entry),
+  },
+});
+```
+
+## Handlers file
+
+The manifest is pure data — it can't contain functions. When you need a function (a tenant resolver, a log handler, a WebSocket upgrade handler), you export it from `slingshot.handlers.ts`:
+
+```typescript title="slingshot.handlers.ts"
+import type { Context } from 'hono';
+import type { RequestLogEntry } from '@lastshotlabs/slingshot';
+
+declare const db: {
+  tenants: {
+    findBySlug(slug: string): Promise<{ id: string } | null>;
+  };
+};
+declare function sendToDatadog(entry: RequestLogEntry): Promise<void>;
+
+// Referenced as { "handler": "resolveTenant" } in the manifest
+export async function resolveTenant(c: Context): Promise<string | undefined> {
+  const host = c.req.header('host') ?? '';
+  const subdomain = host.split('.')[0];
+  if (subdomain && subdomain !== 'www') {
+    const tenant = await db.tenants.findBySlug(subdomain);
+    return tenant?.id;
+  }
+  return 'default';
+}
+
+// Referenced as { "handler": "onLog" }
+export async function onLog(entry: RequestLogEntry) {
+  await sendToDatadog(entry);
+}
+```
+
+The manifest references them by name. The framework loads the handlers file and calls the right export at runtime.
+
+The same registry mechanism also handles custom event buses, custom secret providers, and custom plugins when you need to go beyond the built-in manifest literals.
+
+Manifest validation is not only schema-level. Slingshot also performs cross-field checks for admin page configs, including bad page references, invalid lookup operation names, and template fields that do not exist on the referenced entity, so these mistakes fail during startup instead of surfacing as broken UI routes later.
+
+## Choosing
+
+|                               | Manifest      | Code                 |
+| ----------------------------- | ------------- | -------------------- |
+| Zero boilerplate              | ✓             | —                    |
+| Config validated before boot  | ✓             | type-checked         |
+| Works with `slingshot start`  | ✓             | —                    |
+| Works with `slingshot deploy` | ✓             | —                    |
+| Custom plugin composition     | via registry  | natural              |
+| TypeScript type inference     | JSON schema   | full                 |
+| Function logic in-file        | handlers file | inline               |
+| Dynamic configuration         | —             | natural              |
+| Best for                      | most apps     | advanced composition |
+
+## Mixing them
+
+You can build on top of the manifest programmatically:
+
+```typescript
+import { readFileSync } from 'node:fs';
+import {
+  createManifestHandlerRegistry,
+  createServer,
+  manifestToAppConfig,
+  validateAppManifest,
+} from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
+
+declare function createMyCustomPlugin(): SlingshotPlugin;
+
+const raw = JSON.parse(readFileSync('./app.manifest.json', 'utf8'));
+const result = validateAppManifest(raw);
+if (!result.success) {
+  throw new Error(result.errors.join('\n'));
+}
+
+const registry = createManifestHandlerRegistry();
+registry.registerPlugin('slingshot-auth', config =>
+  createAuthPlugin(config as Parameters<typeof createAuthPlugin>[0]),
+);
+registry.registerPlugin('slingshot-community', config =>
+  createCommunityPlugin(config as Parameters<typeof createCommunityPlugin>[0]),
+);
+registry.registerPlugin('slingshot-organizations', config =>
+  createOrganizationsPlugin(config as Parameters<typeof createOrganizationsPlugin>[0]),
+);
+
+const config = manifestToAppConfig(result.manifest, registry);
+
+// Modify config before starting
+config.plugins = [...(config.plugins ?? []), createMyCustomPlugin()];
+
+await createServer(config);
+```
+
+Or add custom plugins via the registry without touching the code path:
+
+```typescript
+import { createManifestHandlerRegistry, createServerFromManifest } from '@lastshotlabs/slingshot';
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+declare function createAnalyticsPlugin(config?: Record<string, unknown>): SlingshotPlugin;
+
+const registry = createManifestHandlerRegistry();
+registry.registerPlugin('analytics', config => createAnalyticsPlugin(config));
+
+await createServerFromManifest('./app.manifest.json', registry);
+```
+
+## Environment variables
+
+The manifest supports `${env:NAME}` placeholder syntax for environment variables:
+
+```json
+{
+  "db": { "postgres": "${env:DATABASE_URL}" },
+  "security": { "signing": { "secret": "${env:SIGNING_SECRET}" } }
+}
+```
+
+Any string value containing `${env:NAME}` (or the bare form `${NAME}` with an all-uppercase name) is replaced with `process.env.NAME` before the manifest is validated.
+
+Lowercase placeholders like `${importMetaDir}` are reserved by the framework and are not substituted. If a referenced variable is not set in the environment, Slingshot throws a clear error at startup — before the server ever serves a request.
+
+## Entity manifest features
+
+When using `slingshot-entity` as a manifest plugin, entity definitions can declare `autoGrant` and `activityLog` to eliminate event handler boilerplate entirely.
+
+**`autoGrant`** — on entity creation, automatically grant a role to the creator:
+
+```json
+"Document": {
+  "fields": { ... },
+  "autoGrant": {
+    "on": "created",
+    "role": "document:owner",
+    "subjectField": "createdBy"
+  }
+}
+```
+
+The framework derives `resourceType` from `routes.permissions.resourceType`, `resourceId` from `payload.id`, and `tenantId` from `payload.orgId`. If any required field is missing at runtime, the grant is skipped with a warning.
+
+**`activityLog`** — write activity records to a sibling entity when events fire:
+
+```json
+"Document": {
+  "fields": { ... },
+  "activityLog": {
+    "entity": "Activity",
+    "resourceType": "content:document",
+    "events": {
+      "created": { "action": "created", "meta": ["title", "typeId"] },
+      "updated": { "action": "updated", "meta": ["title"] },
+      "deleted": { "action": "deleted" }
+    }
+  }
+}
+```
+
+Actor is resolved from payload fields in order: `createdBy` → `updatedBy` → `actorId` → `"system"`. When `meta` is omitted, the activity record's meta is `null`.
+
+Both features work only in manifest mode (`slingshot-entity` plugin with a `manifest` config). When `slingshot-permissions` is declared before `slingshot-entity`, the entity plugin automatically reads permissions from the shared plugin state — no explicit `permissions` config required.
+
+Entity-based plugins such as `slingshot-community`, `slingshot-game-engine`, and `slingshot-polls` build on this same config-driven foundation. Each registers its entities and operations through the manifest dispatch table without requiring a TypeScript entry point.
+
+## Where to go next
+
+- [Quick Start](/quick-start/) — see both paths side by side
+- [The Manifest System](/internals/manifest/) — how manifest-to-server works internally
+- [Secrets](/internals/secrets/) — secrets provider configuration

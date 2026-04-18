@@ -1,0 +1,198 @@
+---
+title: Event Bus
+description: Emitting, subscribing, and forwarding cross-package events - with types and client-safe filtering
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The event bus is how plugins talk to each other without importing each other. Auth emits `auth:user.created`. Mail subscribes and sends the welcome email. No auth-to-mail dependency, no circular imports, no tight coupling.
+
+That is the point. When auth deletes a user, it should not need to know that mail exists, or notes exist, or anything else. It fires the event. Every subscriber gets it and does its own thing.
+
+## Accessing the bus
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { getContext } from '@lastshotlabs/slingshot-core';
+
+const plugin: SlingshotPlugin = {
+  name: 'notes',
+  setupPost({ app, bus }) {
+    const ctx = getContext(app);
+    void ctx;
+    bus.on('auth:user.created', () => {});
+  },
+};
+
+void plugin;
+```
+
+## Emitting events
+
+```typescript
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+
+const bus = new InProcessAdapter();
+
+bus.emit('auth:user.created', {
+  userId: 'user-123',
+  email: 'user@example.com',
+  tenantId: null,
+});
+
+bus.emit('app:ready', { plugins: ['slingshot-auth', 'notes'] });
+```
+
+## Subscribing to events
+
+Always subscribe in `setupPost` - that is after all plugins have finished `setupRoutes`, which means all publishers are wired before any subscriber tries to listen.
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+async function sendWelcomeEmail(email: string): Promise<void> {
+  void email;
+}
+
+async function deleteAllUserData(userId: string): Promise<void> {
+  void userId;
+}
+
+const plugin: SlingshotPlugin = {
+  name: 'notes',
+  setupPost({ bus }) {
+    bus.on('auth:user.created', async ({ email }) => {
+      if (email) {
+        await sendWelcomeEmail(email);
+      }
+    });
+
+    bus.on('auth:user.deleted', async ({ userId }) => {
+      await deleteAllUserData(userId);
+    });
+  },
+};
+
+void plugin;
+```
+
+<Aside type="caution">
+  Do not subscribe in `setupMiddleware` or `setupRoutes`. Some publishers, especially cross-plugin
+  ones, register their events in `setupPost`. If you subscribe before they publish, you may miss
+  events during boot.
+</Aside>
+
+## Extending the event map
+
+Add your package's events to the shared type map via module augmentation:
+
+```typescript title="src/events.ts"
+interface Note {
+  id: string;
+  title: string;
+}
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'note.created': { userId: string; noteId: string; title: string };
+    'note.updated': { userId: string; noteId: string; changes: Partial<Note> };
+    'note.deleted': { userId: string; noteId: string };
+  }
+}
+```
+
+After this, `bus.emit('note.created', ...)` is fully typed and `bus.on('note.created', payload => ...)` gets the correct payload type.
+
+## Client-safe events and SSE
+
+The SSE endpoint only forwards events you have explicitly flagged as client-safe. This is not opt-out - it is opt-in. Internal events such as auth tokens, security signals, and delivery internals never reach browser clients regardless of what you register.
+
+Register your safe events in `setupPost`:
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+const plugin: SlingshotPlugin = {
+  name: 'notes',
+  setupPost({ bus }) {
+    bus.registerClientSafeEvents(['note.created', 'note.updated', 'note.deleted']);
+  },
+};
+
+void plugin;
+```
+
+Forbidden namespaces are never forwarded regardless of registration:
+
+| Namespace              | Reason                            |
+| ---------------------- | --------------------------------- |
+| `security.*`           | Internal security events          |
+| `auth:*`               | Auth lifecycle with PII or tokens |
+| `community:delivery.*` | Internal delivery signals         |
+| `push:*`               | Push delivery internals           |
+| `app:*`                | Framework lifecycle               |
+
+## Draining events in tests
+
+Event handlers run asynchronously - `emit` fires and returns immediately. In tests, that means your assertions can run before the handlers finish. `bus.drain()` waits for all pending handlers to settle before you assert.
+
+```typescript
+import { expect, test } from 'bun:test';
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+
+test('drains async listeners before asserting', async () => {
+  const bus = new InProcessAdapter();
+  const sentEmails: string[] = [];
+
+  bus.on('auth:user.created', async ({ email }) => {
+    if (email) {
+      sentEmails.push(email);
+    }
+  });
+
+  bus.emit('auth:user.created', {
+    userId: 'user-1',
+    email: 'test@example.com',
+    tenantId: null,
+  });
+
+  await bus.drain();
+
+  expect(sentEmails).toEqual(['test@example.com']);
+});
+```
+
+## Built-in events
+
+These come from the core event map - no augmentation needed:
+
+| Event                          | Payload                            |
+| ------------------------------ | ---------------------------------- |
+| `auth:user.created`            | `{ userId, email?, tenantId? }`    |
+| `auth:user.deleted`            | `{ userId, tenantId? }`            |
+| `auth:login`                   | `{ userId, sessionId, tenantId? }` |
+| `auth:logout`                  | `{ userId, sessionId }`            |
+| `auth:mfa.enabled`             | `{ userId, method }`               |
+| `auth:mfa.disabled`            | `{ userId, method? }`              |
+| `security.rate_limit.exceeded` | `{ key?, ip?, meta? }`             |
+| `app:ready`                    | `{ plugins }`                      |
+| `app:shutdown`                 | `{ signal }`                       |
+
+## Multi-instance delivery
+
+The default `InProcessAdapter` delivers events only within the current process. For multi-instance deployments, switch to a shared event bus so events cross instances:
+
+```json title="app.manifest.json"
+{
+  "eventBus": "bullmq",
+  "secrets": { "provider": "env" }
+}
+```
+
+BullMQ is the built-in manifest option. Other brokers still work through the registry-backed custom event-bus path. See [Custom Event Bus](/examples/custom-event-bus/) for the full configuration.
+
+## See also
+
+- [Internals: Event Bus](/internals/event-bus/) - `InProcessAdapter`, transport contract, and `SlingshotEventMap` extension
+- [Custom Event Bus](/examples/custom-event-bus/) - BullMQ plus registry-backed custom buses
+- [Realtime with SSE](/examples/realtime-sse/) - forwarding client-safe events to browsers

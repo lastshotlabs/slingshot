@@ -1,0 +1,166 @@
+---
+title: Content Platform
+description: Search, assets, SSR, SSG, and edge-ready delivery for a documentation, publishing, or media application
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+This example is for teams building a content-heavy product surface: editorial pages, docs, media
+assets, search, and hybrid SSR or SSG delivery. It shows how Slingshot's content, rendering, and
+runtime packages fit together instead of documenting them as separate islands.
+
+Source-backed example app: `examples/content-platform/`
+
+## What this demonstrates
+
+- content and community features backed by the same platform
+- uploaded assets plus image-aware delivery
+- search over content records
+- SSR for request-time pages and SSG for pre-rendered routes
+- worker-friendly hosting with KV-backed ISR
+
+## Install
+
+```bash
+bun add @lastshotlabs/slingshot \
+        @lastshotlabs/slingshot-assets \
+        @lastshotlabs/slingshot-auth \
+        @lastshotlabs/slingshot-community \
+        @lastshotlabs/slingshot-deep-links \
+        @lastshotlabs/slingshot-notifications \
+        @lastshotlabs/slingshot-permissions \
+        @lastshotlabs/slingshot-search \
+        @lastshotlabs/slingshot-ssg \
+        @lastshotlabs/slingshot-ssr \
+        @lastshotlabs/runtime-edge
+```
+
+## App composition
+
+<Tabs>
+  <TabItem label="Server">
+    ```typescript title="src/index.ts"
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAssetsPlugin } from '@lastshotlabs/slingshot-assets';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+    import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+    import { createDeepLinksPlugin } from '@lastshotlabs/slingshot-deep-links';
+    import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
+    import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+    import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
+    import { createSsrPlugin, type SlingshotSsrRenderer } from '@lastshotlabs/slingshot-ssr';
+    import { edgeRuntime } from '@lastshotlabs/runtime-edge';
+    import { createKvIsrCache, type KvNamespace } from '@lastshotlabs/runtime-edge/kv';
+
+    declare const renderer: SlingshotSsrRenderer;
+    declare const ISR_CACHE: KvNamespace;
+
+    await createServer({
+      runtime: edgeRuntime({
+        fileStore: async (_path: string) => null,
+      }),
+      port: 3000,
+      security: { signing: { secret: process.env.JWT_SECRET! } },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
+          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+        }),
+        createNotificationsPlugin({
+          dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+        }),
+        createPermissionsPlugin(),
+        createCommunityPlugin({ containerCreation: 'admin' }),
+        createAssetsPlugin({
+          storage: { adapter: 'memory' },
+          presignedUrls: true,
+          image: { allowedOrigins: ['assets.example.com'] },
+        }),
+        createSearchPlugin({
+          providers: {
+            default: { provider: 'db-native' },
+          },
+        }),
+        createDeepLinksPlugin({
+          fallbackBaseUrl: 'https://content.example.com',
+          fallbackRedirects: {
+            '/open/*': '/articles/:id',
+          },
+        }),
+        createSsrPlugin({
+          renderer,
+          serverRoutesDir: `${import.meta.dir}/server/routes`,
+          assetsManifest: `${import.meta.dir}/dist/client/.vite/manifest.json`,
+          staticDir: `${import.meta.dir}/dist/static`,
+          draftModeSecret: process.env.DRAFT_MODE_SECRET!,
+          isr: { adapter: createKvIsrCache(ISR_CACHE) },
+        }),
+      ],
+    });
+    ```
+
+  </TabItem>
+  <TabItem label="Static Build">
+    ```typescript title="scripts/build-static.ts"
+    import { collectSsgRoutes, renderSsgPages } from '@lastshotlabs/slingshot-ssg';
+    import type { SlingshotSsrRenderer } from '@lastshotlabs/slingshot-ssr';
+
+    declare const renderer: SlingshotSsrRenderer;
+
+    const config = {
+      serverRoutesDir: `${import.meta.dir}/../src/server/routes`,
+      assetsManifest: `${import.meta.dir}/../dist/client/.vite/manifest.json`,
+      outDir: `${import.meta.dir}/../dist/static`,
+      concurrency: 4,
+    };
+
+    const paths = await collectSsgRoutes(config);
+    await renderSsgPages(paths, renderer, config);
+    ```
+
+  </TabItem>
+</Tabs>
+
+## Why this composition matters
+
+| Capability                                                 | Package path              |
+| ---------------------------------------------------------- | ------------------------- |
+| Authenticated editorial and admin surface                  | `slingshot-auth`          |
+| Permission evaluation for community workflows              | `slingshot-permissions`   |
+| Notification runtime for community activity                | `slingshot-notifications` |
+| Community discussion alongside content                     | `slingshot-community`     |
+| Asset metadata, uploads, and image-aware serving           | `slingshot-assets`        |
+| Search over content records                                | `slingshot-search`        |
+| Request-time page rendering, metadata, draft mode, and ISR | `slingshot-ssr`           |
+| Build-time pre-rendering for stable routes                 | `slingshot-ssg`           |
+| Mobile and browser entry routing                           | `slingshot-deep-links`    |
+| Worker-host deployment and KV ISR                          | `runtime-edge`            |
+
+## Delivery model
+
+- Use SSR for pages that depend on auth state, draft mode, or frequently changing data.
+- Use SSG for routes that can be generated ahead of time from stable content.
+- Use ISR when a page is mostly static but still needs cheap background revalidation.
+- Use `runtime-edge` when the deployment target is a worker host and you want bundled file reads
+  plus shared ISR invalidation.
+
+## What users see
+
+- editorial pages rendered through `slingshot-ssr`
+- pre-generated landing pages and docs pages emitted by `slingshot-ssg`
+- uploads and media served through `slingshot-assets`
+- search endpoints powering site-wide discovery
+- optional community discussion layered into article or docs pages
+
+<Aside type="tip">
+  This is the example to point product teams at when they ask whether Slingshot is only an API
+  backend. It demonstrates that search, assets, rendering, and delivery are first-class platform
+  concerns too.
+</Aside>
+
+## Where to go next
+
+- [SaaS Foundations](/examples/saas-foundations/) for the tenant and permissions story
+- [runtime-edge package](/packages/runtime-edge/) for worker-host constraints
+- [slingshot-ssr](/packages/slingshot-ssr/) for route loaders, draft mode, and ISR details
+- [slingshot-ssg](/packages/slingshot-ssg/) for static collection and rendering behavior

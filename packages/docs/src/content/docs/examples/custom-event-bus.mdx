@@ -1,0 +1,198 @@
+---
+title: Custom Event Bus
+description: Replace the in-process event bus with BullMQ or a custom implementation for multi-instance deployments
+---
+
+The default event bus runs in-process - fast and zero-configuration for single-instance apps. Multi-instance deployments require events to cross process boundaries.
+
+## When you need this
+
+Use a custom event bus when:
+
+- You are running multiple instances of your Slingshot app behind a load balancer
+- You need SSE clients on one instance to receive events emitted on another
+- You want durable event delivery with a message queue
+- You are building a distributed system that shares events across services
+
+For single-instance apps, the in-process bus is the right choice.
+
+## BullMQ event bus
+
+For durable, at-least-once delivery with retries and dead-letter queues:
+
+```bash
+bun add @lastshotlabs/slingshot-bullmq bullmq ioredis
+```
+
+### Via manifest
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "eventBus": "bullmq",
+  "secrets": { "provider": "env" }
+}
+```
+
+Built-in BullMQ manifest support is available through `createServerFromManifest()`.
+It resolves Redis credentials from the configured secrets provider and auto-loads
+`@lastshotlabs/slingshot-bullmq` only when the manifest selects `bullmq`.
+
+Use the object form to customize retry counts or queue prefixes without writing
+your own registry wiring:
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "eventBus": {
+    "type": "bullmq",
+    "config": {
+      "prefix": "myapp:events",
+      "attempts": 5
+    }
+  },
+  "secrets": { "provider": "env" }
+}
+```
+
+BullMQ-backed events survive process restarts and can be retried on failure. Use
+this for anything where losing an event is unacceptable, such as payment
+webhooks, notification delivery, or audit logging.
+
+### Via registry
+
+If you need full control over the BullMQ adapter, register your own factory:
+
+```typescript title="src/index.ts"
+import { createManifestHandlerRegistry, createServerFromManifest } from '@lastshotlabs/slingshot';
+import { createBullMQAdapter } from '@lastshotlabs/slingshot-bullmq';
+
+const registry = createManifestHandlerRegistry();
+registry.registerEventBus('bullmq', () =>
+  createBullMQAdapter({
+    connection: { host: process.env.REDIS_HOST ?? '127.0.0.1', port: 6379 },
+    prefix: 'myapp:events',
+    attempts: 5,
+  }),
+);
+
+await createServerFromManifest('./app.manifest.json', registry);
+```
+
+## Redis event bus
+
+```bash
+bun add ioredis
+```
+
+### Via manifest
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "eventBus": {
+    "type": "redis",
+    "config": {
+      "channel": "slingshot:events"
+    }
+  },
+  "secrets": { "provider": "env" }
+}
+```
+
+Redis pub/sub is not a built-in manifest literal. Register a custom Redis bus
+implementation under a name like `"redis"` and select it with the object form
+shown above.
+
+### Via registry
+
+Register a custom Redis bus implementation:
+
+```typescript title="src/index.ts"
+import { createManifestHandlerRegistry, createServerFromManifest } from '@lastshotlabs/slingshot';
+import { createRedisEventBus } from './eventBus.js';
+
+const registry = createManifestHandlerRegistry();
+
+registry.registerEventBus('redis', () => {
+  return createRedisEventBus({
+    url: process.env.REDIS_URL ?? 'redis://127.0.0.1:6379',
+    channel: 'slingshot:events',
+  });
+});
+
+await createServerFromManifest('./app.manifest.json', registry);
+```
+
+```typescript title="src/eventBus.ts"
+import { Redis } from 'ioredis';
+import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+
+export function createRedisEventBus({
+  url,
+  channel,
+}: {
+  url: string;
+  channel: string;
+}): SlingshotEventBus {
+  const pub = new Redis(url);
+  const sub = new Redis(url);
+  const handlers = new Map<string, Set<(payload: unknown) => void>>();
+  const clientSafeEvents = new Set<string>();
+
+  sub.subscribe(channel);
+  sub.on('message', (_ch, msg) => {
+    const { key, payload } = JSON.parse(msg) as { key: string; payload: unknown };
+    handlers.get(key)?.forEach(handler => handler(payload));
+  });
+
+  return {
+    clientSafeKeys: clientSafeEvents,
+    emit(key: string, payload: unknown) {
+      pub.publish(channel, JSON.stringify({ key, payload }));
+    },
+    on(key: string, handler: (payload: unknown) => void | Promise<void>) {
+      if (!handlers.has(key)) handlers.set(key, new Set());
+      handlers.get(key)?.add(handler as (payload: unknown) => void);
+    },
+    off(key: string, handler: (payload: unknown) => void | Promise<void>) {
+      handlers.get(key)?.delete(handler as (payload: unknown) => void);
+    },
+    registerClientSafeEvents(keys: string[]) {
+      for (const key of keys) {
+        clientSafeEvents.add(key);
+      }
+    },
+    ensureClientSafeEventKey(key: string) {
+      if (!clientSafeEvents.has(key)) {
+        throw new Error(`Event "${key}" is not registered as client-safe`);
+      }
+      return key;
+    },
+  };
+}
+```
+
+## The event bus interface
+
+Any implementation of `SlingshotEventBus` from `slingshot-core` works:
+
+```typescript
+interface SlingshotEventBus {
+  emit<K extends EventKey>(key: K, payload: EventPayload<K>): void;
+  on<K extends EventKey>(key: K, handler: EventHandler<K>): void;
+  off<K extends EventKey>(key: K, handler: EventHandler<K>): void;
+  clientSafeKeys: ReadonlySet<string>;
+  registerClientSafeEvents(keys: string[]): void;
+  ensureClientSafeEventKey(key: string, source?: string): string;
+  shutdown?(): Promise<void>;
+}
+```
+
+The framework does not care what is underneath - Redis, NATS, Kafka, or a custom transport. Implement the interface and plugins, entities, and SSE endpoints continue to work.
+
+## Where to go next
+
+- [Realtime with SSE](/examples/realtime-sse/) - SSE and WebSocket endpoints
+- [Internals: Event Bus](/internals/event-bus/) - how the in-process bus works and why client-safe keys are enforced
+- [slingshot-bullmq](/packages/slingshot-bullmq/) - durable queue configuration

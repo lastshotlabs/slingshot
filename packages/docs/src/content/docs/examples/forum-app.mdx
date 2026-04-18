@@ -1,0 +1,174 @@
+---
+title: Forum App
+description: Auth + community + notifications + permissions — a complete forum surface with containers, threads, replies, moderation, and realtime notifications
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Four packages and one auth bridge give you a working forum: channels, threads, replies, reactions, moderation, bans, reports, and realtime notifications.
+
+## Install
+
+```bash
+bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/slingshot-community @lastshotlabs/slingshot-notifications @lastshotlabs/slingshot-permissions hono zod
+```
+
+## Full setup
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "security": {
+        "signing": { "secret": "${secret:JWT_SECRET}" }
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user", "moderator"], "defaultRole": "user" },
+            "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
+          }
+        },
+        {
+          "plugin": "slingshot-notifications",
+          "config": {
+            "dispatcher": { "enabled": false }
+          }
+        },
+        {
+          "plugin": "slingshot-permissions",
+          "config": {
+            "adapter": "memory"
+          }
+        },
+        {
+          "plugin": "slingshot-community",
+          "config": {
+            "containerCreation": "user"
+          }
+        }
+      ],
+      "middleware": [{ "handler": "communityAuthBridge" }]
+    }
+    ```
+
+    ```typescript title="slingshot.handlers.ts"
+    import type { Context, Next } from 'hono';
+
+    export async function communityAuthBridge(c: Context, next: Next) {
+      const userId = c.get('authUserId');
+      const roles = c.get('roles') ?? [];
+      if (userId) c.set('communityPrincipal', { subject: userId, roles });
+      await next();
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+    import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+    import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
+    import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+    import type { Context, Next } from 'hono';
+
+    const communityAuthBridge = async (c: Context, next: Next) => {
+      const userId = c.get('authUserId');
+      const roles = c.get('roles') ?? [];
+      if (userId) c.set('communityPrincipal', { subject: userId, roles });
+      await next();
+    };
+
+    await createServer({
+      port: 3000,
+      security: { signing: { secret: process.env.SECRET! } },
+      middleware: [communityAuthBridge],
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user', 'moderator'], defaultRole: 'user' },
+          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+        }),
+        createNotificationsPlugin({
+          dispatcher: { enabled: false, intervalMs: 30_000, maxPerTick: 500 },
+        }),
+        createPermissionsPlugin(),
+        createCommunityPlugin({
+          containerCreation: 'user',
+        }),
+      ],
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## Routes
+
+`slingshot-community` mounts all routes under `/community`:
+
+| Resource   | Routes                                                                                                          |
+| ---------- | --------------------------------------------------------------------------------------------------------------- |
+| Containers | `GET /community/containers`, `POST /community/containers`, `GET /community/containers/:id`                      |
+| Threads    | `GET /community/containers/:id/threads`, `POST /community/containers/:id/threads`, `GET /community/threads/:id` |
+| Replies    | `GET /community/threads/:id/replies`, `POST /community/threads/:id/replies`                                     |
+| Reactions  | `POST /community/threads/:id/reactions`, `POST /community/replies/:id/reactions`                                |
+| Moderation | `POST /community/threads/:id/lock`, `POST /community/threads/:id/pin`                                           |
+| Reports    | `POST /community/threads/:id/report`, `POST /community/replies/:id/report`                                      |
+| Bans       | `POST /community/bans`                                                                                          |
+
+## The auth bridge
+
+Community middleware reads `communityPrincipal` — not raw auth state. The bridge maps `authUserId` and `roles` (set by `slingshot-auth`) into that shape. This keeps the packages independent: community doesn't depend on auth internals, and auth doesn't know about community.
+
+<Aside type="caution">
+  If the bridge is missing, all community routes treat requests as unauthenticated. Protected
+  operations return 401.
+</Aside>
+
+## Container creation policy
+
+```typescript
+containerCreation: 'user'; // Any authenticated user can create containers
+containerCreation: 'admin'; // Only admins can create containers
+```
+
+Use `'admin'` when containers are structured sections that only staff should manage.
+
+## Realtime notifications
+
+`slingshot-notifications` mounts its own SSE inbox at `/notifications/sse` when the plugin is enabled.
+
+Clients connect to `GET /notifications/sse` with the same auth they use for the rest of the app. Notification events arrive as SSE messages scoped to the authenticated user.
+
+## Auto-moderation
+
+Use declarative `AutoModRule` records for pre-persist moderation instead of callback config. The
+community package persists reports, warnings, bans, and audit log entries as first-class entities.
+
+## Permission grants
+
+Grant roles to users on specific containers:
+
+```typescript
+await permissionsAdapter.createGrant({
+  subjectId: userId,
+  subjectType: 'user',
+  resourceType: 'community:container',
+  resourceId: containerId,
+  roles: ['moderator'],
+  effect: 'allow',
+  grantedBy: 'system',
+});
+```
+
+Built-in community roles: `owner` (full access), `moderator` (pin, lock, ban), `member` (create threads and replies).
+
+## Where to go next
+
+- [slingshot-community](/packages/slingshot-community/) — full config reference
+- [slingshot-permissions](/packages/slingshot-permissions/) — permission model and adapter API
+- [Config-Driven Domain](/examples/config-driven-domain/) — build your own domain package using this same pattern

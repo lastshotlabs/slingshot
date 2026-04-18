@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ESNext",
+    "types": ["bun"],
+    "paths": {
+      "@auth/*": ["../slingshot-auth/src/*"],
+      "@lastshotlabs/slingshot-core": ["../slingshot-core/src/index.ts"],
+      "@lastshotlabs/slingshot-auth": ["../slingshot-auth/src/index.ts"],
+      "@lastshotlabs/slingshot-auth/plugin": ["../slingshot-auth/src/plugin-api.ts"],
+      "@lastshotlabs/slingshot-auth/testing": ["../slingshot-auth/src/testing.ts"]
+    },
+    "skipLibCheck": true
+  }
+}

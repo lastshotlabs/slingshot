@@ -1,0 +1,227 @@
+---
+title: Quick Start
+description: A running Slingshot app with auth in under two minutes
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+
+## Install
+
+```bash
+bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth hono zod
+```
+
+## Start the server
+
+<Tabs>
+  <TabItem label="Manifest">
+    Create `app.manifest.json` in your project root:
+
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "security": {
+        "signing": { "secret": "${secret:JWT_SECRET}" }
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
+            "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
+          }
+        }
+      ]
+    }
+    ```
+
+    ```bash
+    slingshot start
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+    await createServer({
+      port: 3000,
+      security: {
+        signing: { secret: process.env.JWT_SECRET! },
+      },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+        }),
+      ],
+    });
+    ```
+
+    ```bash
+    bun run src/index.ts
+    ```
+
+  </TabItem>
+</Tabs>
+
+Your API docs are live at **`http://localhost:3000/docs`** - the full OpenAPI spec, automatically generated from every route.
+
+## Register and log in
+
+```bash
+# Register an account
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "you@example.com", "password": "hunter2" }'
+
+# Log in - returns a JWT
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "you@example.com", "password": "hunter2" }'
+# { "token": "eyJ..." }
+
+# Use the token on protected routes
+curl http://localhost:3000/auth/me \
+  -H "Authorization: Bearer eyJ..."
+```
+
+## Protect a route
+
+Import `userAuth` from `@lastshotlabs/slingshot-auth` and apply it as middleware. `userAuth` rejects unauthenticated requests automatically - no manual check needed.
+
+```typescript title="src/routes/dashboard.ts"
+import { createRouter } from '@lastshotlabs/slingshot';
+import { userAuth } from '@lastshotlabs/slingshot-auth';
+
+export const router = createRouter();
+
+// All routes in this file require authentication.
+router.use('*', userAuth);
+
+router.get('/dashboard', c => {
+  // authUserId is guaranteed after userAuth validates the token.
+  return c.json({ userId: c.get('authUserId')! });
+});
+```
+
+## Restrict to a role
+
+`requireRole` works the same way - add it after `userAuth`:
+
+```typescript
+import { createRouter } from '@lastshotlabs/slingshot';
+import { requireRole, userAuth } from '@lastshotlabs/slingshot-auth';
+
+declare function deleteUser(id: string): Promise<void>;
+
+const router = createRouter();
+
+// Only admins can reach this route.
+router.use('/admin/*', userAuth, requireRole('admin'));
+
+router.delete('/admin/users/:id', async c => {
+  const id = c.req.param('id');
+  await deleteUser(id);
+  return c.json({ deleted: id });
+});
+```
+
+## Point the server at your routes
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "routesDir": "${importMetaDir}/src/routes",
+      "plugins": [...]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    import { dirname, join } from 'node:path';
+    import { fileURLToPath } from 'node:url';
+    import { createServer } from '@lastshotlabs/slingshot';
+
+    const here = dirname(fileURLToPath(import.meta.url));
+
+    await createServer({
+      port: 3000,
+      routesDir: join(here, 'routes'),
+      // ...
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+Any file in `routesDir` that exports a `router` mounts automatically. No manual registration.
+
+## Switch to persistent storage
+
+In-memory data resets on restart. One config change switches to SQLite:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "db": { "sqlite": "${importMetaDir}/data/app.db" },
+      "plugins": [{
+        "plugin": "slingshot-auth",
+        "config": {
+          "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
+          "db": { "auth": "sqlite", "sessions": "sqlite", "oauthState": "sqlite" }
+        }
+      }]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+      db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+Nothing else changes. [Postgres and MongoDB](/examples/production-databases/) work the same way.
+
+## Add more plugins
+
+Drop any Slingshot plugin into the array and its routes wire in automatically:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    "plugins": [
+      { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user"], "defaultRole": "user" } } },
+      { "plugin": "slingshot-community" },
+      { "plugin": "slingshot-organizations" }
+    ]
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    plugins: [
+      createAuthPlugin({ ... }),
+      createCommunityPlugin({ ... }),
+      createOrganizationsPlugin({ ... }),
+    ]
+    ```
+  </TabItem>
+</Tabs>
+
+## Where to go next
+
+- [Auth Setup](/examples/with-auth/) - OAuth, MFA, passkeys, email verification
+- [Forum App](/examples/forum-app/) - community + permissions fully wired
+- [Config-Driven Domain](/examples/config-driven-domain/) - define your own entity and ship it as a plugin
+- [OpenAPI](/guides/openapi/) - typed routes, named schemas, versioning
+- [Installation](/installation/) - all packages and optional dependencies

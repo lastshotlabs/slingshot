@@ -1,0 +1,781 @@
+---
+title: Operations Reference
+description: Complete reference for all 17 built-in operation kinds — JSON config shape, generated routes, and examples.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Operations are plain JSON config objects with a `kind` field. The framework reads those objects and generates typed adapter methods (wired to five backends — memory, SQLite, Postgres, MongoDB, Redis) and HTTP routes. Standard CRUD comes from the entity definition itself; operations extend it with domain-specific behavior.
+
+Each operation is a JSON object like:
+
+```json
+{ "kind": "lookup", "fields": { "roomId": "param:roomId" }, "returns": "many" }
+{ "kind": "transition", "field": "status", "from": "sent", "to": "delivered", "match": { "id": "param:id" } }
+{ "kind": "aggregate", "groupBy": "roomId", "compute": { "total": "count" } }
+```
+
+Today you author these using TypeScript builder functions that produce the same objects:
+
+```typescript
+import { defineOperations, op } from '@lastshotlabs/slingshot';
+
+declare const Message: Parameters<typeof defineOperations>[0];
+
+const MessageOps = defineOperations(Message, {
+  byRoom: op.lookup({ fields: { roomId: 'param:roomId' }, returns: 'many' }),
+  markRead: op.transition({
+    field: 'status',
+    from: 'delivered',
+    to: 'read',
+    match: { id: 'param:id' },
+  }),
+});
+```
+
+`op.lookup({...})` stamps `{ kind: 'lookup', ...config }` and freezes it. JSON and TypeScript forms are structurally identical.
+
+<Aside type="note" title="Transaction Contract">
+  Transaction handling is operation-scoped, not entity-scoped.
+
+Standard operations are meant to be safe by default without forcing API consumers to think about
+transaction strategy. Single-statement writes stay single-statement. Multi-step operations are
+transaction-wrapped by the executor when correctness requires it. Use `op.transaction(...)` when
+you want to compose multiple operations as one explicit unit. Use optional `atomic` flags only on
+operations that expose a real semantic or performance tradeoff.
+
+</Aside>
+
+---
+
+## Filter expressions
+
+Several operations accept `filter` expressions. The filter language works the same in JSON and TypeScript:
+
+```json
+{ "status": "active" }
+{ "createdAt": { "$gt": "param:since" } }
+{ "role": { "$in": ["admin", "moderator"] } }
+{ "status": { "$nin": ["deleted", "banned"] } }
+{ "name": { "$contains": "param:query" } }
+{ "$or": [{ "status": "active" }, { "status": "pending" }] }
+{ "$and": [{ "verified": true }, { "age": { "$gte": 18 } }] }
+```
+
+Supported operators: `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$contains`, `$and`, `$or`.
+
+**Value references:**
+
+- `"param:x"` — resolved from call-time parameters at runtime
+- `"now"` — resolves to the current `Date`
+
+---
+
+## lookup
+
+Find one or many records by field match.
+
+```json
+{
+  "kind": "lookup",
+  "fields": { "roomId": "param:roomId" },
+  "returns": "many",
+  "sort": "createdAt",
+  "direction": "desc",
+  "paginate": true,
+  "filter": { "status": { "$ne": "deleted" } }
+}
+```
+
+| Option      | Required | Description                                                       |
+| ----------- | -------- | ----------------------------------------------------------------- |
+| `kind`      | Yes      | `"lookup"`                                                        |
+| `fields`    | Yes      | Field-to-param/literal match conditions                           |
+| `returns`   | Yes      | `"one"` → `Entity \| null` · `"many"` → `PaginatedResult<Entity>` |
+| `sort`      | No       | Field to sort results by                                          |
+| `direction` | No       | Sort direction — default `"asc"`                                  |
+| `limit`     | No       | Maximum records to return                                         |
+| `paginate`  | No       | Enable cursor-based pagination (requires `returns: "many"`)       |
+| `filter`    | No       | Additional filter conditions                                      |
+
+**Generated route:** `GET /{entity}/{op-kebab}?roomId=...`
+
+```typescript
+byRoom: op.lookup({
+  fields: { roomId: 'param:roomId' },
+  returns: 'many',
+  sort: 'createdAt',
+  direction: 'desc',
+});
+byEmail: op.lookup({ fields: { email: 'param:email' }, returns: 'one' });
+activeSessions: op.lookup({
+  fields: { userId: 'param:userId' },
+  filter: { expiresAt: { $gt: 'now' } },
+  returns: 'many',
+  paginate: true,
+});
+```
+
+---
+
+## exists
+
+Boolean existence check — more efficient than `lookup` when you only need yes/no.
+
+```json
+{
+  "kind": "exists",
+  "fields": { "email": "param:email" },
+  "check": { "verified": true }
+}
+```
+
+| Option   | Required | Description                                                                                                |
+| -------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `kind`   | Yes      | `"exists"`                                                                                                 |
+| `fields` | Yes      | Primary match conditions                                                                                   |
+| `check`  | No       | Additional field equality checks combined via AND — useful for asserting state alongside the primary match |
+
+**Generated route:** `GET /{entity}/{op-kebab}?email=...` → `{ "exists": true }`
+
+```typescript
+emailTaken: op.exists({ fields: { email: 'param:email' } });
+tokenValid: op.exists({ fields: { token: 'param:token' }, check: { used: false } });
+```
+
+---
+
+## transition
+
+Atomically move a record from one state to another. Rejects if the current field value doesn't match `from`.
+
+```json
+{
+  "kind": "transition",
+  "field": "status",
+  "from": "draft",
+  "to": "published",
+  "match": { "id": "param:id" },
+  "set": { "publishedAt": "now" },
+  "returns": "entity"
+}
+```
+
+| Option    | Required | Description                                                                                         |
+| --------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `kind`    | Yes      | `"transition"`                                                                                      |
+| `field`   | Yes      | Entity field holding the state value                                                                |
+| `from`    | Yes      | Expected current value — transition is rejected if it doesn't match                                 |
+| `to`      | Yes      | Value to write on success                                                                           |
+| `match`   | Yes      | Field conditions to identify the record                                                             |
+| `set`     | No       | Additional fields to update atomically. `"now"` → current timestamp · `"param:x"` → call-time param |
+| `returns` | No       | `"entity"` (default) returns updated record · `"boolean"` returns success flag                      |
+
+**Generated route:** `POST /{entity}/:id/{op-kebab}`
+
+```typescript
+publish: op.transition({
+  field: 'status',
+  from: 'draft',
+  to: 'published',
+  match: { id: 'param:id' },
+  set: { publishedAt: 'now' },
+});
+archive: op.transition({
+  field: 'status',
+  from: ['draft', 'published'],
+  to: 'archived',
+  match: { id: 'param:id' },
+});
+activate: op.transition({
+  field: 'status',
+  from: 'pending',
+  to: 'active',
+  match: { token: 'param:token' },
+  returns: 'boolean',
+});
+```
+
+---
+
+## fieldUpdate
+
+Partially update specific fields on a matched record — without replacing the whole entity.
+
+```json
+{
+  "kind": "fieldUpdate",
+  "match": { "id": "param:id" },
+  "set": ["title", "body"],
+  "partial": true
+}
+```
+
+| Option     | Required | Description                                                                    |
+| ---------- | -------- | ------------------------------------------------------------------------------ |
+| `kind`     | Yes      | `"fieldUpdate"`                                                                |
+| `match`    | Yes      | Record identification conditions                                               |
+| `set`      | Yes      | Field names the operation may write — caller provides values at call time      |
+| `partial`  | No       | When `true`, all `set` fields are optional — omitted fields are left unchanged |
+| `nullable` | No       | When `true`, `null` is accepted for any `set` field                            |
+
+**Generated route:** `PATCH /{entity}/:id/{op-kebab}`
+
+```typescript
+editPost: op.fieldUpdate({ match: { id: 'param:id' }, set: ['title', 'body'] });
+setLocked: op.fieldUpdate({ match: { id: 'param:id' }, set: ['locked'] });
+updateProfile: op.fieldUpdate({
+  match: { id: 'param:id' },
+  set: ['displayName', 'bio', 'avatarUrl'],
+  partial: true,
+  nullable: true,
+});
+```
+
+---
+
+## arrayPush
+
+Append a value to an array field. Deduplicated by default.
+
+The executor owns any transaction or locking required for correctness. Consumers should not need to
+manage transaction strategy for this operation.
+
+```json
+{
+  "kind": "arrayPush",
+  "field": "watchers",
+  "value": "ctx:authUserId",
+  "dedupe": true
+}
+```
+
+| Option   | Required | Description                                                                                                               |
+| -------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `kind`   | Yes      | `"arrayPush"`                                                                                                             |
+| `field`  | Yes      | Array field to push into                                                                                                  |
+| `value`  | Yes      | Binding expression — `"ctx:key"` (Hono context) · `"param:key"` (URL param) · `"input:key"` (request body) · or a literal |
+| `dedupe` | No       | When `true` (default), value is only pushed if not already present                                                        |
+
+**Generated route:** `POST /{entity}/:id/{op-kebab}`
+
+```typescript
+watch: op.arrayPush({ field: 'watchers', value: 'ctx:authUserId' });
+addTag: op.arrayPush({ field: 'tags', value: 'input:tag' });
+addRole: op.arrayPush({ field: 'roles', value: 'input:role', dedupe: false });
+```
+
+---
+
+## arrayPull
+
+Remove all occurrences of a value from an array field.
+
+The executor owns any transaction or locking required for correctness. Consumers should not need to
+manage transaction strategy for this operation.
+
+```json
+{
+  "kind": "arrayPull",
+  "field": "watchers",
+  "value": "ctx:authUserId"
+}
+```
+
+| Option  | Required | Description                        |
+| ------- | -------- | ---------------------------------- |
+| `kind`  | Yes      | `"arrayPull"`                      |
+| `field` | Yes      | Array field to remove from         |
+| `value` | Yes      | Same binding syntax as `arrayPush` |
+
+**Generated route:** `DELETE /{entity}/:id/{op-kebab}`
+
+```typescript
+unwatch: op.arrayPull({ field: 'watchers', value: 'ctx:authUserId' });
+removeTag: op.arrayPull({ field: 'tags', value: 'input:tag' });
+```
+
+---
+
+## arraySet
+
+Replace the entire contents of an array field. Deduplicated before writing by default.
+
+```json
+{
+  "kind": "arraySet",
+  "field": "labelIds",
+  "value": "input:labelIds",
+  "dedupe": true
+}
+```
+
+| Option   | Required | Description                                                                     |
+| -------- | -------- | ------------------------------------------------------------------------------- |
+| `kind`   | Yes      | `"arraySet"`                                                                    |
+| `field`  | Yes      | Array field to replace                                                          |
+| `value`  | Yes      | Binding expression resolving to the replacement array — typically `"input:key"` |
+| `dedupe` | No       | When `true` (default), the array is deduplicated before writing                 |
+
+**Generated route:** `PUT /{entity}/:id/{op-kebab}`
+
+Use `arraySet` when the caller sends the full new list. Use `arrayPush`/`arrayPull` for incremental mutations.
+
+```typescript
+setLabels: op.arraySet({ field: 'labelIds', value: 'input:labelIds' });
+setPermissions: op.arraySet({ field: 'permissions', value: 'input:permissions', dedupe: false });
+```
+
+---
+
+## aggregate
+
+Compute summary statistics over a set of records — count, sum, avg, min, max — with optional grouping.
+
+```json
+{
+  "kind": "aggregate",
+  "groupBy": "status",
+  "compute": {
+    "total": "count",
+    "revenue": { "sum": "amount" },
+    "byPlan": { "countBy": "plan" }
+  },
+  "filter": { "createdAt": { "$gte": "param:since" } }
+}
+```
+
+| Option    | Required | Description                                                                                                                              |
+| --------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`    | Yes      | `"aggregate"`                                                                                                                            |
+| `compute` | Yes      | Output columns — field name → compute spec                                                                                               |
+| `groupBy` | No       | Field name or `{ field, truncate? }` object. When set, result is an array grouped by this field's (optionally truncated) distinct values |
+| `filter`  | No       | Filter applied before aggregating                                                                                                        |
+
+`groupBy` accepts a plain field name string or an object for date truncation:
+
+```json
+{ "field": "createdAt", "truncate": "month" }
+```
+
+Truncation levels: `"year"` · `"month"` · `"week"` · `"day"` · `"hour"`. Groups date field values into truncated string keys (e.g., `"2026-04"` for month).
+
+**Compute specs:** `"count"` · `{ "sum": "fieldName" }` · `{ "countBy": "fieldName" }` · `{ "where": {...}, "count": true }`
+
+**Generated route:** `GET /{entity}/{op-kebab}`
+
+```typescript
+messagesByRoom: op.aggregate({ groupBy: 'roomId', compute: { total: 'count' } });
+revenueStats: op.aggregate({
+  compute: { total: 'count', revenue: { sum: 'amount' }, byPlan: { countBy: 'plan' } },
+  filter: { createdAt: { $gte: 'param:since' } },
+});
+// Group by truncated date — monthly revenue:
+monthlyRevenue: op.aggregate({
+  groupBy: { field: 'createdAt', truncate: 'month' },
+  compute: { revenue: { sum: 'amount' } },
+});
+```
+
+---
+
+## computedAggregate
+
+Aggregate records from a source entity and write the result back into a target entity. Used for denormalized summary fields like `commentCount` on a post.
+
+```json
+{
+  "kind": "computedAggregate",
+  "source": "comments",
+  "target": "posts",
+  "sourceFilter": { "postId": "param:postId" },
+  "compute": { "commentCount": "count" },
+  "materializeTo": "commentCount",
+  "targetMatch": { "id": "param:postId" },
+  "atomic": true
+}
+```
+
+| Option          | Required | Description                                                                       |
+| --------------- | -------- | --------------------------------------------------------------------------------- |
+| `kind`          | Yes      | `"computedAggregate"`                                                             |
+| `source`        | Yes      | Source entity storage name                                                        |
+| `target`        | Yes      | Target entity storage name                                                        |
+| `sourceFilter`  | Yes      | Filter applied to source records before aggregating                               |
+| `compute`       | Yes      | Aggregation spec (same as `aggregate`)                                            |
+| `materializeTo` | Yes      | Target entity field to write the result into                                      |
+| `targetMatch`   | Yes      | Conditions to find the target record to update                                    |
+| `atomic`        | No       | Request a real transaction for this multi-step flow where the backend supports it |
+
+**Generated route:** `POST /{entity}/{op-kebab}`
+
+`computedAggregate` is one of the few operations that exposes an `atomic` flag because it is
+inherently a read-aggregate-write sequence. Ordinary single-statement operations should not require
+consumers to ask for a transaction.
+
+```typescript
+syncCommentCount: op.computedAggregate({
+  source: 'comments',
+  target: 'posts',
+  sourceFilter: { postId: 'param:postId' },
+  compute: { commentCount: 'count' },
+  materializeTo: 'commentCount',
+  targetMatch: { id: 'param:postId' },
+  atomic: true,
+});
+```
+
+---
+
+## batch
+
+Update or delete multiple records matching a filter in one call.
+
+```json
+{
+  "kind": "batch",
+  "action": "update",
+  "filter": { "expiresAt": { "$lt": "now" } },
+  "set": { "status": "expired", "expiredAt": "now" },
+  "atomic": true,
+  "returns": "count"
+}
+```
+
+| Option    | Required | Description                                                                         |
+| --------- | -------- | ----------------------------------------------------------------------------------- |
+| `kind`    | Yes      | `"batch"`                                                                           |
+| `action`  | Yes      | `"update"` mutates matched records · `"delete"` removes them                        |
+| `filter`  | Yes      | Filter selecting which records to act on                                            |
+| `set`     | No       | Fields to write when `action` is `"update"`. `"now"` → current timestamp            |
+| `atomic`  | No       | Request a stricter transaction boundary for the batch where the backend supports it |
+| `returns` | No       | `"count"` (default) returns rows affected · `"void"` returns nothing                |
+
+**Generated route:** `POST /{entity}/{op-kebab}`
+
+Most single-record operations do not expose a transaction knob. `batch` does because it can be a
+meaningful semantic boundary and some callers want the stricter all-or-nothing behavior.
+
+```typescript
+purgeExpired: op.batch({
+  action: 'update',
+  filter: { expiresAt: { $lt: 'now' } },
+  set: { status: 'expired' },
+});
+clearRoom: op.batch({ action: 'delete', filter: { roomId: 'param:roomId' } });
+```
+
+---
+
+## upsert
+
+Create-or-update by a natural key. Idempotent — if a matching record exists, it's updated; if not, it's created.
+
+```json
+{
+  "kind": "upsert",
+  "match": ["provider", "providerId"],
+  "set": ["accessToken", "refreshToken", "expiresAt"],
+  "onCreate": { "id": "uuid" },
+  "returns": { "entity": true, "created": true }
+}
+```
+
+| Option     | Required | Description                                                                                   |
+| ---------- | -------- | --------------------------------------------------------------------------------------------- |
+| `kind`     | Yes      | `"upsert"`                                                                                    |
+| `match`    | Yes      | Field names that form the natural key                                                         |
+| `set`      | Yes      | Fields to write on both create and update                                                     |
+| `onCreate` | No       | Fields set only on create. Sentinels: `"uuid"`, `"cuid"`, `"now"`, or literals                |
+| `returns`  | No       | `"entity"` (default) · `{ "entity": true, "created": true }` also returns a `created` boolean |
+
+**Generated route:** `POST /{entity}/{op-kebab}`
+
+```typescript
+ensureProfile: op.upsert({
+  match: ['userId'],
+  set: ['displayName', 'bio'],
+  onCreate: { id: 'uuid', createdAt: 'now' },
+});
+syncOAuth: op.upsert({
+  match: ['provider', 'providerId'],
+  set: ['accessToken', 'refreshToken', 'expiresAt'],
+  onCreate: { id: 'uuid' },
+  returns: { entity: true, created: true },
+});
+```
+
+---
+
+## search
+
+Full-text or keyword search across entity fields. Delegates to an external search provider when configured, otherwise falls back to DB-native text search.
+
+```json
+{
+  "kind": "search",
+  "fields": ["title", "body"],
+  "filter": { "status": "published" },
+  "paginate": true,
+  "useSearchProvider": true
+}
+```
+
+| Option              | Required | Description                                                                                                            |
+| ------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `kind`              | Yes      | `"search"`                                                                                                             |
+| `fields`            | Yes      | Entity fields to search across                                                                                         |
+| `filter`            | No       | Additional filter applied alongside the text query                                                                     |
+| `paginate`          | No       | Enable cursor pagination on results                                                                                    |
+| `useSearchProvider` | No       | Delegate to external provider (Meilisearch, Typesense) when available. Default: `true` if entity has a `search` config |
+
+**Generated route:** `GET /{entity}/{op-kebab}?q=...`
+
+```typescript
+searchPosts: op.search({
+  fields: ['title', 'body'],
+  filter: { status: 'published' },
+  paginate: true,
+});
+quickSearch: op.search({ fields: ['name'], useSearchProvider: false });
+```
+
+---
+
+## collection
+
+Manage an embedded ordered list of sub-documents within a parent entity.
+
+```json
+{
+  "kind": "collection",
+  "parentKey": "members",
+  "itemFields": {
+    "id": { "type": "string", "primary": true, "default": "uuid" },
+    "userId": { "type": "string" },
+    "role": { "type": "enum", "values": ["owner", "admin", "member"], "default": "member" }
+  },
+  "operations": ["list", "add", "remove", "update"],
+  "identifyBy": "id",
+  "maxItems": 50
+}
+```
+
+| Option       | Required | Description                                                                    |
+| ------------ | -------- | ------------------------------------------------------------------------------ |
+| `kind`       | Yes      | `"collection"`                                                                 |
+| `parentKey`  | Yes      | Field on the parent entity holding the embedded array                          |
+| `itemFields` | Yes      | Field definitions for each collection item                                     |
+| `operations` | Yes      | Sub-operations to generate: `"list"`, `"add"`, `"remove"`, `"update"`, `"set"` |
+| `identifyBy` | No       | Field used to identify items for `remove` and `update`. Default: `"id"`        |
+| `maxItems`   | No       | Maximum number of items                                                        |
+
+A `collection` op named `members` generates adapter methods `membersList`, `membersAdd`, `membersRemove`, `membersUpdate`, `membersSet`. Routes follow the same pattern.
+
+```typescript
+members: op.collection({
+  parentKey: 'members',
+  itemFields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    userId: field.string(),
+    role: field.enum(['owner', 'admin', 'member'] as const, { default: 'member' }),
+  },
+  operations: ['list', 'add', 'remove', 'update'],
+});
+```
+
+---
+
+## consume
+
+Read and delete a record atomically in a single call. Used for one-time-use tokens, OTPs, and magic links.
+
+```json
+{
+  "kind": "consume",
+  "filter": { "token": "param:token", "type": "email_verification" },
+  "expiry": { "field": "expiresAt" },
+  "returns": "entity"
+}
+```
+
+| Option    | Required | Description                                                                           |
+| --------- | -------- | ------------------------------------------------------------------------------------- |
+| `kind`    | Yes      | `"consume"`                                                                           |
+| `filter`  | Yes      | Conditions to find the record to consume                                              |
+| `returns` | Yes      | `"boolean"` returns `true`/`false` · `"entity"` returns the consumed record or `null` |
+| `expiry`  | No       | When set, records whose `field` value is in the past are rejected without consuming   |
+
+**Generated route:** `POST /{entity}/{op-kebab}`
+
+```typescript
+verifyEmail: op.consume({
+  filter: { token: 'param:token', type: 'email_verification' },
+  expiry: { field: 'expiresAt' },
+  returns: 'entity',
+});
+redeemOtp: op.consume({
+  filter: { code: 'param:code', userId: 'param:userId' },
+  expiry: { field: 'expiresAt' },
+  returns: 'boolean',
+});
+```
+
+---
+
+## derive
+
+Compose results from multiple entity sources using a merge strategy. Used for feed or inbox queries that pull from more than one entity type.
+
+```json
+{
+  "kind": "derive",
+  "sources": [
+    { "from": "directMessages", "where": { "recipientId": "param:userId" } },
+    { "from": "notifications", "where": { "userId": "param:userId" } },
+    {
+      "from": "follows",
+      "where": { "followerId": "param:userId" },
+      "traverse": { "to": "posts", "on": "followedUserId", "select": "id" }
+    }
+  ],
+  "merge": "union"
+}
+```
+
+| Option       | Required | Description                                                                                                                                                                           |
+| ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`       | Yes      | `"derive"`                                                                                                                                                                            |
+| `sources`    | Yes      | Ordered list of entity sources to query                                                                                                                                               |
+| `merge`      | Yes      | `"union"` (dedup by ID) · `"concat"` (preserve order+dups) · `"intersect"` (only shared IDs) · `"first"` (first non-empty source) · `"priority"` (first, with numeric source weights) |
+| `flatten`    | No       | Flatten result arrays one level                                                                                                                                                       |
+| `postFilter` | No       | Filter applied to the merged result                                                                                                                                                   |
+
+Each source accepts `from` (entity name), `where` (match conditions), `select` (field to extract), and optionally `traverse` (one-hop relation: reads `on` field from `from` records, looks up `to` entity, returns `select` from traversed records).
+
+```typescript
+activityFeed: op.derive({
+  sources: [
+    { from: 'directMessages', where: { recipientId: 'param:userId' } },
+    { from: 'notifications', where: { userId: 'param:userId' } },
+    {
+      from: 'follows',
+      where: { followerId: 'param:userId' },
+      traverse: { to: 'posts', on: 'followedUserId', select: 'id' },
+    },
+  ],
+  merge: 'union',
+});
+```
+
+---
+
+## increment
+
+Atomically add to (or subtract from) a numeric field on a specific record. All backends perform this atomically where supported — Postgres uses `SET field = field + $n`, Mongo uses `$inc`, memory/Redis use read-modify-write.
+
+```json
+{
+  "kind": "increment",
+  "field": "viewCount",
+  "by": 1
+}
+```
+
+| Option  | Required | Description                                                     |
+| ------- | -------- | --------------------------------------------------------------- |
+| `kind`  | Yes      | `"increment"`                                                   |
+| `field` | Yes      | Numeric field to increment                                      |
+| `by`    | No       | Amount to add. Use a negative number to decrement. Default: `1` |
+
+**Generated route:** `POST /{entity}/:id/{op-kebab}`
+
+```typescript
+incrementViews: op.increment({ field: 'viewCount' });
+addScore: op.increment({ field: 'score', by: 5 });
+decreaseBalance: op.increment({ field: 'balance', by: -50 });
+```
+
+---
+
+## custom
+
+Escape hatch for backend-specific logic not covered by built-in operation kinds.
+
+```json
+{
+  "kind": "custom",
+  "http": { "method": "post" }
+}
+```
+
+| Option | Required | Description                                                                                                        |
+| ------ | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `kind` | Yes      | `"custom"`                                                                                                         |
+| `http` | No       | When set, mounts a route at `POST /{entity}/{op-kebab}` (or the specified method/path). Omit for adapter-only ops. |
+
+The `custom` op is extended in TypeScript with per-backend factories (not expressible in JSON):
+
+```typescript
+rawPostCount: op.custom({
+  http: { method: 'get' },
+  postgres: pool => async (userId: string) => {
+    const { rows } = await pool.query('SELECT count(*) FROM posts WHERE author_id = $1', [userId]);
+    return parseInt(rows[0].count, 10);
+  },
+  memory: store => (userId: string) =>
+    [...store.values()].filter(r => r.authorId === userId && !r.deletedAt).length,
+});
+
+// Route-only marker for a method mixed in from a composite adapter
+hybridSearch: op.custom({ http: { method: 'post' } });
+```
+
+**Cross-entity access:** A `custom` handler's factory only receives its own entity's backend driver (e.g. `pool` for Postgres, `store` for memory). To access other entities' adapters — for example, creating a Transaction record from within an Account operation — use `hooks.afterAdapters` in the manifest to capture adapters at startup:
+
+```typescript title="slingshot.handlers.ts"
+import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
+
+let transactionAdapter: BareEntityAdapter | null = null;
+
+export const hooks = {
+  captureAdapters(ctx: unknown) {
+    const { adapters } = ctx as { adapters: Readonly<Record<string, BareEntityAdapter>> };
+    transactionAdapter = adapters.Transaction ?? null;
+  },
+};
+```
+
+```json title="app.manifest.json"
+{
+  "hooks": {
+    "afterAdapters": [{ "handler": "captureAdapters" }]
+  }
+}
+```
+
+The captured adapter is then available inside any `custom` operation handler. See [The Manifest System — Hooks](/internals/manifest/#the-hooks-export) for details.
+
+---
+
+## Quick reference
+
+| Need                                                          | Kind                |
+| ------------------------------------------------------------- | ------------------- |
+| Find records by field values                                  | `lookup`            |
+| Boolean check without fetching                                | `exists`            |
+| Move through a state machine                                  | `transition`        |
+| Update specific fields                                        | `fieldUpdate`       |
+| Add a value to a list                                         | `arrayPush`         |
+| Remove a value from a list                                    | `arrayPull`         |
+| Replace a whole list                                          | `arraySet`          |
+| Count, sum, average, group-by (with optional date truncation) | `aggregate`         |
+| Write aggregated result back to entity                        | `computedAggregate` |
+| Multi-record update or delete                                 | `batch`             |
+| Insert or update by natural key                               | `upsert`            |
+| Text search across fields                                     | `search`            |
+| Embedded sub-document list                                    | `collection`        |
+| One-time-use token / OTP                                      | `consume`           |
+| Feed from multiple entity types                               | `derive`            |
+| Atomically increment / decrement a number                     | `increment`         |
+| Backend-specific or non-declarative logic                     | `custom`            |

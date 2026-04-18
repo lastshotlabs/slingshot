@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "tsBuildInfoFile": ".tmp/tsconfig.typecheck.tsbuildinfo",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": ".",
+    "outDir": ".tmp/typecheck/src",
+    "noEmit": false
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    {
+      "path": "../slingshot-auth/tsconfig.typecheck.json"
+    },
+    {
+      "path": "../slingshot-core/tsconfig.typecheck.json"
+    }
+  ]
+}

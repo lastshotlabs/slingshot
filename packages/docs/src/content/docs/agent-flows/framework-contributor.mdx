@@ -1,0 +1,76 @@
+---
+title: Framework Contributor Flow
+description: The required workflow for agents and developers implementing features inside the Slingshot framework.
+---
+
+This is the Slingshot-internal flow.
+
+Use it when you are changing:
+
+- framework bootstrap
+- plugin lifecycle
+- package APIs
+- schema fields
+- generated docs
+- source-backed examples
+- cross-cutting guides
+
+## Required Read Order
+
+Read in this order and stop once you know the owning package, code path, and impacted docs:
+
+1. `slingshot-docs/engineering-rules.md`
+2. root `CLAUDE.md`
+3. owning package `CLAUDE.md`
+4. package `src/index.ts`
+5. one schema/config file
+6. one primary runtime/plugin file
+7. tests only if behavior is still unclear
+
+Do not start with a broad repo sweep.
+
+## Canonical Shapes And Patterns
+
+Agents should learn canonical shapes from the narrowest source-of-truth stack:
+
+- `engineering-rules.md` for framework-wide patterns
+- root/package `CLAUDE.md` for ownership and where the pattern lives
+- package `src/index.ts` for the public surface
+- schema/type files for exact config and data shapes
+- one primary runtime/plugin file for how the shape is actually consumed
+
+Prefer one canonical home for each pattern. Docs should point to that home instead of redefining it.
+
+## What You Must Publish
+
+When a Slingshot capability changes, you are responsible for publishing that change to the surfaces
+future app-building agents consume:
+
+- JSDoc on public exports
+- Zod `.describe()` strings
+- package `docs/human/index.md`
+- affected Astro docs pages
+- source-backed examples in `examples/`
+- `CLAUDE.md` files when routing or ownership changed
+
+If you change Slingshot without updating those surfaces, the repo is left in a misleading state.
+
+## Verification
+
+Run the verification that matches the change. For public or cross-cutting changes, the default set is:
+
+```bash
+bun run typecheck
+bun run format:check
+bun run docs:ci
+```
+
+## Why This Exists
+
+App-building agents should not have to rediscover Slingshot capability from source code. Contributor
+agents publish capability. App-builder agents consume capability.
+
+Related pages:
+
+- [/agent-flows/app-builder/](/agent-flows/app-builder/)
+- [/config-driven/workflow/](/config-driven/workflow/)

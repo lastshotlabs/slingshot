@@ -1,0 +1,125 @@
+---
+title: Introduction
+description: What Slingshot is, what problems it solves, and how to think about it
+---
+
+## The problem
+
+Every backend starts simple. A few route files, a database, maybe an auth library. Then the product grows: you need permissions, events, email, a forum, an admin panel. Each new feature scatters its logic - auth state here, permission checks there, event emissions somewhere else. The codebase drifts.
+
+Slingshot is the answer to that drift.
+
+## How Slingshot works
+
+Slingshot is a backend platform for Bun that keeps your product's moving parts coherent. Instead of scattering auth state, permissions, events, and route logic across separate files, you describe a domain once - and the platform wires routes, adapters, permission checks, and event emission around it.
+
+For complete product domains like auth, community, and organizations, you don't write any of that. Drop in a package.
+
+## Two ways to build
+
+### The manifest
+
+The simplest path is a JSON manifest. Declare your plugins, database, port, and security config - and run `slingshot start`. No TypeScript entry point, no imports, no boilerplate.
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "port": 3000,
+  "db": {
+    "sqlite": "${importMetaDir}/data/app.db",
+    "redis": "${env:REDIS_URL}"
+  },
+  "plugins": [
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": { "roles": ["user"], "defaultRole": "user" },
+        "db": { "auth": "sqlite", "sessions": "redis" }
+      }
+    },
+    { "plugin": "slingshot-community" }
+  ],
+  "security": { "cors": ["https://myapp.com"] }
+}
+```
+
+```bash
+slingshot start
+```
+
+When you need custom behavior - a tenant resolver, a logging hook, a WebSocket handler - you export named functions from `slingshot.handlers.ts`. The manifest references them by name. Your business logic stays pure; the framework calls it.
+
+### Code
+
+For full control or custom composition, use `createServer()` directly in TypeScript. Every option the manifest supports is available as a typed config object.
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+await createServer({
+  port: 3000,
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user'], defaultRole: 'user' },
+      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+    }),
+  ],
+});
+```
+
+Both paths produce the same server. Start with the manifest; move to code when you need it.
+
+## The four layers
+
+### App layer
+
+`createServer()` and `createApp()` are the assembly point - where plugins, infrastructure, runtime config, and shared behavior come together. The manifest maps directly to this layer.
+
+### Feature packages
+
+Feature packages own complete product domains:
+
+- **`slingshot-auth`** - identity, sessions, JWT, MFA, OAuth, passkeys
+- **`slingshot-community`** - forums, threads, replies, reactions, moderation
+- **`slingshot-organizations`** - teams, membership, roles, invite flows
+- **`slingshot-search`**, **`slingshot-mail`**, **`slingshot-push`**, **`slingshot-webhooks`**, and more
+
+Each one owns a real domain and mounts a complete API - not helpers, but full product packages.
+
+### Config-driven domain layer
+
+`slingshot-entity` is how you build your own packages the same way the platform packages are built:
+
+- `defineEntity()` - fields, indexes, route policy, permissions, events
+- `defineOperations()` - transitions, lookups, search, aggregates
+- `createEntityPlugin()` - turns those definitions into a mounted plugin with adapters for every supported database
+
+### Custom routes
+
+Hand-written Hono routes are always available. Use them for endpoints that genuinely don't belong in a domain model: health checks, webhook receivers, one-off logic. Not as the starting point for every feature.
+
+## Choose your workflow first
+
+- Building an app with Slingshot: start at [/start-here/](/start-here/) and then [/agent-flows/app-builder/](/agent-flows/app-builder/)
+- Modifying Slingshot itself: start at [/agent-flows/framework-contributor/](/agent-flows/framework-contributor/)
+
+## When to use Slingshot
+
+Slingshot fits well when you want:
+
+- Bun and Hono with real product architecture - not just growing route files indefinitely
+- Domain packages where permissions, events, and routes track the data model
+- A plugin system with explicit lifecycle, boot ordering, and dependency management
+- Production-ready auth, community, and org features without building them from scratch
+
+## Where to go next
+
+- [Start Here](/start-here/) - choose the right Slingshot workflow before reading deeper
+- [Quick Start](/quick-start/) - running in two minutes
+- [Examples](/examples/) - complete working apps for common scenarios
+- [Auth Setup](/examples/with-auth/) - accounts, sessions, OAuth, MFA, passkeys
+- [Config-Driven Walkthrough](/config-driven-walkthrough/) - build your own domain: entity -> operations -> plugin -> app
+- [Security](/guides/security/) - JWT config, CORS, rate limiting, production checklist
+- [Testing](/guides/testing/) - testing apps and plugins without a running server
+- [FAQ](/faq/) - common questions answered

@@ -1,0 +1,848 @@
+---
+title: Security
+description: Hardening a Slingshot app for production — JWT, CORS, rate limiting, CSRF, session policy, secrets, and input validation
+---
+
+import { Aside, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Most Slingshot defaults are safe. What they don't know is your threat model. Here's every security knob worth tuning before you ship to production.
+
+## JWT signing
+
+Every JWT issued by `slingshot-auth` signs with this secret. All sessions depend on it.
+
+**Minimum 32 characters.** Slingshot uses the secret as an HMAC-SHA256 key. Anything shorter is rejected at startup.
+
+**Never hardcode it.** It belongs in a secret manager or environment variable, not in source code.
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "security": {
+        "signing": { "secret": "${secret:SIGNING_SECRET}" }
+      }
+    }
+    ```
+
+    `${secret:NAME}` resolves from your configured secrets provider (SSM in production, `.env` in development). See [Secrets](/guides/secrets/) for the full provider reference.
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    await createServer({
+      security: {
+        signing: { secret: process.env.SIGNING_SECRET! },
+      },
+    });
+    ```
+
+    Never `process.env.SIGNING_SECRET ?? 'fallback'` — if the variable is missing, let it fail at startup rather than silently using a weak key.
+
+  </TabItem>
+</Tabs>
+
+### Token expiry
+
+The default session lifetime is **7 days** (604 800 seconds). Set it via the session policy:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": {
+          "sessionPolicy": {
+            "absoluteTimeout": 86400
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: {
+        sessionPolicy: {
+          absoluteTimeout: 86400, // 24 hours
+          idleTimeout: 1800,      // revoke after 30 min of inactivity
+        },
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+For short-lived access tokens with a refresh flow:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": {
+          "refreshTokens": {
+            "accessTokenExpiry": 900,
+            "refreshTokenExpiry": 2592000,
+            "rotationGraceSeconds": 10
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: {
+        refreshTokens: {
+          accessTokenExpiry: 900,        // 15 min access token
+          refreshTokenExpiry: 2_592_000, // 30 day refresh token
+          rotationGraceSeconds: 10,      // old token still valid for 10s after rotation
+        },
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+### Zero-downtime key rotation
+
+Rotating the signing secret invalidates all active sessions — unless you use `previousSecrets`:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "security": {
+        "signing": {
+          "secret": "${secret:SIGNING_SECRET_V2}",
+          "previousSecrets": ["${secret:SIGNING_SECRET_V1}"]
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    await createServer({
+      security: {
+        signing: {
+          secret: process.env.SIGNING_SECRET_V2!,
+          previousSecrets: [process.env.SIGNING_SECRET_V1!],
+        },
+      },
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+New tokens sign with `V2`. Tokens signed with `V1` stay valid until they expire. Once your session TTL has elapsed since the rotation, remove `previousSecrets`.
+
+### Issuer and audience
+
+Set `jwt.issuer` and `jwt.audience` so tokens are scoped to your application. Slingshot warns at startup if either is missing.
+
+```typescript
+createAuthPlugin({
+  auth: {
+    jwt: {
+      issuer: 'https://api.example.com',
+      audience: 'https://app.example.com',
+    },
+  },
+});
+```
+
+Both claims are embedded in every signed JWT and verified on every token check. Without them, a token minted by another service using the same signing secret could be accepted.
+
+### Clock tolerance
+
+Distributed systems have minor clock drift between nodes. Slingshot applies a **60-second** clock tolerance by default when verifying JWT `exp`, `nbf`, and `iat` claims.
+
+```typescript
+createAuthPlugin({
+  auth: {
+    jwt: {
+      clockTolerance: 30, // seconds — set to 0 to disable
+    },
+  },
+});
+```
+
+### Session fingerprint binding
+
+Bind sessions to the client's network fingerprint so that a stolen JWT cannot be replayed from a different device or location.
+
+```typescript
+await createServer({
+  security: {
+    signing: {
+      secret: process.env.SIGNING_SECRET!,
+      sessionBinding: {
+        fields: ['ip', 'ua'], // hash IP + User-Agent (default)
+        onMismatch: 'unauthenticate', // 'unauthenticate' | 'reject' | 'log-only'
+      },
+    },
+  },
+});
+```
+
+| `onMismatch`       | Behavior                                                |
+| ------------------ | ------------------------------------------------------- |
+| `'unauthenticate'` | Silently treat the request as unauthenticated (default) |
+| `'reject'`         | Throw a 401 error immediately                           |
+| `'log-only'`       | Accept the request but emit a warning log               |
+
+The fingerprint is stored on the first authenticated request and checked on every subsequent request, including refresh token exchanges.
+
+---
+
+## CORS
+
+`security.cors` controls the `Access-Control-Allow-Origin` header. Restrict it to your actual frontend domains.
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json (production)"
+    {
+      "security": {
+        "cors": ["https://app.example.com", "https://www.example.com"]
+      }
+    }
+    ```
+
+    ```json title="app.manifest.json (development)"
+    {
+      "security": {
+        "cors": ["http://localhost:5173"]
+      }
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    await createServer({
+      security: {
+        cors: ['https://app.example.com'],
+      },
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+<Aside type="danger">
+  Do not set `cors: '*'` in production. Wildcard CORS means any website can make credentialed
+  requests to your API. This is appropriate for public read-only APIs only — never for APIs that use
+  cookie-based sessions or tokens that could be leaked.
+</Aside>
+
+---
+
+## Rate limiting
+
+Auth endpoints are rate-limited out of the box. The defaults are conservative — tighten them before shipping.
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": {
+          "rateLimit": {
+            "login": { "windowMs": 900000, "max": 10 },
+            "register": { "windowMs": 3600000, "max": 5 },
+            "forgotPassword": { "windowMs": 900000, "max": 5 },
+            "store": "redis"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: {
+        rateLimit: {
+          login:          { windowMs: 15 * 60 * 1000, max: 10 }, // 10 attempts per 15 min
+          register:       { windowMs: 60 * 60 * 1000, max: 5  }, // 5 registrations per hour
+          forgotPassword: { windowMs: 15 * 60 * 1000, max: 5  }, // 5 resets per 15 min
+          mfaVerify:      { windowMs: 15 * 60 * 1000, max: 10 },
+          store: 'redis', // share counters across instances in production
+        },
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+`store` defaults to `'redis'` when Redis is available, `'memory'` otherwise. In-memory counters are per-process — with multiple server instances, each gets its own window. Use `'redis'` for accurate limits across instances.
+
+### Credential stuffing detection
+
+Detects distributed password stuffing attacks — many logins across many accounts from the same IP, or many IPs per account:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": {
+          "rateLimit": {
+            "credentialStuffing": {
+              "maxAccountsPerIp": { "count": 5, "windowMs": 600000 },
+              "maxIpsPerAccount": { "count": 3, "windowMs": 600000 }
+            }
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: {
+        rateLimit: {
+          credentialStuffing: {
+            maxAccountsPerIp: { count: 5, windowMs: 10 * 60 * 1000 },
+            maxIpsPerAccount: { count: 3, windowMs: 10 * 60 * 1000 },
+            onDetected: ({ type, key, count }) => {
+              alerting.send({ type, key, count });
+            },
+          },
+        },
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+When a threshold is crossed, the bus emits `security.credential_stuffing.detected` with severity `'critical'`. Wire a handler via `securityEvents`:
+
+```typescript
+createAuthPlugin({
+  securityEvents: {
+    onEvent: event => {
+      if (event.severity === 'critical') {
+        pagerduty.alert(event);
+      }
+      auditLog.write(event);
+    },
+  },
+});
+```
+
+### Rate limiting your own routes
+
+The framework imposes no rate limits on non-auth routes. Apply Hono middleware directly:
+
+```typescript title="src/routes/api.ts"
+import type { MiddlewareHandler } from 'hono';
+import { createRouter } from '@lastshotlabs/slingshot';
+
+declare function rateLimiter(options: {
+  windowMs: number;
+  limit: number;
+  standardHeaders?: string;
+}): MiddlewareHandler;
+
+// or your preferred library
+
+const router = createRouter();
+
+router.use(
+  '/api/expensive-operation',
+  rateLimiter({
+    windowMs: 60 * 1000,
+    limit: 10,
+    standardHeaders: 'draft-6',
+  }),
+);
+```
+
+---
+
+## CSRF protection
+
+Required when using cookie-based sessions. The auth cookie is `HttpOnly` — JavaScript can't read it, but a malicious site can still trigger authenticated requests when same-site cookies alone aren't sufficient.
+
+Slingshot uses the **double-submit cookie pattern**: on login, it sets a CSRF token in a non-`HttpOnly` cookie. Your frontend reads that cookie and echoes it back in the `x-csrf-token` header on every state-changing request. The server verifies that cookie and header match.
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": {
+          "csrf": { "enabled": true }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: {
+        csrf: { enabled: true },
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+When CSRF is enabled, `POST`, `PUT`, `PATCH`, and `DELETE` requests that carry the auth cookie must also include the `x-csrf-token` header matching the `csrf_token` cookie. Slingshot also protects public session-establishing auth routes like login, register, refresh, MFA completion, and OAuth code exchange even before an auth cookie exists, so those endpoints require the same double-submit token.
+
+**Exempt paths** — webhook receivers and OAuth callbacks should bypass CSRF:
+
+```typescript
+createAuthPlugin({
+  auth: {
+    csrf: {
+      enabled: true,
+      exemptPaths: ['/webhooks/*', '/auth/oauth/*/callback'],
+    },
+  },
+});
+```
+
+<Aside>
+  If you're using Bearer token auth (not cookies), CSRF protection is not needed — the token can
+  only be included in requests from JavaScript that already has it, not from cross-site form
+  submissions.
+</Aside>
+
+---
+
+## Password policy
+
+The defaults are minimal: 8 characters, one letter, one digit. Tighten before shipping:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": {
+          "passwordPolicy": {
+            "minLength": 12,
+            "requireLetter": true,
+            "requireDigit": true,
+            "requireSpecial": true,
+            "preventReuse": 5
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: {
+        passwordPolicy: {
+          minLength: 12,
+          requireLetter: true,
+          requireDigit: true,
+          requireSpecial: true,
+          preventReuse: 5, // remember last 5 hashes
+        },
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+`preventReuse` stores the last N password hashes and rejects reuse. All built-in adapters (memory, SQLite, Postgres, MongoDB) support it.
+
+### Breached password detection
+
+Block passwords from known breach databases via the [HaveIBeenPwned](https://haveibeenpwned.com/API/v3) k-Anonymity API. Only the first 5 characters of the SHA-1 hash leave your server — the full password never does.
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": {
+          "breachedPasswordCheck": {
+            "block": true,
+            "onApiFailure": "block",
+            "minBreachCount": 1
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: {
+        breachedPasswordCheck: {
+          block: true,
+          onApiFailure: 'block', // fail-closed (default); use 'allow' for fail-open
+          minBreachCount: 1,
+        },
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+`onApiFailure: 'block'` (default) is fail-closed: if HIBP is unreachable, the password is rejected. Use `'allow'` for fail-open if you prefer availability over safety.
+
+---
+
+## Registration security
+
+### Concealed registration
+
+By default, Slingshot conceals whether an email is already registered. The `/auth/register` endpoint returns the same response shape regardless of whether the account already exists, preventing user enumeration attacks.
+
+To disable this behavior (not recommended for public-facing apps):
+
+```typescript
+createAuthPlugin({
+  auth: {
+    concealRegistration: null, // disable — registration will return 409 for existing emails
+  },
+});
+```
+
+### Email normalization
+
+All auth adapters normalize email addresses before storage and lookup, preventing duplicate accounts via cosmetic variations:
+
+- **Case folding** — `Alice@Example.com` → `alice@example.com`
+- **Plus-addressing removal** (Gmail/Googlemail) — `user+tag@gmail.com` → `user@gmail.com`
+- **Dot removal** (Gmail/Googlemail) — `u.s.e.r@gmail.com` → `user@gmail.com`
+
+This is applied automatically on `create`, `findByEmail`, `findByIdentifier`, and `findOrCreateByProvider`. No configuration needed.
+
+---
+
+## Session security
+
+### Session limits and timeouts
+
+```typescript
+createAuthPlugin({
+  auth: {
+    sessionPolicy: {
+      maxSessions: 5, // evict oldest when exceeded (default: 6)
+      absoluteTimeout: 604_800, // 7 days max session lifetime
+      idleTimeout: 3_600, // revoke after 1 hour of inactivity
+      onPasswordChange: 'revoke_others', // invalidate other sessions after password change
+    },
+  },
+});
+```
+
+| `onPasswordChange`          | Behavior                                         |
+| --------------------------- | ------------------------------------------------ |
+| `'revoke_others'` (default) | Keeps the current session, revokes all others    |
+| `'revoke_all_and_reissue'`  | Revokes everything, issues a fresh session token |
+| `'none'`                    | Does nothing — not recommended                   |
+
+### Revoking sessions
+
+Users can view and revoke their own sessions:
+
+```bash
+# List sessions
+GET /auth/sessions
+
+# Revoke a specific session
+DELETE /auth/sessions/:sessionId
+
+# Revoke all other sessions (log out everywhere)
+DELETE /auth/sessions
+```
+
+These mount automatically via `slingshot-auth`. No additional configuration needed.
+
+### Cookie vs. Bearer trade-offs
+
+|                    | Cookie                                 | Bearer                                    |
+| ------------------ | -------------------------------------- | ----------------------------------------- |
+| Storage            | `HttpOnly` cookie — browser handles it | Client stores in memory or `localStorage` |
+| XSS exposure       | Not readable by JS                     | Readable if stored in `localStorage`      |
+| CSRF risk          | Yes — requires CSRF protection         | No                                        |
+| Works with SPAs    | Yes, requires CORS + CSRF config       | Yes, straightforward                      |
+| Mobile/API clients | Awkward                                | Natural                                   |
+
+`userAuth` accepts the JWT in either `Authorization: Bearer <token>` or the `x-user-token` header. For non-browser clients (mobile, other servers, CLI tools), Bearer is simpler. For browser SPAs, both work — cookies offload token storage to the browser.
+
+---
+
+## Secrets management
+
+**Never commit secrets to source control** — not in config files, not in comments, not in test fixtures. Use real secrets in tests, or use obviously fake values like `test-signing-secret-32-chars-ok!` that can't be mistaken for production keys.
+
+**Use `${secret:NAME}` in manifests, not `${env:NAME}` for sensitive values.** Env vars can appear in process listings and logs. SSM Parameter Store or equivalent keeps them out of the environment.
+
+**Validate presence at startup.** Run `slingshot secrets check --stage prod` before every deploy:
+
+```bash
+slingshot secrets check --stage prod
+# ✓ SIGNING_SECRET      present in ssm:/myapp/prod/
+# ✓ DATABASE_URL        present in ssm:/myapp/prod/
+# ✗ GOOGLE_CLIENT_ID    missing — required by slingshot-oauth
+```
+
+The [Secrets guide](/guides/secrets/) covers providers in full.
+
+---
+
+## Input validation
+
+All routes defined via `router.openapi()` / `createRoute()` validate request bodies, params, and query strings via Zod automatically. Validation errors return 422 before your handler runs.
+
+```typescript title="src/routes/payments.ts"
+import { createRoute, createRouter } from '@lastshotlabs/slingshot-core';
+
+const router = createRouter();
+const paymentRequestSchema = {
+  type: 'object',
+  properties: {
+    amount: { type: 'integer', minimum: 1, maximum: 999_999_99 }, // cents
+    currency: { type: 'string', enum: ['usd', 'eur', 'gbp'] },
+    description: { type: 'string', maxLength: 500 },
+  },
+  required: ['amount', 'currency', 'description'],
+} as const;
+const paymentResponseSchema = {
+  type: 'object',
+  properties: {
+    id: { type: 'string' },
+    status: { type: 'string', enum: ['created'] },
+  },
+  required: ['id', 'status'],
+} as const;
+
+router.openapi(
+  createRoute({
+    method: 'post',
+    path: '/payments',
+    request: {
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: paymentRequestSchema as never,
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Payment created',
+        content: {
+          'application/json': {
+            schema: paymentResponseSchema as never,
+          },
+        },
+      },
+    },
+  }),
+  async c => {
+    const body = (await c.req.json()) as {
+      amount: number;
+      currency: 'usd' | 'eur' | 'gbp';
+      description: string;
+    };
+    return c.json({
+      id: `pay_${body.currency}`,
+      status: 'created' as const,
+    } as never);
+  },
+);
+```
+
+Don't skip schema definitions. `z.any()` or `z.unknown()` passes everything through — intentionally or not.
+
+Validate params and query strings too. Body validation is easy to remember; these aren't:
+
+```typescript
+createRoute({
+  method: 'get',
+  path: '/users/:id',
+  request: {
+    params: z.object({ id: z.string().uuid() }), // validates format
+    query: z.object({ page: z.coerce.number().min(1).optional() }), // coerces string → number
+  },
+  // ...
+});
+```
+
+---
+
+## Security headers
+
+Slingshot doesn't set security headers (`Strict-Transport-Security`, `X-Frame-Options`, `X-Content-Type-Options`, `Content-Security-Policy`, etc.). Set them at the reverse proxy or CDN layer.
+
+When running behind nginx, Caddy, or an AWS ALB, configure headers there. Apps deployed via `slingshot-infra` include a baseline set in the generated Caddy and nginx configs under the `# --- section:security-headers ---` block, which you can override.
+
+---
+
+## MFA
+
+Enforce MFA for all users:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": {
+          "mfa": {
+            "issuer": "Acme",
+            "required": true,
+            "emailOtp": { "codeLength": 6 }
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    createAuthPlugin({
+      auth: {
+        mfa: {
+          issuer: 'Acme',
+          required: true,        // block non-auth routes until MFA setup complete
+          emailOtp: { codeLength: 6 },
+        },
+      },
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+`required: true` redirects users without MFA configured to the setup flow. Only MFA routes and auth routes are accessible until setup completes.
+
+For high-security operations, use step-up auth:
+
+```typescript
+// On a route that requires step-up:
+import type { MiddlewareHandler } from 'hono';
+import { createRouter } from '@lastshotlabs/slingshot';
+import { createAuthPlugin, userAuth } from '@lastshotlabs/slingshot-auth';
+
+declare const requireStepUp: (opts?: { maxAge?: number }) => MiddlewareHandler;
+
+const router = createRouter();
+
+createAuthPlugin({
+  auth: {
+    stepUp: { maxAge: 300 }, // MFA must have been verified within the last 5 min
+  },
+});
+
+router.use('/admin/export', userAuth, requireStepUp({ maxAge: 300 }));
+```
+
+---
+
+## Security event auditing
+
+Every auth event emits on the internal event bus. Wire an `onEvent` handler to forward them to your audit log or SIEM:
+
+```typescript
+createAuthPlugin({
+  securityEvents: {
+    onEvent: event => {
+      // event.eventType, event.severity, event.userId, event.ip, event.timestamp
+      if (event.severity === 'critical') {
+        alerting.page(event);
+      }
+      auditLog.append(event);
+    },
+    onEventError: err => {
+      logger.error('Security event handler failed', err);
+    },
+    exclude: ['security.auth.login.success'], // drop noisy low-severity events if needed
+  },
+});
+```
+
+Security events never reach browser clients via SSE — the `security.*` namespace is blocked at the bus level regardless of configuration.
+
+---
+
+## Production checklist
+
+**Secrets**
+
+- [ ] `signing.secret` is at least 32 characters and stored in SSM or equivalent
+- [ ] No secrets in source control, config files, or `.env` files committed to the repo
+- [ ] `slingshot secrets check --stage prod` passes clean
+
+**JWT**
+
+- [ ] `jwt.issuer` and `jwt.audience` are configured
+- [ ] Token expiry is appropriate for your threat model (`absoluteTimeout`, `idleTimeout`)
+- [ ] Refresh token rotation is configured if using short-lived access tokens
+- [ ] `previousSecrets` rotation plan is documented for when the signing key changes
+
+**CORS**
+
+- [ ] `security.cors` lists specific origins — not `'*'`
+- [ ] Origins are HTTPS in production, not `http://`
+
+**Auth hardening**
+
+- [ ] `passwordPolicy.minLength` is at least 12
+- [ ] `passwordPolicy.requireSpecial` is enabled
+- [ ] Rate limits are tightened for `login`, `register`, and `forgotPassword`
+- [ ] Rate limit `store` is set to `'redis'` in multi-instance deployments
+- [ ] Credential stuffing detection is enabled with `maxAccountsPerIp`
+- [ ] CSRF protection is enabled if using cookie-based sessions
+- [ ] `sessionPolicy.onPasswordChange` is `'revoke_others'` or `'revoke_all_and_reissue'`
+
+**MFA (if applicable)**
+
+- [ ] `mfa.required: true` for admin users or all users
+- [ ] Step-up auth is applied to high-value operations
+
+**Input validation**
+
+- [ ] Every `router.openapi()` call has a schema with meaningful constraints — no `z.any()`
+- [ ] Params and query strings are validated, not just bodies
+
+**Session hardening**
+
+- [ ] Session fingerprint binding is enabled (`signing.sessionBinding`) in production
+- [ ] `authCookie.domain` is not set to an overly broad value (e.g., `.com`)
+
+**Infrastructure**
+
+- [ ] HTTPS is enforced at the load balancer or reverse proxy
+- [ ] Security headers are set at the proxy layer
+- [ ] `trustProxy` is configured if reading client IPs behind a load balancer
+
+**Observability**
+
+- [ ] `securityEvents.onEvent` is wired to an audit log or SIEM
+- [ ] Critical severity events (`credential_stuffing.detected`, `account.locked`) trigger alerts
+
+## See also
+
+- [Secrets](/guides/secrets/) — full secrets provider reference with SSM, `.env`, and environment variables
+- [Auth Setup](/examples/with-auth/) — OAuth, MFA, passkeys, and email verification
+- [Horizontal Scaling](/guides/horizontal-scaling/) — shared sessions and rate limit stores across instances
+- [Deployment](/guides/deployment/) — how `slingshot-infra` manages secrets and deploys

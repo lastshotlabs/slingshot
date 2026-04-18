@@ -1,0 +1,235 @@
+---
+title: Runtime
+description: Run Slingshot on Bun, Node.js, or worker-style edge hosts - what each runtime provides and how to switch
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Slingshot runs on Bun, Node.js, and worker-style edge hosts. Swap the runtime package and everything
+else stays the same.
+
+## What the runtime provides
+
+The `SlingshotRuntime` interface abstracts the runtime-specific capabilities Slingshot depends on:
+
+| Capability           | Bun                                | Node.js                                    | Edge / Workers                             |
+| -------------------- | ---------------------------------- | ------------------------------------------ | ------------------------------------------ |
+| **Password hashing** | `Bun.password` (argon2id built-in) | `argon2` package                           | Web Crypto PBKDF2 by default               |
+| **SQLite**           | `bun:sqlite` (built-in)            | `better-sqlite3` package                   | Not supported                              |
+| **HTTP server**      | `Bun.serve`                        | `@hono/node-server` + Node's `http.Server` | Export a `fetch` handler                   |
+| **File I/O**         | `Bun.file`, `Bun.write`            | `node:fs/promises`                         | Read via `fileStore`; no filesystem writes |
+| **Glob**             | `Bun.Glob`                         | `fast-glob` package                        | Not supported                              |
+
+Everything else - routing, plugins, database adapters, event bus, auth - is runtime-agnostic.
+
+## Bun runtime
+
+```bash
+bun add @slingshot/runtime-bun
+```
+
+No extra dependencies. Bun includes SQLite, password hashing, HTTP serving, and file I/O built-in.
+
+```typescript
+import { bunRuntime } from '@slingshot/runtime-bun';
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  runtime: bunRuntime(),
+  port: 3000,
+  // ...
+});
+```
+
+## Node.js runtime
+
+```bash
+bun add @slingshot/runtime-node
+bun add better-sqlite3 argon2 @hono/node-server ws fast-glob
+```
+
+<Aside>`ws` adds WebSocket support on Node. `fast-glob` handles route discovery.</Aside>
+
+```typescript
+import { nodeRuntime } from '@slingshot/runtime-node';
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  runtime: nodeRuntime(),
+  port: 3000,
+  // ...
+});
+```
+
+## Edge runtime
+
+```bash
+bun add @lastshotlabs/runtime-edge
+```
+
+Use `@lastshotlabs/runtime-edge` when Slingshot is hosted inside a worker platform such as Cloudflare
+Workers or Deno Deploy.
+
+```typescript
+import { edgeRuntime } from '@lastshotlabs/runtime-edge';
+
+const runtime = edgeRuntime();
+```
+
+The edge runtime intentionally omits several host features:
+
+- no SQLite
+- no filesystem writes
+- no glob scanning
+- no `server.listen()`
+- `supportsAsyncLocalStorage: false`
+
+If you need bundled file reads, pass `fileStore`. If you need ISR in a multi-instance worker
+deployment, pair `slingshot-ssr` with `createKvIsrCache()` from `@lastshotlabs/runtime-edge/kv`.
+
+## Choosing a runtime
+
+**Use Bun when:**
+
+- You want the fastest startup and best SQLite performance
+- You're deploying to an environment where Bun is available
+- You want zero extra dependencies for SQLite and password hashing
+- You're using WebSockets
+
+**Use Node.js when:**
+
+- Your deployment environment doesn't support Bun
+- You need to run in a Node-only CI or serverless environment
+- You're using native npm modules compiled for Node.js
+
+**Use the edge runtime when:**
+
+- You're deploying to Cloudflare Workers, Deno Deploy, or another fetch-handler host
+- You can live without SQLite and local filesystem writes
+- You want SSR or route handling in a worker-friendly runtime envelope
+
+## The manifest path (`slingshot start`)
+
+`slingshot start` assumes the Bun runtime by default. For Node, specify the runtime in your manifest
+or pass `--runtime node`:
+
+```bash
+slingshot start --runtime node
+```
+
+Or in the manifest:
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "runtime": "node",
+  "port": 3000
+}
+```
+
+Worker-host deployments usually construct the app in the worker entry module rather than calling
+`slingshot start`.
+
+## Feature differences
+
+Most features work identically across runtimes. The main differences are:
+
+| Feature                            | Bun                          | Node.js                            | Edge / Workers                                |
+| ---------------------------------- | ---------------------------- | ---------------------------------- | --------------------------------------------- |
+| WebSockets                         | Native (`Bun.serve` pub/sub) | Via `ws` package                   | Host-specific, not provided by `runtime-edge` |
+| SQLite WAL mode                    | Automatic                    | Explicit `PRAGMA journal_mode=WAL` | Not available                                 |
+| Process signals                    | Bun.signal                   | `process.on('SIGTERM', ...)`       | Not available                                 |
+| Hot reload                         | `--hot` flag                 | Requires nodemon or similar        | Host-platform specific                        |
+| Draft mode / ALS-dependent helpers | Full support                 | Full support                       | Degraded when ALS is required                 |
+
+<Aside type="caution">
+  WebSocket pub/sub uses Bun's native support on Bun and the `ws` package on Node. For
+  multi-instance realtime scaling, use `ws.transport` for WebSocket fan-out and a shared event bus
+  for SSE or plugin events. On worker hosts, treat realtime transport as a separate deployment
+  concern from the Slingshot runtime package.
+</Aside>
+
+At bootstrap time, runtime selection does not change the plugin contract: if you pass root `ws`
+config to `createApp()` or `createServer()`, Slingshot threads that draft through infrastructure,
+copies `ws.endpoints` into `ctx.wsEndpoints` before plugin `setupPost`, and `createServer()`
+starts from that same live endpoint map on Bun or Node. The runtime only changes the host transport
+implementation underneath.
+
+Root `ws` is typed as the same `WsConfig` shape on both APIs. `createApp()` only carries that
+bootstrap config far enough for plugin wiring and context setup, while `createServer()` additionally
+owns transport startup, upgrade handling, and host-specific websocket wiring.
+That split lets tests and manifest bootstrap exercise plugin WebSocket registration without opening
+a listener, while Bun and Node still consume the exact same endpoint draft when the server boots.
+
+## Switching runtimes
+
+Switching from Bun to Node requires one line:
+
+```typescript
+import { bunRuntime } from '@slingshot/runtime-bun';
+import { nodeRuntime } from '@slingshot/runtime-node';
+
+const runtime = bunRuntime();
+const migratedRuntime = nodeRuntime();
+```
+
+Switching from Bun or Node to a worker host typically means replacing the runtime import and moving
+server bootstrap into a `fetch` entry module:
+
+```typescript
+import { edgeRuntime } from '@lastshotlabs/runtime-edge';
+
+const runtime = edgeRuntime();
+```
+
+Plugins, routes, database adapters, and event bus contracts remain the same. The changes are in the
+host boundary, not the domain packages.
+
+## Custom runtime
+
+Need a host beyond the built-in Bun, Node, or edge packages? Implement `SlingshotRuntime` from
+`@lastshotlabs/slingshot-core`:
+
+```typescript
+import type {
+  RuntimeServerInstance,
+  RuntimeServerOptions,
+  RuntimeSqliteDatabase,
+  SlingshotRuntime,
+} from '@lastshotlabs/slingshot-core';
+
+const sqliteDb = {} as RuntimeSqliteDatabase;
+
+const myRuntime: SlingshotRuntime = {
+  password: {
+    hash: async plain => `hashed:${plain}`,
+    verify: async (plain, hash) => hash === `hashed:${plain}`,
+  },
+  sqlite: {
+    open: _path => sqliteDb,
+  },
+  server: {
+    listen: async (_opts: RuntimeServerOptions): Promise<RuntimeServerInstance> => ({
+      port: 3000,
+      stop() {},
+    }),
+  },
+  fs: {
+    write: async (_path, _data) => {},
+    readFile: async _path => null,
+    exists: async _path => false,
+  },
+  glob: {
+    scan: async (_pattern, _opts) => [],
+  },
+  readFile: async _path => null,
+  supportsAsyncLocalStorage: false,
+};
+```
+
+## See also
+
+- [Installation](/installation/) - runtime package install commands
+- [Deployment](/guides/deployment/) - which runtime is used in ECS and EC2 presets
+- [Horizontal Scaling](/guides/horizontal-scaling/) - multi-instance setup applies to every runtime
+- [runtime-edge package](/packages/runtime-edge/) - worker-host runtime behavior and the KV ISR adapter

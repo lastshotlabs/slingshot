@@ -1,0 +1,251 @@
+---
+title: Multi-Tenancy
+description: Isolate data per tenant — by subdomain, header, or path — using Slingshot's tenant resolver pattern
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot has a first-class tenant model. Every request carries a `tenantId` on the context. Plugins that support multi-tenancy — community, search, push, organizations — scope their data by that ID automatically. Provide one function that extracts the tenant from the request; the rest wires itself.
+
+## How it works
+
+The framework calls your `tenantResolver` on every request before any routes run. The returned string becomes `c.get('tenantId')`, available in all middleware and route handlers. Plugins read it automatically.
+
+For single-tenant apps: `tenantResolver: () => 'default'`.
+
+For multi-tenant apps: return a different string per tenant — from the subdomain, a header, a JWT claim, or a database lookup.
+
+## Setting up a tenant resolver
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "tenancy": {
+        "resolution": "subdomain",
+        "onResolve": { "handler": "resolveTenant" }
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user"], "defaultRole": "user" }
+          }
+        },
+        {
+          "plugin": "slingshot-community",
+          "config": { "containerCreation": "user" }
+        }
+      ]
+    }
+    ```
+
+    ```typescript title="slingshot.handlers.ts"
+    export async function resolveTenant(tenantId: string) {
+      // Subdomain: app1.example.com → 'app1'
+      if (!tenantId || tenantId === 'www') return null;
+      return { slug: tenantId };
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+    import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
+
+    await createServer({
+      port: 3000,
+      security: {
+        signing: {
+          secret: process.env.JWT_SECRET!,
+        },
+      },
+      tenancy: {
+        resolution: 'subdomain',
+        onResolve: async tenantId => {
+          if (!tenantId || tenantId === 'www') return null;
+          return { slug: tenantId };
+        },
+      },
+      plugins: [
+        createAuthPlugin({
+          auth: {
+            roles: ['admin', 'member'],
+            defaultRole: 'member',
+          },
+          db: {
+            auth: 'memory',
+            sessions: 'memory',
+            oauthState: 'memory',
+          },
+        }),
+        createCommunityPlugin({
+          containerCreation: 'user',
+          // No tenantResolver needed here — it reads from context automatically
+        }),
+      ],
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## Tenant resolution strategies
+
+### Subdomain
+
+```typescript
+// app1.example.com → 'app1'
+tenantResolver: c => {
+  const host = c.req.header('host') ?? '';
+  return host.split('.')[0];
+};
+```
+
+### Header
+
+```typescript
+// X-Tenant-ID: acme
+tenantResolver: c => c.req.header('x-tenant-id') ?? 'default';
+```
+
+### JWT claim
+
+```typescript
+// Tenant embedded in the user's JWT
+tenantResolver: c => {
+  const token = c.req.header('authorization')?.replace('Bearer ', '');
+  if (!token) return undefined;
+  const payload = decodeJwtWithoutVerifying(token);
+  return payload?.tenantId ?? undefined;
+};
+```
+
+<Aside>
+  Returning `undefined` means "no tenant." Plugins will treat the request as unauthenticated for
+  tenant-scoped operations. Return `'default'` for single-tenant apps.
+</Aside>
+
+### Path prefix
+
+```typescript
+// /t/acme/posts → tenant 'acme'
+tenantResolver: c => {
+  const match = c.req.path.match(/^\/t\/([^/]+)/);
+  return match?.[1];
+};
+```
+
+### Database lookup
+
+```typescript
+// Look up the tenant by custom domain
+tenantResolver: async c => {
+  const host = c.req.header('host') ?? '';
+  const tenant = await db.tenants.findByDomain(host);
+  return tenant?.id;
+};
+```
+
+## Reading the tenant in routes
+
+`tenantId` lands on `c.var` before any route handler runs:
+
+```typescript
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { createRouter } from '@lastshotlabs/slingshot-core';
+
+const router = createRouter();
+
+router.get('/my-data', c => {
+  const tenantId = c.get('tenantId'); // string | null
+  return c.json({ tenantId });
+});
+```
+
+## Per-tenant config
+
+Store tenant config (feature flags, plan limits, etc.) alongside the ID:
+
+```typescript
+tenantResolver: async c => {
+  const host = c.req.header('host') ?? '';
+  const tenant = await tenantCache.get(host);
+  if (!tenant) return undefined;
+
+  // tenantConfig is also set on the context
+  c.set('tenantConfig', {
+    plan: tenant.plan,
+    maxUsers: tenant.maxUsers,
+    features: tenant.features,
+  });
+
+  return tenant.id;
+};
+```
+
+Read it anywhere:
+
+```typescript
+const config = c.get('tenantConfig') as { plan: string; maxUsers: number } | null;
+```
+
+## Plugin data isolation
+
+Plugins that support multi-tenancy scope all queries by `tenantId` automatically:
+
+| Plugin                    | Scoped by tenant                              |
+| ------------------------- | --------------------------------------------- |
+| `slingshot-community`     | Containers, threads, replies, reactions, bans |
+| `slingshot-search`        | Search indexes and results                    |
+| `slingshot-push`          | Push subscriptions                            |
+| `slingshot-organizations` | Organizations and memberships                 |
+
+No extra config needed. They read `c.get('tenantId')` from the request context.
+
+<Aside type="tip" title="dataScope vs policy">
+  `dataScope` handles tenant isolation (row-level filtering by `tenantId` or `authorId`). For
+  cross-consumer authorization — e.g., polls checking room membership via the chat plugin — use
+  [`permission.policy`](/packages/slingshot-entity/permission-policy/) dispatch instead.
+</Aside>
+
+## Auth in multi-tenant apps
+
+Auth is not tenant-scoped by default — a user account exists across all tenants. To scope roles per tenant, use `TenantRole`:
+
+```typescript
+import type { AuthAdapter } from '@lastshotlabs/slingshot-core';
+
+declare const adapter: AuthAdapter & {
+  addTenantRole(userId: string, tenantId: string, role: string): Promise<void>;
+};
+
+await adapter.addTenantRole('usr_123', 'acme', 'member');
+```
+
+With tenant roles enabled, `c.get('tenantRoles')` holds the user's roles scoped to `c.get('tenantId')`.
+
+## Organizations as tenants
+
+When using `slingshot-organizations`, organizations are a natural tenant boundary:
+
+```typescript
+tenantResolver: c => {
+  // After auth middleware sets authUserId, resolve the user's current org
+  const orgId = c.req.header('x-organization-id');
+  return orgId ?? undefined;
+};
+```
+
+Users switch organizations by changing the `X-Organization-ID` header. Their auth token stays the same.
+
+## See also
+
+- [Auth Setup](/examples/with-auth/) — session and role configuration
+- [Forum App](/examples/forum-app/) — community scoped to containers
+- [SaaS Foundations](/examples/saas-foundations/) — organizations as tenant boundaries
+- [Horizontal Scaling](/guides/horizontal-scaling/) — sharing tenant data across instances

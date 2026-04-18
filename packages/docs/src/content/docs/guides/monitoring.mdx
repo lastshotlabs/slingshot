@@ -1,0 +1,490 @@
+---
+title: Monitoring and Observability
+description: Structured logging, Prometheus metrics, health checks, auth security events, error tracking, and distributed tracing for Slingshot apps in production.
+---
+
+import { Aside, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Production apps fail in ways that are invisible without instrumentation. Slingshot emits structured JSON logs, exposes a Prometheus `/metrics` endpoint, and publishes security-relevant auth events on the event bus.
+
+---
+
+## Structured request logging
+
+Every request logs as a single JSON line to stdout.
+
+<Tabs>
+  <TabItem label="Code">
+    ```typescript
+    await createServer({
+      port: 3000,
+      logging: {
+        level: 'info',      // 'debug' | 'info' | 'warn' | 'error' | 'silent'
+        format: 'json',     // 'json' (default in production) | 'pretty' (default in dev)
+        requests: true,     // log every request (default: true)
+      },
+      // ...
+    });
+    ```
+  </TabItem>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "logging": {
+        "level": "info",
+        "format": "json",
+        "requests": true
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### What each request log contains
+
+```json
+{
+  "level": "info",
+  "time": "2025-09-01T12:34:56.789Z",
+  "msg": "request",
+  "method": "POST",
+  "url": "/api/auth/login",
+  "status": 200,
+  "duration": 42,
+  "requestId": "01HZ...",
+  "tenantId": "acme",
+  "userId": "usr_abc123",
+  "ip": "203.0.113.42",
+  "userAgent": "Mozilla/5.0 ..."
+}
+```
+
+`requestId` generates per-request and propagates through the context. Attach it to downstream calls for correlation.
+
+`tenantId` and `userId` populate only after tenant middleware and auth middleware run — absent on unauthenticated routes.
+
+### Log levels
+
+| Level    | What it covers                                                     |
+| -------- | ------------------------------------------------------------------ |
+| `debug`  | Request/response body snapshots, DB query plans, cache hits/misses |
+| `info`   | Every request, plugin startup, migration runs                      |
+| `warn`   | Retried operations, degraded mode, non-fatal auth events           |
+| `error`  | Unhandled exceptions, plugin setup failures, DB connection errors  |
+| `silent` | No output — use this in tests                                      |
+
+### Silencing logs in tests
+
+```typescript
+import { createApp } from '@lastshotlabs/slingshot';
+
+const { app } = await createApp({
+  logging: { enabled: false },
+  // ...
+});
+```
+
+Use `logging.enabled: false` in tests when you need deterministic output.
+
+---
+
+## Prometheus metrics
+
+Enable the `/metrics` endpoint with one config key:
+
+<Tabs>
+  <TabItem label="Code">
+    ```typescript
+    await createServer({
+      metrics: {
+        enabled: true,
+        path: '/metrics',   // default
+        // Restrict scraping to internal network or a bearer token:
+        auth: { type: 'bearer', token: process.env.METRICS_TOKEN },
+      },
+    });
+    ```
+  </TabItem>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "metrics": {
+        "enabled": true,
+        "path": "/metrics",
+        "auth": {
+          "type": "bearer",
+          "token": "${secret:METRICS_TOKEN}"
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Exported metrics
+
+| Metric                               | Type      | Labels                           | Description                       |
+| ------------------------------------ | --------- | -------------------------------- | --------------------------------- |
+| `slingshot_http_requests_total`      | Counter   | `method`, `route`, `status`      | Total request count               |
+| `slingshot_http_request_duration_ms` | Histogram | `method`, `route`, `status`      | Request latency in milliseconds   |
+| `slingshot_http_errors_total`        | Counter   | `method`, `route`, `status`      | 4xx and 5xx responses             |
+| `slingshot_active_connections`       | Gauge     | —                                | Current open HTTP connections     |
+| `slingshot_auth_login_total`         | Counter   | `outcome` (`success`, `failure`) | Auth login attempts               |
+| `slingshot_auth_session_duration_s`  | Histogram | —                                | Session lifetimes                 |
+| `slingshot_event_bus_emit_total`     | Counter   | `event`                          | Events emitted on the bus         |
+| `slingshot_db_query_duration_ms`     | Histogram | `adapter`, `operation`           | Adapter query latency             |
+| `process_cpu_seconds_total`          | Counter   | —                                | Standard Node/Bun process metrics |
+| `process_resident_memory_bytes`      | Gauge     | —                                | RSS                               |
+
+Plugin metrics use the plugin name as prefix: `slingshot_community_thread_created_total`, `slingshot_push_notification_sent_total`, etc.
+
+### Prometheus scrape config
+
+```yaml title="prometheus.yml"
+scrape_configs:
+  - job_name: slingshot
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['your-app-host:3000']
+    metrics_path: /metrics
+    bearer_token: '<METRICS_TOKEN>'
+```
+
+For ECS or Kubernetes, use service discovery instead of static targets:
+
+```yaml
+scrape_configs:
+  - job_name: slingshot
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: your-app
+        action: keep
+    bearer_token: '<METRICS_TOKEN>'
+```
+
+### Grafana dashboard
+
+Import the community Slingshot dashboard (ID `XXXXX`) or build your own from these panels:
+
+- **Request rate** — `rate(slingshot_http_requests_total[1m])` grouped by `route`
+- **P95 latency** — `histogram_quantile(0.95, rate(slingshot_http_request_duration_ms_bucket[5m]))`
+- **Error rate** — `rate(slingshot_http_errors_total[1m]) / rate(slingshot_http_requests_total[1m])`
+- **Auth failures** — `rate(slingshot_auth_login_total{outcome="failure"}[5m])`
+- **DB latency** — `histogram_quantile(0.95, rate(slingshot_db_query_duration_ms_bucket[5m]))` by `adapter`
+
+---
+
+## Health checks
+
+### Liveness
+
+Returns 200 whenever the process is running. Sufficient for load balancer health checks.
+
+```typescript title="src/routes/health.ts"
+import { createRouter } from '@lastshotlabs/slingshot';
+
+const router = createRouter();
+
+router.get('/health', c => c.json({ status: 'ok' }));
+
+export default router;
+```
+
+<Aside>
+  Keep the liveness check fast and dependency-free. A slow `/health` causes the load balancer to
+  mark healthy instances as down during DB latency spikes.
+</Aside>
+
+### Readiness
+
+For Kubernetes readiness probes or staged deployments, verify downstream dependencies before the instance accepts traffic:
+
+```typescript title="src/routes/ready.ts"
+import { createRouter, getRedisFromApp } from '@lastshotlabs/slingshot';
+
+const router = createRouter();
+
+declare function getSlingshotApp(c: import('hono').Context): object;
+declare function pingPostgres(app: object): Promise<void>;
+
+router.get('/ready', async c => {
+  const app = getSlingshotApp(c);
+
+  const checks: Record<string, 'ok' | 'error'> = {};
+
+  try {
+    await pingPostgres(app);
+    checks.postgres = 'ok';
+  } catch {
+    checks.postgres = 'error';
+  }
+
+  try {
+    const redis = getRedisFromApp(app);
+    if (!redis) throw new Error('Redis is not configured');
+    await redis.ping();
+    checks.redis = 'ok';
+  } catch {
+    checks.redis = 'error';
+  }
+
+  const healthy = Object.values(checks).every(v => v === 'ok');
+  return c.json({ status: healthy ? 'ok' : 'degraded', checks }, healthy ? 200 : 503);
+});
+
+export default router;
+```
+
+### Kubernetes probe config
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  failureThreshold: 3
+```
+
+When the readiness probe returns 503, the pod drops from the load balancer's target group without being killed — useful during DB failovers.
+
+---
+
+## Auth security events
+
+`slingshot-auth` emits an event on the framework event bus for every security-relevant action. Subscribe in `setupPost` to forward to your audit log or SIEM.
+
+### Events emitted
+
+| Event key                            | Emitted when                                   |
+| ------------------------------------ | ---------------------------------------------- |
+| `auth:user.login`                    | Successful password login                      |
+| `auth:user.login_failed`             | Failed login attempt                           |
+| `auth:user.logout`                   | Explicit logout                                |
+| `auth:user.registered`               | New account created                            |
+| `auth:user.password_changed`         | Password updated                               |
+| `auth:user.password_reset_requested` | Password reset email sent                      |
+| `auth:user.mfa_enabled`              | MFA activated on an account                    |
+| `auth:user.mfa_disabled`             | MFA removed                                    |
+| `auth:user.mfa_failed`               | MFA challenge failed                           |
+| `auth:user.account_locked`           | Account locked after repeated failures         |
+| `auth:session.revoked`               | Session explicitly revoked                     |
+| `auth:oauth.linked`                  | OAuth provider linked to account               |
+| `auth:oauth.login`                   | Login via OAuth provider                       |
+| `auth:m2m.key_created`               | API key created (if `slingshot-m2m` installed) |
+| `auth:m2m.key_revoked`               | API key revoked                                |
+
+### Subscribing in a plugin
+
+```typescript title="src/plugins/securityAudit.ts"
+import { type SecurityEvent, createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+createAuthPlugin({
+  securityEvents: {
+    onEvent: async (event: SecurityEvent) => {
+      await shipToSiem({
+        eventType: event.eventType,
+        severity: event.severity,
+        userId: event.userId,
+        ip: event.ip,
+        userAgent: event.userAgent,
+        timestamp: event.timestamp,
+        metadata: event.meta,
+      });
+    },
+    exclude: ['security.auth.login.success'],
+  },
+});
+
+async function shipToSiem(entry: Record<string, unknown>) {
+  // POST to your SIEM ingest endpoint, write to a structured log, etc.
+  console.log(JSON.stringify({ level: 'security', ...entry }));
+}
+```
+
+Register this plugin in `createServer` before other plugins — it has no setup dependencies.
+
+<Aside type="tip">
+  Security event payloads always include `userId`, `ip`, and `timestamp`. The exact shape varies per
+  event — check `@lastshotlabs/slingshot-auth`'s event type exports for the full discriminated
+  union.
+</Aside>
+
+---
+
+## Error tracking
+
+### Sentry integration
+
+```typescript
+import type { Context } from 'hono';
+import { createApp } from '@lastshotlabs/slingshot';
+
+declare function reportError(err: Error, context: Record<string, unknown>): void;
+
+const { app } = await createApp({
+  // ...
+});
+
+app.onError((err: Error, c: Context) => {
+  reportError(err, {
+    requestId: c.get('requestId'),
+    userId: c.get('userId'),
+    url: c.req.url,
+    method: c.req.method,
+  });
+
+  // Let Slingshot's default error handler format the response
+  return c.json({ error: 'internal_server_error' }, 500);
+});
+```
+
+`createServer` returns the `app` instance. Register `onError` after startup to wrap Slingshot's own error handling.
+
+### Structured error logs
+
+```typescript
+app.onError((err, c) => {
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      msg: err.message,
+      stack: err.stack,
+      requestId: c.get('requestId'),
+      url: c.req.url,
+      method: c.req.method,
+      time: new Date().toISOString(),
+    }),
+  );
+
+  return c.json({ error: 'internal_server_error' }, 500);
+});
+```
+
+---
+
+## Distributed tracing
+
+Slingshot propagates `requestId` through the request context. For span-level distributed tracing, integrate OpenTelemetry:
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+
+declare const tracing: {
+  start(): Promise<void> | void;
+};
+
+await tracing.start();
+await createServer({ port: 3000 /* ... */ });
+```
+
+OpenTelemetry is the common choice here: start your tracer provider before `createServer()`, then add the HTTP and database instrumentations that match your runtime and drivers.
+
+For Bun, use `@opentelemetry/sdk-node` with Bun's compatibility layer. Full Bun-native OTEL support is pending upstream — check the [OpenTelemetry Bun issue](https://github.com/open-telemetry/opentelemetry-js/issues/4815) for current status.
+
+---
+
+## Log aggregation
+
+Slingshot logs to stdout as newline-delimited JSON. Any log shipper that reads stdout forwards them without extra parsing configuration.
+
+### Datadog
+
+```yaml title="datadog-agent.yaml"
+logs:
+  - type: docker
+    service: slingshot-api
+    source: slingshot
+    sourcecategory: backend
+```
+
+Datadog auto-parses JSON logs. The `msg`, `level`, `requestId`, `userId`, and `duration` fields index as facets by default.
+
+### CloudWatch (ECS)
+
+The generated `sst.config.ts` sets up CloudWatch log groups with:
+
+```typescript title="slingshot.platform.ts"
+import { definePlatform } from '@lastshotlabs/slingshot-infra';
+
+export default definePlatform({
+  org: 'acme',
+  provider: 'aws',
+  region: 'us-east-1',
+  registry: {
+    provider: 'local',
+    path: '.slingshot/registry.json',
+  },
+  stages: {
+    prod: {
+      env: {
+        NODE_ENV: 'production',
+      },
+    },
+  },
+  defaults: {
+    logging: {
+      driver: 'cloudwatch',
+      retentionDays: 30,
+    },
+  },
+});
+```
+
+JSON log lines land in CloudWatch as structured records. Query them with CloudWatch Insights:
+
+```
+fields @timestamp, method, url, status, duration, userId
+| filter status >= 500
+| sort @timestamp desc
+| limit 100
+```
+
+### Grafana Loki
+
+```yaml title="promtail.yaml"
+scrape_configs:
+  - job_name: slingshot
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '.*slingshot.*'
+        action: keep
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            requestId: requestId
+            status: status
+            duration: duration
+      - labels:
+          level:
+          status:
+```
+
+LogQL query for P95 latency:
+
+```logql
+quantile_over_time(0.95, {job="slingshot"} | json | duration != "" | unwrap duration [5m])
+```
+
+---
+
+## See also
+
+- [Deployment](/guides/deployment/) — log driver config in `slingshot-infra`
+- [Horizontal Scaling](/guides/horizontal-scaling/) — shared event bus for multi-instance
+- [Secrets](/guides/secrets/) — securing the metrics endpoint token
+- [slingshot-auth](/packages/slingshot-auth/) — full list of security event payloads

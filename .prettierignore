@@ -1,0 +1,10 @@
+node_modules
+dist
+.archive
+.claude
+.tmp
+coverage
+packages/docs/dist
+.oclif.manifest.json
+bun.lock
+package-lock.json

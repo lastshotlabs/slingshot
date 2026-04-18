@@ -1,0 +1,52 @@
+---
+title: Documentation Levels
+description: How generated, AI, human, and notes docs work together in Slingshot
+---
+
+Slingshot keeps package docs in four lanes so ownership stays clear and automation does not stomp on trusted guidance.
+
+## Generated
+
+- Rebuilt by automation.
+- Best for inventories, package metadata, exports, scripts, and other facts.
+- Treat this lane as disposable output.
+
+## AI Draft
+
+- Good for first-pass explanations, summaries, and example-heavy drafts.
+- Humans can replace or rewrite this lane at any time.
+- Use it to move from blank page to useful starting point quickly.
+
+## Human Guide
+
+- Use for architecture, decisions, invariants, migration notes, and trusted guidance.
+- This is the authoritative lane.
+- Anything here should survive automation runs unchanged.
+
+## Notes
+
+- Use for rough notes, investigation breadcrumbs, and reminders.
+- Split a notes lane into more files when a topic deserves its own page.
+- Put personal untracked notes in `private.md` inside any `notes/` folder.
+
+## Package Layout
+
+Every package uses the same shape:
+
+```text
+docs/
+  generated/
+  ai/
+  human/
+  notes/
+```
+
+The root `@lastshotlabs/slingshot` package uses the same layout under `docs/package/`.
+
+## Workflow
+
+1. Run `bun run docs:sync` to scaffold missing docs folders and sync package docs into the Astro site.
+2. Run `bun run docs:api` to rebuild API reference pages from exported TypeScript entrypoints.
+3. Run `bun run docs:build` to assemble the full site.
+
+`bun run docs:generate` runs the sync and API steps together.

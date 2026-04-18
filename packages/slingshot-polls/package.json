@@ -1,0 +1,40 @@
+{
+  "name": "@lastshotlabs/slingshot-polls",
+  "version": "0.1.0",
+  "description": "Multiple-choice polls attachable to any user content for slingshot",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./testing": {
+      "bun": "./src/testing.ts",
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src/ --cache",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0",
+    "@lastshotlabs/slingshot-entity": "workspace:*",
+    "zod": ">=4.0 <5"
+  },
+  "peerDependencies": {
+    "hono": ">=4.12.12 <5"
+  }
+}

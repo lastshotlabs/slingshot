@@ -1,0 +1,46 @@
+{
+  "name": "@lastshotlabs/slingshot-core",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./testing": {
+      "bun": "./src/testing.ts",
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
+    },
+    "./content": {
+      "bun": "./src/content.public.ts",
+      "types": "./dist/src/content.public.d.ts",
+      "import": "./dist/src/content.public.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": ">=0.18",
+    "@asteasolutions/zod-to-openapi": ">=7.0"
+  },
+  "peerDependencies": {
+    "hono": ">=4.12.12 <5",
+    "zod": ">=4.0 <5"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.18.0"
+  }
+}

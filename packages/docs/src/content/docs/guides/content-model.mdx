@@ -1,0 +1,181 @@
+---
+title: Content Model
+description: Shared content model for chat messages, community threads, and replies — field reference, token syntax, rendering contract, and search indexing.
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot uses a **shared content model** across chat messages, community threads,
+and community replies. Every content entity carries the same field vocabulary
+so front-end clients can use a single rendering pipeline.
+
+## Content Layout
+
+A content entity renders in this order:
+
+1. **Quote** — if `quotedMessageId` / `quotedReplyId` is present, render the `quotePreview` block above the body.
+2. **Body** — the main text, interpreted according to `format`.
+3. **Attachments** — file/media previews from the `attachments` array.
+4. **Embeds** — link previews from the `embeds` array.
+5. **Poll** — if `pollId` is present, render the embedded poll widget.
+
+## `format` Field
+
+| Value                  | Behavior                                                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `'markdown'` (default) | Parse body as GitHub-flavored Markdown, then parse inline tokens in text runs.                                       |
+| `'plain'`              | Render body as literal text — no Markdown parsing. Inline tokens (`<@userId>`, `<@&roleId>`, etc.) are still parsed. |
+
+<Aside>
+  The old `contentType` field (which included `'rich'`) has been replaced by `format`. The `'rich'`
+  option was removed — structured rich-text editors should serialize to Markdown.
+</Aside>
+
+## Token Syntax
+
+Tokens are inline markers embedded in the body text. They are parsed by
+`parseContentTokens()` from `@lastshotlabs/slingshot-core/content`.
+
+| Token             | Syntax                     | Example          | Purpose                                |
+| ----------------- | -------------------------- | ---------------- | -------------------------------------- |
+| User mention      | `<@userId>`                | `<@user-123>`    | Mention a specific user.               |
+| Broadcast mention | `<@everyone>` or `<@here>` | `<@everyone>`    | Mention all members or online members. |
+| Role mention      | `<@&roleId>`               | `<@&moderator>`  | Mention all users with a role.         |
+| Context reference | `<#contextId>`             | `<#channel-abc>` | Link to a room/container/thread.       |
+| Emoji shortcode   | `:shortcode:`              | `:wave:`         | Render an emoji by name.               |
+
+Tokens inside code spans (`` `...` ``) and fenced code blocks are **not** parsed.
+
+## Field Reference
+
+### Chat Message
+
+| Field               | Type                      | Notes                                                                                                                 |
+| ------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `body`              | `string`                  | Required. Max 8,000 chars.                                                                                            |
+| `type`              | enum                      | `'text'` \| `'image'` \| `'file'` \| `'gif'` \| `'sticker'` \| `'voice'` \| `'location'` \| `'contact'` \| `'system'` |
+| `format`            | enum                      | `'plain'` \| `'markdown'` (default)                                                                                   |
+| `mentions`          | `string[]`                | User IDs mentioned. Client-provided or parsed from body.                                                              |
+| `broadcastMentions` | `('everyone'\|'here')[]`  | Broadcast mention tokens.                                                                                             |
+| `mentionedRoleIds`  | `string[]`                | Role IDs mentioned.                                                                                                   |
+| `attachments`       | `AssetRef[]`              | Uploaded files/media. Max 10.                                                                                         |
+| `embeds`            | `EmbedData[]`             | Server-resolved link previews.                                                                                        |
+| `quotedMessageId`   | `string`                  | ID of the quoted message (immutable).                                                                                 |
+| `quotePreview`      | `QuotePreview`            | Snapshot of quoted message body + author.                                                                             |
+| `pollId`            | `string`                  | Attached poll entity ID (immutable).                                                                                  |
+| `stickerId`         | `string`                  | Sticker asset ID (immutable).                                                                                         |
+| `location`          | `LocationData`            | Geolocation for `type: 'location'`.                                                                                   |
+| `contact`           | `ContactData`             | Contact card for `type: 'contact'`.                                                                                   |
+| `systemEvent`       | `SystemEventData`         | Event payload for `type: 'system'`.                                                                                   |
+| `appMetadata`       | `Record<string, unknown>` | Opaque application metadata.                                                                                          |
+
+### Community Thread
+
+| Field               | Type                     | Notes                                |
+| ------------------- | ------------------------ | ------------------------------------ |
+| `body`              | `string?`                | Optional.                            |
+| `format`            | enum                     | `'plain'` \| `'markdown'` (default)  |
+| `mentions`          | `string[]`               | User IDs mentioned.                  |
+| `broadcastMentions` | `('everyone'\|'here')[]` | Broadcast mention tokens.            |
+| `mentionedRoleIds`  | `string[]`               | Role IDs mentioned.                  |
+| `attachments`       | `AssetRef[]`             | Uploaded files/media.                |
+| `embeds`            | `EmbedData[]`            | Link previews.                       |
+| `pollId`            | `string`                 | Attached poll entity ID (immutable). |
+
+### Community Reply
+
+| Field               | Type                     | Notes                                   |
+| ------------------- | ------------------------ | --------------------------------------- |
+| `body`              | `string`                 | Required.                               |
+| `format`            | enum                     | `'plain'` \| `'markdown'` (default)     |
+| `mentions`          | `string[]`               | User IDs mentioned.                     |
+| `broadcastMentions` | `('everyone'\|'here')[]` | Broadcast mention tokens.               |
+| `mentionedRoleIds`  | `string[]`               | Role IDs mentioned.                     |
+| `attachments`       | `AssetRef[]`             | Uploaded files/media.                   |
+| `embeds`            | `EmbedData[]`            | Link previews.                          |
+| `quotedReplyId`     | `string`                 | ID of the quoted reply (immutable).     |
+| `quotePreview`      | `QuotePreview`           | Snapshot of quoted reply body + author. |
+
+## Shared Types
+
+All content-model types are exported from `@lastshotlabs/slingshot-core`:
+
+```ts
+import type {
+  AssetRef,
+  ContactData,
+  ContentFormat,
+  EmbedData,
+  LocationData,
+  QuotePreview,
+  SystemEventData,
+  VoiceMetadata,
+} from '@lastshotlabs/slingshot-core';
+```
+
+Validation schemas (Zod) are on the `/content` subpath:
+
+```ts
+import {
+  assetRefSchema,
+  contactDataSchema,
+  embedDataSchema,
+  locationDataSchema,
+  quotePreviewSchema,
+  systemEventDataSchema,
+} from '@lastshotlabs/slingshot-core/content';
+```
+
+Constants:
+
+```ts
+import {
+  // 10
+  MAX_CONTENT_ATTACHMENTS,
+  // 8,000
+  MAX_CONTENT_BODY_LENGTH,
+  // 50
+  MAX_CONTENT_MENTIONS,
+} from '@lastshotlabs/slingshot-core';
+```
+
+## Rendering Guide
+
+### Step 1: Parse tokens
+
+```ts
+import { parseContentTokens } from '@lastshotlabs/slingshot-core/content';
+
+const message = { body: 'Hello <@user-123>' };
+const parsed = parseContentTokens(message.body);
+// parsed.segments — array of ContentSegment
+// parsed.mentionedUserIds — string[]
+// parsed.broadcastMentions — ('everyone' | 'here')[]
+```
+
+### Step 2: Render segments
+
+Walk the `segments` array. Each segment has a `type` discriminator:
+
+| Segment type       | Rendering                                                        |
+| ------------------ | ---------------------------------------------------------------- |
+| `text`             | Render as plain text (or Markdown if `format === 'markdown'`).   |
+| `mention`          | Render as a user mention chip. Look up display name by `userId`. |
+| `broadcastMention` | Render as `@everyone` or `@here` badge.                          |
+| `roleMention`      | Render as a role mention chip.                                   |
+| `contextRef`       | Render as a clickable link to the referenced room/container.     |
+| `emoji`            | Render the shortcode as an emoji image or native character.      |
+| `codeSpan`         | Render as inline code.                                           |
+| `codeBlock`        | Render as a fenced code block with optional language tag.        |
+
+### Step 3: Append sidecar content
+
+After the body, render in order: attachments → embeds → poll.
+
+## Search Indexing
+
+When content is indexed by `slingshot-search`, the body is stripped of tokens
+via `stripContentTokens()` before indexing. This ensures that `<@user-123>`
+does not pollute full-text search results. The raw token data is preserved in
+the `mentions`, `broadcastMentions`, and `mentionedRoleIds` fields for
+filtered search.

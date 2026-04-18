@@ -1,0 +1,216 @@
+---
+title: Error Handling
+description: Validation failures, HttpError, auth middleware responses, and OpenAPI error schemas
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Slingshot has two main error paths:
+
+- request-shape failures handled by the shared validation hook
+- application failures handled by the framework's `app.onError`
+
+For framework-managed apps, prefer `HttpError` and `ValidationError`. Those are the types the built-in error handler understands today.
+
+## How errors flow
+
+Routers created with `createRouter()` use Slingshot's shared `defaultHook`. That means:
+
+1. request params, query strings, and JSON bodies are validated before your handler runs
+2. failed validation returns HTTP `400`
+3. handlers that throw `HttpError` are converted into structured JSON responses
+4. handlers that throw `ValidationError` reuse the active validation formatter
+5. all other thrown values fall through to Slingshot's generic `500` response
+
+Auth middleware such as `userAuth` and `requireRole(...)` returns `401` and `403` responses directly rather than throwing.
+
+## Validation errors
+
+The default validation formatter produces this shape:
+
+```json
+{
+  "error": "Invalid email, Required",
+  "details": [
+    { "path": "email", "message": "Invalid email" },
+    { "path": "name", "message": "Required" }
+  ],
+  "requestId": "req_a1b2c3d4"
+}
+```
+
+`DefaultValidationErrorBody` from `@lastshotlabs/slingshot` describes that contract exactly:
+
+| Field       | Type                                  | Meaning                                  |
+| ----------- | ------------------------------------- | ---------------------------------------- |
+| `error`     | `string`                              | Comma-joined summary of every issue      |
+| `details`   | `{ path: string; message: string }[]` | Per-field breakdown                      |
+| `requestId` | `string`                              | Correlation ID from the request pipeline |
+
+`path` is built with dot-separated segments because the implementation uses `issue.path.join('.')`.
+
+## Customizing validation responses
+
+Validation response customization lives under `validation.formatError`, not a top-level `validationErrorFormatter` option.
+
+```typescript title="src/index.ts"
+import { type ValidationErrorFormatter, createServer } from '@lastshotlabs/slingshot';
+
+const formatError: ValidationErrorFormatter = (issues, requestId) => ({
+  type: 'validation_error',
+  requestId,
+  fields: issues.map(issue => ({
+    path: issue.path.join('.'),
+    message: issue.message,
+  })),
+});
+
+void createServer({
+  validation: {
+    formatError,
+  },
+});
+```
+
+If your formatter throws, Slingshot falls back to the built-in formatter rather than surfacing a `500`.
+
+## Throwing typed HTTP errors
+
+Use `HttpError` when your handler needs to fail with a specific status code and an optional machine-readable code.
+
+```typescript title="src/routes/posts.ts"
+import { HttpError, createRouter } from '@lastshotlabs/slingshot';
+import { userAuth } from '@lastshotlabs/slingshot-auth';
+
+type Post = {
+  id: string;
+  tenantId: string | null;
+  title: string;
+};
+
+const posts = new Map<string, Post>();
+
+export const router = createRouter();
+
+router.get('/posts/:id', userAuth, c => {
+  const id = c.req.param('id');
+  const post = posts.get(id);
+
+  if (!post) {
+    throw new HttpError(404, 'Post not found', 'POST_NOT_FOUND');
+  }
+
+  if (post.tenantId !== (c.get('tenantId') ?? null)) {
+    throw new HttpError(403, 'Access denied', 'POST_ACCESS_DENIED');
+  }
+
+  return c.json(post, 200);
+});
+```
+
+`HttpError` becomes:
+
+- `{ error, requestId }` for a normal framework error
+- `{ error, requestId, code }` when you pass a `code`
+
+## Reusing the validation path from service code
+
+When validation happens outside the route layer, throw `ValidationError` with the raw Zod issues.
+
+```typescript
+import { z } from 'zod';
+import { ValidationError } from '@lastshotlabs/slingshot-core';
+
+export async function validateBody<T extends z.ZodType>(
+  schema: T,
+  req: Request,
+): Promise<z.output<T>> {
+  const body: unknown = await req.json();
+  const result = schema.safeParse(body);
+
+  if (!result.success) {
+    throw new ValidationError(
+      result.error.issues as ConstructorParameters<typeof ValidationError>[0],
+    );
+  }
+
+  return result.data;
+}
+```
+
+This feeds back into the same formatter configured in `validation.formatError`.
+
+## Authentication errors
+
+These are the common middleware-level responses:
+
+| Middleware                                 | Status | Body                          |
+| ------------------------------------------ | ------ | ----------------------------- |
+| `userAuth`                                 | `401`  | `{ "error": "Unauthorized" }` |
+| `requireRole('admin')` without a user      | `401`  | `{ "error": "Unauthorized" }` |
+| `requireRole('admin')` with the wrong role | `403`  | `{ "error": "Forbidden" }`    |
+
+```typescript
+import { createRouter } from '@lastshotlabs/slingshot';
+import { requireRole, userAuth } from '@lastshotlabs/slingshot-auth';
+
+const router = createRouter();
+
+router.delete('/admin/users/:id', userAuth, requireRole('admin'), c => {
+  return c.body(null, 204);
+});
+
+router.get('/super/dashboard', userAuth, requireRole.global('superadmin'), c => {
+  return c.json({ ok: true }, 200);
+});
+```
+
+`requireRole.global(...)` ignores tenant scoping intentionally and checks app-wide roles only.
+
+## OpenAPI error schemas
+
+Use named schemas for reusable error responses so clients see consistent `$ref` components throughout the document.
+
+```typescript title="src/schemas/errors.ts"
+import { z } from 'zod';
+import { ErrorResponse } from '@lastshotlabs/slingshot-auth';
+
+export { ErrorResponse };
+
+export const ValidationErrorResponse = z.object({
+  error: z.string(),
+  requestId: z.string(),
+  details: z.array(
+    z.object({
+      path: z.string(),
+      message: z.string(),
+    }),
+  ),
+});
+
+export const NotFoundErrorResponse = z.object({
+  error: z.string(),
+  requestId: z.string(),
+});
+```
+
+`ErrorResponse` from `@lastshotlabs/slingshot-auth` is the canonical built-in auth error shape: `{ error: string }`.
+
+## Status-code expectations
+
+For framework-managed APIs, consumers can generally expect:
+
+| Status | Typical source                            | Body shape                                                                              |
+| ------ | ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| `400`  | route validation or `ValidationError`     | `{ error, details, requestId }` by default                                              |
+| `401`  | auth middleware                           | `{ error: "Unauthorized" }`                                                             |
+| `403`  | authz middleware or `HttpError(403, ...)` | auth middleware returns `{ error: "Forbidden" }`; `HttpError` also includes `requestId` |
+| `404`  | missing resource                          | `{ error, requestId }` when thrown via `HttpError`                                      |
+| `409`  | conflict                                  | `{ error, requestId, code? }` when thrown via `HttpError`                               |
+| `500`  | unhandled exception                       | `{ error: "Internal Server Error", requestId }`                                         |
+
+<Aside type="caution">
+  Slingshot's built-in `app.onError` path is centered on `HttpError` and `ValidationError`. If you
+  throw other framework-specific exception types, install your own outer error handler or convert
+  them to `HttpError` first.
+</Aside>

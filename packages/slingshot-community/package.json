@@ -1,0 +1,55 @@
+{
+  "name": "@lastshotlabs/slingshot-community",
+  "version": "0.1.1",
+  "description": "Community forum plugin for Slingshot — containers, threads, replies, reactions, moderation",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    },
+    "./testing": {
+      "bun": "./src/testing.ts",
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0",
+    "@lastshotlabs/slingshot-entity": "^0.1.0",
+    "@lastshotlabs/slingshot-notifications": "workspace:*"
+  },
+  "peerDependencies": {
+    "@hono/zod-openapi": ">=0.18",
+    "hono": ">=4.12.12 <5",
+    "zod": ">=4.0 <5",
+    "drizzle-orm": ">=0.45.2 <1",
+    "mongoose": ">=9.0 <10",
+    "pg": "^8.20.0"
+  },
+  "peerDependenciesMeta": {
+    "drizzle-orm": {
+      "optional": true
+    },
+    "mongoose": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
+  }
+}

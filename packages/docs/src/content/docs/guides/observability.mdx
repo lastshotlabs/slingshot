@@ -1,0 +1,184 @@
+---
+title: Observability & Distributed Tracing
+description: Configure OpenTelemetry distributed tracing in Slingshot apps for bootstrap, request, and plugin lifecycle visibility.
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot provides built-in OpenTelemetry (OTel) instrumentation for distributed tracing. When enabled, the framework creates spans for bootstrap phases, HTTP requests, and plugin lifecycle calls. Combined with the existing Prometheus metrics and structured request logs, this gives operators full visibility into application behavior.
+
+## What Slingshot Instruments
+
+### Bootstrap Spans
+
+When tracing is enabled, `createApp()` produces a span hierarchy showing where startup time goes:
+
+- `slingshot.bootstrap` (root span)
+  - `slingshot.bootstrap.validate` -- config validation
+  - `slingshot.bootstrap.secrets` -- secret resolution
+  - `slingshot.bootstrap.infrastructure` -- DB connections, cache, queue setup
+  - `slingshot.bootstrap.context` -- context creation
+  - `slingshot.bootstrap.middleware.framework` -- framework middleware mounting
+  - `slingshot.bootstrap.middleware.boundary` -- boundary adapter registration
+  - `slingshot.bootstrap.middleware.plugins` -- plugin middleware phase
+    - `slingshot.plugin.<name>.setupMiddleware` -- per-plugin spans
+  - `slingshot.bootstrap.schemas` -- schema pre-loading
+  - `slingshot.bootstrap.routes.plugins` -- plugin route phase
+    - `slingshot.plugin.<name>.setupRoutes` -- per-plugin spans
+  - `slingshot.bootstrap.routes.core` -- health, home, optional endpoints
+  - `slingshot.bootstrap.routes.service` -- file-based route mounting
+  - `slingshot.bootstrap.post` -- plugin post phase
+    - `slingshot.plugin.<name>.setupPost` -- per-plugin spans
+  - `slingshot.bootstrap.finalize` -- context finalization
+
+### Request Spans
+
+Every HTTP request gets a root span with attributes following OTel HTTP semantic conventions:
+
+- `http.method` -- request method
+- `http.target` -- request path
+- `http.url` -- full request URL
+- `http.status_code` -- response status code
+- `slingshot.request_id` -- server-generated request ID
+- `slingshot.user_id` -- authenticated user ID (when available)
+- `slingshot.tenant_id` -- resolved tenant ID (when available)
+
+The middleware extracts W3C Trace Context and B3 propagation headers from incoming requests, enabling distributed trace continuity across services.
+
+### Plugin Lifecycle Spans
+
+Each plugin's lifecycle calls produce individual spans with attributes:
+
+- `slingshot.plugin.name` -- the plugin name
+- `slingshot.plugin.phase` -- the lifecycle phase (`setupMiddleware`, `setupRoutes`, `setupPost`)
+- `slingshot.plugin.dependency_count` -- number of declared dependencies
+
+## Enabling Tracing
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "observability": {
+        "tracing": {
+          "enabled": true,
+          "serviceName": "my-app"
+        }
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Programmatic">
+    ```ts
+    import { createServer } from '@lastshotlabs/slingshot';
+
+    await createServer({
+      observability: {
+        tracing: {
+          enabled: true,
+          serviceName: 'my-app',
+        },
+      },
+      // ...
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+When `enabled` is `false` or omitted, no tracer is created and there is zero runtime overhead. The `@opentelemetry/api` package returns no-op implementations when no SDK is registered.
+
+The `serviceName` field sets the service name reported in all spans. It defaults to the app name from `meta.name`, or `'slingshot-app'` if neither is set.
+
+## Installing an OTel SDK
+
+Slingshot depends on `@opentelemetry/api` only (the thin API surface). To actually collect and export spans, install an OTel SDK and exporter in your app:
+
+```sh
+bun add @opentelemetry/sdk-node @opentelemetry/auto-instrumentations-node @opentelemetry/exporter-trace-otlp-http
+```
+
+Configure the SDK before your app starts (e.g., in a `tracing.ts` file imported at the top of your entry point):
+
+```javascript
+// tracing.ts
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces', // OTLP HTTP endpoint (Jaeger, Tempo, etc.)
+  }),
+  instrumentations: [getNodeAutoInstrumentations()],
+  serviceName: 'my-app',
+});
+
+sdk.start();
+```
+
+Then import it before your server:
+
+```javascript
+// index.ts
+// Must be first
+import { createServerFromManifest } from '@lastshotlabs/slingshot';
+import './tracing';
+
+await createServerFromManifest('./app.manifest.json');
+```
+
+The Slingshot framework spans will appear alongside any auto-instrumented spans (HTTP client, database queries, etc.) in your OTel backend.
+
+## Plugin Child Spans
+
+Plugin authors can create child spans within the current request's trace context using the `createChildSpan` helper:
+
+```javascript
+import { createChildSpan } from '@lastshotlabs/slingshot';
+
+router.get('/heavy-work', async c => {
+  const span = createChildSpan(c, 'my-plugin.heavy-computation');
+  try {
+    const result = await doExpensiveWork();
+    span?.setAttribute('result.count', result.length);
+    return c.json(result);
+  } finally {
+    span?.end();
+  }
+});
+```
+
+`createChildSpan` returns `undefined` when tracing is not active, so always use optional chaining (`span?.end()`). The child span is automatically parented to the request's root span.
+
+## Log Correlation
+
+When tracing is active, the structured request logger automatically includes `traceId` and `spanId` fields in every log entry:
+
+```json
+{
+  "level": "info",
+  "time": 1713100800000,
+  "msg": "GET /api/users 200",
+  "requestId": "a1b2c3d4-...",
+  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+  "spanId": "00f067aa0ba902b7",
+  "method": "GET",
+  "path": "/api/users",
+  "statusCode": 200,
+  "responseTime": 12.34
+}
+```
+
+Log aggregation tools (Datadog, Grafana Loki, Elasticsearch) can use these fields to correlate logs with traces, enabling a single click from a log line to its full distributed trace.
+
+When tracing is not active, `traceId` and `spanId` are `null`.
+
+## Relationship to Prometheus Metrics
+
+Tracing and metrics are complementary:
+
+- **Prometheus metrics** (`metrics.enabled`) answer "how many requests hit this path" and "what is the p99 latency". They are aggregated counters and histograms with low cardinality.
+- **Distributed traces** (`observability.tracing.enabled`) answer "where did this specific request spend its time" and "which plugin was slow during startup". They are per-request/per-bootstrap detailed breakdowns.
+
+Both can be enabled simultaneously. The OTel request span middleware runs before the Prometheus metrics middleware, so metrics collection is included in the request span duration.

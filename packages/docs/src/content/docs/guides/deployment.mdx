@@ -1,0 +1,375 @@
+---
+title: Deployment
+description: Deploy a Slingshot app to AWS ECS Fargate or a self-managed EC2 server using slingshot-infra and the CLI
+---
+
+import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Describe infrastructure in TypeScript. The CLI generates Dockerfiles, cloud configs, and GitHub Actions workflows — then runs the deploy. `slingshot-infra` owns the infrastructure config. The `slingshot` CLI owns the build, push, and deploy.
+
+This page is a step-by-step deploy guide. For a deeper walkthrough of the config-driven infrastructure design — provisioners, the registry, multi-stage resource management, EC2 vs ECS — see [Config-Driven Infrastructure](/config-driven/infra/).
+
+## Install
+
+```bash
+bun add --dev @lastshotlabs/slingshot-infra
+```
+
+## The two config files
+
+Deployment uses two files that live alongside your app:
+
+- **`slingshot.platform.ts`** — shared infrastructure: cloud provider, regions, resources (databases, caches), deployment stacks, stages (dev/prod)
+- **`slingshot.infra.ts`** — app-specific config: port, container size, which resources it uses, health check, scaling
+
+---
+
+## 1. Initialize platform config
+
+```bash
+slingshot platform init
+```
+
+Runs an interactive setup and generates `slingshot.platform.ts`:
+
+```typescript title="slingshot.platform.ts"
+import { definePlatform } from '@lastshotlabs/slingshot-infra';
+
+export default definePlatform({
+  org: 'acme',
+  provider: 'aws',
+  region: 'us-east-1',
+
+  registry: {
+    provider: 's3',
+    bucket: 'acme-slingshot-registry',
+  },
+
+  secrets: {
+    provider: 'ssm',
+    pathPrefix: '/acme/',
+  },
+
+  resources: {
+    db: {
+      type: 'postgres',
+      provision: true,
+      stages: {
+        dev: { instanceClass: 'db.t3.micro', storageGb: 20 },
+        prod: { instanceClass: 'db.t3.small', storageGb: 100 },
+      },
+    },
+    cache: {
+      type: 'redis',
+      provision: true,
+    },
+  },
+
+  stacks: {
+    main: {
+      preset: 'ecs',
+    },
+  },
+
+  stages: {
+    dev: {
+      domainSuffix: '.dev.acme.com',
+    },
+    prod: {
+      domainSuffix: '.acme.com',
+    },
+  },
+
+  defaults: {
+    scaling: { min: 1, max: 3, targetCpuPercent: 70 },
+    logging: { driver: 'cloudwatch', retentionDays: 30 },
+  },
+
+  dns: {
+    provider: 'cloudflare',
+    apiToken: process.env.CLOUDFLARE_API_TOKEN,
+  },
+});
+```
+
+## 2. Initialize app infra config
+
+```bash
+slingshot infra init
+```
+
+Generates `slingshot.infra.ts`:
+
+```typescript title="slingshot.infra.ts"
+import { defineInfra } from '@lastshotlabs/slingshot-infra';
+
+export default defineInfra({
+  stacks: ['main'],
+  domain: 'api', // resolves to api.dev.acme.com / api.acme.com
+  port: 3000,
+  size: 'small', // 256 CPU / 512MB memory
+
+  uses: ['db', 'cache'], // auto-wires DATABASE_URL and REDIS_URL as env vars
+
+  healthCheck: '/health',
+
+  scaling: {
+    min: 1,
+    max: 5,
+    targetCpuPercent: 60,
+  },
+});
+```
+
+## 3. Provision shared resources
+
+Create the RDS and ElastiCache instances for a stage:
+
+```bash
+slingshot platform deploy --stage dev
+```
+
+Provisions the resources declared in `slingshot.platform.ts` via SST/CloudFormation. Run once per stage — safe to re-run; existing resources update in place.
+
+## 4. Deploy the app
+
+```bash
+slingshot deploy --stage dev
+```
+
+What happens:
+
+1. Loads `slingshot.platform.ts` and `slingshot.infra.ts`
+2. Generates a `Dockerfile` for your app
+3. Generates an SST config (ECS) or `docker-compose.yml` (EC2)
+4. Generates a GitHub Actions workflow for CI/CD
+5. Resolves environment variables — database URLs and cache URLs from provisioned resources are auto-wired
+6. Builds and pushes the Docker image
+7. Deploys to AWS via SST
+8. Updates DNS records
+9. Records the deploy in the registry (enables rollback)
+
+---
+
+## Deployment targets
+
+### ECS Fargate (recommended for AWS)
+
+AWS-managed containers. No servers to manage. Auto-scales on CPU.
+
+```typescript title="slingshot.platform.ts"
+stacks: {
+  main: { preset: 'ecs' },
+},
+```
+
+What gets generated: `Dockerfile`, `sst.config.ts`, `.github/workflows/deploy.yml`
+
+Deploy runs `bunx sst deploy --stage <name>` which creates/updates:
+
+- ECS cluster and service
+- Application Load Balancer
+- Task definitions with auto-scaling
+- CloudWatch log groups
+
+### EC2 (self-managed)
+
+Docker Compose on an EC2 instance. The `ec2-nginx` preset defaults to Caddy as the reverse proxy with automatic TLS via Let's Encrypt. Pass `proxy: 'nginx'` to use nginx instead.
+
+```typescript title="slingshot.platform.ts"
+import { definePlatform } from '@lastshotlabs/slingshot-infra';
+
+export default definePlatform({
+  org: 'acme',
+  provider: 'aws',
+  region: 'us-east-1',
+  registry: {
+    provider: 'local',
+    path: '.slingshot/registry.json',
+  },
+  stages: {
+    dev: {
+      env: {
+        NODE_ENV: 'development',
+      },
+    },
+  },
+  stacks: {
+    main: {
+      preset: 'ec2-nginx',
+      network: {
+        sshKeyName: 'my-key-pair',
+      },
+    },
+  },
+});
+```
+
+What gets generated: `Dockerfile`, `docker-compose.yml`, `Caddyfile`, `.github/workflows/deploy.yml`
+
+Deploy SSHes to the host, copies the compose file, pulls the new image, and restarts the container.
+
+First, register the EC2 host:
+
+```bash
+slingshot servers add --host 1.2.3.4 --stage dev
+```
+
+---
+
+## Container size presets
+
+| Size     | CPU  | Memory | Good for                       |
+| -------- | ---- | ------ | ------------------------------ |
+| `small`  | 256  | 512 MB | Development, low traffic       |
+| `medium` | 512  | 1 GB   | Moderate traffic               |
+| `large`  | 1024 | 2 GB   | Production workloads           |
+| `xlarge` | 2048 | 4 GB   | High traffic, memory-intensive |
+
+---
+
+## Resource auto-wiring
+
+Declare `uses: ['db', 'cache']` and Slingshot injects connection strings as environment variables at deploy time:
+
+```typescript
+uses: ['db', 'cache'],
+// Automatically sets DATABASE_URL and REDIS_URL from provisioned resources
+// No manual env var wiring needed
+```
+
+Pair this with the manifest secrets config:
+
+```json title="app.manifest.json"
+{
+  "db": {
+    "postgres": "${env:DATABASE_URL}",
+    "redis": "${env:REDIS_URL}"
+  }
+}
+```
+
+The deploy pipeline pulls `DATABASE_URL` and `REDIS_URL` from provisioned resource outputs and injects them into the container.
+
+---
+
+## Multi-service apps
+
+For apps with multiple services (API, worker, scheduler):
+
+```typescript title="slingshot.infra.ts"
+import { defineInfra } from '@lastshotlabs/slingshot-infra';
+
+export default defineInfra({
+  services: {
+    api: {
+      path: './services/api',
+      stacks: ['main'],
+      domain: 'api',
+      port: 3000,
+      size: 'medium',
+      uses: ['db', 'cache'],
+      healthCheck: '/health',
+    },
+    worker: {
+      path: './services/worker',
+      stacks: ['main'],
+      size: 'small',
+      uses: ['db', 'cache'],
+      scaling: { min: 1, max: 2 },
+    },
+  },
+});
+```
+
+Each service gets its own Dockerfile, task definition, and scaling configuration.
+
+---
+
+## Rollback
+
+Roll back to the previous image:
+
+```bash
+slingshot rollback --stage prod
+slingshot rollback --stage prod --service api
+slingshot rollback --stage prod --service api --tag v1.2.3
+```
+
+The registry tracks previous image tags per service per stage. Rollback calls the preset's deploy with the prior tag.
+
+---
+
+## CI/CD with GitHub Actions
+
+The generated `.github/workflows/deploy.yml` runs on push to `main`:
+
+```yaml
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: bun install
+      - run: slingshot deploy --stage prod --yes
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+```
+
+---
+
+## Preview deploys
+
+```bash
+# See what would change without deploying
+slingshot deploy --stage prod --plan
+
+# Generate files without deploying
+slingshot infra generate --stage prod
+
+# Validate without starting
+slingshot start --dry-run
+```
+
+---
+
+## Secrets in production
+
+Push local secrets to SSM before first deploy:
+
+```bash
+slingshot secrets push --stage prod
+```
+
+Verify all required secrets are present:
+
+```bash
+slingshot secrets check --stage prod
+```
+
+See [Secrets](/guides/secrets/) for full documentation.
+
+---
+
+## DNS
+
+Configure `platform.dns` and Slingshot updates DNS records automatically after each deploy. Supported providers:
+
+- **Cloudflare** — updates A/CNAME records via API
+- **Route53** — AWS native, no extra config
+- **Manual** — logs the records to update yourself
+
+---
+
+## See also
+
+- [Config-Driven Infrastructure](/config-driven/infra/) — deep walkthrough of `definePlatform`, `defineInfra`, provisioners, registry, and the deploy pipeline
+- [slingshot-infra](/packages/slingshot-infra/) — full platform and infra config reference
+- [Horizontal Scaling](/guides/horizontal-scaling/) — multi-instance deployments with shared state
+- [Secrets](/guides/secrets/) — managing secrets across environments

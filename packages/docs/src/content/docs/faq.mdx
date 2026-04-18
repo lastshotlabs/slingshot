@@ -1,0 +1,455 @@
+---
+title: FAQ
+description: Common questions about Slingshot answered.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Does Slingshot work on Node.js?
+
+Yes. Install `@slingshot/runtime-node` and pass it as the runtime adapter:
+
+```typescript
+import { nodeRuntime } from '@slingshot/runtime-node';
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  runtime: nodeRuntime(),
+  port: 3000,
+  // ...
+});
+```
+
+Node 20+ is required. The Node adapter uses `node:http` under the hood and supports the same middleware, route, and plugin model as the Bun adapter.
+
+**Performance difference:** Bun is meaningfully faster — typically 2–3× higher throughput on I/O-bound workloads in benchmarks. The Node adapter exists for environments where Bun isn't available (some CI/CD pipelines, corporate Linux images, Lambda runtimes). For new projects with no existing Node constraint, use Bun.
+
+---
+
+## Can I use Slingshot with an existing Hono app?
+
+Yes. `createApp()` returns `{ app, ctx }`, where `app` is a standard Hono instance. You can mount that app into any Hono application as a sub-router, or use it as the base app and mount your existing routes on top.
+
+**Mount Slingshot under a path in your existing app:**
+
+```typescript
+import { Hono } from 'hono';
+import { createApp } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+const { app: slingshotApp } = await createApp({
+  security: { signing: { secret: process.env.SECRET! } },
+  plugins: [
+    createAuthPlugin({
+      /* ... */
+    }),
+  ],
+});
+
+const myApp = new Hono();
+myApp.route('/api', slingshotApp); // all Slingshot routes under /api
+myApp.get('/legacy', c => c.text('existing handler'));
+
+export default myApp;
+```
+
+**Use Slingshot as the base and add your routes on top:**
+
+```typescript
+const { app } = await createApp({
+  /* ... */
+});
+
+// app is a Hono instance — attach more routes directly
+app.get('/custom', c => c.text('custom handler'));
+```
+
+All Hono middleware, routing, and lifecycle APIs work unchanged.
+
+---
+
+## How do I add a route that isn't in a plugin?
+
+Set `routesDir` in your config and create files that export a `router`:
+
+```typescript title="slingshot.config.ts or createServer call"
+await createServer({
+  routesDir: './src/routes',
+  // ...
+});
+```
+
+```typescript title="src/routes/orders.ts"
+import { Hono } from 'hono';
+
+const router = new Hono();
+
+router.get('/orders', async c => {
+  return c.json({ orders: [] });
+});
+
+router.post('/orders', async c => {
+  const body = await c.req.json();
+  // ...
+  return c.json({ id: 'ord_123' }, 201);
+});
+
+export { router };
+```
+
+Slingshot discovers every file in `routesDir` that exports a named `router`. File names determine nothing — routing comes entirely from what you register on the `Hono` instance. Nest files in subdirectories freely.
+
+<Aside>
+  Routes discovered via `routesDir` run after plugin routes. If you need to intercept before plugin
+  routes, use the plugin `setupMiddleware` lifecycle instead.
+</Aside>
+
+---
+
+## What's the difference between `createServer` and `createApp`?
+
+`createServer` starts the HTTP server and returns the running server instance. Use it in production entry points.
+
+`createApp` assembles the Hono application and returns `{ app, ctx }` — it applies plugins, wires middleware, and discovers routes, but does **not** bind a port or accept connections. Use it for testing, or when you want to embed Slingshot into a larger Hono application.
+
+```typescript
+// Production
+await createServer({ port: 3000 /* ... */ });
+
+// Testing — no port, no server, no cleanup needed
+const { app } = await createApp({
+  /* ... */
+});
+const res = await app.request('/api/auth/login', {
+  method: 'POST',
+  body: JSON.stringify({ email: 'user@example.com', password: 'secret' }),
+  headers: { 'Content-Type': 'application/json' },
+});
+```
+
+`createApp` is what the testing utilities in `@lastshotlabs/slingshot-auth/testing` (and other `*/testing` subpaths) use internally. It creates a fully wired app identical to production, just without an HTTP server bound to a port.
+
+---
+
+## How do I run database migrations?
+
+Entity plugins generate migration SQL from your entity definitions. Two paths:
+
+**Via the CLI (recommended for CI/CD):**
+
+```bash
+# Generate migration files
+slingshot migrate generate --stage dev
+
+# Apply pending migrations
+slingshot migrate run --stage dev
+
+# Preview what would run
+slingshot migrate status --stage dev
+```
+
+**Via the migration API in code:**
+
+```typescript
+import {
+  type ResolvedEntityConfig,
+  generateMigrations,
+  loadSnapshot,
+} from '@lastshotlabs/slingshot-entity';
+
+declare const User: ResolvedEntityConfig;
+
+const snapshot = loadSnapshot('.slingshot/snapshots', User);
+
+if (snapshot) {
+  const migrations = generateMigrations(snapshot.entity, User, ['postgres']);
+  for (const [filename, script] of Object.entries(migrations)) {
+    console.log(filename, script);
+  }
+}
+```
+
+SQLite and Postgres are supported. MongoDB uses schemaless documents — no migrations needed. The CLI wraps the same snapshot-and-diff flow, then writes the generated scripts to `migrations/`.
+
+---
+
+## Can I use Slingshot without the manifest?
+
+Yes. The manifest is a convenience layer over `createServer`. Every option in `app.manifest.json` maps 1:1 to a `createServer` config key. The manifest adds zero-code bootstrap (`slingshot start`) and environment-variable placeholder syntax (`${env:NAME}`, `${secret:NAME}`).
+
+Everything the manifest does, you can express in code:
+
+```typescript
+// This is what slingshot start does under the hood
+await createServer({
+  port: 3000,
+  security: { signing: { secret: process.env.SECRET! } },
+  db: {
+    postgres: process.env.DATABASE_URL,
+    redis: process.env.REDIS_URL,
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user'], defaultRole: 'user' },
+      db: { auth: 'postgres', sessions: 'redis', oauthState: 'redis' },
+    }),
+  ],
+});
+```
+
+See [Manifest vs code](/manifest-vs-code/) for a full comparison of the two approaches.
+
+---
+
+## How do I add custom middleware?
+
+Two options depending on where you need it to run.
+
+**Via a plugin (recommended — integrates with the lifecycle):**
+
+```typescript
+import type { Context, Next } from 'hono';
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot';
+import type { PluginSetupContext } from '@lastshotlabs/slingshot-core';
+
+function createMyPlugin(): SlingshotPlugin {
+  return {
+    name: 'my-plugin',
+    async setupMiddleware({ app }: PluginSetupContext) {
+      // Runs after framework middleware, before tenant middleware
+      app.use('*', async (c: Context, next: Next) => {
+        c.header('X-Custom', 'value');
+        await next();
+      });
+    },
+  };
+}
+```
+
+**When embedding Slingshot in a larger Hono app:**
+
+```typescript
+import { Hono } from 'hono';
+import { createApp } from '@lastshotlabs/slingshot';
+
+const myMiddleware = async (_c: import('hono').Context, next: import('hono').Next) => {
+  await next();
+};
+
+const { app: slingshotApp } = await createApp({
+  /* ... */
+});
+
+const app = new Hono();
+app.use('*', myMiddleware);
+app.route('/', slingshotApp);
+```
+
+For middleware that needs to run before Slingshot's own request handling (e.g., IP allowlisting, rate limiting by a non-standard key), use `setupMiddleware` in a plugin — this is the only way to insert middleware early in the chain.
+
+---
+
+## What happens when I upgrade a Slingshot package?
+
+Slingshot is pre-production. Breaking changes happen and are not announced in advance. When you upgrade:
+
+1. Read the CHANGELOG for the packages you're upgrading.
+2. Run `bun run typecheck` — type errors surface most breaking changes immediately.
+3. Run the test suite.
+
+No migration guides, no deprecation periods, no backwards-compatibility shims. If something breaks, fix it. The upside: the API surface stays lean and gets cleaned up aggressively.
+
+<Aside type="caution">
+  Pin your Slingshot package versions in `package.json` and upgrade deliberately. Unpinned
+  dependencies will pull in breaking changes on the next `bun install`.
+</Aside>
+
+---
+
+## Does Slingshot support GraphQL?
+
+Not natively. Mount a GraphQL handler as a custom route alongside the OpenAPI routes:
+
+```typescript
+import type { MiddlewareHandler } from 'hono';
+import { createApp } from '@lastshotlabs/slingshot';
+
+declare const mySchema: object;
+declare function createGraphQLHandler(options: {
+  schema: object;
+  context: (req: { raw: Request }) => { userId: string | null };
+}): MiddlewareHandler;
+
+const { app } = await createApp({
+  /* ... */
+});
+
+app.use(
+  '/graphql',
+  createGraphQLHandler({
+    schema: mySchema,
+    context: req => ({
+      userId: req.raw.headers.get('x-user-id'),
+    }),
+  }),
+);
+```
+
+GraphQL Yoga, Mercurius, and Apollo Server all expose a Hono/fetch-compatible handler. Any of them work here. OpenAPI routes and GraphQL can coexist on the same app with no conflict.
+
+---
+
+## How do I disable the OpenAPI docs in production?
+
+```typescript
+await createServer({
+  openapi: { enabled: false },
+  // ...
+});
+```
+
+Or in the manifest:
+
+```json
+{
+  "openapi": { "enabled": false }
+}
+```
+
+You can also leave the spec enabled but disable the UI:
+
+```typescript
+openapi: {
+  enabled: true,
+  ui: false,   // disables Scalar/Swagger UI, keeps /openapi.json
+}
+```
+
+Set `enabled: process.env.NODE_ENV !== 'production'` to tie it to the environment automatically.
+
+---
+
+## How do I add HTTPS / TLS?
+
+Pass a `tls` config to `createServer`. Slingshot uses Bun's native TLS:
+
+```typescript
+await createServer({
+  port: 443,
+  tls: {
+    cert: Bun.file('./certs/server.crt'),
+    key: Bun.file('./certs/server.key'),
+  },
+});
+```
+
+For Let's Encrypt certificates, pass the PEM files directly. Bun handles TLS termination in the same process.
+
+**In production, let the reverse proxy handle TLS termination.** Caddy (auto-TLS), nginx, or an AWS ALB all terminate TLS before traffic reaches your app container. This offloads certificate rotation and reduces the attack surface of the app process.
+
+<Aside>
+  The Node adapter uses `node:https` for TLS. The config shape is the same; the underlying
+  implementation differs.
+</Aside>
+
+---
+
+## Can I use multiple databases at once?
+
+Yes. Slingshot's connection config is a map — provide connection strings for each backend you need:
+
+```typescript
+await createServer({
+  db: {
+    postgres: process.env.DATABASE_URL, // relational data
+    mongo: process.env.MONGO_URL, // document data
+    redis: process.env.REDIS_URL, // sessions, cache, queues
+    sqlite: './local.db', // local dev or embedded data
+  },
+  plugins: [
+    createAuthPlugin({
+      db: { auth: 'postgres', sessions: 'redis', oauthState: 'redis' },
+    }),
+    createCommunityPlugin({
+      db: { threads: 'mongo', reactions: 'redis' },
+    }),
+  ],
+});
+```
+
+Each plugin declares which adapter it uses for each concern. The connections are shared — the `postgres` connection opens once and serves all plugins that need it.
+
+---
+
+## How do I handle file uploads?
+
+See the [File Uploads](/guides/file-uploads/) guide for the full walkthrough. The short version: Slingshot uses Bun's native multipart parser:
+
+```typescript
+router.post('/upload', async c => {
+  const formData = await c.req.formData();
+  const file = formData.get('file') as File;
+
+  const buffer = await file.arrayBuffer();
+  // write to S3, local disk, etc.
+
+  return c.json({ size: file.size, name: file.name });
+});
+```
+
+For large uploads or uploads to S3, the guide covers streaming multipart uploads and presigned URL flows.
+
+---
+
+## What's the smallest possible Slingshot server?
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  port: 3000,
+  security: { signing: { secret: 'at-least-32-characters-long-secret' } },
+});
+```
+
+No plugins, no routes, no database. This boots an HTTP server with framework middleware (request ID, CORS, rate limiting) and an empty route table. Add plugins and routes incrementally from here.
+
+---
+
+## How do I customize error responses?
+
+Register a Hono `onError` handler on the app instance returned by `createServer`:
+
+```typescript
+const { app } = await createServer({
+  /* ... */
+});
+
+app.onError((err, c) => {
+  // Log the error
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      msg: err.message,
+      requestId: c.get('requestId'),
+      url: c.req.url,
+    }),
+  );
+
+  // Return a custom error shape
+  return c.json(
+    {
+      error: {
+        code: 'internal_error',
+        message: 'Something went wrong.',
+        requestId: c.get('requestId'),
+      },
+    },
+    500,
+  );
+});
+```
+
+For domain-specific errors (validation failures, auth errors), Slingshot's plugins throw typed `HttpException` subclasses. You can discriminate on `err instanceof HttpException` in the error handler to return different shapes per error type.
+
+See the [Error Handling](/guides/error-handling/) guide for a full reference on error types and response customization.

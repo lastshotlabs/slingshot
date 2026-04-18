@@ -1,0 +1,43 @@
+{
+  "name": "@lastshotlabs/slingshot-m2m",
+  "version": "0.1.0",
+  "description": "Machine-to-machine (M2M) OAuth2 client credentials plugin for Slingshot",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint src/ --cache",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "^0.1.0"
+  },
+  "peerDependencies": {
+    "@lastshotlabs/slingshot-auth": "^0.1.0",
+    "hono": ">=4.12.12 <5",
+    "zod": ">=4.0 <5",
+    "mongoose": ">=9.0 <10"
+  },
+  "peerDependenciesMeta": {
+    "@lastshotlabs/slingshot-auth": {
+      "optional": false
+    },
+    "mongoose": {
+      "optional": true
+    }
+  }
+}

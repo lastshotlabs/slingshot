@@ -1,0 +1,68 @@
+---
+title: App Builder Flow
+description: The workflow for agents and developers building an app with Slingshot rather than modifying Slingshot itself.
+---
+
+This is the Slingshot-consumer flow.
+
+Use it when you are building a product with Slingshot and want to choose the right composition
+without reading framework internals first.
+
+## Start From Capability, Not Internals
+
+Read in this order:
+
+1. docs home
+2. examples index
+3. the closest source-backed example
+4. relevant package overview pages
+5. package reference pages only for the packages you are composing
+
+Examples of good starting points:
+
+- auth and identity: [/examples/with-auth/](/examples/with-auth/)
+- config-driven package authoring: [/examples/config-driven-domain/](/examples/config-driven-domain/)
+- collaboration stack: [/examples/collaboration-workspace/](/examples/collaboration-workspace/)
+- content, SSR, SSG, and edge delivery: [/examples/content-platform/](/examples/content-platform/)
+- multi-tenant SaaS foundations: [/examples/saas-foundations/](/examples/saas-foundations/)
+
+## Canonical Shapes And Patterns
+
+App-building agents should learn product capability from:
+
+- top-level docs and start pages
+- example pages
+- source-backed example apps
+- package overview pages
+- package reference generated from current JSDoc
+
+They should not have to reverse-engineer Slingshot internals to learn what packages, operations, or
+composition patterns exist.
+
+## Escalate Only When Needed
+
+Read Slingshot internals only when:
+
+- you are authoring a custom plugin
+- a lifecycle dependency is unclear
+- manifest behavior needs debugging
+- runtime, SSR, or persistence behavior needs debugging
+
+If you reach that point, switch to the contributor-style narrow read order for only the relevant
+package or subsystem.
+
+## Outcome
+
+The goal is to move from product brief to composition quickly:
+
+1. choose an app shape
+2. pick the closest example
+3. identify the required packages
+4. adapt the manifest or app config
+5. add app-specific entities, routes, tests, and docs
+
+Related pages:
+
+- [/start-here/](/start-here/)
+- [/examples/](/examples/)
+- [/config-driven/workflow/](/config-driven/workflow/)

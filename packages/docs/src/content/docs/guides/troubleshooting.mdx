@@ -1,0 +1,832 @@
+---
+title: Troubleshooting
+description: Concrete fixes for the most common Slingshot runtime errors, organised by category
+---
+
+import { Aside, Code, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
+
+Search for the exact string from your terminal or log output and jump straight to the fix.
+
+---
+
+## `[security] No JWT secret configured`
+
+**Full error:**
+
+```
+Error: [security] No JWT secret configured. Provide a signing config via
+createApp({ security: { signing: { secret: "..." } } }) or configure a
+SecretRepository with JWT_SECRET.
+```
+
+`slingshot-auth` validates the signing secret at plugin boot, before any request is served. It throws immediately rather than failing silently on the first login.
+
+**Fix:**
+
+```ts
+// slingshot.server.ts
+import { createServer } from '@lastshotlabs/slingshot';
+
+export default createServer({
+  security: {
+    signing: {
+      secret: process.env.JWT_SECRET!, // min 32 chars
+    },
+  },
+});
+```
+
+Generate a secret: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`
+
+<Aside type="caution">
+  The secret must be at least 32 characters. A shorter secret throws: `[security] JWT secret is too
+  short (N chars). Must be at least 32 characters.`
+</Aside>
+
+---
+
+## `[security] JWT secret is too short`
+
+**Full error:**
+
+```
+Error: [security] JWT secret is too short (16 chars). Must be at least 32 characters.
+Generate one with: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+**Fix:** Replace it with a 64-character hex string. To rotate without invalidating existing sessions:
+
+```ts
+signing: {
+  secret: ['new-64-char-hex-secret', 'old-64-char-hex-secret'],
+}
+```
+
+---
+
+## `createApp: Adapter capability validation failed`
+
+**Full error:**
+
+```
+Error: createApp: Adapter capability validation failed:
+  - "mfa" is configured but the auth adapter does not implement setMfaSecret. Add setMfaSecret to your adapter.
+  - "mfa" is configured but the auth adapter does not implement getMfaSecret. Add getMfaSecret to your adapter.
+```
+
+The framework validates every enabled feature against the auth adapter at startup, collecting all missing methods at once.
+
+**Fix:** Implement the missing methods on your adapter, or remove the feature from config:
+
+| Config key             | Required adapter methods                                                               |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `auth.mfa`             | `setMfaSecret`, `getMfaSecret`, `isMfaEnabled`, `setMfaEnabled`, recovery code methods |
+| `auth.roles`           | `getRoles`, `setRoles`, `addRole`, `removeRole`                                        |
+| `auth.oauth.providers` | `findOrCreateByProvider`, `linkProvider`, `unlinkProvider`                             |
+| `auth.m2m`             | `getM2MClient`, `createM2MClient`, `deleteM2MClient`, `listM2MClients`                 |
+| `auth.groups`          | `createGroup`, `listGroups`, `addGroupMember`, `getEffectiveRoles`, and more           |
+
+---
+
+## `[slingshot-auth] A store is configured as "redis" but no Redis connection is available`
+
+**Full error:**
+
+```
+[slingshot-auth] A store is configured as "redis" but no Redis connection is available.
+When using slingshot-auth standalone, use "memory" or "sqlite" stores,
+or establish a Redis connection (connectRedis()) before calling plugin.setupMiddleware().
+```
+
+**Fix (framework path):** Add `REDIS_URL` to your environment:
+
+```ts
+createServer({
+  db: { redis: process.env.REDIS_URL },
+});
+```
+
+**Fix (standalone / test):** Use `'memory'` or `'sqlite'` instead:
+
+```ts
+createAuthPlugin({
+  auth: {
+    stores: {
+      sessions: 'sqlite',
+      cache: 'memory',
+    },
+  },
+});
+```
+
+---
+
+## Plugin fails to initialize — missing dependency
+
+**Symptom:** A plugin that depends on `slingshot-auth` throws at startup because auth state isn't available.
+
+Plugin lifecycle phases run in order: `setupMiddleware` → `setupRoutes` → `setupPost`. State produced by one plugin in `setupPost` isn't available to another plugin during `setupRoutes`. The `dependencies` array controls ordering.
+
+**Fix:**
+
+```ts
+export const myPlugin: SlingshotPlugin = {
+  name: 'my-plugin',
+  dependencies: ['slingshot-auth'], // wait for auth to finish setupPost
+  async setupPost(app, cfg, bus) {
+    // auth runtime is available here
+  },
+};
+```
+
+---
+
+## `listen EADDRINUSE: address already in use :::3000`
+
+<Tabs>
+  <TabItem label="Env var">
+    ```bash
+    PORT=3001 bun run dev
+    ```
+  </TabItem>
+  <TabItem label="Config">
+    ```ts
+    createServer({ port: 3001 });
+    ```
+  </TabItem>
+  <TabItem label="Manifest">
+    ```json
+    { "manifestVersion": 1, "port": 3001 }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## `Cannot find module 'otpauth'` / `Cannot find module 'web-push'`
+
+Features that require heavy optional dependencies aren't bundled. Install them only when you enable the feature.
+
+**Fix:**
+
+```bash
+# TOTP MFA
+bun add otpauth
+
+# Web Push
+bun add web-push
+
+# OAuth (via arctic — bundled with slingshot-auth, but peer dep)
+bun add arctic
+```
+
+Remove unused features from config entirely. The framework imports optional packages only when the associated config key is present.
+
+---
+
+## 401 on every request, even with a valid token
+
+**Wrong transport:** The `identify` middleware reads the session token from the `token` cookie (browsers) or the `x-user-token` header (non-browser clients). `Authorization: Bearer <token>` is for `createBearerAuth()` static secret auth, not JWT sessions.
+
+**Fix:**
+
+```bash
+# Correct — use x-user-token for JWT session tokens
+curl https://api.example.com/me \
+  -H "x-user-token: <your-jwt>"
+
+# Wrong — this header is for static bearer tokens, not user sessions
+curl https://api.example.com/me \
+  -H "Authorization: Bearer <your-jwt>"
+```
+
+**`userAuth` middleware missing:** The `identify` middleware resolves the user but doesn't block unauthenticated requests. `userAuth` does.
+
+**Fix:**
+
+```ts
+import { userAuth } from '@lastshotlabs/slingshot-auth';
+import { createRouter } from '@lastshotlabs/slingshot-core';
+
+const router = createRouter();
+
+// Wrong — no auth gate
+router.get('/profile', async c => {
+  const userId = c.get('authUserId'); // may be null
+});
+
+// Correct — gate first, then access the variable
+router.get('/profile', userAuth, async c => {
+  const userId = c.get('authUserId')!; // guaranteed non-null
+});
+```
+
+---
+
+## JWT expired — user recently authenticated but gets 401
+
+Server logs show `[identify] invalid token — unauthenticated`. Default expiry is 1 hour.
+
+**Fix (extend expiry):**
+
+```ts
+createAuthPlugin({
+  auth: {
+    jwt: {
+      expiresInSeconds: 60 * 60 * 8, // 8 hours
+    },
+  },
+});
+```
+
+**Fix (use refresh tokens):** Enable and call `POST /auth/refresh` before the token expires. The client sends the `refresh_token` cookie (or `x-refresh-token` header) and receives a new access token.
+
+<Aside type="tip">
+  For browser SPA clients, configure a short access token TTL (15 minutes) with a long-lived refresh
+  token (7–30 days). Call refresh proactively before expiry rather than reactively after a 401.
+</Aside>
+
+---
+
+## OAuth callback fails or state parameter rejected
+
+**Redirect URI mismatch:** The `redirectUri` in your config must exactly match what's registered in the OAuth provider's developer console — scheme, host, port, path, including any trailing slash.
+
+**Fix:**
+
+```ts
+createAuthPlugin({
+  auth: {
+    oauth: {
+      providers: {
+        google: {
+          clientId: process.env.GOOGLE_CLIENT_ID!,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          // Must match EXACTLY what is registered in Google Cloud Console
+          redirectUri: 'https://app.example.com/auth/google/callback',
+        },
+      },
+    },
+  },
+});
+```
+
+**Expired state:** OAuth state values expire after 300 seconds. If the user takes more than 5 minutes to complete the OAuth flow, the state expires and the callback is rejected. Restart the flow.
+
+**Wrong client credentials:** Dev and prod OAuth apps have different `clientId`/`clientSecret` pairs. Verify you're using the right ones for your environment.
+
+---
+
+## Cookie not sent on cross-origin requests
+
+**Symptom:** Browser sets the `token` cookie on login but subsequent requests don't include it. API and frontend are on different origins.
+
+The auth cookie defaults to `SameSite: Lax`. Cross-origin requests (different subdomain or port) require `SameSite: None; Secure`.
+
+**Fix:**
+
+```ts
+createAuthPlugin({
+  auth: {
+    authCookie: {
+      sameSite: 'None',
+      secure: true, // required with SameSite: None
+      domain: '.example.com', // share across subdomains
+    },
+  },
+});
+```
+
+<Aside type="danger">
+  `SameSite: None` requires `Secure: true`. Browsers silently reject `SameSite=None` cookies over
+  plain HTTP. This only works in production (HTTPS). In development, use a proxy that puts your API
+  and frontend on the same origin, or use `SameSite: Lax` locally.
+</Aside>
+
+---
+
+## Route you defined returns 404
+
+**Wrong export:** The framework expects route files to default-export a Hono router.
+
+```ts
+// Wrong — default export but not a router
+// export default function notARouter() { /* ... */ }
+// Wrong — named export
+// export const router = new Hono();
+// Correct
+import { createRouter } from '@lastshotlabs/slingshot-core';
+
+const router = createRouter();
+router.get('/posts', async c => c.json({ posts: [] }));
+
+export default router;
+```
+
+**Wrong `routesDir`:** The framework only scans files in `routesDir`. Check your server config:
+
+```ts
+createServer({
+  routesDir: import.meta.dir + '/routes', // must contain your routes file
+});
+```
+
+**Path prefix mismatch:** When the app mounts your router under a prefix (e.g., `/api`), route paths must not include that prefix:
+
+```ts
+// If mounted at /api, define route as /posts (not /api/posts)
+router.get('/posts', handler);
+```
+
+---
+
+## Middleware not running on matching routes
+
+`router.use()` middleware applies only to routes defined **after** it on the same router instance. It does not retroactively apply.
+
+```ts
+// Wrong — route is defined before middleware
+router.get('/protected', handler);
+router.use('/protected', authMiddleware); // never runs for the route above
+
+// Correct — middleware before the route
+router.use('/protected', authMiddleware);
+router.get('/protected', handler);
+```
+
+---
+
+## `authUserId` is `null` in a handler for authenticated users
+
+The `identify` middleware resolves identity but `userAuth` gates the route. Without `userAuth`, the handler runs regardless of auth status.
+
+```ts
+import { userAuth } from '@lastshotlabs/slingshot-auth';
+import { createRouter } from '@lastshotlabs/slingshot-core';
+
+const router = createRouter();
+
+router.get('/me', userAuth, async c => {
+  const userId = c.get('authUserId')!; // safe — userAuth guarantees non-null
+  return c.json({ userId });
+});
+```
+
+---
+
+## `SqliteError: no such table: auth_sessions`
+
+SQLite adapters create tables lazily on first use. A missing table means either the adapter was never called (database path is wrong) or you're pointing at an existing file from a different schema version.
+
+**Fix — check database path:**
+
+```ts
+createServer({
+  db: {
+    sqlite: {
+      path: './data/app.db', // must be writable; directory must exist
+    },
+  },
+});
+```
+
+The directory must exist — SQLite won't create intermediate directories.
+
+**Delete stale database:** In development, delete the `.db` file and restart. Adapters recreate all tables from scratch.
+
+---
+
+## Postgres connection refused or auth failure
+
+**Symptom:**
+
+```
+Error: connect ECONNREFUSED 127.0.0.1:5432
+```
+
+or
+
+```
+Error: password authentication failed for user "postgres"
+```
+
+**Fix:**
+
+```bash
+# Verify Postgres is running
+pg_isready -h localhost -p 5432
+
+# Test the connection string manually
+psql "postgresql://user:password@localhost:5432/dbname"
+```
+
+Valid connection string format:
+
+```
+postgresql://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require
+```
+
+<Aside type="caution">
+  If your password contains special characters (`@`, `/`, `:`), percent-encode them in the URL.
+</Aside>
+
+---
+
+## Memory adapter — state lost on every restart
+
+Expected behavior. The memory adapter holds all state in JavaScript Maps. Process restart wipes them.
+
+Use a persistent adapter for any environment where state must survive restarts:
+
+```ts
+createServer({
+  db: {
+    sqlite: { path: './data/app.db' }, // persists across restarts
+    // or
+    postgres: process.env.DATABASE_URL,
+    // or
+    redis: process.env.REDIS_URL,
+  },
+});
+```
+
+Reserve the memory adapter for unit tests and ephemeral CI.
+
+---
+
+## `[slingshot] Unsupported store type: postgres`
+
+A plugin's `RepoFactories` map is missing an entry for the active store type. All five store types must appear in every `RepoFactories` map.
+
+**Fix:**
+
+```ts
+export const myRepoFactories: RepoFactories<MyRepo> = {
+  memory: () => createMemoryMyRepo(),
+  sqlite: infra => createSqliteMyRepo(infra.getSqliteDb()),
+  redis: infra => createRedisMyRepo(infra.getRedis()),
+  mongo: infra => {
+    const { conn, mg } = infra.getMongo();
+    return createMongoMyRepo(conn, mg);
+  },
+  postgres: infra => createPostgresMyRepo(infra.getPostgres()),
+};
+```
+
+---
+
+## Tests interfere with each other
+
+**Symptom:** Tests pass individually but fail when run together. A test sees data left by a previous test.
+
+Create a fresh adapter in `beforeEach`:
+
+```ts
+import { beforeEach, test } from 'bun:test';
+import { createMemoryAuthAdapter } from '@lastshotlabs/slingshot-auth/testing';
+
+let adapter: ReturnType<typeof createMemoryAuthAdapter>;
+
+beforeEach(() => {
+  adapter = createMemoryAuthAdapter(); // fresh instance — no shared state
+});
+```
+
+Or call `ctx.clear()` on a shared app instance:
+
+```ts
+import { beforeEach } from 'bun:test';
+import { getContext } from '@lastshotlabs/slingshot-core';
+
+declare const app: object;
+
+beforeEach(async () => {
+  await getContext(app).clear();
+});
+```
+
+---
+
+## Event handler registered with `bus.on()` never fires in tests
+
+Async event handlers are fire-and-forget. The test assertion runs before the async handler completes.
+
+**Fix:** Call `bus.drain()` after the action:
+
+```ts
+import { expect, test } from 'bun:test';
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'demo:post.created': { id: string };
+  }
+}
+
+test('event fires on create', async () => {
+  const bus = new InProcessAdapter();
+  const received: string[] = [];
+
+  bus.on('demo:post.created', payload => {
+    received.push(payload.id);
+  });
+
+  bus.emit('demo:post.created', { id: 'post-1' });
+  await bus.drain(); // wait for all async handlers to settle
+
+  expect(received).toEqual(['post-1']);
+});
+```
+
+---
+
+## TypeScript errors when passing memory adapter to functions expecting `StoreInfra`
+
+Use `TestableRepoFactories<T>`, which allows calling `.memory()` with no arguments:
+
+```ts
+import type { TestableRepoFactories } from '@lastshotlabs/slingshot-core';
+
+interface MyRepo {}
+declare const createMemoryMyRepo: () => MyRepo;
+declare const createSqliteMyRepo: (sqlite: unknown) => MyRepo;
+declare const createRedisMyRepo: (redis: unknown) => MyRepo;
+declare const createMongoMyRepo: (mongo: unknown) => MyRepo;
+declare const createPostgresMyRepo: (postgres: unknown) => MyRepo;
+
+export const myRepoFactories: TestableRepoFactories<MyRepo> = {
+  memory: () => createMemoryMyRepo(), // no infra needed
+  sqlite: infra => createSqliteMyRepo(infra.getSqliteDb()),
+  redis: infra => createRedisMyRepo(infra.getRedis()),
+  mongo: infra => createMongoMyRepo(infra.getMongo()),
+  postgres: infra => createPostgresMyRepo(infra.getPostgres()),
+};
+
+// In tests:
+const repo = myRepoFactories.memory(); // no cast needed
+```
+
+---
+
+## Browser SSE client connected but not receiving events
+
+**Event not registered as client-safe:** The SSE filter forwards only events registered via `bus.registerClientSafeEvents()`. Unregistered events are silently dropped.
+
+**Fix — via entity route config:**
+
+```ts
+// In your entity route config
+const routes: EntityRouteConfig = {
+  clientSafeEvents: ['post:post.created', 'post:post.updated'],
+  create: { event: 'post:post.created' },
+};
+```
+
+**Fix — manually:**
+
+```ts
+bus.registerClientSafeEvents(['post:post.created']);
+```
+
+**Forbidden namespace:** These namespaces can never be registered as client-safe:
+
+- `security.*`
+- `auth:*`
+- `community:delivery.*`
+- `push:*`
+- `app:*`
+
+Attempting to register a key in a forbidden namespace throws:
+
+```
+Error: [slingshot] SSE config: "security.auth.login.success" cannot be streamed to
+clients because the "security." namespace is forbidden
+```
+
+Use a custom event key outside these namespaces for events you want to stream to clients.
+
+---
+
+## WebSocket connection drops after ~60 seconds
+
+Reverse proxies have default idle connection timeouts (nginx: 60s, ALB: 60s). A WebSocket with no traffic is treated as idle and closed.
+
+**Fix:** Enable heartbeats in your config:
+
+```ts
+ws: {
+  endpoints: {
+    '/ws/chat': {
+      heartbeat: {
+        intervalMs: 30_000, // send ping every 30s
+        timeoutMs:  10_000, // disconnect if no pong within 10s
+      },
+    },
+  },
+}
+```
+
+Set your proxy timeout higher than `intervalMs`:
+
+```nginx
+# nginx
+proxy_read_timeout 120s;
+```
+
+---
+
+## Event handler wired in `setupRoutes` never fires
+
+Event subscriptions wired before `setupPost` can be overwritten, or the bus may not be the final instance. Wire all subscriptions in `setupPost` instead.
+
+```ts
+export const myPlugin: SlingshotPlugin = {
+  name: 'my-plugin',
+  dependencies: [],
+
+  // Wrong — bus may not be the final instance
+  async setupRoutes(app, cfg, bus) {
+    bus.on('entity:post.created', handler); // may not fire
+  },
+
+  // Correct
+  async setupPost(app, cfg, bus) {
+    bus.on('entity:post.created', handler);
+  },
+};
+```
+
+---
+
+## High memory usage that grows continuously
+
+The in-memory adapter is running in production. Every session, OAuth state entry, rate-limit counter, and cached value accumulates in process heap with no eviction.
+
+**Fix:**
+
+```ts
+createServer({
+  db: {
+    redis: process.env.REDIS_URL, // sessions, cache, rate limits
+    postgres: process.env.DATABASE_URL, // entities, auth users
+  },
+});
+```
+
+The memory adapter evicts expired entries opportunistically on writes — that's not a substitute for a real store in production.
+
+---
+
+## Slow query performance as dataset grows
+
+Missing indexes on columns used in `WHERE` clauses or sort operations.
+
+**Fix — Postgres:**
+
+```sql
+-- If you filter users by email
+CREATE INDEX CONCURRENTLY idx_users_email ON users(email);
+
+-- If you filter posts by tenantId + createdAt
+CREATE INDEX CONCURRENTLY idx_posts_tenant_created ON posts(tenant_id, created_at DESC);
+```
+
+Slingshot's built-in SQLite adapters create their own indexes at initialization. Add custom query indexes via migration files.
+
+---
+
+## Load balancer health check returns 404
+
+Slingshot doesn't mount `/health` by default.
+
+**Fix:**
+
+```ts
+// routes/health.ts
+import { createRouter } from '@lastshotlabs/slingshot-core';
+
+const router = createRouter();
+
+router.get('/health', c => c.json({ ok: true }, 200));
+
+export default router;
+```
+
+For a readiness check that verifies database connectivity:
+
+```ts
+import { createRouter } from '@lastshotlabs/slingshot-core';
+
+const router = createRouter();
+declare function checkDatabase(): Promise<void>;
+
+router.get('/health', async c => {
+  try {
+    await checkDatabase();
+    return c.json({ ok: true });
+  } catch (err) {
+    return c.json({ ok: false, error: String(err) }, 503);
+  }
+});
+```
+
+---
+
+## Enable verbose auth logging
+
+```bash
+SLINGSHOT_AUTH_DEBUG=true bun run dev
+```
+
+Outputs lines like:
+
+```
+[identify] token=present
+[identify] token verified, checking session...
+[identify] authUserId=usr_abc123 sessionId=sess_xyz
+```
+
+For general Hono request logging:
+
+```ts
+import { Hono } from 'hono';
+import { logger } from 'hono/logger';
+
+const app = new Hono();
+
+// In your server setup or a plugin's setupMiddleware:
+app.use('*', logger());
+```
+
+---
+
+## Inspect plugin state at runtime
+
+```ts
+import { createRouter, getContext } from '@lastshotlabs/slingshot-core';
+
+const router = createRouter();
+declare const app: object;
+
+// In a diagnostic endpoint (remove before shipping)
+router.get('/debug/context', async c => {
+  const ctx = getContext(app); // your Hono app instance
+
+  return c.json({
+    plugins: [...ctx.pluginState.keys()],
+    appName: ctx.config.appName,
+    resolvedStores: ctx.config.resolvedStores,
+  });
+});
+```
+
+To inspect a specific plugin's runtime state:
+
+```ts
+// Auth plugin stores its runtime under the AUTH_RUNTIME_KEY symbol
+import { getContext } from '@lastshotlabs/slingshot-core';
+
+declare const app: object;
+
+const ctx = getContext(app);
+const authRuntime = ctx.pluginState.get('slingshot-auth') as
+  | { oauth?: { providers?: Record<string, unknown> } }
+  | undefined;
+console.log('OAuth providers:', Object.keys(authRuntime?.oauth?.providers ?? {}));
+```
+
+<Aside type="danger">
+  Never expose debug endpoints in production. They leak internal state. Gate them with IP allowlists
+  or remove them before deployment.
+</Aside>
+
+---
+
+## Trace all event bus emissions
+
+```ts
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+
+// After creating the bus, before passing it to plugins:
+const bus = new InProcessAdapter();
+
+const emitWithTrace: typeof bus.emit = (event, payload) => {
+  if (process.env.NODE_ENV !== 'production') {
+    console.debug('[bus]', event, payload);
+  }
+  return bus.emit(event, payload);
+};
+```
+
+Or tap specific event namespaces without monkey-patching:
+
+```ts
+import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
+
+// Log all security events during development
+const bus = new InProcessAdapter();
+const SECURITY_EVENTS = ['security.auth.login.failure', 'security.auth.account.locked'] as const;
+for (const key of SECURITY_EVENTS) {
+  bus.on(key, payload => console.warn('[security]', key, payload));
+}
+```

@@ -1,0 +1,108 @@
+---
+title: Examples
+description: Complete Slingshot app compositions for auth, collaboration, SaaS, rendering, and config-driven authoring
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+These are the highest-signal starting points for the platform. They are organized around product and
+authoring goals rather than package names so users can answer "which example looks like my app?"
+quickly.
+
+All examples use in-memory adapters by default. Swapping to SQLite, Postgres, MongoDB, or Redis is
+a one-line change. See [Production Databases](/examples/production-databases/).
+
+Source-backed example apps live in the repo under `examples/`. The current source-backed set is
+`with-auth`, `config-driven-domain`, `collaboration-workspace`, and `content-platform`.
+
+## App compositions
+
+<CardGrid>
+  <LinkCard
+    title="Auth Setup"
+    href="/examples/with-auth/"
+    description="Email/password, JWT sessions, OAuth, MFA, passkeys. The identity baseline."
+  />
+  <LinkCard
+    title="Forum App"
+    href="/examples/forum-app/"
+    description="Auth + community + permissions + notifications for a discussion product."
+  />
+  <LinkCard
+    title="SaaS Foundations"
+    href="/examples/saas-foundations/"
+    description="Auth + organizations + per-resource permissions + search. Multi-tenant from the start."
+  />
+  <LinkCard
+    title="Collaboration Workspace"
+    href="/examples/collaboration-workspace/"
+    description="Chat + community + polls + interactions + assets + emoji + embeds + GIFs + deep links."
+  />
+  <LinkCard
+    title="Content Platform"
+    href="/examples/content-platform/"
+    description="Search + assets + SSR + SSG + edge-ready delivery for docs, media, or publishing products."
+  />
+  <LinkCard
+    title="Config-Driven Domain"
+    href="/examples/config-driven-domain/"
+    description="Define an entity, add operations, wrap it in a plugin. The core authoring pattern."
+  />
+</CardGrid>
+
+## Capability map
+
+| Example                                                       | Auth | Community | Chat | Media | Search   | SSR/SSG | Config-driven |
+| ------------------------------------------------------------- | ---- | --------- | ---- | ----- | -------- | ------- | ------------- |
+| [Auth Setup](/examples/with-auth/)                            | x    |           |      |       |          |         |               |
+| [Forum App](/examples/forum-app/)                             | x    | x         |      |       |          |         | x             |
+| [SaaS Foundations](/examples/saas-foundations/)               | x    |           |      |       | x        |         | x             |
+| [Collaboration Workspace](/examples/collaboration-workspace/) | x    | x         | x    | x     |          |         | x             |
+| [Content Platform](/examples/content-platform/)               | x    | x         |      | x     | x        | x       |               |
+| [Config-Driven Domain](/examples/config-driven-domain/)       | x    |           |      |       | optional |         | x             |
+
+## How-tos
+
+<CardGrid>
+  <LinkCard
+    title="Custom Plugin"
+    href="/examples/custom-plugin/"
+    description="Build a plugin with routes, events, middleware, and cross-plugin state from scratch."
+  />
+  <LinkCard
+    title="Adding Search"
+    href="/examples/adding-search/"
+    description="Attach full-text search to your entities with Meilisearch, Elasticsearch, or Typesense."
+  />
+  <LinkCard
+    title="Production Databases"
+    href="/examples/production-databases/"
+    description="Switch from in-memory to SQLite, Postgres, MongoDB, or Redis with minimal config changes."
+  />
+  <LinkCard
+    title="Realtime with SSE"
+    href="/examples/realtime-sse/"
+    description="Stream events from your entities and plugins to browser clients."
+  />
+  <LinkCard
+    title="Custom Event Bus"
+    href="/examples/custom-event-bus/"
+    description="Replace the default in-process bus with Redis or BullMQ for multi-instance delivery."
+  />
+</CardGrid>
+
+| If you need...                     | Start with                                                    |
+| ---------------------------------- | ------------------------------------------------------------- |
+| User accounts and sessions         | [Auth Setup](/examples/with-auth/)                            |
+| Forum or discussion features       | [Forum App](/examples/forum-app/)                             |
+| Multi-tenant SaaS                  | [SaaS Foundations](/examples/saas-foundations/)               |
+| Collaboration product surface      | [Collaboration Workspace](/examples/collaboration-workspace/) |
+| Publishing or docs platform        | [Content Platform](/examples/content-platform/)               |
+| Your own entity-driven package     | [Config-Driven Domain](/examples/config-driven-domain/)       |
+| Custom routes and event handling   | [Custom Plugin](/examples/custom-plugin/)                     |
+| Full-text search                   | [Adding Search](/examples/adding-search/)                     |
+| Live updates in the browser        | [Realtime with SSE](/examples/realtime-sse/)                  |
+| Events that cross server instances | [Custom Event Bus](/examples/custom-event-bus/)               |
+
+To build your own entity-driven plugin step by step, see [Build a Plugin](/plugins/overview/) and
+[Config-Driven Domain](/examples/config-driven-domain/).

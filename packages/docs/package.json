@@ -1,0 +1,25 @@
+{
+  "name": "@lastshotlabs/slingshot-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "bun ../../scripts/ensure-pagefind-link.ts && astro build",
+    "lint": "astro check",
+    "preview": "astro preview",
+    "generate-api": "bun generate-api.ts"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.33",
+    "astro": "^5.5",
+    "pagefind": "^1.3.0",
+    "sharp": "^0.33",
+    "typedoc": "^0.28",
+    "typedoc-plugin-markdown": "^4.6",
+    "zod": "^3.25"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.8",
+    "typescript": "^6.0.2"
+  }
+}

@@ -1,0 +1,230 @@
+---
+title: Realtime with SSE
+description: Server-sent events for live updates — community notifications, entity changes, custom event streams
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot's SSE support bridges the event bus to browser clients. Events from plugins and entities flow directly to connected clients — no WebSocket server, no polling.
+
+## How it works
+
+1. Your entities and plugins emit events to the internal event bus
+2. SSE endpoints subscribe to the bus and forward client-safe events to connected clients
+3. Clients connect with a JWT and receive a filtered stream
+
+Only events registered as `clientSafeEvents` reach clients. The framework automatically filters internal events (auth, security, delivery status).
+
+## Community notifications
+
+`slingshot-notifications` ships a built-in SSE inbox route at `/notifications/sse`.
+
+Register `createNotificationsPlugin()` alongside `createCommunityPlugin()` and clients can connect to `GET /notifications/sse` to receive notification events scoped to the authenticated user.
+
+## Custom SSE endpoint
+
+For a custom event stream, define your own SSE endpoint:
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "sse": {
+        "endpoints": {
+          "/__sse/activity": {
+            "events": ["blog:post.created", "blog:post.published"],
+            "upgrade": { "handler": "sseUpgrade" },
+            "filter": { "handler": "sseFilter" }
+          }
+        }
+      },
+      "plugins": [
+        { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user"], "defaultRole": "user" } } }
+      ]
+    }
+    ```
+
+    ```typescript title="slingshot.handlers.ts"
+    export async function sseUpgrade(req: Request) {
+      const token = req.headers.get('authorization')?.replace('Bearer ', '');
+      if (!token) return new Response('Unauthorized', { status: 401 });
+
+      // Verify and decode the JWT
+      const userId = verifyToken(token);
+      if (!userId) return new Response('Unauthorized', { status: 401 });
+
+      // Return client data — available to the filter function
+      return { userId };
+    }
+
+    export async function sseFilter(message: unknown, clientData: { userId: string }) {
+      // Return true to send this event to this client, false to skip
+      // message.key is the event key, message.payload is the event payload
+      return true; // send all client-safe events
+    }
+    ```
+
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    await createServer({
+      sse: {
+        endpoints: {
+          '/__sse/activity': {
+            events: ['blog:post.created', 'blog:post.published'],
+
+            upgrade: async (req) => {
+              const token = req.headers.get('authorization')?.replace('Bearer ', '');
+              if (!token) return new Response('Unauthorized', { status: 401 });
+              const userId = verifyToken(token);
+              if (!userId) return new Response('Unauthorized', { status: 401 });
+              return { userId };
+            },
+
+            filter: async (message, clientData) => {
+              // Per-user filtering — only send events relevant to this client
+              return true;
+            },
+          },
+        },
+      },
+    });
+    ```
+
+  </TabItem>
+</Tabs>
+
+## Entity-level client-safe events
+
+Events only reach SSE clients if they're declared as `clientSafeEvents` on the entity:
+
+```typescript
+export const Post = defineEntity('Post', {
+  routes: {
+    create: {
+      event: { key: 'blog:post.created', payload: ['id', 'authorId', 'title'] },
+    },
+    clientSafeEvents: ['blog:post.created'], // only this event is forwarded to clients
+  },
+});
+```
+
+Events not in `clientSafeEvents` — including `blog:post.deleted`, internal validation events, or anything with sensitive data — never reach clients.
+
+## Consuming SSE from the browser
+
+The native `EventSource` API doesn't support custom headers. Pass the JWT as a query parameter instead — the `upgrade` handler reads it from the URL:
+
+```typescript
+// Pass the token as a query parameter
+const es = new EventSource(`/__sse/activity?token=${encodeURIComponent(token)}`);
+
+es.addEventListener('blog:post.created', event => {
+  const post = JSON.parse(event.data);
+  console.log('New post:', post.title);
+});
+
+es.addEventListener('blog:post.published', event => {
+  const post = JSON.parse(event.data);
+  console.log('Published:', post.title);
+});
+
+es.onerror = () => {
+  // Reconnect automatically after a delay
+  setTimeout(() => reconnect(), 3000);
+};
+```
+
+Update the `upgrade` handler to read the token from the query string:
+
+```typescript
+export async function sseUpgrade(req: Request) {
+  const token = new URL(req.url).searchParams.get('token');
+  if (!token) return new Response('Unauthorized', { status: 401 });
+  const userId = verifyToken(token);
+  if (!userId) return new Response('Unauthorized', { status: 401 });
+  return { userId };
+}
+```
+
+Cookie-based sessions work without the query param — browsers send cookies automatically with `EventSource` requests.
+
+## Per-user filtering
+
+Use the `filter` function to implement per-client filtering — only send events the specific user should see:
+
+```typescript
+filter: async (message, clientData: { userId: string }) => {
+  const { key, payload } = message;
+
+  // Only send thread events to users in that container
+  if (key === 'community:thread.created') {
+    const isMember = await checkContainerMembership(clientData.userId, payload.containerId);
+    return isMember;
+  }
+
+  return true;
+};
+```
+
+## WebSockets
+
+For bidirectional communication, Slingshot also supports WebSocket endpoints:
+
+```json
+{
+  "ws": {
+    "endpoints": {
+      "/api/chat": {
+        "upgrade": { "handler": "wsUpgrade" },
+        "on": {
+          "open": { "handler": "wsOpen" },
+          "message": { "handler": "wsMessage" },
+          "close": { "handler": "wsClose" }
+        }
+      }
+    }
+  }
+}
+```
+
+```typescript title="slingshot.handlers.ts"
+export async function wsUpgrade(req: Request, server: Server) {
+  const token = req.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return new Response('Unauthorized', { status: 401 });
+  // Return undefined to allow upgrade, or a Response to reject
+}
+
+export async function wsOpen(ws: ServerWebSocket) {
+  ws.subscribe('chat-room');
+}
+
+export async function wsMessage(ws: ServerWebSocket, message: string | Buffer) {
+  ws.publish('chat-room', message);
+}
+
+export async function wsClose(ws: ServerWebSocket) {
+  ws.unsubscribe('chat-room');
+}
+```
+
+## Multi-instance SSE
+
+For multi-instance deployments, replace the in-process event bus with a shared bus so SSE events cross instance boundaries. BullMQ is the built-in manifest option:
+
+```json
+{
+  "eventBus": "bullmq",
+  "secrets": { "provider": "env" }
+}
+```
+
+If you want Redis pub/sub, NATS, Kafka, or another broker instead, register it as a custom event bus and select it with the object form shown in [Custom Event Bus](/examples/custom-event-bus/).
+
+## Where to go next
+
+- [Custom Event Bus](/examples/custom-event-bus/) - BullMQ plus custom buses for multi-instance deployments
+- [Forum App](/examples/forum-app/) — community SSE notifications in context
+- [Internals: Event Bus](/internals/event-bus/) — how client-safe event filtering works under the hood

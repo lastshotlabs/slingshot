@@ -1,0 +1,254 @@
+---
+title: Production Databases
+description: Switch from in-memory to SQLite, Postgres, MongoDB, or Redis — one config change, zero code changes
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components';
+
+Slingshot's adapter model means your business logic never knows which database it's running against. Every package — auth, community, your own entities — takes a store type. Swap it in one place.
+
+## The adapter model
+
+In development, you use `'memory'` for everything. It's fast, zero-setup, and resets on restart. For production, you change the adapter name. Nothing else changes.
+
+```typescript
+// Development
+db: { auth: 'memory', sessions: 'memory' }
+
+// Production
+db: { auth: 'postgres', sessions: 'redis' }
+```
+
+## SQLite — built into Bun
+
+SQLite requires no extra dependencies. It's built into Bun and is a great starting point for small deployments.
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "db": {
+        "sqlite": "${importMetaDir}/data/app.db"
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user"], "defaultRole": "user" },
+            "db": { "auth": "sqlite", "sessions": "sqlite", "oauthState": "sqlite" }
+          }
+        },
+        { "plugin": "slingshot-community" }
+      ]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    await createServer({
+      db: {
+        sqlite: './data/app.db',
+      },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user'], defaultRole: 'user' },
+          db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
+        }),
+        createCommunityPlugin({ ... }),
+      ],
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+## PostgreSQL
+
+```bash
+bun add @lastshotlabs/slingshot-postgres
+```
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "db": {
+        "postgres": "${env:DATABASE_URL}"
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user"], "defaultRole": "user" },
+            "db": { "auth": "postgres", "sessions": "postgres", "oauthState": "postgres" }
+          }
+        },
+        { "plugin": "slingshot-community" }
+      ]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    await createServer({
+      db: {
+        postgres: process.env.DATABASE_URL,
+      },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user'], defaultRole: 'user' },
+          db: { auth: 'postgres', sessions: 'postgres', oauthState: 'postgres' },
+        }),
+        createCommunityPlugin({ ... }),
+      ],
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+## MongoDB
+
+```bash
+bun add mongoose
+```
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json title="app.manifest.json"
+    {
+      "manifestVersion": 1,
+      "port": 3000,
+      "db": {
+        "mongo": "${env:MONGO_URL}"
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "auth": { "roles": ["user"], "defaultRole": "user" },
+            "db": { "auth": "mongo", "sessions": "mongo", "oauthState": "mongo" }
+          }
+        },
+        { "plugin": "slingshot-community" }
+      ]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    await createServer({
+      db: {
+        mongo: process.env.MONGO_URL,
+      },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user'], defaultRole: 'user' },
+          db: { auth: 'mongo', sessions: 'mongo', oauthState: 'mongo' },
+        }),
+        createCommunityPlugin({ ... }),
+      ],
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+## Redis sessions + SQL records
+
+A common production setup: durable records in Postgres or SQLite, high-throughput sessions in Redis.
+
+```bash
+bun add ioredis
+```
+
+<Tabs>
+  <TabItem label="Manifest">
+    ```json
+    {
+      "db": {
+        "postgres": "${env:DATABASE_URL}",
+        "redis": "${env:REDIS_URL}"
+      },
+      "plugins": [
+        {
+          "plugin": "slingshot-auth",
+          "config": {
+            "db": {
+              "auth": "postgres",
+              "sessions": "redis",
+              "oauthState": "postgres"
+            }
+          }
+        }
+      ]
+    }
+    ```
+  </TabItem>
+  <TabItem label="Code">
+    ```typescript
+    await createServer({
+      db: {
+        postgres: process.env.DATABASE_URL,
+        redis: process.env.REDIS_URL,
+      },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user'], defaultRole: 'user' },
+          db: { auth: 'postgres', sessions: 'redis', oauthState: 'postgres' },
+        }),
+      ],
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+## Mixing adapters per concern
+
+Different parts of your app can use different stores. Each adapter config is independent:
+
+```json
+{
+  "db": {
+    "sqlite": "./data/app.db",
+    "redis": "${env:REDIS_URL}"
+  },
+  "plugins": [
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "db": {
+          "auth": "sqlite",
+          "sessions": "redis",
+          "oauthState": "memory"
+        }
+      }
+    },
+    {
+      "plugin": "slingshot-community"
+    }
+  ]
+}
+```
+
+## Running migrations
+
+Slingshot generates database migrations from your entity definitions:
+
+```bash
+# Generate migrations for all entities
+slingshot migrate:generate
+
+# Apply pending migrations
+slingshot migrate:run
+
+# Show current migration status
+slingshot migrate:status
+```
+
+## Where to go next
+
+- [Auth Setup](/examples/with-auth/) — adapter options for auth
+- [slingshot-postgres](/packages/slingshot-postgres/) — Postgres-specific config and query helpers
+- [Deployment](/guides/deployment/) — full production deployment with slingshot-infra

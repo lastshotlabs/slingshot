@@ -1,0 +1,7 @@
+{
+  "index.html": {
+    "file": "assets/app.js",
+    "isEntry": true,
+    "src": "src/client.ts"
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun"],
+    "strict": true,
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ESNext",
+    "paths": {
+      "@auth/*": ["./packages/slingshot-auth/src/*"],
+      "@framework/*": ["./src/framework/*"],
+      "@lib/*": ["./src/lib/*"],
+      "@workers/*": ["./src/workers/*"],
+      "@queues/*": ["./src/queues/*"],
+      "@scripts/*": ["./src/scripts/*"],
+      "@lastshotlabs/slingshot-core": ["./packages/slingshot-core/src/index.ts"],
+      "@lastshotlabs/slingshot-entity": ["./packages/slingshot-entity/src/index.ts"],
+      "@lastshotlabs/slingshot-infra": ["./packages/slingshot-infra/src/index.ts"],
+      "@lastshotlabs/slingshot-core/testing": ["./packages/slingshot-core/src/testing.ts"],
+      "@lastshotlabs/slingshot-auth": ["./packages/slingshot-auth/src/index.ts"],
+      "@lastshotlabs/slingshot-auth/testing": ["./packages/slingshot-auth/src/testing.ts"],
+      "@lastshotlabs/slingshot-admin": ["./packages/slingshot-admin/src/index.ts"],
+      "@lastshotlabs/slingshot-permissions": ["./packages/slingshot-permissions/src/index.ts"],
+      "@lastshotlabs/slingshot-permissions/testing": [
+        "./packages/slingshot-permissions/src/testing.ts"
+      ],
+      "@lastshotlabs/slingshot-postgres": ["./packages/slingshot-postgres/src/index.ts"],
+      "@lastshotlabs/slingshot-bullmq": ["./packages/slingshot-bullmq/src/index.ts"],
+      "@lastshotlabs/slingshot-community": ["./packages/slingshot-community/src/index.ts"],
+      "@lastshotlabs/slingshot-community/testing": [
+        "./packages/slingshot-community/src/testing.ts"
+      ],
+      "@lastshotlabs/slingshot-deep-links": ["./packages/slingshot-deep-links/src/index.ts"],
+      "@lastshotlabs/slingshot-deep-links/testing": [
+        "./packages/slingshot-deep-links/src/testing.ts"
+      ],
+      "@lastshotlabs/slingshot-interactions": ["./packages/slingshot-interactions/src/index.ts"],
+      "@lastshotlabs/slingshot-interactions/testing": [
+        "./packages/slingshot-interactions/src/testing.ts"
+      ],
+      "@lastshotlabs/slingshot-notifications": ["./packages/slingshot-notifications/src/index.ts"],
+      "@lastshotlabs/slingshot-organizations": ["./packages/slingshot-organizations/src/index.ts"],
+      "@lastshotlabs/slingshot-m2m": ["./packages/slingshot-m2m/src/index.ts"],
+      "@lastshotlabs/slingshot-scim": ["./packages/slingshot-scim/src/index.ts"],
+      "@lastshotlabs/slingshot-oidc": ["./packages/slingshot-oidc/src/index.ts"],
+      "@lastshotlabs/slingshot-oauth": ["./packages/slingshot-oauth/src/index.ts"],
+      "@lastshotlabs/slingshot-auth/plugin": ["./packages/slingshot-auth/src/plugin-api.ts"],
+      "@lastshotlabs/slingshot-webhooks": ["./packages/slingshot-webhooks/src/index.ts"],
+      "@lastshotlabs/slingshot-webhooks/testing": ["./packages/slingshot-webhooks/src/testing.ts"],
+      "@lastshotlabs/slingshot-push": ["./packages/slingshot-push/src/index.ts"],
+      "@lastshotlabs/slingshot-push/testing": ["./packages/slingshot-push/src/testing.ts"],
+      "@lastshotlabs/slingshot-game-engine": ["./packages/slingshot-game-engine/src/index.ts"],
+      "@lastshotlabs/slingshot-game-engine/types": [
+        "./packages/slingshot-game-engine/src/types/models.ts"
+      ],
+      "@lastshotlabs/slingshot-game-engine/recipes": [
+        "./packages/slingshot-game-engine/src/recipes/index.ts"
+      ],
+      "@lastshotlabs/slingshot-game-engine/testing": [
+        "./packages/slingshot-game-engine/src/testing/index.ts"
+      ],
+      "@lastshotlabs/slingshot-ssr": ["./packages/slingshot-ssr/src/index.ts"],
+      "@lastshotlabs/slingshot-ssg": ["./packages/slingshot-ssg/src/index.ts"],
+      "@slingshot/runtime-bun": ["./packages/runtime-bun/src/index.ts"],
+      "@config/*": ["./src/config/*"],
+      "@admin/*": ["./packages/slingshot-admin/src/*"],
+      "@app": ["./src/app.ts"]
+    }
+  },
+  "include": ["src", "tests"],
+  "exclude": [
+    "node_modules",
+    "**/node_modules",
+    "**/dist",
+    "packages/docs",
+    "tests/isolated/passkey-e2e.test.ts"
+  ]
+}

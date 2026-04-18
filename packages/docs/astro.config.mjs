@@ -27,11 +27,11 @@ export default defineConfig({
         {
           icon: 'github',
           label: 'GitHub',
-          href: 'https://github.com/Last-Shot-Labs/slingshot',
+          href: 'https://github.com/lastshotlabs/slingshot',
         },
       ],
       editLink: {
-        baseUrl: 'https://github.com/Last-Shot-Labs/slingshot/edit/main/packages/docs/',
+        baseUrl: 'https://github.com/lastshotlabs/slingshot/edit/main/packages/docs/',
       },
       sidebar: [
         {

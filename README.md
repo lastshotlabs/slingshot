@@ -1,10 +1,10 @@
 # Slingshot
 
-Config-driven backend framework for Bun, built on Hono.
+Config-driven backend framework built on Hono. Plugin-driven, manifest-first.
 
 ## What it is
 
-Slingshot is a backend platform for Bun. Declare plugins, databases, and security in a JSON manifest — run `slingshot start`. Zero code for built-in plugins; export functions from `slingshot.handlers.ts` for custom logic.
+Slingshot is a backend framework built on Hono with runtime adapters for Bun, Node, and Edge. Declare plugins, databases, and security in a JSON manifest — run `slingshot start`. Zero code for built-in plugins; export functions from `slingshot.handlers.ts` for custom logic.
 
 ## Quickstart
 

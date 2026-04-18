@@ -4,10 +4,10 @@
     "packages/*"
   ],
   "version": "0.2.0",
-  "description": "Composable Slingshot app-assembly package for Bun and Hono - plugins, config-driven entities, realtime, and platform tooling",
+  "description": "Config-driven backend framework built on Hono. Plugin-driven, manifest-first.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Last-Shot-Labs/slingshot.git"
+    "url": "https://github.com/lastshotlabs/slingshot.git"
   },
   "license": "MIT",
   "keywords": [

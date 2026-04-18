@@ -53,7 +53,6 @@ bun add @lastshotlabs/slingshot
 - `lint`: `eslint src/ --cache && bun run --filter '*' lint`
 - `lint:deps`: `depcruise packages/ src/ --config .dependency-cruiser.cjs`
 - `lint:fix`: `eslint src/ --cache --fix && bun run --filter '*' lint -- --fix`
-- `lint:write`: `bash -c 'eslint src/ --cache && bun run --filter "*" lint' 2>&1 | tee -a lint-results.txt`
 - `prepublishOnly`: `bun run build`
 - `release`: `bun run build && bun publish --access public && bun run --filter '*' publish`
 - `release:major`: `bun run --filter '*' version major && npm version major && bun run release`

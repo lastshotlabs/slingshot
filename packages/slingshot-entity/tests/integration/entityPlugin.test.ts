@@ -691,6 +691,25 @@ describe('createEntityPlugin — manifest intake', () => {
       }),
     );
     expect(blocked.status).toBe(404);
+
+    const otherCreateRes = await app.fetch(
+      new Request('http://localhost/notes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-auth-user-id': 'user-b' },
+        body: JSON.stringify({ text: 'other note' }),
+      }),
+    );
+    expect(otherCreateRes.status).toBe(201);
+
+    const listRes = await app.fetch(
+      new Request('http://localhost/notes?userId=user-b', {
+        headers: { 'x-auth-user-id': 'user-a' },
+      }),
+    );
+    expect(listRes.status).toBe(200);
+    const listBody = (await listRes.json()) as { items: Array<Record<string, unknown>> };
+    expect(listBody.items).toHaveLength(1);
+    expect(listBody.items[0]?.userId).toBe('user-a');
   });
 });
 

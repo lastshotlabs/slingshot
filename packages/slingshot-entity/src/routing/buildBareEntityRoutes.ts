@@ -58,6 +58,7 @@ export interface BareEntityAdapterCrud {
     filter?: unknown;
     limit?: number;
     cursor?: string;
+    sortDir?: 'asc' | 'desc';
   }): Promise<{ items: unknown[]; cursor?: string; nextCursor?: string; hasMore?: boolean }>;
   update(id: string, data: unknown, filter?: Record<string, unknown>): Promise<unknown>;
   delete(id: string, filter?: Record<string, unknown>): Promise<boolean>;
@@ -425,12 +426,33 @@ export function buildBareEntityRoutes<
         path: `/${segment}`,
         tags: [tag],
         summary: `List ${config.name}`,
+        request: { query: schemas.listOptions },
         responses: {
           200: { content: { 'application/json': { schema: schemas.list } }, description: 'OK' },
         },
       }),
       async c => {
-        let listOpts: { filter?: Record<string, unknown>; limit?: number; cursor?: string } = {};
+        const rawQuery = Object.fromEntries(new URL(c.req.url).searchParams.entries());
+        const parsedQuery = schemas.listOptions.safeParse(rawQuery);
+        if (!parsedQuery.success) {
+          return c.json(
+            {
+              success: false,
+              error: { name: 'ZodError', message: parsedQuery.error.message },
+            },
+            400,
+          ) as never;
+        }
+
+        const { limit, cursor, sortDir, ...validatedFilters } = parsedQuery.data as Record<
+          string,
+          unknown
+        > & {
+          limit?: number;
+          cursor?: string;
+          sortDir?: 'asc' | 'desc';
+        };
+        let filter = Object.keys(validatedFilters).length > 0 ? { ...validatedFilters } : undefined;
 
         if (dataScopes.length > 0) {
           const resolution = resolveDataScopes(dataScopes, 'list', c);
@@ -440,8 +462,19 @@ export function buildBareEntityRoutes<
               401,
             ) as never;
           }
-          listOpts = { filter: resolution.bindings };
+          filter = { ...(filter ?? {}), ...resolution.bindings };
         }
+
+        const listOpts: {
+          filter?: Record<string, unknown>;
+          limit?: number;
+          cursor?: string;
+          sortDir?: 'asc' | 'desc';
+        } = {};
+        if (filter) listOpts.filter = filter;
+        if (limit !== undefined) listOpts.limit = limit;
+        if (cursor !== undefined) listOpts.cursor = cursor;
+        if (sortDir !== undefined) listOpts.sortDir = sortDir;
 
         const result = await adapter.list(listOpts);
         c.set('__opName' as never, 'list' as never);

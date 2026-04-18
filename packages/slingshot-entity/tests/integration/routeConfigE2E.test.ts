@@ -15,6 +15,15 @@ import { buildBareEntityRoutes } from '../../src/routing/buildBareEntityRoutes';
 const records = new Map<string, Record<string, unknown>>();
 let idCounter = 0;
 
+function matchesFilter(record: Record<string, unknown>, filter?: Record<string, unknown>): boolean {
+  if (!filter) return true;
+  for (const [key, value] of Object.entries(filter)) {
+    if (value === undefined) continue;
+    if (record[key] !== value) return false;
+  }
+  return true;
+}
+
 function createMemoryAdapter() {
   return {
     create: (data: unknown) => {
@@ -24,7 +33,21 @@ function createMemoryAdapter() {
       return Promise.resolve(record);
     },
     getById: (id: string) => Promise.resolve(records.get(id) ?? null),
-    list: () => Promise.resolve({ items: [...records.values()], hasMore: false }),
+    list: (opts?: {
+      filter?: unknown;
+      limit?: number;
+      cursor?: string;
+      sortDir?: 'asc' | 'desc';
+    }) => {
+      let items = [...records.values()];
+      if (opts?.filter && typeof opts.filter === 'object' && !Array.isArray(opts.filter)) {
+        items = items.filter(record =>
+          matchesFilter(record, opts.filter as Record<string, unknown>),
+        );
+      }
+      const limit = opts?.limit ?? items.length;
+      return Promise.resolve({ items: items.slice(0, limit), hasMore: items.length > limit });
+    },
     update: (id: string, data: unknown) => {
       const existing = records.get(id);
       if (!existing) return Promise.resolve(null);
@@ -102,6 +125,51 @@ describe('buildBareEntityRoutes + applyRouteConfig E2E', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { items: unknown[] };
     expect(body.items).toHaveLength(2);
+  });
+
+  it('list filters by validated query params and ignores unknown keys', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const filterableEntityConfig: ResolvedEntityConfig = {
+      ...testEntityConfig,
+      fields: {
+        ...testEntityConfig.fields,
+        ownerId: { type: 'string', primary: false, immutable: false, optional: false },
+        status: {
+          type: 'enum',
+          primary: false,
+          immutable: false,
+          optional: false,
+          enumValues: ['draft', 'published'],
+        },
+      },
+      indexes: [{ fields: ['ownerId'] }],
+    };
+    const router = buildBareEntityRoutes(filterableEntityConfig, undefined, adapter);
+
+    await adapter.create({ text: 'note 1', ownerId: 'u1', status: 'published' });
+    await adapter.create({ text: 'note 2', ownerId: 'u1', status: 'published' });
+    await adapter.create({ text: 'note 3', ownerId: 'u1', status: 'draft' });
+    await adapter.create({ text: 'note 4', ownerId: 'u2', status: 'published' });
+
+    const filteredRes = await router.fetch(
+      new Request('http://localhost/notes?ownerId=u1&status=published&limit=1'),
+    );
+    expect(filteredRes.status).toBe(200);
+    const filteredBody = (await filteredRes.json()) as {
+      items: Array<Record<string, unknown>>;
+      hasMore?: boolean;
+    };
+    expect(filteredBody.items).toHaveLength(1);
+    expect(filteredBody.items[0]?.ownerId).toBe('u1');
+    expect(filteredBody.items[0]?.status).toBe('published');
+    expect(filteredBody.hasMore).toBe(true);
+
+    const unknownRes = await router.fetch(new Request('http://localhost/notes?unknown=u1'));
+    expect(unknownRes.status).toBe(200);
+    const unknownBody = (await unknownRes.json()) as { items: unknown[] };
+    expect(unknownBody.items).toHaveLength(4);
   });
 
   it('get by id returns the record', async () => {

@@ -314,6 +314,7 @@ describe('Postgres executor atomicity', () => {
     const op: ArrayPushOpConfig = {
       kind: 'arrayPush',
       field: 'tags',
+      value: 'input:tag',
     };
 
     const { pool, state, clientQueries, released } = createArrayMutationPool([
@@ -349,6 +350,7 @@ describe('Postgres executor atomicity', () => {
     const op: ArrayPullOpConfig = {
       kind: 'arrayPull',
       field: 'tags',
+      value: 'input:tag',
     };
 
     const { pool, state, clientQueries, released } = createArrayMutationPool(

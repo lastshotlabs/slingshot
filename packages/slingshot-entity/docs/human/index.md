@@ -43,6 +43,11 @@ The goal is to make the declarative path easier than the hand-wired path.
 
 `createEntityPlugin()` and the routing helpers are the runtime proof that the same definitions can drive live packages, not just generated code. This is what lets packages like community express behavior through entity config, middleware references, and post-setup event consumers instead of bespoke route files.
 
+The stock CRUD list route is part of that contract. For entities mounted through
+`createEntityPlugin()`, `GET /{entity}` accepts the same allowlisted list query params that the
+generated route path exposes: indexed fields, enum fields, boolean fields, the tenant field, and
+`limit` / `cursor` / `sortDir`. Runtime row scoping still wins over caller-supplied filters.
+
 ## Relationship To Other Packages
 
 - `slingshot-core` owns the canonical contracts and shared type families.

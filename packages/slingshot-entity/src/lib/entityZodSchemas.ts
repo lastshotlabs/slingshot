@@ -14,6 +14,10 @@ import type {
 import { registerSchema } from '@lastshotlabs/slingshot-core';
 import { isAutoDefault } from './naming';
 
+function isUnknownArray(value: unknown): value is unknown[] {
+  return Array.isArray(value);
+}
+
 /**
  * Map a `FieldDef` to its runtime Zod schema.
  *
@@ -63,12 +67,58 @@ function fieldToZod(def: FieldDef): z.ZodType {
 }
 
 /**
+ * Map a field definition to a query-parameter-friendly Zod schema.
+ *
+ * Query params arrive as strings, so runtime route validation must coerce
+ * numeric/date values and explicitly parse booleans before the adapter sees
+ * them.
+ */
+function fieldToQueryZod(def: FieldDef): z.ZodType {
+  switch (def.type) {
+    case 'string':
+      return z.string();
+    case 'number':
+      return z.coerce.number();
+    case 'integer':
+      return z.coerce.number().int();
+    case 'boolean':
+      return z.preprocess(value => {
+        if (value === true || value === false) return value;
+        if (value === 'true') return true;
+        if (value === 'false') return false;
+        return value;
+      }, z.boolean());
+    case 'date':
+      return z.preprocess(value => {
+        if (value instanceof Date) return value;
+        if (typeof value === 'string' || typeof value === 'number') return new Date(value);
+        return value;
+      }, z.date());
+    case 'enum':
+      if (def.enumValues && def.enumValues.length > 0) {
+        return z.enum(def.enumValues as [string, ...string[]]);
+      }
+      return z.string();
+    case 'string[]':
+      return z.preprocess(value => {
+        if (isUnknownArray(value)) return value;
+        if (typeof value === 'string') return [value];
+        return value;
+      }, z.array(z.string()));
+    case 'json':
+    default:
+      return z.unknown();
+  }
+}
+
+/**
  * Runtime Zod schemas derived from a `ResolvedEntityConfig`.
  *
  * - `entity` — full entity object schema (all fields).
  * - `create` — input schema for creation (excludes auto-defaults and `onUpdate` fields).
  * - `update` — partial update schema (all mutable, non-`onUpdate` fields as optional).
  * - `list` — list response schema with `items` array and optional pagination fields.
+ * - `listOptions` — allowed list query params with runtime coercion.
  */
 export interface EntityZodSchemas {
   /** Full entity object schema, registered in the OpenAPI component registry. */
@@ -79,6 +129,8 @@ export interface EntityZodSchemas {
   update: z.ZodType;
   /** List response schema. */
   list: z.ZodType;
+  /** List query schema. */
+  listOptions: z.ZodObject;
 }
 
 /**
@@ -87,7 +139,7 @@ export interface EntityZodSchemas {
  * generated spec as a named `$ref` component.
  *
  * @param config - The resolved entity configuration.
- * @returns `EntityZodSchemas` with `entity`, `create`, `update`, and `list`.
+ * @returns `EntityZodSchemas` with `entity`, `create`, `update`, `list`, and `listOptions`.
  */
 export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSchemas {
   const fieldDefs = Object.entries(config.fields);
@@ -141,6 +193,41 @@ export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSc
   }
   const update = z.object(updateShape);
 
+  // List query schema
+  const listOptionsShape: Record<string, z.ZodType> = {};
+  const filterableFields = new Set<string>();
+
+  for (const [fieldName, def] of fieldDefs) {
+    if (def.type === 'enum' || def.type === 'boolean') {
+      filterableFields.add(fieldName);
+    }
+  }
+
+  if (config.indexes) {
+    for (const idx of config.indexes) {
+      for (const fieldName of idx.fields) {
+        const def = config.fields[fieldName];
+        if (def.type !== 'json') {
+          filterableFields.add(fieldName);
+        }
+      }
+    }
+  }
+
+  if (config.tenant) {
+    filterableFields.add(config.tenant.field);
+  }
+
+  for (const fieldName of filterableFields) {
+    const def = config.fields[fieldName];
+    listOptionsShape[fieldName] = fieldToQueryZod(def).optional();
+  }
+
+  listOptionsShape['limit'] = z.coerce.number().int().positive().optional();
+  listOptionsShape['cursor'] = z.string().optional();
+  listOptionsShape['sortDir'] = z.enum(['asc', 'desc']).optional();
+  const listOptions: z.ZodObject = z.object(listOptionsShape);
+
   // List response schema
   const list = z.object({
     items: z.array(entityRaw),
@@ -149,5 +236,5 @@ export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSc
     hasMore: z.boolean().optional(),
   });
 
-  return { entity, create, update, list };
+  return { entity, create, update, list, listOptions };
 }

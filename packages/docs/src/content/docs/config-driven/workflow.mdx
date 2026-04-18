@@ -57,6 +57,12 @@ This is where you decide whether the domain behavior stays declarative or needs 
 If you can express it with `op.*`, do that first. It keeps adapter methods, route shapes, and
 validation aligned.
 
+Before adding a filtered lookup operation, check whether plain CRUD list already covers it.
+`createEntityPlugin()` now forwards allowlisted list query params on the generated `GET /{entity}`
+route for indexed fields, enum fields, boolean fields, the tenant field, and the standard
+pagination keys (`limit`, `cursor`, `sortDir`). If the behavior is just "list records where
+field X equals Y", prefer the built-in list route over a dedicated `byX` operation.
+
 Reference files:
 
 - `examples/config-driven-domain/src/entities/postOperations.ts`

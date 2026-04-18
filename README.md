@@ -4,7 +4,7 @@ Config-driven backend framework built on Hono. Plugin-driven, manifest-first.
 
 ## What it is
 
-Slingshot is a backend framework built on Hono with runtime adapters for Bun, Node, and Edge. Declare plugins, databases, and security in a JSON manifest — run `slingshot start`. Zero code for built-in plugins; export functions from `slingshot.handlers.ts` for custom logic.
+Slingshot is a backend framework built on Hono with runtime adapters for Bun and Node. Declare plugins, databases, and security in a JSON manifest — run `slingshot start`. Zero code for built-in plugins; export functions from `slingshot.handlers.ts` for custom logic.
 
 ## Quickstart
 
@@ -45,7 +45,7 @@ For custom behavior (middleware, event handlers, tenant resolvers), export named
 - **Community & Realtime** — community (forums), chat, notifications, push, polls
 - **Content & Media** — assets, image optimization, emoji, embeds, GIFs, deep links
 - **Infrastructure** — search, webhooks, interactions, mail, admin, infra
-- **Rendering** — SSR, SSG with runtime adapters (Bun, Node, Edge)
+- **Rendering** — SSR, SSG with runtime adapters (Bun, Node)
 - **Data** — config-driven entities, code generation, Postgres adapter, BullMQ adapter
 - **Game Engine** — multiplayer game runtime with phases, turns, scoring, channels
 

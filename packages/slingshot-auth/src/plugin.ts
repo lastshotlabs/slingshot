@@ -184,7 +184,11 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
             key: string,
             opts: { windowMs: number; max: number },
           ): Promise<boolean> {
-            return rlService.trackAttempt(key, opts);
+            if (await rlService.isLimited(key, opts)) {
+              return true;
+            }
+            await rlService.trackAttempt(key, opts);
+            return false;
           },
         };
         registrar.setRateLimitAdapter(rateLimitAdapter);

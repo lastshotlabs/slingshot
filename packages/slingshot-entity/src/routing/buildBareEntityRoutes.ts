@@ -120,7 +120,7 @@ function registerRoute(
       if (c.req.method !== 'HEAD') {
         return c.json({ error: 'Not found' }, 404) as never;
       }
-      return handler(c);
+      return handler(c, async () => {});
     };
     if (supportsOpenApi(router)) {
       router.openapi(route, headOnlyHandler);
@@ -353,7 +353,7 @@ export function buildBareEntityRoutes<
             params: z.object(Object.fromEntries(routeParams.map(param => [param, z.string()]))),
           }
         : undefined;
-    const responses =
+    const responses: Parameters<typeof createRoute>[0]['responses'] =
       opConfig.kind === 'lookup'
         ? opConfig.returns === 'one'
           ? {

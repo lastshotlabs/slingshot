@@ -8,6 +8,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type {
   AppEnv,
   EntityRouteConfig,
+  RouteIdempotencyConfig,
   EntityRoutePolicyConfig,
   OperationConfig,
   PermissionEvaluator,
@@ -17,7 +18,13 @@ import type {
   RouteOperationConfig,
   SlingshotEventBus,
 } from '@lastshotlabs/slingshot-core';
-import { getSlingshotCtx, resolveOpConfig } from '@lastshotlabs/slingshot-core';
+import {
+  getSlingshotCtx,
+  HEADER_IDEMPOTENCY_KEY,
+  hmacSign,
+  resolveOpConfig,
+  sha256,
+} from '@lastshotlabs/slingshot-core';
 import { entityToPath } from '../generators/routeHelpers';
 import { buildPolicyAction, policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
 import { safeReadJsonBody } from '../policy/safeReadJsonBody';
@@ -78,6 +85,129 @@ function methodGuard(methods: Set<string>, handler: MiddlewareHandler): Middlewa
       return;
     }
     return handler(c, next);
+  };
+}
+
+function normalizeIdempotencyConfig(
+  config: RouteOperationConfig['idempotency'],
+): Required<RouteIdempotencyConfig> | null {
+  if (!config) return null;
+  if (config === true) {
+    return { ttl: 86400, scope: 'user' };
+  }
+  return {
+    ttl: config.ttl ?? 86400,
+    scope: config.scope ?? 'user',
+  };
+}
+
+async function buildRequestFingerprint(c: Context<AppEnv, string>): Promise<string> {
+  const url = new URL(c.req.url);
+  const contentType = c.req.header('content-type') ?? '';
+  const body = await c.req.raw.clone().text().catch(() => '');
+  return sha256(`${c.req.method}\n${url.pathname}\n${url.search}\n${contentType}\n${body}`);
+}
+
+function buildScopedIdempotencyKey(
+  rawKey: string,
+  entityName: string,
+  opName: string,
+  c: Context<AppEnv, string>,
+  config: Required<RouteIdempotencyConfig>,
+): string {
+  const slingshotCtx = getSlingshotCtx(c as unknown as Parameters<typeof getSlingshotCtx>[0]);
+  const signingConfig = slingshotCtx.signing;
+  const signingSecret = signingConfig?.secret ?? null;
+  const keyToken =
+    signingConfig?.idempotencyKeys && signingSecret ? hmacSign(rawKey, signingSecret) : rawKey;
+  const tenantId = (c.get('tenantId' as never) as string | undefined) ?? null;
+  const authUserId = (c.get('authUserId' as never) as string | undefined) ?? null;
+
+  const parts = ['entity-idempotency', entityName, opName];
+  switch (config.scope) {
+    case 'global':
+      parts.push('global');
+      break;
+    case 'tenant':
+      parts.push(`tenant:${tenantId ?? 'none'}`);
+      break;
+    case 'user':
+      if (!authUserId) {
+        throw new Error(
+          `Entity route idempotency for ${entityName}.${opName} requires authUserId when scope is 'user'`,
+        );
+      }
+      if (tenantId) parts.push(`tenant:${tenantId}`);
+      parts.push(`user:${authUserId}`);
+      break;
+  }
+  parts.push(keyToken);
+  return parts.join(':');
+}
+
+function idempotencyConflictResponse(c: Context<AppEnv, string>): Response {
+  return c.json(
+    {
+      error: 'Idempotency-Key reuse with different request',
+      code: 'idempotency_key_conflict',
+    },
+    409,
+  );
+}
+
+function createEntityIdempotencyMiddleware(
+  entityName: string,
+  opName: string,
+  config: Required<RouteIdempotencyConfig>,
+): MiddlewareHandler<AppEnv> {
+  return async (c, next) => {
+    const rawKey = c.req.header(HEADER_IDEMPOTENCY_KEY);
+    if (!rawKey) {
+      await next();
+      return;
+    }
+
+    const slingshotCtx = getSlingshotCtx(c as unknown as Parameters<typeof getSlingshotCtx>[0]);
+    const adapter = slingshotCtx.persistence.idempotency;
+    const requestFingerprint = await buildRequestFingerprint(c);
+    const derivedKey = buildScopedIdempotencyKey(rawKey, entityName, opName, c, config);
+
+    const cached = await adapter.get(derivedKey);
+    if (cached) {
+      if (cached.requestFingerprint && cached.requestFingerprint !== requestFingerprint) {
+        c.res = idempotencyConflictResponse(c);
+        return;
+      }
+      c.res = c.json(
+        JSON.parse(cached.response),
+        cached.status as import('hono/utils/http-status').ContentfulStatusCode,
+      );
+      return;
+    }
+
+    await next();
+
+    const status = c.res.status;
+    let body: string;
+    try {
+      body = await c.res.clone().text();
+    } catch {
+      return;
+    }
+
+    await adapter.set(derivedKey, body, status, config.ttl, { requestFingerprint });
+
+    const stored = await adapter.get(derivedKey);
+    if (stored?.requestFingerprint && stored.requestFingerprint !== requestFingerprint) {
+      c.res = idempotencyConflictResponse(c);
+      return;
+    }
+    if (stored && stored.response !== body) {
+      c.res = new Response(stored.response, {
+        status: stored.status,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
   };
 }
 
@@ -273,22 +403,21 @@ export function applyRouteConfig(
           method: routeConfig.operations?.[opName]?.method,
           path: routeConfig.operations?.[opName]?.path,
         });
-    if (!isCrudOp && !namedRoute) continue;
-    const paths = isCrudOp ? getOpPaths(path, opName) : [`/${path}/${namedRoute.path}`];
-    const methods = isCrudOp ? opMethods(opName) : new Set([namedRoute.method.toUpperCase()]);
+    let paths: string[];
+    let methods: Set<string>;
+    if (isCrudOp) {
+      paths = getOpPaths(path, opName);
+      methods = opMethods(opName);
+    } else {
+      if (!namedRoute) continue;
+      paths = [`/${path}/${namedRoute.path}`];
+      methods = new Set([namedRoute.method.toUpperCase()]);
+    }
 
     for (const opPath of paths) {
       // Rate limit middleware
       if (opConfig.rateLimit && rateLimitFactory) {
         router.use(opPath, methodGuard(methods, rateLimitFactory(opConfig.rateLimit)));
-      }
-
-      // Custom middleware
-      if (opConfig.middleware && mw) {
-        for (const name of opConfig.middleware) {
-          const handler = (mw as Record<string, MiddlewareHandler | undefined>)[name];
-          if (handler) router.use(opPath, methodGuard(methods, handler));
-        }
       }
 
       if (opConfig.auth || opConfig.permission) {
@@ -338,6 +467,22 @@ export function applyRouteConfig(
             await next();
           }),
         );
+      }
+
+      const idempotency = normalizeIdempotencyConfig(opConfig.idempotency);
+      if (idempotency) {
+        router.use(
+          opPath,
+          methodGuard(methods, createEntityIdempotencyMiddleware(entityConfig.name, opName, idempotency)),
+        );
+      }
+
+      // Custom middleware
+      if (opConfig.middleware && mw) {
+        for (const name of opConfig.middleware) {
+          const handler = (mw as Record<string, MiddlewareHandler | undefined>)[name];
+          if (handler) router.use(opPath, methodGuard(methods, handler));
+        }
       }
 
       // Collect events for after-response middleware

@@ -73,14 +73,62 @@ const testEntityConfig: ResolvedEntityConfig = {
 };
 
 function attachSlingshotCtx(router: OpenAPIHono<AppEnv>, tenantId?: string) {
+  const idempotencyStore = new Map<
+    string,
+    {
+      response: string;
+      status: number;
+      createdAt: number;
+      expiresAt: number;
+      requestFingerprint?: string | null;
+    }
+  >();
   router.use('*', async (_c: Context, next: Next) => {
     const slingshotCtx = {
       tenantId,
       pluginState: new Map<string, unknown>(),
       routeAuth: {
-        userAuth: async (_c: Context, nextAuth: Next) => nextAuth(),
+        userAuth: async (_c: Context, nextAuth: Next) => {
+          _c.set('authUserId', 'user-1');
+          await nextAuth();
+        },
         requireRole: () => async (_c: Context, nextAuth: Next) => nextAuth(),
       },
+      persistence: {
+        idempotency: {
+          async get(key: string) {
+            const record = idempotencyStore.get(key);
+            if (!record) return null;
+            if (Date.now() > record.expiresAt) {
+              idempotencyStore.delete(key);
+              return null;
+            }
+            return {
+              response: record.response,
+              status: record.status,
+              createdAt: record.createdAt,
+              requestFingerprint: record.requestFingerprint ?? null,
+            };
+          },
+          async set(
+            key: string,
+            response: string,
+            status: number,
+            ttlSeconds: number,
+            meta?: { requestFingerprint?: string | null },
+          ) {
+            if (idempotencyStore.has(key)) return;
+            idempotencyStore.set(key, {
+              response,
+              status,
+              createdAt: Date.now(),
+              expiresAt: Date.now() + ttlSeconds * 1000,
+              requestFingerprint: meta?.requestFingerprint ?? null,
+            });
+          },
+        },
+      },
+      signing: null,
     } as unknown as SlingshotContext;
 
     _c.set('slingshotCtx', slingshotCtx);
@@ -539,6 +587,140 @@ describe('named operation inference — HTTP round-trip', () => {
     const res = await router.fetch(new Request('http://localhost/notes/find-by-slug/alpha'));
     expect(res.status).toBe(200);
     expect(middlewareCalled).toBe(true);
+  });
+
+  it('runs custom middleware after auth so authUserId is available', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    attachSlingshotCtx(router);
+
+    let sawAuthUserId: string | null = null;
+    applyRouteConfig(
+      router,
+      testEntityConfig,
+      {
+        create: {
+          auth: 'userAuth',
+          middleware: ['checkAuth'],
+        },
+        middleware: { checkAuth: true },
+      },
+      {
+        middleware: {
+          checkAuth: async (c, next) => {
+            sawAuthUserId = (c.get('authUserId' as never) as string | undefined) ?? null;
+            await next();
+          },
+        },
+      },
+    );
+    buildBareEntityRoutes(testEntityConfig, undefined, adapter, router);
+
+    const res = await router.fetch(
+      new Request('http://localhost/notes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'ordered' }),
+      }),
+    );
+
+    expect(res.status).toBe(201);
+    expect(sawAuthUserId).toBe('user-1');
+  });
+
+  it('replays entity create responses when first-class idempotency is enabled', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    attachSlingshotCtx(router);
+
+    applyRouteConfig(
+      router,
+      testEntityConfig,
+      {
+        create: {
+          auth: 'userAuth',
+          idempotency: true,
+        },
+      },
+      {},
+    );
+    buildBareEntityRoutes(testEntityConfig, undefined, adapter, router);
+
+    const request = (text: string) =>
+      router.fetch(
+        new Request('http://localhost/notes', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'idempotency-key': 'note-create-1',
+          },
+          body: JSON.stringify({ text }),
+        }),
+      );
+
+    const first = await request('hello');
+    const second = await request('hello');
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(records.size).toBe(1);
+    expect(await first.json()).toEqual(await second.json());
+  });
+
+  it('rejects reused entity idempotency keys when the request fingerprint changes', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    attachSlingshotCtx(router);
+
+    applyRouteConfig(
+      router,
+      testEntityConfig,
+      {
+        create: {
+          auth: 'userAuth',
+          idempotency: true,
+        },
+      },
+      {},
+    );
+    buildBareEntityRoutes(testEntityConfig, undefined, adapter, router);
+
+    const first = await router.fetch(
+      new Request('http://localhost/notes', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': 'note-create-2',
+        },
+        body: JSON.stringify({ text: 'one' }),
+      }),
+    );
+    const second = await router.fetch(
+      new Request('http://localhost/notes', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'idempotency-key': 'note-create-2',
+        },
+        body: JSON.stringify({ text: 'two' }),
+      }),
+    );
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(409);
+    expect(records.size).toBe(1);
+    expect(await second.json()).toMatchObject({
+      code: 'idempotency_key_conflict',
+    });
   });
 });
 

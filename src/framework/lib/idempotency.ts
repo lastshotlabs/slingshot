@@ -1,10 +1,9 @@
 // ---------------------------------------------------------------------------
 // Idempotency middleware - consumes repository from SlingshotContext
 // ---------------------------------------------------------------------------
-import { hmacSign } from '@lib/signing';
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { HEADER_IDEMPOTENCY_KEY } from '@lastshotlabs/slingshot-core';
+import { HEADER_IDEMPOTENCY_KEY, hmacSign, sha256 } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,6 +12,23 @@ import { HEADER_IDEMPOTENCY_KEY } from '@lastshotlabs/slingshot-core';
 export interface IdempotencyOptions {
   /** TTL in seconds for cached responses. Default: 86400 (24 hours). */
   ttl?: number;
+}
+
+async function buildRequestFingerprint(c: Parameters<MiddlewareHandler<AppEnv>>[0]): Promise<string> {
+  const url = new URL(c.req.url);
+  const contentType = c.req.header('content-type') ?? '';
+  const body = await c.req.raw.clone().text().catch(() => '');
+  return sha256(`${c.req.method}\n${url.pathname}\n${url.search}\n${contentType}\n${body}`);
+}
+
+function fingerprintConflictResponse(c: Parameters<MiddlewareHandler<AppEnv>>[0]): Response {
+  return c.json(
+    {
+      error: 'Idempotency-Key reuse with different request',
+      code: 'idempotency_key_conflict',
+    },
+    409,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -65,10 +81,14 @@ export const idempotent =
     const signingSecret = signingConfig?.secret ?? null;
     const key = deriveKey(rawKey, userId, { config: signingConfig, secret: signingSecret });
     const ttl = opts?.ttl ?? 86400;
+    const requestFingerprint = await buildRequestFingerprint(c);
 
     // Cache hit - return stored response
     const cached = await adapter.get(key);
     if (cached) {
+      if (cached.requestFingerprint && cached.requestFingerprint !== requestFingerprint) {
+        return fingerprintConflictResponse(c);
+      }
       return c.json(
         JSON.parse(cached.response),
         cached.status as import('hono/utils/http-status').ContentfulStatusCode,
@@ -88,10 +108,14 @@ export const idempotent =
       return;
     }
 
-    await adapter.set(key, body, status, ttl);
+    await adapter.set(key, body, status, ttl, { requestFingerprint });
 
     // Re-read to handle write collision (NX semantics - set() may have been a no-op)
     const stored = await adapter.get(key);
+    if (stored?.requestFingerprint && stored.requestFingerprint !== requestFingerprint) {
+      c.res = fingerprintConflictResponse(c);
+      return;
+    }
     if (stored && stored.response !== body) {
       c.res = new Response(stored.response, {
         status: stored.status,

@@ -1,16 +1,16 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { type E2EServerHandle, createTestHttpServer } from '../setup-e2e';
 
 let handle: E2EServerHandle;
 
-beforeAll(async () => {
+beforeEach(async () => {
   // Very low limit: 3 requests per minute so we can hit it reliably in tests
   handle = await createTestHttpServer({
     security: { rateLimit: { windowMs: 60_000, max: 3 } },
   });
 });
 
-afterAll(() => handle.stop());
+afterEach(() => handle.stop());
 
 // ---------------------------------------------------------------------------
 // Helpers

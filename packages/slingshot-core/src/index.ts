@@ -116,6 +116,7 @@ export {
 /** Crypto and token helpers used by auth, signing, and secure request flows. */
 export {
   sha256,
+  hmacSign,
   timingSafeEqual,
   hashToken,
   encryptField,
@@ -417,6 +418,8 @@ export type {
   RouteAuthConfig,
   RoutePermissionConfig,
   RouteRateLimitConfig,
+  RouteIdempotencyConfig,
+  RouteIdempotencyScope,
   RouteEventConfig,
   RouteOperationConfig,
   RouteNamedOperationConfig,

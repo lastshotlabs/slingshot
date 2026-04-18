@@ -9,6 +9,7 @@ interface IdempotencyRecord {
   status: number;
   body: string;
   createdAt: number;
+  requestFingerprint?: string | null;
 }
 
 type SqliteIdempotencyDatabase = Pick<RuntimeSqliteDatabase, 'query'> & {
@@ -46,15 +47,17 @@ export function createMemoryIdempotencyAdapter(): IdempotencyAdapter {
         response: record.body,
         status: record.status,
         createdAt: record.createdAt,
+        requestFingerprint: record.requestFingerprint ?? null,
       });
     },
-    set(key, response, status, ttlSeconds) {
+    set(key, response, status, ttlSeconds, meta) {
       if (store.has(key)) return Promise.resolve(); // NX semantics — don't overwrite
       evictOldest(store, DEFAULT_MAX_ENTRIES);
       store.set(key, {
         status,
         body: response,
         createdAt: Date.now(),
+        requestFingerprint: meta?.requestFingerprint ?? null,
         expiresAt: Date.now() + ttlSeconds * 1000,
       });
       return Promise.resolve();
@@ -100,10 +103,20 @@ export function createRedisIdempotencyAdapter(
       const raw = await redis.get(rkey(key));
       if (!raw) return null;
       const record = JSON.parse(raw) as IdempotencyRecord;
-      return { response: record.body, status: record.status, createdAt: record.createdAt };
+      return {
+        response: record.body,
+        status: record.status,
+        createdAt: record.createdAt,
+        requestFingerprint: record.requestFingerprint ?? null,
+      };
     },
-    async set(key, response, status, ttlSeconds) {
-      const value = JSON.stringify({ status, body: response, createdAt: Date.now() });
+    async set(key, response, status, ttlSeconds, meta) {
+      const value = JSON.stringify({
+        status,
+        body: response,
+        createdAt: Date.now(),
+        requestFingerprint: meta?.requestFingerprint ?? null,
+      });
       await redis.set(rkey(key), value, 'EX', ttlSeconds, 'NX');
     },
   };
@@ -119,7 +132,12 @@ interface IdempotencyModel {
     filter: object,
     projection: string,
   ): {
-    lean(): Promise<{ status: number; body: string; createdAt: { getTime(): number } } | null>;
+    lean(): Promise<{
+      status: number;
+      body: string;
+      createdAt: { getTime(): number };
+      requestFingerprint?: string | null;
+    } | null>;
   };
   create(doc: object): Promise<unknown>;
 }
@@ -156,6 +174,7 @@ export function createMongoIdempotencyAdapter(
         body: { type: String, required: true },
         createdAt: { type: Date, required: true },
         expiresAt: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
+        requestFingerprint: { type: String, required: false, default: null },
       },
       { collection: 'idempotency' },
     );
@@ -165,12 +184,18 @@ export function createMongoIdempotencyAdapter(
   return {
     async get(key) {
       const doc = await getModel()
-        .findOne({ key, expiresAt: { $gt: new Date() } }, 'status body createdAt')
+        .findOne({ key, expiresAt: { $gt: new Date() } }, 'status body createdAt requestFingerprint')
         .lean();
       if (!doc) return null;
-      return { status: doc.status, response: doc.body, createdAt: doc.createdAt.getTime() };
+      return {
+        status: doc.status,
+        response: doc.body,
+        createdAt: doc.createdAt.getTime(),
+        requestFingerprint:
+          (doc as { requestFingerprint?: string | null }).requestFingerprint ?? null,
+      };
     },
-    async set(key, response, status, ttlSeconds) {
+    async set(key, response, status, ttlSeconds, meta) {
       const now = new Date();
       try {
         await getModel().create({
@@ -179,6 +204,7 @@ export function createMongoIdempotencyAdapter(
           body: response,
           createdAt: now,
           expiresAt: new Date(now.getTime() + ttlSeconds * 1000),
+          requestFingerprint: meta?.requestFingerprint ?? null,
         });
       } catch (err: unknown) {
         // Duplicate key — NX semantics: ignore
@@ -216,8 +242,16 @@ export function createSqliteIdempotencyAdapter(db: SqliteIdempotencyDatabase): I
       status    INTEGER NOT NULL,
       body      TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
-      expiresAt INTEGER NOT NULL
+      expiresAt INTEGER NOT NULL,
+      requestFingerprint TEXT
     )`);
+    const columns = db
+      .query<{ name: string }>('PRAGMA table_info(idempotency)')
+      .all()
+      .map(row => row.name);
+    if (!columns.includes('requestFingerprint')) {
+      db.run('ALTER TABLE idempotency ADD COLUMN requestFingerprint TEXT');
+    }
     initialized = true;
   }
 
@@ -229,17 +263,25 @@ export function createSqliteIdempotencyAdapter(db: SqliteIdempotencyDatabase): I
           status: number;
           body: string;
           createdAt: number;
-        }>('SELECT status, body, createdAt FROM idempotency WHERE key = ? AND expiresAt > ?')
+          requestFingerprint: string | null;
+        }>(
+          'SELECT status, body, createdAt, requestFingerprint FROM idempotency WHERE key = ? AND expiresAt > ?',
+        )
         .get(key, Date.now());
       if (!row) return Promise.resolve(null);
-      return Promise.resolve({ status: row.status, response: row.body, createdAt: row.createdAt });
+      return Promise.resolve({
+        status: row.status,
+        response: row.body,
+        createdAt: row.createdAt,
+        requestFingerprint: row.requestFingerprint ?? null,
+      });
     },
-    set(key, response, status, ttlSeconds) {
+    set(key, response, status, ttlSeconds, meta) {
       ensureTable();
       const now = Date.now();
       db.run(
-        'INSERT OR IGNORE INTO idempotency (key, status, body, createdAt, expiresAt) VALUES (?, ?, ?, ?, ?)',
-        [key, status, response, now, now + ttlSeconds * 1000],
+        'INSERT OR IGNORE INTO idempotency (key, status, body, createdAt, expiresAt, requestFingerprint) VALUES (?, ?, ?, ?, ?, ?)',
+        [key, status, response, now, now + ttlSeconds * 1000, meta?.requestFingerprint ?? null],
       );
       return Promise.resolve();
     },
@@ -281,9 +323,13 @@ export function createPostgresIdempotencyAdapter(pool: PgPool): IdempotencyAdapt
         status     INTEGER NOT NULL,
         body       TEXT NOT NULL,
         created_at BIGINT NOT NULL,
-        expires_at BIGINT NOT NULL
+        expires_at BIGINT NOT NULL,
+        request_fingerprint TEXT
       )
     `);
+    await pool.query(
+      'ALTER TABLE slingshot_idempotency ADD COLUMN IF NOT EXISTS request_fingerprint TEXT',
+    );
     initialized = true;
   }
 
@@ -291,7 +337,7 @@ export function createPostgresIdempotencyAdapter(pool: PgPool): IdempotencyAdapt
     async get(key) {
       await ensureTable();
       const result = await pool.query(
-        'SELECT status, body, created_at FROM slingshot_idempotency WHERE key = $1 AND expires_at > $2',
+        'SELECT status, body, created_at, request_fingerprint FROM slingshot_idempotency WHERE key = $1 AND expires_at > $2',
         [key, Date.now()],
       );
       const row = result.rows.at(0);
@@ -300,16 +346,17 @@ export function createPostgresIdempotencyAdapter(pool: PgPool): IdempotencyAdapt
         status: row['status'] as number,
         response: row['body'] as string,
         createdAt: row['created_at'] as number,
+        requestFingerprint: (row['request_fingerprint'] as string | null | undefined) ?? null,
       };
     },
-    async set(key, response, status, ttlSeconds) {
+    async set(key, response, status, ttlSeconds, meta) {
       await ensureTable();
       const now = Date.now();
       await pool.query(
-        `INSERT INTO slingshot_idempotency (key, status, body, created_at, expires_at)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO slingshot_idempotency (key, status, body, created_at, expires_at, request_fingerprint)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (key) DO NOTHING`,
-        [key, status, response, now, now + ttlSeconds * 1000],
+        [key, status, response, now, now + ttlSeconds * 1000, meta?.requestFingerprint ?? null],
       );
     },
   };

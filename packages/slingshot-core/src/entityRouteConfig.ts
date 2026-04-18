@@ -398,6 +398,41 @@ export interface RouteRateLimitConfig {
   max: number;
 }
 
+// --- Idempotency ---
+/**
+ * Scope used when deriving the server-side storage key for entity route idempotency.
+ *
+ * The final key always includes the entity name, operation name, and client-supplied
+ * `Idempotency-Key`. `scope` controls which request identity dimension is added on top.
+ */
+export type RouteIdempotencyScope = 'user' | 'tenant' | 'global';
+
+/**
+ * Idempotency configuration for a single entity operation.
+ *
+ * When enabled, the framework stores the first successful JSON response under a derived
+ * server-side key and replays it on later retries that present the same
+ * `Idempotency-Key` header. Reusing the same key with a different request fingerprint is
+ * rejected with HTTP 409.
+ */
+export interface RouteIdempotencyConfig {
+  /**
+   * Retention period for cached idempotency records, in seconds.
+   *
+   * Defaults to `86400` (24 hours).
+   */
+  ttl?: number;
+
+  /**
+   * Identity dimension included in the derived storage key.
+   *
+   * - `'user'`   — scope by authenticated user ID. Default.
+   * - `'tenant'` — scope by tenant ID (or `'none'` when no tenant is resolved).
+   * - `'global'` — no extra identity dimension beyond entity + operation.
+   */
+  scope?: RouteIdempotencyScope;
+}
+
 // --- Events ---
 /**
  * Event emitted on the `SlingshotEventBus` after a route operation completes successfully.
@@ -546,6 +581,14 @@ export interface RouteOperationConfig {
    * startup, not at request time.
    */
   middleware?: string[];
+
+  /**
+   * Idempotency handling for retried requests to this operation.
+   *
+   * When enabled, the framework requires clients to supply `Idempotency-Key` and replays
+   * the first successful response for later retries of the same logical request.
+   */
+  idempotency?: boolean | RouteIdempotencyConfig;
 }
 
 /**
@@ -1072,8 +1115,8 @@ export interface EntityRouteConfig {
  *
  * @param routeConfig - The top-level entity route configuration.
  * @param opName - The operation name (`'create'`, `'list'`, `'delete'`, or a custom name).
- * @returns The merged `RouteOperationConfig`, or `undefined` if no auth/permission/rateLimit
- *   is configured at all (so callers can skip middleware registration entirely).
+ * @returns The merged `RouteOperationConfig`, or `undefined` if no operation-specific config
+ *   exists and `defaults` is empty (so callers can skip middleware registration entirely).
  *
  * @example
  * ```ts
@@ -1091,6 +1134,6 @@ export function resolveOpConfig(
   const crud = routeConfig[opName as keyof EntityRouteConfig] as RouteOperationConfig | undefined;
   const named = routeConfig.operations?.[opName];
   const specific = crud ?? named;
-  if (!specific && !defaults.auth && !defaults.permission && !defaults.rateLimit) return undefined;
+  if (!specific && Object.keys(defaults).length === 0) return undefined;
   return { ...defaults, ...specific };
 }

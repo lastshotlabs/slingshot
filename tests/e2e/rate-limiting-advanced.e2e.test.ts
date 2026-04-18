@@ -7,7 +7,7 @@
  *
  * Uses createTestHttpServer() with a very low max (3) so limits are hit quickly.
  */
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { E2EServerHandle } from '../setup-e2e';
 import { createTestHttpServer } from '../setup-e2e';
 
@@ -80,13 +80,13 @@ describe('rate limiting — per-tenant isolation', () => {
 describe('rate limiting — error response format', () => {
   let handle: E2EServerHandle;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     handle = await createTestHttpServer({
       security: { rateLimit: { windowMs: 60_000, max: 1 } },
     });
   });
 
-  afterAll(() => handle.stop());
+  afterEach(() => handle.stop());
 
   test('429 response body contains error field', async () => {
     await fetch(`${handle.baseUrl}/health`); // exhaust the 1 allowed
@@ -111,13 +111,13 @@ describe('rate limiting — error response format', () => {
 describe('rate limiting — global (non-tenanted) bucket', () => {
   let handle: E2EServerHandle;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     handle = await createTestHttpServer({
       security: { rateLimit: { windowMs: 60_000, max: 3 } },
     });
   });
 
-  afterAll(() => handle.stop());
+  afterEach(() => handle.stop());
 
   test('first 3 requests succeed, 4th is rate-limited', async () => {
     const url = `${handle.baseUrl}/health`;
@@ -145,13 +145,13 @@ describe('rate limiting — global (non-tenanted) bucket', () => {
 describe('rate limiting — cross-endpoint bucket', () => {
   let handle: E2EServerHandle;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     handle = await createTestHttpServer({
       security: { rateLimit: { windowMs: 60_000, max: 3 } },
     });
   });
 
-  afterAll(() => handle.stop());
+  afterEach(() => handle.stop());
 
   test('requests to different endpoints share the same IP bucket', async () => {
     // Use 2 requests on /health, 1 on /cached — all 3 share the same IP bucket

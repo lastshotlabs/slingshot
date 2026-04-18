@@ -41,6 +41,14 @@ const routeRateLimitSchema = z.object({
   max: z.number().int().positive(),
 });
 
+const routeIdempotencySchema = z.union([
+  z.literal(true),
+  z.object({
+    ttl: z.number().int().positive().optional(),
+    scope: z.enum(['user', 'tenant', 'global']).optional(),
+  }),
+]);
+
 const eventKeySchema = z
   .string()
   .min(1)
@@ -64,6 +72,7 @@ const routeOperationConfigSchema = z.object({
   rateLimit: routeRateLimitSchema.optional(),
   event: routeEventSchema.optional(),
   middleware: z.array(z.string()).optional(),
+  idempotency: routeIdempotencySchema.optional(),
 });
 
 const namedOpHttpMethodSchema = z.enum(['get', 'post', 'put', 'patch', 'delete']);
@@ -178,6 +187,27 @@ export const entityRouteConfigSchema = z
     const isAuthEnabled = (auth: string | undefined): boolean =>
       auth === 'userAuth' || auth === 'bearer';
 
+    const getEffectiveAuth = (
+      op: (typeof cfg)['create'] | (typeof cfg)['get'] | (typeof cfg)['list'] | (typeof cfg)['update'] | (typeof cfg)['delete'] | Record<string, unknown> | undefined,
+    ): string | undefined => {
+      const auth =
+        op && typeof op === 'object' && 'auth' in op ? (op['auth'] as string | undefined) : undefined;
+      return auth ?? cfg.defaults?.auth;
+    };
+
+    const getEffectiveIdempotency = (
+      op: (typeof cfg)['create'] | (typeof cfg)['get'] | (typeof cfg)['list'] | (typeof cfg)['update'] | (typeof cfg)['delete'] | Record<string, unknown> | undefined,
+    ): { enabled: boolean; scope: 'user' | 'tenant' | 'global' } => {
+      const raw =
+        op && typeof op === 'object' && 'idempotency' in op
+          ? op['idempotency']
+          : cfg.defaults?.idempotency;
+      if (!raw) return { enabled: false, scope: 'user' };
+      if (raw === true) return { enabled: true, scope: 'user' };
+      const config = raw as { scope?: 'user' | 'tenant' | 'global' };
+      return { enabled: true, scope: config.scope ?? 'user' };
+    };
+
     const crudAuthEnabled =
       isAuthEnabled(cfg.defaults?.auth) ||
       isAuthEnabled(cfg.create?.auth) ||
@@ -212,6 +242,34 @@ export const entityRouteConfigSchema = z
         path: ['permission', 'policy'],
         message:
           "permission.policy requires auth — set defaults.auth or an operation.auth to 'userAuth' or 'bearer'. A public route cannot provide a userId to the resolver.",
+      });
+    }
+
+    const authSensitiveOps = [
+      ['create', cfg.create],
+      ['get', cfg.get],
+      ['list', cfg.list],
+      ['update', cfg.update],
+      ['delete', cfg.delete],
+      ...Object.entries(cfg.operations ?? {}),
+    ] as const;
+
+    for (const [opName, opConfig] of authSensitiveOps) {
+      const idempotency = getEffectiveIdempotency(opConfig);
+      if (!idempotency.enabled || idempotency.scope !== 'user') continue;
+      if (isAuthEnabled(getEffectiveAuth(opConfig))) continue;
+      ctx.addIssue({
+        code: 'custom',
+        path:
+          opName === 'create' ||
+          opName === 'get' ||
+          opName === 'list' ||
+          opName === 'update' ||
+          opName === 'delete'
+            ? [opName, 'idempotency']
+            : ['operations', opName, 'idempotency'],
+        message:
+          "idempotency.scope 'user' requires auth — set defaults.auth or operation.auth to 'userAuth' or 'bearer', or choose scope 'tenant' or 'global'.",
       });
     }
   });

@@ -232,6 +232,30 @@ describe('idempotency middleware', () => {
 
     expect(count.n).toBe(1); // second request cached
   });
+
+  test('same key with different request fingerprint returns 409', async () => {
+    const count = { n: 0 };
+    const app = buildApp(count);
+
+    const first = await app.request('/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'idempotency-key': 'fingerprint-key' },
+      body: JSON.stringify({ amount: 1 }),
+    });
+    expect(first.status).toBe(201);
+
+    const second = await app.request('/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'idempotency-key': 'fingerprint-key' },
+      body: JSON.stringify({ amount: 2 }),
+    });
+
+    expect(second.status).toBe(409);
+    expect(count.n).toBe(1);
+    expect(await second.json()).toMatchObject({
+      code: 'idempotency_key_conflict',
+    });
+  });
 });
 
 describe('memory persistence clear support', () => {

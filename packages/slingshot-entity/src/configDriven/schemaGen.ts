@@ -127,29 +127,45 @@ export function generateSchemas(config: ResolvedEntityConfig): GeneratedSchemas 
   const updateShape: Record<string, z.ZodType> = {};
   const listShape: Record<string, z.ZodType> = {};
 
+  // Build set of FK fields that are nullable via optional belongsTo relations
+  const nullableFkFields = new Set<string>();
+  if (config.relations) {
+    for (const rel of Object.values(config.relations)) {
+      if (rel.kind === 'belongsTo' && rel.optional) {
+        nullableFkFields.add(rel.foreignKey);
+      }
+    }
+  }
+
   for (const [name, def] of Object.entries(config.fields)) {
     const base = zodTypeForField(def);
 
+    // A field is nullable if it's an optional belongsTo FK, or if the field
+    // itself is optional — a field that can be absent should accept null on update.
+    const isNullable = nullableFkFields.has(name) || def.optional;
+
     // --- Entity schema: all fields ---
-    entityShape[name] = def.optional ? base.optional() : base;
+    const entityBase = isNullable ? base.nullable() : base;
+    entityShape[name] = isNullable ? entityBase.optional() : entityBase;
 
     // --- Create schema: exclude auto-default & onUpdate fields ---
     const hasAuto = isAutoDefault(def.default);
     const hasOnUpdate = def.onUpdate === 'now';
 
     if (!hasAuto && !hasOnUpdate) {
-      // Has a literal default or is optional → optional in create
       const hasLiteralDefault = def.default !== undefined && !isAutoDefault(def.default);
-      if (def.optional || hasLiteralDefault) {
-        createShape[name] = base.optional();
+      const createBase = isNullable ? base.nullable() : base;
+      if (isNullable || hasLiteralDefault) {
+        createShape[name] = createBase.optional();
       } else {
-        createShape[name] = base;
+        createShape[name] = createBase;
       }
     }
 
     // --- Update schema: exclude immutable & onUpdate ---
     if (!def.immutable && !hasOnUpdate) {
-      updateShape[name] = base.optional();
+      const updateBase = isNullable ? base.nullable() : base;
+      updateShape[name] = updateBase.optional();
     }
 
     // --- List filter options: enums, booleans, indexed string/number fields ---

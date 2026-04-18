@@ -770,7 +770,11 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
   const publishToWs: WsPublishFn = (state, targetEndpoint, room, data, options) => {
     const publish = getAppContext()?.wsPublish;
     if (!publish) return;
-    publish(state, targetEndpoint, room, data, options);
+    if (options !== undefined) {
+      publish(state, targetEndpoint, room, data, options);
+    } else {
+      publish(state, targetEndpoint, room, data);
+    }
   };
 
   // When manifest is used without explicit permissions, auto-declare dependency

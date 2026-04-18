@@ -2,6 +2,7 @@ import {
   createCipheriv,
   createDecipheriv,
   createHash,
+  createHmac,
   timingSafeEqual as nodeTimingSafeEqual,
   randomBytes,
 } from 'crypto';
@@ -55,6 +56,24 @@ export function timingSafeEqual(a: string, b: string): boolean {
  */
 export function sha256(input: string): string {
   return createHash('sha256').update(input).digest('hex');
+}
+
+/**
+ * HMAC-SHA256 sign a string with the active secret.
+ *
+ * Accepts either a single secret or a rotated secret array. When an array is
+ * provided, the first entry is treated as the active signing key.
+ *
+ * @param input - The string to sign.
+ * @param secret - The active secret or key-rotation array.
+ * @returns Lowercase hex HMAC digest.
+ */
+export function hmacSign(input: string, secret: string | string[]): string {
+  const key = Array.isArray(secret) ? secret[0] : secret;
+  if (!key) {
+    throw new Error('hmacSign: secret key must be a non-empty string');
+  }
+  return createHmac('sha256', key).update(input).digest('hex');
 }
 
 /**

@@ -91,6 +91,17 @@ describe('entityRouteConfigSchema — valid configs', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  test('idempotency config parses', () => {
+    const result = entityRouteConfigSchema.safeParse({
+      defaults: { auth: 'userAuth', idempotency: true },
+      update: { idempotency: { ttl: 3600, scope: 'user' } },
+      operations: {
+        publish: { auth: 'userAuth', idempotency: { scope: 'tenant' } },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -251,6 +262,16 @@ describe('validateEntityRouteConfig', () => {
     expect(result.success).toBe(false);
     expect(result.errors).toBeDefined();
   });
+
+  test('rejects user-scoped idempotency without auth', () => {
+    const result = validateEntityRouteConfig({
+      create: { idempotency: true },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors?.issues[0]?.message).toContain("idempotency.scope 'user' requires auth");
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -285,6 +306,14 @@ describe('resolveOpConfig — merge logic', () => {
     expect(resolved?.auth).toBe('none');
     // rateLimit from defaults is preserved
     expect(resolved?.rateLimit).toEqual({ windowMs: 60000, max: 10 });
+  });
+
+  test('defaults-only idempotency resolves for other operations', () => {
+    const config = {
+      defaults: { auth: 'userAuth' as const, idempotency: true },
+    };
+    const resolved = resolveOpConfig(config, 'update');
+    expect(resolved?.idempotency).toBe(true);
   });
 
   test('named operation in operations map is resolved', () => {

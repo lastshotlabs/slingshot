@@ -26,6 +26,20 @@ import type { InboundProvider } from './types/inbound';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
 
+async function runGuardMiddleware(
+  middleware: MiddlewareHandler,
+  c: Parameters<MiddlewareHandler>[0],
+): Promise<Response | null> {
+  let nextCalled = false;
+  const result = await middleware(c, async () => {
+    nextCalled = true;
+  });
+  if (nextCalled) {
+    return null;
+  }
+  return result instanceof Response ? result : c.res;
+}
+
 function buildAdminMiddleware(role: string): MiddlewareHandler {
   return async (c, next) => {
     const slingshotCtx = c.get('slingshotCtx') as Parameters<typeof getRouteAuth>[0] | undefined;
@@ -33,9 +47,15 @@ function buildAdminMiddleware(role: string): MiddlewareHandler {
       return c.json({ error: 'Unauthorized' }, 401);
     }
     const routeAuth = getRouteAuth(slingshotCtx);
-    return routeAuth.userAuth(c, async () => {
-      await routeAuth.requireRole(role)(c, next);
-    });
+    const authFailure = await runGuardMiddleware(routeAuth.userAuth, c);
+    if (authFailure) {
+      return authFailure;
+    }
+    const roleFailure = await runGuardMiddleware(routeAuth.requireRole(role), c);
+    if (roleFailure) {
+      return roleFailure;
+    }
+    await next();
   };
 }
 

@@ -20,8 +20,17 @@
  *       const raw = await redis.get(`idmp:${key}`);
  *       return raw ? JSON.parse(raw) : null;
  *     },
- *     async set(key, response, status, ttlSeconds) {
- *       await redis.setex(`idmp:${key}`, ttlSeconds, JSON.stringify({ response, status, createdAt: Date.now() }));
+ *     async set(key, response, status, ttlSeconds, meta) {
+ *       await redis.setex(
+ *         `idmp:${key}`,
+ *         ttlSeconds,
+ *         JSON.stringify({
+ *           response,
+ *           status,
+ *           createdAt: Date.now(),
+ *           requestFingerprint: meta?.requestFingerprint ?? null,
+ *         }),
+ *       );
  *     },
  *   };
  * }
@@ -39,7 +48,12 @@ export interface IdempotencyAdapter {
    * short-circuits the handler and replays the stored `response` and `status` directly to
    * the client without executing the route handler again.
    */
-  get(key: string): Promise<{ response: string; status: number; createdAt: number } | null>;
+  get(key: string): Promise<{
+    response: string;
+    status: number;
+    createdAt: number;
+    requestFingerprint?: string | null;
+  } | null>;
 
   /**
    * Cache a response for an idempotency key.
@@ -47,6 +61,7 @@ export interface IdempotencyAdapter {
    * @param response - The serialised response body (JSON string).
    * @param status - The HTTP status code of the response.
    * @param ttlSeconds - How long to retain this record (seconds).
+   * @param meta - Optional metadata associated with the original request.
    *
    * @remarks
    * Implementations MUST honour `ttlSeconds` — records that outlive their TTL will cause
@@ -54,7 +69,13 @@ export interface IdempotencyAdapter {
    * equivalent `SET ... EX`) to delegate TTL enforcement to Redis. The framework passes
    * 86400 (24 hours) as the default TTL; app configs may override this.
    */
-  set(key: string, response: string, status: number, ttlSeconds: number): Promise<void>;
+  set(
+    key: string,
+    response: string,
+    status: number,
+    ttlSeconds: number,
+    meta?: { requestFingerprint?: string | null },
+  ): Promise<void>;
 
   /**
    * Remove all stored idempotency records.

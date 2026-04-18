@@ -1,13 +1,13 @@
 ---
 title: Human Guide
-description: Human-maintained guidance for @slingshot/runtime-bun
+description: Human-maintained guidance for @lastshotlabs/runtime-bun
 ---
 
 > Human-owned documentation. This is the authoritative lane for package boundaries, constraints, and operational guidance.
 
 ## Purpose
 
-@slingshot/runtime-bun is the runtime package in the Slingshot workspace.
+@lastshotlabs/runtime-bun is the runtime package in the Slingshot workspace.
 
 Package documentation for this Slingshot workspace module.
 

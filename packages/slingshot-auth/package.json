@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-auth",
-  "version": "0.1.1",
+  "version": "0.0.1",
   "description": "Authentication, sessions, MFA, OAuth, WebAuthn, and passkeys for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -27,6 +27,7 @@
     "directory": "packages/slingshot-auth"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [
@@ -40,7 +41,7 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@lastshotlabs/slingshot-core": "^0.1.0"
+    "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "optionalDependencies": {
     "@lastshotlabs/slingshot-postgres": "workspace:*"

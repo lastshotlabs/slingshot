@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-gifs",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "GIF search proxy for slingshot — swappable providers (Giphy, Tenor), server-side API key",
   "license": "MIT",
   "type": "module",
@@ -17,6 +17,7 @@
     "directory": "packages/slingshot-gifs"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [
@@ -30,6 +31,6 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@lastshotlabs/slingshot-core": "^0.1.0"
+    "@lastshotlabs/slingshot-core": "workspace:*"
   }
 }

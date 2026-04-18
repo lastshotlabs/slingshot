@@ -1,13 +1,13 @@
 ---
 title: Human Guide
-description: Human-maintained guidance for @slingshot/runtime-node
+description: Human-maintained guidance for @lastshotlabs/runtime-node
 ---
 
 > Human-owned documentation. This is the authoritative lane for package boundaries, constraints, and operational guidance.
 
 ## Purpose
 
-@slingshot/runtime-node is the runtime package in the Slingshot workspace.
+@lastshotlabs/runtime-node is the runtime package in the Slingshot workspace.
 
 Package documentation for this Slingshot workspace module.
 

@@ -62,7 +62,7 @@
       ],
       "@lastshotlabs/slingshot-ssr": ["./packages/slingshot-ssr/src/index.ts"],
       "@lastshotlabs/slingshot-ssg": ["./packages/slingshot-ssg/src/index.ts"],
-      "@slingshot/runtime-bun": ["./packages/runtime-bun/src/index.ts"],
+      "@lastshotlabs/runtime-bun": ["./packages/runtime-bun/src/index.ts"],
       "@config/*": ["./src/config/*"],
       "@admin/*": ["./packages/slingshot-admin/src/*"],
       "@app": ["./src/app.ts"]

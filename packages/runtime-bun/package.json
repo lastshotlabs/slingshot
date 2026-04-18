@@ -1,6 +1,6 @@
 {
-  "name": "@slingshot/runtime-bun",
-  "version": "0.0.1",
+  "name": "@lastshotlabs/runtime-bun",
+  "version": "0.1.0",
   "description": "Bun-native runtime implementation for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -17,6 +17,7 @@
     "directory": "packages/runtime-bun"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [

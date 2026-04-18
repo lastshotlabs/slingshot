@@ -24,11 +24,11 @@ import type {
  *
  * @remarks
  * This runtime is intended for use in Bun environments only. For Node.js, use
- * `nodeRuntime()` from `@slingshot/runtime-node`.
+ * `nodeRuntime()` from `@lastshotlabs/runtime-node`.
  *
  * @example
  * ```ts
- * import { bunRuntime } from '@slingshot/runtime-bun';
+ * import { bunRuntime } from '@lastshotlabs/runtime-bun';
  * import { createServer } from '@lastshotlabs/slingshot-core';
  *
  * const server = await createServer({ runtime: bunRuntime(), ...config });

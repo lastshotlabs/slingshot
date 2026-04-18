@@ -45,19 +45,19 @@ Slingshot runs on Bun or Node.js. **On Bun, the runtime is auto-detected** — n
 
 ```bash
 # Node.js only — Bun users can skip this
-bun add @slingshot/runtime-node
+bun add @lastshotlabs/runtime-node
 bun add better-sqlite3 argon2 @hono/node-server ws fast-glob
 ```
 
 ```typescript
 // Node.js only — pass the runtime explicitly
-import { nodeRuntime } from '@slingshot/runtime-node';
+import { nodeRuntime } from '@lastshotlabs/runtime-node';
 import { createServer } from '@lastshotlabs/slingshot';
 
 await createServer({ runtime: nodeRuntime(), port: 3000 });
 ```
 
-On Bun, `createServer` without a `runtime` argument uses `@slingshot/runtime-bun` automatically.
+On Bun, `createServer` without a `runtime` argument uses `@lastshotlabs/runtime-bun` automatically.
 
 ## Database drivers
 
@@ -147,6 +147,6 @@ slingshot infra check
 ## Prerequisites
 
 - **Bun** v1.2 or later — recommended. Use Bun as your package manager and runtime.
-- **Node.js** 20+ — only if using the Node.js runtime adapter (`@slingshot/runtime-node`).
+- **Node.js** 20+ — only if using the Node.js runtime adapter (`@lastshotlabs/runtime-node`).
 
 All examples in these docs use Bun. The only difference on Node.js is passing `runtime: nodeRuntime()` to `createServer`.

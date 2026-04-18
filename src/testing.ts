@@ -31,7 +31,7 @@ export interface E2EServerHandle {
 export async function wrapAppAsTestServer(app: {
   fetch: (...args: unknown[]) => unknown;
 }): Promise<E2EServerHandle> {
-  const { bunRuntime } = await import('@slingshot/runtime-bun');
+  const { bunRuntime } = await import('@lastshotlabs/runtime-bun');
   const rt = bunRuntime();
   const server = await rt.server.listen({
     port: 0,

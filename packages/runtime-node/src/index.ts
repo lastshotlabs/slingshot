@@ -223,12 +223,13 @@ function createNodeServer(): RuntimeServerFactory {
 
       // Wrap the fetch handler to forward uncaught errors to opts.error when provided.
       // Without this, errors from the fetch handler are swallowed by @hono/node-server.
-      const fetchHandler = opts.error
+      const errorHandler = opts.error;
+      const fetchHandler = errorHandler
         ? async (req: Request) => {
             try {
               return await opts.fetch(req);
             } catch (err) {
-              return opts.error!(err instanceof Error ? err : new Error(String(err)));
+              return errorHandler(err instanceof Error ? err : new Error(String(err)));
             }
           }
         : opts.fetch;
@@ -554,7 +555,7 @@ function createNodeGlob(): RuntimeGlob {
  *
  * @remarks
  * This runtime is intended for use in Node.js environments only. For Bun, use
- * `bunRuntime()` from `@slingshot/runtime-bun`.
+ * `bunRuntime()` from `@lastshotlabs/runtime-bun`.
  *
  * Peer dependency failures (missing `argon2`, `better-sqlite3`, `@hono/node-server`,
  * or `fast-glob`) surface at **first use** of the respective capability, not when
@@ -564,7 +565,7 @@ function createNodeGlob(): RuntimeGlob {
  *
  * @example
  * ```ts
- * import { nodeRuntime } from '@slingshot/runtime-node';
+ * import { nodeRuntime } from '@lastshotlabs/runtime-node';
  * import { createServer } from '@lastshotlabs/slingshot-core';
  *
  * const server = await createServer({ runtime: nodeRuntime(), ...config });

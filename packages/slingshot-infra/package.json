@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-infra",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Infrastructure configuration, deploy planning, and platform tooling for Slingshot apps",
   "license": "MIT",
   "type": "module",
@@ -17,6 +17,7 @@
     "directory": "packages/slingshot-infra"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [
@@ -30,7 +31,7 @@
     "lint": "eslint src/ --cache"
   },
   "dependencies": {
-    "@lastshotlabs/slingshot-core": "^0.1.0",
+    "@lastshotlabs/slingshot-core": "workspace:*",
     "yaml": "^2.7.0"
   },
   "peerDependencies": {

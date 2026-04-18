@@ -3,7 +3,7 @@
   "workspaces": [
     "packages/*"
   ],
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Config-driven backend framework built on Hono. Plugin-driven, manifest-first.",
   "repository": {
     "type": "git",
@@ -136,17 +136,17 @@
     "@aws-sdk/client-s3": ">=3.0",
     "@aws-sdk/s3-request-presigner": ">=3.0",
     "@aws-sdk/lib-storage": ">=3.0",
-    "@lastshotlabs/slingshot-admin": ">=0.1.0",
-    "@lastshotlabs/slingshot-bullmq": ">=0.1.0",
-    "@lastshotlabs/slingshot-community": ">=0.1.0",
-    "@lastshotlabs/slingshot-deep-links": ">=0.1.0",
-    "@lastshotlabs/slingshot-interactions": ">=0.1.0",
-    "@lastshotlabs/slingshot-mail": ">=0.0.1",
-    "@lastshotlabs/slingshot-notifications": ">=0.1.0",
-    "@lastshotlabs/slingshot-permissions": ">=0.1.0",
-    "@lastshotlabs/slingshot-postgres": ">=0.1.0",
-    "@lastshotlabs/slingshot-push": ">=0.1.0",
-    "@lastshotlabs/slingshot-webhooks": ">=0.0.1"
+    "@lastshotlabs/slingshot-admin": "workspace:*",
+    "@lastshotlabs/slingshot-bullmq": "workspace:*",
+    "@lastshotlabs/slingshot-community": "workspace:*",
+    "@lastshotlabs/slingshot-deep-links": "workspace:*",
+    "@lastshotlabs/slingshot-interactions": "workspace:*",
+    "@lastshotlabs/slingshot-mail": "workspace:*",
+    "@lastshotlabs/slingshot-notifications": "workspace:*",
+    "@lastshotlabs/slingshot-permissions": "workspace:*",
+    "@lastshotlabs/slingshot-postgres": "workspace:*",
+    "@lastshotlabs/slingshot-push": "workspace:*",
+    "@lastshotlabs/slingshot-webhooks": "workspace:*"
   },
   "peerDependenciesMeta": {
     "arctic": {
@@ -267,6 +267,7 @@
     "yaml": "^2.8.3"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   }
 }

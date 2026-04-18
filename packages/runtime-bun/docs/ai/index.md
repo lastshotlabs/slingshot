@@ -1,13 +1,13 @@
 ---
 title: AI Draft
-description: AI-assisted starting point for @slingshot/runtime-bun
+description: AI-assisted starting point for @lastshotlabs/runtime-bun
 ---
 
 > AI-assisted draft. Use this page for fast orientation, then harden important details in the human guide.
 
 ## Summary
 
-@slingshot/runtime-bun is the runtime package in the Slingshot workspace.
+@lastshotlabs/runtime-bun is the runtime package in the Slingshot workspace.
 
 Package documentation for this Slingshot workspace module.
 

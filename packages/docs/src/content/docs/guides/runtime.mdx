@@ -25,13 +25,13 @@ Everything else - routing, plugins, database adapters, event bus, auth - is runt
 ## Bun runtime
 
 ```bash
-bun add @slingshot/runtime-bun
+bun add @lastshotlabs/runtime-bun
 ```
 
 No extra dependencies. Bun includes SQLite, password hashing, HTTP serving, and file I/O built-in.
 
 ```typescript
-import { bunRuntime } from '@slingshot/runtime-bun';
+import { bunRuntime } from '@lastshotlabs/runtime-bun';
 import { createServer } from '@lastshotlabs/slingshot';
 
 await createServer({
@@ -44,14 +44,14 @@ await createServer({
 ## Node.js runtime
 
 ```bash
-bun add @slingshot/runtime-node
+bun add @lastshotlabs/runtime-node
 bun add better-sqlite3 argon2 @hono/node-server ws fast-glob
 ```
 
 <Aside>`ws` adds WebSocket support on Node. `fast-glob` handles route discovery.</Aside>
 
 ```typescript
-import { nodeRuntime } from '@slingshot/runtime-node';
+import { nodeRuntime } from '@lastshotlabs/runtime-node';
 import { createServer } from '@lastshotlabs/slingshot';
 
 await createServer({
@@ -166,8 +166,8 @@ a listener, while Bun and Node still consume the exact same endpoint draft when 
 Switching from Bun to Node requires one line:
 
 ```typescript
-import { bunRuntime } from '@slingshot/runtime-bun';
-import { nodeRuntime } from '@slingshot/runtime-node';
+import { bunRuntime } from '@lastshotlabs/runtime-bun';
+import { nodeRuntime } from '@lastshotlabs/runtime-node';
 
 const runtime = bunRuntime();
 const migratedRuntime = nodeRuntime();

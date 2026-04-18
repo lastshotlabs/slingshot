@@ -57,7 +57,7 @@
       "@lastshotlabs/slingshot-search": ["./packages/slingshot-search/dist/src/index.d.ts"],
       "@lastshotlabs/slingshot-ssg": ["./packages/slingshot-ssg/dist/src/index.d.ts"],
       "@lastshotlabs/slingshot-ssr": ["./packages/slingshot-ssr/dist/src/index.d.ts"],
-      "@slingshot/runtime-bun": ["./packages/runtime-bun/dist/src/index.d.ts"]
+      "@lastshotlabs/runtime-bun": ["./packages/runtime-bun/dist/src/index.d.ts"]
     }
   },
   "include": ["src/framework"],

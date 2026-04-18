@@ -17,6 +17,7 @@
     "directory": "packages/slingshot-organizations"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [
@@ -30,11 +31,11 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@lastshotlabs/slingshot-core": "^0.1.0",
-    "@lastshotlabs/slingshot-entity": "^0.1.0"
+    "@lastshotlabs/slingshot-core": "workspace:*",
+    "@lastshotlabs/slingshot-entity": "workspace:*"
   },
   "peerDependencies": {
-    "@lastshotlabs/slingshot-auth": "^0.1.0",
+    "@lastshotlabs/slingshot-auth": "workspace:*",
     "hono": ">=4.12.12 <5",
     "zod": ">=4.0 <5",
     "mongoose": ">=9.0 <10"

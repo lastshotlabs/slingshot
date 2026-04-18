@@ -217,7 +217,7 @@ export const createServer = async <T extends object = object>(
   // We re-resolve with the same fallback to ensure server.ts has the runtime available
   // for Bun.serve() calls and workers glob.
   const runtime: SlingshotRuntime =
-    config.runtime ?? (await import('@slingshot/runtime-bun')).bunRuntime();
+    config.runtime ?? (await import('@lastshotlabs/runtime-bun')).bunRuntime();
   const rawPort = process.env.PORT ?? config.port ?? 3000;
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {

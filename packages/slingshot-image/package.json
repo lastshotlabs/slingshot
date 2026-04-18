@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-image",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "On-the-fly image optimization and transform pipeline for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -17,6 +17,7 @@
     "directory": "packages/slingshot-image"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [
@@ -35,7 +36,7 @@
   "peerDependencies": {
     "hono": ">=4.12.12 <5",
     "zod": ">=4.0 <5",
-    "@lastshotlabs/slingshot-core": "^0.1.0"
+    "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0"

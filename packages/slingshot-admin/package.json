@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-admin",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "Admin plugin for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -22,6 +22,7 @@
     "directory": "packages/slingshot-admin"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [
@@ -35,7 +36,7 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@lastshotlabs/slingshot-core": "^0.1.0"
+    "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "peerDependencies": {
     "hono": ">=4.12.12 <5",

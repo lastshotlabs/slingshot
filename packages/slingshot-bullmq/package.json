@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-bullmq",
-  "version": "0.1.1",
+  "version": "0.0.1",
   "description": "Durable BullMQ-backed event bus adapter for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -16,6 +16,7 @@
     "directory": "packages/slingshot-bullmq"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [
@@ -31,7 +32,7 @@
     "test:redis": "cd ../.. && BULLMQ_INTEGRATION_REDIS_URL=redis://localhost:6380 bun test tests/docker/bullmq-adapter-redis-integration.test.ts"
   },
   "dependencies": {
-    "@lastshotlabs/slingshot-core": "^0.1.0"
+    "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "peerDependencies": {
     "bullmq": ">=5",

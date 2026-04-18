@@ -22,6 +22,7 @@
     "directory": "packages/slingshot-entity"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [

@@ -1,6 +1,6 @@
 {
   "name": "@lastshotlabs/slingshot-m2m",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Machine-to-machine (M2M) OAuth2 client credentials plugin for Slingshot",
   "license": "MIT",
   "type": "module",
@@ -17,6 +17,7 @@
     "directory": "packages/slingshot-m2m"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   },
   "files": [
@@ -30,10 +31,10 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@lastshotlabs/slingshot-core": "^0.1.0"
+    "@lastshotlabs/slingshot-core": "workspace:*"
   },
   "peerDependencies": {
-    "@lastshotlabs/slingshot-auth": "^0.1.0",
+    "@lastshotlabs/slingshot-auth": "workspace:*",
     "hono": ">=4.12.12 <5",
     "zod": ">=4.0 <5",
     "mongoose": ">=9.0 <10"

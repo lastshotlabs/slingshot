@@ -19,8 +19,8 @@ type WorkspacePackage = {
 
 const packagesOnly = process.argv.includes('--packages-only');
 const excludedPackages = new Set([
-  '@slingshot/runtime-bun',
-  '@slingshot/runtime-node',
+  '@lastshotlabs/runtime-bun',
+  '@lastshotlabs/runtime-node',
   '@lastshotlabs/slingshot-docs',
 ]);
 

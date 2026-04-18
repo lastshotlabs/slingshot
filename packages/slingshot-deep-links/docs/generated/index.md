@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-deep-lin
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-deep-links`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Universal links, Android app links, and fallback redirects for slingshot
@@ -31,12 +31,11 @@ bun add @lastshotlabs/slingshot-deep-links
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 - `zod`: `>=4.0 <5`
 
 ## Peer Dependencies

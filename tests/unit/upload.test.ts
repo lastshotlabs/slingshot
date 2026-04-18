@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Context } from 'hono';
-import { createRouter } from '@lastshotlabs/slingshot-core';
+import { attachContext, createRouter } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { memoryStorage } from '../../src/framework/adapters/memoryStorage';
 import {
@@ -34,6 +34,7 @@ const makeUploadRuntime = (
       },
     },
   } as any;
+  attachContext(app, slingshotCtx);
   return { app, slingshotCtx };
 };
 

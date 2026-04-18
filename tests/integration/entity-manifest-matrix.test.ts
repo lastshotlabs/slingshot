@@ -57,6 +57,7 @@ function matrixManifest(namespace: string): MultiEntityManifest {
             bumpCount: { method: 'post' },
             searchTitle: { method: 'get' },
             upsertBySlug: { method: 'put' },
+            findBySlugAlias: { path: 'by-slug/:slug' },
           },
         },
         operations: {
@@ -80,6 +81,20 @@ function matrixManifest(namespace: string): MultiEntityManifest {
             fields: ['title'],
             filter: { status: 'param:status' },
             paginate: true,
+          },
+          findBySlug: {
+            kind: 'lookup',
+            fields: { slug: 'param:slug' },
+            returns: 'one',
+          },
+          findBySlugAlias: {
+            kind: 'lookup',
+            fields: { slug: 'param:slug' },
+            returns: 'one',
+          },
+          slugExists: {
+            kind: 'exists',
+            fields: { slug: 'param:slug' },
           },
           upsertBySlug: {
             kind: 'upsert',
@@ -248,6 +263,28 @@ describe('entity manifest matrix', () => {
         expect(search.json.items.map(item => item.id)).toContain(id);
         expect(search.json.hasMore).toBe(false);
 
+        const foundBySlug = await requestJson<JsonRecord>(
+          app,
+          `${base}/find-by-slug/${label}-alpha`,
+        );
+        expect(foundBySlug.response.status).toBe(200);
+        expect(foundBySlug.json.id).toBe(id);
+
+        const aliasedBySlug = await requestJson<JsonRecord>(app, `${base}/by-slug/${label}-alpha`);
+        expect(aliasedBySlug.response.status).toBe(200);
+        expect(aliasedBySlug.json.id).toBe(id);
+
+        const missingBySlug = await app.request(`${base}/find-by-slug/missing`);
+        expect(missingBySlug.status).toBe(404);
+
+        const slugExists = await app.request(`${base}/slug-exists/${label}-alpha`, {
+          method: 'HEAD',
+        });
+        expect(slugExists.status).toBe(200);
+
+        const missingSlug = await app.request(`${base}/slug-exists/missing`, { method: 'HEAD' });
+        expect(missingSlug.status).toBe(404);
+
         const upserted = await requestJson<JsonRecord>(app, `${base}/upsert-by-slug`, {
           method: 'PUT',
           body: JSON.stringify({
@@ -284,6 +321,9 @@ describe('entity manifest matrix', () => {
         expectOpenApiMethod(spec, `${base}/set-tags`, 'put');
         expectOpenApiMethod(spec, `${base}/bump-count`, 'post');
         expectOpenApiMethod(spec, `${base}/search-title`, 'get');
+        expectOpenApiMethod(spec, `${base}/find-by-slug/{slug}`, 'get');
+        expectOpenApiMethod(spec, `${base}/by-slug/{slug}`, 'get');
+        expectOpenApiMethod(spec, `${base}/slug-exists/{slug}`, 'head');
         expectOpenApiMethod(spec, `${base}/upsert-by-slug`, 'put');
       } finally {
         await ctx.destroy();

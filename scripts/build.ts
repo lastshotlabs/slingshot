@@ -11,18 +11,13 @@ type BuildStep = {
 type WorkspacePackage = {
   name: string;
   dir: string;
-  build: string;
   dependencies: string[];
   optionalDependencies: string[];
   peerDependencies: string[];
 };
 
 const packagesOnly = process.argv.includes('--packages-only');
-const excludedPackages = new Set([
-  '@lastshotlabs/slingshot-runtime-bun',
-  '@lastshotlabs/slingshot-runtime-node',
-  '@lastshotlabs/slingshot-docs',
-]);
+const excludedPackages = new Set(['@lastshotlabs/slingshot-docs']);
 
 const workspacePackages: WorkspacePackage[] = fs
   .readdirSync('packages', { withFileTypes: true })
@@ -30,26 +25,23 @@ const workspacePackages: WorkspacePackage[] = fs
   .flatMap(entry => {
     const dir = path.join('packages', entry.name);
     const manifestPath = path.join(dir, 'package.json');
+    const buildConfigPath = path.join(dir, 'tsconfig.build.json');
     if (!fs.existsSync(manifestPath)) return [];
+    if (!fs.existsSync(buildConfigPath)) return [];
 
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
       name?: string;
-      scripts?: { build?: string };
       dependencies?: Record<string, string>;
       optionalDependencies?: Record<string, string>;
       peerDependencies?: Record<string, string>;
     };
 
-    const build = manifest.scripts?.build;
-    if (!build) return [];
     if (excludedPackages.has(manifest.name ?? '')) return [];
-    if (build.includes('--noEmit')) return [];
 
     return [
       {
         name: manifest.name ?? entry.name,
         dir,
-        build,
         dependencies: [...Object.keys(manifest.dependencies ?? {})],
         optionalDependencies: Object.keys(manifest.optionalDependencies ?? {}),
         peerDependencies: Object.keys(manifest.peerDependencies ?? {}),

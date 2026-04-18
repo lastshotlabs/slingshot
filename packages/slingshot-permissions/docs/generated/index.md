@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-permissi
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-permissions`
-- Version: `0.1.1`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: library package
 - Description: Policy engine for slingshot — grants, roles, tenant-scoped permission evaluation
@@ -30,12 +30,11 @@ bun add @lastshotlabs/slingshot-permissions
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 
 ## Peer Dependencies
 

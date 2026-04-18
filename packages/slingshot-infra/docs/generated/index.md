@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-infra
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-infra`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Infrastructure configuration, deploy planning, and platform tooling for Slingshot apps
@@ -29,12 +29,11 @@ bun add @lastshotlabs/slingshot-infra
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc -p tsconfig.json --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 - `yaml`: `^2.7.0`
 
 ## Peer Dependencies

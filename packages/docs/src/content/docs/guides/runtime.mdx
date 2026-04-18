@@ -31,8 +31,8 @@ bun add @lastshotlabs/slingshot-runtime-bun
 No extra dependencies. Bun includes SQLite, password hashing, HTTP serving, and file I/O built-in.
 
 ```typescript
-import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
 import { createServer } from '@lastshotlabs/slingshot';
+import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
 
 await createServer({
   runtime: bunRuntime(),
@@ -51,8 +51,8 @@ bun add better-sqlite3 argon2 @hono/node-server ws fast-glob
 <Aside>`ws` adds WebSocket support on Node. `fast-glob` handles route discovery.</Aside>
 
 ```typescript
-import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 import { createServer } from '@lastshotlabs/slingshot';
+import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
 await createServer({
   runtime: nodeRuntime(),

@@ -428,7 +428,8 @@ async function prepareBootstrap<T extends object>(
     securityConfig.signing = { ...securityConfig.signing, secret: resolvedSecrets.jwtSecret };
   }
 
-  const runtime = config.runtime ?? (await import('@lastshotlabs/slingshot-runtime-bun')).bunRuntime();
+  const runtime =
+    config.runtime ?? (await import('@lastshotlabs/slingshot-runtime-bun')).bunRuntime();
 
   const infra = await withSpan(tracer, 'slingshot.bootstrap.infrastructure', async span => {
     span.setAttribute('slingshot.db.mongo', String(db.mongo ?? 'single'));

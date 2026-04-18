@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-runtime-
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-runtime-edge`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
-- Role: runtime package
-- Description: Package documentation for this Slingshot workspace module.
+- Role: feature package
+- Description: Edge runtime implementation with Web Crypto and KV-backed ISR for Slingshot
 - Workspace path: `packages/runtime-edge`
 - Entry point: `packages/runtime-edge/src/index.ts`
 
@@ -38,9 +38,9 @@ bun add @lastshotlabs/slingshot-runtime-edge
 
 ## Peer Dependencies
 
-- `@lastshotlabs/slingshot-core`: `*`
-- `@lastshotlabs/slingshot-ssr`: `*`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
+- `@lastshotlabs/slingshot-ssr`: `workspace:*`
 
 ## Related Docs
 
-- [API reference](/api/runtime-edge/)
+- [API reference](/api/slingshot-runtime-edge/)

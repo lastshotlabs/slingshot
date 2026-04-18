@@ -402,7 +402,7 @@ describe('factories entry — single-entity HTTP round-trip', () => {
 
     const plugin = createEntityPlugin({
       name: 'notes-plugin',
-      entities: [{ config: noteEntity, factories: factories as never }],
+      entities: [{ config: noteEntity, factories }],
     });
 
     await plugin.setupRoutes!({ app, config: fw, bus });
@@ -449,7 +449,7 @@ describe('factories entry — onAdapter ref capture', () => {
       entities: [
         {
           config: noteEntity,
-          factories: factories as never,
+          factories,
           onAdapter: (a: BareEntityAdapter) => {
             adapterRef = a;
           },

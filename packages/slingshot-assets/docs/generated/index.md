@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-assets
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-assets`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Package documentation for this Slingshot workspace module.
+- Description: Entity-backed asset storage, upload metadata, and storage adapter resolution for Slingshot
 - Workspace path: `packages/slingshot-assets`
 - Entry point: `packages/slingshot-assets/src/index.ts`
 
@@ -30,14 +30,13 @@ bun add @lastshotlabs/slingshot-assets
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
-- `@lastshotlabs/slingshot-entity`: `^0.1.0`
-- `@lastshotlabs/slingshot-permissions`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
+- `@lastshotlabs/slingshot-entity`: `workspace:*`
+- `@lastshotlabs/slingshot-permissions`: `workspace:*`
 
 ## Peer Dependencies
 

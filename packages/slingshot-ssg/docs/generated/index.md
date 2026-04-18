@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-ssg
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-ssg`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Package documentation for this Slingshot workspace module.
+- Description: Static site generation helpers built on Slingshot SSR
 - Workspace path: `packages/slingshot-ssg`
 - Entry point: `packages/slingshot-ssg/src/index.ts`
 
@@ -29,12 +29,11 @@ bun add @lastshotlabs/slingshot-ssg
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-ssr`: `^0.1.0`
+- `@lastshotlabs/slingshot-ssr`: `workspace:*`
 
 ## Peer Dependencies
 

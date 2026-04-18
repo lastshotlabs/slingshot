@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-notifica
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-notifications`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Shared notification storage, scheduling, and delivery events for slingshot
@@ -31,13 +31,12 @@ bun add @lastshotlabs/slingshot-notifications
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `test`: `bun test tests`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
 - `zod`: `>=4.0 <5`
 

@@ -51,8 +51,8 @@ bun add better-sqlite3 argon2 @hono/node-server ws fast-glob
 
 ```typescript
 // Node.js only — pass the runtime explicitly
-import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 import { createServer } from '@lastshotlabs/slingshot';
+import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
 await createServer({ runtime: nodeRuntime(), port: 3000 });
 ```

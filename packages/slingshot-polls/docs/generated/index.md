@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-polls
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-polls`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Multiple-choice polls attachable to any user content for slingshot
@@ -30,13 +30,12 @@ bun add @lastshotlabs/slingshot-polls
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `test`: `bun test tests`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-entity`: `workspace:*`
 - `zod`: `>=4.0 <5`
 

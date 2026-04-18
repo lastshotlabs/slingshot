@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-postgres
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-postgres`
-- Version: `0.1.1`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: adapter package
-- Description: Package documentation for this Slingshot workspace module.
+- Description: Postgres adapter and connection helper for Slingshot auth
 - Workspace path: `packages/slingshot-postgres`
 - Entry point: `packages/slingshot-postgres/src/index.ts`
 
@@ -30,12 +30,11 @@ bun add @lastshotlabs/slingshot-postgres
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 
 ## Peer Dependencies
 

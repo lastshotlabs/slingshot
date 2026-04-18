@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-organiza
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-organizations`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Organizations and groups management plugin for Slingshot
@@ -29,17 +29,16 @@ bun add @lastshotlabs/slingshot-organizations
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
-- `@lastshotlabs/slingshot-entity`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
+- `@lastshotlabs/slingshot-entity`: `workspace:*`
 
 ## Peer Dependencies
 
-- `@lastshotlabs/slingshot-auth`: `^0.1.0`
+- `@lastshotlabs/slingshot-auth`: `workspace:*`
 - `hono`: `>=4.12.12 <5`
 - `mongoose`: `>=9.0 <10`
 - `zod`: `>=4.0 <5`

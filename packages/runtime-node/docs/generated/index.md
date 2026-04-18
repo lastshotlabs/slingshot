@@ -10,8 +10,8 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-runtime-
 - Package: `@lastshotlabs/slingshot-runtime-node`
 - Version: `0.0.1`
 - Kind: Workspace package
-- Role: runtime package
-- Description: Package documentation for this Slingshot workspace module.
+- Role: feature package
+- Description: Node.js runtime implementation for Slingshot
 - Workspace path: `packages/runtime-node`
 - Entry point: `packages/runtime-node/src/index.ts`
 
@@ -45,4 +45,4 @@ bun add @lastshotlabs/slingshot-runtime-node
 
 ## Related Docs
 
-- [API reference](/api/runtime-node/)
+- [API reference](/api/slingshot-runtime-node/)

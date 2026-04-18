@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-ssr
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-ssr`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Package documentation for this Slingshot workspace module.
+- Description: SSR, ISR, and page-routing plugin for Slingshot
 - Workspace path: `packages/slingshot-ssr`
 - Entry point: `packages/slingshot-ssr/src/index.ts`
 
@@ -32,13 +32,12 @@ bun add @lastshotlabs/slingshot-ssr
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
-- `@lastshotlabs/slingshot-entity`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
+- `@lastshotlabs/slingshot-entity`: `workspace:*`
 
 ## Peer Dependencies
 

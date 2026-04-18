@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-bullmq
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-bullmq`
-- Version: `0.1.1`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Package documentation for this Slingshot workspace module.
+- Description: Durable BullMQ-backed event bus adapter for Slingshot
 - Workspace path: `packages/slingshot-bullmq`
 - Entry point: `packages/slingshot-bullmq/src/index.ts`
 
@@ -29,14 +29,13 @@ bun add @lastshotlabs/slingshot-bullmq
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `test`: `cd ../.. && bun test tests/unit/bullmq-adapter.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts`
 - `test:redis`: `cd ../.. && BULLMQ_INTEGRATION_REDIS_URL=redis://localhost:6380 bun test tests/docker/bullmq-adapter-redis-integration.test.ts`
 - `typecheck`: `tsc -p tsconfig.json --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 
 ## Peer Dependencies
 

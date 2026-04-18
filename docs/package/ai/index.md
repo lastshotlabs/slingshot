@@ -14,7 +14,7 @@ Slingshot applications import first.
 ## Quick Map
 
 - Package kind: Root package
-- Public exports: `.`, `./docs/*`, `./mongo`, `./queue`, `./redis`, `./testing`
+- Public exports: `.`, `./mongo`, `./queue`, `./redis`, `./testing`
 - API reference: /api/slingshot/
 - App bootstrap: `src/app.ts`
 - Server bootstrap: `src/server.ts`

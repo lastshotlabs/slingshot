@@ -834,7 +834,8 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
         // IMPORTANT: applyRouteConfig registers Hono middleware, which must be registered
         // BEFORE route handlers to take effect.
         if (config.routes) {
-          // Build operationMethods map from route config for named op HTTP method overrides.
+          // Build named-operation route override maps from route config so handler
+          // registration matches the middleware paths/methods applied below.
           const operationMethods = Object.fromEntries(
             Object.entries(config.routes.operations ?? {})
               .filter(
@@ -842,6 +843,13 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
                   !!entry[1].method,
               )
               .map(([name, cfg]) => [name, cfg.method]),
+          );
+          const operationPaths = Object.fromEntries(
+            Object.entries(config.routes.operations ?? {})
+              .filter(
+                (entry): entry is [string, (typeof entry)[1] & { path: string }] => !!entry[1].path,
+              )
+              .map(([name, cfg]) => [name, cfg.path]),
           );
           const parentAdapter = entry.buildParentAdapter
             ? entry.buildParentAdapter(storeType, infra)
@@ -876,11 +884,13 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               parentPath,
               parentAdapter,
               policyResolvers,
+              operationConfigs: operations,
             });
             buildBareEntityRoutes(config, operations, adapter, app, {
               routePath: entry.routePath,
               parentPath,
               operationMethods,
+              operationPaths,
               dataScope: config.routes.dataScope,
               policyConfig: defaultsPolicyConfig,
               policyResolver: defaultsPolicyResolver,
@@ -902,11 +912,13 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               parentPath,
               parentAdapter,
               policyResolvers,
+              operationConfigs: operations,
             });
             buildBareEntityRoutes(config, operations, adapter, router, {
               routePath: entry.routePath,
               parentPath,
               operationMethods,
+              operationPaths,
               dataScope: config.routes.dataScope,
               policyConfig: defaultsPolicyConfig,
               policyResolver: defaultsPolicyResolver,

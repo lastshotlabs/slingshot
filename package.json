@@ -42,15 +42,13 @@
     "./testing": {
       "import": "./dist/src/testing.js",
       "types": "./dist/src/testing.d.ts"
-    },
-    "./docs/*": "./docs/sections/*"
+    }
   },
   "bin": {
     "slingshot": "./dist/cli/index.js"
   },
   "files": [
     "dist",
-    "docs/sections",
     ".oclif.manifest.json"
   ],
   "oclif": {

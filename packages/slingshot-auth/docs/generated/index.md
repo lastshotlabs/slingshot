@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-auth
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-auth`
-- Version: `0.1.1`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Package documentation for this Slingshot workspace module.
+- Description: Authentication, sessions, MFA, OAuth, WebAuthn, and passkeys for Slingshot
 - Workspace path: `packages/slingshot-auth`
 - Entry point: `packages/slingshot-auth/src/index.ts`
 
@@ -31,12 +31,11 @@ bun add @lastshotlabs/slingshot-auth
 
 - `build`: `tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 
 ## Peer Dependencies
 

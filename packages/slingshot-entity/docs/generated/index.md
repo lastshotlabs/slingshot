@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-entity
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-entity`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: config-driven tooling package
-- Description: Package documentation for this Slingshot workspace module.
+- Description: Config-driven entity CRUD, code generation, and search for Slingshot
 - Workspace path: `packages/slingshot-entity`
 - Entry point: `packages/slingshot-entity/src/index.ts`
 

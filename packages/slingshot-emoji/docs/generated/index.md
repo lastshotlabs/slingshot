@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-emoji
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-emoji`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Custom emoji management for slingshot — CRUD with storage integration
@@ -29,13 +29,12 @@ bun add @lastshotlabs/slingshot-emoji
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
-- `@lastshotlabs/slingshot-entity`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
+- `@lastshotlabs/slingshot-entity`: `workspace:*`
 
 ## Peer Dependencies
 

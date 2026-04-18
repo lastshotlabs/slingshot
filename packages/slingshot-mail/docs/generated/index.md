@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-mail
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-mail`
-- Version: `0.0.2`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Package documentation for this Slingshot workspace module.
+- Description: Transactional mail with provider drivers, queues, and renderer integration for Slingshot
 - Workspace path: `packages/slingshot-mail`
 - Entry point: `packages/slingshot-mail/src/index.ts`
 
@@ -29,12 +29,11 @@ bun add @lastshotlabs/slingshot-mail
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 
 ## Peer Dependencies
 

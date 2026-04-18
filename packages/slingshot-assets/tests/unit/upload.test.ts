@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import type { Context } from 'hono';
-import type { AppEnv, StorageAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  type AppEnv,
+  type StorageAdapter,
+  attachContext,
+  createRouter,
+} from '@lastshotlabs/slingshot-core';
 import { memoryStorage } from '../../src/adapters/memory';
 import {
   generateUploadKey,
@@ -11,7 +16,9 @@ import {
 } from '../../src/lib/upload';
 
 function makeUploadRuntime(adapter: StorageAdapter | null = memoryStorage(), config: object = {}) {
-  return {
+  const app = createRouter();
+  const slingshotCtx = {
+    app,
     config: {},
     upload: { adapter, config },
     routeAuth: null,
@@ -21,7 +28,9 @@ function makeUploadRuntime(adapter: StorageAdapter | null = memoryStorage(), con
     cacheAdapters: new Map(),
     emailTemplates: new Map(),
     persistence: {},
-  };
+  } as const;
+  attachContext(app, slingshotCtx as never);
+  return slingshotCtx;
 }
 
 function makeContext(fields: Record<string, unknown>, adapter: StorageAdapter = memoryStorage()) {

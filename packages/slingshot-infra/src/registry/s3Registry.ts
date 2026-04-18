@@ -138,7 +138,12 @@ export function createS3Registry(config: S3RegistryConfig): RegistryProvider {
         const body = await res.Body?.transformToString();
         return body ? parseRegistryDocument(body) : null;
       } catch (err: unknown) {
-        if (err && typeof err === 'object' && 'name' in err && err.name === 'NoSuchKey') {
+        if (
+          err &&
+          typeof err === 'object' &&
+          'name' in err &&
+          (err.name === 'NoSuchKey' || err.name === 'NoSuchBucket' || err.name === 'NotFound')
+        ) {
           return null;
         }
         throw err;

@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-communit
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-community`
-- Version: `0.1.1`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: Community forum plugin for Slingshot — containers, threads, replies, reactions, moderation
@@ -30,13 +30,12 @@ bun add @lastshotlabs/slingshot-community
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
-- `@lastshotlabs/slingshot-entity`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
+- `@lastshotlabs/slingshot-entity`: `workspace:*`
 - `@lastshotlabs/slingshot-notifications`: `workspace:*`
 
 ## Peer Dependencies

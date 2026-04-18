@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish to GitHub Packages
+    name: Publish packages
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +27,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://npm.pkg.github.com
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -42,18 +41,18 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish root package
-        run: npm publish || echo "Root package already published at this version"
+      - name: Publish to GitHub Packages
+        run: bun scripts/publish.ts --target=github --publish --skip-existing
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish workspace packages
+      - name: Configure npm for npmjs
         run: |
-          for dir in packages/*/; do
-            if [ -f "$dir/package.json" ] && [ "$dir" != "packages/docs/" ]; then
-              echo "Publishing $dir..."
-              (cd "$dir" && npm publish) || echo "Skipping $dir (may already be published)"
-            fi
-          done
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > .npmrc
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish to npm
+        run: bun scripts/publish.ts --target=npm --publish --skip-existing
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

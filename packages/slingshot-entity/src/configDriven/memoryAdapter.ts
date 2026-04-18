@@ -9,7 +9,7 @@ import type {
   OperationConfig,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
-import { createEvictExpired, evictOldest } from '@lastshotlabs/slingshot-core';
+import { HttpError, createEvictExpired, evictOldest } from '@lastshotlabs/slingshot-core';
 import {
   applyDefaults,
   applyOnUpdate,
@@ -41,6 +41,12 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
   const pkField = config._pkField;
   const maxEntries = config.storage?.memory?.maxEntries ?? 10_000;
   const ttlMs = config.ttl ? config.ttl.defaultSeconds * 1000 : undefined;
+
+  // Collect all unique constraints from both `uniques` and `indexes` with unique: true
+  const uniqueConstraints: ReadonlyArray<readonly string[]> = [
+    ...(config.uniques ?? []).map(u => u.fields),
+    ...(config.indexes ?? []).filter(idx => idx.unique).map(idx => idx.fields),
+  ];
 
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
@@ -82,6 +88,30 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
    * @param filter - A flat key/value map of field constraints.
    * @returns `true` if the record satisfies every active filter constraint.
    */
+  /**
+   * Check whether a record violates any unique constraint against existing
+   * visible store entries. Returns the conflicting field set, or `null` if OK.
+   *
+   * @param record - The record to validate.
+   * @param excludePk - Primary key to exclude (for updates — skip self).
+   */
+  function findUniqueViolation(
+    record: Record<string, unknown>,
+    excludePk?: string | number,
+  ): readonly string[] | null {
+    if (uniqueConstraints.length === 0) return null;
+    for (const fields of uniqueConstraints) {
+      for (const [pk, entry] of store) {
+        if (pk === excludePk) continue;
+        if (!isAlive(entry)) continue;
+        if (!recordVisible(entry.record)) continue;
+        const allMatch = fields.every(f => record[f] === entry.record[f]);
+        if (allMatch) return fields;
+      }
+    }
+    return null;
+  }
+
   function matchesFilter(
     record: Record<string, unknown>,
     filter: Record<string, unknown>,
@@ -126,6 +156,17 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
       const record = applyDefaults(input as Record<string, unknown>, config.fields);
       const pk = record[pkField] as string | number;
 
+      const violated = findUniqueViolation(record);
+      if (violated) {
+        return Promise.reject(
+          new HttpError(
+            409,
+            `Unique constraint violated on fields: ${violated.join(', ')}`,
+            'UNIQUE_VIOLATION',
+          ),
+        );
+      }
+
       store.set(pk, {
         record,
         expiresAt: ttlMs ? Date.now() + ttlMs : undefined,
@@ -159,6 +200,19 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
       }
 
       const updatePayload = applyOnUpdate(input as Record<string, unknown>, config.fields);
+      // Check unique constraints against the merged record before applying
+      const merged = { ...entry.record, ...updatePayload };
+      const violated = findUniqueViolation(merged, id);
+      if (violated) {
+        return Promise.reject(
+          new HttpError(
+            409,
+            `Unique constraint violated on fields: ${violated.join(', ')}`,
+            'UNIQUE_VIOLATION',
+          ),
+        );
+      }
+
       Object.assign(entry.record, updatePayload);
 
       // Refresh TTL on update

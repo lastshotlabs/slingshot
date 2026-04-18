@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot`
-- Version: `0.2.0`
+- Version: `0.0.1`
 - Kind: Root package
 - Role: app assembly package
 - Description: Config-driven backend framework built on Hono. Plugin-driven, manifest-first.
@@ -24,7 +24,6 @@ bun add @lastshotlabs/slingshot
 ## Export Paths
 
 - `.`
-- `./docs/*`
 - `./mongo`
 - `./queue`
 - `./redis`
@@ -50,6 +49,8 @@ bun add @lastshotlabs/slingshot
 - `examples:typecheck`: `tsc -p tsconfig.examples.json --pretty false`
 - `format`: `prettier --write .`
 - `format:check`: `prettier --check .`
+- `hardening:core`: `bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run build && bun run test`
+- `hardening:full`: `bun run hardening:core && bun run lint:deps && bun run test:docker && bun run test:e2e && bun run test:coverage:check && bun run docs:ci`
 - `lint`: `eslint src/ --cache && bun run --filter '*' lint`
 - `lint:deps`: `depcruise packages/ src/ --config .dependency-cruiser.cjs`
 - `lint:fix`: `eslint src/ --cache --fix && bun run --filter '*' lint -- --fix`
@@ -76,9 +77,9 @@ bun add @lastshotlabs/slingshot
 - `test:isolated`: `bun test tests/isolated/config-lock.test.ts tests/isolated/memoryCache.test.ts tests/isolated/zodToMongoose.test.ts && bun test tests/isolated/optional-deps.test.ts && bun test tests/isolated/jwt-signing-singleton.test.ts && bun test tests/isolated/csrf-signing-singleton.test.ts && bun test tests/isolated/auth0Access.test.ts && bun test tests/isolated/queue.test.ts && bun test tests/isolated/jobs-router.test.ts && bun test tests/isolated/queued-deletion.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts && bun test tests/isolated/passkey-e2e.test.ts && bun run test:docs`
 - `test:node`: `vitest run --config vitest.config.ts`
 - `test:root`: `bun scripts/run-root-tests.ts`
-- `typecheck`: `tsc -b tsconfig.typecheck.json --pretty false`
-- `typecheck:root`: `tsc -b tsconfig.root.typecheck.json --pretty false`
-- `typecheck:tests`: `tsc -b tsconfig.tests.typecheck.json --pretty false`
+- `typecheck`: `node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.typecheck.json --pretty false`
+- `typecheck:root`: `node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.root.typecheck.json --pretty false`
+- `typecheck:tests`: `node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.tests.typecheck.json --pretty false`
 
 ## Dependencies
 
@@ -98,17 +99,17 @@ bun add @lastshotlabs/slingshot
 - `@aws-sdk/client-ssm`: `>=3.0`
 - `@aws-sdk/lib-storage`: `>=3.0`
 - `@aws-sdk/s3-request-presigner`: `>=3.0`
-- `@lastshotlabs/slingshot-admin`: `>=0.1.0`
-- `@lastshotlabs/slingshot-bullmq`: `>=0.1.0`
-- `@lastshotlabs/slingshot-community`: `>=0.1.0`
-- `@lastshotlabs/slingshot-deep-links`: `>=0.1.0`
-- `@lastshotlabs/slingshot-interactions`: `>=0.1.0`
-- `@lastshotlabs/slingshot-mail`: `>=0.0.1`
-- `@lastshotlabs/slingshot-notifications`: `>=0.1.0`
-- `@lastshotlabs/slingshot-permissions`: `>=0.1.0`
-- `@lastshotlabs/slingshot-postgres`: `>=0.1.0`
-- `@lastshotlabs/slingshot-push`: `>=0.1.0`
-- `@lastshotlabs/slingshot-webhooks`: `>=0.0.1`
+- `@lastshotlabs/slingshot-admin`: `workspace:*`
+- `@lastshotlabs/slingshot-bullmq`: `workspace:*`
+- `@lastshotlabs/slingshot-community`: `workspace:*`
+- `@lastshotlabs/slingshot-deep-links`: `workspace:*`
+- `@lastshotlabs/slingshot-interactions`: `workspace:*`
+- `@lastshotlabs/slingshot-mail`: `workspace:*`
+- `@lastshotlabs/slingshot-notifications`: `workspace:*`
+- `@lastshotlabs/slingshot-permissions`: `workspace:*`
+- `@lastshotlabs/slingshot-postgres`: `workspace:*`
+- `@lastshotlabs/slingshot-push`: `workspace:*`
+- `@lastshotlabs/slingshot-webhooks`: `workspace:*`
 - `@simplewebauthn/server`: `>=10.0.0`
 - `arctic`: `^3.7.0`
 - `bullmq`: `>=5.0 <6`

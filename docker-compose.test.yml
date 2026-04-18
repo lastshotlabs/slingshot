@@ -38,7 +38,7 @@ services:
           'CMD',
           'bash',
           '-c',
-          'curl -sf http://localhost:4566/_localstack/health | grep -q "running"',
+          'curl -sf http://localhost:4566/_localstack/health | grep -Eq "\"s3\"[[:space:]]*:[[:space:]]*\"(available|running)\""',
         ]
       interval: 5s
       timeout: 10s

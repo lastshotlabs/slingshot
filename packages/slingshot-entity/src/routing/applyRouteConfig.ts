@@ -9,6 +9,7 @@ import type {
   AppEnv,
   EntityRouteConfig,
   EntityRoutePolicyConfig,
+  OperationConfig,
   PermissionEvaluator,
   PermissionRegistry,
   PolicyResolver,
@@ -21,6 +22,7 @@ import { entityToPath } from '../generators/routeHelpers';
 import { buildPolicyAction, policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
 import { safeReadJsonBody } from '../policy/safeReadJsonBody';
 import { evaluateRouteAuth } from './evaluateRouteAuth';
+import { resolveNamedOperationRoute } from './namedOperationRouting';
 
 /**
  * Operations where the pre-handler policy pass must be skipped.
@@ -61,7 +63,6 @@ function opMethods(opName: string): Set<string> {
     case 'delete':
       return new Set(['DELETE']);
     default:
-      // Named operations are registered as POST by buildBareEntityRoutes.
       return new Set(['POST']);
   }
 }
@@ -159,6 +160,12 @@ export interface RouteConfigDeps {
    * policy pass.
    */
   policyResolvers?: ReadonlyMap<string, PolicyResolver>;
+  /**
+   * Operation configs keyed by operation name. When provided, named-operation middleware
+   * paths and methods are inferred from the actual operation kind so they stay aligned
+   * with `buildBareEntityRoutes()`.
+   */
+  operationConfigs?: Record<string, OperationConfig>;
 }
 
 /**
@@ -259,15 +266,16 @@ export function applyRouteConfig(
     const opConfig = resolveOpConfig(routeConfig, opName);
     if (!opConfig) continue;
 
-    // For named (non-CRUD) ops, allow HTTP method and path overrides from route config.
-    const namedOpMethod = ['create', 'list', 'get', 'update', 'delete'].includes(opName)
+    const isCrudOp = ['create', 'list', 'get', 'update', 'delete'].includes(opName);
+    const namedRoute = isCrudOp
       ? undefined
-      : routeConfig.operations?.[opName]?.method;
-    const namedOpPath = ['create', 'list', 'get', 'update', 'delete'].includes(opName)
-      ? undefined
-      : routeConfig.operations?.[opName]?.path;
-    const paths = getOpPaths(path, opName, namedOpPath);
-    const methods = namedOpMethod ? new Set([namedOpMethod.toUpperCase()]) : opMethods(opName);
+      : resolveNamedOperationRoute(opName, deps.operationConfigs?.[opName], {
+          method: routeConfig.operations?.[opName]?.method,
+          path: routeConfig.operations?.[opName]?.path,
+        });
+    if (!isCrudOp && !namedRoute) continue;
+    const paths = isCrudOp ? getOpPaths(path, opName) : [`/${path}/${namedRoute.path}`];
+    const methods = isCrudOp ? opMethods(opName) : new Set([namedRoute.method.toUpperCase()]);
 
     for (const opPath of paths) {
       // Rate limit middleware

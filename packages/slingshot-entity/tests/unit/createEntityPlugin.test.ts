@@ -10,6 +10,7 @@ import type {
   PermissionEvaluator,
   PermissionRegistry,
   PermissionsAdapter,
+  RepoFactories,
   ResolvedEntityConfig,
   SlingshotEventBus,
   SlingshotFrameworkConfig,
@@ -497,7 +498,11 @@ describe('createEntityPlugin', () => {
 function makeFactoriesEntry(
   config: ResolvedEntityConfig,
   adapter?: BareEntityAdapter,
-): { config: ResolvedEntityConfig; factories: never; adapter: BareEntityAdapter } {
+): {
+  config: ResolvedEntityConfig;
+  factories: RepoFactories<BareEntityAdapter>;
+  adapter: BareEntityAdapter;
+} {
   const a = adapter ?? createMockAdapter();
   const factories = {
     memory: () => a,
@@ -506,7 +511,7 @@ function makeFactoriesEntry(
     postgres: () => a,
     mongo: () => a,
   };
-  return { config, factories: factories as never, adapter: a };
+  return { config, factories, adapter: a };
 }
 
 describe('EntityPluginEntryFactories — single-entity path (no entityKey)', () => {
@@ -545,7 +550,7 @@ describe('EntityPluginEntryFactories — single-entity path (no entityKey)', () 
       entities: [
         {
           config: noteConfig,
-          factories: factories as never,
+          factories,
           onAdapter: (adapter: BareEntityAdapter) => {
             captured = adapter;
           },
@@ -580,7 +585,7 @@ describe('EntityPluginEntryFactories — single-entity path (no entityKey)', () 
       entities: [
         {
           config: noteConfig,
-          factories: factories as never,
+          factories,
           onAdapter: () => {
             order.push('onAdapter');
           },
@@ -620,7 +625,7 @@ describe('EntityPluginEntryFactories — composite path (entityKey present)', ()
       entities: [
         {
           config: noteConfig,
-          factories: factories as never,
+          factories,
           entityKey: 'documents',
           onAdapter: (a: BareEntityAdapter) => {
             capturedAdapter = a;
@@ -654,7 +659,7 @@ describe('EntityPluginEntryFactories — composite path (entityKey present)', ()
       entities: [
         {
           config: noteConfig,
-          factories: factories as never,
+          factories,
           entityKey: 'wrong-key',
         },
       ],
@@ -686,7 +691,7 @@ describe('EntityPluginEntryFactories — composite path (entityKey present)', ()
       entities: [
         {
           config: noteConfig,
-          factories: factories as never,
+          factories,
           onAdapter: (adapter: BareEntityAdapter) => {
             capturedAdapter = adapter;
           },

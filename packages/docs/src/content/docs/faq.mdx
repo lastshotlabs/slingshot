@@ -10,8 +10,8 @@ import { Aside } from '@astrojs/starlight/components';
 Yes. Install `@lastshotlabs/slingshot-runtime-node` and pass it as the runtime adapter:
 
 ```typescript
-import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 import { createServer } from '@lastshotlabs/slingshot';
+import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
 await createServer({
   runtime: nodeRuntime(),

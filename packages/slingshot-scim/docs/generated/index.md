@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-scim
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-scim`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
 - Description: SCIM 2.0 user provisioning plugin for Slingshot
@@ -29,16 +29,15 @@ bun add @lastshotlabs/slingshot-scim
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 
 ## Peer Dependencies
 
-- `@lastshotlabs/slingshot-auth`: `^0.1.0`
+- `@lastshotlabs/slingshot-auth`: `workspace:*`
 - `hono`: `>=4.12.12 <5`
 - `zod`: `>=4.0 <5`
 

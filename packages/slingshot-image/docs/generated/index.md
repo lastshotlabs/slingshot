@@ -8,10 +8,10 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-image
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-image`
-- Version: `0.1.0`
+- Version: `0.0.1`
 - Kind: Workspace package
 - Role: feature package
-- Description: Package documentation for this Slingshot workspace module.
+- Description: On-the-fly image optimization and transform pipeline for Slingshot
 - Workspace path: `packages/slingshot-image`
 - Entry point: `packages/slingshot-image/src/index.ts`
 
@@ -29,7 +29,6 @@ bun add @lastshotlabs/slingshot-image
 
 - `build`: `tsc -b tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `prepublishOnly`: `bun run build`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies
@@ -38,7 +37,7 @@ bun add @lastshotlabs/slingshot-image
 
 ## Peer Dependencies
 
-- `@lastshotlabs/slingshot-core`: `^0.1.0`
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 - `hono`: `>=4.12.12 <5`
 - `zod`: `>=4.0 <5`
 

@@ -10,8 +10,8 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-runtime-
 - Package: `@lastshotlabs/slingshot-runtime-bun`
 - Version: `0.0.1`
 - Kind: Workspace package
-- Role: runtime package
-- Description: Package documentation for this Slingshot workspace module.
+- Role: feature package
+- Description: Bun-native runtime implementation for Slingshot
 - Workspace path: `packages/runtime-bun`
 - Entry point: `packages/runtime-bun/src/index.ts`
 
@@ -41,4 +41,4 @@ bun add @lastshotlabs/slingshot-runtime-bun
 
 ## Related Docs
 
-- [API reference](/api/runtime-bun/)
+- [API reference](/api/slingshot-runtime-bun/)

@@ -110,13 +110,6 @@ export async function createWebhooksTestApp(
   const frameworkConfig = createTestFrameworkConfig(frameworkOptions);
   const pluginState = new Map<string, unknown>();
 
-  attachContext(app, {
-    pluginState,
-    ws: null,
-    wsEndpoints: {},
-    wsPublish: null,
-  } as unknown as Parameters<typeof attachContext>[1]);
-
   const routeAuth = {
     userAuth: (async (c, next) => {
       const userId = c.req.header('x-user-id');
@@ -138,10 +131,13 @@ export async function createWebhooksTestApp(
       }) as MiddlewareHandler,
   };
 
-  app.use('*', async (c, next) => {
-    (c as typeof c & { set(key: string, value: unknown): void }).set('slingshotCtx', { routeAuth });
-    await next();
-  });
+  attachContext(app, {
+    pluginState,
+    routeAuth,
+    ws: null,
+    wsEndpoints: {},
+    wsPublish: null,
+  } as unknown as Parameters<typeof attachContext>[1]);
 
   const setupContext: PluginSetupContext = {
     app,

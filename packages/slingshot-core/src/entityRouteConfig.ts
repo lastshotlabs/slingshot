@@ -554,14 +554,17 @@ export interface RouteOperationConfig {
  * CRUD operations (`create`, `list`, `get`, `update`, `delete`) ignore this —
  * their HTTP methods are semantically fixed by the operation type.
  */
-export type NamedOpHttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
+export type NamedOpHttpMethod = 'get' | 'head' | 'post' | 'put' | 'patch' | 'delete';
 
 /**
  * Route configuration for a named (non-CRUD) entity operation.
  *
  * Extends `RouteOperationConfig` with `method` — an optional HTTP method override.
- * Named operations default to `POST`. Set `method: 'get'` for read-only query
- * operations (e.g. `listByDocument`) to align with REST semantics.
+ * Named operations default by operation kind:
+ * - `lookup` → `GET`
+ * - `exists` → `HEAD`
+ * - `custom` → `http.method` when declared on the operation
+ * - everything else → `POST`
  *
  * @example
  * ```ts
@@ -574,7 +577,9 @@ export type NamedOpHttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete';
  */
 export interface RouteNamedOperationConfig extends RouteOperationConfig {
   /**
-   * HTTP method for this named operation. Defaults to `'post'` when omitted.
+   * HTTP method for this named operation. When omitted, the runtime infers a default
+   * from the operation kind (`lookup` → `'get'`, `exists` → `'head'`, otherwise `'post'`
+   * unless a custom op declares `http.method`).
    *
    * @remarks
    * Only applies to entries in `EntityRouteConfig.operations`. The standard CRUD fields
@@ -583,8 +588,9 @@ export interface RouteNamedOperationConfig extends RouteOperationConfig {
    * respectively) and cannot be overridden here.
    *
    * Use `'get'` for read-only query operations (e.g. `listByCategory`, `search`) so they
-   * align with REST semantics and allow browser caching. Use `'post'` (or omit) for
-   * state-mutating operations. `'put'` is available for idempotent full-replacement operations.
+   * align with REST semantics and allow browser caching. Use `'head'` for existence checks,
+   * `'post'` for state-mutating operations, and `'put'` for idempotent full-replacement
+   * operations.
    *
    * @example
    * ```ts

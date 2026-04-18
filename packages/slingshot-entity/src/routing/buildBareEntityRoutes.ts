@@ -24,6 +24,7 @@ import type {
 import { entityToPath } from '../generators/routeHelpers';
 import { buildEntityZodSchemas } from '../lib/entityZodSchemas';
 import { policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
+import { resolveNamedOperationRoute } from './namedOperationRouting';
 import { findScopedFieldInBody, normalizeDataScopes, resolveDataScopes } from './resolveDataScope';
 
 /**
@@ -90,13 +91,16 @@ export interface BareEntityAdapterCrud {
 export type BareEntityAdapter = BareEntityAdapterCrud & { [key: string]: unknown };
 
 type OperationFunction = (...args: unknown[]) => Promise<unknown>;
-type BareRouteMethod = 'delete' | 'get' | 'patch' | 'post';
 type RouteDefinition = ReturnType<typeof createRoute>;
 type OpenApiRouteRegistrar = {
   openapi(route: RouteDefinition, handler: Handler): unknown;
 };
 type BareRouteRegistrar = {
-  [Method in BareRouteMethod]: (path: string, handler: Handler) => unknown;
+  delete(path: string, handler: Handler): unknown;
+  get(path: string, handler: Handler): unknown;
+  patch(path: string, handler: Handler): unknown;
+  post(path: string, handler: Handler): unknown;
+  put(path: string, handler: Handler): unknown;
 };
 type BareEntityRouteRegistrar = BareRouteRegistrar & Partial<OpenApiRouteRegistrar>;
 
@@ -111,6 +115,19 @@ function registerRoute(
   route: RouteDefinition,
   handler: Handler,
 ): void {
+  if (route.method === 'head') {
+    const headOnlyHandler: Handler = async c => {
+      if (c.req.method !== 'HEAD') {
+        return c.json({ error: 'Not found' }, 404) as never;
+      }
+      return handler(c);
+    };
+    if (supportsOpenApi(router)) {
+      router.openapi(route, headOnlyHandler);
+    }
+    router.get(route.path, headOnlyHandler);
+    return;
+  }
   if (supportsOpenApi(router)) {
     router.openapi(route, handler);
     return;
@@ -121,6 +138,9 @@ function registerRoute(
       return;
     case 'post':
       router.post(route.path, handler);
+      return;
+    case 'put':
+      router.put(route.path, handler);
       return;
     case 'patch':
       router.patch(route.path, handler);
@@ -212,7 +232,8 @@ function routeDisabled(
  * - `GET    /{segment}/:id` — get
  * - `PATCH  /{segment}/:id` — update
  * - `DELETE /{segment}/:id` — delete
- * - `POST   /{segment}/{opName}` — one route per named operation (camelCase → kebab-case)
+ * - One route per named operation, with verb/path inferred from the operation kind
+ *   (for example `lookup` → `GET /{segment}/{op}/{params}`, `exists` → `HEAD ...`)
  *
  * Route handlers set `c.set('__opName', ...)` and `c.set('__opResult', ...)`
  * so that the event emission middleware registered by `applyRouteConfig()` can
@@ -232,10 +253,10 @@ function routeDisabled(
  *   `RouteConfigDeps.parentPath` passed to `applyRouteConfig`.
  * @param options.operationMethods - HTTP method overrides for named operations.
  *   Keys are operation names; values are `NamedOpHttpMethod`. Method resolution priority:
- *   `operationMethods[opName]` → `op.custom http.method` → `'post'`.
+ *   `operationMethods[opName]` → `op.custom http.method` → inferred default by op kind.
  * @param options.operationPaths - URL path segment overrides for named operations.
  *   Keys are operation names; values are path strings (e.g. `':id/revert'`).
- *   Priority: `operationPaths[opName]` → `op.custom http.path` → kebab-cased op name.
+ *   Priority: `operationPaths[opName]` → `op.custom http.path` → inferred default path.
  *   Path params declared in the override (e.g. `:id`) are injected into the operation
  *   params alongside body fields and context values.
  * @param options.dataScope - Optional row-level isolation bindings for standard CRUD
@@ -310,30 +331,65 @@ export function buildBareEntityRoutes<
   const policyConfig = options?.policyConfig;
   const policyResolver = options?.policyResolver;
   const policyBus = options?.bus;
+  const errorSchema = z.object({ error: z.string() });
 
   // Named operations are registered BEFORE CRUD routes so that static paths
   // (e.g. /notes/list-by-document) take precedence over the dynamic GET /notes/:id
   // route when a named op uses method 'get'.
   for (const [opName, opConfig] of Object.entries(operations ?? {})) {
-    const kebab = opName.replace(/([A-Z])/g, '-$1').toLowerCase();
-    // Priority: explicit operationMethods override → op.custom http.method → default 'post'
-    const customHttpMethod =
-      opConfig.kind === 'custom' && opConfig.http ? opConfig.http.method : undefined;
-    const method = options?.operationMethods?.[opName] ?? customHttpMethod ?? 'post';
-    const customPath =
-      opConfig.kind === 'custom' && opConfig.http?.path ? opConfig.http.path : undefined;
-    // Priority: explicit operationPaths override → op.custom http.path → kebab-case op name
-    const pathOverride = options?.operationPaths?.[opName] ?? customPath ?? kebab;
-    const opPath = `/${segment}/${pathOverride}`;
-    if (routeDisabled(disabled, opName, method, opPath)) continue;
+    const route = resolveNamedOperationRoute(opName, opConfig, {
+      method: options?.operationMethods?.[opName],
+      path: options?.operationPaths?.[opName],
+    });
+    const opPath = `/${segment}/${route.path}`;
+    if (routeDisabled(disabled, opName, route.method, opPath)) continue;
+    const routeParams =
+      opConfig.kind === 'lookup' || opConfig.kind === 'exists'
+        ? [...new Set(opPath.match(/:([A-Za-z]\w*)/g)?.map(param => param.slice(1)) ?? [])]
+        : [];
+    const request =
+      routeParams.length > 0
+        ? {
+            params: z.object(Object.fromEntries(routeParams.map(param => [param, z.string()]))),
+          }
+        : undefined;
+    const responses =
+      opConfig.kind === 'lookup'
+        ? opConfig.returns === 'one'
+          ? {
+              200: {
+                content: { 'application/json': { schema: schemas.entity } },
+                description: 'Found',
+              },
+              404: {
+                content: { 'application/json': { schema: errorSchema } },
+                description: 'Not found',
+              },
+            }
+          : {
+              200: {
+                content: { 'application/json': { schema: schemas.list } },
+                description: 'List result',
+              },
+            }
+        : opConfig.kind === 'exists'
+          ? {
+              200: { description: 'Exists' },
+              404: { description: 'Not found' },
+            }
+          : {
+              200: {
+                content: { 'application/json': { schema: schemas.entity } },
+                description: 'OK',
+              },
+            };
     const opRoute = createRoute({
-      method,
+      method: route.method,
       path: opPath,
       tags: [tag],
       summary: opName,
-      responses: {
-        200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
-      },
+      ...(request ? { request } : {}),
+      responses,
     });
     registerRoute(router, opRoute, async c => {
       // GET requests may carry no JSON body — fall back to empty object so
@@ -370,6 +426,13 @@ export function buildBareEntityRoutes<
       const result = await invokeNamedOperation(opConfig, opFn as OperationFunction, params);
       c.set('__opName' as never, opName as never);
       c.set('__opResult' as never, result as never);
+      if (opConfig.kind === 'lookup' && opConfig.returns === 'one') {
+        if (!result) return c.json({ error: 'Not found' }, 404) as never;
+        return c.json(result, 200);
+      }
+      if (opConfig.kind === 'exists') {
+        return result ? c.body(null, 200) : c.body(null, 404);
+      }
       return c.json(result, 200);
     });
   }

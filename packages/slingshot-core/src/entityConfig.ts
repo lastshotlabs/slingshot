@@ -973,6 +973,8 @@ export interface PaginatedResult<T> {
  * @template UpdateInput - The update input type (from `InferUpdateInput`).
  */
 export interface EntityAdapter<Entity, CreateInput, UpdateInput> {
+  /** Allow adapter implementations to carry extra keys (e.g. composite ops). */
+  [key: string]: unknown;
   /** Insert a new record, applying auto-defaults. Returns the created entity. */
   create(input: CreateInput): Promise<Entity>;
   /** Retrieve by primary key. Returns `null` when not found (or out of scope). */

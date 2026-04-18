@@ -401,6 +401,147 @@ describe('named op method override — HTTP round-trip', () => {
   });
 });
 
+describe('named operation inference — HTTP round-trip', () => {
+  const slugEntityConfig: ResolvedEntityConfig = {
+    ...testEntityConfig,
+    fields: {
+      ...testEntityConfig.fields,
+      slug: { type: 'string', primary: false, immutable: false, optional: false },
+    },
+  };
+
+  it('lookup one defaults to GET with path params and returns 404 when missing', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = {
+      ...createMemoryAdapter(),
+      findBySlug: ({ slug }: { slug: string }) =>
+        Promise.resolve([...records.values()].find(record => record.slug === slug) ?? null),
+    };
+    await adapter.create({ text: 'hello', slug: 'alpha' });
+
+    const router = buildBareEntityRoutes(
+      slugEntityConfig,
+      {
+        findBySlug: {
+          kind: 'lookup',
+          fields: { slug: 'param:slug' },
+          returns: 'one',
+        },
+      },
+      adapter,
+    );
+
+    const found = await router.fetch(new Request('http://localhost/notes/find-by-slug/alpha'));
+    expect(found.status).toBe(200);
+    expect((await found.json()) as Record<string, unknown>).toMatchObject({ slug: 'alpha' });
+
+    const missing = await router.fetch(new Request('http://localhost/notes/find-by-slug/missing'));
+    expect(missing.status).toBe(404);
+
+    const wrongMethod = await router.fetch(
+      new Request('http://localhost/notes/find-by-slug/alpha', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slug: 'alpha' }),
+      }),
+    );
+    expect(wrongMethod.status).toBe(404);
+  });
+
+  it('exists defaults to HEAD with path params and 200/404 semantics', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = {
+      ...createMemoryAdapter(),
+      slugExists: ({ slug }: { slug: string }) =>
+        Promise.resolve([...records.values()].some(record => record.slug === slug)),
+    };
+    await adapter.create({ text: 'hello', slug: 'alpha' });
+
+    const router = buildBareEntityRoutes(
+      slugEntityConfig,
+      {
+        slugExists: {
+          kind: 'exists',
+          fields: { slug: 'param:slug' },
+        },
+      },
+      adapter,
+    );
+
+    const exists = await router.fetch(
+      new Request('http://localhost/notes/slug-exists/alpha', { method: 'HEAD' }),
+    );
+    expect(exists.status).toBe(200);
+
+    const missing = await router.fetch(
+      new Request('http://localhost/notes/slug-exists/missing', { method: 'HEAD' }),
+    );
+    expect(missing.status).toBe(404);
+
+    const wrongMethod = await router.fetch(new Request('http://localhost/notes/slug-exists/alpha'));
+    expect(wrongMethod.status).toBe(404);
+  });
+
+  it('applyRouteConfig aligns middleware with inferred lookup routes when operation configs are provided', async () => {
+    records.clear();
+    idCounter = 0;
+    let middlewareCalled = false;
+    const adapter = {
+      ...createMemoryAdapter(),
+      findBySlug: ({ slug }: { slug: string }) =>
+        Promise.resolve([...records.values()].find(record => record.slug === slug) ?? null),
+    };
+    await adapter.create({ text: 'hello', slug: 'alpha' });
+
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    applyRouteConfig(
+      router,
+      slugEntityConfig,
+      {
+        operations: {
+          findBySlug: {
+            middleware: ['flag'],
+          },
+        },
+      },
+      {
+        middleware: {
+          flag: async (_c, next) => {
+            middlewareCalled = true;
+            await next();
+          },
+        },
+        operationConfigs: {
+          findBySlug: {
+            kind: 'lookup',
+            fields: { slug: 'param:slug' },
+            returns: 'one',
+          },
+        },
+      },
+    );
+    buildBareEntityRoutes(
+      slugEntityConfig,
+      {
+        findBySlug: {
+          kind: 'lookup',
+          fields: { slug: 'param:slug' },
+          returns: 'one',
+        },
+      },
+      adapter,
+      router,
+    );
+
+    const res = await router.fetch(new Request('http://localhost/notes/find-by-slug/alpha'));
+    expect(res.status).toBe(200);
+    expect(middlewareCalled).toBe(true);
+  });
+});
+
 describe('parentPath — HTTP round-trip', () => {
   it('responds at nested path /documents/:docId/versions', async () => {
     records.clear();

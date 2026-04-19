@@ -1,7 +1,7 @@
 import { and, asc, eq, gt, ilike, isNull, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool, PoolClient } from 'pg';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { HttpError, getPostgresPoolRuntime } from '@lastshotlabs/slingshot-core';
 import type { AuthAdapter } from '@lastshotlabs/slingshot-core';
 import {
   groupMemberships,
@@ -400,7 +400,9 @@ export interface PostgresAdapterOptions {
  * ```
  */
 export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promise<AuthAdapter> {
-  await runMigrations(opts.pool);
+  if (getPostgresPoolRuntime(opts.pool)?.migrationMode !== 'assume-ready') {
+    await runMigrations(opts.pool);
+  }
   const db = drizzle(opts.pool);
 
   return {

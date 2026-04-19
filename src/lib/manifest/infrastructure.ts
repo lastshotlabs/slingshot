@@ -1,6 +1,19 @@
 import { z } from 'zod';
 import { appManifestHandlerRefSchema } from './helpers';
 
+const postgresPoolSchema = z.object({
+  max: z.number().optional(),
+  min: z.number().optional(),
+  idleTimeoutMs: z.number().optional(),
+  connectionTimeoutMs: z.number().optional(),
+  queryTimeoutMs: z.number().optional(),
+  statementTimeoutMs: z.number().optional(),
+  maxUses: z.number().optional(),
+  allowExitOnIdle: z.boolean().optional(),
+  keepAlive: z.boolean().optional(),
+  keepAliveInitialDelayMillis: z.number().optional(),
+});
+
 // -- Database --
 export const dbSectionSchema = z.object({
   sqlite: z
@@ -38,6 +51,15 @@ export const dbSectionSchema = z.object({
     .string()
     .optional()
     .describe("Postgres connection string. Omit unless a store uses 'postgres'."),
+  postgresPool: postgresPoolSchema
+    .optional()
+    .describe('Postgres pool sizing and timeout options passed through to pg.Pool.'),
+  postgresMigrations: z
+    .enum(['apply', 'assume-ready'])
+    .optional()
+    .describe(
+      'Postgres schema bootstrap strategy. Use "assume-ready" when migrations are managed externally.',
+    ),
   sessions: z
     .enum(['redis', 'mongo', 'sqlite', 'memory', 'postgres'])
     .optional()

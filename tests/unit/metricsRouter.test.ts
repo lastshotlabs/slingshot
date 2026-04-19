@@ -4,7 +4,7 @@
  */
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, PostgresBundle } from '@lastshotlabs/slingshot-core';
 import { attachContext } from '@lastshotlabs/slingshot-core';
 import { createMetricsState } from '../../src/framework/metrics/registry';
 import { createMetricsRouter } from '../../src/framework/routes/metrics';
@@ -244,5 +244,36 @@ describe('createMetricsRouter — queue gauges', () => {
     // On second scrape, createQueue should be called again (evicted)
     await app.request('/metrics');
     expect(createQueue.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('createMetricsRouter — postgres gauges', () => {
+  test('registers postgres pool and query gauges when a postgres bundle is provided', async () => {
+    const postgres: PostgresBundle = {
+      pool: {} as never,
+      db: {},
+      getStats: () => ({
+        migrationMode: 'assume-ready',
+        totalCount: 7,
+        idleCount: 3,
+        waitingCount: 1,
+        queryCount: 11,
+        errorCount: 2,
+        averageQueryDurationMs: 4.5,
+        maxQueryDurationMs: 12,
+        lastErrorAt: null,
+      }),
+    };
+    const router = createMetricsRouter({ auth: 'none', isProd: false }, state, undefined, postgres);
+    const app = makeApp(router);
+
+    const res = await app.request('/metrics');
+    const body = await res.text();
+
+    expect(body).toContain('slingshot_postgres_pool_clients');
+    expect(body).toContain('slingshot_postgres_pool_clients{state="total"} 7');
+    expect(body).toContain('slingshot_postgres_query_count{state="failed"} 2');
+    expect(body).toContain('slingshot_postgres_query_latency_ms{stat="max"} 12');
+    expect(body).toContain('slingshot_postgres_migration_mode{mode="assume-ready"} 1');
   });
 });

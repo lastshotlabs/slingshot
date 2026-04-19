@@ -1,4 +1,4 @@
-import type { StoreType } from '@lastshotlabs/slingshot-core';
+import type { PostgresMigrationMode, StoreType } from '@lastshotlabs/slingshot-core';
 
 export interface RedisConnectionOptions {
   /**
@@ -11,6 +11,51 @@ export interface RedisConnectionOptions {
    * Omit to use the client default.
    */
   maxRetriesPerRequest?: number;
+}
+
+export interface PostgresPoolConfig {
+  /**
+   * Maximum number of clients in the Postgres pool.
+   * Omit to use the pg default.
+   */
+  max?: number;
+  /**
+   * Minimum number of clients to keep warm in the Postgres pool.
+   * Omit to use the pg default.
+   */
+  min?: number;
+  /**
+   * Milliseconds an idle client may remain in the pool before eviction.
+   */
+  idleTimeoutMs?: number;
+  /**
+   * Milliseconds to wait when establishing a new Postgres connection.
+   */
+  connectionTimeoutMs?: number;
+  /**
+   * Milliseconds to allow an individual query before pg aborts it client-side.
+   */
+  queryTimeoutMs?: number;
+  /**
+   * Milliseconds to allow a statement on the server before PostgreSQL cancels it.
+   */
+  statementTimeoutMs?: number;
+  /**
+   * Maximum number of uses before a client is recycled.
+   */
+  maxUses?: number;
+  /**
+   * Allow Node to exit while clients remain idle in the pool.
+   */
+  allowExitOnIdle?: boolean;
+  /**
+   * Enable TCP keepalive on Postgres sockets.
+   */
+  keepAlive?: boolean;
+  /**
+   * Delay before the first TCP keepalive probe, in milliseconds.
+   */
+  keepAliveInitialDelayMillis?: number;
 }
 
 export interface DbConfig {
@@ -40,6 +85,16 @@ export interface DbConfig {
    * Required when any selected store is "postgres".
    */
   postgres?: string;
+  /**
+   * Postgres pool sizing and timeout options passed through to `pg.Pool`.
+   */
+  postgresPool?: PostgresPoolConfig;
+  /**
+   * Postgres schema bootstrap strategy.
+   * - "apply": runtime-owned schema initialization and migrations
+   * - "assume-ready": skip startup DDL because migrations are managed externally
+   */
+  postgresMigrations?: PostgresMigrationMode;
   /**
    * Where to store JWT sessions. Default: resolved framework default store.
    * Sessions are stored on the app-side persistence connection, not the auth connection.

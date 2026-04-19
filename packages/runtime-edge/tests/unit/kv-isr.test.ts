@@ -112,6 +112,94 @@ describe('createKvIsrCache()', () => {
         expect(key.startsWith('isr:tag:')).toBe(false);
       }
     });
+
+    it('repairs a corrupt tag index when adding a newly tagged path', async () => {
+      kv._store.set('isr:tag:posts', 'not-valid-json');
+
+      await cache.set('/posts/1', makeEntry('/posts/1', ['posts']));
+
+      expect(JSON.parse(kv._store.get('isr:tag:posts') ?? '[]')).toEqual(['/posts/1']);
+    });
+
+    it('removes dropped tags and keeps retained tags when updating an entry', async () => {
+      await cache.set('/posts/1', makeEntry('/posts/1', ['posts', 'featured']));
+
+      await cache.set('/posts/1', makeEntry('/posts/1', ['featured', 'fresh']));
+
+      expect(kv._store.has('isr:tag:posts')).toBe(false);
+      expect(JSON.parse(kv._store.get('isr:tag:featured') ?? '[]')).toEqual(['/posts/1']);
+      expect(JSON.parse(kv._store.get('isr:tag:fresh') ?? '[]')).toEqual(['/posts/1']);
+    });
+
+    it('rewrites a tag index when removing one path but retaining others', async () => {
+      await cache.set('/posts/1', makeEntry('/posts/1', ['posts']));
+      await cache.set('/posts/2', makeEntry('/posts/2', ['posts']));
+
+      await cache.set('/posts/1', makeEntry('/posts/1', ['fresh']));
+
+      expect(JSON.parse(kv._store.get('isr:tag:posts') ?? '[]')).toEqual(['/posts/2']);
+      expect(JSON.parse(kv._store.get('isr:tag:fresh') ?? '[]')).toEqual(['/posts/1']);
+    });
+
+    it('ignores corrupt old page metadata when diffing tags for an update', async () => {
+      kv._store.set('isr:page:/broken', 'not-valid-json');
+
+      await cache.set('/broken', makeEntry('/broken', ['repaired']));
+
+      expect(JSON.parse(kv._store.get('isr:tag:repaired') ?? '[]')).toEqual(['/broken']);
+    });
+
+    it('ignores corrupt tag indexes when removing a dropped tag', async () => {
+      await cache.set('/posts/1', makeEntry('/posts/1', ['posts', 'featured']));
+      kv._store.set('isr:tag:posts', 'not-valid-json');
+
+      await expect(
+        cache.set('/posts/1', makeEntry('/posts/1', ['featured'])),
+      ).resolves.toBeUndefined();
+
+      expect(kv._store.get('isr:tag:posts')).toBe('not-valid-json');
+      expect(JSON.parse(kv._store.get('isr:tag:featured') ?? '[]')).toEqual(['/posts/1']);
+    });
+
+    it('does not poison future tag additions after a failed tag-index write', async () => {
+      let failNextPostsPut = true;
+      const originalPut = kv.put.bind(kv);
+      kv.put = async (key: string, value: string) => {
+        if (key === 'isr:tag:posts' && failNextPostsPut) {
+          failNextPostsPut = false;
+          throw new Error('simulated put failure');
+        }
+        await originalPut(key, value);
+      };
+
+      await expect(cache.set('/posts/1', makeEntry('/posts/1', ['posts']))).rejects.toThrow(
+        'simulated put failure',
+      );
+
+      await expect(cache.set('/posts/2', makeEntry('/posts/2', ['posts']))).resolves.toBeUndefined();
+      expect(JSON.parse(kv._store.get('isr:tag:posts') ?? '[]')).toEqual(['/posts/2']);
+    });
+
+    it('does not poison future tag updates after a failed removal step', async () => {
+      await cache.set('/posts/1', makeEntry('/posts/1', ['posts']));
+
+      let failNextPostsGet = true;
+      const originalGet = kv.get.bind(kv);
+      kv.get = async (key: string) => {
+        if (key === 'isr:tag:posts' && failNextPostsGet) {
+          failNextPostsGet = false;
+          throw new Error('simulated get failure');
+        }
+        return await originalGet(key, { type: 'text' });
+      };
+
+      await expect(cache.set('/posts/1', makeEntry('/posts/1', []))).rejects.toThrow(
+        'simulated get failure',
+      );
+
+      await expect(cache.set('/posts/2', makeEntry('/posts/2', ['posts']))).resolves.toBeUndefined();
+      expect(JSON.parse(kv._store.get('isr:tag:posts') ?? '[]')).toEqual(['/posts/1', '/posts/2']);
+    });
   });
 
   describe('invalidatePath()', () => {

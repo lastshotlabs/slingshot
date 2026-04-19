@@ -1,3 +1,5 @@
+import { getPostgresPoolRuntime } from '@lastshotlabs/slingshot-core';
+
 interface PostgresQueryable {
   query(
     sql: string,
@@ -22,6 +24,10 @@ export function createPostgresInitializer(
 
   return async () => {
     if (initialized) return;
+    if (getPostgresPoolRuntime(pool)?.migrationMode === 'assume-ready') {
+      initialized = true;
+      return;
+    }
     if (initializationPromise) {
       await initializationPromise;
       return;

@@ -17,6 +17,7 @@ export const rootCoverageSupplementalFiles = [
 
 const processIsolatedFiles = new Set([
   'tests/unit/auditLogProviders.test.ts',
+  'tests/unit/build-publish-scripts.test.ts',
   'tests/unit/cronRegistry.test.ts',
   'tests/unit/uploadRegistry-backends.test.ts',
   'tests/unit/uploadRegistryBackends.test.ts',

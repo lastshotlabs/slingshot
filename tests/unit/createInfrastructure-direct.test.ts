@@ -5,7 +5,7 @@ const mongooseModule = await import('mongoose');
 const actualMongo = await import('@lib/mongo');
 const actualRedis = await import('@lib/redis');
 
-const connectPostgresMock = mock(async (connectionString: string) => ({
+const connectPostgresMock = mock(async (connectionString: string, options?: unknown) => ({
   pool: {
     query: async () => ({ rows: [], rowCount: 0 }),
     connect: async () => ({
@@ -14,6 +14,7 @@ const connectPostgresMock = mock(async (connectionString: string) => ({
     }),
   },
   connectionString,
+  options,
 }));
 const connectRedisMock = mock(async () => ({ kind: 'redis-client' }));
 const disconnectRedisMock = mock(async () => {});
@@ -528,13 +529,64 @@ describe('createInfrastructure direct', () => {
       },
     });
 
-    expect(connectPostgresMock).toHaveBeenCalledWith(
-      'postgres://slingshot:test@localhost:5432/app',
-    );
+    expect(connectPostgresMock).toHaveBeenCalledWith('postgres://slingshot:test@localhost:5432/app', {
+      pool: undefined,
+      migrations: undefined,
+      healthcheckTimeoutMs: undefined,
+    });
     expect(infra.postgres).toMatchObject({
       connectionString: 'postgres://slingshot:test@localhost:5432/app',
     });
     expect(infra.frameworkConfig.storeInfra.getPostgres()).toBe(infra.postgres!);
+  });
+
+  test('passes postgres pool sizing and migration strategy through to the connector', async () => {
+    const createInfrastructure = await loadCreateInfrastructure();
+
+    await createInfrastructure({
+      ...baseOptions(),
+      db: {
+        mongo: false,
+        redis: false,
+        postgres: 'postgres://slingshot:test@localhost:5432/app',
+        postgresMigrations: 'assume-ready',
+        postgresPool: {
+          max: 24,
+          min: 4,
+          idleTimeoutMs: 15_000,
+          connectionTimeoutMs: 2_000,
+          queryTimeoutMs: 1_500,
+          statementTimeoutMs: 1_200,
+          maxUses: 500,
+          allowExitOnIdle: true,
+          keepAlive: true,
+          keepAliveInitialDelayMillis: 3_000,
+        },
+        sessions: 'postgres',
+        cache: 'postgres',
+        auth: 'memory',
+      },
+    });
+
+    expect(connectPostgresMock).toHaveBeenLastCalledWith(
+      'postgres://slingshot:test@localhost:5432/app',
+      {
+        pool: {
+          max: 24,
+          min: 4,
+          idleTimeoutMs: 15_000,
+          connectionTimeoutMs: 2_000,
+          queryTimeoutMs: 1_500,
+          statementTimeoutMs: 1_200,
+          maxUses: 500,
+          allowExitOnIdle: true,
+          keepAlive: true,
+          keepAliveInitialDelayMillis: 3_000,
+        },
+        migrations: 'assume-ready',
+        healthcheckTimeoutMs: 1_500,
+      },
+    );
   });
 
   test('disconnects opened mongo and redis handles when later bootstrap fails', async () => {

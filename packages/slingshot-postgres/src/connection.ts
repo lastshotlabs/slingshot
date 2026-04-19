@@ -49,6 +49,10 @@ type Queryable = {
   query: (...args: unknown[]) => Promise<unknown>;
 };
 
+type InstrumentedClient = Queryable & {
+  __slingshotInstrumented?: boolean;
+};
+
 function wrapQueryableQueries(target: Queryable, recordQuery: (durationMs: number, failed: boolean) => void): void {
   const originalQuery = target.query.bind(target);
   target.query = (async (...args: unknown[]) => {
@@ -67,16 +71,21 @@ function wrapQueryableQueries(target: Queryable, recordQuery: (durationMs: numbe
 function instrumentPool(pool: Pool, recordQuery: (durationMs: number, failed: boolean) => void): void {
   wrapQueryableQueries(pool as unknown as Queryable, recordQuery);
 
-  const originalConnect = pool.connect.bind(pool);
-  pool.connect = (async (...args: Parameters<typeof originalConnect>) => {
+  if (typeof pool.connect !== 'function') return;
+
+  const originalConnect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
+  (pool as Pool & { connect: (...args: unknown[]) => unknown }).connect = (async (...args: unknown[]) => {
     const client = await originalConnect(...args);
-    const instrumented = client as typeof client & { __slingshotInstrumented?: boolean };
+    if (!client || typeof client !== 'object' || !('query' in client)) {
+      return client;
+    }
+    const instrumented = client as InstrumentedClient;
     if (!instrumented.__slingshotInstrumented) {
       wrapQueryableQueries(client as unknown as Queryable, recordQuery);
       instrumented.__slingshotInstrumented = true;
     }
     return client;
-  }) as typeof pool.connect;
+  }) as unknown as typeof pool.connect;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

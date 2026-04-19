@@ -8,7 +8,12 @@ import {
 import type { QueueFactory } from '@lib/queue';
 import type { Queue as BullMQQueue } from 'bullmq';
 import type { Context, MiddlewareHandler, Next } from 'hono';
-import { createRouter, getRouteAuth, getSlingshotCtx } from '@lastshotlabs/slingshot-core';
+import {
+  createRouter,
+  getRouteAuth,
+  getSlingshotCtx,
+  type PostgresBundle,
+} from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -65,6 +70,7 @@ export const createMetricsRouter = (
   config: MetricsRouteConfig & { isProd: boolean },
   state: MetricsState,
   queueFactory?: QueueFactory,
+  postgres?: PostgresBundle | null,
 ) => {
   const router = createRouter();
   const authConfig = config.auth ?? 'none';
@@ -124,6 +130,38 @@ export const createMetricsRouter = (
       }
 
       return results;
+    });
+  }
+
+  if (postgres?.getStats) {
+    registerGaugeCallback(state, 'slingshot_postgres_pool_clients', async () => {
+      const stats = postgres.getStats!();
+      return [
+        { labels: { state: 'total' }, value: stats.totalCount },
+        { labels: { state: 'idle' }, value: stats.idleCount },
+        { labels: { state: 'waiting' }, value: stats.waitingCount },
+      ];
+    });
+
+    registerGaugeCallback(state, 'slingshot_postgres_query_count', async () => {
+      const stats = postgres.getStats!();
+      return [
+        { labels: { state: 'total' }, value: stats.queryCount },
+        { labels: { state: 'failed' }, value: stats.errorCount },
+      ];
+    });
+
+    registerGaugeCallback(state, 'slingshot_postgres_query_latency_ms', async () => {
+      const stats = postgres.getStats!();
+      return [
+        { labels: { stat: 'average' }, value: stats.averageQueryDurationMs },
+        { labels: { stat: 'max' }, value: stats.maxQueryDurationMs },
+      ];
+    });
+
+    registerGaugeCallback(state, 'slingshot_postgres_migration_mode', async () => {
+      const stats = postgres.getStats!();
+      return [{ labels: { mode: stats.migrationMode }, value: 1 }];
     });
   }
 

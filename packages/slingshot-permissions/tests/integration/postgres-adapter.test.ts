@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import type { PermissionGrant } from '@lastshotlabs/slingshot-core';
+import {
+  attachPostgresPoolRuntime,
+  createPostgresPoolRuntime,
+  type PermissionGrant,
+} from '@lastshotlabs/slingshot-core';
 import { createPermissionsPostgresAdapter } from '../../src/adapters/postgres';
 import type { PgParam, PgRow, PoolClientLike, PoolLike } from '../../src/adapters/postgres';
 
@@ -378,6 +382,18 @@ describe('Postgres permissions adapter — migrations', () => {
       'Database schema version 2 is newer than this binary supports (1)',
     );
     expect(pool.captured.some(q => q.sql === 'ROLLBACK')).toBe(true);
+  });
+
+  test('skips migrations when the pool runtime is configured as assume-ready', async () => {
+    const pool = new MockPool();
+    pool.schemaVersion = 999;
+    attachPostgresPoolRuntime(
+      pool,
+      createPostgresPoolRuntime({ migrationMode: 'assume-ready' }),
+    );
+
+    await expect(makeAdapter(pool)).resolves.toBeDefined();
+    expect(pool.captured).toHaveLength(0);
   });
 });
 

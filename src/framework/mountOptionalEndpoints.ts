@@ -13,7 +13,7 @@ import { createMetricsRouter } from '@framework/routes/metrics';
 import { createUploadsRouter } from '@framework/routes/uploads';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { type QueueFactory, createQueueFactory } from '@lib/queue';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, PostgresBundle } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -87,6 +87,7 @@ export function mountOptionalEndpoints(
     redisPassword?: string;
   },
   isProd: boolean,
+  postgres?: PostgresBundle | null,
 ): void {
   // Security validation runs before infrastructure creation so config errors
   // take priority over missing infrastructure (Redis) errors.
@@ -149,6 +150,7 @@ export function mountOptionalEndpoints(
         },
         metricsState,
         queueFactory,
+        postgres,
       ),
     );
   }

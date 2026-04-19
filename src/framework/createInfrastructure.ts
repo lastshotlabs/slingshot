@@ -415,7 +415,11 @@ export async function createInfrastructure(
 
     if (db.postgres) {
       const { connectPostgres } = await import('@lastshotlabs/slingshot-postgres');
-      postgresDb = await connectPostgres(db.postgres);
+      postgresDb = await connectPostgres(db.postgres, {
+        pool: db.postgresPool,
+        migrations: db.postgresMigrations,
+        healthcheckTimeoutMs: db.postgresPool?.queryTimeoutMs,
+      });
     }
 
     /**

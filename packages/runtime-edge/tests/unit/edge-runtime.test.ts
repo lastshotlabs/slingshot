@@ -78,6 +78,11 @@ describe('edgeRuntime()', () => {
       expect(ok).toBe(false);
     });
 
+    it('returns false when the stored hash payload is not valid base64', async () => {
+      const runtime = edgeRuntime();
+      await expect(runtime.password.verify('password', '%%%:%%%')).resolves.toBe(false);
+    });
+
     it('each hash call produces a unique output (random salt)', async () => {
       const runtime = edgeRuntime();
       const hash1 = await runtime.password.hash('same');
@@ -111,6 +116,20 @@ describe('edgeRuntime()', () => {
       const hash = await runtime.password.hash('test');
       expect(await runtime.password.verify('test', hash)).toBe(true);
       expect(await runtime.password.verify('wrong', hash)).toBe(false);
+    });
+
+    it('rejects partially customized password handlers', () => {
+      expect(() =>
+        edgeRuntime({
+          hashPassword: async plain => `custom:${plain}`,
+        }),
+      ).toThrow('hashPassword and verifyPassword must both be provided');
+
+      expect(() =>
+        edgeRuntime({
+          verifyPassword: async () => true,
+        }),
+      ).toThrow('hashPassword and verifyPassword must both be provided');
     });
   });
 

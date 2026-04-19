@@ -73,7 +73,7 @@
     "release:major": "bun run --filter '*' version major && npm version major && bun run release",
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
-    "test": "bun run test:root && bun run test:isolated && bun scripts/run-package-tests.ts",
+    "test": "bun run test:root && bun run test:isolated && bun scripts/run-package-tests.ts && bun run test:node",
     "test:root": "bun scripts/run-root-tests.ts",
     "test:docs": "bun test packages/docs/tests",
     "test:isolated": "bun test tests/isolated/config-lock.test.ts tests/isolated/memoryCache.test.ts tests/isolated/zodToMongoose.test.ts && bun test tests/isolated/optional-deps.test.ts && bun test tests/isolated/jwt-signing-singleton.test.ts && bun test tests/isolated/csrf-signing-singleton.test.ts && bun test tests/isolated/auth0Access.test.ts && bun test tests/isolated/queue.test.ts && bun test tests/isolated/jobs-router.test.ts && bun test tests/isolated/queued-deletion.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts && bun test tests/isolated/webhooks-bullmq.test.ts && bun test tests/isolated/webhooks-bullmq-ioredis.test.ts && bun test tests/isolated/webhooks-bullmq-missing-bullmq.test.ts && bun test tests/isolated/webhooks-bullmq-missing-ioredis.test.ts && bun test tests/isolated/passkey-e2e.test.ts",

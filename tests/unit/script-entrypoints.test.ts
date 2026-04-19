@@ -152,6 +152,9 @@ describe('script entrypoints', () => {
     const runPackageTestsModule = await import(
       `../../scripts/run-package-tests.ts?packages=${Date.now()}`
     );
+    const runRuntimeNodeCoverageModule = await import(
+      `../../scripts/run-runtime-node-coverage.ts?rtnode=${Date.now()}`
+    );
     const runCoverageModule = await import(`../../scripts/run-coverage.ts?all=${Date.now()}`);
 
     const coverageDir = join(tempDir, 'coverage-files');
@@ -256,6 +259,39 @@ describe('script entrypoints', () => {
       'tests/demo/a.test.ts',
     ]);
 
+    const runtimeNodeCalls: SpawnCalls = [];
+    expect(
+      await runRuntimeNodeCoverageModule.runRuntimeNodeCoverage(
+        createSpawnStub(cmd => {
+          const coverageDir =
+            cmd.includes('vitest')
+              ? join('coverage', 'runtime-node', '.runs', 'vitest')
+              : join('coverage', 'runtime-node', '.runs', 'bun');
+          mkdirSync(coverageDir, { recursive: true });
+          writeFileSync(
+            join(coverageDir, 'lcov.info'),
+            [
+              cmd.includes('vitest')
+                ? 'SF:packages/runtime-node/src/index.ts'
+                : 'SF:packages/runtime-node/src/index.ts',
+              'LF:1',
+              'LH:1',
+              'end_of_record',
+              '',
+            ].join('\n'),
+            'utf8',
+          );
+        }, runtimeNodeCalls),
+      ),
+    ).toBe(0);
+    expect(runtimeNodeCalls).toHaveLength(2);
+    expect(runtimeNodeCalls[0]?.cmd[0]).toBe(process.execPath);
+    expect(runtimeNodeCalls[0]?.cmd[1]).toBe('test');
+    expect(runtimeNodeCalls[1]?.cmd.slice(0, 4)).toEqual([process.execPath, 'x', 'vitest', 'run']);
+    expect(readFileSync(join('coverage', 'runtime-node', 'lcov.info'), 'utf8')).toContain(
+      'SF:packages/runtime-node/src/index.ts',
+    );
+
     const suiteRoot = join('.tmp', 'run-coverage-script-test');
     const coverageSuites = [
       {
@@ -274,6 +310,14 @@ describe('script entrypoints', () => {
         ownedGlobs: ['scripts/examples-coverage.ts'],
         ignoredGlobs: [],
       },
+      {
+        name: 'runtime-node',
+        testsPath: 'packages/runtime-node/tests',
+        coverageDir: join(suiteRoot, 'runtime-node'),
+        command: ['scripts/run-runtime-node-coverage.ts'],
+        ownedGlobs: ['packages/runtime-node/src/**/*.ts'],
+        ignoredGlobs: [],
+      },
     ];
 
     expect(
@@ -283,13 +327,17 @@ describe('script entrypoints', () => {
           const coveragePath =
             cmd[1] === 'scripts/run-root-coverage.ts'
               ? join(suiteRoot, 'root', 'lcov.info')
-              : join(suiteRoot, 'pkg', 'lcov.info');
+              : cmd[1] === 'scripts/run-runtime-node-coverage.ts'
+                ? join(suiteRoot, 'runtime-node', 'lcov.info')
+                : join(suiteRoot, 'pkg', 'lcov.info');
           mkdirSync(dirname(coveragePath), { recursive: true });
           writeFileSync(
             coveragePath,
             [
               cmd[1] === 'scripts/run-root-coverage.ts'
                 ? 'SF:scripts/ensure-pagefind-link.ts'
+                : cmd[1] === 'scripts/run-runtime-node-coverage.ts'
+                  ? 'SF:packages/runtime-node/src/index.ts'
                 : 'SF:scripts/examples-coverage.ts',
               'LF:1',
               'LH:1',

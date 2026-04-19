@@ -66,6 +66,7 @@ function packageSuites(): TestCommandSuite[] {
 interface PackageCoverageOverride {
   coverageTestFiles: string[];
   configPath?: string;
+  coverageCommand?: string[];
 }
 
 const packageCoverageOverrides: Record<string, PackageCoverageOverride> = {
@@ -91,6 +92,10 @@ const packageCoverageOverrides: Record<string, PackageCoverageOverride> = {
       'tests/isolated/webhooks-bullmq-missing-bullmq.test.ts',
       'tests/isolated/webhooks-bullmq-missing-ioredis.test.ts',
     ],
+  },
+  'runtime-node': {
+    coverageTestFiles: [],
+    coverageCommand: ['scripts/run-runtime-node-coverage.ts'],
   },
 };
 
@@ -174,15 +179,17 @@ function packageCoverageSuites(): CoverageSuite[] {
         testFiles: packageTests.length > 0 ? packageTests : undefined,
         configPath,
         coverageDir: `coverage/${name}`,
-        command: [
-          'scripts/run-coverage-files.ts',
-          '--label',
-          name,
-          '--coverage-dir',
-          `coverage/${name}`,
-          ...(configPath ? ['--config', configPath] : []),
-          ...coverageTestFiles,
-        ],
+        command:
+          override?.coverageCommand ??
+          [
+            'scripts/run-coverage-files.ts',
+            '--label',
+            name,
+            '--coverage-dir',
+            `coverage/${name}`,
+            ...(configPath ? ['--config', configPath] : []),
+            ...coverageTestFiles,
+          ],
         ownedGlobs: [`packages/${name}/**/*.ts`, `packages/${name}/**/*.tsx`],
         ignoredGlobs: [
           `packages/${name}/node_modules/**`,

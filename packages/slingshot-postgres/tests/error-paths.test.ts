@@ -11,7 +11,11 @@
  * rollback scenarios at the drizzle level.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import {
+  HttpError,
+  attachPostgresPoolRuntime,
+  createPostgresPoolRuntime,
+} from '@lastshotlabs/slingshot-core';
 // ── Import adapter AFTER mocks ────────────────────────────────────────────────
 import { createPostgresAdapter } from '../src/adapter.js';
 
@@ -155,6 +159,14 @@ describe('slingshot-postgres adapter — error paths', () => {
     await expect(
       createPostgresAdapter({ pool: new (await import('pg')).Pool() }),
     ).rejects.toThrow('Database schema version 3 is newer than this binary supports (2)');
+  });
+
+  test('skips adapter migrations when the pool runtime is configured as assume-ready', async () => {
+    mockMigrationVersion = 99;
+    const pool = new (await import('pg')).Pool();
+    attachPostgresPoolRuntime(pool, createPostgresPoolRuntime({ migrationMode: 'assume-ready' }));
+
+    await expect(createPostgresAdapter({ pool })).resolves.toBeDefined();
   });
 
   // ── Connection / network errors ────────────────────────────────────────────

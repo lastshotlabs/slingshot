@@ -1,4 +1,4 @@
-import { validateGrant } from '@lastshotlabs/slingshot-core';
+import { getPostgresPoolRuntime, validateGrant } from '@lastshotlabs/slingshot-core';
 import type {
   EvaluationScope,
   GrantEffect,
@@ -325,7 +325,9 @@ export type PermissionsPostgresAdapter = TestablePermissionsAdapter;
 export async function createPermissionsPostgresAdapter(
   pool: PoolLike,
 ): Promise<PermissionsPostgresAdapter> {
-  await runMigrations(pool);
+  if (getPostgresPoolRuntime(pool as object)?.migrationMode !== 'assume-ready') {
+    await runMigrations(pool);
+  }
 
   return {
     async createGrant(grant: Omit<PermissionGrant, 'id' | 'grantedAt'>): Promise<string> {

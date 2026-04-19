@@ -46,6 +46,52 @@ describe('slingshot-postgres connection helpers', () => {
     expect(drizzleMock).toHaveBeenCalledWith(MockPool.instances[0]);
     expect(result.pool).toBe(MockPool.instances[0]);
     expect(result.db).toEqual({ kind: 'drizzle', pool: MockPool.instances[0] });
+    expect(typeof result.healthCheck).toBe('function');
+    expect(typeof result.getStats).toBe('function');
+    expect(result.getStats()).toMatchObject({
+      migrationMode: 'apply',
+      queryCount: 1,
+      errorCount: 0,
+      totalCount: 0,
+      idleCount: 0,
+      waitingCount: 0,
+    });
+  });
+
+  test('connectPostgres passes pool sizing and migration options to the runtime', async () => {
+    const { connectPostgres } = await import(`../src/connection.ts?pool=${Date.now()}`);
+
+    const result = await connectPostgres('postgresql://db.example/app', {
+      migrations: 'assume-ready',
+      healthcheckTimeoutMs: 2500,
+      pool: {
+        max: 20,
+        min: 4,
+        idleTimeoutMs: 15_000,
+        connectionTimeoutMs: 2_000,
+        queryTimeoutMs: 1_500,
+        statementTimeoutMs: 1_200,
+        maxUses: 500,
+        allowExitOnIdle: true,
+        keepAlive: true,
+        keepAliveInitialDelayMillis: 3_000,
+      },
+    });
+
+    expect(MockPool.instances[0]?.options).toEqual({
+      connectionString: 'postgresql://db.example/app',
+      max: 20,
+      min: 4,
+      idleTimeoutMillis: 15_000,
+      connectionTimeoutMillis: 2_000,
+      query_timeout: 1_500,
+      statement_timeout: 1_200,
+      maxUses: 500,
+      allowExitOnIdle: true,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 3_000,
+    });
+    expect(result.getStats().migrationMode).toBe('assume-ready');
   });
 
   test('clearPostgresAuthTables truncates child tables before parent tables and re-exports connectPostgres', async () => {

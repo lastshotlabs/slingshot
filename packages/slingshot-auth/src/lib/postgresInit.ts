@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { getPostgresPoolRuntime } from '@lastshotlabs/slingshot-core';
 
 export function createPostgresInitializer(
   pool: Pool,
@@ -9,6 +10,10 @@ export function createPostgresInitializer(
 
   return async () => {
     if (initialized) return;
+    if (getPostgresPoolRuntime(pool)?.migrationMode === 'assume-ready') {
+      initialized = true;
+      return;
+    }
     if (initializationPromise) {
       await initializationPromise;
       return;

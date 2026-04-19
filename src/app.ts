@@ -592,6 +592,7 @@ async function mountAppRoutes<T extends object>(
       assembly.ctx.metrics,
       secretBundle.framework,
       assembly.isProd,
+      infra.postgres,
     );
     return Promise.resolve();
   });

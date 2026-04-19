@@ -15,7 +15,11 @@ describe.skipIf(!isPostgresE2e)('Postgres backend E2E', () => {
   let handle: E2EServerHandle;
 
   beforeAll(async () => {
-    handle = await createTestHttpServer(undefined, undefined, { resetBackend: true });
+    handle = await createTestHttpServer(
+      { metrics: { enabled: true } },
+      undefined,
+      { resetBackend: true },
+    );
   });
 
   afterAll(async () => {
@@ -35,24 +39,44 @@ describe.skipIf(!isPostgresE2e)('Postgres backend E2E', () => {
     expect(token).toBeString();
 
     await handle.stop();
+    handle = await createTestHttpServer({ metrics: { enabled: true } }, undefined, {
+      resetBackend: false,
+    });
 
-    const restarted = await createTestHttpServer(undefined, undefined, { resetBackend: false });
-    try {
-      const meRes = await fetch(`${restarted.baseUrl}/auth/me`, {
-        headers: { 'x-user-token': token },
-      });
-      expect(meRes.status).toBe(200);
-      const me = await meRes.json();
-      expect(me.email).toBe('postgres-restart@example.com');
+    const meRes = await fetch(`${handle.baseUrl}/auth/me`, {
+      headers: { 'x-user-token': token },
+    });
+    expect(meRes.status).toBe(200);
+    const me = await meRes.json();
+    expect(me.email).toBe('postgres-restart@example.com');
 
-      const sessionsRes = await fetch(`${restarted.baseUrl}/auth/sessions`, {
-        headers: { 'x-user-token': token },
-      });
-      expect(sessionsRes.status).toBe(200);
-      const { sessions } = await sessionsRes.json();
-      expect(sessions.length).toBeGreaterThanOrEqual(1);
-    } finally {
-      await restarted.stop();
-    }
+    const sessionsRes = await fetch(`${handle.baseUrl}/auth/sessions`, {
+      headers: { 'x-user-token': token },
+    });
+    expect(sessionsRes.status).toBe(200);
+    const { sessions } = await sessionsRes.json();
+    expect(sessions.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('/health/ready reports postgres readiness', async () => {
+    const res = await fetch(`${handle.baseUrl}/health/ready`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe('ok');
+    expect(body.checks.postgres.ok).toBe(true);
+    expect(body.checks.postgres.pool.total).toBeGreaterThanOrEqual(0);
+    expect(body.checks.postgres.queries.total).toBeGreaterThan(0);
+  });
+
+  test('/metrics exposes postgres operational metrics', async () => {
+    await fetch(`${handle.baseUrl}/health/ready`);
+
+    const res = await fetch(`${handle.baseUrl}/metrics`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('slingshot_postgres_pool_clients');
+    expect(body).toContain('slingshot_postgres_query_count');
+    expect(body).toContain('slingshot_postgres_query_latency_ms');
+    expect(body).toContain('slingshot_postgres_migration_mode');
   });
 });

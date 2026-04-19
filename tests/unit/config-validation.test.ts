@@ -300,6 +300,13 @@ describe('config validation', () => {
         routesDir: '/routes',
         db: {
           postgres: 'postgres://slingshot:test@localhost:5432/app',
+          postgresMigrations: 'assume-ready',
+          postgresPool: {
+            max: 20,
+            min: 4,
+            queryTimeoutMs: 1_500,
+            statementTimeoutMs: 1_000,
+          },
           sessions: 'postgres',
           oauthState: 'postgres',
           cache: 'postgres',

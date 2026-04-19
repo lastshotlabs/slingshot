@@ -360,7 +360,6 @@ function createNodeServer(): RuntimeServerFactory {
 
       /** Wrap a raw `ws` WebSocket in the RuntimeWebSocket contract. */
       function wrapWs(ws: WsWebSocket, data: unknown): RuntimeWebSocket {
-        if (!wsHandler) throw new Error('wrapWs called without a websocket handler');
         const handler = wsHandler;
         const subscribedChannels = new Set<string>();
 

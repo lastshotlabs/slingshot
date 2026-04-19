@@ -106,13 +106,15 @@ describe('PollCreateInputSchema', () => {
   });
 
   it('rejects missing sourceType', () => {
-    const { sourceType, ...rest } = validInput;
+    const { sourceType: _omitSourceType, ...rest } = validInput;
+    void _omitSourceType;
     const result = PollCreateInputSchema.safeParse(rest);
     expect(result.success).toBe(false);
   });
 
   it('rejects missing scopeId', () => {
-    const { scopeId, ...rest } = validInput;
+    const { scopeId: _omitScopeId, ...rest } = validInput;
+    void _omitScopeId;
     const result = PollCreateInputSchema.safeParse(rest);
     expect(result.success).toBe(false);
   });

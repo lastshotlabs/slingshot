@@ -136,8 +136,9 @@ describe('closeSweep', () => {
   });
 
   it('returns a noop handle when intervalMs is 0', () => {
+    const emptyObj = {};
     handle = startCloseSweep({
-      pollAdapter: {} as PollAdapter,
+      pollAdapter: emptyObj as unknown as PollAdapter,
       bus: { emit: () => {} },
       intervalMs: 0,
     });

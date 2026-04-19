@@ -267,7 +267,7 @@ describe('PermissionEvaluator', () => {
     });
 
     const groupResolver = {
-      async getGroupsForUser(userId: string, tenantId: string | null) {
+      async getGroupsForUser(userId: string) {
         if (userId === 'user-1') return ['group-alpha'];
         return [];
       },
@@ -310,7 +310,7 @@ describe('PermissionEvaluator', () => {
     });
 
     const groupResolver = {
-      async getGroupsForUser(userId: string, tenantId: string | null) {
+      async getGroupsForUser(userId: string) {
         if (userId === 'user-1') return ['group-alpha'];
         return [];
       },

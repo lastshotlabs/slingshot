@@ -5,6 +5,10 @@ import { permissionsAdapterFactories } from '../../src/factories';
 import { seedSuperAdmin } from '../../src/lib/bootstrap';
 import { createPermissionsPlugin } from '../../src/plugin';
 
+function asNever<T>(v: T): never {
+  return v as never;
+}
+
 describe('slingshot-permissions bootstrap and plugin wiring', () => {
   test('seedSuperAdmin writes a global super-admin allow grant with defaults', async () => {
     const createGrant = mock(async input => {
@@ -21,7 +25,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       return 'grant-1';
     });
 
-    const grantId = await seedSuperAdmin({ createGrant } as never, {
+    const grantId = await seedSuperAdmin(asNever({ createGrant }), {
       subjectId: 'user-1',
     });
 
@@ -40,7 +44,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     });
 
     await expect(
-      seedSuperAdmin({ createGrant } as never, {
+      seedSuperAdmin(asNever({ createGrant }), {
         subjectId: 'svc-1',
         subjectType: 'service-account',
         grantedBy: 'migration',
@@ -49,10 +53,10 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
   });
 
   test('permissionsAdapterFactories reject redis stores instead of silently falling back', async () => {
-    const memoryAdapter = await permissionsAdapterFactories.memory({} as never);
+    const memoryAdapter = await permissionsAdapterFactories.memory(asNever({}));
 
     expect(typeof memoryAdapter.createGrant).toBe('function');
-    expect(() => permissionsAdapterFactories.redis({} as never)).toThrow(
+    expect(() => permissionsAdapterFactories.redis(asNever({}))).toThrow(
       'Redis permissions adapter is not implemented',
     );
   });
@@ -72,14 +76,14 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     const plugin = createPermissionsPlugin();
 
     await expect(
-      plugin.setupMiddleware?.({
-        app: app as never,
+      plugin.setupMiddleware?.(asNever({
+        app,
         config: {
           resolvedStores: { authStore: 'redis' },
           storeInfra: {},
-        } as never,
-        bus: {} as never,
-      }),
+        },
+        bus: {},
+      })),
     ).rejects.toThrow('Redis is not supported as a permissions store');
   });
 
@@ -90,14 +94,14 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     const plugin = createPermissionsPlugin();
 
-    await plugin.setupMiddleware?.({
-      app: app as never,
+    await plugin.setupMiddleware?.(asNever({
+      app,
       config: {
         resolvedStores: { authStore: 'memory' },
         storeInfra: {},
-      } as never,
-      bus: {} as never,
-    });
+      },
+      bus: {},
+    }));
 
     const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as Record<string, unknown> | undefined;
     expect(plugin.name).toBe('slingshot-permissions');
@@ -116,14 +120,14 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     const plugin = createPermissionsPlugin();
 
-    await plugin.setupMiddleware?.({
-      app: app as never,
+    await plugin.setupMiddleware?.(asNever({
+      app,
       config: {
         resolvedStores: { authStore: 'memory' },
         storeInfra: {},
-      } as never,
-      bus: {} as never,
-    });
+      },
+      bus: {},
+    }));
 
     expect(ctx.pluginState.get(PERMISSIONS_STATE_KEY)).toBe(sentinel);
   });
@@ -150,14 +154,14 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     const plugin = createPermissionsPlugin();
 
-    await plugin.setupMiddleware?.({
-      app: app as never,
+    await plugin.setupMiddleware?.(asNever({
+      app,
       config: {
         resolvedStores: { authStore: 'memory' },
         storeInfra: {},
-      } as never,
-      bus: {} as never,
-    });
+      },
+      bus: {},
+    }));
 
     const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as
       | {

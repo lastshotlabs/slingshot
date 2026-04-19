@@ -6,7 +6,7 @@ const headers = (userId: string) => ({
   'content-type': 'application/json',
 });
 
-async function createTestPoll(app: { request: Function }, userId = 'user-1'): Promise<string> {
+async function createTestPoll(app: { request: (...args: unknown[]) => unknown }, userId = 'user-1'): Promise<string> {
   const res = await app.request('/polls/polls', {
     method: 'POST',
     headers: headers(userId),

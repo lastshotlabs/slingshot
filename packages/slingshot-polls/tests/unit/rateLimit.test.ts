@@ -205,7 +205,7 @@ describe('buildRateLimitMiddleware', () => {
   it('checks per-user before per-tenant', async () => {
     const calls: string[] = [];
     const backend: RateLimitBackend = {
-      async check(key, _w, _m) {
+      async check(key) {
         calls.push(key);
         return { allowed: true, remaining: 10, resetAt: Date.now() + 60_000 };
       },

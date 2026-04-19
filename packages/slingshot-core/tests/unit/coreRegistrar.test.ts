@@ -1,0 +1,158 @@
+import { describe, expect, test } from 'bun:test';
+import { createCoreRegistrar } from '../../src/coreRegistrar';
+
+function createMiddleware() {
+  return (async (_c: unknown, next: () => Promise<void>) => {
+    await next();
+  }) as never;
+}
+
+describe('createCoreRegistrar', () => {
+  test('drain returns nulls for unregistered dependencies', () => {
+    const { drain } = createCoreRegistrar();
+    const snapshot = drain();
+
+    expect(snapshot.routeAuth).toBeNull();
+    expect(snapshot.userResolver).toBeNull();
+    expect(snapshot.rateLimitAdapter).toBeNull();
+    expect(snapshot.fingerprintBuilder).toBeNull();
+    expect(snapshot.cacheAdapters.size).toBe(0);
+    expect(snapshot.emailTemplates.size).toBe(0);
+  });
+
+  test('registrar methods populate snapshot values', () => {
+    const { registrar, drain } = createCoreRegistrar();
+
+    const routeAuth = {
+      userAuth: createMiddleware(),
+      requireRole: () => createMiddleware(),
+      bearerAuth: createMiddleware(),
+    };
+    const userResolver = {
+      async resolveUserId(): Promise<string | null> {
+        return 'user-1';
+      },
+    };
+    const rateLimitAdapter = {
+      async trackAttempt(): Promise<boolean> {
+        return false;
+      },
+    };
+    const fingerprintBuilder = {
+      async buildFingerprint(): Promise<string> {
+        return 'fp';
+      },
+    };
+
+    registrar.setRouteAuth(routeAuth);
+    registrar.setUserResolver(userResolver);
+    registrar.setRateLimitAdapter(rateLimitAdapter);
+    registrar.setFingerprintBuilder(fingerprintBuilder);
+
+    const snapshot = drain();
+
+    expect(snapshot.routeAuth).toBe(routeAuth);
+    expect(snapshot.userResolver).toBe(userResolver);
+    expect(snapshot.rateLimitAdapter).toBe(rateLimitAdapter);
+    expect(snapshot.fingerprintBuilder).toBe(fingerprintBuilder);
+  });
+
+  test('registrar is frozen — properties cannot be reassigned', () => {
+    const { registrar } = createCoreRegistrar();
+    expect(Object.isFrozen(registrar)).toBe(true);
+  });
+
+  test('all setter methods throw after drain (sealed)', () => {
+    const { registrar, drain } = createCoreRegistrar();
+    drain();
+
+    expect(() => registrar.setRouteAuth({} as never)).toThrow(
+      'CoreRegistrar is finalized; setRouteAuth() cannot be called after drain().',
+    );
+    expect(() => registrar.setUserResolver({} as never)).toThrow(
+      'CoreRegistrar is finalized; setUserResolver() cannot be called after drain().',
+    );
+    expect(() => registrar.setRateLimitAdapter({} as never)).toThrow(
+      'CoreRegistrar is finalized; setRateLimitAdapter() cannot be called after drain().',
+    );
+    expect(() => registrar.setFingerprintBuilder({} as never)).toThrow(
+      'CoreRegistrar is finalized; setFingerprintBuilder() cannot be called after drain().',
+    );
+    expect(() => registrar.addCacheAdapter('memory' as never, {} as never)).toThrow(
+      'CoreRegistrar is finalized; addCacheAdapter() cannot be called after drain().',
+    );
+    expect(() => registrar.addEmailTemplates({} as never)).toThrow(
+      'CoreRegistrar is finalized; addEmailTemplates() cannot be called after drain().',
+    );
+  });
+
+  test('addCacheAdapter stores adapters by store name', () => {
+    const { registrar, drain } = createCoreRegistrar();
+    const memAdapter = { name: 'memory' } as never;
+    const redisAdapter = { name: 'redis' } as never;
+
+    registrar.addCacheAdapter('memory' as never, memAdapter);
+    registrar.addCacheAdapter('redis' as never, redisAdapter);
+
+    const snapshot = drain();
+    expect(snapshot.cacheAdapters.get('memory' as never)).toBe(memAdapter);
+    expect(snapshot.cacheAdapters.get('redis' as never)).toBe(redisAdapter);
+    expect(snapshot.cacheAdapters.size).toBe(2);
+  });
+
+  test('addEmailTemplates merges multiple template sets', () => {
+    const { registrar, drain } = createCoreRegistrar();
+
+    registrar.addEmailTemplates({
+      welcome: { subject: 'Welcome', html: '<p>Welcome</p>' },
+    } as never);
+    registrar.addEmailTemplates({
+      reset: { subject: 'Reset', html: '<p>Reset</p>' },
+    } as never);
+
+    const snapshot = drain();
+    expect(snapshot.emailTemplates.size).toBe(2);
+    expect(snapshot.emailTemplates.get('welcome')).toEqual({
+      subject: 'Welcome',
+      html: '<p>Welcome</p>',
+    });
+    expect(snapshot.emailTemplates.get('reset')).toEqual({
+      subject: 'Reset',
+      html: '<p>Reset</p>',
+    });
+  });
+
+  test('drain returns independent snapshots of maps', () => {
+    const { registrar, drain } = createCoreRegistrar();
+    const adapter = { name: 'memory' } as never;
+
+    registrar.addCacheAdapter('memory' as never, adapter);
+
+    const first = drain();
+    // Mutating the first snapshot's map should not affect future drain() calls
+    first.cacheAdapters.set('redis' as never, {} as never);
+
+    const second = drain();
+    expect(second.cacheAdapters.has('redis' as never)).toBe(false);
+    expect(second.cacheAdapters.get('memory' as never)).toBe(adapter);
+  });
+
+  test('drain can be called multiple times safely', () => {
+    const { registrar, drain } = createCoreRegistrar();
+    const routeAuth = {
+      userAuth: createMiddleware(),
+      requireRole: () => createMiddleware(),
+      bearerAuth: createMiddleware(),
+    };
+
+    registrar.setRouteAuth(routeAuth);
+
+    const first = drain();
+    const second = drain();
+
+    expect(first.routeAuth).toBe(routeAuth);
+    expect(second.routeAuth).toBe(routeAuth);
+    // They should be different object references
+    expect(first).not.toBe(second);
+  });
+});

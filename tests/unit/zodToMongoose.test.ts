@@ -10,6 +10,7 @@ import { z } from 'zod';
 // Mock the mongo module so getMongooseModule returns a mongoose-like object
 // with a Schema class and Schema.Types.Mixed / Schema.Types.ObjectId
 mock.module('@lib/mongo', () => {
+  // eslint-disable-next-line @typescript-eslint/no-extraneous-class
   class MockSchema {
     static Types = {
       Mixed: 'Mixed',
@@ -171,7 +172,6 @@ describe('zodToMongoose — config options', () => {
       ownerId: z.string(),
       status: z.enum(['draft', 'published']).optional(),
     });
-    const fakeSchema = { name: 'SubDoc' } as any;
 
     const result = zodToMongoose(schema, {
       refs: { ownerId: { dbField: 'owner', ref: 'User' } },

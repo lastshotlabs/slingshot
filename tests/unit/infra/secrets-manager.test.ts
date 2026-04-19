@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -11,7 +11,7 @@ describe('createSecretsManager - env provider', () => {
     // Restore original env
     for (const key of Object.keys(process.env)) {
       if (!(key in originalEnv)) {
-        delete process.env[key];
+        Reflect.deleteProperty(process.env, key);
       }
     }
     Object.assign(process.env, originalEnv);
@@ -61,7 +61,6 @@ describe('createSecretsManager - file provider', () => {
     secretsDir = join(tempDir, 'secrets');
     appRoot = join(tempDir, 'app');
     // Create app root directory
-    const { mkdirSync } = require('node:fs');
     mkdirSync(appRoot, { recursive: true });
   });
 
@@ -110,7 +109,6 @@ describe('createSecretsManager - file provider', () => {
   });
 
   it('pull reads key files into .env', async () => {
-    const { mkdirSync } = require('node:fs');
     mkdirSync(secretsDir, { recursive: true });
     writeFileSync(join(secretsDir, 'DB_URL'), 'postgres://prod-db');
     writeFileSync(join(secretsDir, 'REDIS_URL'), 'redis://prod-redis');
@@ -126,7 +124,6 @@ describe('createSecretsManager - file provider', () => {
   });
 
   it('pull skips missing key files', async () => {
-    const { mkdirSync } = require('node:fs');
     mkdirSync(secretsDir, { recursive: true });
     writeFileSync(join(secretsDir, 'EXISTS'), 'val');
 
@@ -137,7 +134,6 @@ describe('createSecretsManager - file provider', () => {
   });
 
   it('check finds existing key files and reports missing', async () => {
-    const { mkdirSync } = require('node:fs');
     mkdirSync(secretsDir, { recursive: true });
     writeFileSync(join(secretsDir, 'FOUND_KEY'), 'val');
 

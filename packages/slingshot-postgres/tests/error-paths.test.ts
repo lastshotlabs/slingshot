@@ -48,7 +48,7 @@ function makeBuilder(result: unknown, error: Error | null): DrizzleBuilder {
       if (prop === Symbol.toStringTag) return 'MockBuilder';
       // All other property accesses (from, where, set, values, limit, offset,
       // onConflictDoNothing, etc.) return a function that returns the same proxy.
-      return (..._args: unknown[]) => proxy;
+      return () => proxy;
     },
   }) as DrizzleBuilder;
   return proxy;
@@ -70,14 +70,13 @@ function resolvingBuilder(value: unknown): ReturnType<typeof makeBuilder> {
 mock.module('pg', () => {
   return {
     Pool: class MockPool {
-      constructor(_opts: unknown) {}
       // runMigrations uses pool.connect() + PoolClient, not pool.query() directly.
       connect(): Promise<{
         query(sql: string, params?: unknown[]): Promise<{ rows: unknown[]; rowCount: number }>;
         release(): void;
       }> {
         return Promise.resolve({
-          query(_sql: string, _params?: unknown[]) {
+          query() {
             // Return version = 2 (= MIGRATIONS.length) so runMigrations is a no-op.
             return Promise.resolve({ rows: [{ version: 2 }], rowCount: 1 });
           },
@@ -96,7 +95,7 @@ mock.module('pg', () => {
 
 mock.module('drizzle-orm/node-postgres', () => {
   return {
-    drizzle: (_pool: unknown) => {
+    drizzle: () => {
       return new Proxy(
         {},
         {
@@ -277,7 +276,7 @@ describe('slingshot-postgres adapter — error paths', () => {
     test('setRoles: transaction failure propagates to caller', async () => {
       const err = new Error('deadlock detected');
       mockDbImpl = {
-        transaction: async (_fn: (tx: unknown) => Promise<unknown>) => {
+        transaction: async () => {
           throw err;
         },
       };
@@ -288,7 +287,7 @@ describe('slingshot-postgres adapter — error paths', () => {
     test('setTenantRoles: transaction failure propagates to caller', async () => {
       const err = new Error('connection reset during transaction');
       mockDbImpl = {
-        transaction: async (_fn: (tx: unknown) => Promise<unknown>) => {
+        transaction: async () => {
           throw err;
         },
       };
@@ -307,7 +306,7 @@ describe('slingshot-postgres adapter — error paths', () => {
           if (callCount === 1) return resolvingBuilder([]);
           return resolvingBuilder([]);
         },
-        transaction: async (_fn: (tx: unknown) => Promise<unknown>) => {
+        transaction: async () => {
           throw transactionErr;
         },
       };
@@ -320,7 +319,7 @@ describe('slingshot-postgres adapter — error paths', () => {
     test('listUsers: transaction failure propagates to caller', async () => {
       const err = new Error('serialization failure');
       mockDbImpl = {
-        transaction: async (_fn: (tx: unknown) => Promise<unknown>) => {
+        transaction: async () => {
           throw err;
         },
       };
@@ -331,7 +330,7 @@ describe('slingshot-postgres adapter — error paths', () => {
     test('setRecoveryCodes: transaction failure propagates to caller', async () => {
       const err = new Error('deadlock on recovery codes');
       mockDbImpl = {
-        transaction: async (_fn: (tx: unknown) => Promise<unknown>) => {
+        transaction: async () => {
           throw err;
         },
       };
@@ -384,9 +383,9 @@ describe('slingshot-postgres adapter — error paths', () => {
           const tx = new Proxy(
             {},
             {
-              get(_t, prop) {
+              get() {
                 const builder = resolvingBuilder([{ count: '0' }]);
-                return (..._args: unknown[]) => builder;
+                return () => builder;
               },
             },
           );
@@ -406,9 +405,9 @@ describe('slingshot-postgres adapter — error paths', () => {
           const tx = new Proxy(
             {},
             {
-              get(_t, prop) {
+              get() {
                 const builder = resolvingBuilder([{ count: '0' }]);
-                return (..._args: unknown[]) => builder;
+                return () => builder;
               },
             },
           );
@@ -428,9 +427,9 @@ describe('slingshot-postgres adapter — error paths', () => {
           const tx = new Proxy(
             {},
             {
-              get(_t, prop) {
+              get() {
                 const builder = resolvingBuilder([{ count: '0' }]);
-                return (..._args: unknown[]) => builder;
+                return () => builder;
               },
             },
           );

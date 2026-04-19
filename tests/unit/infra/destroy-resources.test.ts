@@ -5,7 +5,6 @@ import type {
   RegistryDocument,
   RegistryProvider,
 } from '../../../packages/slingshot-infra/src/types/registry';
-import type { ResourceProvisionerContext } from '../../../packages/slingshot-infra/src/types/resource';
 
 // ---------------------------------------------------------------------------
 // Fixtures

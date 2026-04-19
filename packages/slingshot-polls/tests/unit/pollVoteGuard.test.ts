@@ -179,7 +179,6 @@ describe('pollVoteGuard', () => {
 
   // Enterprise invariant: "Same user votes multiple options on multi-select"
   it('allows multi-select vote even if user already voted another option', async () => {
-    const nextCalled = mock(() => {});
     const app = createTestApp(
       { getById: async () => makePoll({ multiSelect: true }) },
       {

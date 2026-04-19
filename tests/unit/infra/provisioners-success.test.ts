@@ -120,7 +120,7 @@ function makeAtlasFetch(
 }
 
 function makeCtx(overrides: Partial<ResourceProvisionerContext> = {}): ResourceProvisionerContext {
-  return {
+  const ctx = {
     resourceName: 'docs',
     config: {
       type: 'documentdb',
@@ -133,7 +133,8 @@ function makeCtx(overrides: Partial<ResourceProvisionerContext> = {}): ResourceP
     region: 'us-east-1',
     platform: 'testorg',
     ...overrides,
-  } as ResourceProvisionerContext;
+  };
+  return ctx as ResourceProvisionerContext;
 }
 
 describe('provisioner success paths', () => {
@@ -210,23 +211,25 @@ describe('provisioner success paths', () => {
     }) as typeof Date.now;
 
     const provisioner = createMongoProvisioner();
-    const result = await provisioner.provision({
+    const mongoConfig = {
+      type: 'mongo',
+      provision: true,
+      atlas: {
+        orgId: 'org-1',
+        projectId: 'proj-1',
+      },
+      stages: {
+        dev: { instanceClass: 'M20' },
+      },
+    } as MongoResourceConfig;
+    const mongoCtx = {
       resourceName: 'mongo',
-      config: {
-        type: 'mongo',
-        provision: true,
-        atlas: {
-          orgId: 'org-1',
-          projectId: 'proj-1',
-        },
-        stages: {
-          dev: { instanceClass: 'M20' },
-        },
-      } as MongoResourceConfig,
+      config: mongoConfig,
       stageName: 'dev',
       region: 'us-east-1',
       platform: 'testorg',
-    } as ResourceProvisionerContext);
+    } as ResourceProvisionerContext;
+    const result = await provisioner.provision(mongoCtx);
 
     expect(result.status).toBe('provisioned');
     expect(result.connectionEnv.MONGO_URL).toContain('mongodb+srv://');
@@ -253,20 +256,22 @@ describe('provisioner success paths', () => {
     }) as typeof Date.now;
 
     const provisioner = createMongoProvisioner();
-    await provisioner.destroy({
+    const destroyMongoConfig = {
+      type: 'mongo',
+      provision: true,
+      atlas: {
+        orgId: 'org-1',
+        projectId: 'proj-1',
+      },
+    } as MongoResourceConfig;
+    const destroyCtx = {
       resourceName: 'mongo',
-      config: {
-        type: 'mongo',
-        provision: true,
-        atlas: {
-          orgId: 'org-1',
-          projectId: 'proj-1',
-        },
-      } as MongoResourceConfig,
+      config: destroyMongoConfig,
       stageName: 'dev',
       region: 'us-east-1',
       platform: 'testorg',
-    } as ResourceProvisionerContext);
+    } as ResourceProvisionerContext;
+    await provisioner.destroy(destroyCtx);
 
     // destroy() calls: DELETE cluster, DELETE user, GET cluster (poll until gone)
     // Each is a 2-step digest flow (challenge + authenticated), so 6 fetch calls total

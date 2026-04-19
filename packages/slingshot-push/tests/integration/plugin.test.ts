@@ -32,7 +32,7 @@ import { TEST_VAPID } from '../../src/testing';
 // Mock web-push before any provider creates
 // ---------------------------------------------------------------------------
 
-const mockSendNotification = mock((..._args: unknown[]) => Promise.resolve());
+const mockSendNotification = mock(() => Promise.resolve());
 
 mock.module('web-push', () => ({
   default: { sendNotification: mockSendNotification },
@@ -672,7 +672,7 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
 
 describe('createPushPlugin — manifest-first boot', () => {
   test('boots from plain JSON-serializable config object', async () => {
-    const config = JSON.parse(
+    JSON.parse(
       JSON.stringify({
         enabledPlatforms: ['web'],
         web: { vapid: TEST_VAPID },

@@ -82,7 +82,7 @@ describe('createWsUpgradeHandler', () => {
     resolveUserIdMock.mockImplementation(async () => 'user-42');
     let capturedData: any = null;
     const server = createMockServer({
-      upgrade: (_req: unknown, opts: any) => {
+      upgrade: (_req: Request, opts: any) => {
         capturedData = opts?.data;
         return true;
       },

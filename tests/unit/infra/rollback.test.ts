@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { runRollback } from '../../../packages/slingshot-infra/src/deploy/rollback';
-import type { RollbackOptions } from '../../../packages/slingshot-infra/src/deploy/rollback';
+
 import type { DefineInfraConfig } from '../../../packages/slingshot-infra/src/types/infra';
 import type { DefinePlatformConfig } from '../../../packages/slingshot-infra/src/types/platform';
 import type { PresetProvider } from '../../../packages/slingshot-infra/src/types/preset';
@@ -67,7 +67,7 @@ function createMockPreset(): PresetProvider {
 }
 
 function createMockPresetRegistry(preset: PresetProvider) {
-  return { get: (_name: string) => preset };
+  return { get: () => preset };
 }
 
 describe('runRollback', () => {

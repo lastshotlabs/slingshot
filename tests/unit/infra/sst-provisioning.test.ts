@@ -22,6 +22,7 @@ mock.module('../../../packages/slingshot-infra/src/resource/provisionViaSst', ()
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { spawnSync } = require('node:child_process') as typeof import('node:child_process');
 
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } =
     require('node:fs') as typeof import('node:fs');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -169,7 +170,7 @@ function createMockRunner(
 ): { runner: ProcessRunner; calls: Array<{ cmd: string; args: string[] }> } {
   const calls: Array<{ cmd: string; args: string[] }> = [];
 
-  const runner: ProcessRunner = (cmd, args, _opts) => {
+  const runner: ProcessRunner = (cmd, args) => {
     calls.push({ cmd, args: [...args] });
     if (behavior === 'success') {
       return {

@@ -46,9 +46,9 @@ describe('loadWorkers', () => {
       createDLQHandler: mock(() => {
         throw new Error('not used');
       }),
-    } as never);
+    } as unknown as never);
 
-    const save = mock(async (_names: ReadonlySet<string>) => {});
+    const save = mock(async () => {});
 
     await loadWorkers({
       workersDir: workersDir.replace(/\\/g, '/'),
@@ -56,7 +56,7 @@ describe('loadWorkers', () => {
         glob: {
           scan: async () => ['worker-a.ts'],
         },
-      } as never,
+      } as unknown as never,
       resolvedSecrets: {
         redisHost: '127.0.0.1:6379',
       },
@@ -96,7 +96,7 @@ describe('loadWorkers', () => {
     const createQueueFactory = spyOn(queueModule, 'createQueueFactory').mockImplementation(() => {
       throw new Error('Cannot find module bullmq');
     });
-    const save = mock(async (_names: ReadonlySet<string>) => {});
+    const save = mock(async () => {});
 
     // Should not throw — error is swallowed silently
     await expect(
@@ -106,7 +106,7 @@ describe('loadWorkers', () => {
           glob: {
             scan: async () => ['worker-safe.ts'],
           },
-        } as never,
+        } as unknown as never,
         resolvedSecrets: {
           redisHost: '127.0.0.1:6379',
         },
@@ -144,16 +144,16 @@ describe('loadWorkers', () => {
       createCronWorker: mock(() => { throw new Error('not used'); }),
       cleanupStaleSchedulers,
       createDLQHandler: mock(() => { throw new Error('not used'); }),
-    } as never);
+    } as unknown as never);
 
-    const save = mock(async (_names: ReadonlySet<string>) => {});
+    const save = mock(async () => {});
 
     await expect(
       loadWorkers({
         workersDir: workersDir.replace(/\\/g, '/'),
         runtime: {
           glob: { scan: async () => ['worker-c.ts'] },
-        } as never,
+        } as unknown as never,
         resolvedSecrets: { redisHost: '127.0.0.1:6379' },
         persistence: {
           cronRegistry: {
@@ -176,7 +176,7 @@ describe('loadWorkers', () => {
     );
 
     const createQueueFactory = spyOn(queueModule, 'createQueueFactory');
-    const save = mock(async (_names: ReadonlySet<string>) => {});
+    const save = mock(async () => {});
 
     await loadWorkers({
       workersDir: workersDir.replace(/\\/g, '/'),
@@ -184,7 +184,7 @@ describe('loadWorkers', () => {
         glob: {
           scan: async () => ['worker-b.ts'],
         },
-      } as never,
+      } as unknown as never,
       resolvedSecrets: {},
       persistence: {
         cronRegistry: {

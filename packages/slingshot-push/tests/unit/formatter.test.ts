@@ -4,7 +4,7 @@
  * Tests ${path} interpolation, fallback behavior, runtime registration,
  * and dataTemplate expansion.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { NotificationRecord } from '@lastshotlabs/slingshot-notifications';
 import { compilePushFormatters } from '../../src/formatter';
 import type { PushFormatterTemplate } from '../../src/types/config';

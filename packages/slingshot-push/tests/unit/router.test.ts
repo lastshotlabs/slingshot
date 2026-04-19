@@ -4,7 +4,7 @@
  * Tests routing by platform, fan-out, invalid-token cleanup, retry backoff,
  * topic publish, and unknown-platform skip behavior.
  */
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import type { PushProvider } from '../../src/providers/provider';
 import { createPushRouter } from '../../src/router';
 import type { PushRouterRepos } from '../../src/router';
@@ -61,10 +61,11 @@ function createFakeRepos(): PushRouterRepos & {
 
     subscriptions: {
       create: async input => {
-        const sub = {
+        const raw = {
           ...(input as Record<string, unknown>),
           id: nextId(),
-        } as PushSubscriptionRecord;
+        };
+        const sub = raw as unknown as PushSubscriptionRecord;
         subscriptions.push(sub);
         return sub;
       },
@@ -100,7 +101,8 @@ function createFakeRepos(): PushRouterRepos & {
           Object.assign(existing, p);
           return existing;
         }
-        const sub = { ...p, id: nextId() } as PushSubscriptionRecord;
+        const rawSub = { ...p, id: nextId() };
+        const sub = rawSub as unknown as PushSubscriptionRecord;
         subscriptions.push(sub);
         return sub;
       },
@@ -126,7 +128,8 @@ function createFakeRepos(): PushRouterRepos & {
           x => x.topicId === p['topicId'] && x.subscriptionId === p['subscriptionId'],
         );
         if (!m) {
-          m = { ...p, id: nextId(), createdAt: new Date() } as PushTopicMembershipRecord;
+          const rawM = { ...p, id: nextId(), createdAt: new Date() };
+          m = rawM as unknown as PushTopicMembershipRecord;
           memberships.push(m);
         }
         return m;

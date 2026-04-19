@@ -77,4 +77,63 @@ describe('manifestToSsgConfig', () => {
 
     expect(() => manifestToSsgConfig(manifest)).toThrow('manifest.ssg.enabled is false');
   });
+
+  it('throws when renderer handler ref is missing (requireHandlerRef — line 44)', () => {
+    // No ssg.renderer and no ssr.renderer
+    const manifest: AppManifest = {
+      manifestVersion: 1,
+      ssr: {
+        serverRoutesDir: './server/routes',
+        assetsManifest: './dist/manifest.json',
+        // renderer intentionally omitted — will be undefined
+      } as any,
+    };
+
+    expect(() => manifestToSsgConfig(manifest)).toThrow('[manifestToSsgConfig] Missing required handler ref');
+  });
+
+  it('throws when assetsManifest string is missing (requireString — line 52)', () => {
+    const registry = createManifestHandlerRegistry();
+    const renderer = {
+      resolve: async () => null,
+      render: async () => new Response('ok'),
+      renderChain: async () => new Response('ok'),
+    };
+    registry.registerHandler('ssrRenderer', () => renderer);
+
+    const manifest: AppManifest = {
+      manifestVersion: 1,
+      ssr: {
+        renderer: { handler: 'ssrRenderer' },
+        serverRoutesDir: './server/routes',
+        // assetsManifest intentionally omitted
+      } as any,
+    };
+
+    expect(() => manifestToSsgConfig(manifest, registry)).toThrow('[manifestToSsgConfig] Missing required string value');
+  });
+
+  it('rejects inline JSON assets manifest (lines 92-93)', () => {
+    const registry = createManifestHandlerRegistry();
+    const renderer = {
+      resolve: async () => null,
+      render: async () => new Response('ok'),
+      renderChain: async () => new Response('ok'),
+    };
+    registry.registerHandler('ssrRenderer', () => renderer);
+
+    const manifest: AppManifest = {
+      manifestVersion: 1,
+      ssr: {
+        renderer: { handler: 'ssrRenderer' },
+        serverRoutesDir: './server/routes',
+        // Inline JSON object as string (starts with "{")
+        assetsManifest: '{"chunks":{"main":{"file":"main.js"}}}',
+      },
+    };
+
+    expect(() => manifestToSsgConfig(manifest, registry)).toThrow(
+      'Inline JSON assets manifests are not supported for SSG builds',
+    );
+  });
 });

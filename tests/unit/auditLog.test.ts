@@ -1,11 +1,12 @@
 import { Database } from 'bun:sqlite';
-import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import {
   type AuditLogEntry,
   type AuditLogProvider,
   DEFAULT_MAX_ENTRIES,
 } from '@lastshotlabs/slingshot-core';
-import { createAuditLogProvider } from '../../src/framework/auditLog';
+import { createAuditLogProvider, createAuditLogFactories, auditLogFactories } from '../../src/framework/auditLog';
+import { decodeCursor } from '../../src/framework/auditLog/cursor';
 
 function makeEntry(overrides?: Partial<AuditLogEntry>): AuditLogEntry {
   return {
@@ -152,6 +153,30 @@ describe('auditLog — memory store', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// auditLog — createAuditLogProvider error paths (lines 40-47)
+// ---------------------------------------------------------------------------
+
+describe('createAuditLogProvider — error paths', () => {
+  test('throws when store is sqlite but no db is provided', () => {
+    expect(() => createAuditLogProvider({ store: 'sqlite' })).toThrow(
+      /sqlite.*no db instance/i,
+    );
+  });
+
+  test('throws when store is mongo but no connection is provided', () => {
+    expect(() => createAuditLogProvider({ store: 'mongo' })).toThrow(
+      /mongo.*no connection/i,
+    );
+  });
+
+  test('throws a helpful message for postgres directing to createAuditLogFactories', () => {
+    expect(() => createAuditLogProvider({ store: 'postgres' as any })).toThrow(
+      /createAuditLogFactories/,
+    );
+  });
+});
+
 describe('auditLog — SQLite store', () => {
   let db: Database;
   let provider: AuditLogProvider;
@@ -230,5 +255,215 @@ describe('auditLog — SQLite store', () => {
   test('storage error does not throw (caught internally)', async () => {
     db.close();
     await expect(provider.logEntry(makeEntry())).resolves.toBeUndefined();
+  });
+
+  test('ttlDays prunes entries older than the cutoff on each write (lines 71-72)', async () => {
+    const db2 = new Database(':memory:');
+    const ttlProvider = createAuditLogProvider({ store: 'sqlite', db: db2, ttlDays: 1 });
+
+    // Write an old entry (2 days ago)
+    const old = makeEntry({
+      id: 'old-entry',
+      createdAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+    });
+    await ttlProvider.logEntry(old);
+
+    // Write a fresh entry — this triggers the TTL DELETE
+    const fresh = makeEntry({ id: 'fresh-entry', createdAt: new Date().toISOString() });
+    await ttlProvider.logEntry(fresh);
+
+    const { items } = await ttlProvider.getLogs({ limit: 100 });
+    const ids = items.map(e => e.id);
+    expect(ids).not.toContain('old-entry');
+    expect(ids).toContain('fresh-entry');
+
+    db2.close();
+  });
+
+  test('filter by tenantId (lines 94-95)', async () => {
+    await provider.logEntry(makeEntry({ tenantId: 'tenant-a' }));
+    await provider.logEntry(makeEntry({ tenantId: 'tenant-b' }));
+
+    const { items } = await provider.getLogs({ tenantId: 'tenant-a' });
+    expect(items.length).toBe(1);
+    expect(items[0].tenantId).toBe('tenant-a');
+  });
+
+  test('filter by after date (lines 98-99)', async () => {
+    const t0 = new Date('2024-01-01T00:00:00Z');
+    const t1 = new Date('2024-06-01T00:00:00Z');
+    await provider.logEntry(makeEntry({ createdAt: t0.toISOString() }));
+    await provider.logEntry(makeEntry({ createdAt: t1.toISOString() }));
+
+    const { items } = await provider.getLogs({ after: new Date('2024-03-01') });
+    expect(items.length).toBe(1);
+    expect(items[0].createdAt).toBe(t1.toISOString());
+  });
+
+  test('filter by before date (lines 102-103)', async () => {
+    const t0 = new Date('2024-01-01T00:00:00Z');
+    const t1 = new Date('2024-06-01T00:00:00Z');
+    await provider.logEntry(makeEntry({ createdAt: t0.toISOString() }));
+    await provider.logEntry(makeEntry({ createdAt: t1.toISOString() }));
+
+    const { items } = await provider.getLogs({ before: new Date('2024-03-01') });
+    expect(items.length).toBe(1);
+    expect(items[0].createdAt).toBe(t0.toISOString());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cursor.ts — decodeCursor invalid shape (lines 23-24)
+// ---------------------------------------------------------------------------
+
+describe('auditLog cursor — decodeCursor', () => {
+  test('returns null for valid base64/JSON but wrong shape (missing t)', () => {
+    // Encode a JSON object that lacks a proper "t" field — parses fine but shape fails
+    const badCursor = btoa(JSON.stringify({ id: 'abc', notT: 'something' }));
+    expect(decodeCursor(badCursor)).toBeNull();
+  });
+
+  test('returns null for valid base64/JSON but t is not a valid date string', () => {
+    const badCursor = btoa(JSON.stringify({ t: 'not-a-date', id: 'abc' }));
+    expect(decodeCursor(badCursor)).toBeNull();
+  });
+
+  test('returns null for valid base64/JSON but id is empty string', () => {
+    const badCursor = btoa(JSON.stringify({ t: '2024-01-01T00:00:00.000Z', id: '' }));
+    expect(decodeCursor(badCursor)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createAuditLogFactories and auditLogFactories
+// ---------------------------------------------------------------------------
+
+describe('createAuditLogFactories', () => {
+  test('returns factory map with all required keys', () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const factories = createAuditLogFactories();
+    expect(factories.memory).toBeTypeOf('function');
+    expect(factories.sqlite).toBeTypeOf('function');
+    expect(factories.redis).toBeTypeOf('function');
+    expect(factories.mongo).toBeTypeOf('function');
+    expect(factories.postgres).toBeTypeOf('function');
+    warnSpy.mockRestore();
+  });
+
+  test('memory factory creates a working provider', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const factories = createAuditLogFactories(7);
+    const provider = factories.memory({} as any);
+    await provider.logEntry(makeEntry());
+    const { items } = await provider.getLogs({});
+    expect(items).toHaveLength(1);
+    warnSpy.mockRestore();
+  });
+
+  test('redis factory falls back to memory provider', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const factories = createAuditLogFactories();
+    const provider = factories.redis({} as any);
+    await provider.logEntry(makeEntry());
+    const { items } = await provider.getLogs({});
+    expect(items).toHaveLength(1);
+    warnSpy.mockRestore();
+  });
+
+  test('sqlite factory creates provider when db is available', () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const factories = createAuditLogFactories();
+    const sqlDb = new Database(':memory:');
+    const provider = factories.sqlite({ getSqliteDb: () => sqlDb } as any);
+    expect(provider.logEntry).toBeTypeOf('function');
+    sqlDb.close();
+    warnSpy.mockRestore();
+  });
+
+  test('mongo factory creates provider when conn is available', () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const factories = createAuditLogFactories();
+    // Minimal mock connection — createMongoAuditLogProvider only needs conn
+    const mockConn = {
+      models: {} as Record<string, unknown>,
+      model: (_name: string, _schema: unknown) => ({
+        create: async () => {},
+        find: () => ({ sort: () => ({ limit: () => ({ lean: async () => [] }) }) }),
+      }),
+    };
+    const provider = factories.mongo({ getMongo: () => ({ conn: mockConn }) } as any);
+    expect(provider.logEntry).toBeTypeOf('function');
+    warnSpy.mockRestore();
+  });
+
+  test('postgres factory creates provider when pool is available', () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const factories = createAuditLogFactories();
+    const mockPool = {
+      query: async () => ({ rows: [], rowCount: 0 }),
+    };
+    const provider = factories.postgres({ getPostgres: () => ({ pool: mockPool }) } as any);
+    expect(provider.logEntry).toBeTypeOf('function');
+    warnSpy.mockRestore();
+  });
+});
+
+describe('auditLogFactories (deprecated export)', () => {
+  test('memory factory from deprecated export works', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const provider = auditLogFactories.memory({} as any);
+    await provider.logEntry(makeEntry());
+    const { items } = await provider.getLogs({});
+    expect(items).toHaveLength(1);
+    warnSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getAuditLogModel — Mongoose model registration (src/framework/models/AuditLog.ts)
+// ---------------------------------------------------------------------------
+
+describe('getAuditLogModel', () => {
+  test('creates AuditLog model on first call and returns cached on second', async () => {
+    // Mock schema with index method
+    const mockSchema = {
+      index: mock(() => {}),
+    };
+    const mockModel = { modelName: 'AuditLog' };
+
+    // Mock connection
+    const mockConn = {
+      models: {} as Record<string, unknown>,
+      model: mock((_name: string, _schema: unknown) => {
+        mockConn.models['AuditLog'] = mockModel;
+        return mockModel;
+      }),
+    };
+
+    // Create a Schema constructor
+    function MockSchema() {
+      return mockSchema;
+    }
+    MockSchema.Types = { Mixed: 'Mixed' };
+
+    // Mock the mongoose module
+    mock.module('@lib/mongo', () => ({
+      getMongooseModule: () => ({ Schema: MockSchema }),
+    }));
+
+    // Dynamic import to pick up the mock
+    const { getAuditLogModel } = await import('../../src/framework/models/AuditLog');
+
+    // First call: creates model
+    const model1 = getAuditLogModel(mockConn as any);
+    expect(model1).toBe(mockModel);
+    expect(mockConn.model).toHaveBeenCalledTimes(1);
+    expect(mockSchema.index).toHaveBeenCalledTimes(3); // userId, tenantId, path indexes
+
+    // Second call: returns cached model
+    const model2 = getAuditLogModel(mockConn as any);
+    expect(model2).toBe(mockModel);
+    // model() should NOT have been called again
+    expect(mockConn.model).toHaveBeenCalledTimes(1);
   });
 });

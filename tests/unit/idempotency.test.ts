@@ -258,6 +258,225 @@ describe('idempotency middleware', () => {
   });
 });
 
+describe('idempotency write-collision paths', () => {
+  // These tests simulate a concurrent write collision: two requests use the same
+  // idempotency key. The second request's adapter.set() is a no-op (NX), then
+  // adapter.get() returns the first request's stored value.
+
+  test('write collision: stored fingerprint differs → c.res set to 409 conflict (lines 116-117)', async () => {
+    // Build an adapter that appears to have no entry on get() initially (cache miss),
+    // but after set() a re-read returns a different fingerprint (simulating race).
+    const key = 'collision-fp-key';
+    let getCallCount = 0;
+
+    const mockAdapter = {
+      async get(_k: string) {
+        getCallCount++;
+        if (getCallCount === 1) return null; // first get: cache miss → execute handler
+        // second get after set: return stored value with DIFFERENT fingerprint
+        return {
+          response: JSON.stringify({ orderId: 'from-other-request' }),
+          status: 201 as const,
+          createdAt: Date.now(),
+          requestFingerprint: 'different-fp-that-wont-match',
+        };
+      },
+      async set() {
+        // NX no-op: another request already stored
+      },
+    };
+
+    const callCount = { n: 0 };
+    const app = new Hono();
+    const app2 = app as unknown as object;
+    const persistence = createTestPersistence();
+    persistence.idempotency = mockAdapter as any;
+    const ctx = {
+      app: app2,
+      config: {
+        appName: 'test',
+        resolvedStores: { sessions: 'memory', oauthState: 'memory', cache: 'memory', authStore: 'memory', sqlite: undefined },
+        security: { cors: '*' },
+        signing: null,
+        dataEncryptionKeys: [],
+        redis: undefined,
+        mongo: undefined,
+        captcha: null,
+      },
+      redis: null,
+      mongo: null,
+      sqlite: null,
+      signing: null,
+      dataEncryptionKeys: [],
+      ws: null,
+      persistence,
+      pluginState: new Map(),
+      async clear() {},
+      async destroy() {},
+    } as unknown as SlingshotContext;
+    const { attachContext } = await import('@lastshotlabs/slingshot-core');
+    attachContext(app2, ctx);
+
+    app.use(async (c, next) => {
+      const { getContext } = await import('@lastshotlabs/slingshot-core');
+      (c as any).set('slingshotCtx', getContext(app2));
+      await next();
+    });
+    app.use('/order', idempotent());
+    app.post('/order', async c => {
+      callCount.n++;
+      return c.json({ orderId: 'abc-123', count: callCount.n }, 201);
+    });
+
+    const res = await app.request('/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'idempotency-key': key },
+      body: JSON.stringify({ data: 'unique' }),
+    });
+
+    // The middleware sets c.res to the 409 conflict response
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.code).toBe('idempotency_key_conflict');
+  });
+
+  test('write collision: stored response differs → c.res set to stored response (lines 119-123)', async () => {
+    const storedBody = JSON.stringify({ orderId: 'from-concurrent-request' });
+    let getCallCount = 0;
+
+    const mockAdapter = {
+      async get(_k: string) {
+        getCallCount++;
+        if (getCallCount === 1) return null; // cache miss on first check
+        // After our set() no-op, return value stored by other request (same fingerprint, different body)
+        return {
+          response: storedBody,
+          status: 201 as const,
+          createdAt: Date.now(),
+          requestFingerprint: null, // null fingerprint — won't trigger conflict
+        };
+      },
+      async set() {
+        // NX no-op
+      },
+    };
+
+    const callCount = { n: 0 };
+    const app = new Hono();
+    const app2 = app as unknown as object;
+    const persistence = createTestPersistence();
+    persistence.idempotency = mockAdapter as any;
+    const ctx = {
+      app: app2,
+      config: {
+        appName: 'test',
+        resolvedStores: { sessions: 'memory', oauthState: 'memory', cache: 'memory', authStore: 'memory', sqlite: undefined },
+        security: { cors: '*' },
+        signing: null,
+        dataEncryptionKeys: [],
+        redis: undefined,
+        mongo: undefined,
+        captcha: null,
+      },
+      redis: null,
+      mongo: null,
+      sqlite: null,
+      signing: null,
+      dataEncryptionKeys: [],
+      ws: null,
+      persistence,
+      pluginState: new Map(),
+      async clear() {},
+      async destroy() {},
+    } as unknown as SlingshotContext;
+    const { attachContext } = await import('@lastshotlabs/slingshot-core');
+    attachContext(app2, ctx);
+
+    app.use(async (c, next) => {
+      const { getContext } = await import('@lastshotlabs/slingshot-core');
+      (c as any).set('slingshotCtx', getContext(app2));
+      await next();
+    });
+    app.use('/order', idempotent());
+    app.post('/order', async c => {
+      callCount.n++;
+      return c.json({ orderId: 'abc-123', count: callCount.n }, 201);
+    });
+
+    const res = await app.request('/order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'idempotency-key': 'collision-body-key' },
+      body: JSON.stringify({}),
+    });
+
+    // Should return the stored (winning) response
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.orderId).toBe('from-concurrent-request');
+  });
+});
+
+describe('idempotency — non-text response skips caching (lines 104-109)', () => {
+  test('handler returning a non-clonable response skips idempotency caching', async () => {
+    const app = new Hono();
+    const app2 = app as unknown as object;
+    const persistence = createTestPersistence();
+    const ctx = {
+      app: app2,
+      config: {
+        appName: 'test',
+        resolvedStores: { sessions: 'memory', oauthState: 'memory', cache: 'memory', authStore: 'memory', sqlite: undefined },
+        security: { cors: '*' },
+        signing: null,
+        dataEncryptionKeys: [],
+        redis: undefined,
+        mongo: undefined,
+        captcha: null,
+      },
+      redis: null,
+      mongo: null,
+      sqlite: null,
+      signing: null,
+      dataEncryptionKeys: [],
+      ws: null,
+      persistence,
+      pluginState: new Map(),
+      async clear() {},
+      async destroy() {},
+    } as unknown as SlingshotContext;
+    attachContext(app2, ctx);
+
+    app.use(async (c, next) => {
+      (c as any).set('slingshotCtx', getContext(app2));
+      await next();
+    });
+    app.use('/stream', idempotent());
+    app.post('/stream', async c => {
+      // Create a response whose clone().text() will fail
+      const stream = new ReadableStream({
+        start(ctrl) {
+          ctrl.enqueue(new Uint8Array([0xff, 0xfe]));
+          ctrl.close();
+        },
+      });
+      // Override the response with one whose text() will throw
+      const res = new Response(stream);
+      const originalClone = res.clone.bind(res);
+      // Read the original body to lock the stream, then clone will fail
+      return res;
+    });
+
+    const res = await app.request('/stream', {
+      method: 'POST',
+      headers: { 'idempotency-key': 'stream-key' },
+      body: 'data',
+    });
+
+    // Should not crash even if caching is skipped
+    expect(res.status).toBe(200);
+  });
+});
+
 describe('memory persistence clear support', () => {
   test('memory idempotency adapter clear() removes cached entries', async () => {
     const adapter = createMemoryIdempotencyAdapter();

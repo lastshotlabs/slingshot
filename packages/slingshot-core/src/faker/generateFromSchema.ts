@@ -147,8 +147,11 @@ export function generateExample<T>(
     optionalRate: 1.0,
     overrides,
   });
-  // Strip undefined and coerce non-serializable types (BigInt, Symbol) for JSON-clean output
-  return JSON.parse(JSON.stringify(result, (_key, value) =>
-    typeof value === 'bigint' ? Number(value) : value,
-  )) as T;
+  // Strip undefined and coerce non-serializable types for JSON-clean output
+  return JSON.parse(JSON.stringify(result, (_key, value) => {
+    if (typeof value === 'bigint') return Number(value);
+    if (value instanceof Set) return [...value];
+    if (value instanceof Map) return Object.fromEntries(value);
+    return value;
+  })) as T;
 }

@@ -34,6 +34,26 @@ describe('WsTransportAdapter', () => {
   });
 
   describe('InMemoryTransport', () => {
+    it('can be instantiated and all methods resolve', async () => {
+      const transport = new InMemoryTransport();
+      expect(transport).toBeInstanceOf(InMemoryTransport);
+
+      // Verify publish resolves
+      const publishResult = transport.publish(ENDPOINT, 'room', 'message', 'origin-1');
+      expect(publishResult).toBeInstanceOf(Promise);
+      await expect(publishResult).resolves.toBeUndefined();
+
+      // Verify connect resolves
+      const connectResult = transport.connect(() => {});
+      expect(connectResult).toBeInstanceOf(Promise);
+      await expect(connectResult).resolves.toBeUndefined();
+
+      // Verify disconnect resolves
+      const disconnectResult = transport.disconnect();
+      expect(disconnectResult).toBeInstanceOf(Promise);
+      await expect(disconnectResult).resolves.toBeUndefined();
+    });
+
     it('publish is a no-op', async () => {
       const transport = new InMemoryTransport();
       await transport.publish(ENDPOINT, 'room', 'message', 'origin-1');

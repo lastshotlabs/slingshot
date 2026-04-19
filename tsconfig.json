@@ -15,8 +15,12 @@
       "@queues/*": ["./src/queues/*"],
       "@scripts/*": ["./src/scripts/*"],
       "@lastshotlabs/slingshot-core": ["./packages/slingshot-core/src/index.ts"],
+      "@lastshotlabs/slingshot-core/content": ["./packages/slingshot-core/src/content.public.ts"],
       "@lastshotlabs/slingshot-core/faker": ["./packages/slingshot-core/src/faker/index.ts"],
       "@lastshotlabs/slingshot-entity": ["./packages/slingshot-entity/src/index.ts"],
+      "@lastshotlabs/slingshot-entity/routing": [
+        "./packages/slingshot-entity/src/routing/index.ts"
+      ],
       "@lastshotlabs/slingshot-entity/seeder": ["./packages/slingshot-entity/src/seeder/index.ts"],
       "@lastshotlabs/slingshot-infra": ["./packages/slingshot-infra/src/index.ts"],
       "@lastshotlabs/slingshot-core/testing": ["./packages/slingshot-core/src/testing.ts"],

@@ -58,4 +58,14 @@ describe('botProtection', () => {
     const res = await app.request(new Request('http://test.com/'));
     expect(res.status).toBe(200);
   });
+
+  it('throws at construction time for an IPv4 blockList entry with wrong number of octets', () => {
+    // Exercises ipv4ToUint32 line 17: parts.length !== 4
+    expect(() => botProtection({ blockList: ['1.2.3'] })).toThrow(/Invalid IPv4/);
+  });
+
+  it('throws at construction time for an IPv4 CIDR with an out-of-range octet', () => {
+    // Exercises ipv4ToUint32 line 20: octet value > 255
+    expect(() => botProtection({ blockList: ['999.0.0.0/8'] })).toThrow(/Invalid IPv4/);
+  });
 });

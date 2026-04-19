@@ -226,6 +226,42 @@ describe('requireSignedRequest', () => {
     expect(res.status).toBe(200);
   });
 
+  test('missing timestamp header returns 401 EXPIRED_TIMESTAMP (line 82)', async () => {
+    const app = buildApp();
+
+    const res = await app.request('/data', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // No x-timestamp header — parseInt(undefined) is NaN
+        'x-signature': 'fakesig',
+      },
+      body: '{}',
+    });
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json.code).toBe('EXPIRED_TIMESTAMP');
+  });
+
+  test('signing enabled but secret missing returns 500 SIGNING_SECRET_MISSING (line 100)', async () => {
+    // Build an app with requestSigning enabled but no secret
+    const app = buildApp({ requestSigning: true });
+    const timestamp = String(Math.floor(Date.now() / 1000));
+
+    const res = await app.request('/data', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-signature': 'fakesig',
+        'x-timestamp': timestamp,
+      },
+      body: '{}',
+    });
+    expect(res.status).toBe(500);
+    const json = await res.json();
+    expect(json.code).toBe('SIGNING_SECRET_MISSING');
+  });
+
   test('repeated key: sorted by value (?tag=b&tag=a canonicalizes to tag=a&tag=b)', async () => {
     const app = buildApp();
     const ts = String(Math.floor(Date.now() / 1000));

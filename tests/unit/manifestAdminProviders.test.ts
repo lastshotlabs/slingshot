@@ -1,5 +1,424 @@
 import { describe, expect, it } from 'bun:test';
-import { createInMemoryAuditLog } from '../../src/lib/manifestAdminProviders';
+import {
+  createDeferredAdminProviders,
+  createInMemoryAuditLog,
+} from '../../src/lib/manifestAdminProviders';
+
+// ---------------------------------------------------------------------------
+// Helpers / mock factory
+// ---------------------------------------------------------------------------
+
+/** Build a minimal mock Hono context with a get() method. */
+function mockContext(vars: Record<string, unknown>) {
+  return {
+    get: (key: string) => vars[key],
+  };
+}
+
+/** Build a minimal mock auth adapter. */
+function mockAuthAdapter(overrides: Record<string, unknown> = {}) {
+  return {
+    ...overrides,
+  };
+}
+
+/** Build a minimal mock auth runtime context suitable for pluginState. */
+function mockAuthRuntime(adapterOverrides: Record<string, unknown> = {}) {
+  return {
+    adapter: mockAuthAdapter(adapterOverrides),
+  };
+}
+
+/** Build a minimal permissions state suitable for pluginState. */
+function mockPermissionsState() {
+  const grants: unknown[] = [];
+  const adapter = {
+    createGrant: (grant: unknown) => { grants.push(grant); return Promise.resolve(grant as never); },
+    revokeGrant: () => Promise.resolve(),
+    getGrantsForSubject: () => Promise.resolve([]),
+    getEffectiveGrantsForSubject: () => Promise.resolve([]),
+    listGrantHistory: () => Promise.resolve([]),
+    listGrantsOnResource: () => Promise.resolve([]),
+    deleteAllGrantsForSubject: () => Promise.resolve(),
+  };
+  const registry = {
+    register: () => {},
+    getActionsForRole: () => [],
+    getDefinition: () => undefined,
+    listResourceTypes: () => [],
+  };
+  const evaluator = {
+    can: () => Promise.resolve(false),
+  };
+  return { adapter, registry, evaluator };
+}
+
+// ---------------------------------------------------------------------------
+// createDeferredAdminProviders — bind and provider methods
+// ---------------------------------------------------------------------------
+
+describe('createDeferredAdminProviders', () => {
+  it('returns deps and bind with no string strategies (no providers)', () => {
+    const result = createDeferredAdminProviders({});
+    expect(result.deps).toEqual([]);
+    expect(typeof result.bind).toBe('function');
+    expect(result.accessProvider).toBeUndefined();
+    expect(result.managedUserProvider).toBeUndefined();
+    expect(result.permissions).toBeUndefined();
+    expect(result.auditLog).toBeUndefined();
+  });
+
+  it('adds accessProvider when accessProvider is "slingshot-auth"', () => {
+    const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
+    expect(result.deps).toContain('slingshot-auth');
+    expect(result.accessProvider).toBeDefined();
+  });
+
+  it('accessProvider.verifyRequest returns null when no userId (line 92)', async () => {
+    const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
+    const c = mockContext({ authUserId: undefined, roles: [] });
+    const principal = await result.accessProvider!.verifyRequest(c as never);
+    expect(principal).toBeNull();
+  });
+
+  it('accessProvider.verifyRequest returns null when no super-admin role (lines 85-93)', async () => {
+    const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
+    const c = mockContext({ authUserId: 'u1', roles: ['admin'] });
+    const principal = await result.accessProvider!.verifyRequest(c as never);
+    expect(principal).toBeNull();
+  });
+
+  it('accessProvider.verifyRequest returns principal when userId and super-admin role (line 94)', async () => {
+    const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
+    const c = mockContext({ authUserId: 'u1', roles: ['super-admin'] });
+    const principal = await result.accessProvider!.verifyRequest(c as never);
+    expect(principal).not.toBeNull();
+    expect(principal!.subject).toBe('u1');
+    expect(principal!.provider).toBe('slingshot-auth');
+  });
+
+  it('accessProvider.verifyRequest handles non-array roles (line 88)', async () => {
+    const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
+    const c = mockContext({ authUserId: 'u1', roles: 'not-an-array' });
+    const principal = await result.accessProvider!.verifyRequest(c as never);
+    expect(principal).toBeNull();
+  });
+
+  it('bind() sets authRuntime when accessProvider is slingshot-auth (lines 68-76)', () => {
+    const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    pluginState.set('slingshot-auth', mockAuthRuntime());
+    // Should not throw
+    result.bind(pluginState);
+  });
+
+  it('bind() sets authRuntime when managedUserProvider is slingshot-auth (lines 68-76)', () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    pluginState.set('slingshot-auth', mockAuthRuntime());
+    result.bind(pluginState);
+  });
+
+  it('bind() sets permsState when permissions is slingshot-permissions (line 75-76)', () => {
+    const result = createDeferredAdminProviders({ permissions: 'slingshot-permissions' });
+    const pluginState = new Map<string, unknown>();
+    pluginState.set('slingshot-permissions', mockPermissionsState());
+    result.bind(pluginState);
+  });
+
+  it('adds managedUserProvider when managedUserProvider is "slingshot-auth"', () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    expect(result.deps).toContain('slingshot-auth');
+    expect(result.managedUserProvider).toBeDefined();
+  });
+
+  it('managedUserProvider throws when adapter not bound (requireAdapter, lines 102-108)', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    // Do NOT call bind — adapter not bound
+    await expect(result.managedUserProvider!.listUsers({})).rejects.toThrow(
+      '[manifestAdminProviders] Auth runtime not bound.',
+    );
+  });
+
+  it('managedUserProvider.listUsers returns empty when adapter.listUsers is absent', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    // adapter without listUsers
+    pluginState.set('slingshot-auth', mockAuthRuntime({}));
+    result.bind(pluginState);
+    const listResult = await result.managedUserProvider!.listUsers({});
+    expect(listResult.items).toEqual([]);
+  });
+
+  it('managedUserProvider.listUsers calls adapter.listUsers when present (lines 115-143)', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    const listUsersMock = async (_query: unknown) => ({
+      users: [
+        {
+          id: 'u1',
+          email: 'a@b.com',
+          displayName: 'A',
+          firstName: 'A',
+          lastName: 'B',
+          externalId: null,
+          suspended: false,
+          userMetadata: { plan: 'free' },
+        },
+      ],
+      totalResults: 1,
+    });
+    pluginState.set('slingshot-auth', mockAuthRuntime({ listUsers: listUsersMock }));
+    result.bind(pluginState);
+    const listResult = await result.managedUserProvider!.listUsers({ limit: 10 });
+    expect(listResult.items).toHaveLength(1);
+    expect(listResult.items[0].id).toBe('u1');
+    expect(listResult.items[0].status).toBe('active');
+    expect(listResult.items[0].metadata).toEqual({ plan: 'free' });
+    expect(listResult.nextCursor).toBeUndefined();
+  });
+
+  it('managedUserProvider.listUsers sets nextCursor when more results remain', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    const users = Array.from({ length: 5 }, (_, i) => ({
+      id: `u${i}`,
+      email: `u${i}@b.com`,
+      displayName: null,
+      firstName: null,
+      lastName: null,
+      externalId: null,
+      suspended: false,
+      userMetadata: null,
+    }));
+    pluginState.set(
+      'slingshot-auth',
+      mockAuthRuntime({
+        listUsers: async () => ({ users, totalResults: 100 }),
+      }),
+    );
+    result.bind(pluginState);
+    const listResult = await result.managedUserProvider!.listUsers({ limit: 5 });
+    expect(listResult.nextCursor).toBe('5');
+  });
+
+  it('managedUserProvider.listUsers handles suspended status filter', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    let capturedQuery: unknown;
+    pluginState.set(
+      'slingshot-auth',
+      mockAuthRuntime({
+        listUsers: async (query: unknown) => {
+          capturedQuery = query;
+          return { users: [], totalResults: 0 };
+        },
+      }),
+    );
+    result.bind(pluginState);
+    await result.managedUserProvider!.listUsers({ status: 'suspended' });
+    expect((capturedQuery as Record<string, unknown>).suspended).toBe(true);
+
+    await result.managedUserProvider!.listUsers({ status: 'active' });
+    expect((capturedQuery as Record<string, unknown>).suspended).toBe(false);
+  });
+
+  it('managedUserProvider.listUsers handles cursor for pagination', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    let capturedQuery: unknown;
+    pluginState.set(
+      'slingshot-auth',
+      mockAuthRuntime({
+        listUsers: async (query: unknown) => {
+          capturedQuery = query;
+          return { users: [], totalResults: 0 };
+        },
+      }),
+    );
+    result.bind(pluginState);
+    await result.managedUserProvider!.listUsers({ cursor: '10' });
+    expect((capturedQuery as Record<string, unknown>).startIndex).toBe(10);
+  });
+
+  it('managedUserProvider.getUser returns null when adapter.getUser is absent (line 148)', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    pluginState.set('slingshot-auth', mockAuthRuntime({}));
+    result.bind(pluginState);
+    const user = await result.managedUserProvider!.getUser('u1');
+    expect(user).toBeNull();
+  });
+
+  it('managedUserProvider.getUser returns null when user not found (line 150)', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    pluginState.set(
+      'slingshot-auth',
+      mockAuthRuntime({ getUser: async () => null }),
+    );
+    result.bind(pluginState);
+    const user = await result.managedUserProvider!.getUser('u1');
+    expect(user).toBeNull();
+  });
+
+  it('managedUserProvider.getUser returns mapped record (lines 151-161)', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    pluginState.set(
+      'slingshot-auth',
+      mockAuthRuntime({
+        getUser: async () => ({
+          email: 'a@b.com',
+          displayName: 'A B',
+          firstName: 'A',
+          lastName: 'B',
+          externalId: 'ext-1',
+          suspended: true,
+          userMetadata: null,
+        }),
+      }),
+    );
+    result.bind(pluginState);
+    const user = await result.managedUserProvider!.getUser('u1');
+    expect(user).not.toBeNull();
+    expect(user!.id).toBe('u1');
+    expect(user!.status).toBe('suspended');
+    expect(user!.provider).toBe('slingshot-auth');
+  });
+
+  it('managedUserProvider.getCapabilities reflects adapter method presence (lines 164-177)', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    pluginState.set(
+      'slingshot-auth',
+      mockAuthRuntime({
+        listUsers: async () => ({ users: [], totalResults: 0 }),
+        getUser: async () => null,
+        deleteUser: async () => {},
+        setSuspended: async () => {},
+        setUserMetadata: async () => {},
+      }),
+    );
+    result.bind(pluginState);
+    const caps = await result.managedUserProvider!.getCapabilities();
+    expect(caps.canListUsers).toBe(true);
+    expect(caps.canViewUser).toBe(true);
+    expect(caps.canDeleteUsers).toBe(true);
+    expect(caps.canSuspendUsers).toBe(true);
+    expect(caps.canEditUser).toBe(true);
+    expect(caps.canViewSessions).toBe(false);
+    expect(caps.canManageRoles).toBe(false);
+  });
+
+  it('managedUserProvider.deleteUser throws when adapter.deleteUser is absent (lines 179-183)', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    pluginState.set('slingshot-auth', mockAuthRuntime({}));
+    result.bind(pluginState);
+    await expect(result.managedUserProvider!.deleteUser('u1')).rejects.toThrow(
+      'does not support deleteUser',
+    );
+  });
+
+  it('managedUserProvider.deleteUser calls adapter.deleteUser (line 184)', async () => {
+    const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
+    const pluginState = new Map<string, unknown>();
+    let deleted: string | undefined;
+    pluginState.set(
+      'slingshot-auth',
+      mockAuthRuntime({ deleteUser: async (id: string) => { deleted = id; } }),
+    );
+    result.bind(pluginState);
+    await result.managedUserProvider!.deleteUser('u1');
+    expect(deleted).toBe('u1');
+  });
+
+  it('adds permissions provider when permissions is "slingshot-permissions" (lines 189-251)', () => {
+    const result = createDeferredAdminProviders({ permissions: 'slingshot-permissions' });
+    expect(result.deps).toContain('slingshot-permissions');
+    expect(result.permissions).toBeDefined();
+    expect(result.permissions!.evaluator).toBeDefined();
+    expect(result.permissions!.registry).toBeDefined();
+    expect(result.permissions!.adapter).toBeDefined();
+  });
+
+  it('permissions.evaluator.can delegates to requirePerms (lines 192-198, 228-234)', async () => {
+    const result = createDeferredAdminProviders({ permissions: 'slingshot-permissions' });
+    // Without binding, requirePerms should throw (synchronously inside an async call)
+    let threw = false;
+    try {
+      await result.permissions!.evaluator.can({ id: 'u1', type: 'user' } as never, 'read');
+    } catch (err) {
+      threw = true;
+      expect((err as Error).message).toContain('[manifestAdminProviders] Permissions state not bound.');
+    }
+    expect(threw).toBe(true);
+  });
+
+  it('permissions.evaluator.can works after bind (line 233)', async () => {
+    const result = createDeferredAdminProviders({ permissions: 'slingshot-permissions' });
+    const perms = mockPermissionsState();
+    const pluginState = new Map<string, unknown>();
+    pluginState.set('slingshot-permissions', perms);
+    result.bind(pluginState);
+    const canResult = await result.permissions!.evaluator.can({ id: 'u1', type: 'user' }, 'read');
+    expect(typeof canResult).toBe('boolean');
+  });
+
+  it('permissions.registry methods delegate to requirePerms (lines 236-249)', async () => {
+    const result = createDeferredAdminProviders({ permissions: 'slingshot-permissions' });
+    const perms = mockPermissionsState();
+    const pluginState = new Map<string, unknown>();
+    pluginState.set('slingshot-permissions', perms);
+    result.bind(pluginState);
+
+    // register
+    result.permissions!.registry.register({ resourceType: 'test', roles: {} } as never);
+    // getActionsForRole
+    const actions = result.permissions!.registry.getActionsForRole('test', 'admin');
+    expect(Array.isArray(actions)).toBe(true);
+    // listResourceTypes
+    const types = result.permissions!.registry.listResourceTypes();
+    expect(Array.isArray(types)).toBe(true);
+    // getDefinition
+    const def = result.permissions!.registry.getDefinition('test');
+    expect(def).toBeUndefined();
+  });
+
+  it('permissions.adapter methods delegate to requirePerms (lines 202-224)', async () => {
+    const result = createDeferredAdminProviders({ permissions: 'slingshot-permissions' });
+    const perms = mockPermissionsState();
+    const pluginState = new Map<string, unknown>();
+    pluginState.set('slingshot-permissions', perms);
+    result.bind(pluginState);
+
+    const adapter = result.permissions!.adapter;
+    // All methods should delegate without throwing
+    await adapter.createGrant({ id: 'g1' } as never);
+    await adapter.revokeGrant('g1', 'u1', null);
+    await adapter.getGrantsForSubject('u1', 'user', null);
+    await adapter.getEffectiveGrantsForSubject('u1', 'user', null);
+    await adapter.listGrantHistory('u1', 'user');
+    await adapter.listGrantsOnResource('resource', 'r1', null);
+    await adapter.deleteAllGrantsForSubject({ id: 'u1', type: 'user' } as never);
+  });
+
+  it('adds in-memory auditLog when auditLog is "memory"', () => {
+    const result = createDeferredAdminProviders({ auditLog: 'memory' });
+    expect(result.auditLog).toBeDefined();
+    expect(typeof result.auditLog!.logEntry).toBe('function');
+  });
+
+  it('does not add slingshot-auth dep twice when both accessProvider and managedUserProvider are set', () => {
+    const result = createDeferredAdminProviders({
+      accessProvider: 'slingshot-auth',
+      managedUserProvider: 'slingshot-auth',
+    });
+    const authDeps = result.deps.filter(d => d === 'slingshot-auth');
+    expect(authDeps).toHaveLength(1);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // In-memory audit log

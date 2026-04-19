@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { faker as fakerInstance } from '@faker-js/faker';
 import { z } from 'zod';
 import { generateFromSchema, generateMany, generateExample } from '../../src/faker';
 
@@ -329,6 +330,18 @@ describe('generateFromSchema — determinism', () => {
 
     const a = generateFromSchema(schema, { seed: 42 });
     const b = generateFromSchema(schema, { seed: 42 });
+    expect(a).toEqual(b);
+  });
+
+  it('seeds a custom faker instance when both faker and seed are provided', () => {
+    const schema = z.object({
+      name: z.string(),
+      value: z.number(),
+    });
+
+    // Pass a custom faker instance WITH a seed — exercises lines 74-75
+    const a = generateFromSchema(schema, { faker: fakerInstance, seed: 99 });
+    const b = generateFromSchema(schema, { faker: fakerInstance, seed: 99 });
     expect(a).toEqual(b);
   });
 });

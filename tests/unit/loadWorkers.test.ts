@@ -83,6 +83,90 @@ describe('loadWorkers', () => {
     expect([...knownNames].sort()).toEqual(['keep-b', 'new-c', 'old-a']);
   });
 
+  test('swallows error when createQueueFactory throws (bullmq not installed path)', async () => {
+    // Exercises the catch block at lines 24-26: when createQueueFactory throws, worker
+    // bootstrapping is skipped gracefully rather than crashing the server.
+    const workersDir = createTempWorkersDir();
+    writeFileSync(
+      join(workersDir, 'worker-safe.ts'),
+      "export default async function boot() { return ['some-job']; }\n",
+      'utf8',
+    );
+
+    const createQueueFactory = spyOn(queueModule, 'createQueueFactory').mockImplementation(() => {
+      throw new Error('Cannot find module bullmq');
+    });
+    const save = mock(async (_names: ReadonlySet<string>) => {});
+
+    // Should not throw — error is swallowed silently
+    await expect(
+      loadWorkers({
+        workersDir: workersDir.replace(/\\/g, '/'),
+        runtime: {
+          glob: {
+            scan: async () => ['worker-safe.ts'],
+          },
+        } as never,
+        resolvedSecrets: {
+          redisHost: '127.0.0.1:6379',
+        },
+        persistence: {
+          cronRegistry: {
+            getAll: async () => new Set<string>(),
+            save,
+          },
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(createQueueFactory).toHaveBeenCalledTimes(1);
+    // Workers were not initialized — queueFactory is null — so no scheduler names collected
+    const savedNames = [...((save.mock.calls[0]?.[0] as ReadonlySet<string>) ?? [])];
+    expect(savedNames).toEqual([]);
+  });
+
+  test('swallows error when cleanupStaleSchedulers throws (best-effort path)', async () => {
+    // Exercises the catch block at lines 59-61: when cleanupStaleSchedulers throws,
+    // the error is swallowed to avoid crashing on Redis unavailability.
+    const workersDir = createTempWorkersDir();
+    writeFileSync(
+      join(workersDir, 'worker-c.ts'),
+      "export default async function boot() { return ['job-x']; }\n",
+      'utf8',
+    );
+
+    const cleanupStaleSchedulers = mock(async () => {
+      throw new Error('Redis unavailable');
+    });
+    spyOn(queueModule, 'createQueueFactory').mockReturnValue({
+      createQueue: mock(() => { throw new Error('not used'); }),
+      createWorker: mock(() => { throw new Error('not used'); }),
+      createCronWorker: mock(() => { throw new Error('not used'); }),
+      cleanupStaleSchedulers,
+      createDLQHandler: mock(() => { throw new Error('not used'); }),
+    } as never);
+
+    const save = mock(async (_names: ReadonlySet<string>) => {});
+
+    await expect(
+      loadWorkers({
+        workersDir: workersDir.replace(/\\/g, '/'),
+        runtime: {
+          glob: { scan: async () => ['worker-c.ts'] },
+        } as never,
+        resolvedSecrets: { redisHost: '127.0.0.1:6379' },
+        persistence: {
+          cronRegistry: {
+            getAll: async () => new Set<string>(),
+            save,
+          },
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(cleanupStaleSchedulers).toHaveBeenCalledTimes(1);
+  });
+
   test('skips worker bootstrapping cleanup when redis secrets are unavailable', async () => {
     const workersDir = createTempWorkersDir();
     writeFileSync(

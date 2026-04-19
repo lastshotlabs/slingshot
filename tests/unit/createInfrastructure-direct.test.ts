@@ -617,4 +617,70 @@ describe('createInfrastructure direct', () => {
 
     expect(sqliteDb.close).toHaveBeenCalledTimes(1);
   });
+
+  test('cleanup swallows postgres pool.end() error when bootstrap fails after postgres connects (lines 229-231)', async () => {
+    // When postgres connects but a later step fails (bad data encryption key),
+    // cleanupOpenInfrastructure calls postgresDb.pool.end(). If that throws,
+    // the error is swallowed (best-effort).
+    const poolEndMock = mock(async () => { throw new Error('pg pool.end failed'); });
+    connectPostgresMock.mockResolvedValueOnce({
+      pool: { end: poolEndMock, query: async () => ({ rows: [], rowCount: 0 }) },
+      connectionString: 'postgres://test',
+    } as any);
+    const createInfrastructure = await loadCreateInfrastructure();
+
+    await expect(
+      createInfrastructure({
+        ...baseOptions(),
+        db: {
+          mongo: false,
+          redis: false,
+          postgres: 'postgres://test',
+          sessions: 'memory',
+          cache: 'memory',
+          auth: 'memory',
+        },
+        secrets: {
+          ...baseOptions().secrets,
+          // Bad format: no colon separator — triggers getDataEncryptionKeys error
+          dataEncryptionKey: 'bad-key-no-colon',
+        },
+      }),
+    ).rejects.toThrow(/getDataEncryptionKeys/);
+
+    // pool.end() was called during cleanup and its error was swallowed
+    expect(poolEndMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('cleanup swallows postgres pool.end() error during rollback (lines 229-231)', async () => {
+    const poolEndMock = mock(async () => { throw new Error('pg pool end failed'); });
+    connectPostgresMock.mockResolvedValueOnce({
+      pool: { end: poolEndMock, query: async () => ({ rows: [], rowCount: 0 }) },
+      connectionString: 'postgres://test',
+    } as any);
+    // Make Redis connect return null so persistence resolution fails
+    connectRedisMock.mockResolvedValueOnce(null as never);
+    const createInfrastructure = await loadCreateInfrastructure();
+
+    await expect(
+      createInfrastructure({
+        ...baseOptions(),
+        db: {
+          mongo: false,
+          redis: true,
+          postgres: 'postgres://test',
+          sessions: 'memory',
+          cache: 'memory',
+          auth: 'memory',
+        },
+        secrets: {
+          ...baseOptions().secrets,
+          redisHost: '127.0.0.1:6379',
+        },
+      }),
+    ).rejects.toThrow(/Redis store selected but Redis is unavailable/);
+
+    // pool.end() was called and the error was swallowed
+    expect(poolEndMock).toHaveBeenCalledTimes(1);
+  });
 });

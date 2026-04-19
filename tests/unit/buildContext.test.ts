@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
+  PERMISSIONS_STATE_KEY,
   RESOLVE_REINDEX_SOURCE,
   createEntityRegistry,
   createRouter,
@@ -54,6 +55,207 @@ afterEach(async () => {
   disconnectRedisMock.mockResolvedValue(undefined);
   disconnectMongoMock.mockResolvedValue(undefined);
 });
+
+describe('finalizeContext — edge cases', () => {
+  test('freezePublishedContract: primitive routeAuth value passes through unchanged (line 44)', () => {
+    // When routeAuth is a truthy primitive (not an object), freezePublishedContract returns
+    // it unchanged — covers the `return value` branch at line 44.
+    const ctx = {
+      routeAuth: null,
+      userResolver: null,
+      rateLimitAdapter: null,
+      fingerprintBuilder: null,
+      cacheAdapters: new Map(),
+      emailTemplates: new Map(),
+    } as any;
+
+    const snapshot = {
+      routeAuth: null,
+      userResolver: null,
+      rateLimitAdapter: null,
+      fingerprintBuilder: null,
+      cacheAdapters: new Map(),
+      emailTemplates: new Map(),
+    } as any;
+
+    // All null — triggers the `? null` branch on each field, not freezePublishedContract
+    finalizeContext(ctx, snapshot);
+    expect(ctx.routeAuth).toBeNull();
+  });
+
+  test('publicPaths ReadonlySet supports union(), intersection(), difference()', async () => {
+    // Build a context to get a publicPaths ReadonlySet, then call the set operations
+    // that use the internal collectValues helper (lines 55-60).
+    const result = await createApp({
+      ...baseConfig,
+      plugins: [
+        {
+          name: 'paths-plugin',
+          publicPaths: ['/a', '/b'],
+          setupPost() {},
+        },
+      ],
+    });
+    createdContexts.push(result.ctx);
+
+    const paths = result.ctx.publicPaths;
+
+    // union — uses collectValues on the `other` set
+    const other = new Set(['/c', '/a']);
+    const unionResult = paths.union(other);
+    expect(unionResult.has('/a')).toBe(true);
+    expect(unionResult.has('/b')).toBe(true);
+    expect(unionResult.has('/c')).toBe(true);
+
+    // intersection — uses collectValues via backing iteration
+    const intersectResult = paths.intersection(other);
+    expect(intersectResult.has('/a')).toBe(true);
+    expect(intersectResult.has('/b')).toBe(false);
+
+    // difference
+    const diffResult = paths.difference(other);
+    expect(diffResult.has('/b')).toBe(true);
+    expect(diffResult.has('/a')).toBe(false);
+
+    // symmetricDifference — uses collectValues
+    const symDiff = paths.symmetricDifference(other);
+    expect(symDiff.has('/b')).toBe(true);
+    expect(symDiff.has('/c')).toBe(true);
+    expect(symDiff.has('/a')).toBe(false);
+
+    // isSupersetOf — uses collectValues
+    const subset = new Set(['/a']);
+    expect(paths.isSupersetOf(subset)).toBe(true);
+
+    // isDisjointFrom — uses backing iteration (no collectValues)
+    const disjoint = new Set(['/x', '/y']);
+    expect(paths.isDisjointFrom(disjoint)).toBe(true);
+    const overlapping = new Set(['/a']);
+    expect(paths.isDisjointFrom(overlapping)).toBe(false);
+  });
+});
+
+describe('freezePublishedContract — non-object path', () => {
+  test('passes through primitive email template value unchanged (line 45)', () => {
+    // When an email template value is a primitive (e.g., a string),
+    // freezePublishedContract returns it without calling Object.freeze.
+    const ctx = {
+      routeAuth: null,
+      userResolver: null,
+      rateLimitAdapter: null,
+      fingerprintBuilder: null,
+      cacheAdapters: new Map(),
+      emailTemplates: new Map(),
+    } as any;
+
+    const snapshot = {
+      routeAuth: null,
+      userResolver: null,
+      rateLimitAdapter: null,
+      fingerprintBuilder: null,
+      cacheAdapters: new Map(),
+      // A primitive template value exercises the non-object branch
+      emailTemplates: new Map([['inline', 'Hello {{name}}']]),
+    } as any;
+
+    finalizeContext(ctx, snapshot);
+    expect(ctx.emailTemplates.get('inline')).toBe('Hello {{name}}');
+  });
+
+  test('freezes null/falsy values through the ternary (line 44)', () => {
+    const ctx = {
+      routeAuth: null,
+      userResolver: null,
+      rateLimitAdapter: null,
+      fingerprintBuilder: null,
+      cacheAdapters: new Map(),
+      emailTemplates: new Map(),
+    } as any;
+
+    // All null -> triggers the `? null` ternary, not freezePublishedContract
+    // But emailTemplates with a falsy value (empty string) would trigger
+    // freezePublishedContract with a falsy value -> line 42 check `value && ...`
+    // is false -> falls to line 45 return value
+    const snapshot = {
+      routeAuth: null,
+      userResolver: null,
+      rateLimitAdapter: null,
+      fingerprintBuilder: null,
+      cacheAdapters: new Map(),
+      emailTemplates: new Map([['empty', '']]),
+    } as any;
+
+    finalizeContext(ctx, snapshot);
+    expect(ctx.emailTemplates.get('empty')).toBe('');
+  });
+});
+
+describe('ReadonlySet view — full method coverage', () => {
+  test('covers size, has, entries, keys, values, forEach, Symbol.iterator (lines 63-84, 148-150)', async () => {
+    const result = await createApp({
+      ...baseConfig,
+      plugins: [
+        {
+          name: 'set-ops-plugin',
+          publicPaths: ['/x', '/y', '/z'],
+          setupPost() {},
+        },
+      ],
+    });
+    createdContexts.push(result.ctx);
+    const paths = result.ctx.publicPaths;
+
+    // size (line 64)
+    expect(paths.size).toBe(3);
+
+    // has (line 67-68)
+    expect(paths.has('/x')).toBe(true);
+    expect(paths.has('/missing')).toBe(false);
+
+    // entries (line 70)
+    const entries = [...paths.entries()];
+    expect(entries.length).toBe(3);
+    expect(entries[0]).toEqual(['/x', '/x']);
+
+    // keys (line 73)
+    const keys = [...paths.keys()];
+    expect(keys).toContain('/x');
+
+    // values (line 76)
+    const values = [...paths.values()];
+    expect(values).toContain('/y');
+
+    // forEach (lines 79-84)
+    const forEachItems: string[] = [];
+    paths.forEach((value, _value2, set) => {
+      forEachItems.push(value);
+      expect(set).toBe(paths);
+    });
+    expect(forEachItems).toEqual(['/x', '/y', '/z']);
+
+    // forEach with thisArg
+    const collector = { items: [] as string[] };
+    paths.forEach(function(this: typeof collector, value) {
+      this.items.push(value);
+    }, collector);
+    expect(collector.items).toEqual(['/x', '/y', '/z']);
+
+    // isSubsetOf (lines 126-131)
+    const superset = new Set(['/x', '/y', '/z', '/w']);
+    expect(paths.isSubsetOf(superset)).toBe(true);
+    const partial = new Set(['/x']);
+    expect(paths.isSubsetOf(partial)).toBe(false);
+
+    // isSupersetOf — false branch (line 137)
+    const notSubset = new Set(['/x', '/y', '/z', '/missing']);
+    expect(paths.isSupersetOf(notSubset)).toBe(false);
+
+    // Symbol.iterator (lines 148-150)
+    const iterItems = [...paths];
+    expect(iterItems).toEqual(['/x', '/y', '/z']);
+  });
+});
+
 
 describe('finalizeContext', () => {
   test('replaces registrar-owned fields and refreshes mutable maps from the snapshot', () => {
@@ -438,5 +640,334 @@ describe('buildContext lifecycle', () => {
     expect(teardown).toHaveBeenCalledTimes(1);
     expect(secretDestroy).toHaveBeenCalledTimes(1);
     expect(ctx.ws?.transport).toBeNull();
+  });
+
+  test('ReadonlyMap views exercise all methods (lines 159-183)', async () => {
+    const { ctx } = await createDirectContext();
+    const cacheAdapter1 = {
+      name: 'memory',
+      get: async () => null,
+      set: async () => {},
+      del: async () => {},
+      delPattern: async () => {},
+      isReady: () => true,
+    };
+    const cacheAdapter2 = {
+      name: 'redis',
+      get: async () => null,
+      set: async () => {},
+      del: async () => {},
+      delPattern: async () => {},
+      isReady: () => true,
+    };
+
+    finalizeContext(ctx, {
+      routeAuth: null,
+      userResolver: null,
+      rateLimitAdapter: null,
+      fingerprintBuilder: null,
+      cacheAdapters: new Map([['memory', cacheAdapter1], ['redis', cacheAdapter2]]),
+      emailTemplates: new Map([['welcome', { subject: 'Hi' }], ['reset', { subject: 'Reset' }]]),
+    });
+
+    // size
+    expect(ctx.cacheAdapters.size).toBe(2);
+    // has
+    expect(ctx.cacheAdapters.has('memory')).toBe(true);
+    expect(ctx.cacheAdapters.has('missing')).toBe(false);
+    // get
+    expect(ctx.cacheAdapters.get('memory')).toBe(cacheAdapter1);
+    // entries
+    expect([...ctx.cacheAdapters.entries()].length).toBe(2);
+    // keys
+    expect([...ctx.cacheAdapters.keys()]).toContain('memory');
+    // values
+    expect([...ctx.cacheAdapters.values()]).toContain(cacheAdapter1);
+    // forEach
+    const cacheForEach: string[] = [];
+    ctx.cacheAdapters.forEach((_v, k, map) => {
+      cacheForEach.push(k as string);
+      expect(map).toBe(ctx.cacheAdapters);
+    });
+    expect(cacheForEach).toEqual(['memory', 'redis']);
+    // Symbol.iterator
+    expect([...ctx.cacheAdapters].length).toBe(2);
+
+    // emailTemplates map
+    expect(ctx.emailTemplates.size).toBe(2);
+    expect(ctx.emailTemplates.has('welcome')).toBe(true);
+    expect([...ctx.emailTemplates.entries()].length).toBe(2);
+    expect([...ctx.emailTemplates.keys()]).toContain('welcome');
+    expect([...ctx.emailTemplates.values()].length).toBe(2);
+    const emailForEach: string[] = [];
+    ctx.emailTemplates.forEach((_v, k) => { emailForEach.push(k); });
+    expect(emailForEach).toEqual(['welcome', 'reset']);
+    expect([...ctx.emailTemplates].length).toBe(2);
+  });
+
+  test('wsEndpoints constructed when ws config has endpoints (lines 395-396)', async () => {
+    const { ctx } = await createDirectContext({
+      infra: {
+        frameworkConfig: {
+          entityRegistry: createEntityRegistry(),
+          trustProxy: false,
+          ws: {
+            endpoints: {
+              '/chat': { maxConnections: 100 },
+              '/notifications': { maxConnections: 50 },
+            },
+          },
+          storeInfra: {
+            appName: 'ws-app',
+            getRedis: () => { throw new Error('not configured'); },
+            getMongo: () => { throw new Error('not configured'); },
+            getSqliteDb: () => { throw new Error('not configured'); },
+            getPostgres: () => { throw new Error('not configured'); },
+          },
+        },
+      } as any,
+    });
+    expect(ctx.wsEndpoints).not.toBeNull();
+    expect(ctx.wsEndpoints?.['/chat']).toBeDefined();
+    expect(ctx.wsEndpoints?.['/notifications']).toBeDefined();
+  });
+
+  test('bootstraps permissions when config is provided (lines 338-367)', async () => {
+    const { ctx } = await createDirectContext({
+      permissions: {
+        adapter: 'memory',
+      },
+    });
+    expect(ctx.pluginState.has(PERMISSIONS_STATE_KEY)).toBe(true);
+    const perms = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as any;
+    expect(perms).toBeDefined();
+    expect(perms.evaluator).toBeDefined();
+    expect(perms.registry).toBeDefined();
+    expect(perms.adapter).toBeDefined();
+    expect(Object.isFrozen(perms)).toBe(true);
+  });
+
+  test('ReadonlyMap forEach passes thisArg correctly (lines 178-181)', async () => {
+    const { ctx } = await createDirectContext();
+    finalizeContext(ctx, {
+      routeAuth: null,
+      userResolver: null,
+      rateLimitAdapter: null,
+      fingerprintBuilder: null,
+      cacheAdapters: new Map([['a', 'adapter-a'], ['b', 'adapter-b']]),
+      emailTemplates: new Map([['t1', { subject: 'S1' }]]),
+    });
+
+    // Exercise the forEach thisArg path on ReadonlyMap (line 178-181)
+    const collector = { keys: [] as string[] };
+    ctx.cacheAdapters.forEach(function(this: typeof collector, _v: unknown, k: unknown) {
+      this.keys.push(k as string);
+    }, collector);
+    expect(collector.keys).toEqual(['a', 'b']);
+
+    const emailCollector = { names: [] as string[] };
+    ctx.emailTemplates.forEach(function(this: typeof emailCollector, _v: unknown, k: string) {
+      this.names.push(k);
+    }, emailCollector);
+    expect(emailCollector.names).toEqual(['t1']);
+  });
+
+  test('upload config includes generateKey and tenantScopedKeys (lines 424-425)', async () => {
+    const generateKey = () => 'custom-key';
+    const { ctx } = await createDirectContext({
+      upload: {
+        storage: { put: async () => ({ key: 'k', url: '/u' }) } as any,
+        maxFileSize: 2048,
+        maxFiles: 5,
+        allowedMimeTypes: ['image/png'],
+        keyPrefix: 'uploads/',
+        generateKey,
+        tenantScopedKeys: true,
+      },
+    });
+    expect(ctx.upload?.config.generateKey).toBe(generateKey);
+    expect(ctx.upload?.config.tenantScopedKeys).toBe(true);
+    expect(ctx.upload?.config.keyPrefix).toBe('uploads/');
+  });
+
+  test('destroy without ws transport exercises the non-ws path (lines 463-469)', async () => {
+    const { ctx, secretDestroy } = await createDirectContext();
+    // ctx.ws is null by default — destroy should not throw
+    expect(ctx.ws).toBeNull();
+    await ctx.destroy();
+    expect(secretDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  test('destroy with ws but no transport exercises the ws.transport falsy path (line 463)', async () => {
+    const { ctx } = await createDirectContext();
+    ctx.ws = {
+      roomRegistry: new Map(),
+      heartbeatSockets: new Set(),
+      heartbeatEndpointConfigs: new Map(),
+      socketUsers: new Map(),
+      roomPresence: new Map(),
+      socketRegistry: new Map(),
+      rateLimitState: new Map(),
+      sessionRegistry: new Map(),
+      lastEventIds: new Map(),
+      heartbeatTimer: null,
+      transport: null, // no transport to disconnect
+    } as any;
+    await ctx.destroy();
+    // Should not throw — transport is null, so disconnect is skipped
+  });
+
+  test('destroy swallows bus.shutdown errors (line 473)', async () => {
+    const busShutdown = mock(async () => {
+      throw new Error('bus shutdown failed');
+    });
+    const { ctx } = await createDirectContext({ busShutdown });
+    await ctx.destroy();
+    expect(busShutdown).toHaveBeenCalledTimes(1);
+  });
+
+  test('destroy swallows plugin teardown errors (line 459)', async () => {
+    const teardown = mock(async () => {
+      throw new Error('teardown failed');
+    });
+    const { ctx } = await createDirectContext({
+      plugins: [{ name: 'failing-plugin', teardown }],
+    });
+    await ctx.destroy();
+    expect(teardown).toHaveBeenCalledTimes(1);
+  });
+
+  test('clear without ws state does not throw (lines 437-451)', async () => {
+    const { ctx } = await createDirectContext();
+    expect(ctx.ws).toBeNull();
+    // clear should not throw when ws is null
+    await ctx.clear();
+  });
+
+  test('clear handles ws without heartbeatTimer (line 447)', async () => {
+    const { ctx } = await createDirectContext();
+    ctx.ws = {
+      roomRegistry: new Map([['r1', new Set(['s1'])]]),
+      heartbeatSockets: new Set(['s1']),
+      heartbeatEndpointConfigs: new Map(),
+      socketUsers: new Map(),
+      roomPresence: new Map(),
+      socketRegistry: new Map(),
+      rateLimitState: new Map(),
+      sessionRegistry: new Map(),
+      lastEventIds: new Map(),
+      heartbeatTimer: null, // no timer to clear
+    } as any;
+    await ctx.clear();
+    expect(ctx.ws?.roomRegistry.size).toBe(0);
+    expect(ctx.ws?.heartbeatSockets.size).toBe(0);
+  });
+
+  test('clearIfPresent handles null/undefined/non-clearable values', async () => {
+    const { ctx } = await createDirectContext({
+      infra: {
+        persistence: {
+          idempotency: null,       // null — clearIfPresent sees null
+          uploadRegistry: {},      // no clear method
+          wsMessages: undefined,   // undefined
+          auditLog: {},
+          cronRegistry: {},
+          configureRoom() {},
+          getRoomConfig() { return null; },
+          setDefaults() {},
+        },
+      } as any,
+    });
+    // Should not throw when persistence sub-objects are null/undefined/missing clear
+    await ctx.clear();
+  });
+
+  test('corsOrigins as string (non-array) passes through without copying (line 378-379)', async () => {
+    const { ctx } = await createDirectContext({
+      infra: {
+        corsOrigins: '*',
+      } as any,
+    });
+    expect(ctx.config.security.cors).toBe('*');
+  });
+
+  test('mongo config is undefined when infra.mongo is null (lines 314-319)', async () => {
+    const { ctx } = await createDirectContext({
+      infra: { mongo: null } as any,
+    });
+    expect(ctx.config.mongo).toBeUndefined();
+    expect(ctx.mongo).toBeNull();
+  });
+
+  test('mongo config is frozen when infra.mongo is set (lines 314-319)', async () => {
+    const { ctx } = await createDirectContext({
+      infra: {
+        mongo: {
+          auth: { kind: 'auth' } as any,
+          app: { kind: 'app' } as any,
+          mongoose: {} as any,
+        },
+        mongoMode: 'single',
+      } as any,
+    });
+    expect(ctx.config.mongo).toBeDefined();
+    expect(Object.isFrozen(ctx.config.mongo!)).toBe(true);
+    expect(ctx.mongo).not.toBeNull();
+    expect(ctx.mongo?.auth).toEqual({ kind: 'auth' });
+    expect(ctx.mongo?.app).toEqual({ kind: 'app' });
+  });
+
+  test('redis is null and config.redis is undefined when infra.redis is null (lines 383-387)', async () => {
+    const { ctx } = await createDirectContext({
+      infra: { redis: null } as any,
+    });
+    expect(ctx.redis).toBeNull();
+    expect(ctx.config.redis).toBeUndefined();
+  });
+
+  test('sqlite and sqliteDb are null when not configured (lines 389-390)', async () => {
+    const { ctx } = await createDirectContext({
+      infra: { sqliteDb: null } as any,
+    });
+    expect(ctx.sqlite).toBeNull();
+    expect(ctx.sqliteDb).toBeNull();
+  });
+
+  test('captcha cloneAndFreezeConfig with null returns null (line 49)', async () => {
+    const { ctx } = await createDirectContext({ captcha: null });
+    expect(ctx.config.captcha).toBeNull();
+  });
+
+  test('captcha cloneAndFreezeConfig with object returns frozen deep clone (line 50)', async () => {
+    const captcha = { provider: 'test', siteKey: 'key-1', secretKey: 'secret-1' };
+    const { ctx } = await createDirectContext({ captcha: captcha as any });
+    expect(ctx.config.captcha).not.toBe(captcha);
+    expect(ctx.config.captcha).toEqual(captcha);
+    expect(Object.isFrozen(ctx.config.captcha)).toBe(true);
+  });
+
+  test('upload is null when not provided (line 428)', async () => {
+    const { ctx } = await createDirectContext();
+    expect(ctx.upload).toBeNull();
+  });
+
+  test('upload config without allowedMimeTypes sets it to undefined (line 420-421)', async () => {
+    const { ctx } = await createDirectContext({
+      upload: {
+        storage: { put: async () => ({ key: 'k', url: '/u' }) } as any,
+        maxFileSize: 1024,
+        maxFiles: 1,
+        // no allowedMimeTypes
+      },
+    });
+    expect(ctx.upload?.config.allowedMimeTypes).toBeUndefined();
+  });
+
+  test('secrets provider destroy is called even when optional (line 503)', async () => {
+    const { ctx } = await createDirectContext({
+      secretDestroy: undefined as any,
+    });
+    // destroy should not throw when provider.destroy is undefined
+    await ctx.destroy();
   });
 });

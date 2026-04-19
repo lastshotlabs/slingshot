@@ -8,8 +8,10 @@
     "types": ["bun"],
     "paths": {
       "@lastshotlabs/slingshot-core": ["../slingshot-core/src/index.ts"],
+      "@lastshotlabs/slingshot-core/content": ["../slingshot-core/src/content.public.ts"],
       "@lastshotlabs/slingshot-core/testing": ["../slingshot-core/src/testing.ts"],
       "@lastshotlabs/slingshot-entity": ["../slingshot-entity/src/index.ts"],
+      "@lastshotlabs/slingshot-entity/routing": ["../slingshot-entity/src/routing/index.ts"],
       "@lastshotlabs/slingshot-community": ["../slingshot-community/src/index.ts"],
       "@lastshotlabs/slingshot-notifications": ["../slingshot-notifications/src/index.ts"],
       "@lastshotlabs/slingshot-notifications/testing": ["../slingshot-notifications/src/testing.ts"]

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
@@ -589,6 +589,267 @@ describe('createServerFromManifest', () => {
         expect(capturedConfig?.['eventBus']).toBe(fakeBus);
       } finally {
         serverSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('handler loading', () => {
+    it('loads handlers from a directory (dir mode) and registers them', async () => {
+      const dir = join(tmpdir(), `slingshot-handlers-dir-${Date.now()}`);
+      mkdirSync(dir, { recursive: true });
+
+      // Create handler directory with .ts files
+      const handlersDir = join(dir, 'handlers');
+      mkdirSync(handlersDir, { recursive: true });
+      writeFileSync(
+        join(handlersDir, 'myHandler.ts'),
+        'export function myHandler() { return "handler-result"; }\n',
+        'utf-8',
+      );
+      writeFileSync(
+        join(handlersDir, 'ignored.d.ts'),
+        '// This should be ignored\nexport const foo = 1;\n',
+        'utf-8',
+      );
+
+      const manifest = JSON.stringify({
+        manifestVersion: 1,
+        handlers: { dir: './handlers' },
+      });
+      writeFileSync(join(dir, 'app.manifest.json'), manifest, 'utf-8');
+
+      const registry = createManifestHandlerRegistry();
+      const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
+
+      try {
+        await createServerFromManifest(join(dir, 'app.manifest.json'), registry);
+        expect(registry.hasHandler('myHandler')).toBe(true);
+      } finally {
+        serverSpy.mockRestore();
+      }
+    });
+
+    it('loads hooks from handler files', async () => {
+      const dir = join(tmpdir(), `slingshot-hooks-${Date.now()}`);
+      mkdirSync(dir, { recursive: true });
+
+      writeFileSync(
+        join(dir, 'slingshot.handlers.ts'),
+        `export const hooks = {
+          afterAdapters: async () => {},
+          beforeSetup: async () => {},
+        };\n`,
+        'utf-8',
+      );
+
+      const manifest = JSON.stringify({
+        manifestVersion: 1,
+      });
+      writeFileSync(join(dir, 'app.manifest.json'), manifest, 'utf-8');
+
+      const registry = createManifestHandlerRegistry();
+      const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
+
+      try {
+        await createServerFromManifest(join(dir, 'app.manifest.json'), registry);
+        expect(registry.hasHook('afterAdapters')).toBe(true);
+        expect(registry.hasHook('beforeSetup')).toBe(true);
+      } finally {
+        serverSpy.mockRestore();
+      }
+    });
+
+    it('skips handler loading when handlersPath is false', async () => {
+      const path = writeTempManifest(MINIMAL_MANIFEST);
+
+      const registry = createManifestHandlerRegistry();
+      const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
+
+      try {
+        await createServerFromManifest(path, registry, { handlersPath: false });
+        // No handlers should be loaded
+      } finally {
+        serverSpy.mockRestore();
+      }
+    });
+
+    it('handles non-existent handler directory gracefully', async () => {
+      const dir = join(tmpdir(), `slingshot-nodir-${Date.now()}`);
+      mkdirSync(dir, { recursive: true });
+
+      const manifest = JSON.stringify({
+        manifestVersion: 1,
+        handlers: { dir: './nonexistent-handlers' },
+      });
+      writeFileSync(join(dir, 'app.manifest.json'), manifest, 'utf-8');
+
+      const registry = createManifestHandlerRegistry();
+      const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
+
+      try {
+        // Should not throw
+        await createServerFromManifest(join(dir, 'app.manifest.json'), registry);
+      } finally {
+        serverSpy.mockRestore();
+      }
+    });
+
+    it('overrides manifest handlers field with handlersPath option', async () => {
+      const dir = join(tmpdir(), `slingshot-override-${Date.now()}`);
+      mkdirSync(dir, { recursive: true });
+
+      const handlersDir = join(dir, 'custom-handlers');
+      mkdirSync(handlersDir, { recursive: true });
+      writeFileSync(
+        join(handlersDir, 'custom.ts'),
+        'export function customFn() { return "custom"; }\n',
+        'utf-8',
+      );
+
+      const manifest = JSON.stringify({
+        manifestVersion: 1,
+        handlers: 'should-not-be-used.ts',
+      });
+      writeFileSync(join(dir, 'app.manifest.json'), manifest, 'utf-8');
+
+      const registry = createManifestHandlerRegistry();
+      const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
+
+      try {
+        await createServerFromManifest(join(dir, 'app.manifest.json'), registry, {
+          handlersPath: { dir: handlersDir },
+        });
+        expect(registry.hasHandler('customFn')).toBe(true);
+      } finally {
+        serverSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('synthetic plugin injection', () => {
+    it('auto-adds slingshot-entity and slingshot-permissions when entities are defined', async () => {
+      const manifest = JSON.stringify({
+        manifestVersion: 1,
+        entities: {
+          Post: {
+            fields: {
+              id: { type: 'string', primary: true },
+              title: { type: 'string' },
+            },
+          },
+        },
+      });
+      const path = writeTempManifest(manifest);
+
+      let capturedConfig: Record<string, unknown> | undefined;
+      const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(
+        (config?: Record<string, unknown>) => {
+          capturedConfig = config;
+          return makePlugin('mock-plugin');
+        },
+      );
+      const serverSpy = spyOn(serverModule, 'createServer').mockImplementation(config => {
+        return Promise.resolve(makeTestServer());
+      });
+
+      try {
+        await createServerFromManifest(path);
+        // Both slingshot-entity and slingshot-permissions should have been loaded
+        const loadedPlugins = loadSpy.mock.calls.map(c => c[0]);
+        expect(loadedPlugins).toContain('slingshot-entity');
+        expect(loadedPlugins).toContain('slingshot-permissions');
+      } finally {
+        loadSpy.mockRestore();
+        serverSpy.mockRestore();
+      }
+    });
+
+    it('includes afterAdapters hooks in synthetic entity plugin config', async () => {
+      const manifest = JSON.stringify({
+        manifestVersion: 1,
+        apiPrefix: '/api/v2',
+        entities: {
+          Post: {
+            fields: {
+              id: { type: 'string', primary: true },
+              title: { type: 'string' },
+            },
+          },
+        },
+        hooks: {
+          afterAdapters: [
+            { handler: 'myHook' },
+            { handler: 'myHookWithParams', params: { key: 'value' } },
+          ],
+        },
+      });
+      const path = writeTempManifest(manifest);
+
+      const capturedConfigs: Record<string, unknown>[] = [];
+      const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(
+        (config?: Record<string, unknown>) => {
+          if (config) capturedConfigs.push(config);
+          return makePlugin('mock-plugin');
+        },
+      );
+      const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
+
+      try {
+        await createServerFromManifest(path);
+        // Find the entity plugin config
+        const entityConfig = capturedConfigs.find(c => c['name'] === 'slingshot-entity');
+        expect(entityConfig).toBeDefined();
+        expect(entityConfig!['mountPath']).toBe('/api/v2');
+        const manifestBlock = entityConfig!['manifest'] as Record<string, unknown>;
+        const hooks = manifestBlock['hooks'] as { afterAdapters: Array<{ handler: string; params?: unknown }> };
+        expect(hooks).toBeDefined();
+        expect(hooks.afterAdapters).toHaveLength(2);
+        expect(hooks.afterAdapters[0]).toEqual({ handler: 'myHook' });
+        expect(hooks.afterAdapters[1]).toEqual({ handler: 'myHookWithParams', params: { key: 'value' } });
+      } finally {
+        loadSpy.mockRestore();
+        serverSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('env var interpolation in arrays', () => {
+    const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+      process.env['TEST_ORIGIN'] = 'https://test.example.com';
+    });
+
+    afterEach(() => {
+      if ('TEST_ORIGIN' in originalEnv) {
+        process.env['TEST_ORIGIN'] = originalEnv['TEST_ORIGIN'];
+      } else {
+        Reflect.deleteProperty(process.env, 'TEST_ORIGIN');
+      }
+    });
+
+    it('interpolates env vars inside arrays', async () => {
+      const manifest = JSON.stringify({
+        manifestVersion: 1,
+        security: { cors: ['${TEST_ORIGIN}', 'https://other.example.com'] },
+      });
+      const path = writeTempManifest(manifest);
+
+      let capturedConfig: Record<string, unknown> | undefined;
+      const spy = spyOn(serverModule, 'createServer').mockImplementation(config => {
+        capturedConfig = config as Record<string, unknown>;
+        return Promise.resolve(makeTestServer());
+      });
+
+      try {
+        await createServerFromManifest(path);
+        const security = capturedConfig?.['security'] as Record<string, unknown> | undefined;
+        expect(security?.['cors']).toEqual([
+          'https://test.example.com',
+          'https://other.example.com',
+        ]);
+      } finally {
+        spy.mockRestore();
       }
     });
   });

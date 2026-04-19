@@ -79,4 +79,21 @@ describe('mcpFoundation', () => {
 
     expect(schema).not.toBeNull();
   });
+
+  test('generateConfig returns validation error for invalid manifest', () => {
+    const foundation = createMcpFoundation();
+    // Invalid manifest (missing required routesDir, wrong manifestVersion) triggers
+    // the early-return validation-failure path inside generateConfig.
+    const result = foundation.generateConfig({ manifestVersion: 99 });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('getPlugin returns null for an unknown plugin name', () => {
+    const foundation = createMcpFoundation();
+    expect(foundation.getPlugin('non-existent-plugin-xyz')).toBeNull();
+  });
 });

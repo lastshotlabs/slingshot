@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { StoredMessage, WsMessageRepository } from '@lastshotlabs/slingshot-core';
-import { createMemoryWsMessageRepository } from '../../src/framework/persistence/wsMessages';
+import {
+  createMemoryWsMessageRepository,
+  createMongoWsMessageRepository,
+} from '../../src/framework/persistence/wsMessages';
 
 const ENDPOINT = '/ws';
 
@@ -139,5 +142,249 @@ describe('wsMessages (memory backend)', () => {
 
     const history = await repo.getHistory(ENDPOINT, 'chat');
     expect(history).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MongoDB backend — cursor-based pagination & persist trimming
+// ---------------------------------------------------------------------------
+
+describe('wsMessages (mongo backend)', () => {
+  const ENDPOINT = '/ws';
+
+  interface MockDoc {
+    _id: string;
+    endpoint: string;
+    room: string;
+    senderId?: string | null;
+    payload?: unknown;
+    createdAt: number;
+  }
+
+  function makeMockMongoModel() {
+    const docs: MockDoc[] = [];
+
+    const model = {
+      create: async (doc: object) => {
+        docs.push(doc as MockDoc);
+      },
+      countDocuments: async (filter: { endpoint: string; room: string }) => {
+        return docs.filter(d => d.endpoint === filter.endpoint && d.room === filter.room).length;
+      },
+      find: (filter: Record<string, unknown>) => {
+        let filtered = docs.filter(d => {
+          if (filter.endpoint && d.endpoint !== filter.endpoint) return false;
+          if (filter.room && d.room !== filter.room) return false;
+          if (filter['$or']) {
+            const orClauses = filter['$or'] as Array<Record<string, unknown>>;
+            return orClauses.some(clause => {
+              const ct = clause.createdAt;
+              const idCmp = clause._id;
+              if (typeof ct === 'object' && ct !== null && typeof idCmp === 'undefined') {
+                // Simple createdAt comparison: { createdAt: { $lt: N } }
+                const ctObj = ct as Record<string, number>;
+                if ('$lt' in ctObj) return d.createdAt < ctObj['$lt'];
+                if ('$gt' in ctObj) return d.createdAt > ctObj['$gt'];
+              }
+              if (typeof ct === 'number' && typeof idCmp === 'object' && idCmp !== null) {
+                // Compound clause: { createdAt: N, _id: { $lt/$gt: id } }
+                if (d.createdAt !== ct) return false;
+                const idObj = idCmp as Record<string, string>;
+                if ('$lt' in idObj) return d._id < idObj['$lt'];
+                if ('$gt' in idObj) return d._id > idObj['$gt'];
+              }
+              return false;
+            });
+          }
+          if (filter['_id']) {
+            const idFilter = filter['_id'] as Record<string, string[]>;
+            if (idFilter['$in']) return idFilter['$in'].includes(d._id);
+          }
+          return true;
+        });
+
+        return {
+          sort: (order: Record<string, number>) => {
+            const key = Object.keys(order)[0] === 'createdAt' ? 'createdAt' : '_id';
+            const dir = Object.values(order)[0];
+            filtered = filtered.sort((a, b) => {
+              const va = key === 'createdAt' ? a.createdAt : a._id;
+              const vb = key === 'createdAt' ? b.createdAt : b._id;
+              return dir === 1 ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+            });
+            return {
+              limit: (n: number) => ({
+                select: async (_fields: string) => filtered.slice(0, n).map(d => ({ _id: d._id })),
+                lean: async () => filtered.slice(0, n),
+              }),
+            };
+          },
+        };
+      },
+      findById: (id: string) => ({
+        lean: async () => docs.find(d => d._id === id) ?? null,
+      }),
+      deleteMany: async (filter: Record<string, unknown>) => {
+        if (Object.keys(filter).length === 0) {
+          // Clear all
+          docs.length = 0;
+          return;
+        }
+        const idFilter = filter['_id'] as Record<string, string[]> | undefined;
+        if (idFilter?.['$in']) {
+          const idsToRemove = new Set(idFilter['$in']);
+          for (let i = docs.length - 1; i >= 0; i--) {
+            if (idsToRemove.has(docs[i]._id)) docs.splice(i, 1);
+          }
+        }
+      },
+    };
+
+    return { model, docs };
+  }
+
+  function makeMockConn(model: unknown) {
+    return {
+      models: {} as Record<string, unknown>,
+      model(_name: string, _schema: unknown) {
+        return model;
+      },
+    };
+  }
+
+  function makeMockMongoose() {
+    const SchemaClass = class {
+      constructor(_def: object, _opts?: object) {}
+      index(_spec: object, _opts?: object) {}
+    } as any;
+    SchemaClass.Types = { Mixed: 'Mixed' };
+    return { Schema: SchemaClass };
+  }
+
+  function makeMessage(
+    room: string,
+    data: { senderId?: string | null; payload: unknown },
+    createdAt?: number,
+  ): StoredMessage {
+    return {
+      id: crypto.randomUUID(),
+      endpoint: ENDPOINT,
+      room,
+      senderId: data.senderId ?? null,
+      payload: data.payload,
+      createdAt: createdAt ?? Date.now(),
+    };
+  }
+
+  test('persist trims oldest when count exceeds maxCount', async () => {
+    const { model, docs } = makeMockMongoModel();
+    const conn = makeMockConn(model);
+    const mg = makeMockMongoose();
+    const repo = createMongoWsMessageRepository(conn as any, mg);
+
+    const config = { maxCount: 2, ttlSeconds: 86400 };
+    await repo.persist(makeMessage('chat', { payload: '1' }, 1000), config);
+    await repo.persist(makeMessage('chat', { payload: '2' }, 2000), config);
+    await repo.persist(makeMessage('chat', { payload: '3' }, 3000), config);
+
+    // After persisting 3 with maxCount=2, oldest should be trimmed
+    expect(docs.length).toBe(2);
+  });
+
+  test('getHistory with before cursor applies $or filter', async () => {
+    const { model, docs } = makeMockMongoModel();
+    const conn = makeMockConn(model);
+    const mg = makeMockMongoose();
+    const repo = createMongoWsMessageRepository(conn as any, mg);
+
+    const config = { maxCount: 100, ttlSeconds: 86400 };
+    const m1 = makeMessage('chat', { payload: '1' }, 1000);
+    const m2 = makeMessage('chat', { payload: '2' }, 2000);
+    const m3 = makeMessage('chat', { payload: '3' }, 3000);
+    await repo.persist(m1, config);
+    await repo.persist(m2, config);
+    await repo.persist(m3, config);
+
+    // getHistory with before: m3 should return messages before m3
+    const history = await repo.getHistory(ENDPOINT, 'chat', { before: m3.id });
+    // Should only contain messages with createdAt < 3000
+    expect(history.every(m => m.createdAt < 3000)).toBe(true);
+  });
+
+  test('getHistory with after cursor applies $or filter', async () => {
+    const { model, docs } = makeMockMongoModel();
+    const conn = makeMockConn(model);
+    const mg = makeMockMongoose();
+    const repo = createMongoWsMessageRepository(conn as any, mg);
+
+    const config = { maxCount: 100, ttlSeconds: 86400 };
+    const m1 = makeMessage('chat', { payload: '1' }, 1000);
+    const m2 = makeMessage('chat', { payload: '2' }, 2000);
+    const m3 = makeMessage('chat', { payload: '3' }, 3000);
+    await repo.persist(m1, config);
+    await repo.persist(m2, config);
+    await repo.persist(m3, config);
+
+    // getHistory with after: m1 should return messages after m1
+    const history = await repo.getHistory(ENDPOINT, 'chat', { after: m1.id });
+    expect(history.every(m => m.createdAt > 1000)).toBe(true);
+  });
+
+  test('getHistory with before cursor for nonexistent id returns all', async () => {
+    const { model } = makeMockMongoModel();
+    const conn = makeMockConn(model);
+    const mg = makeMockMongoose();
+    const repo = createMongoWsMessageRepository(conn as any, mg);
+
+    const config = { maxCount: 100, ttlSeconds: 86400 };
+    await repo.persist(makeMessage('chat', { payload: '1' }, 1000), config);
+    await repo.persist(makeMessage('chat', { payload: '2' }, 2000), config);
+
+    // Nonexistent cursor id — findById returns null, no $or filter applied
+    const history = await repo.getHistory(ENDPOINT, 'chat', { before: 'nonexistent-id' });
+    expect(history).toHaveLength(2);
+  });
+
+  test('getHistory with after cursor for nonexistent id returns all', async () => {
+    const { model } = makeMockMongoModel();
+    const conn = makeMockConn(model);
+    const mg = makeMockMongoose();
+    const repo = createMongoWsMessageRepository(conn as any, mg);
+
+    const config = { maxCount: 100, ttlSeconds: 86400 };
+    await repo.persist(makeMessage('chat', { payload: '1' }, 1000), config);
+    await repo.persist(makeMessage('chat', { payload: '2' }, 2000), config);
+
+    const history = await repo.getHistory(ENDPOINT, 'chat', { after: 'nonexistent-id' });
+    expect(history).toHaveLength(2);
+  });
+
+  test('clear swallows errors (best-effort)', async () => {
+    const failingModel = {
+      deleteMany: async () => { throw new Error('db error'); },
+    };
+    // Need to also provide findById, find, etc for getModel
+    const conn = {
+      models: {} as Record<string, unknown>,
+      model(_name: string, _schema: unknown) { return failingModel; },
+    };
+    const mg = makeMockMongoose();
+    const repo = createMongoWsMessageRepository(conn as any, mg);
+
+    // Should not throw
+    await expect(repo.clear()).resolves.toBeUndefined();
+  });
+
+  test('getHistory maps senderId null correctly', async () => {
+    const { model } = makeMockMongoModel();
+    const conn = makeMockConn(model);
+    const mg = makeMockMongoose();
+    const repo = createMongoWsMessageRepository(conn as any, mg);
+
+    const config = { maxCount: 100, ttlSeconds: 86400 };
+    await repo.persist(makeMessage('chat', { payload: 'test' }, 1000), config);
+
+    const history = await repo.getHistory(ENDPOINT, 'chat');
+    expect(history[0].senderId).toBeNull();
   });
 });

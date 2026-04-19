@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { WsState } from '@lastshotlabs/slingshot-core';
 import { handleIncomingEvent } from '../../src/framework/ws/dispatch';
+import * as rooms from '../../src/framework/ws/rooms';
+
+// Mock the rooms module so publish/subscribe/unsubscribe are observable
+mock.module('../../src/framework/ws/rooms', () => ({
+  publish: mock(() => {}),
+  subscribe: mock(() => {}),
+  unsubscribe: mock(() => {}),
+}));
 
 function createWsState(overrides?: Partial<WsState>): WsState {
   return {
@@ -251,6 +259,61 @@ describe('wsDispatch — handleIncomingEvent', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it('middleware throws — treated as deny, ack error forbidden', async () => {
+    const guard = mock(() => { throw new Error('guard crash'); });
+    const handler = mock(() => 'nope');
+    const ws = createMockWs('s1');
+    const msg = JSON.stringify({ action: 'event', event: 'guarded', ackId: 'a-throw' });
+
+    await handleIncomingEvent(state, ws as never, msg, {
+      incoming: { guarded: { middleware: ['check'], handler } },
+      middleware: { check: guard },
+    });
+
+    expect(guard).toHaveBeenCalledTimes(1);
+    expect(handler).not.toHaveBeenCalled();
+    expect(JSON.parse(ws.sent[0])).toEqual({ event: 'ack', ackId: 'a-throw', error: 'forbidden' });
+  });
+
+  it('auth: bearer, no userId — ack error unauthenticated', async () => {
+    const handler = mock(() => 'ok');
+    const ws = createMockWs('s1');
+    const msg = JSON.stringify({ action: 'event', event: 'secure', ackId: 'a-bearer' });
+
+    await handleIncomingEvent(state, ws as never, msg, {
+      incoming: { secure: { auth: 'bearer', handler } },
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(JSON.parse(ws.sent[0])).toEqual({ event: 'ack', ackId: 'a-bearer', error: 'unauthenticated' });
+  });
+
+  it('handler throws non-Error — error message is stringified', async () => {
+    const handler = mock(() => { throw 42; });
+    const ws = createMockWs('s1');
+    const msg = JSON.stringify({ action: 'event', event: 'thrownum', ackId: 'a-num' });
+
+    await handleIncomingEvent(state, ws as never, msg, {
+      incoming: { thrownum: { handler } },
+    });
+
+    expect(JSON.parse(ws.sent[0])).toEqual({ event: 'ack', ackId: 'a-num', error: '42' });
+  });
+
+  it('Buffer message is parsed correctly', async () => {
+    const handler = mock(() => 'from-buffer');
+    const ws = createMockWs('s1');
+    const msg = Buffer.from(JSON.stringify({ action: 'event', event: 'buf', ackId: 'a-buf' }));
+
+    const consumed = await handleIncomingEvent(state, ws as never, msg, {
+      incoming: { buf: { handler } },
+    });
+
+    expect(consumed).toBe(true);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(ws.sent[0]).result).toBe('from-buffer');
+  });
+
   it('unknown middleware name — skipped, handler called normally', async () => {
     const handler = mock(() => 'ok');
     const ws = createMockWs('s1');
@@ -262,5 +325,60 @@ describe('wsDispatch — handleIncomingEvent', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(JSON.parse(ws.sent[0]).result).toBe('ok');
+  });
+
+  // -------------------------------------------------------------------------
+  // context.publish / context.subscribe / context.unsubscribe (lines 40, 43, 46)
+  // -------------------------------------------------------------------------
+
+  it('context.publish is callable from handler (line 40)', async () => {
+    const ws = createMockWs('s1');
+    const handler = mock((_ws: unknown, _payload: unknown, ctx: any) => {
+      ctx.publish('myroom', { hello: 'world' });
+      return 'done';
+    });
+    const msg = JSON.stringify({ action: 'event', event: 'pub', ackId: 'ack-pub' });
+
+    await handleIncomingEvent(state, ws as never, msg, {
+      incoming: { pub: { handler } },
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    // rooms.publish mock should have been called
+    expect((rooms.publish as ReturnType<typeof mock>).mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it('context.subscribe is callable from handler (line 43)', async () => {
+    const ws = createMockWs('s1');
+    (ws as any).subscribe = mock(() => {});
+    const handler = mock((_ws: unknown, _payload: unknown, ctx: any) => {
+      ctx.subscribe('myroom');
+      return 'done';
+    });
+    const msg = JSON.stringify({ action: 'event', event: 'sub', ackId: 'ack-sub' });
+
+    await handleIncomingEvent(state, ws as never, msg, {
+      incoming: { sub: { handler } },
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect((rooms.subscribe as ReturnType<typeof mock>).mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it('context.unsubscribe is callable from handler (line 46)', async () => {
+    const ws = createMockWs('s1');
+    (ws as any).unsubscribe = mock(() => {});
+    const handler = mock((_ws: unknown, _payload: unknown, ctx: any) => {
+      ctx.unsubscribe('myroom');
+      return 'done';
+    });
+    const msg = JSON.stringify({ action: 'event', event: 'unsub', ackId: 'ack-unsub' });
+
+    await handleIncomingEvent(state, ws as never, msg, {
+      incoming: { unsub: { handler } },
+    });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect((rooms.unsubscribe as ReturnType<typeof mock>).mock.calls.length).toBeGreaterThan(0);
   });
 });

@@ -403,6 +403,145 @@ describe('createUploadsRouter (root coverage)', () => {
     expect(deleteSpy).not.toHaveBeenCalled();
   });
 
+  test('returns 501 when adapter has no presignPut method (lines 254-257)', async () => {
+    const { app } = makeUploadApp({
+      adapter: {
+        // no presignPut
+        delete: async (_key: string) => {},
+      },
+    });
+
+    const response = await app.request(
+      '/uploads/presign',
+      json({ filename: 'doc.pdf', mimeType: 'application/pdf' }),
+    );
+
+    expect(response.status).toBe(501);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Presigned URLs not supported by the configured storage adapter',
+    });
+  });
+
+  test('returns 400 when mimeType is missing but allowedMimeTypes is configured (lines 268-271)', async () => {
+    const presignPut = mock(async () => 'https://uploads.example/test');
+    const { app } = makeUploadApp({
+      adapter: { presignPut, delete: async () => {} },
+      uploadConfig: { allowedMimeTypes: ['image/png', 'application/pdf'] },
+    });
+
+    const response = await app.request(
+      '/uploads/presign',
+      json({ filename: 'file.pdf' }), // no mimeType
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'mimeType is required when upload.allowedMimeTypes is configured.',
+    });
+    expect(presignPut).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 when mimeType is not in allowedMimeTypes list (line 275)', async () => {
+    const presignPut = mock(async () => 'https://uploads.example/test');
+    const { app } = makeUploadApp({
+      adapter: { presignPut, delete: async () => {} },
+      uploadConfig: { allowedMimeTypes: ['image/png'] },
+    });
+
+    const response = await app.request(
+      '/uploads/presign',
+      json({ filename: 'file.pdf', mimeType: 'application/pdf' }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'File type "application/pdf" not allowed.',
+    });
+    expect(presignPut).not.toHaveBeenCalled();
+  });
+
+  test('mimeMatches wildcard pattern: accepts mime with wildcard allowedMimeType (line 20)', async () => {
+    const presignPut = mock(async () => 'https://uploads.example/image');
+    const { app } = makeUploadApp({
+      adapter: { presignPut, delete: async () => {} },
+      uploadConfig: { allowedMimeTypes: ['image/*'] },
+    });
+
+    const response = await app.request(
+      '/uploads/presign',
+      json({ filename: 'photo.png', mimeType: 'image/png' }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(presignPut).toHaveBeenCalled();
+  });
+
+  test('returns 413 when maxBytes exceeds configuredMaxFileSize (lines 284-290)', async () => {
+    const presignPut = mock(async () => 'https://uploads.example/test');
+    const { app } = makeUploadApp({
+      adapter: { presignPut, delete: async () => {} },
+      uploadConfig: { maxFileSize: 1000 },
+    });
+
+    const response = await app.request(
+      '/uploads/presign',
+      json({ filename: 'big.bin', mimeType: 'application/octet-stream', maxBytes: 5000 }),
+    );
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Requested upload size exceeds configured limit of 1000 bytes.',
+    });
+    expect(presignPut).not.toHaveBeenCalled();
+  });
+
+  test('uses configuredMaxFileSize as effectiveMaxBytes when request omits maxBytes (lines 310-311)', async () => {
+    const presignPut = mock(async (key: string, opts: Record<string, unknown>) => {
+      return `https://uploads.example/${encodeURIComponent(key)}`;
+    });
+    const { app } = makeUploadApp({
+      adapter: { presignPut, delete: async () => {} },
+      uploadConfig: { maxFileSize: 2048 },
+    });
+
+    // Request without maxBytes — configuredMaxFileSize should be used
+    const response = await app.request(
+      '/uploads/presign',
+      json({ filename: 'doc.pdf' }),
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    // effectiveMaxBytes should come from configuredMaxFileSize
+    expect(body.maxBytes).toBe(2048);
+    expect(presignPut).toHaveBeenCalledWith(
+      body.key,
+      expect.objectContaining({ maxSize: 2048 }),
+    );
+  });
+
+  test('effectiveMaxBytes is undefined when neither maxBytes nor maxFileSize is set (lines 307-312)', async () => {
+    const presignPut = mock(async (key: string) => `https://uploads.example/${key}`);
+    const { app } = makeUploadApp({
+      adapter: { presignPut, delete: async () => {} },
+      uploadConfig: {}, // no maxFileSize
+    });
+
+    const response = await app.request(
+      '/uploads/presign',
+      json({ filename: 'doc.pdf' }), // no maxBytes
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    // effectiveMaxBytes is undefined → maxBytes not included in response
+    expect(body.maxBytes).toBeUndefined();
+    expect(presignPut).toHaveBeenCalledWith(
+      body.key,
+      expect.objectContaining({ maxSize: undefined }),
+    );
+  });
+
   test('deletes registered uploads for the owner and removes the registry record', async () => {
     const deleteSpy = mock(async (_key: string) => {});
     const { app, records } = makeUploadApp({

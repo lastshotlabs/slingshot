@@ -116,6 +116,9 @@ function extractStringConstraints(def: ZodDef): {
   prefix?: string;
   suffix?: string;
   includes?: string;
+  precision?: number | null;
+  local?: boolean;
+  offset?: boolean;
 } {
   const result: {
     min?: number;
@@ -125,6 +128,9 @@ function extractStringConstraints(def: ZodDef): {
     prefix?: string;
     suffix?: string;
     includes?: string;
+    precision?: number | null;
+    local?: boolean;
+    offset?: boolean;
   } = {};
 
   // Format can come from the def itself (dedicated format types like ZodUUID)
@@ -154,6 +160,15 @@ function extractStringConstraints(def: ZodDef): {
         if (fmt === 'ends_with') result.suffix = (cd as Record<string, unknown>).suffix as string;
         if (fmt === 'includes')
           result.includes = (cd as Record<string, unknown>).includes as string;
+        // Extract datetime/time precision and flags
+        if (fmt === 'datetime' || fmt === 'time') {
+          const cdr = cd as Record<string, unknown>;
+          result.precision = cdr.precision as number | null | undefined;
+          if (fmt === 'datetime') {
+            result.local = cdr.local as boolean | undefined;
+            result.offset = cdr.offset as boolean | undefined;
+          }
+        }
         break;
       }
       case 'regex':
@@ -276,7 +291,12 @@ function extractSetConstraints(def: ZodDef): {
 // String format → faker mapping
 // ---------------------------------------------------------------------------
 
-function fakeStringForFormat(format: string, f: Faker): string {
+function fakeStringForFormat(
+  format: string,
+  f: Faker,
+  precision?: number | null,
+  local?: boolean,
+): string {
   switch (format) {
     case 'email':
       return f.internet.email();
@@ -293,12 +313,33 @@ function fakeStringForFormat(format: string, f: Faker): string {
       return `${f.internet.ipv4()}/${f.number.int({ min: 0, max: 32 })}`;
     case 'cidrv6':
       return `${f.internet.ipv6()}/${f.number.int({ min: 0, max: 128 })}`;
-    case 'datetime':
-      return f.date.recent().toISOString();
+    case 'datetime': {
+      const d = f.date.recent();
+      const iso = d.toISOString();
+      // Apply precision: null = any (default ISO ms), 0 = no fraction, N = N digits
+      let result: string;
+      if (precision === 0) {
+        result = iso.replace(/\.\d+Z$/, 'Z');
+      } else if (typeof precision === 'number' && precision > 0) {
+        const ms = iso.match(/\.(\d+)Z$/)?.[1] ?? '000';
+        result = iso.replace(/\.\d+Z$/, '.' + ms.padEnd(precision, '0').slice(0, precision) + 'Z');
+      } else {
+        result = iso;
+      }
+      if (local) result = result.replace('Z', '');
+      return result;
+    }
     case 'date':
       return f.date.recent().toISOString().split('T')[0];
-    case 'time':
-      return f.date.recent().toISOString().split('T')[1].replace('Z', '');
+    case 'time': {
+      const t = f.date.recent().toISOString().split('T')[1].replace('Z', '');
+      if (precision === 0) return t.replace(/\.\d+$/, '');
+      if (typeof precision === 'number' && precision > 0) {
+        const ms = t.match(/\.(\d+)$/)?.[1] ?? '000';
+        return t.replace(/\.\d+$/, '.' + ms.padEnd(precision, '0').slice(0, precision));
+      }
+      return t;
+    }
     case 'duration':
       return `P${f.number.int({ min: 1, max: 30 })}D`;
     case 'cuid':
@@ -397,7 +438,7 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
         return prefix + bodyBefore + middle + bodyAfter + suffix;
       }
       // Format takes priority (email, uuid, url, etc.)
-      if (c.format) return fakeStringForFormat(c.format, f);
+      if (c.format) return fakeStringForFormat(c.format, f, c.precision, c.local);
       // Length constraints
       const minLen = c.min ?? 1;
       const maxLen = c.max ?? Math.max(minLen, 50);

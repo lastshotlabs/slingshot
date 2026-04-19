@@ -76,6 +76,16 @@ describe('hmacSign / hmacVerify', () => {
     const wrongSig = hmacSign('data', '[object Array]');
     expect(hmacVerify('data', wrongSig, stringKey)).toBe(false);
   });
+
+  test('throws when key is an empty string (line 17 coverage)', () => {
+    // hmacSign with an empty string key must throw — covers the !key guard
+    expect(() => hmacSign('data', '')).toThrow(/non-empty string/);
+  });
+
+  test('throws when key array is empty (line 17 coverage)', () => {
+    // secret[0] is undefined for an empty array, triggering the !key guard
+    expect(() => hmacSign('data', [])).toThrow(/non-empty string/);
+  });
 });
 
 describe('signCookieValue / verifyCookieValue', () => {

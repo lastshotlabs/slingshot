@@ -323,3 +323,76 @@ describe('round-trip: cursorParams + cursorResponse in a route', () => {
     expect(cursor).toBe('tok_xyz');
   });
 });
+
+// ---------------------------------------------------------------------------
+// parseCursorParams — signing branch (lines 58-60)
+// ---------------------------------------------------------------------------
+
+describe('parseCursorParams — signing', () => {
+  it('returns cursor as-is when signing config has cursors disabled', () => {
+    const signing = { config: { cursors: false }, secret: 'secret' };
+    const result = parseCursorParams({ cursor: 'raw-cursor' }, undefined, signing as any);
+    expect(result.cursor).toBe('raw-cursor');
+  });
+
+  it('returns cursor when signing config is present but no secret', () => {
+    const signing = { config: { cursors: true }, secret: null };
+    const result = parseCursorParams({ cursor: 'raw-cursor' }, undefined, signing as any);
+    expect(result.cursor).toBe('raw-cursor');
+  });
+
+  it('verifies and returns cursor when signing is active with valid cursor', () => {
+    const { signCursor } = require('../../src/lib/signing');
+    const secret = 'test-secret-32-chars-long-xxxxxxx';
+    const signed = signCursor('page-2', secret);
+    const signing = { config: { cursors: true }, secret };
+    const result = parseCursorParams({ cursor: signed }, undefined, signing as any);
+    expect(result.cursor).toBe('page-2');
+    expect(result.invalidCursor).toBeUndefined();
+  });
+
+  it('returns invalidCursor:true when signed cursor is tampered', () => {
+    const signing = { config: { cursors: true }, secret: 'test-secret-32-chars-long-xxxxxxx' };
+    const result = parseCursorParams({ cursor: 'tampered-cursor-value' }, undefined, signing as any);
+    expect(result.cursor).toBeUndefined();
+    expect(result.invalidCursor).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// maybeSignCursor (lines 66-75)
+// ---------------------------------------------------------------------------
+
+describe('maybeSignCursor', () => {
+  it('returns null when cursor is null', () => {
+    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
+    expect(maybeSignCursor(null)).toBeNull();
+  });
+
+  it('returns cursor as-is when no signing config', () => {
+    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
+    expect(maybeSignCursor('cursor-abc')).toBe('cursor-abc');
+  });
+
+  it('returns cursor as-is when signing cursors is disabled', () => {
+    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
+    const signing = { config: { cursors: false }, secret: 'secret' };
+    expect(maybeSignCursor('cursor-abc', signing as any)).toBe('cursor-abc');
+  });
+
+  it('returns cursor as-is when secret is null', () => {
+    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
+    const signing = { config: { cursors: true }, secret: null };
+    expect(maybeSignCursor('cursor-abc', signing as any)).toBe('cursor-abc');
+  });
+
+  it('returns signed cursor when signing is active', () => {
+    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
+    const { verifyCursor } = require('../../src/lib/signing');
+    const secret = 'test-secret-32-chars-long-xxxxxxx';
+    const signing = { config: { cursors: true }, secret };
+    const signed = maybeSignCursor('page-3', signing as any);
+    expect(typeof signed).toBe('string');
+    expect(verifyCursor(signed, secret)).toBe('page-3');
+  });
+});

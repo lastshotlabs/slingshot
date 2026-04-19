@@ -137,6 +137,35 @@ describe('createDtoMapper — nullable and optional fields', () => {
 });
 
 // ---------------------------------------------------------------------------
+// ZodDefault unwrap (isNullable branch — line 14 coverage)
+// ---------------------------------------------------------------------------
+
+describe('createDtoMapper — ZodDefault nullable unwrap', () => {
+  it('treats ZodDefault wrapping ZodNullable as nullable and coerces undefined to null', () => {
+    // z.string().nullable().default('') creates ZodDefault wrapping ZodNullable
+    // isNullable must unwrap the ZodDefault to find the ZodNullable underneath
+    const schema = z.object({ id: z.string(), note: z.string().nullable().default('') });
+    const toDto = createDtoMapper(schema);
+    const doc = { _id: objectId('x1') }; // note missing → should coerce to null
+    const dto = toDto(doc);
+    expect(dto.note).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// toId error branch (line 29 coverage)
+// ---------------------------------------------------------------------------
+
+describe('createDtoMapper — toId error', () => {
+  it('throws TypeError when _id is not stringifiable', () => {
+    const schema = z.object({ id: z.string() });
+    const toDto = createDtoMapper(schema);
+    // Pass a doc without _id at all (null-ish value will fail stringifiable check)
+    expect(() => toDto({ _id: 42 as unknown as any })).toThrow(TypeError);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Combined transformation
 // ---------------------------------------------------------------------------
 

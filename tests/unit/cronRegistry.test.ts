@@ -11,6 +11,7 @@ import {
   createPostgresCronRegistry,
   createRedisCronRegistry,
   createSqliteCronRegistry,
+  cronRegistryFactories,
 } from '../../src/framework/persistence/cronRegistry';
 
 // ---------------------------------------------------------------------------
@@ -273,5 +274,247 @@ describe('createPostgresCronRegistry — postgres adapter', () => {
     const repo = createPostgresCronRegistry(pool, 'my-app');
     const result = await repo.getAll();
     expect(result.has('existing-job')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MongoDB adapter (mock)
+// ---------------------------------------------------------------------------
+
+describe('createMongoCronRegistry — mongodb adapter', () => {
+  function makeMockMongoose() {
+    const store = new Map<string, { names: string[] }>();
+
+    const model = {
+      findById: (id: string) => ({
+        lean: () => Promise.resolve(store.get(id) ?? null),
+      }),
+      findByIdAndUpdate: async (
+        id: string,
+        update: { $set: { names: string[] } },
+        _opts: object,
+      ) => {
+        store.set(id, { names: update.$set.names });
+        return null;
+      },
+    };
+
+    const conn = {
+      models: {} as Record<string, unknown>,
+      model(_name: string, _schema: unknown) {
+        return model;
+      },
+    };
+
+    const mg = {
+      Schema: class {
+        constructor(_def: object, _opts?: object) {}
+      },
+    };
+
+    return { conn, mg, model, store };
+  }
+
+  test('getAll returns empty set when no document exists', async () => {
+    const { conn, mg } = makeMockMongoose();
+    const { createMongoCronRegistry } = await import(
+      '../../src/framework/persistence/cronRegistry'
+    );
+    const repo = createMongoCronRegistry(
+      () => conn as any,
+      () => mg as any,
+      'test-app',
+    );
+    const result = await repo.getAll();
+    expect(result.size).toBe(0);
+  });
+
+  test('save and getAll round-trip', async () => {
+    const { conn, mg } = makeMockMongoose();
+    const { createMongoCronRegistry } = await import(
+      '../../src/framework/persistence/cronRegistry'
+    );
+    const repo = createMongoCronRegistry(
+      () => conn as any,
+      () => mg as any,
+      'my-app',
+    );
+    await repo.save(new Set(['mongo-job-a', 'mongo-job-b']));
+    const result = await repo.getAll();
+    expect(result.has('mongo-job-a')).toBe(true);
+    expect(result.has('mongo-job-b')).toBe(true);
+  });
+
+  test('uses cached model on second call (conn.models path)', async () => {
+    const { conn, mg, model } = makeMockMongoose();
+    // Pre-populate models to simulate second call
+    conn.models['CronSchedulerRegistry'] = model;
+
+    const { createMongoCronRegistry } = await import(
+      '../../src/framework/persistence/cronRegistry'
+    );
+    const repo = createMongoCronRegistry(
+      () => conn as any,
+      () => mg as any,
+      'cached-app',
+    );
+    // Should use the pre-existing model without calling conn.model()
+    const result = await repo.getAll();
+    expect(result.size).toBe(0);
+  });
+
+  test('getAll returns empty set when doc has no names field', async () => {
+    const conn = {
+      models: {} as Record<string, unknown>,
+      model(_name: string, _schema: unknown) {
+        return {
+          findById: (_id: string) => ({ lean: () => Promise.resolve({}) }),
+          findByIdAndUpdate: async () => null,
+        };
+      },
+    };
+    const mg = {
+      Schema: class {
+        constructor(_def: object, _opts?: object) {}
+      },
+    };
+    const { createMongoCronRegistry } = await import(
+      '../../src/framework/persistence/cronRegistry'
+    );
+    const repo = createMongoCronRegistry(
+      () => conn as any,
+      () => mg as any,
+      'no-names-app',
+    );
+    const result = await repo.getAll();
+    expect(result.size).toBe(0);
+  });
+
+  test('appName defaults to "default" docId when empty string', async () => {
+    const store = new Map<string, { names: string[] }>();
+    const model = {
+      findById: (id: string) => ({ lean: () => Promise.resolve(store.get(id) ?? null) }),
+      findByIdAndUpdate: async (
+        id: string,
+        update: { $set: { names: string[] } },
+        _opts: object,
+      ) => {
+        store.set(id, { names: update.$set.names });
+        return null;
+      },
+    };
+    const conn = {
+      models: {} as Record<string, unknown>,
+      model: (_n: string, _s: unknown) => model,
+    };
+    const mg = {
+      Schema: class {
+        constructor(_def: object, _opts?: object) {}
+      },
+    };
+    const { createMongoCronRegistry } = await import(
+      '../../src/framework/persistence/cronRegistry'
+    );
+    const repo = createMongoCronRegistry(
+      () => conn as any,
+      () => mg as any,
+      '',
+    );
+    await repo.save(new Set(['default-job']));
+    expect(store.has('default')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cronRegistryFactories export
+// ---------------------------------------------------------------------------
+
+describe('cronRegistryFactories', () => {
+  test('memory factory creates a working in-memory registry', async () => {
+    const repo = cronRegistryFactories.memory({} as any);
+    await repo.save(new Set(['factory-job']));
+    const result = await repo.getAll();
+    expect(result.has('factory-job')).toBe(true);
+  });
+
+  test('redis factory creates a redis-backed registry', async () => {
+    const store = new Map<string, string>();
+    const redis = {
+      get: async (key: string) => store.get(key) ?? null,
+      set: async (key: string, value: string) => { store.set(key, value); },
+    };
+    const infra = {
+      getRedis: () => redis,
+      appName: 'factory-app',
+    };
+    const repo = cronRegistryFactories.redis(infra as any);
+    await repo.save(new Set(['redis-factory-job']));
+    const result = await repo.getAll();
+    expect(result.has('redis-factory-job')).toBe(true);
+  });
+
+  test('sqlite factory creates a sqlite-backed registry', async () => {
+    const table: string[] = [];
+    const db = {
+      run: (sql: string, params?: unknown[]) => {
+        if (sql.includes('DELETE FROM')) { table.length = 0; return; }
+        if (sql.includes('INSERT INTO') && params) { table.push(params[0] as string); }
+      },
+      query: <T>(_sql: string) => ({
+        all: (..._args: unknown[]) => table.map(name => ({ name }) as unknown as T),
+      }),
+    };
+    const infra = { getSqliteDb: () => db };
+    const repo = cronRegistryFactories.sqlite(infra as any);
+    await repo.save(new Set(['sqlite-factory-job']));
+    const result = await repo.getAll();
+    expect(result.has('sqlite-factory-job')).toBe(true);
+  });
+
+  test('mongo factory creates a mongo-backed registry', async () => {
+    const store = new Map<string, { names: string[] }>();
+    const model = {
+      findById: (id: string) => ({ lean: () => Promise.resolve(store.get(id) ?? null) }),
+      findByIdAndUpdate: async (id: string, update: { $set: { names: string[] } }, _opts: object) => {
+        store.set(id, { names: update.$set.names });
+      },
+    };
+    const conn = {
+      models: {} as Record<string, unknown>,
+      model: (_n: string, _s: unknown) => model,
+    };
+    const mg = { Schema: class { constructor(_def: object, _opts?: object) {} } };
+    const infra = {
+      getMongo: () => ({ conn, mg }),
+      appName: 'mongo-factory-app',
+    };
+    const repo = cronRegistryFactories.mongo(infra as any);
+    await repo.save(new Set(['mongo-factory-job']));
+    const result = await repo.getAll();
+    expect(result.has('mongo-factory-job')).toBe(true);
+  });
+
+  test('postgres factory creates a postgres-backed registry', async () => {
+    const rows: { names: string[] }[] = [];
+    const pool = {
+      query: async (sql: string, params?: unknown[]) => {
+        if (sql.includes('CREATE TABLE')) return { rows: [], rowCount: 0 };
+        if (sql.includes('SELECT names')) return { rows, rowCount: rows.length };
+        if (sql.includes('INSERT INTO')) {
+          rows.length = 0;
+          rows.push({ names: params?.[1] as string[] });
+          return { rows: [], rowCount: 1 };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    };
+    const infra = {
+      getPostgres: () => ({ pool }),
+      appName: 'pg-factory-app',
+    };
+    const repo = cronRegistryFactories.postgres(infra as any);
+    await repo.save(new Set(['pg-factory-job']));
+    const result = await repo.getAll();
+    expect(result.has('pg-factory-job')).toBe(true);
   });
 });

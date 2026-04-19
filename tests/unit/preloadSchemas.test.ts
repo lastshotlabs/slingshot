@@ -147,3 +147,71 @@ describe('preloadModelSchemas — object config without paths', () => {
     ).resolves.toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// makeBunGlob — internal implementation (lines 55, 57-63)
+// ---------------------------------------------------------------------------
+
+describe('preloadModelSchemas — makeBunGlob internal (uses Bun.Glob directly)', () => {
+  test('makeBunGlob scan iterates matched files via real Bun.Glob (lines 57-63)', async () => {
+    // Call without a custom glob → uses the real makeBunGlob() Bun.Glob wrapper.
+    // Use SCHEMAS_DIR which only has safe, importable fixture files.
+    // This exercises lines 57-63: new BunGlob(pattern), scan loop, results push.
+    await expect(preloadModelSchemas(SCHEMAS_DIR)).resolves.toBeUndefined();
+  });
+
+  test('makeBunGlob fallback no-op when Bun.Glob is absent (line 55)', async () => {
+    // Temporarily hide Bun.Glob to exercise the fallback no-op path (line 55).
+    const g = (globalThis as any).Bun;
+    const origGlob = g.Glob;
+    g.Glob = undefined;
+    try {
+      // With no Bun.Glob, makeBunGlob returns { scan: async function*(){} }
+      // preloadModelSchemas will call scan(), which returns no files → no imports
+      await expect(preloadModelSchemas(SCHEMAS_DIR)).resolves.toBeUndefined();
+    } finally {
+      g.Glob = origGlob;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Glob pattern with wildcards (lines 134-137)
+// ---------------------------------------------------------------------------
+
+describe('preloadModelSchemas — glob pattern with wildcards (lines 134-137)', () => {
+  test('splits path at first wildcard segment to derive cwd and pattern', async () => {
+    // The path /base/dir/**/*.schema.ts has a wildcard.
+    // Expected: cwd = "/base/dir", pattern = "**/*.schema.ts"
+    const capturedCalls: Array<{ pattern: string; cwd?: string }> = [];
+    const trackingGlob: RuntimeGlob = {
+      async scan(pattern: string, options?: { cwd?: string }): Promise<string[]> {
+        capturedCalls.push({ pattern, cwd: options?.cwd });
+        return []; // no files — just capture the call
+      },
+    };
+
+    await preloadModelSchemas('/base/dir/**/*.schema.ts', trackingGlob);
+
+    expect(capturedCalls).toHaveLength(1);
+    expect(capturedCalls[0].pattern).toBe('**/*.schema.ts');
+    expect(capturedCalls[0].cwd).toBe('/base/dir');
+  });
+
+  test('handles single-segment wildcard path correctly', async () => {
+    const capturedCalls: Array<{ pattern: string; cwd?: string }> = [];
+    const trackingGlob: RuntimeGlob = {
+      async scan(pattern: string, options?: { cwd?: string }): Promise<string[]> {
+        capturedCalls.push({ pattern, cwd: options?.cwd });
+        return [];
+      },
+    };
+
+    // Pattern like /schemas/*.ts — single wildcard at end
+    await preloadModelSchemas('/schemas/*.ts', trackingGlob);
+
+    expect(capturedCalls).toHaveLength(1);
+    expect(capturedCalls[0].pattern).toBe('*.ts');
+    expect(capturedCalls[0].cwd).toBe('/schemas');
+  });
+});

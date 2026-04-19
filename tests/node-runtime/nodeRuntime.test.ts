@@ -7,7 +7,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { nodeRuntime } from '../../packages/runtime-node/src/index';
 
@@ -34,6 +34,29 @@ function deferred<T = void>() {
     reject = rej;
   });
   return { promise, resolve, reject };
+}
+
+async function openRawSocket(
+  port: number,
+  headers: string[],
+): Promise<import('node:net').Socket> {
+  const net = await import('node:net');
+  const socket = net.createConnection({ host: '127.0.0.1', port });
+  await new Promise<void>((resolve, reject) => {
+    socket.once('connect', resolve);
+    socket.once('error', reject);
+  });
+  socket.write(`GET / HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n${headers.join('\r\n')}\r\n\r\n`);
+  return socket;
+}
+
+function waitForSocketEnd(socket: import('node:net').Socket): Promise<void> {
+  return new Promise(resolve => {
+    const done = () => resolve();
+    socket.once('close', done);
+    socket.once('end', done);
+    socket.once('error', done);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +256,11 @@ describe('RuntimeFs (node:fs)', () => {
     const runtime = nodeRuntime();
     expect(await runtime.readFile(join(tmpDir, 'nope.txt'))).toBeNull();
   });
+
+  it('rethrows non-ENOENT readFile errors', async () => {
+    const runtime = nodeRuntime();
+    await expect(runtime.fs.readFile(tmpDir)).rejects.toBeTruthy();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -366,6 +394,27 @@ describe('RuntimeServerFactory (@hono/node-server)', () => {
       const res = await fetch(`http://127.0.0.1:${server.port}`);
       expect(res.status).toBe(500);
       expect(await res.text()).toBe('caught: boom');
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  it('wraps non-Error throws via opts.error', async () => {
+    const runtime = nodeRuntime();
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch() {
+        throw 'string-error'; // non-Error value
+      },
+      error(err) {
+        return new Response(`caught: ${err.message}`, { status: 500 });
+      },
+    });
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}`);
+      expect(res.status).toBe(500);
+      expect(await res.text()).toBe('caught: string-error');
     } finally {
       await server.stop(true);
     }
@@ -934,6 +983,263 @@ describe('WebSocket (ws)', () => {
     }
   });
 
+  it('logs and swallows errors from async message handler', async () => {
+    const runtime = nodeRuntime();
+    const errorLogged = deferred();
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      if (String(args[0]).includes('websocket message handler failed')) {
+        errorLogged.resolve();
+      }
+    };
+
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          server.upgrade!(req, { data: {} });
+          return new Response(null);
+        }
+        return new Response('ok');
+      },
+      websocket: {
+        open() {},
+        async message() {
+          throw new Error('handler-crash');
+        },
+        close() {},
+      },
+    });
+
+    try {
+      const clientOpen = deferred();
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+      ws.on('open', () => {
+        clientOpen.resolve();
+        ws.send('trigger');
+      });
+      await clientOpen.promise;
+      await errorLogged.promise;
+      ws.close();
+    } finally {
+      console.error = originalError;
+      await server.stop(true);
+    }
+  });
+
+  it('logs and swallows errors from async open handler', async () => {
+    const runtime = nodeRuntime();
+    const errorLogged = deferred();
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      if (String(args[0]).includes('websocket open handler failed')) {
+        errorLogged.resolve();
+      }
+    };
+
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          server.upgrade!(req, { data: {} });
+          return new Response(null);
+        }
+        return new Response('ok');
+      },
+      websocket: {
+        async open() {
+          throw new Error('open-crash');
+        },
+        message() {},
+        close() {},
+      },
+    });
+
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+      ws.on('error', () => {}); // suppress
+      await errorLogged.promise;
+      ws.close();
+    } finally {
+      console.error = originalError;
+      await server.stop(true);
+    }
+  });
+
+  it('logs and swallows errors from async close handler', async () => {
+    const runtime = nodeRuntime();
+    const errorLogged = deferred();
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      if (String(args[0]).includes('websocket close handler failed')) {
+        errorLogged.resolve();
+      }
+    };
+
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          server.upgrade!(req, { data: {} });
+          return new Response(null);
+        }
+        return new Response('ok');
+      },
+      websocket: {
+        open() {},
+        message() {},
+        async close() {
+          throw new Error('close-crash');
+        },
+      },
+    });
+
+    try {
+      const clientOpen = deferred();
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+      ws.on('open', () => clientOpen.resolve());
+      await clientOpen.promise;
+      ws.close();
+      await errorLogged.promise;
+    } finally {
+      console.error = originalError;
+      await server.stop(true);
+    }
+  });
+
+  it('logs and swallows errors from pong handler', async () => {
+    const runtime = nodeRuntime();
+    const errorLogged = deferred();
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      if (String(args[0]).includes('websocket pong handler failed')) {
+        errorLogged.resolve();
+      }
+    };
+
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          server.upgrade!(req, { data: {} });
+          return new Response(null);
+        }
+        return new Response('ok');
+      },
+      websocket: {
+        open(ws) {
+          ws.ping();
+        },
+        message() {},
+        close() {},
+        pong() {
+          throw new Error('pong-crash');
+        },
+      },
+    });
+
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+      ws.on('error', () => {});
+      await errorLogged.promise;
+      ws.close();
+    } finally {
+      console.error = originalError;
+      await server.stop(true);
+    }
+  });
+
+  it('upgrade() returns false when request has no sec-websocket-key', async () => {
+    const runtime = nodeRuntime();
+
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch() {
+        return new Response('ok');
+      },
+      websocket: {
+        open() {},
+        message() {},
+        close() {},
+      },
+    });
+
+    try {
+      // Request without sec-websocket-key header
+      const fakeReq = new Request('http://localhost/ws');
+      expect(server.upgrade!(fakeReq, { data: {} })).toBe(false);
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  it('destroys malformed raw upgrade requests that omit sec-websocket-key', async () => {
+    const runtime = nodeRuntime();
+
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch() {
+        return new Response('ok');
+      },
+      websocket: {
+        open() {},
+        message() {},
+        close() {},
+      },
+    });
+
+    try {
+      const socket = await openRawSocket(server.port, [
+        'Connection: Upgrade',
+        'Upgrade: websocket',
+      ]);
+      await waitForSocketEnd(socket);
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  it('times out pending raw upgrade requests that are never accepted', async () => {
+    const runtime = nodeRuntime();
+    const realSetTimeout = global.setTimeout;
+    const fetchCalled = deferred();
+    const setTimeoutSpy = vi
+      .spyOn(global, 'setTimeout')
+      .mockImplementation(((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
+        return realSetTimeout(handler, timeout === 30_000 ? 5 : timeout, ...args);
+      }) as typeof setTimeout);
+
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          fetchCalled.resolve();
+          return new Response(null);
+        }
+        return new Response('ok');
+      },
+      websocket: {
+        open() {},
+        message() {},
+        close() {},
+      },
+    });
+
+    try {
+      const socket = await openRawSocket(server.port, [
+        'Connection: Upgrade',
+        'Upgrade: websocket',
+        'Sec-WebSocket-Version: 13',
+        'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
+      ]);
+      await fetchCalled.promise;
+      await waitForSocketEnd(socket);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      await server.stop(true);
+    }
+  });
+
   it('upgrade() returns false when no websocket handler is configured', async () => {
     const runtime = nodeRuntime();
 
@@ -985,6 +1291,57 @@ describe('WebSocket (ws)', () => {
       ws.on('open', () => opened.resolve());
       await opened.promise;
       ws.close();
+    } finally {
+      await server.stop(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TLS Server
+// ---------------------------------------------------------------------------
+
+describe('TLS Server', () => {
+  it('starts an HTTPS server when tls key/cert are provided', async () => {
+    // Generate self-signed cert for testing
+    const { execSync } = await import('node:child_process');
+    const keyPath = join(tmpDir, 'key.pem');
+    const certPath = join(tmpDir, 'cert.pem');
+    execSync(
+      `openssl req -x509 -newkey rsa:2048 -keyout ${keyPath} -out ${certPath} -days 1 -nodes -subj "/CN=localhost"`,
+      { stdio: 'pipe' },
+    );
+
+    const { readFile } = await import('node:fs/promises');
+    const key = await readFile(keyPath, 'utf8');
+    const cert = await readFile(certPath, 'utf8');
+
+    const runtime = nodeRuntime();
+    const server = await runtime.server.listen({
+      port: 0,
+      tls: { key, cert },
+      fetch() {
+        return new Response('tls ok');
+      },
+    });
+
+    try {
+      expect(server.port).toBeGreaterThan(0);
+      // Use Node's https.get with rejectUnauthorized: false for self-signed cert
+      const https = await import('node:https');
+      const body = await new Promise<string>((resolve, reject) => {
+        const req = https.get(
+          `https://127.0.0.1:${server.port}`,
+          { rejectUnauthorized: false },
+          res => {
+            let data = '';
+            res.on('data', chunk => (data += chunk));
+            res.on('end', () => resolve(data));
+          },
+        );
+        req.on('error', reject);
+      });
+      expect(body).toBe('tls ok');
     } finally {
       await server.stop(true);
     }

@@ -48,4 +48,46 @@ describe('pluginSchemaRegistry', () => {
     expect(names).toEqual(sortedNames);
     expect(names.length).toBe(Object.keys(BUILTIN_PLUGINS).length);
   });
+
+  test('loadPluginSchema returns null for plugins whose packages are not installed (covers loadSchemaExport catch and each loadSchema body)', async () => {
+    // These plugins call loadSchemaExport with packages that are not installed in the
+    // test environment, so each call hits the catch branch (line 28 → return null).
+    const pluginsWithExternalSchema = [
+      'slingshot-community',
+      'slingshot-deep-links',
+      'slingshot-chat',
+      'slingshot-interactions',
+      'slingshot-ssr',
+      'slingshot-image',
+      'slingshot-embeds',
+      'slingshot-assets',
+      'slingshot-notifications',
+      'slingshot-game-engine',
+      'slingshot-search',
+      'slingshot-admin',
+      'slingshot-emoji',
+      'slingshot-gifs',
+      'slingshot-mail',
+      'slingshot-polls',
+      'slingshot-push',
+      'slingshot-webhooks',
+    ];
+    for (const name of pluginsWithExternalSchema) {
+      const result = await loadPluginSchema(name);
+      // Either null (package not installed) or a ZodType (package installed)
+      expect(result === null || result instanceof z.ZodType).toBe(true);
+    }
+  });
+
+  test('PLUGIN_SCHEMA_ENTRIES entries have required metadata fields', () => {
+    for (const entry of Object.values(PLUGIN_SCHEMA_ENTRIES)) {
+      expect(typeof entry.name).toBe('string');
+      expect(typeof entry.package).toBe('string');
+      expect(typeof entry.factory).toBe('string');
+      expect(typeof entry.description).toBe('string');
+      expect(typeof entry.category).toBe('string');
+      expect(Array.isArray(entry.requires)).toBe(true);
+      expect(typeof entry.loadSchema).toBe('function');
+    }
+  });
 });

@@ -3,8 +3,8 @@ import { z } from 'zod';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
-  getContextOrNull,
   getPluginState,
+  getPluginStateOrNull,
   getRouteAuthOrNull,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -120,9 +120,8 @@ export function createOrganizationsPlugin(
         delete manifest.entities.GroupMembership;
       }
 
-      const slingshotCtx = getContextOrNull(ctx.app);
-      const authRuntime = getOrganizationsAuthRuntime(slingshotCtx?.pluginState);
-      const routeAuth = slingshotCtx ? getRouteAuthOrNull(slingshotCtx) : null;
+      const authRuntime = getOrganizationsAuthRuntime(getPluginStateOrNull(ctx.app));
+      const routeAuth = getRouteAuthOrNull(ctx.app);
       if (!routeAuth) {
         throw new Error(
           '[slingshot-organizations] RouteAuthRegistry is not available. Ensure slingshot-auth setupMiddleware runs before slingshot-organizations.',

@@ -135,6 +135,17 @@ describe('parseContentTokens', () => {
     expect(Object.isFrozen(result.mentionedUserIds)).toBe(true);
   });
 
+  // --- Text before code fence (covers line 82) ---
+  test('text before code fence is preserved', () => {
+    const result = parseContentTokens('hello world\n```js\ncode\n```');
+    expect(result.segments[0]).toEqual({ type: 'text', value: 'hello world\n' });
+    expect(result.segments[1]).toEqual({
+      type: 'codeBlock',
+      value: 'code\n',
+      language: 'js',
+    });
+  });
+
   // --- Adversarial input ---
   test('long input is truncated', () => {
     const longInput = 'a'.repeat(100_000);
@@ -195,5 +206,31 @@ describe('extractMentionsFromBody', () => {
   test('returns frozen array', () => {
     const result = extractMentionsFromBody('<@user-1>');
     expect(Object.isFrozen(result)).toBe(true);
+  });
+});
+
+describe('parseContentTokens edge cases', () => {
+  test('truncates body exceeding MAX_BODY_LENGTH', () => {
+    const longBody = 'a'.repeat(70_000);
+    const result = parseContentTokens(longBody);
+    // Should not throw; body is truncated to 65536
+    expect(result.segments.length).toBeGreaterThan(0);
+    const totalText = result.segments
+      .filter((s) => s.type === 'text')
+      .map((s) => (s as { value: string }).value)
+      .join('');
+    expect(totalText.length).toBe(65_536);
+  });
+
+  test('stops emitting segments at MAX_SEGMENTS limit', () => {
+    // Create input with many separate regions (code spans) to trigger the break at MAX_SEGMENTS
+    // Each `code` span creates a separate region, and there's a text region between each
+    const parts: string[] = [];
+    for (let i = 0; i < 2500; i++) {
+      parts.push(`t${i} \`c${i}\``);
+    }
+    const result = parseContentTokens(parts.join(' '));
+    // Should be capped — not all 5000 regions get added
+    expect(result.segments.length).toBeLessThanOrEqual(4096);
   });
 });

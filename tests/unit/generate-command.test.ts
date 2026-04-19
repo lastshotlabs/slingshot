@@ -149,6 +149,86 @@ describe('slingshot generate CLI', () => {
     expect(output).toContain('migrations/mongo.js');
   });
 
+  it('dry-run with --manifest generates files for each entity', async () => {
+    const manifestPath = join(TMP_ROOT, 'entities.json');
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({
+        manifestVersion: 1,
+        namespace: 'shop',
+        entities: {
+          Product: {
+            fields: {
+              id: { type: 'string', primary: true, default: 'uuid' },
+              name: { type: 'string' },
+              price: { type: 'number', default: 0 },
+            },
+          },
+        },
+      }),
+      'utf-8',
+    );
+
+    const cmd = makeCommand([
+      '--manifest',
+      manifestPath,
+      '--outdir',
+      OUT_DIR,
+      '--snapshot-dir',
+      SNAPSHOT_DIR,
+      '--dry-run',
+    ]);
+
+    const logs: string[] = [];
+    spyOn(cmd, 'log').mockImplementation((...args: unknown[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+
+    await cmd.run();
+
+    const output = logs.join('\n');
+    expect(output).toContain('Generated files (dry run):');
+    expect(output).toContain('types.ts');
+  });
+
+  it('errors on invalid manifest JSON', async () => {
+    const manifestPath = join(TMP_ROOT, 'bad.json');
+    writeFileSync(manifestPath, '{ not valid json }', 'utf-8');
+
+    const cmd = makeCommand([
+      '--manifest',
+      manifestPath,
+      '--outdir',
+      OUT_DIR,
+    ]);
+
+    spyOn(cmd, 'log').mockImplementation(() => {});
+    const errorSpy = spyOn(cmd, 'error').mockImplementation((msg: string) => {
+      throw new Error(msg);
+    });
+
+    await expect(cmd.run()).rejects.toThrow(/Failed to read manifest/);
+  });
+
+  it('errors on invalid manifest schema', async () => {
+    const manifestPath = join(TMP_ROOT, 'bad-schema.json');
+    writeFileSync(manifestPath, JSON.stringify({ wrong: 'data' }), 'utf-8');
+
+    const cmd = makeCommand([
+      '--manifest',
+      manifestPath,
+      '--outdir',
+      OUT_DIR,
+    ]);
+
+    spyOn(cmd, 'log').mockImplementation(() => {});
+    const errorSpy = spyOn(cmd, 'error').mockImplementation((msg: string) => {
+      throw new Error(msg);
+    });
+
+    await expect(cmd.run()).rejects.toThrow(/Invalid manifest/);
+  });
+
   it('dry-run with --migration and no prior snapshot emits no migration files', async () => {
     const cmd = makeCommand([
       '--definition',

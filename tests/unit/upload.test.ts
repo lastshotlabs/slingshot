@@ -5,6 +5,7 @@ import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { memoryStorage } from '../../src/framework/adapters/memoryStorage';
 import {
   generateUploadKey,
+  generateUploadKeyFromFilename,
   parseUpload,
   processUpload,
   validateFile,
@@ -238,5 +239,52 @@ describe('upload extension sanitization', () => {
     const file = new File([], 'photo.jpg');
     const key = generateUploadKey(file, {});
     expect(key.endsWith('.jpg')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateUploadKeyFromFilename
+// ---------------------------------------------------------------------------
+
+describe('generateUploadKeyFromFilename', () => {
+  it('generates a key from a filename with extension', () => {
+    const key = generateUploadKeyFromFilename('photo.jpg', {});
+    expect(key).toMatch(/^uploads\//);
+    expect(key).toMatch(/\.jpg$/);
+  });
+
+  it('generates a key without extension when filename has no extension', () => {
+    const key = generateUploadKeyFromFilename('noextension', {});
+    expect(key).toMatch(/^uploads\//);
+    expect(key).not.toContain('.');
+  });
+
+  it('uses undefined filename gracefully', () => {
+    const key = generateUploadKeyFromFilename(undefined, {});
+    expect(key).toMatch(/^uploads\//);
+  });
+
+  it('uses custom generateKey function (lines 65-67 coverage)', () => {
+    // When a generateKey function is provided, it creates a stub File from the
+    // filename and calls the function — exercises lines 65-67 of upload.ts.
+    const key = generateUploadKeyFromFilename(
+      'original-name.png',
+      { userId: 'u-42' },
+      {
+        generateKey: (file, ctx) => `custom/${ctx.userId}/${file.name}`,
+      },
+    );
+    expect(key).toBe('custom/u-42/original-name.png');
+  });
+
+  it('uses custom generateKey with undefined filename (stub file has name "upload")', () => {
+    const key = generateUploadKeyFromFilename(
+      undefined,
+      {},
+      {
+        generateKey: (file, _ctx) => `fallback/${file.name}`,
+      },
+    );
+    expect(key).toBe('fallback/upload');
   });
 });

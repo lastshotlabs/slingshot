@@ -158,4 +158,70 @@ describe('postgresCacheAdapter', () => {
   test('adapter name is postgres', () => {
     expect(adapter.name).toBe('postgres');
   });
+
+  test('background cleanup timer fires and deletes expired entries', async () => {
+    // Capture the setInterval callback by temporarily overriding setInterval
+    let capturedCallback: (() => Promise<void>) | null = null;
+    const originalSetInterval = globalThis.setInterval;
+    const mockTimer = { unref: () => {} };
+
+    globalThis.setInterval = (fn: TimerHandler, _delay?: number, ..._args: unknown[]) => {
+      capturedCallback = fn as () => Promise<void>;
+      return mockTimer as unknown as ReturnType<typeof setInterval>;
+    };
+
+    const fresh = createMockPool();
+    const { createPostgresCacheAdapter } = await import(
+      '../../src/framework/boundaryAdapters/postgresCacheAdapter'
+    );
+    await createPostgresCacheAdapter(fresh.pool);
+
+    globalThis.setInterval = originalSetInterval;
+
+    expect(capturedCallback).not.toBeNull();
+
+    // Trigger the cleanup callback (covers the try block at lines 69-73)
+    fresh.reset();
+    await capturedCallback!();
+
+    const cleanupCall = fresh.calls.find(c =>
+      c.sql.includes('DELETE FROM cache_entries WHERE expires_at IS NOT NULL'),
+    );
+    expect(cleanupCall).toBeDefined();
+  });
+
+  test('background cleanup timer swallows errors silently', async () => {
+    // Capture the setInterval callback
+    let capturedCallback: (() => Promise<void>) | null = null;
+    const originalSetInterval = globalThis.setInterval;
+    const mockTimer = { unref: () => {} };
+
+    globalThis.setInterval = (fn: TimerHandler, _delay?: number, ..._args: unknown[]) => {
+      capturedCallback = fn as () => Promise<void>;
+      return mockTimer as unknown as ReturnType<typeof setInterval>;
+    };
+
+    const fresh = createMockPool();
+    // Make pool.query throw on the cleanup DELETE call
+    let callCount = 0;
+    const originalQuery = fresh.pool.query.bind(fresh.pool);
+    (fresh.pool as any).query = async (sql: string, params?: unknown[]) => {
+      callCount++;
+      if (callCount > 2) {
+        // After CREATE TABLE + CREATE INDEX, throw on cleanup
+        throw new Error('cleanup query failed');
+      }
+      return originalQuery(sql, params);
+    };
+
+    const { createPostgresCacheAdapter } = await import(
+      '../../src/framework/boundaryAdapters/postgresCacheAdapter'
+    );
+    await createPostgresCacheAdapter(fresh.pool);
+
+    globalThis.setInterval = originalSetInterval;
+
+    // Should not throw even when pool.query fails
+    await expect(capturedCallback!()).resolves.toBeUndefined();
+  });
 });

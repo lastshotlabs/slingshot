@@ -2,7 +2,7 @@ import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingsho
 import {
   PERMISSIONS_STATE_KEY,
   getAuthRuntimePeerOrNull,
-  getContext,
+  getPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from './factories';
@@ -43,9 +43,9 @@ export function createPermissionsPlugin(): SlingshotPlugin {
     name: 'slingshot-permissions',
 
     async setupMiddleware({ app, config: frameworkConfig }: PluginSetupContext) {
-      const ctx = getContext(app);
+      const pluginState = getPluginState(app);
       // Idempotent — if another plugin already seeded permissions state, skip.
-      if (ctx.pluginState.has(PERMISSIONS_STATE_KEY)) return;
+      if (pluginState.has(PERMISSIONS_STATE_KEY)) return;
 
       const storeType = frameworkConfig.resolvedStores.authStore;
       const infra = frameworkConfig.storeInfra;
@@ -64,10 +64,10 @@ export function createPermissionsPlugin(): SlingshotPlugin {
       const evaluator = createPermissionEvaluator({
         registry,
         adapter,
-        groupResolver: createAuthGroupResolver(() => getAuthRuntimePeerOrNull(ctx.pluginState)),
+        groupResolver: createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
       });
 
-      ctx.pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));
+      pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));
     },
   };
 }

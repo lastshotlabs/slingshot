@@ -119,6 +119,62 @@ describe('localStorage', () => {
   });
 });
 
+describe('localStorage — defaultFs paths (lines 14-16)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = join(tmpdir(), `slingshot-dflt-${crypto.randomUUID()}`);
+    await mkdir(dir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('defaultFs.readFile returns Uint8Array when file exists (line 14)', async () => {
+    // Use real defaultFs (no fs override) so defaultFs.readFile line 14 runs
+    const adapter = localStorage({ directory: dir });
+    const content = Buffer.from('default-fs-content');
+    await adapter.put('dflt.txt', content, { mimeType: 'text/plain', size: content.length });
+
+    const result = await adapter.get('dflt.txt');
+    expect(result).not.toBeNull();
+    expect(result!.size).toBe(content.length);
+
+    const reader = result!.stream.getReader();
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    expect(Buffer.concat(chunks).toString('utf8')).toBe('default-fs-content');
+  });
+
+  it('defaultFs.readFile returns null for missing file', async () => {
+    const adapter = localStorage({ directory: dir });
+    const result = await adapter.get('missing.txt');
+    expect(result).toBeNull();
+  });
+
+  it('defaultFs.write writes data correctly', async () => {
+    // Direct write+read cycle using only defaultFs
+    const adapter = localStorage({ directory: dir });
+    await adapter.put('write-test.txt', new Uint8Array([72, 73]), { mimeType: 'text/plain', size: 2 });
+    const f = Bun.file(join(dir, 'write-test.txt'));
+    expect(await f.exists()).toBe(true);
+    expect(await f.text()).toBe('HI');
+  });
+
+  it('delete via defaultFs removes the file', async () => {
+    const adapter = localStorage({ directory: dir });
+    await adapter.put('del.txt', Buffer.from('x'), { mimeType: 'text/plain', size: 1 });
+    await adapter.delete('del.txt');
+    const result = await adapter.get('del.txt');
+    expect(result).toBeNull();
+  });
+});
+
 describe('localStorage path traversal protection', () => {
   let dir: string;
   let adapter: ReturnType<typeof localStorage>;

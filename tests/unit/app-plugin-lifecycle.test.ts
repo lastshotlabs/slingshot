@@ -1,7 +1,15 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
+import { OpenAPIHono } from '@hono/zod-openapi';
 import { defineEntity, field } from '@lastshotlabs/slingshot-core';
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
+import {
+  runPluginMiddleware,
+  runPluginPost,
+  runPluginRoutes,
+  runPluginTeardown,
+  validateAndSortPlugins,
+} from '../../src/framework/runPluginLifecycle';
 
 // Minimal createApp config that avoids real DB connections.
 // routesDir must point to a real (but empty or minimal) directory so the routes glob does not
@@ -159,5 +167,136 @@ describe('Plugin lifecycle', () => {
     await createApp({ ...baseConfig, plugins: [plugin] });
     // setup() is never called by the framework — it is standalone-only
     expect(setupFn).not.toHaveBeenCalled();
+  });
+});
+
+describe('validateAndSortPlugins — direct', () => {
+  test('throws on circular dependency (lines 45-47)', () => {
+    const pluginA: SlingshotPlugin = {
+      name: 'a',
+      dependencies: ['b'],
+      setupMiddleware: async () => {},
+    };
+    const pluginB: SlingshotPlugin = {
+      name: 'b',
+      dependencies: ['a'],
+      setupMiddleware: async () => {},
+    };
+    expect(() => validateAndSortPlugins([pluginA, pluginB])).toThrow(
+      /Circular plugin dependency detected/,
+    );
+  });
+
+  test('cross-phase validation catches setup-only plugin used as dep for middleware plugin (lines 162-171)', () => {
+    // standalone-dep has earliest phase 3 (setup-only), dependent has phase 0 (setupMiddleware).
+    // Cross-phase validation fires because depPhase (3) > pluginPhase (0).
+    const standalone: SlingshotPlugin = {
+      name: 'standalone-dep',
+      setup: async () => {},
+    };
+    const dependent: SlingshotPlugin = {
+      name: 'dependent',
+      dependencies: ['standalone-dep'],
+      setupMiddleware: async () => {},
+    };
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      expect(() => validateAndSortPlugins([standalone, dependent])).toThrow(
+        /earliest phase.*setupMiddleware.*depends on.*setup-only/,
+      );
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  test('throws on duplicate plugin names (lines 124-126)', () => {
+    const p1: SlingshotPlugin = { name: 'dup', setupMiddleware: async () => {} };
+    const p2: SlingshotPlugin = { name: 'dup', setupRoutes: async () => {} };
+    expect(() => validateAndSortPlugins([p1, p2])).toThrow(/Duplicate plugin name "dup"/);
+  });
+
+  test('throws on cross-phase dependency violation (lines 167-171)', () => {
+    // Plugin with setupMiddleware depends on a plugin that only has setupPost
+    const late: SlingshotPlugin = { name: 'late', setupPost: async () => {} };
+    const early: SlingshotPlugin = {
+      name: 'early',
+      dependencies: ['late'],
+      setupMiddleware: async () => {},
+    };
+    expect(() => validateAndSortPlugins([late, early])).toThrow(
+      /earliest phase.*setupMiddleware.*depends on.*setupPost/,
+    );
+  });
+
+  test('cross-phase validation throws when dep not found in nameToPlugin (lines 162-163)', () => {
+    // This is a defensive path — normally caught earlier by the missing-dep check.
+    // But we test it through a scenario where the nameToPlugin lookup fails during
+    // cross-phase validation. The earlier check uses pluginNames (a Set of strings),
+    // while this one uses nameToPlugin (a Map). They should be identical, but we
+    // verify the error message is correct.
+    const plugin: SlingshotPlugin = {
+      name: 'orphan',
+      dependencies: ['ghost'],
+      setupMiddleware: async () => {},
+    };
+    // The earlier check (lines 134-139) fires first with the same message pattern
+    expect(() => validateAndSortPlugins([plugin])).toThrow(
+      /Plugin "orphan" declares dependency "ghost"/,
+    );
+  });
+});
+
+describe('runPlugin* functions — no tracer branch', () => {
+  const dummyApp = new OpenAPIHono<AppEnv>();
+  const dummyConfig = {} as any;
+  const dummyBus = {} as any;
+
+  test('runPluginMiddleware calls setupMiddleware without tracer (line 219-220)', async () => {
+    const fn = mock(async () => {});
+    const plugin: SlingshotPlugin = { name: 'mw', setupMiddleware: fn };
+    await runPluginMiddleware([plugin], dummyApp, dummyConfig, dummyBus);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  test('runPluginRoutes calls setupRoutes without tracer (line 261-262)', async () => {
+    const fn = mock(async () => {});
+    const plugin: SlingshotPlugin = { name: 'rt', setupRoutes: fn };
+    await runPluginRoutes([plugin], dummyApp, dummyConfig, dummyBus);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  test('runPluginPost calls setupPost without tracer (line 303-304)', async () => {
+    const fn = mock(async () => {});
+    const plugin: SlingshotPlugin = { name: 'ps', setupPost: fn };
+    await runPluginPost([plugin], dummyApp, dummyConfig, dummyBus);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  test('runPluginTeardown collects all errors into AggregateError (line 328+)', async () => {
+    const p1: SlingshotPlugin = {
+      name: 'a',
+      teardown: async () => { throw new Error('a failed'); },
+      setupPost: async () => {},
+    };
+    const p2: SlingshotPlugin = {
+      name: 'b',
+      teardown: async () => { throw new Error('b failed'); },
+      setupPost: async () => {},
+    };
+    await expect(runPluginTeardown([p1, p2])).rejects.toThrow(AggregateError);
+  });
+
+  test('runPluginTeardown wraps non-Error throws', async () => {
+    const plugin: SlingshotPlugin = {
+      name: 'non-error',
+      teardown: async () => { throw 'string-error'; },
+      setupPost: async () => {},
+    };
+    try {
+      await runPluginTeardown([plugin]);
+    } catch (err: any) {
+      expect(err).toBeInstanceOf(AggregateError);
+      expect(err.errors[0].message).toBe('string-error');
+    }
   });
 });

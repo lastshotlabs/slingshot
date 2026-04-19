@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'bun:test';
+import { writeFileSync, mkdirSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import type { SecretRepository, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import type { AppManifest } from '../../src/lib/manifest';
@@ -521,6 +524,46 @@ describe('manifestToAppConfig', () => {
         '[manifestToAppConfig] ws.transport.type "redis" requires options.connection.',
       );
     });
+
+    it('resolves ws endpoint upgrade handler ref (lines 206-211)', () => {
+      const reg = createManifestHandlerRegistry();
+      const upgradeFn = () => {};
+      reg.registerHandler('wsUpgrade', () => upgradeFn);
+
+      const manifest: AppManifest = {
+        ...minimalManifest,
+        ws: {
+          endpoints: {
+            '/ws/chat': {
+              upgrade: { handler: 'wsUpgrade' },
+            },
+          },
+        },
+      };
+      const config = manifestToAppConfig(manifest, reg);
+      const ep = config.ws?.endpoints['/ws/chat'];
+      expect(ep?.upgrade).toBe(upgradeFn);
+    });
+
+    it('resolves ws endpoint onRoomSubscribe handler ref (lines 216-221)', () => {
+      const reg = createManifestHandlerRegistry();
+      const onRoomSubscribeFn = () => {};
+      reg.registerHandler('wsRoomSub', () => onRoomSubscribeFn);
+
+      const manifest: AppManifest = {
+        ...minimalManifest,
+        ws: {
+          endpoints: {
+            '/ws/chat': {
+              onRoomSubscribe: { handler: 'wsRoomSub' },
+            },
+          },
+        },
+      };
+      const config = manifestToAppConfig(manifest, reg);
+      const ep = config.ws?.endpoints['/ws/chat'];
+      expect(ep?.onRoomSubscribe).toBe(onRoomSubscribeFn);
+    });
   });
 
   describe('SSE endpoint handler resolution', () => {
@@ -547,6 +590,293 @@ describe('manifestToAppConfig', () => {
       const ep = config.sse?.endpoints['/__sse/events'];
       expect(ep?.upgrade).toBe(upgradeHandler);
       expect(ep?.events).toEqual(['entity:user.created']);
+    });
+
+    it('resolves sse endpoint filter handler via registry', () => {
+      const reg = createManifestHandlerRegistry();
+      const filterFn = () => true;
+      reg.registerHandler('sseFilter', () => filterFn);
+
+      const manifest: AppManifest = {
+        ...minimalManifest,
+        sse: {
+          endpoints: {
+            '/__sse/events': {
+              events: ['entity:user.created'],
+              filter: { handler: 'sseFilter' },
+            },
+          },
+        },
+      };
+      const config = manifestToAppConfig(manifest, reg);
+      const ep = config.sse?.endpoints['/__sse/events'];
+      expect(ep?.filter).toBe(filterFn);
+    });
+  });
+
+  describe('TLS resolution (lines 93-101)', () => {
+    it('resolves tls with keyPath and certPath from files', () => {
+      const tmpDir = tmpdir();
+      const keyPath = join(tmpDir, 'test-tls.key');
+      const certPath = join(tmpDir, 'test-tls.cert');
+      writeFileSync(keyPath, 'fake-key-content');
+      writeFileSync(certPath, 'fake-cert-content');
+
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        tls: { keyPath, certPath },
+      });
+      const config = manifestToAppConfig(manifest);
+      expect((config.tls as Record<string, unknown>)?.key).toBe('fake-key-content');
+      expect((config.tls as Record<string, unknown>)?.cert).toBe('fake-cert-content');
+    });
+
+    it('resolves tls with caPath from file', () => {
+      const tmpDir = tmpdir();
+      const caPath = join(tmpDir, 'test-tls.ca');
+      writeFileSync(caPath, 'fake-ca-content');
+
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        tls: { caPath },
+      });
+      const config = manifestToAppConfig(manifest);
+      expect((config.tls as Record<string, unknown>)?.ca).toBe('fake-ca-content');
+    });
+  });
+
+  describe('SSM secrets provider (lines 159-161)', () => {
+    it('ssm provider resolves without registry', () => {
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        secrets: { provider: 'ssm', pathPrefix: '/myapp/', region: 'us-east-1' },
+      });
+      const config = manifestToAppConfig(manifest);
+      expect(config.secrets).toBeDefined();
+    });
+  });
+
+  describe('local and s3 storage adapters (lines 206-221)', () => {
+    it('resolves local storage adapter', () => {
+      const manifest: AppManifest = {
+        ...minimalManifest,
+        upload: {
+          storage: { adapter: 'local', config: { directory: '/tmp/uploads' } },
+        },
+      };
+      const config = manifestToAppConfig(manifest);
+      expect(config.upload?.storage).toBeDefined();
+    });
+
+    it('resolves s3 storage adapter', () => {
+      const manifest: AppManifest = {
+        ...minimalManifest,
+        upload: {
+          storage: { adapter: 's3', config: { bucket: 'my-bucket', region: 'us-east-1' } },
+        },
+      };
+      const config = manifestToAppConfig(manifest);
+      expect(config.upload?.storage).toBeDefined();
+    });
+  });
+
+  describe('upload.authorization.authorize string strategy (lines 484-487)', () => {
+    it('resolves authorize string strategy "owner"', () => {
+      const manifest: AppManifest = {
+        ...minimalManifest,
+        upload: {
+          storage: { adapter: 'memory' },
+          authorization: { authorize: 'owner' },
+        },
+      };
+      const config = manifestToAppConfig(manifest);
+      expect(typeof config.upload?.authorization?.authorize).toBe('function');
+    });
+
+    it('resolves authorize string strategy "authenticated"', () => {
+      const manifest: AppManifest = {
+        ...minimalManifest,
+        upload: {
+          storage: { adapter: 'memory' },
+          authorization: { authorize: 'authenticated' },
+        },
+      };
+      const config = manifestToAppConfig(manifest);
+      expect(typeof config.upload?.authorization?.authorize).toBe('function');
+    });
+
+    it('resolves authorize string strategy "public"', () => {
+      const manifest: AppManifest = {
+        ...minimalManifest,
+        upload: {
+          storage: { adapter: 'memory' },
+          authorization: { authorize: 'public' },
+        },
+      };
+      const config = manifestToAppConfig(manifest);
+      expect(typeof config.upload?.authorization?.authorize).toBe('function');
+    });
+  });
+
+  describe('ws.transport missing options object (line 243)', () => {
+    it('throws when ws.transport has type redis but options is not an object', () => {
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        ws: {
+          transport: { type: 'redis', options: null },
+          endpoints: { '/ws': {} },
+        },
+      });
+      expect(() => manifestToAppConfig(manifest)).toThrow(
+        '[manifestToAppConfig] ws.transport.type "redis" requires an options object.',
+      );
+    });
+  });
+
+  describe('security.rateLimit handler ref paths (lines 331-366)', () => {
+    it('resolves rateLimit = false (line 331)', () => {
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        security: { rateLimit: false },
+      });
+      const config = manifestToAppConfig(manifest);
+      expect((config.security as Record<string, unknown>)?.rateLimit).toBe(false);
+    });
+
+    it('resolves rateLimit.keyGenerator as string strategy (line 346-349)', () => {
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        security: { rateLimit: { windowMs: 60000, max: 100, keyGenerator: 'ip' } },
+      });
+      const config = manifestToAppConfig(manifest);
+      const rl = (config.security as Record<string, unknown>)?.rateLimit as Record<string, unknown>;
+      expect(typeof rl?.keyGenerator).toBe('function');
+    });
+
+    it('resolves rateLimit.keyGenerator as HandlerRef (lines 350-355)', () => {
+      const reg = createManifestHandlerRegistry();
+      const keyFn = () => 'key';
+      reg.registerHandler('myKeyGen', () => keyFn);
+
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        security: {
+          rateLimit: {
+            windowMs: 60000,
+            max: 100,
+            keyGenerator: { handler: 'myKeyGen' },
+          },
+        },
+      });
+      const config = manifestToAppConfig(manifest, reg);
+      const rl = (config.security as Record<string, unknown>)?.rateLimit as Record<string, unknown>;
+      expect(rl?.keyGenerator).toBe(keyFn);
+    });
+
+    it('resolves rateLimit.skip as string strategy (lines 358-359)', () => {
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        security: { rateLimit: { windowMs: 60000, max: 100, skip: 'authenticated' } },
+      });
+      const config = manifestToAppConfig(manifest);
+      const rl = (config.security as Record<string, unknown>)?.rateLimit as Record<string, unknown>;
+      expect(typeof rl?.skip).toBe('function');
+    });
+
+    it('resolves rateLimit.skip as HandlerRef (lines 360-361)', () => {
+      const reg = createManifestHandlerRegistry();
+      const skipFn = () => false;
+      reg.registerHandler('mySkip', () => skipFn);
+
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        security: {
+          rateLimit: {
+            windowMs: 60000,
+            max: 100,
+            skip: { handler: 'mySkip' },
+          },
+        },
+      });
+      const config = manifestToAppConfig(manifest, reg);
+      const rl = (config.security as Record<string, unknown>)?.rateLimit as Record<string, unknown>;
+      expect(rl?.skip).toBe(skipFn);
+    });
+
+    it('resolves rateLimit.handler as HandlerRef (lines 364-366)', () => {
+      const reg = createManifestHandlerRegistry();
+      const handlerFn = () => {};
+      reg.registerHandler('myRlHandler', () => handlerFn);
+
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        security: {
+          rateLimit: {
+            windowMs: 60000,
+            max: 100,
+            handler: { handler: 'myRlHandler' },
+          },
+        },
+      });
+      const config = manifestToAppConfig(manifest, reg);
+      const rl = (config.security as Record<string, unknown>)?.rateLimit as Record<string, unknown>;
+      expect(rl?.handler).toBe(handlerFn);
+    });
+  });
+
+  describe('middleware array resolution (lines 376-379)', () => {
+    it('resolves middleware array of HandlerRefs', () => {
+      const reg = createManifestHandlerRegistry();
+      const mw1 = () => {};
+      const mw2 = () => {};
+      reg.registerHandler('mw1', () => mw1);
+      reg.registerHandler('mw2', () => mw2);
+
+      const manifest: AppManifest = {
+        ...minimalManifest,
+        middleware: [{ handler: 'mw1' }, { handler: 'mw2' }],
+      };
+      const config = manifestToAppConfig(manifest, reg);
+      expect(Array.isArray(config.middleware)).toBe(true);
+      expect((config.middleware as unknown[])?.[0]).toBe(mw1);
+      expect((config.middleware as unknown[])?.[1]).toBe(mw2);
+    });
+  });
+
+  describe('observability tracing (lines 555-562)', () => {
+    it('maps observability.tracing to config', () => {
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        observability: {
+          tracing: { enabled: true, serviceName: 'my-service' },
+        },
+      });
+      const config = manifestToAppConfig(manifest);
+      expect((config as Record<string, unknown>).observability).toEqual({
+        tracing: { enabled: true, serviceName: 'my-service' },
+      });
+    });
+
+    it('maps observability without tracing to empty tracing', () => {
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        observability: {},
+      });
+      const config = manifestToAppConfig(manifest);
+      expect((config as Record<string, unknown>).observability).toEqual({
+        tracing: undefined,
+      });
+    });
+  });
+
+  describe('permissions field copy', () => {
+    it('copies permissions section directly', () => {
+      const manifest = unsafeManifest({
+        ...minimalManifest,
+        permissions: { roles: ['admin', 'user'] },
+      });
+      const config = manifestToAppConfig(manifest);
+      expect((config as Record<string, unknown>).permissions).toEqual({ roles: ['admin', 'user'] });
     });
   });
 });

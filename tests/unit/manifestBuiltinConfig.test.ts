@@ -1,9 +1,110 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
+
+// Mock runtime packages before importing the module under test
+mock.module('@lastshotlabs/slingshot-runtime-bun', () => ({
+  bunRuntime: () => ({ serve: () => 'bun-serve' }),
+}));
+mock.module('@lastshotlabs/slingshot-runtime-node', () => ({
+  nodeRuntime: () => ({ serve: () => 'node-serve' }),
+}));
+mock.module('@lastshotlabs/slingshot-runtime-edge', () => ({
+  edgeRuntime: () => ({ serve: () => 'edge-serve' }),
+}));
+
 import {
+  isRecord,
+  isHandlerRefLike,
+  requireRegistry,
+  resolveHandlerRef,
+  resolveBuiltinPath,
   resolveAdminManifestConfig,
   resolveSearchManifestConfig,
   resolveSsrManifestConfig,
+  resolveWebhookManifestConfig,
 } from '../../src/lib/manifestBuiltinConfig';
+
+// ---------------------------------------------------------------------------
+// Utility functions
+// ---------------------------------------------------------------------------
+
+describe('isRecord', () => {
+  it('returns true for plain objects', () => {
+    expect(isRecord({})).toBe(true);
+    expect(isRecord({ a: 1 })).toBe(true);
+  });
+
+  it('returns false for null, arrays, and primitives', () => {
+    expect(isRecord(null)).toBe(false);
+    expect(isRecord([])).toBe(false);
+    expect(isRecord('string')).toBe(false);
+    expect(isRecord(42)).toBe(false);
+  });
+});
+
+describe('isHandlerRefLike', () => {
+  it('returns true for { handler: string }', () => {
+    expect(isHandlerRefLike({ handler: 'myHandler' })).toBe(true);
+  });
+
+  it('returns true for { handler: string, params: {} }', () => {
+    expect(isHandlerRefLike({ handler: 'myHandler', params: { key: 'val' } })).toBe(true);
+  });
+
+  it('returns false for non-object', () => {
+    expect(isHandlerRefLike('string')).toBe(false);
+    expect(isHandlerRefLike(null)).toBe(false);
+  });
+
+  it('returns false when handler is not a string', () => {
+    expect(isHandlerRefLike({ handler: 42 })).toBe(false);
+  });
+
+  it('returns false when params is not an object', () => {
+    expect(isHandlerRefLike({ handler: 'h', params: 'bad' })).toBe(false);
+  });
+});
+
+describe('requireRegistry', () => {
+  it('throws when registry is undefined', () => {
+    expect(() => requireRegistry(undefined, 'test')).toThrow(/requires a manifest handler registry/);
+  });
+
+  it('returns registry when defined', () => {
+    const reg = { resolveHandler: () => {} } as any;
+    expect(requireRegistry(reg, 'test')).toBe(reg);
+  });
+});
+
+describe('resolveHandlerRef', () => {
+  it('calls registry.resolveHandler with handler and params', () => {
+    let calledWith: unknown[];
+    const reg = {
+      resolveHandler(...args: unknown[]) {
+        calledWith = args;
+        return 'resolved';
+      },
+    } as any;
+    const result = resolveHandlerRef({ handler: 'myFn', params: { x: 1 } }, reg, 'ctx');
+    expect(result).toBe('resolved');
+    expect(calledWith!).toEqual(['myFn', { x: 1 }]);
+  });
+
+  it('throws when registry is undefined', () => {
+    expect(() => resolveHandlerRef({ handler: 'fn' } as any, undefined, 'ctx')).toThrow();
+  });
+});
+
+describe('resolveBuiltinPath', () => {
+  it('resolves ${importMetaDir} relative to baseDir', () => {
+    const result = resolveBuiltinPath('${importMetaDir}/views', '/app');
+    expect(result).toContain('views');
+  });
+
+  it('resolves plain relative path', () => {
+    const result = resolveBuiltinPath('./public', '/app');
+    expect(result).toContain('public');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Search plugin strategies
@@ -226,5 +327,191 @@ describe('resolveSsrManifestConfig', () => {
     const result = resolveSsrManifestConfig({ staticDir: './public' }, undefined, '/base', 'ssr');
     // staticDir is resolved as a path relative to baseDir
     expect(typeof result['staticDir']).toBe('string');
+  });
+
+  it('resolves renderer handler ref', () => {
+    const reg = { resolveHandler: () => ({ render: () => {} }) } as any;
+    const result = resolveSsrManifestConfig(
+      { renderer: { handler: 'myRenderer' } },
+      reg,
+      '/base',
+      'ssr',
+    );
+    expect(typeof result['renderer']).toBe('object');
+  });
+
+  it('resolves runtime handler ref', () => {
+    const reg = { resolveHandler: () => ({ serve: () => {} }) } as any;
+    const result = resolveSsrManifestConfig(
+      { runtime: { handler: 'myRuntime' } },
+      reg,
+      '/base',
+      'ssr',
+    );
+    expect(typeof result['runtime']).toBe('object');
+  });
+
+  it('resolves serverRoutesDir path', () => {
+    const result = resolveSsrManifestConfig(
+      { serverRoutesDir: './routes' },
+      undefined,
+      '/base',
+      'ssr',
+    );
+    expect(typeof result['serverRoutesDir']).toBe('string');
+    expect(result['serverRoutesDir']).toContain('routes');
+  });
+
+  it('resolves serverActionsDir path', () => {
+    const result = resolveSsrManifestConfig(
+      { serverActionsDir: './actions' },
+      undefined,
+      '/base',
+      'ssr',
+    );
+    expect(typeof result['serverActionsDir']).toBe('string');
+  });
+
+  it('resolves assetsManifest path', () => {
+    const result = resolveSsrManifestConfig(
+      { assetsManifest: './dist/manifest.json' },
+      undefined,
+      '/base',
+      'ssr',
+    );
+    expect(typeof result['assetsManifest']).toBe('string');
+  });
+
+  it('keeps inline JSON assetsManifest as-is', () => {
+    const json = '{"main.js": "/assets/main.abc.js"}';
+    const result = resolveSsrManifestConfig(
+      { assetsManifest: json },
+      undefined,
+      '/base',
+      'ssr',
+    );
+    expect(result['assetsManifest']).toBe(json);
+  });
+
+  it('resolves ISR adapter handler ref', () => {
+    const reg = { resolveHandler: () => ({ get: () => {} }) } as any;
+    const result = resolveSsrManifestConfig(
+      { isr: { adapter: { handler: 'myAdapter' } } },
+      reg,
+      '/base',
+      'ssr',
+    );
+    const isr = result['isr'] as Record<string, unknown>;
+    expect(typeof isr['adapter']).toBe('object');
+  });
+
+  it('resolves runtime: "bun" to a lazy proxy that loads on first access (lines 46-72)', () => {
+    const result = resolveSsrManifestConfig(
+      { runtime: 'bun' },
+      undefined,
+      '/base',
+      'ssr',
+    );
+    const runtime = result['runtime'] as Record<string, unknown>;
+    // Access a property to trigger the proxy getter (lines 61-68)
+    expect(typeof runtime.serve).toBe('function');
+  });
+
+  it('resolves runtime: "node" to a lazy proxy that loads on first access', () => {
+    const result = resolveSsrManifestConfig(
+      { runtime: 'node' },
+      undefined,
+      '/base',
+      'ssr',
+    );
+    const runtime = result['runtime'] as Record<string, unknown>;
+    expect(typeof runtime.serve).toBe('function');
+  });
+
+  it('resolves runtime: "edge" to a lazy proxy that loads on first access', () => {
+    const result = resolveSsrManifestConfig(
+      { runtime: 'edge' },
+      undefined,
+      '/base',
+      'ssr',
+    );
+    const runtime = result['runtime'] as Record<string, unknown>;
+    expect(typeof runtime.serve).toBe('function');
+  });
+
+  it('proxy caches the resolved runtime on subsequent accesses', () => {
+    const result = resolveSsrManifestConfig(
+      { runtime: 'bun' },
+      undefined,
+      '/base',
+      'ssr',
+    );
+    const runtime = result['runtime'] as Record<string, unknown>;
+    // First access triggers require + factory
+    const serve1 = runtime.serve;
+    // Second access should reuse cached resolved object
+    const serve2 = runtime.serve;
+    expect(serve1).toBe(serve2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Webhook plugin config
+// ---------------------------------------------------------------------------
+
+describe('resolveWebhookManifestConfig', () => {
+  it('passes through config unchanged when no handler refs present', () => {
+    const config = { retryCount: 3, maxPayloadSize: 1024 };
+    const result = resolveWebhookManifestConfig(config, undefined);
+    expect(result['retryCount']).toBe(3);
+  });
+
+  it('resolves adapter handler ref', () => {
+    const reg = { resolveHandler: () => ({ send: () => {} }) } as any;
+    const result = resolveWebhookManifestConfig(
+      { adapter: { handler: 'webhookAdapter' } },
+      reg,
+    );
+    expect(typeof result['adapter']).toBe('object');
+  });
+
+  it('resolves queue handler ref', () => {
+    const reg = { resolveHandler: () => ({ enqueue: () => {} }) } as any;
+    const result = resolveWebhookManifestConfig(
+      { queue: { handler: 'webhookQueue' } },
+      reg,
+    );
+    expect(typeof result['queue']).toBe('object');
+  });
+
+  it('resolves adminGuard handler ref', () => {
+    const reg = { resolveHandler: () => ({ check: () => {} }) } as any;
+    const result = resolveWebhookManifestConfig(
+      { adminGuard: { handler: 'myGuard' } },
+      reg,
+    );
+    expect(typeof result['adminGuard']).toBe('object');
+  });
+
+  it('resolves inbound provider handler refs', () => {
+    const reg = { resolveHandler: () => ({ verify: () => {} }) } as any;
+    const result = resolveWebhookManifestConfig(
+      { inbound: [{ handler: 'provider1' }, 'plainProvider'] },
+      reg,
+    );
+    const inbound = result['inbound'] as unknown[];
+    expect(typeof inbound[0]).toBe('object');
+    expect(inbound[1]).toBe('plainProvider');
+  });
+
+  it('resolves queueConfig.onDeadLetter handler ref', () => {
+    const reg = { resolveHandler: () => (() => {}) } as any;
+    const result = resolveWebhookManifestConfig(
+      { queueConfig: { maxRetries: 3, onDeadLetter: { handler: 'dlqHandler' } } },
+      reg,
+    );
+    const qc = result['queueConfig'] as Record<string, unknown>;
+    expect(typeof qc['onDeadLetter']).toBe('function');
+    expect(qc['maxRetries']).toBe(3);
   });
 });

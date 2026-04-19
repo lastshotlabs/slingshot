@@ -6,8 +6,8 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
-  getContext,
   getPermissionsStateOrNull,
+  getPluginState,
   getRateLimitAdapter,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
@@ -91,8 +91,8 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
     dependencies: ['slingshot-auth', 'slingshot-permissions'],
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      const ctx = getContext(app);
-      const permissions = getPermissionsStateOrNull(ctx.pluginState);
+      const pluginState = getPluginState(app);
+      const permissions = getPermissionsStateOrNull(pluginState);
       if (!permissions) {
         throw new Error(
           '[slingshot-interactions] Permissions state not found. Register createPermissionsPlugin() first.',
@@ -121,14 +121,14 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
             return compiled.resolve(actionId);
           },
         },
-        rateLimit: getRateLimitAdapter(ctx),
+        rateLimit: getRateLimitAdapter(app),
         permissions,
         bus,
         rateLimitWindowMs: config.rateLimit.windowMs,
         rateLimitMax: config.rateLimit.max,
         peers: {
-          chat: probeChatPeer(ctx.pluginState),
-          community: probeCommunityPeer(ctx.pluginState),
+          chat: probeChatPeer(pluginState),
+          community: probeCommunityPeer(pluginState),
         },
         repos: {
           interactionEvents: null,
@@ -144,7 +144,7 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
       };
 
       stateRef = state;
-      ctx.pluginState.set(INTERACTIONS_PLUGIN_STATE_KEY, state);
+      pluginState.set(INTERACTIONS_PLUGIN_STATE_KEY, state);
 
       innerPlugin = createEntityPlugin({
         name: INTERACTIONS_PLUGIN_STATE_KEY,
@@ -172,10 +172,11 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
     async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
       await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
 
-      const ctx = getContext(app);
       const state =
         stateRef ??
-        (ctx.pluginState.get(INTERACTIONS_PLUGIN_STATE_KEY) as InteractionsPluginState | undefined);
+        (getPluginState(app).get(INTERACTIONS_PLUGIN_STATE_KEY) as
+          | InteractionsPluginState
+          | undefined);
       if (!state) return;
 
       state.logger?.info?.(

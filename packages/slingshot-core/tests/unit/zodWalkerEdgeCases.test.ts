@@ -1448,4 +1448,85 @@ describe('generateExample', () => {
     expect(typeof (example as any).id).toBe('number');
     expect(typeof (example as any).name).toBe('string');
   });
+
+  it('serializes Set fields as arrays', () => {
+    const schema = z.object({
+      tags: z.set(z.string()),
+      name: z.string(),
+    });
+    const example = generateExample<any>(schema as any);
+    expect(Array.isArray(example.tags)).toBe(true);
+    expect(example.tags.length).toBeGreaterThan(0);
+    expect(typeof example.tags[0]).toBe('string');
+  });
+
+  it('serializes Map fields as plain objects', () => {
+    const schema = z.object({
+      data: z.map(z.string(), z.number()),
+      name: z.string(),
+    });
+    const example = generateExample<any>(schema as any);
+    expect(typeof example.data).toBe('object');
+    expect(example.data).not.toBeNull();
+    expect(Object.keys(example.data).length).toBeGreaterThan(0);
+    expect(typeof Object.values(example.data)[0]).toBe('number');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Comprehensive format validation
+// ---------------------------------------------------------------------------
+
+describe('format validation against Zod parse', () => {
+  const formatCases: [string, z.ZodType][] = [
+    ['email', z.string().email()],
+    ['url', z.string().url()],
+    ['uuid', z.string().uuid()],
+    ['datetime', z.string().datetime()],
+    ['datetime-precision0', z.string().datetime({ precision: 0 })],
+    ['datetime-precision3', z.string().datetime({ precision: 3 })],
+    ['datetime-local', z.string().datetime({ local: true })],
+    ['datetime-offset', z.string().datetime({ offset: true })],
+    ['date', z.string().date()],
+    ['time', z.string().time()],
+    ['time-precision0', z.string().time({ precision: 0 })],
+  ];
+
+  for (const [name, schema] of formatCases) {
+    it(`z.string().${name}() output passes Zod validation`, () => {
+      for (let i = 0; i < 20; i++) {
+        const val = generateFromSchema<string>(schema as any);
+        const result = schema.safeParse(val);
+        expect(result.success).toBe(true);
+      }
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Complex real-world schema validation
+// ---------------------------------------------------------------------------
+
+describe('complex schema validation', () => {
+  it('generated output validates against a real-world user schema', () => {
+    const userSchema = z.object({
+      id: z.string().uuid(),
+      email: z.string().email(),
+      name: z.string().min(2).max(50),
+      age: z.number().int().min(18).max(120),
+      role: z.enum(['admin', 'user', 'moderator']),
+      bio: z.string().optional(),
+      tags: z.array(z.string()).min(1).max(5),
+      createdAt: z.date(),
+      settings: z.object({
+        theme: z.enum(['light', 'dark']),
+        notifications: z.boolean(),
+      }),
+    });
+    for (let i = 0; i < 20; i++) {
+      const val = generateFromSchema<any>(userSchema as any, { optionalRate: 1.0 });
+      const result = userSchema.safeParse(val);
+      expect(result.success).toBe(true);
+    }
+  });
 });

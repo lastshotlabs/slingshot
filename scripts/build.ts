@@ -309,7 +309,7 @@ for (const entry of fs.readdirSync('packages', { withFileTypes: true })) {
 
 for (const step of steps) {
   await runStep(step);
-  if (step.name === 'framework build output') {
+  if (step.name === 'root build output') {
     console.log('[build] framework declaration import rewrite...');
     rewriteFrameworkDeclarationImports();
     console.log('[build] framework declaration import rewrite done');

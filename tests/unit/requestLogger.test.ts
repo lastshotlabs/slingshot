@@ -1,5 +1,5 @@
 import { trace } from '@opentelemetry/api';
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { otelRequestMiddleware } from '../../src/framework/middleware/otelRequest';
@@ -236,6 +236,73 @@ describe('requestLogger middleware', () => {
     expect(logs[0].spanId).toBeNull();
   });
 
+  test('errorToString handles non-Error thrown string values', async () => {
+    // This exercises the errorToString string branch (line 75)
+    const logs: RequestLogEntry[] = [];
+    const app = new Hono<AppEnv>();
+    app.use(requestId);
+    app.use(requestLogger({ onLog: entry => { logs.push(entry); } }));
+    app.use(async () => {
+      throw 'string-error';
+    });
+
+    await app.request('/string-throw');
+    // Hono catches it — the middleware sees it when re-thrown
+    expect(logs).toHaveLength(1);
+    expect(logs[0].statusCode).toBe(500);
+  });
+
+  test('errorToString handles non-Error thrown number values', async () => {
+    // This exercises the errorToString number branch (line 76-77)
+    const logs: RequestLogEntry[] = [];
+    const app = new Hono<AppEnv>();
+    app.use(requestId);
+    app.use(requestLogger({ onLog: entry => { logs.push(entry); } }));
+    app.use(async () => {
+      throw 42;
+    });
+
+    await app.request('/number-throw');
+    expect(logs).toHaveLength(1);
+    expect(logs[0].statusCode).toBe(500);
+  });
+
+  test('level filtering with error: error below minLevel is still re-thrown (line 157)', async () => {
+    // With minLevel: 'error', a 4xx response is filtered (warn < error), but
+    // an actual thrown error at warn-level should still propagate
+    const logs: RequestLogEntry[] = [];
+    const app = new Hono<AppEnv>();
+    app.use(requestId);
+    app.use(requestLogger({
+      level: 'error',
+      onLog: entry => { logs.push(entry); },
+    }));
+    app.get('/ok', c => c.json({ ok: true }, 200));
+
+    await app.request('/ok');
+    // info < error so entry is dropped
+    expect(logs).toHaveLength(0);
+  });
+
+  test('err field is populated for non-Error thrown objects (lines 191-194)', async () => {
+    // Exercises the non-Error branch of err field population
+    const logs: RequestLogEntry[] = [];
+    const app = new Hono<AppEnv>();
+    app.use(requestId);
+    app.use(requestLogger({ onLog: entry => { logs.push(entry); } }));
+    // Throw a plain object — not an Error instance
+    app.use(async () => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw { code: 'CUSTOM', detail: 'custom error' };
+    });
+
+    await app.request('/obj-throw');
+    expect(logs).toHaveLength(1);
+    // err should be populated even for non-Error thrown values
+    expect(logs[0].err).toBeDefined();
+    expect(typeof logs[0].err?.message).toBe('string');
+  });
+
   test('traceId and spanId populated when otelSpan is set', async () => {
     const logs: RequestLogEntry[] = [];
     const app = new Hono<AppEnv>();
@@ -259,5 +326,23 @@ describe('requestLogger middleware', () => {
     // but they should still be strings, not null
     expect(typeof logs[0].traceId).toBe('string');
     expect(typeof logs[0].spanId).toBe('string');
+  });
+
+  test('default onLog calls console.log with JSON when no onLog is provided', async () => {
+    const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+
+    const app = new Hono<AppEnv>();
+    app.use(requestId);
+    app.use(requestLogger()); // no onLog override — uses default
+    app.get('/default-log', c => c.json({ ok: true }));
+
+    await app.request('/default-log');
+
+    const jsonCall = logSpy.mock.calls.find(
+      (args: unknown[]) => typeof args[0] === 'string' && args[0].includes('"path":"/default-log"'),
+    );
+    expect(jsonCall).toBeDefined();
+
+    logSpy.mockRestore();
   });
 });

@@ -91,4 +91,29 @@ describe('createFileSecretRepository', () => {
     const provider = createFileSecretRepository({ directory: dir });
     expect(provider.name).toBe('file');
   });
+
+  test('initialize re-throws non-ENOENT errors (line 106)', async () => {
+    // Pass a path that EXISTS but is a FILE not a directory — readdir will throw ENOTDIR
+    const filePath = join(dir, 'DB_PASSWORD'); // this is a file
+    const provider = createFileSecretRepository({ directory: filePath });
+    await expect(provider.initialize?.()).rejects.toThrow();
+    // Should NOT throw "Directory not found" (ENOENT message), just re-throw raw error
+    await provider.initialize?.().catch(err => {
+      expect(err.message).not.toContain('Directory not found');
+    });
+  });
+
+  test('destroy() clears cache and resolves (lines 131-133)', async () => {
+    const provider = createFileSecretRepository({ directory: dir });
+    await provider.initialize?.();
+    // Should have cached values
+    expect(await provider.get('DB_PASSWORD')).toBe('hunter2');
+
+    // destroy() should clear the cache and return a resolved promise
+    await expect(provider.destroy?.()).resolves.toBeUndefined();
+
+    // After destroy, reading should go back to lazy (disk) mode
+    // We can verify by checking a known key still returns a value (lazy read)
+    expect(await provider.get('DB_PASSWORD')).toBe('hunter2');
+  });
 });

@@ -139,4 +139,32 @@ describe('wsHeartbeat', () => {
     clearHeartbeatState(state);
     // No errors, state is clean
   });
+
+  test('heartbeat interval swallows errors thrown by ws.ping() (catch block coverage)', async () => {
+    // A socket whose ping() throws exercises the try/catch in the interval callback (line 65)
+    const throwingWs = {
+      data: { id: 's-throw', endpoint: ENDPOINT, rooms: new Set<string>() },
+      ping() {
+        throw new Error('simulated ping failure');
+      },
+      close(_code?: number, _reason?: string) {},
+    } as any;
+
+    registerSocket(state, throwingWs, 's-throw', ENDPOINT);
+    handlePong(state, 's-throw'); // keep it fresh so timeout doesn't fire
+
+    startHeartbeat(state, { [ENDPOINT]: { intervalMs: 30, timeoutMs: 5000 } });
+
+    // Wait for at least one interval — the error must be swallowed, not propagate
+    await new Promise(r => setTimeout(r, 80));
+
+    // If we reach here the interval survived the thrown error
+    expect(state.heartbeatTimer).not.toBeNull();
+  });
+
+  test('handlePong is a no-op for unknown socket id', () => {
+    // Exercises the early-return path: entry is undefined
+    handlePong(state, 'does-not-exist');
+    // No throw expected
+  });
 });

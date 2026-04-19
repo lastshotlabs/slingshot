@@ -746,22 +746,22 @@ describe('Postgres permissions adapter — listGrantHistory', () => {
 });
 
 describe('Postgres permissions adapter — row coercion errors', () => {
+  // listGrantHistory has no revoked/expired pre-filtering, so bad rows reach rowToGrant
   test('str() throws when column is not a string', async () => {
     const pool = new MockPool();
     pool.schemaVersion = 1;
     const adapter = await makeAdapter(pool);
 
-    // Inject a row with a non-string subject_id to trigger the str() error branch
     pool['grants'].set('bad-str', {
       id: 'bad-str',
-      subject_id: 123 as never, // wrong type
+      subject_id: 'user-1',
       subject_type: 'user',
       tenant_id: null,
       resource_type: null,
       resource_id: null,
       roles: ['admin'],
       effect: 'allow',
-      granted_by: 'system',
+      granted_by: 123 as never, // wrong type — should be string
       granted_at: new Date(),
       reason: null,
       expires_at: null,
@@ -769,7 +769,7 @@ describe('Postgres permissions adapter — row coercion errors', () => {
       revoked_at: null,
     });
 
-    await expect(adapter.getGrantsForSubject(123 as never)).rejects.toThrow('expected string');
+    await expect(adapter.listGrantHistory('user-1', 'user')).rejects.toThrow('expected string');
   });
 
   test('strOrNull() throws when column is neither string nor null', async () => {
@@ -794,7 +794,9 @@ describe('Postgres permissions adapter — row coercion errors', () => {
       revoked_at: null,
     });
 
-    await expect(adapter.getGrantsForSubject('user-1')).rejects.toThrow('expected string | null');
+    await expect(adapter.listGrantHistory('user-1', 'user')).rejects.toThrow(
+      'expected string | null',
+    );
   });
 
   test('dateOrUndef() throws when column is neither Date nor null', async () => {
@@ -812,14 +814,16 @@ describe('Postgres permissions adapter — row coercion errors', () => {
       roles: ['admin'],
       effect: 'allow',
       granted_by: 'system',
-      granted_at: 'not-a-date' as never, // wrong type
+      granted_at: new Date(),
       reason: null,
-      expires_at: null,
+      expires_at: 'not-a-date' as never, // wrong type — should be Date | null
       revoked_by: null,
       revoked_at: null,
     });
 
-    await expect(adapter.getGrantsForSubject('user-1')).rejects.toThrow('expected Date | null');
+    await expect(adapter.listGrantHistory('user-1', 'user')).rejects.toThrow(
+      'expected Date | null',
+    );
   });
 });
 

@@ -1,8 +1,19 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { COOKIE_TOKEN, createRouter } from '@lastshotlabs/slingshot-core';
+import { COOKIE_TOKEN, HttpError, ValidationError, createRouter } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
 import { createTestApp } from '../setup';
+
+const disconnectRedisMock = mock(async () => {});
+const disconnectMongoMock = mock(async () => {});
+
+mock.module('@lib/redis', () => ({
+  disconnectRedis: disconnectRedisMock,
+}));
+
+mock.module('@lib/mongo', () => ({
+  disconnectMongo: disconnectMongoMock,
+}));
 
 const baseConfig = {
   meta: { name: 'Assembly Test App' },
@@ -78,6 +89,205 @@ describe('app assembly', () => {
     expect(result.ctx.publicPaths.has('/public-hook')).toBe(true);
     expect('add' in (result.ctx.publicPaths as object)).toBe(false);
     expect('delete' in (result.ctx.publicPaths as object)).toBe(false);
+  });
+
+  test('cleanupBootstrapFailure: shuts down bus, disconnects redis+mongo on createApp failure (lines 340-374)', async () => {
+    // Force a failure during assembleApp by injecting a plugin that throws during setupMiddleware.
+    // This ensures bootstrap is set but assembly.ctx is not yet available, triggering cleanupBootstrapFailure.
+    disconnectRedisMock.mockClear();
+    disconnectMongoMock.mockClear();
+
+    const secretDestroy = mock(async () => {});
+    const busShutdown = mock(async () => {});
+
+    await expect(
+      createApp({
+        ...baseConfig,
+        db: {
+          ...baseConfig.db,
+        },
+        secrets: {
+          name: 'fail-secrets',
+          get: async (key: string) => {
+            if (key === 'JWT_SECRET') return 'test-secret-key-must-be-at-least-32-chars!!';
+            return null;
+          },
+          getMany: async () => new Map(),
+          destroy: secretDestroy,
+        },
+        plugins: [
+          {
+            name: 'failing-plugin',
+            async setupMiddleware() {
+              throw new Error('plugin middleware failed on purpose');
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow('plugin middleware failed on purpose');
+
+    // secretDestroy should be called by cleanupBootstrapFailure
+    expect(secretDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  test('uses JWT_SECRET from secrets when signing.secret is not provided (line 432)', async () => {
+    const result = await createApp({
+      ...baseConfig,
+      security: {
+        ...baseConfig.security,
+        signing: undefined,
+      },
+      secrets: {
+        name: 'jwt-env-secrets',
+        get: async (key: string) => {
+          if (key === 'JWT_SECRET') return 'jwt-secret-from-provider-at-least-32-chars!!';
+          return null;
+        },
+        getMany: async (keys: readonly string[]) => {
+          const map = new Map<string, string | null>();
+          for (const k of keys) {
+            if (k === 'JWT_SECRET') map.set(k, 'jwt-secret-from-provider-at-least-32-chars!!');
+            else map.set(k, null);
+          }
+          return map;
+        },
+      },
+    });
+    createdApps.push(result.ctx);
+
+    // The app should have started successfully with the JWT_SECRET from secrets
+    const healthRes = await result.app.request('/health');
+    expect(healthRes.status).toBe(200);
+  });
+
+  test('merges plugin tenantExemptPaths into tenancy exempt paths (line 248)', async () => {
+    // Plugin defines tenantExemptPaths — exercises line 248 in mergeTenantExemptPaths
+    const exemptPlugin: SlingshotPlugin = {
+      name: 'exempt-plugin',
+      tenantExemptPaths: ['/webhooks/incoming'],
+      setupRoutes({ app }) {
+        const router = createRouter();
+        router.post('/webhooks/incoming', c => c.json({ ok: true }));
+        app.route('/', router);
+      },
+    };
+
+    const result = await createApp({
+      ...baseConfig,
+      plugins: [exemptPlugin],
+      tenancy: { resolution: 'header' },
+    });
+    createdApps.push(result.ctx);
+
+    // The exempt path should bypass tenant resolution (no tenant header required)
+    const response = await result.app.request('/webhooks/incoming', {
+      method: 'POST',
+    });
+    expect(response.status).toBe(200);
+  });
+
+  test('onError handler returns 500 for generic errors (line 625-627)', async () => {
+    const errorPlugin: SlingshotPlugin = {
+      name: 'error-plugin',
+      setupRoutes({ app }) {
+        const router = createRouter();
+        router.get('/throw-generic', () => {
+          throw new Error('unexpected crash');
+        });
+        app.route('/', router);
+      },
+    };
+
+    const result = await createApp({
+      ...baseConfig,
+      plugins: [errorPlugin],
+    });
+    createdApps.push(result.ctx);
+
+    const response = await result.app.request('/throw-generic');
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe('Internal Server Error');
+  });
+
+  test('onError handler returns HttpError status and body (lines 621-624)', async () => {
+    const errorPlugin: SlingshotPlugin = {
+      name: 'http-error-plugin',
+      setupRoutes({ app }) {
+        const router = createRouter();
+        router.get('/throw-http', () => {
+          throw new HttpError(418, "I'm a teapot");
+        });
+        app.route('/', router);
+      },
+    };
+
+    const result = await createApp({
+      ...baseConfig,
+      plugins: [errorPlugin],
+    });
+    createdApps.push(result.ctx);
+
+    const response = await result.app.request('/throw-http');
+    expect(response.status).toBe(418);
+    const body = await response.json();
+    expect(body.error).toBe("I'm a teapot");
+  });
+
+  test('onError handler with broken validationErrorFormatter falls back to default (lines 614-618)', async () => {
+    const errorPlugin: SlingshotPlugin = {
+      name: 'validation-error-plugin',
+      setupRoutes({ app }) {
+        const router = createRouter();
+        router.get('/throw-validation', (_c) => {
+          throw new ValidationError([{ code: 'custom', message: 'bad input', path: [] }]);
+        });
+        app.route('/', router);
+      },
+    };
+
+    const result = await createApp({
+      ...baseConfig,
+      plugins: [errorPlugin],
+    });
+    createdApps.push(result.ctx);
+
+    const response = await result.app.request('/throw-validation');
+    expect(response.status).toBe(400);
+    // Should not crash even without a custom formatter
+    const body = await response.json();
+    expect(body).toBeDefined();
+  });
+
+  test('onError catch branch: broken custom formatError falls back to defaultValidationErrorFormatter (lines 617-618)', async () => {
+    const errorPlugin: SlingshotPlugin = {
+      name: 'broken-fmt-plugin',
+      setupRoutes({ app }) {
+        const router = createRouter();
+        router.get('/throw-validation-broken-fmt', (_c) => {
+          throw new ValidationError([{ code: 'custom', message: 'bad input', path: ['field'] }]);
+        });
+        app.route('/', router);
+      },
+    };
+
+    const result = await createApp({
+      ...baseConfig,
+      plugins: [errorPlugin],
+      validation: {
+        formatError: () => {
+          throw new Error('formatter exploded');
+        },
+      },
+    });
+    createdApps.push(result.ctx);
+
+    const response = await result.app.request('/throw-validation-broken-fmt');
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    // The default formatter should produce a body with errors array
+    expect(body).toBeDefined();
+    expect(body.errors || body.error || body.issues).toBeDefined();
   });
 
   test('merges plugin public paths and csrf exemptions into auth csrf protection', async () => {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import {
+  closeMetricsQueues,
   createMetricsState,
   defaultNormalizePath,
   incrementCounter,
@@ -7,6 +8,7 @@ import {
   registerGaugeCallback,
   resetMetrics,
   serializeMetrics,
+  setMetricsQueues,
 } from '../../src/framework/metrics/registry';
 
 const state = createMetricsState();
@@ -148,6 +150,48 @@ describe('defaultNormalizePath', () => {
 
   test('handles root path', () => {
     expect(defaultNormalizePath('/')).toBe('/');
+  });
+});
+
+// ── closeMetricsQueues (lines 192-195, 198-200) ──────────────────────────────
+
+describe('closeMetricsQueues', () => {
+  test('closes all queues, clears the map, and sets queues to null', async () => {
+    const closedQueues: string[] = [];
+    const q1 = { close: async () => { closedQueues.push('q1'); } };
+    const q2 = { close: async () => { closedQueues.push('q2'); } };
+
+    const queueMap = new Map<string, { close(): Promise<void> }>([
+      ['q1', q1],
+      ['q2', q2],
+    ]);
+    setMetricsQueues(state, queueMap);
+    expect(state.queues).not.toBeNull();
+
+    await closeMetricsQueues(state);
+
+    expect(closedQueues.sort()).toEqual(['q1', 'q2']);
+    expect(state.queues).toBeNull();
+  });
+
+  test('does nothing when queues is null', async () => {
+    // Should not throw and state remains null
+    await expect(closeMetricsQueues(state)).resolves.toBeUndefined();
+    expect(state.queues).toBeNull();
+  });
+
+  test('continues closing remaining queues when one close() throws (best-effort)', async () => {
+    const closedQueues: string[] = [];
+    const q1 = {
+      close: async () => { throw new Error('q1 close failed'); },
+    };
+    const q2 = { close: async () => { closedQueues.push('q2'); } };
+
+    setMetricsQueues(state, new Map([['q1', q1], ['q2', q2]]));
+
+    await expect(closeMetricsQueues(state)).resolves.toBeUndefined();
+    expect(closedQueues).toContain('q2');
+    expect(state.queues).toBeNull();
   });
 });
 

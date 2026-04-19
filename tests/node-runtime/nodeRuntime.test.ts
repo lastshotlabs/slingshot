@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { nodeRuntime } from '../../packages/runtime-node/src/index';
+import { __runtimeNodeInternals, nodeRuntime } from '../../packages/runtime-node/src/index';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,6 +62,40 @@ function waitForSocketEnd(socket: import('node:net').Socket): Promise<void> {
 // ---------------------------------------------------------------------------
 // Password
 // ---------------------------------------------------------------------------
+
+describe('WebSocket payload normalization helpers', () => {
+  it('returns strings unchanged', () => {
+    expect(__runtimeNodeInternals.stringifyWsPayload('plain-text')).toBe('plain-text');
+  });
+
+  it('converts typed-array views into Buffer slices', () => {
+    const bytes = new Uint8Array([65, 66, 67, 68]);
+    const view = new Uint8Array(bytes.buffer, 1, 2);
+    const chunk = __runtimeNodeInternals.toBufferChunk(view);
+    expect(chunk?.toString()).toBe('BC');
+  });
+
+  it('stringifies chunk arrays composed of mixed supported payload types', () => {
+    const value = __runtimeNodeInternals.stringifyWsPayload([
+      'A',
+      new Uint8Array([66]),
+      new Uint8Array([67]).buffer,
+    ]);
+    expect(value).toBe('ABC');
+  });
+
+  it('throws for unsupported chunk-array entries', () => {
+    expect(() =>
+      __runtimeNodeInternals.stringifyWsPayload(['ok', { bad: true }]),
+    ).toThrowError('Unsupported WebSocket message chunk type');
+  });
+
+  it('throws for unsupported top-level payloads', () => {
+    expect(() => __runtimeNodeInternals.stringifyWsPayload({ nope: true })).toThrowError(
+      'Unsupported WebSocket message payload type',
+    );
+  });
+});
 
 describe('RuntimePassword (argon2)', () => {
   const runtime = nodeRuntime();
@@ -200,6 +234,22 @@ describe('RuntimeSqliteDatabase (better-sqlite3)', () => {
     const db = runtime.sqlite.open(join(tmpDir, 'empty2.db'));
     db.run('CREATE TABLE items (id TEXT PRIMARY KEY)');
     expect(db.prepare('SELECT * FROM items WHERE id = ?').get('nope')).toBeNull();
+    db.close();
+  });
+
+  it('prepare().all returns all matching rows', () => {
+    const runtime = nodeRuntime();
+    const db = runtime.sqlite.open(join(tmpDir, 'prepare-all.db'));
+    db.run('CREATE TABLE items (id TEXT PRIMARY KEY, category TEXT NOT NULL)');
+    db.run('INSERT INTO items VALUES (?, ?)', 'a', 'books');
+    db.run('INSERT INTO items VALUES (?, ?)', 'b', 'books');
+    db.run('INSERT INTO items VALUES (?, ?)', 'c', 'games');
+
+    const rows = db
+      .prepare<{ id: string }>('SELECT id FROM items WHERE category = ? ORDER BY id')
+      .all('books');
+    expect(rows).toEqual([{ id: 'a' }, { id: 'b' }]);
+
     db.close();
   });
 });
@@ -494,6 +544,38 @@ describe('WebSocket (ws)', () => {
     }
   });
 
+  it('defaults listen() to port 3000 and tolerates all createServer callback shapes', async () => {
+    const firstArgListener = vi.fn();
+    const secondArgListener = vi.fn();
+    const originalResponse = global.Response;
+
+    vi.doMock('@hono/node-server', () => ({
+      serve(
+        options: {
+          port: number;
+          createServer: (...args: unknown[]) => unknown;
+        },
+        onListen: (info: { port: number }) => void,
+      ) {
+        expect(options.port).toBe(3000);
+        options.createServer(firstArgListener);
+        options.createServer({}, secondArgListener);
+        options.createServer({});
+        onListen({ port: 3000 });
+      },
+    }));
+
+    try {
+      const runtime = nodeRuntime();
+      const server = await runtime.server.listen({
+        fetch: () => new originalResponse('ok'),
+      });
+      expect(server.port).toBe(3000);
+    } finally {
+      vi.doUnmock('@hono/node-server');
+    }
+  });
+
   it('delivers custom data attached at upgrade time', async () => {
     const runtime = nodeRuntime();
     const opened = deferred<unknown>();
@@ -635,6 +717,40 @@ describe('WebSocket (ws)', () => {
       await new Promise(r => setTimeout(r, 50));
       expect(received).toEqual(['msg1']);
 
+      ws.close();
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  it('unsubscribe() removes the last subscriber channel immediately', async () => {
+    const runtime = nodeRuntime();
+    const unsubscribed = deferred();
+
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          server.upgrade!(req, { data: {} });
+          return new Response(null);
+        }
+        return new Response('ok');
+      },
+      websocket: {
+        open(ws) {
+          ws.subscribe('solo');
+          ws.unsubscribe('solo');
+          unsubscribed.resolve();
+        },
+        message() {},
+        close() {},
+      },
+    });
+
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+      await unsubscribed.promise;
+      server.publish!('solo', 'ghost');
       ws.close();
     } finally {
       await server.stop(true);
@@ -946,6 +1062,51 @@ describe('WebSocket (ws)', () => {
 
       // Publishing after the subscriber closed should be a no-op (no crash)
       server.publish!('ch', 'should-not-crash');
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  it('publish() skips a socket that is already closing but not yet removed from the channel', async () => {
+    const runtime = nodeRuntime();
+    const opened = deferred();
+    const clientClosed = deferred();
+    let serverWs:
+      | {
+          subscribe: (channel: string) => void;
+          close: (code?: number, reason?: string) => void;
+        }
+      | undefined;
+
+    const server = await runtime.server.listen({
+      port: 0,
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          server.upgrade!(req, { data: {} });
+          return new Response(null);
+        }
+        return new Response('ok');
+      },
+      websocket: {
+        open(ws) {
+          serverWs = ws;
+          ws.subscribe('closing');
+          opened.resolve();
+        },
+        message() {},
+        close() {},
+      },
+    });
+
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+      ws.on('close', () => clientClosed.resolve());
+      await opened.promise;
+
+      serverWs!.close(1000, 'closing');
+      server.publish!('closing', 'ignored');
+
+      await clientClosed.promise;
     } finally {
       await server.stop(true);
     }

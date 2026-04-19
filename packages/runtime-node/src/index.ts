@@ -52,6 +52,11 @@ function stringifyWsPayload(rawData: unknown): string {
   throw new TypeError('Unsupported WebSocket message payload type');
 }
 
+export const __runtimeNodeInternals = {
+  toBufferChunk,
+  stringifyWsPayload,
+};
+
 // ---------------------------------------------------------------------------
 // Password — argon2
 // ---------------------------------------------------------------------------
@@ -321,10 +326,7 @@ function createNodeServer(): RuntimeServerFactory {
 
       /** Wrap a raw `ws` WebSocket in the RuntimeWebSocket contract. */
       function wrapWs(ws: WsWebSocket, data: unknown): RuntimeWebSocket {
-        const handler = wsHandler;
-        if (!handler) {
-          throw new Error('[runtime-node] WebSocket handler is unavailable during upgrade');
-        }
+        const handler = wsHandler!;
         const subscribedChannels = new Set<string>();
 
         const rtWs: RuntimeWebSocket = {

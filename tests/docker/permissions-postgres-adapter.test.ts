@@ -14,6 +14,35 @@ describe('Permissions Postgres adapter (docker)', () => {
   let pool: Pool;
   let adapter: PermissionsPostgresAdapter;
 
+  function createTestPool(): Pool {
+    return new Pool({ connectionString: CONNECTION });
+  }
+
+  async function resetPermissionsSchema(targetPool: Pool): Promise<void> {
+    await targetPool.query('DROP TABLE IF EXISTS permission_grants');
+    await targetPool.query('DROP TABLE IF EXISTS _permission_schema_version');
+  }
+
+  async function readPermissionSchemaVersions(targetPool: Pool): Promise<number[]> {
+    const result = await targetPool.query<{ version: number }>(
+      'SELECT version FROM _permission_schema_version ORDER BY version',
+    );
+    return result.rows.map(row => row.version);
+  }
+
+  async function hasPermissionVersionSingletonIndex(targetPool: Pool): Promise<boolean> {
+    const result = await targetPool.query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM pg_indexes
+         WHERE schemaname = current_schema()
+           AND tablename = '_permission_schema_version'
+           AND indexname = 'idx_permission_schema_version_singleton'
+       ) AS exists`,
+    );
+    return result.rows[0]?.exists ?? false;
+  }
+
   beforeAll(async () => {
     pool = new Pool({ connectionString: CONNECTION });
     adapter = await createPermissionsPostgresAdapter(pool);
@@ -315,6 +344,84 @@ describe('Permissions Postgres adapter (docker)', () => {
       const grants2 = await adapter.getGrantsForSubject('user-2');
       expect(grants1.length).toBe(0);
       expect(grants2.length).toBe(0);
+    });
+  });
+
+  describe('migrations', () => {
+    test('serializes concurrent bootstrap and leaves a single schema-version row', async () => {
+      await resetPermissionsSchema(pool);
+
+      const poolA = createTestPool();
+      const poolB = createTestPool();
+
+      try {
+        const [adapterA, adapterB] = await Promise.all([
+          createPermissionsPostgresAdapter(poolA),
+          createPermissionsPostgresAdapter(poolB),
+        ]);
+
+        const versions = await readPermissionSchemaVersions(pool);
+        expect(versions).toEqual([1]);
+        expect(await hasPermissionVersionSingletonIndex(pool)).toBe(true);
+
+        const grantId = await adapterA.createGrant(
+          makeGrant({ subjectId: 'bootstrap-user', roles: ['reader'] }),
+        );
+        const grants = await adapterB.getGrantsForSubject('bootstrap-user');
+        expect(grants).toHaveLength(1);
+        expect(grants[0].id).toBe(grantId);
+      } finally {
+        await poolA.end();
+        await poolB.end();
+      }
+    });
+
+    test('repairs duplicate schema-version rows by canonicalizing to the highest version', async () => {
+      await resetPermissionsSchema(pool);
+
+      const bootstrapPool = createTestPool();
+      try {
+        await createPermissionsPostgresAdapter(bootstrapPool);
+      } finally {
+        await bootstrapPool.end();
+      }
+
+      await pool.query('DROP INDEX IF EXISTS idx_permission_schema_version_singleton');
+      await pool.query('DELETE FROM _permission_schema_version');
+      await pool.query(
+        'INSERT INTO _permission_schema_version (version) VALUES (0), (1), (1)',
+      );
+
+      const repairPool = createTestPool();
+      try {
+        const repairedAdapter = await createPermissionsPostgresAdapter(repairPool);
+        const versions = await readPermissionSchemaVersions(pool);
+        expect(versions).toEqual([1]);
+        expect(await hasPermissionVersionSingletonIndex(pool)).toBe(true);
+
+        await repairedAdapter.createGrant(makeGrant({ subjectId: 'repair-user' }));
+        const grants = await repairedAdapter.getGrantsForSubject('repair-user');
+        expect(grants).toHaveLength(1);
+      } finally {
+        await repairPool.end();
+      }
+    });
+
+    test('fails closed when the stored schema version is newer than this binary supports', async () => {
+      await resetPermissionsSchema(pool);
+
+      await pool.query('CREATE TABLE _permission_schema_version (version INTEGER NOT NULL DEFAULT 0)');
+      await pool.query('INSERT INTO _permission_schema_version (version) VALUES (2)');
+
+      const futurePool = createTestPool();
+      try {
+        await expect(createPermissionsPostgresAdapter(futurePool)).rejects.toThrow(
+          'Database schema version 2 is newer than this binary supports (1)',
+        );
+      } finally {
+        await futurePool.end();
+        await resetPermissionsSchema(pool);
+      }
     });
   });
 });

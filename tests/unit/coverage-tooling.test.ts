@@ -104,4 +104,20 @@ describe('coverage tooling', () => {
     expect(fileNeedsRuntimeCoverage('src/lib/appConfig.ts')).toBe(true);
     expect(fileNeedsRuntimeCoverage('src/config/types/db.ts')).toBe(false);
   });
+
+  test('partitions root tests so module-mocking files run isolated', async () => {
+    const { collectRootTestFiles, fileRequiresIsolatedProcess, partitionRootTestFiles } =
+      await import(`../../scripts/root-test-files.ts?root=${Date.now()}`);
+
+    const files = await collectRootTestFiles();
+    const { bulk, isolated } = partitionRootTestFiles(files);
+    const normalizedBulk = bulk.map((file: string) => file.replace(/\\/g, '/'));
+    const normalizedIsolated = isolated.map((file: string) => file.replace(/\\/g, '/'));
+
+    expect(fileRequiresIsolatedProcess('tests/unit/manifestBuiltinConfig.test.ts')).toBe(true);
+    expect(fileRequiresIsolatedProcess('tests/unit/webhookAuth.test.ts')).toBe(false);
+    expect(normalizedIsolated).toContain('tests/unit/manifestBuiltinConfig.test.ts');
+    expect(normalizedIsolated).toContain('tests/unit/wsDispatch.test.ts');
+    expect(normalizedBulk).toContain('tests/unit/webhookAuth.test.ts');
+  });
 });

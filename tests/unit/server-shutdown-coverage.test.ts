@@ -398,14 +398,8 @@ describe('WS drain handler (line 448)', () => {
 
 // =========================================================================
 // 6. Redis/Mongo disconnect in shutdown (lines 616-631)
-//    Documented as untestable without integration infrastructure
+//    Covered by Docker integration tests:
+//    - tests/docker/server-shutdown-disconnect.test.ts (Redis disconnect via createServer + live Redis)
+//    - tests/docker/mongo-disconnect-shutdown.test.ts (Mongo disconnect with live connections)
+//    - tests/docker/app-bootstrap-redis-cleanup.test.ts (Redis cleanup in cleanupBootstrapFailure)
 // =========================================================================
-
-describe('Redis/Mongo disconnect in shutdown (lines 616-631)', () => {
-  // These branches require ctx.redis / ctx.mongo to be set, which only happens
-  // when createInfrastructure successfully connects to live Redis/Mongo during
-  // bootstrap. The disconnect functions (disconnectRedis, disconnectMongo) are
-  // independently tested in their own test files. The conditional guards
-  // (enableRedis && ctx.redis, mongoMode !== false && ctx.mongo) are trivial.
-  // These lines belong in integration tests with real infrastructure.
-});

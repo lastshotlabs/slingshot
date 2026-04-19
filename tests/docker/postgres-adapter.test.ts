@@ -18,6 +18,42 @@ describe('PostgresAdapter (docker)', () => {
   let pool: Pool;
   let adapter: AuthAdapter;
 
+  function createTestPool(): Pool {
+    return new Pool({ connectionString: CONNECTION });
+  }
+
+  async function resetAuthSchema(targetPool: Pool): Promise<void> {
+    await targetPool.query('DROP TABLE IF EXISTS slingshot_group_memberships');
+    await targetPool.query('DROP TABLE IF EXISTS slingshot_groups');
+    await targetPool.query('DROP TABLE IF EXISTS slingshot_webauthn_credentials');
+    await targetPool.query('DROP TABLE IF EXISTS slingshot_recovery_codes');
+    await targetPool.query('DROP TABLE IF EXISTS slingshot_tenant_roles');
+    await targetPool.query('DROP TABLE IF EXISTS slingshot_user_roles');
+    await targetPool.query('DROP TABLE IF EXISTS slingshot_oauth_accounts');
+    await targetPool.query('DROP TABLE IF EXISTS slingshot_users');
+    await targetPool.query('DROP TABLE IF EXISTS _slingshot_auth_schema_version');
+  }
+
+  async function readAuthSchemaVersions(targetPool: Pool): Promise<number[]> {
+    const result = await targetPool.query<{ version: number }>(
+      'SELECT version FROM _slingshot_auth_schema_version ORDER BY version',
+    );
+    return result.rows.map(row => row.version);
+  }
+
+  async function hasAuthVersionSingletonIndex(targetPool: Pool): Promise<boolean> {
+    const result = await targetPool.query<{ exists: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM pg_indexes
+         WHERE schemaname = current_schema()
+           AND tablename = '_slingshot_auth_schema_version'
+           AND indexname = 'idx_slingshot_auth_schema_version_singleton'
+       ) AS exists`,
+    );
+    return result.rows[0]?.exists ?? false;
+  }
+
   beforeAll(async () => {
     pool = new Pool({ connectionString: CONNECTION });
     // Migrations run automatically inside createPostgresAdapter.
@@ -588,5 +624,78 @@ describe('PostgresAdapter (docker)', () => {
 
     const effective = await adapter.getEffectiveRoles!(userId, null);
     expect(effective.sort()).toEqual(['deploy', 'read', 'superuser']);
+  });
+
+  test('migrations serialize concurrent bootstrap and leave a single schema-version row', async () => {
+    await resetAuthSchema(pool);
+
+    const poolA = createTestPool();
+    const poolB = createTestPool();
+
+    try {
+      const [adapterA, adapterB] = await Promise.all([
+        createPostgresAdapter({ pool: poolA }),
+        createPostgresAdapter({ pool: poolB }),
+      ]);
+
+      const versions = await readAuthSchemaVersions(pool);
+      expect(versions).toEqual([2]);
+      expect(await hasAuthVersionSingletonIndex(pool)).toBe(true);
+
+      const hash = await Bun.password.hash('bootstrap-secret');
+      const created = await adapterA.create('bootstrap@example.com', hash);
+      const found = await adapterB.findByEmail('bootstrap@example.com');
+      expect(found?.id).toBe(created.id);
+    } finally {
+      await poolA.end();
+      await poolB.end();
+    }
+  });
+
+  test('migrations repair duplicate schema-version rows by canonicalizing to the highest version', async () => {
+    await resetAuthSchema(pool);
+
+    const bootstrapPool = createTestPool();
+    try {
+      await createPostgresAdapter({ pool: bootstrapPool });
+    } finally {
+      await bootstrapPool.end();
+    }
+
+    await pool.query('DROP INDEX IF EXISTS idx_slingshot_auth_schema_version_singleton');
+    await pool.query('DELETE FROM _slingshot_auth_schema_version');
+    await pool.query('INSERT INTO _slingshot_auth_schema_version (version) VALUES (0), (1), (2)');
+
+    const repairPool = createTestPool();
+    try {
+      const repairedAdapter = await createPostgresAdapter({ pool: repairPool });
+      const versions = await readAuthSchemaVersions(pool);
+      expect(versions).toEqual([2]);
+      expect(await hasAuthVersionSingletonIndex(pool)).toBe(true);
+
+      const hash = await Bun.password.hash('repair-secret');
+      await repairedAdapter.create('repair@example.com', hash);
+      const found = await repairedAdapter.findByEmail('repair@example.com');
+      expect(found).not.toBeNull();
+    } finally {
+      await repairPool.end();
+    }
+  });
+
+  test('migrations fail closed when the stored schema version is newer than this binary supports', async () => {
+    await resetAuthSchema(pool);
+
+    await pool.query('CREATE TABLE _slingshot_auth_schema_version (version INTEGER NOT NULL DEFAULT 0)');
+    await pool.query('INSERT INTO _slingshot_auth_schema_version (version) VALUES (3)');
+
+    const futurePool = createTestPool();
+    try {
+      await expect(createPostgresAdapter({ pool: futurePool })).rejects.toThrow(
+        'Database schema version 3 is newer than this binary supports (2)',
+      );
+    } finally {
+      await futurePool.end();
+      await resetAuthSchema(pool);
+    }
   });
 });

@@ -394,7 +394,11 @@ describe.skipIf(!TEST_POSTGRES_URL)('Auth postgres adapter integration', () => {
       },
       bus,
       undefined,
-      { signing: null, dataEncryptionKeys: [], password: Bun.password },
+      {
+        signing: { secret: 'integration-test-signing-secret-1234567890' },
+        dataEncryptionKeys: [],
+        password: Bun.password,
+      },
     );
 
     expect(result.adapter).toBeDefined();

@@ -88,11 +88,17 @@ export function generateMigrationSqlite(plan: MigrationPlan): string {
       case 'addField': {
         const col = quoteSqlIdent(toSnakeCase(change.name));
         const type = sqliteColType(change.field.type);
-        const notNull = !change.field.optional && !change.field.primary ? ' NOT NULL' : '';
         const def = defaultClause(change.field);
-        // SQLite requires a default for NOT NULL columns added to existing table.
-        const safeDefault = notNull && !def ? ` DEFAULT ''` : def;
-        schema.push(`ALTER TABLE ${qTable} ADD COLUMN ${col} ${type}${notNull}${safeDefault};`);
+        const needsManualBackfill = !change.field.optional && !change.field.primary && !def;
+        if (needsManualBackfill) {
+          schema.push(`ALTER TABLE ${qTable} ADD COLUMN ${col} ${type};`);
+          schema.push(
+            `-- NOTE: Backfill ${col} for existing rows before enforcing NOT NULL in application code or a follow-up table rebuild.`,
+          );
+          break;
+        }
+        const notNull = !change.field.optional && !change.field.primary ? ' NOT NULL' : '';
+        schema.push(`ALTER TABLE ${qTable} ADD COLUMN ${col} ${type}${notNull}${def};`);
         break;
       }
 

@@ -2,6 +2,10 @@
 import { hashToken } from '@lastshotlabs/slingshot-core';
 import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import { type AuthResolvedConfig, DEFAULT_AUTH_CONFIG } from '../../config/authConfig';
+import {
+  isSqliteMissingColumnError,
+  isSqliteUnsupportedDropColumnError,
+} from '../sqliteSchemaErrors';
 import { getSessionTtlMs, isIdleExpired } from './policy';
 import type { SessionRepository } from './repository';
 import type { SessionInfo } from './types';
@@ -82,12 +86,19 @@ export function createSqliteSessionRepository(db: RuntimeSqliteDatabase): Sessio
     )`);
     try {
       db.run('UPDATE sessions SET refreshTokenPlain = NULL WHERE refreshTokenPlain IS NOT NULL');
-    } catch {
+    } catch (err) {
+      if (!isSqliteMissingColumnError(err, 'refreshTokenPlain')) throw err;
       // Older/newer schemas may omit the legacy plaintext column.
     }
     try {
       db.run('ALTER TABLE sessions DROP COLUMN refreshTokenPlain');
-    } catch {
+    } catch (err) {
+      if (
+        !isSqliteMissingColumnError(err, 'refreshTokenPlain') &&
+        !isSqliteUnsupportedDropColumnError(err)
+      ) {
+        throw err;
+      }
       // Older SQLite engines may not support DROP COLUMN. The legacy values were scrubbed above.
     }
     db.run('CREATE INDEX IF NOT EXISTS idx_sessions_userId ON sessions(userId)');

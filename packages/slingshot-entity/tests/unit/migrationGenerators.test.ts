@@ -244,6 +244,24 @@ describe('generateMigrationSqlite', () => {
     expect(sql).toMatch(/DROP INDEX IF EXISTS "idx_[^"]+_tenant_id"/);
     expect(sql).toMatch(/DROP INDEX IF EXISTS "uidx_[^"]+_email"/);
   });
+
+  it('does not backfill DEFAULT empty-string for required numeric fields without defaults', () => {
+    const Before = defineEntity('Counter', {
+      fields: { id: field.string({ primary: true }) },
+    });
+    const After = defineEntity('Counter', {
+      fields: {
+        id: field.string({ primary: true }),
+        count: field.integer(),
+      },
+    });
+    const plan = diffEntityConfig(Before, After);
+    const sql = generateMigrationSqlite(plan);
+
+    expect(sql).toContain('ADD COLUMN "count" INTEGER;');
+    expect(sql).not.toContain(`DEFAULT ''`);
+    expect(sql).toContain('Backfill "count"');
+  });
 });
 
 describe('generateMigrationPostgres', () => {
@@ -291,6 +309,19 @@ describe('generateMigrationPostgres', () => {
       expect(sql).toContain(`-- --- section:${name} ---`);
       expect(sql).toContain(`-- --- end:${name} ---`);
     }
+  });
+
+  it('keeps index statements inside the transaction', () => {
+    const plan = diffEntityConfig(WidgetV1, WidgetV2);
+    const sql = generateMigrationPostgres(plan);
+    const commitAt = sql.indexOf('COMMIT;');
+    const createIndexAt = sql.indexOf('CREATE INDEX IF NOT EXISTS');
+    const createUniqueAt = sql.indexOf('CREATE UNIQUE INDEX IF NOT EXISTS');
+
+    expect(createIndexAt).toBeGreaterThan(-1);
+    expect(createUniqueAt).toBeGreaterThan(-1);
+    expect(commitAt).toBeGreaterThan(createIndexAt);
+    expect(commitAt).toBeGreaterThan(createUniqueAt);
   });
 });
 

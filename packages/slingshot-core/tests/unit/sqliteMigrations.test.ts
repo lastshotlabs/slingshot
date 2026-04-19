@@ -171,4 +171,36 @@ describe('runSubsystemMigrations', () => {
     const committedRows = raw.query<{ id: string }, []>('SELECT id FROM items').all();
     expect(committedRows).toEqual([{ id: 'committed' }]);
   });
+
+  test('fails closed when subsystem version is newer than this binary supports', () => {
+    const db = createTestDb();
+    db.run(`CREATE TABLE IF NOT EXISTS _slingshot_migrations (
+      subsystem TEXT NOT NULL PRIMARY KEY,
+      version   INTEGER NOT NULL
+    )`);
+    db.run(
+      'INSERT INTO _slingshot_migrations (subsystem, version) VALUES (?, ?)',
+      'future-subsystem',
+      3,
+    );
+
+    expect(() =>
+      runSubsystemMigrations(db, 'future-subsystem', [
+        d => d.run('CREATE TABLE safe_table (id TEXT PRIMARY KEY)'),
+      ]),
+    ).toThrow("Subsystem 'future-subsystem' is at schema version 3");
+  });
+
+  test('fails closed when subsystem version row is corrupt', () => {
+    const db = createTestDb();
+    db.run(`CREATE TABLE IF NOT EXISTS _slingshot_migrations (
+      subsystem TEXT NOT NULL PRIMARY KEY,
+      version   INTEGER NOT NULL
+    )`);
+    db.run("INSERT INTO _slingshot_migrations (subsystem, version) VALUES ('corrupt', 'abc')");
+
+    expect(() =>
+      runSubsystemMigrations(db, 'corrupt', [d => d.run('CREATE TABLE nope (id TEXT PRIMARY KEY)')]),
+    ).toThrow("Invalid schema version for subsystem 'corrupt'");
+  });
 });

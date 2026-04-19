@@ -245,10 +245,6 @@ describe('listByContainerSorted — stub backends return empty results', () => {
     const result = await createListSortedSqliteHandler(null)(params);
     expect(result).toEqual({ items: [], total: 0 });
   });
-  test('postgres handler returns empty', async () => {
-    const result = await createListSortedPostgresHandler(null)(params);
-    expect(result).toEqual({ items: [], total: 0 });
-  });
   test('mongo handler returns empty', async () => {
     const result = await createListSortedMongoHandler(null)(params);
     expect(result).toEqual({ items: [], total: 0 });

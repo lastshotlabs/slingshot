@@ -369,6 +369,16 @@ describe('Postgres permissions adapter — migrations', () => {
     expect(deleteRows).toBeDefined();
     expect(reinsert).toBeDefined();
   });
+
+  test('fails closed when the database schema version is newer than this binary supports', async () => {
+    const pool = new MockPool();
+    pool.schemaVersion = 2;
+
+    await expect(makeAdapter(pool)).rejects.toThrow(
+      'Database schema version 2 is newer than this binary supports (1)',
+    );
+    expect(pool.captured.some(q => q.sql === 'ROLLBACK')).toBe(true);
+  });
 });
 
 describe('Postgres permissions adapter — createGrant', () => {

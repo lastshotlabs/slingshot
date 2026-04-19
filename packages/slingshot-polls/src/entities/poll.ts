@@ -59,7 +59,7 @@ export const Poll = defineEntity('Poll', {
       },
     },
     operations: {
-      listBySource: {},
+      listBySource: { method: 'post', path: 'list-by-source' },
       closePoll: {
         // applyTo: [] prevents the pre-handler policy pass — closePoll body
         // is { id } with no sourceType discriminator, so the dispatched

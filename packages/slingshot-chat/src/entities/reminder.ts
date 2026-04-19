@@ -37,7 +37,7 @@ export const Reminder = defineEntity('Reminder', {
     },
     delete: {},
     operations: {
-      listPending: { auth: 'userAuth' },
+      listPending: { auth: 'userAuth', method: 'post', path: 'list-pending' },
     },
   },
 });

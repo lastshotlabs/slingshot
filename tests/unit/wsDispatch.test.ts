@@ -1,16 +1,23 @@
 import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { WsState } from '@lastshotlabs/slingshot-core';
-import { handleIncomingEvent } from '../../src/framework/ws/dispatch';
-import * as rooms from '../../src/framework/ws/rooms';
 
-// Mock the rooms module so publish/subscribe/unsubscribe are observable
-const actualRooms = await import('../../src/framework/ws/rooms');
-mock.module('../../src/framework/ws/rooms', () => ({
-  ...actualRooms,
-  publish: mock(() => {}),
-  subscribe: mock(() => {}),
-  unsubscribe: mock(() => {}),
-}));
+type DispatchModule = typeof import('../../src/framework/ws/dispatch');
+
+const publishMock = mock(() => {});
+const subscribeMock = mock(() => {});
+const unsubscribeMock = mock(() => {});
+
+async function loadDispatchModule(): Promise<DispatchModule> {
+  const actualRooms = await import('../../src/framework/ws/rooms');
+  mock.module('../../src/framework/ws/rooms', () => ({
+    ...actualRooms,
+    publish: publishMock,
+    subscribe: subscribeMock,
+    unsubscribe: unsubscribeMock,
+  }));
+
+  return import(`../../src/framework/ws/dispatch.ts?ws-dispatch=${Date.now()}-${Math.random()}`);
+}
 
 afterAll(() => {
   mock.restore();
@@ -49,8 +56,14 @@ function createMockWs(id: string, endpoint = '/ws') {
 
 describe('wsDispatch — handleIncomingEvent', () => {
   let state: WsState;
+  let handleIncomingEvent: DispatchModule['handleIncomingEvent'];
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    mock.restore();
+    publishMock.mockReset();
+    subscribeMock.mockReset();
+    unsubscribeMock.mockReset();
+    ({ handleIncomingEvent } = await loadDispatchModule());
     state = createWsState();
   });
 
@@ -351,7 +364,7 @@ describe('wsDispatch — handleIncomingEvent', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     // rooms.publish mock should have been called
-    expect((rooms.publish as ReturnType<typeof mock>).mock.calls.length).toBeGreaterThan(0);
+    expect(publishMock.mock.calls.length).toBeGreaterThan(0);
   });
 
   it('context.subscribe is callable from handler (line 43)', async () => {
@@ -368,7 +381,7 @@ describe('wsDispatch — handleIncomingEvent', () => {
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect((rooms.subscribe as ReturnType<typeof mock>).mock.calls.length).toBeGreaterThan(0);
+    expect(subscribeMock.mock.calls.length).toBeGreaterThan(0);
   });
 
   it('context.unsubscribe is callable from handler (line 46)', async () => {
@@ -385,6 +398,6 @@ describe('wsDispatch — handleIncomingEvent', () => {
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect((rooms.unsubscribe as ReturnType<typeof mock>).mock.calls.length).toBeGreaterThan(0);
+    expect(unsubscribeMock.mock.calls.length).toBeGreaterThan(0);
   });
 });

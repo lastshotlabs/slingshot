@@ -252,10 +252,8 @@ describe('Room invites — findByToken (no-auth lookup)', () => {
     });
 
     // No x-user-id header
-    const res = await app.request('/chat/room-invites/find-by-token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token: 'public-token' }),
+    const res = await app.request('/chat/room-invites/find-by-token/public-token', {
+      method: 'GET',
     });
     expect(res.status).toBe(200);
     const data = (await res.json()) as { token: string; roomId: string };
@@ -266,13 +264,9 @@ describe('Room invites — findByToken (no-auth lookup)', () => {
   it('returns null for a non-existent token', async () => {
     const { app } = await createChatTestApp();
 
-    const res = await app.request('/chat/room-invites/find-by-token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token: 'ghost-token' }),
+    const res = await app.request('/chat/room-invites/find-by-token/ghost-token', {
+      method: 'GET',
     });
-    expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data).toBeNull();
+    expect(res.status).toBe(404);
   });
 });

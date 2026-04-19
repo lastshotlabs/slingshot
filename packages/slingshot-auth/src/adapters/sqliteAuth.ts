@@ -17,6 +17,10 @@ import {
 import { hashToken } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from '../config/authConfig';
 import { normalizeEmail } from '../lib/normalizeEmail';
+import {
+  isSqliteMissingColumnError,
+  isSqliteUnsupportedDropColumnError,
+} from '../lib/sqliteSchemaErrors';
 import type { OAuthCodePayload } from '../types/oauthCode';
 import type { OAuthReauthConfirmation, OAuthReauthState } from '../types/oauthReauth';
 import type { SessionInfo, SessionMetadata } from '../types/session';
@@ -38,15 +42,23 @@ type Migration = (db: RuntimeSqliteDatabase) => void;
 function dropLegacyRefreshTokenPlainColumn(db: RuntimeSqliteDatabase): void {
   try {
     db.run('UPDATE sessions SET refreshTokenPlain = NULL WHERE refreshTokenPlain IS NOT NULL');
-  } catch {
-    return;
+  } catch (err) {
+    if (isSqliteMissingColumnError(err, 'refreshTokenPlain')) return;
+    throw err;
   }
 
   try {
     db.run('ALTER TABLE sessions DROP COLUMN refreshTokenPlain');
-  } catch {
-    // Older SQLite engines may not support DROP COLUMN. The plaintext values have
-    // already been scrubbed above, so leave the inert legacy column in place.
+  } catch (err) {
+    if (
+      isSqliteMissingColumnError(err, 'refreshTokenPlain') ||
+      isSqliteUnsupportedDropColumnError(err)
+    ) {
+      // Older SQLite engines may not support DROP COLUMN. The plaintext values have
+      // already been scrubbed above, so leave the inert legacy column in place.
+      return;
+    }
+    throw err;
   }
 }
 
@@ -64,9 +76,8 @@ function parseProviderIds(raw: string | null | undefined): string[] {
 
 function backfillOAuthProviderLinks(db: RuntimeSqliteDatabase): void {
   const users = db
-    .query<{ id: string; providerIds: string }>('SELECT id, providerIds FROM users')
-    .all()
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .query<{ id: string; providerIds: string }>('SELECT id, providerIds FROM users ORDER BY id ASC')
+    .all();
   const owners = new Map<string, string>();
   const conflicts = new Map<string, Set<string>>();
 

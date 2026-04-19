@@ -12,6 +12,7 @@ import {
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from '../config/authConfig';
+import { isSqliteDuplicateColumnError } from './sqliteSchemaErrors';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -95,6 +96,15 @@ interface MfaChallengeRecord {
 }
 
 const MAX_RESENDS = 3;
+
+function addColumnIfMissing(db: RuntimeSqliteDatabase, sql: string, column: string): void {
+  try {
+    db.run(sql);
+  } catch (err) {
+    if (isSqliteDuplicateColumnError(err, column)) return;
+    throw err;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Repository interface
@@ -291,36 +301,28 @@ export function createSqliteMfaChallengeRepository(
       expiresAt         INTEGER NOT NULL
     )`);
     // Migrate pre-existing tables that lack newer columns
-    try {
-      db.run('ALTER TABLE mfa_challenges ADD COLUMN emailOtpHash TEXT');
-    } catch {
-      /* already exists */
-    }
-    try {
-      db.run('ALTER TABLE mfa_challenges ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0');
-    } catch {
-      /* already exists */
-    }
-    try {
-      db.run('ALTER TABLE mfa_challenges ADD COLUMN resendCount INTEGER NOT NULL DEFAULT 0');
-    } catch {
-      /* already exists */
-    }
-    try {
-      db.run("ALTER TABLE mfa_challenges ADD COLUMN purpose TEXT NOT NULL DEFAULT 'login'");
-    } catch {
-      /* already exists */
-    }
-    try {
-      db.run('ALTER TABLE mfa_challenges ADD COLUMN webauthnChallenge TEXT');
-    } catch {
-      /* already exists */
-    }
-    try {
-      db.run('ALTER TABLE mfa_challenges ADD COLUMN sessionId TEXT');
-    } catch {
-      /* already exists */
-    }
+    addColumnIfMissing(db, 'ALTER TABLE mfa_challenges ADD COLUMN emailOtpHash TEXT', 'emailOtpHash');
+    addColumnIfMissing(
+      db,
+      'ALTER TABLE mfa_challenges ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0',
+      'createdAt',
+    );
+    addColumnIfMissing(
+      db,
+      'ALTER TABLE mfa_challenges ADD COLUMN resendCount INTEGER NOT NULL DEFAULT 0',
+      'resendCount',
+    );
+    addColumnIfMissing(
+      db,
+      "ALTER TABLE mfa_challenges ADD COLUMN purpose TEXT NOT NULL DEFAULT 'login'",
+      'purpose',
+    );
+    addColumnIfMissing(
+      db,
+      'ALTER TABLE mfa_challenges ADD COLUMN webauthnChallenge TEXT',
+      'webauthnChallenge',
+    );
+    addColumnIfMissing(db, 'ALTER TABLE mfa_challenges ADD COLUMN sessionId TEXT', 'sessionId');
     tableCreated = true;
   }
 

@@ -1,15 +1,19 @@
 import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { WsState } from '@lastshotlabs/slingshot-core';
-// Mock getMessageHistory — wsRecovery imports it from wsMessages which needs app context.
-// We mock the module to avoid needing a real SlingshotContext.
-import { getMessageHistory } from '../../src/framework/ws/messages';
-import { handleRecover, pruneExpiredSessions, writeSession } from '../../src/framework/ws/recovery';
 
-const actualWsMessages = await import('../../src/framework/ws/messages');
-mock.module('../../src/framework/ws/messages', () => ({
-  ...actualWsMessages,
-  getMessageHistory: mock(() => Promise.resolve([])),
-}));
+type RecoveryModule = typeof import('../../src/framework/ws/recovery');
+
+const getMessageHistoryMock = mock(() => Promise.resolve([]));
+
+async function loadRecoveryModule(): Promise<RecoveryModule> {
+  const actualWsMessages = await import('../../src/framework/ws/messages');
+  mock.module('../../src/framework/ws/messages', () => ({
+    ...actualWsMessages,
+    getMessageHistory: getMessageHistoryMock,
+  }));
+
+  return import(`../../src/framework/ws/recovery.ts?ws-recovery=${Date.now()}-${Math.random()}`);
+}
 
 afterAll(() => {
   mock.restore();
@@ -54,10 +58,16 @@ const fakeApp = {};
 
 describe('wsRecovery', () => {
   let state: WsState;
+  let handleRecover: RecoveryModule['handleRecover'];
+  let pruneExpiredSessions: RecoveryModule['pruneExpiredSessions'];
+  let writeSession: RecoveryModule['writeSession'];
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    mock.restore();
+    getMessageHistoryMock.mockReset();
+    getMessageHistoryMock.mockResolvedValue([]);
+    ({ handleRecover, pruneExpiredSessions, writeSession } = await loadRecoveryModule());
     state = createWsState();
-    (getMessageHistory as ReturnType<typeof mock>).mockReset();
   });
 
   describe('handleRecover', () => {
@@ -80,7 +90,7 @@ describe('wsRecovery', () => {
           createdAt: 2,
         },
       ];
-      (getMessageHistory as ReturnType<typeof mock>).mockResolvedValue(messages);
+      getMessageHistoryMock.mockResolvedValue(messages);
 
       state.sessionRegistry.set('sess-1', {
         rooms: ['room1'],
@@ -112,7 +122,7 @@ describe('wsRecovery', () => {
         { id: 'm2', endpoint: '/ws', room: 'room2', senderId: null, payload: 2, createdAt: 2 },
         { id: 'm3', endpoint: '/ws', room: 'room2', senderId: null, payload: 3, createdAt: 3 },
       ];
-      (getMessageHistory as ReturnType<typeof mock>)
+      getMessageHistoryMock
         .mockResolvedValueOnce(room1Msgs)
         .mockResolvedValueOnce(room2Msgs);
 
@@ -197,7 +207,7 @@ describe('wsRecovery', () => {
     });
 
     it('rooms same-set, different order — treated as matching', async () => {
-      (getMessageHistory as ReturnType<typeof mock>).mockResolvedValue([]);
+      getMessageHistoryMock.mockResolvedValue([]);
 
       state.sessionRegistry.set('sess-order', {
         rooms: ['room1', 'room2'],
@@ -244,7 +254,7 @@ describe('wsRecovery', () => {
     });
 
     it('session consumed — deleted after success, second recover fails', async () => {
-      (getMessageHistory as ReturnType<typeof mock>).mockResolvedValue([]);
+      getMessageHistoryMock.mockResolvedValue([]);
 
       state.sessionRegistry.set('sess-once', {
         rooms: ['room1'],
@@ -299,7 +309,7 @@ describe('wsRecovery', () => {
   });
 
     it('getMessageHistory throws — sends recover_failed with history_unavailable (lines 64,67-68)', async () => {
-      (getMessageHistory as ReturnType<typeof mock>).mockRejectedValue(new Error('db error'));
+      getMessageHistoryMock.mockRejectedValue(new Error('db error'));
 
       state.sessionRegistry.set('sess-err', {
         rooms: ['room1'],

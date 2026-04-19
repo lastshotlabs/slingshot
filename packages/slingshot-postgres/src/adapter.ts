@@ -281,6 +281,31 @@ const MIGRATION_LOCK_KEY1 = 7283;
  */
 const MIGRATION_LOCK_KEY2 = 4829;
 
+function parseMigrationVersion(raw: unknown, maxVersion: number): number {
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
+    if (raw > maxVersion) {
+      throw new Error(
+        `[slingshot-postgres] Database schema version ${raw} is newer than this binary supports (${maxVersion}).`,
+      );
+    }
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      if (parsed > maxVersion) {
+        throw new Error(
+          `[slingshot-postgres] Database schema version ${parsed} is newer than this binary supports (${maxVersion}).`,
+        );
+      }
+      return parsed;
+    }
+  }
+  throw new Error(
+    `[slingshot-postgres] Invalid value in _slingshot_auth_schema_version: ${String(raw)}`,
+  );
+}
+
 /**
  * Applies any pending schema migrations to the database in a single serialised transaction.
  *
@@ -288,10 +313,11 @@ const MIGRATION_LOCK_KEY2 = 4829;
  * concurrent server processes cannot race during migrations (e.g. on cluster startup).
  * The lock is released automatically when the transaction commits or rolls back.
  *
- * Tracks applied migrations in `_slingshot_auth_schema_version`. Each migration is
- * executed and immediately followed by a version bump so the record stays in sync.
- * If any migration throws, the entire transaction is rolled back and the error is
- * re-thrown.
+ * Tracks applied migrations in `_slingshot_auth_schema_version`. The runner first
+ * canonicalizes that table to a single row holding the highest observed version,
+ * then applies any missing migrations and bumps the version in the same locked
+ * transaction. If any migration throws, the entire transaction is rolled back and
+ * the error is re-thrown.
  *
  * @param pool - An open `pg.Pool` used to acquire a client for the migration transaction.
  * @returns A promise that resolves when all pending migrations have been applied.
@@ -317,14 +343,17 @@ async function runMigrations(pool: Pool): Promise<void> {
         version INTEGER NOT NULL DEFAULT 0
       )
     `);
-    await client.query(`
-      INSERT INTO _slingshot_auth_schema_version (version)
-      SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM _slingshot_auth_schema_version)
-    `);
-    const result = await client.query<{ version: number }>(
-      'SELECT version FROM _slingshot_auth_schema_version',
+    const result = await client.query<{ version: number | string }>(
+      'SELECT COALESCE(MAX(version), 0) AS version FROM _slingshot_auth_schema_version',
     );
-    const currentVersion = result.rows[0]?.version ?? 0;
+    const currentVersion = parseMigrationVersion(result.rows[0]?.version, MIGRATIONS.length);
+    await client.query('DELETE FROM _slingshot_auth_schema_version');
+    await client.query('INSERT INTO _slingshot_auth_schema_version (version) VALUES ($1)', [
+      currentVersion,
+    ]);
+    await client.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_slingshot_auth_schema_version_singleton ON _slingshot_auth_schema_version ((TRUE))',
+    );
     for (let i = currentVersion; i < MIGRATIONS.length; i++) {
       await MIGRATIONS[i](client);
       await client.query('UPDATE _slingshot_auth_schema_version SET version = $1', [i + 1]);

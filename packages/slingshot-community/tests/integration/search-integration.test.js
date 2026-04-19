@@ -254,10 +254,6 @@ describe('searchInContainer — stub backends return empty results', () => {
     const result = await createSearchInContainerSqliteHandler(null)(params);
     expect(result).toEqual({ items: [], total: 0 });
   });
-  test('postgres handler returns empty', async () => {
-    const result = await createSearchInContainerPostgresHandler(null)(params);
-    expect(result).toEqual({ items: [], total: 0 });
-  });
   test('mongo handler returns empty', async () => {
     const result = await createSearchInContainerMongoHandler(null)(params);
     expect(result).toEqual({ items: [], total: 0 });

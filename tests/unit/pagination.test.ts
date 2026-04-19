@@ -341,7 +341,7 @@ describe('parseCursorParams — signing', () => {
     expect(result.cursor).toBe('raw-cursor');
   });
 
-  it('verifies and returns cursor when signing is active with valid cursor', () => {
+  it('verifies and returns cursor when signing is active with valid cursor', async () => {
     const { signCursor } = await import('../../src/lib/signing');
     const secret = 'test-secret-32-chars-long-xxxxxxx';
     const signed = signCursor('page-2', secret);
@@ -364,29 +364,29 @@ describe('parseCursorParams — signing', () => {
 // ---------------------------------------------------------------------------
 
 describe('maybeSignCursor', () => {
-  it('returns null when cursor is null', () => {
+  it('returns null when cursor is null', async () => {
     const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
     expect(maybeSignCursor(null)).toBeNull();
   });
 
-  it('returns cursor as-is when no signing config', () => {
+  it('returns cursor as-is when no signing config', async () => {
     const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
     expect(maybeSignCursor('cursor-abc')).toBe('cursor-abc');
   });
 
-  it('returns cursor as-is when signing cursors is disabled', () => {
+  it('returns cursor as-is when signing cursors is disabled', async () => {
     const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
     const signing = { config: { cursors: false }, secret: 'secret' };
     expect(maybeSignCursor('cursor-abc', signing as any)).toBe('cursor-abc');
   });
 
-  it('returns cursor as-is when secret is null', () => {
+  it('returns cursor as-is when secret is null', async () => {
     const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
     const signing = { config: { cursors: true }, secret: null };
     expect(maybeSignCursor('cursor-abc', signing as any)).toBe('cursor-abc');
   });
 
-  it('returns signed cursor when signing is active', () => {
+  it('returns signed cursor when signing is active', async () => {
     const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
     const { verifyCursor } = await import('../../src/lib/signing');
     const secret = 'test-secret-32-chars-long-xxxxxxx';

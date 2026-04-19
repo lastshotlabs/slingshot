@@ -235,17 +235,28 @@ describe('createSqliteWsMessageRepository', () => {
     expect(JSON.parse(row?.payload ?? '{}')).toEqual({ text: 'hi' });
   });
 
-  test('persist trims old messages after trimInterval writes', async () => {
+  test('persist trims old messages on the configured trim interval', async () => {
     const config = { maxCount: 3, ttlSeconds: 86400 };
     // trimInterval = max(10, floor(3 * 0.1)) = 10
-    // So we need 10 writes to trigger trimming
+    // The repository trims every 10 writes, so rows can temporarily exceed maxCount
+    // between trim cycles.
     for (let i = 0; i < 12; i++) {
       await repo.persist(makeMessage('room', i), config);
     }
 
-    // After trim, at most maxCount=3 messages should remain
-    const row = db.query('SELECT COUNT(*) as n FROM ws_messages WHERE room = ?').get('room') as { n: number };
-    expect(row.n).toBeLessThanOrEqual(3);
+    const rowAfter12 = db.query('SELECT COUNT(*) as n FROM ws_messages WHERE room = ?').get(
+      'room',
+    ) as { n: number };
+    expect(rowAfter12.n).toBe(5);
+
+    for (let i = 12; i < 20; i++) {
+      await repo.persist(makeMessage('room', i), config);
+    }
+
+    const rowAfter20 = db.query('SELECT COUNT(*) as n FROM ws_messages WHERE room = ?').get(
+      'room',
+    ) as { n: number };
+    expect(rowAfter20.n).toBeLessThanOrEqual(3);
   });
 
   test('getHistory returns messages in oldest-first order', async () => {

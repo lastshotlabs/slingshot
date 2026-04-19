@@ -1,5 +1,25 @@
 import type { RuntimeSqliteDatabase } from './runtime';
 
+function parseSqliteMigrationVersion(
+  raw: unknown,
+  subsystem: string,
+  maxVersion: number,
+): number {
+  if (raw === null || raw === undefined) return 0;
+  if (!Number.isInteger(raw) || (raw as number) < 0) {
+    throw new Error(
+      `[sqlite-migrations] Invalid schema version for subsystem '${subsystem}': ${String(raw)}`,
+    );
+  }
+  const version = raw as number;
+  if (version > maxVersion) {
+    throw new Error(
+      `[sqlite-migrations] Subsystem '${subsystem}' is at schema version ${version}, but this binary only supports up to version ${maxVersion}.`,
+    );
+  }
+  return version;
+}
+
 /**
  * Per-subsystem SQLite migration runner.
  *
@@ -41,7 +61,7 @@ export function runSubsystemMigrations(
   const row = db
     .query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
     .get(subsystem);
-  const currentVersion = row?.version ?? 0;
+  const currentVersion = parseSqliteMigrationVersion(row?.version, subsystem, migrations.length);
 
   for (let i = currentVersion; i < migrations.length; i++) {
     const applyMigration = db.transaction(() => {

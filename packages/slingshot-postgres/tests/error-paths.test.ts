@@ -20,6 +20,7 @@ import { createPostgresAdapter } from '../src/adapter.js';
 // We need to control what drizzle's db object returns per-test, so we keep
 // references to the per-test overrides here.
 let mockDbImpl: MockDb | null = null;
+let mockMigrationVersion = 2;
 
 interface MockDb {
   select?: () => ReturnType<typeof makeBuilder>;
@@ -76,9 +77,11 @@ mock.module('pg', () => {
         release(): void;
       }> {
         return Promise.resolve({
-          query() {
-            // Return version = 2 (= MIGRATIONS.length) so runMigrations is a no-op.
-            return Promise.resolve({ rows: [{ version: 2 }], rowCount: 1 });
+          query(sql: string) {
+            if (sql.includes('SELECT COALESCE(MAX(version), 0) AS version')) {
+              return Promise.resolve({ rows: [{ version: mockMigrationVersion }], rowCount: 1 });
+            }
+            return Promise.resolve({ rows: [], rowCount: 0 });
           },
           release() {},
         });
@@ -144,6 +147,14 @@ function uniqueConstraintError(): Error {
 describe('slingshot-postgres adapter — error paths', () => {
   beforeEach(() => {
     mockDbImpl = null;
+    mockMigrationVersion = 2;
+  });
+
+  test('fails closed when the database schema version is newer than this binary supports', async () => {
+    mockMigrationVersion = 3;
+    await expect(
+      createPostgresAdapter({ pool: new (await import('pg')).Pool() }),
+    ).rejects.toThrow('Database schema version 3 is newer than this binary supports (2)');
   });
 
   // ── Connection / network errors ────────────────────────────────────────────

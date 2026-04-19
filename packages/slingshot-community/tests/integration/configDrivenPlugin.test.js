@@ -387,7 +387,7 @@ describe('createCommunityPlugin — permission enforcement', () => {
         role: 'owner',
       }),
     });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
   test('container member create rejects adding a different user through the raw join route', async () => {
     const res = await harness.app.request('/community/container-members', {
@@ -399,7 +399,7 @@ describe('createCommunityPlugin — permission enforcement', () => {
         role: 'member',
       }),
     });
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(403);
   });
 });
 describe('createCommunityPlugin — membership grant reconciliation', () => {
@@ -417,7 +417,7 @@ describe('createCommunityPlugin — membership grant reconciliation', () => {
         containerId: 'c1',
       }),
     });
-    expect(joinRes.status).toBe(401);
+    expect(joinRes.status).toBe(201);
     const member = await joinRes.json();
     const promoteRes = await harness.app.request('/community/container-members/assign-role', {
       method: 'POST',

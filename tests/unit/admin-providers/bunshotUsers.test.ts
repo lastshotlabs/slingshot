@@ -1,22 +1,25 @@
-// Now import the module under test
-import { createSlingshotManagedUserProvider } from '@auth/admin/slingshotUsers';
 import { DEFAULT_AUTH_CONFIG } from '@auth/config/authConfig';
 import type { SessionRepository } from '@auth/lib/session';
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { AuthAdapter } from '@lastshotlabs/slingshot-core';
 import type { ManagedUserRecord } from '@lastshotlabs/slingshot-core';
 
-// ---------------------------------------------------------------------------
-// Module-level mocks — only suspension still uses a module-level import
-// ---------------------------------------------------------------------------
-
 const mockSetSuspended = mock(
   async () => {},
 );
 
-mock.module('@auth/lib/suspension', () => ({
-  setSuspended: mockSetSuspended,
-}));
+type ManagedUserProviderModule =
+  typeof import('../../../packages/slingshot-auth/src/admin/slingshotUsers');
+
+async function loadManagedUserProviderModule(): Promise<ManagedUserProviderModule> {
+  mock.module('@auth/lib/suspension', () => ({
+    setSuspended: mockSetSuspended,
+  }));
+
+  return import(
+    `../../../packages/slingshot-auth/src/admin/slingshotUsers.ts?bunshotUsers=${Date.now()}-${Math.random()}`
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -36,15 +39,18 @@ function baseUser(overrides: Record<string, any> = {}) {
 
 let mockAdapter: Partial<AuthAdapter>;
 let mockSessionRepo: SessionRepository;
+let createSlingshotManagedUserProvider: ManagedUserProviderModule['createSlingshotManagedUserProvider'];
 
 const mockGetUserSessions = mock(async () => [] as any[]);
 const mockDeleteSession = mock(async () => {});
 
-beforeEach(() => {
+beforeEach(async () => {
+  mock.restore();
   // Reset call counts on every mock
   mockGetUserSessions.mockReset();
   mockDeleteSession.mockReset();
   mockSetSuspended.mockReset();
+  ({ createSlingshotManagedUserProvider } = await loadManagedUserProviderModule());
 
   mockGetUserSessions.mockImplementation(async () => []);
   mockDeleteSession.mockImplementation(async () => {});

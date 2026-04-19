@@ -1,5 +1,7 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
+
+type ManifestBuiltinConfigModule = typeof import('../../src/lib/manifestBuiltinConfig');
 
 function makeRuntimeStub(serveLabel: string, supportsAsyncLocalStorage = true): SlingshotRuntime & {
   serve: () => string;
@@ -48,28 +50,50 @@ function makeRuntimeStub(serveLabel: string, supportsAsyncLocalStorage = true): 
   };
 }
 
-// Mock runtime packages before importing the module under test
-mock.module('@lastshotlabs/slingshot-runtime-bun', () => ({
-  bunRuntime: () => makeRuntimeStub('bun-serve'),
-}));
-mock.module('@lastshotlabs/slingshot-runtime-node', () => ({
-  nodeRuntime: () => makeRuntimeStub('node-serve'),
-}));
-mock.module('@lastshotlabs/slingshot-runtime-edge', () => ({
-  edgeRuntime: () => makeRuntimeStub('edge-serve', false),
-}));
+async function loadManifestBuiltinConfig(): Promise<ManifestBuiltinConfigModule> {
+  mock.module('@lastshotlabs/slingshot-runtime-bun', () => ({
+    bunRuntime: () => makeRuntimeStub('bun-serve'),
+  }));
+  mock.module('@lastshotlabs/slingshot-runtime-node', () => ({
+    nodeRuntime: () => makeRuntimeStub('node-serve'),
+  }));
+  mock.module('@lastshotlabs/slingshot-runtime-edge', () => ({
+    edgeRuntime: () => makeRuntimeStub('edge-serve', false),
+  }));
 
-import {
-  isRecord,
-  isHandlerRefLike,
-  requireRegistry,
-  resolveHandlerRef,
-  resolveBuiltinPath,
-  resolveAdminManifestConfig,
-  resolveSearchManifestConfig,
-  resolveSsrManifestConfig,
-  resolveWebhookManifestConfig,
-} from '../../src/lib/manifestBuiltinConfig';
+  return import(
+    `../../src/lib/manifestBuiltinConfig.ts?manifestBuiltinConfig=${Date.now()}-${Math.random()}`
+  );
+}
+
+let isRecord: ManifestBuiltinConfigModule['isRecord'];
+let isHandlerRefLike: ManifestBuiltinConfigModule['isHandlerRefLike'];
+let requireRegistry: ManifestBuiltinConfigModule['requireRegistry'];
+let resolveHandlerRef: ManifestBuiltinConfigModule['resolveHandlerRef'];
+let resolveBuiltinPath: ManifestBuiltinConfigModule['resolveBuiltinPath'];
+let resolveAdminManifestConfig: ManifestBuiltinConfigModule['resolveAdminManifestConfig'];
+let resolveSearchManifestConfig: ManifestBuiltinConfigModule['resolveSearchManifestConfig'];
+let resolveSsrManifestConfig: ManifestBuiltinConfigModule['resolveSsrManifestConfig'];
+let resolveWebhookManifestConfig: ManifestBuiltinConfigModule['resolveWebhookManifestConfig'];
+
+beforeEach(async () => {
+  mock.restore();
+  ({
+    isRecord,
+    isHandlerRefLike,
+    requireRegistry,
+    resolveHandlerRef,
+    resolveBuiltinPath,
+    resolveAdminManifestConfig,
+    resolveSearchManifestConfig,
+    resolveSsrManifestConfig,
+    resolveWebhookManifestConfig,
+  } = await loadManifestBuiltinConfig());
+});
+
+afterAll(() => {
+  mock.restore();
+});
 
 // ---------------------------------------------------------------------------
 // Utility functions

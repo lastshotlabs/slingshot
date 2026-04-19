@@ -154,8 +154,8 @@ export function generateMigrationPostgres(plan: MigrationPlan): string {
     }
   }
 
-  schema.push('COMMIT;');
   schema.push('-- --- end:schema ---');
+  indexes.push('COMMIT;');
   indexes.push('-- --- end:indexes ---');
   sections.push(schema.join('\n'));
   sections.push(indexes.join('\n'));

@@ -63,12 +63,16 @@ export const PollVote = defineEntity('PollVote', {
       // dispatch-based policy resolver. Skip the pre-handler policy pass;
       // permission checks (poll:read) still enforce access.
       listByPoll: {
+        method: 'post',
+        path: 'list-by-poll',
         permission: {
           requires: 'poll:read',
           policy: { resolver: POLL_VOTE_POLICY_KEY, applyTo: [] },
         },
       },
       myVotes: {
+        method: 'post',
+        path: 'my-votes',
         permission: {
           requires: 'poll:read',
           policy: { resolver: POLL_VOTE_POLICY_KEY, applyTo: [] },

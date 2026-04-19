@@ -24,6 +24,8 @@ export interface PoolClientLike {
   release(): void;
 }
 
+type Queryable = Pick<PoolClientLike, 'query'>;
+
 /**
  * Minimal interface required from a `pg` Pool (or compatible test double).
  *
@@ -32,9 +34,8 @@ export interface PoolClientLike {
  * A real `pg.Pool` instance satisfies this interface automatically.
  *
  * @remarks
- * Only the `query` method is required. Connection management, pooling, and event
- * emitter methods on `pg.Pool` are not part of this interface and are not used
- * by the adapter.
+ * The adapter uses `query()` for normal CRUD paths and `connect()` for the
+ * migration transaction. Other `pg.Pool` methods are not required.
  */
 export interface PoolLike {
   query(sql: string, params?: PgParam[]): Promise<{ rows: PgRow[]; rowCount: number | null }>;
@@ -46,14 +47,14 @@ export interface PoolLike {
 // ---------------------------------------------------------------------------
 
 /**
- * A single schema migration function that accepts a `PoolLike` and executes DDL
+ * A single schema migration function that accepts a queryable client and executes DDL
  * statements. Migrations run in version order inside `runMigrations`.
  *
  * @remarks
  * Never edit or reorder existing entries — append new migrations to the end of
  * `MIGRATIONS` only.
  */
-type Migration = (pool: PoolLike) => Promise<void>;
+type Migration = (db: Queryable) => Promise<void>;
 
 /**
  * Ordered list of schema migrations for the permissions PostgreSQL adapter.
@@ -100,21 +101,37 @@ const MIGRATIONS: Migration[] = [
 const MIGRATION_LOCK_KEY1 = 5412;
 const MIGRATION_LOCK_KEY2 = 1947;
 
-function parseVersion(raw: PgParam | string[] | undefined): number {
-  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) return raw;
+function parseVersion(raw: PgParam | string[] | undefined, maxVersion: number): number {
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
+    if (raw > maxVersion) {
+      throw new Error(
+        `[slingshot-permissions] Database schema version ${raw} is newer than this binary supports (${maxVersion}).`,
+      );
+    }
+    return raw;
+  }
   if (typeof raw === 'string') {
     const parsed = Number.parseInt(raw, 10);
-    if (Number.isInteger(parsed) && parsed >= 0) return parsed;
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      if (parsed > maxVersion) {
+        throw new Error(
+          `[slingshot-permissions] Database schema version ${parsed} is newer than this binary supports (${maxVersion}).`,
+        );
+      }
+      return parsed;
+    }
   }
-  return 0;
+  throw new Error(
+    `[slingshot-permissions] Invalid value in _permission_schema_version: ${String(raw)}`,
+  );
 }
 
 /**
  * Applies any pending permissions schema migrations against the given pool.
  *
  * Tracks the applied version in `_permission_schema_version`. Each migration
- * is executed sequentially and is immediately followed by a version bump.
- * No advisory locking is used — all DDL is idempotent.
+ * is executed sequentially and is immediately followed by a version bump inside
+ * a single client transaction protected by a PostgreSQL advisory lock.
  *
  * @param pool - A `PoolLike` instance (real `pg.Pool` or compatible mock).
  * @returns A promise that resolves when all pending migrations have been applied.
@@ -144,7 +161,7 @@ async function runMigrations(pool: PoolLike): Promise<void> {
     const versionResult = await client.query(
       'SELECT COALESCE(MAX(version), 0) AS version FROM _permission_schema_version',
     );
-    const currentVersion = parseVersion(versionResult.rows[0]?.version);
+    const currentVersion = parseVersion(versionResult.rows[0]?.version, MIGRATIONS.length);
 
     await client.query('DELETE FROM _permission_schema_version');
     await client.query('INSERT INTO _permission_schema_version (version) VALUES ($1)', [
@@ -290,9 +307,10 @@ export type PermissionsPostgresAdapter = TestablePermissionsAdapter;
  * Creates a PostgreSQL-backed `PermissionsAdapter`.
  *
  * Accepts any `PoolLike` (a `pg.Pool` or compatible mock). Schema migrations run automatically
- * using a separate `_permission_schema_version` table. Roles are stored as JSONB.
+ * using a separate `_permission_schema_version` table via a locked client transaction.
+ * Roles are stored as JSONB.
  *
- * @param pool - A `pg.Pool` instance or compatible object with a `query()` method.
+ * @param pool - A `pg.Pool` instance or compatible object with `query()` and `connect()`.
  * @returns A `PermissionsPostgresAdapter` instance, ready for use.
  *
  * @example

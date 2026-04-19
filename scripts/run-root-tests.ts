@@ -1,32 +1,8 @@
-const patterns = [
-  'tests/unit/**/*.test.ts',
-  'tests/unit/**/*.test.tsx',
-  'tests/integration/**/*.test.ts',
-  'tests/integration/**/*.test.tsx',
-] as const;
+import { collectRootTestFiles, partitionRootTestFiles } from './root-test-files';
 
-async function collectFiles(pattern: string): Promise<string[]> {
-  const glob = new Bun.Glob(pattern);
-  const files: string[] = [];
-  for await (const file of glob.scan({ cwd: process.cwd(), onlyFiles: true })) {
-    files.push(file);
-  }
-  return files;
-}
-
-const files = (await Promise.all(patterns.map(collectFiles)))
-  .flat()
-  .sort((a, b) => a.localeCompare(b));
-
-if (files.length === 0) {
-  process.exit(0);
-}
-
-const chunkSize = 40;
-
-for (let index = 0; index < files.length; index += chunkSize) {
-  const chunk = files.slice(index, index + chunkSize);
-  const proc = Bun.spawn(['bun', 'test', ...chunk], {
+async function runFiles(label: string, files: string[]): Promise<void> {
+  console.log(`test:root -> ${label}`);
+  const proc = Bun.spawn(['bun', 'test', ...files], {
     cwd: process.cwd(),
     stdin: 'inherit',
     stdout: 'inherit',
@@ -36,6 +12,26 @@ for (let index = 0; index < files.length; index += chunkSize) {
   if (code !== 0) {
     process.exit(code);
   }
+}
+
+const files = await collectRootTestFiles();
+
+if (files.length === 0) {
+  process.exit(0);
+}
+
+const chunkSize = 40;
+const { bulk, isolated } = partitionRootTestFiles(files);
+
+for (let index = 0; index < bulk.length; index += chunkSize) {
+  const chunk = bulk.slice(index, index + chunkSize);
+  if (chunk.length > 0) {
+    await runFiles(`bulk ${index / chunkSize + 1}`, chunk);
+  }
+}
+
+for (const file of isolated) {
+  await runFiles(`isolated ${file}`, [file]);
 }
 
 process.exit(0);

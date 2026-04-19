@@ -116,7 +116,7 @@ describe('runtime-bun smoke', () => {
     const upgradeCalls: Array<{ req: Request; options: { data: unknown } }> = [];
 
     Object.assign(Bun, {
-      serve(_options: Parameters<typeof Bun.serve>[0]) {
+      serve() {
         return {
           port: undefined,
           stop() {

@@ -43,14 +43,15 @@ mock.module('mongoose', () => ({
   default: mockMongoose,
 }));
 
-import {
+const mongoLib = await import(`../../src/lib/mongo.ts?mongo-unit=${Date.now()}`);
+const {
   connectAppMongo,
   connectAuthMongo,
   connectMongo,
   disconnectMongo,
   getMongoFromApp,
   getMongooseModule,
-} from '../../src/lib/mongo';
+} = mongoLib;
 
 describe('getMongooseModule', () => {
   test('returns the mongoose module (lazy-loaded)', () => {

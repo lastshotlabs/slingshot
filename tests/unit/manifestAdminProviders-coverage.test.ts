@@ -427,7 +427,8 @@ describe('createDeferredAdminProviders — coverage', () => {
     result.bind(pluginState);
 
     const adapter = result.permissions!.adapter;
-    const grant = { id: 'g1' } as never;
+    const grantData = { id: 'g1' };
+    const grant = grantData as unknown as never;
     await adapter.createGrant(grant);
     expect(createGrantSpy).toHaveBeenCalledWith(grant);
 
@@ -446,7 +447,8 @@ describe('createDeferredAdminProviders — coverage', () => {
     await adapter.listGrantsOnResource('posts', 'post-1', 'tenant-1');
     expect(listResourceSpy).toHaveBeenCalledWith('posts', 'post-1', 'tenant-1');
 
-    await adapter.deleteAllGrantsForSubject({ id: 'u1', type: 'user' } as never);
+    const deleteSubjectData = { id: 'u1', type: 'user' };
+    await adapter.deleteAllGrantsForSubject(deleteSubjectData as unknown as never);
     expect(deleteAllSpy).toHaveBeenCalled();
   });
 
@@ -486,7 +488,8 @@ describe('createDeferredAdminProviders — coverage', () => {
     pluginState.set('slingshot-permissions', perms);
     result.bind(pluginState);
 
-    const definition = { resourceType: 'test', roles: {} } as never;
+    const definitionData = { resourceType: 'test', roles: {} };
+    const definition = definitionData as unknown as never;
     result.permissions!.registry.register(definition);
     expect(registerSpy).toHaveBeenCalledWith(definition);
   });
@@ -540,14 +543,15 @@ describe('createDeferredAdminProviders — coverage', () => {
 describe('createInMemoryAuditLog — coverage', () => {
   test('stores and retrieves entries with all filter combinations', async () => {
     const log = createInMemoryAuditLog();
-    const entry = {
+    const entryData = {
       userId: 'u1',
       action: 'create',
       path: '/api/items',
       method: 'POST',
       tenantId: 't1',
       timestamp: new Date().toISOString(),
-    } as never;
+    };
+    const entry = entryData as unknown as never;
     await log.logEntry(entry);
 
     const byPath = await log.getLogs({ path: '/api/items' });
@@ -566,12 +570,13 @@ describe('createInMemoryAuditLog — coverage', () => {
   test('paginates correctly with cursor', async () => {
     const log = createInMemoryAuditLog();
     for (let i = 0; i < 7; i++) {
-      await log.logEntry({
+      const pageEntryData = {
         userId: 'u1',
         action: `action-${i}`,
         path: `/path/${i}`,
         method: 'GET',
-      } as never);
+      };
+      await log.logEntry(pageEntryData as unknown as never);
     }
 
     const page1 = await log.getLogs({ limit: 3 });

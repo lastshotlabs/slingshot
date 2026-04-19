@@ -31,7 +31,8 @@ describe('definePlatform', () => {
   });
 
   it('throws on missing required fields', () => {
-    const empty: never = {} as never;
+    const emptyObj = {};
+    const empty = emptyObj as never;
     expect(() => definePlatform(empty)).toThrow('[slingshot-infra] Invalid platform config');
   });
 

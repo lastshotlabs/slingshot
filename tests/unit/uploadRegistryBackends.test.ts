@@ -127,7 +127,10 @@ describe('createSqliteUploadRegistry', () => {
       query<T>(sql: string) {
         return {
           get(...params: unknown[]) {
-            if (sql.includes('changes()')) return { changes: 1 } as T;
+            if (sql.includes('changes()')) {
+              const changes = { changes: 1 };
+              return changes as T;
+            }
             if (!params.length) return null;
             const key = params[0] as string;
             const row = rows.get(key);
@@ -296,8 +299,9 @@ describe('createMongoUploadRegistry', () => {
       },
     };
 
+    const connModels = {};
     const conn = {
-      models: {} as Record<string, unknown>,
+      models: connModels as Record<string, unknown>,
       model() {
         conn.models['UploadRegistry'] = model;
         return model;
@@ -359,7 +363,8 @@ describe('createUploadRegistryFactories', () => {
 
   test('memory factory creates a working adapter', () => {
     const factories = createUploadRegistryFactories();
-    const adapter = factories.memory!({} as never);
+    const stub = {};
+    const adapter = factories.memory!(stub as never);
     expect(typeof adapter.register).toBe('function');
     expect(typeof adapter.get).toBe('function');
   });

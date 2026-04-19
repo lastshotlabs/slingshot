@@ -122,8 +122,8 @@ describe('edgeRuntime()', () => {
 
     it('server.listen() throws with a clear message', () => {
       const runtime = edgeRuntime();
-      const opts: never = {} as never;
-      expect(() => runtime.server.listen(opts)).toThrow('[runtime-edge]');
+      const empty = {};
+      expect(() => runtime.server.listen(empty as never)).toThrow('[runtime-edge]');
     });
 
     it('fs.write() rejects with a clear message', async () => {

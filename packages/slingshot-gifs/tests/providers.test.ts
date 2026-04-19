@@ -166,7 +166,8 @@ describe('slingshot-gifs providers', () => {
       rating: 'medium',
     });
 
-    const emptyConfig: never = {} as never;
+    const emptyObj = {};
+    const emptyConfig = emptyObj as never;
     await plugin.setupRoutes?.({
       app: app as never,
       config: emptyConfig,

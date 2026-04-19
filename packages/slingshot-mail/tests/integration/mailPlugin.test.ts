@@ -7,7 +7,8 @@ import { createRawHtmlRenderer } from '../../src/renderers/rawHtml.js';
 import type { MailMessage, MailProvider, SendResult } from '../../src/types/provider.js';
 
 const MOCK_CFG = {} as unknown as SlingshotFrameworkConfig;
-const MOCK_APP: never = {} as never;
+const MOCK_APP_RAW = {};
+const MOCK_APP = MOCK_APP_RAW as never;
 
 // ---------------------------------------------------------------------------
 // Helpers

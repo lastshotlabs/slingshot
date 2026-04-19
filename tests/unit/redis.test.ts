@@ -34,12 +34,13 @@ mock.module('ioredis', () => ({
   default: MockRedis,
 }));
 
-import {
+const redisLib = await import(`../../src/lib/redis.ts?redis-unit=${Date.now()}`);
+const {
   connectRedis,
   disconnectRedis,
   getRedisConnectionOptions,
   getRedisFromApp,
-} from '../../src/lib/redis';
+} = redisLib;
 
 describe('getRedisConnectionOptions', () => {
   test('parses host:port format', () => {

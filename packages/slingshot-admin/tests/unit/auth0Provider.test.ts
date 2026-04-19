@@ -13,11 +13,15 @@ function makeStubDeps(overrides?: Partial<Auth0Deps>): Auth0Deps {
   return {
     // cast needed: jose's JWKS function type has internal tracking properties
     // (coolingDown, fresh, jwks) that are irrelevant in test stubs
-    createRemoteJWKSet: mock(() => (() => Promise.resolve({} as never)) as never) as Auth0Deps['createRemoteJWKSet'],
+    createRemoteJWKSet: mock(() => {
+      const empty = {};
+      return (() => Promise.resolve(empty)) as never;
+    }) as Auth0Deps['createRemoteJWKSet'],
     // cast needed: jose's JWTVerifyResult requires a `key` field (ResolvedKey) that
     // is not present in test payloads
     jwtVerify: mock(async () => {
-      const key: CryptoKey = {} as never;
+      const emptyKey = {};
+      const key = emptyKey as unknown as CryptoKey;
       return {
         payload: {
           sub: 'auth0|user-123',
@@ -36,15 +40,15 @@ function makeStubDeps(overrides?: Partial<Auth0Deps>): Auth0Deps {
 }
 
 function makeContext(token?: string): never {
-  const ctx: never = {
+  const raw = {
     req: {
       header: (name: string) => {
         if (name === 'authorization') return token ? `Bearer ${token}` : undefined;
         return undefined;
       },
     },
-  } as never;
-  return ctx;
+  };
+  return raw as never;
 }
 
 // ---------------------------------------------------------------------------
@@ -87,12 +91,12 @@ describe('createAuth0AccessProvider', () => {
     const deps = makeStubDeps();
     const provider = createAuth0AccessProvider({ domain: DOMAIN, audience: AUDIENCE }, deps);
 
-    const ctx: never = {
+    const ctxRaw = {
       req: {
         header: (name: string) => (name === 'authorization' ? 'Basic credentials' : undefined),
       },
-    } as never;
-    const principal = await provider.verifyRequest(ctx);
+    };
+    const principal = await provider.verifyRequest(ctxRaw as never);
     expect(principal).toBeNull();
   });
 
@@ -109,7 +113,8 @@ describe('createAuth0AccessProvider', () => {
   test('returns null when sub claim is missing', async () => {
     const deps = makeStubDeps({
       jwtVerify: mock(async () => {
-        const key: CryptoKey = {} as never;
+        const rawKey = {};
+        const key = rawKey as unknown as CryptoKey;
         return {
           payload: { aud: AUDIENCE, iss: `https://${DOMAIN}/` },
           protectedHeader: { alg: 'RS256' },

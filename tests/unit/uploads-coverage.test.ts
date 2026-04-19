@@ -34,17 +34,6 @@ function makeAuthRuntime(): AuthRuntimeContext {
   } as unknown as AuthRuntimeContext;
 }
 
-function json(body: Record<string, unknown>) {
-  return {
-    method: 'POST' as const,
-    headers: {
-      authorization: 'Bearer test',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  };
-}
-
 function makeUploadApp(options?: {
   adapter?: Record<string, unknown> | null;
   signing?: Record<string, unknown> | null;
@@ -63,7 +52,7 @@ function makeUploadApp(options?: {
       await next();
     },
     requireRole:
-      (..._roles: string[]) =>
+      () =>
       async (_c: any, next: () => Promise<void>) => {
         await next();
       },

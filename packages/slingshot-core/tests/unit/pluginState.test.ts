@@ -28,7 +28,8 @@ describe('resolvePluginState', () => {
   });
 
   test('returns null for plain object without pluginState', () => {
-    const obj: never = { foo: 'bar' } as never;
+    const objData = { foo: 'bar' };
+    const obj: never = objData as never;
     expect(resolvePluginState(obj)).toBeNull();
   });
 });
@@ -68,7 +69,8 @@ describe('getPluginState', () => {
   });
 
   test('throws when pluginState not available', () => {
-    const obj: never = {} as never;
+    const objData = {};
+    const obj: never = objData as never;
     expect(() => getPluginState(obj)).toThrow('pluginState is not available for this app');
   });
 });

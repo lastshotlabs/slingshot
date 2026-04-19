@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { attachContext } from '@lastshotlabs/slingshot-core';
 
 describe('root entrypoints', () => {
   afterEach(() => {
@@ -54,18 +55,18 @@ describe('root entrypoints', () => {
   });
 
   test('appConfig utilities deep-freeze values and read app name from context', async () => {
-    const getContext = mock(() => ({ config: { appName: 'Slingshot Test App' } }));
-    mock.module('@lastshotlabs/slingshot-core', () => ({ getContext }));
-
     const appConfig = await import(`../../src/lib/appConfig.ts?app-config=${Date.now()}`);
+    const app = { id: 'app-1' };
+    attachContext(app, {
+      config: { appName: 'Slingshot Test App' },
+    } as any);
     const value = appConfig.deepFreeze({
       topLevel: { nested: true },
     });
 
     expect(Object.isFrozen(value)).toBe(true);
     expect(Object.isFrozen(value.topLevel)).toBe(true);
-    expect(appConfig.getAppNameFromApp({ id: 'app-1' })).toBe('Slingshot Test App');
-    expect(getContext).toHaveBeenCalledWith({ id: 'app-1' });
+    expect(appConfig.getAppNameFromApp(app)).toBe('Slingshot Test App');
   });
 
   test('resolvePlatformConfig exposes the infra helper from the CLI utilities module', async () => {

@@ -50,7 +50,7 @@ describe('attachContext', () => {
   test('attaches context and installs middleware on objects with use()', () => {
     let middlewareInstalled = false;
     const app = {
-      use: (_path: string, _handler: unknown) => {
+      use: () => {
         middlewareInstalled = true;
       },
     };
@@ -65,7 +65,7 @@ describe('attachContext', () => {
   test('does not install middleware twice on the same app', () => {
     let callCount = 0;
     const app = {
-      use: (_path: string, _handler: unknown) => {
+      use: () => {
         callCount++;
       },
     };

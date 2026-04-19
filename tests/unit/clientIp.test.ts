@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { getClientIp, setStandaloneTrustProxy } from '@lastshotlabs/slingshot-core';
 
 function mockContext(headers: Record<string, string> = {}, socketIp?: string) {
-  const raw: Request = new Request('http://localhost');
+  const raw: Request = new Request('http://localhost', { headers });
   return {
     req: {
       raw,
       header(name: string) {
-        return headers[name.toLowerCase()];
+        return raw.headers.get(name) ?? undefined;
       },
     },
     env: socketIp ? { requestIP: () => ({ address: socketIp }) } : {},

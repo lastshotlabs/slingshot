@@ -1,13 +1,19 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { WsState } from '@lastshotlabs/slingshot-core';
 // Mock getMessageHistory — wsRecovery imports it from wsMessages which needs app context.
 // We mock the module to avoid needing a real SlingshotContext.
 import { getMessageHistory } from '../../src/framework/ws/messages';
 import { handleRecover, pruneExpiredSessions, writeSession } from '../../src/framework/ws/recovery';
 
+const actualWsMessages = await import('../../src/framework/ws/messages');
 mock.module('../../src/framework/ws/messages', () => ({
+  ...actualWsMessages,
   getMessageHistory: mock(() => Promise.resolve([])),
 }));
+
+afterAll(() => {
+  mock.restore();
+});
 
 function createWsState(): WsState {
   return {

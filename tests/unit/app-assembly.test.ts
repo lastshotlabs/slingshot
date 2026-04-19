@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { COOKIE_TOKEN, HttpError, ValidationError, createRouter } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
@@ -6,12 +6,16 @@ import { createTestApp } from '../setup';
 
 const disconnectRedisMock = mock(async () => {});
 const disconnectMongoMock = mock(async () => {});
+const actualRedis = await import('@lib/redis');
+const actualMongo = await import('@lib/mongo');
 
 mock.module('@lib/redis', () => ({
+  ...actualRedis,
   disconnectRedis: disconnectRedisMock,
 }));
 
 mock.module('@lib/mongo', () => ({
+  ...actualMongo,
   disconnectMongo: disconnectMongoMock,
 }));
 
@@ -35,6 +39,10 @@ const baseConfig = {
 };
 
 const createdApps: Array<{ destroy(): Promise<void> }> = [];
+
+afterAll(() => {
+  mock.restore();
+});
 
 afterEach(async () => {
   for (const ctx of createdApps.splice(0)) {

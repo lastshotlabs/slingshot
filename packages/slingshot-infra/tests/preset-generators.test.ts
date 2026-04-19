@@ -113,7 +113,7 @@ describe('ECS preset: generate()', () => {
         size: 'small',
         healthCheck: '/health',
         logging: { driver: 'fluentd', fluentd: {} },
-      }),
+      },
     });
     const files = preset.generate(ctx);
     const fluentd = files.find(f => f.path.includes('fluent'));

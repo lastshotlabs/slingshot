@@ -405,8 +405,9 @@ describe('createMongoWsMessageRepository', () => {
       deleteMany: async () => ({ deletedCount: 1 }),
     };
 
+    const connModels = {};
     const conn = {
-      models: {} as Record<string, unknown>,
+      models: connModels as Record<string, unknown>,
       model: () => model,
     };
 
@@ -497,7 +498,7 @@ describe('createMongoWsMessageRepository', () => {
   test('model is created lazily and reused', async () => {
     let modelCallCount = 0;
     const fakeDocs: MockDoc[] = [];
-    const { conn, model } = makeMockConn(fakeDocs);
+    const { conn } = makeMockConn(fakeDocs);
     const origModel = conn.model;
     conn.model = (...args) => {
       modelCallCount++;

@@ -1,26 +1,16 @@
-import { describe, expect, it, mock } from 'bun:test';
-
-// ---------------------------------------------------------------------------
-// Module mocks — Bun hoists these before static imports.
-// ---------------------------------------------------------------------------
+import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { getClientIpFromRequest } from '@lastshotlabs/slingshot-core';
 
 const resolveUserIdMock = mock(async () => null as string | null);
-mock.module('@framework/lib/resolveUserId', () => ({
-  resolveUserId: resolveUserIdMock,
-}));
 
-const setStandaloneClientIpMock = mock(() => {});
-const originalCore = await import('@lastshotlabs/slingshot-core');
-mock.module('@lastshotlabs/slingshot-core', () => ({
-  ...originalCore,
-  setStandaloneClientIp: setStandaloneClientIpMock,
-}));
+async function loadCreateWsUpgradeHandler() {
+  mock.module('@framework/lib/resolveUserId', () => ({
+    resolveUserId: resolveUserIdMock,
+  }));
 
-import { createWsUpgradeHandler } from '../../src/framework/ws/index';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+  const mod = await import(`../../src/framework/ws/index.ts?ws-upgrade=${Date.now()}`);
+  return mod.createWsUpgradeHandler;
+}
 
 function createMockServer(overrides?: {
   requestIP?: (req: Request) => { address: string } | null;
@@ -32,24 +22,27 @@ function createMockServer(overrides?: {
   } as any;
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+afterEach(() => {
+  mock.restore();
+  resolveUserIdMock.mockReset();
+});
 
 describe('createWsUpgradeHandler', () => {
   it('returns undefined on successful upgrade', async () => {
     resolveUserIdMock.mockImplementation(async () => null);
+    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const server = createMockServer();
     const handler = createWsUpgradeHandler(server, '/chat');
     const req = new Request('http://localhost/chat');
 
     const result = await handler(req);
     expect(result).toBeUndefined();
-    expect(setStandaloneClientIpMock).toHaveBeenCalledWith(req, '127.0.0.1');
+    expect(getClientIpFromRequest(req, false)).toBe('127.0.0.1');
   });
 
   it('returns 400 response when upgrade fails', async () => {
     resolveUserIdMock.mockImplementation(async () => null);
+    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const server = createMockServer({
       upgrade: () => false,
     });
@@ -65,6 +58,7 @@ describe('createWsUpgradeHandler', () => {
 
   it('catches requestIP throwing without affecting upgrade', async () => {
     resolveUserIdMock.mockImplementation(async () => null);
+    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const server = createMockServer({
       requestIP: () => {
         throw new Error('requestIP not supported');
@@ -74,12 +68,13 @@ describe('createWsUpgradeHandler', () => {
     const req = new Request('http://localhost/ws');
 
     const result = await handler(req);
-    // Upgrade still succeeds despite requestIP throwing
     expect(result).toBeUndefined();
+    expect(getClientIpFromRequest(req, false)).toBe('unknown');
   });
 
   it('resolves userId via the default resolver', async () => {
     resolveUserIdMock.mockImplementation(async () => 'user-42');
+    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     let capturedData: any = null;
     const server = createMockServer({
       upgrade: (_req: Request, opts: any) => {
@@ -105,6 +100,7 @@ describe('createWsUpgradeHandler', () => {
       receivedResolver = resolver;
       return 'custom-user';
     });
+    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const customResolver = { resolveUserId: async () => 'custom-user' };
     const server = createMockServer();
     const handler = createWsUpgradeHandler(server, '/ws', customResolver as any);
@@ -120,6 +116,7 @@ describe('createWsUpgradeHandler', () => {
       receivedResolver = resolver;
       return null;
     });
+    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const server = createMockServer();
     const handler = createWsUpgradeHandler(server, '/ws', null);
     const req = new Request('http://localhost/ws');
@@ -128,9 +125,9 @@ describe('createWsUpgradeHandler', () => {
     expect(receivedResolver).toBeNull();
   });
 
-  it('does not call setStandaloneClientIp when requestIP returns null', async () => {
+  it('does not attach a client IP when requestIP returns null', async () => {
     resolveUserIdMock.mockImplementation(async () => null);
-    setStandaloneClientIpMock.mockReset();
+    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const server = createMockServer({
       requestIP: () => null,
     });
@@ -138,6 +135,6 @@ describe('createWsUpgradeHandler', () => {
     const req = new Request('http://localhost/ws');
 
     await handler(req);
-    expect(setStandaloneClientIpMock).not.toHaveBeenCalled();
+    expect(getClientIpFromRequest(req, false)).toBe('unknown');
   });
 });

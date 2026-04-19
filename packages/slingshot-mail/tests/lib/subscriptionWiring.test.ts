@@ -3,7 +3,7 @@ import type { SlingshotEventBus, SlingshotEventMap } from '@lastshotlabs/slingsh
 import { TemplateNotFoundError } from '@lastshotlabs/slingshot-core';
 import { wireSubscriptions } from '../../src/lib/subscriptionWiring.js';
 import type { MailPluginConfig } from '../../src/types/config.js';
-import type { MailMessage, SendResult } from '../../src/types/provider.js';
+import type { SendResult } from '../../src/types/provider.js';
 import type { MailQueue } from '../../src/types/queue.js';
 
 type AnyPayload = SlingshotEventMap[keyof SlingshotEventMap];

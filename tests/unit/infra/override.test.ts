@@ -22,7 +22,7 @@ describe('deepMerge', () => {
   });
 
   it('handles null and undefined in source', () => {
-    const source = { a: null, b: undefined } as Record<string, unknown>;
+    const source: Record<string, unknown> = { a: null, b: undefined };
     const result = deepMerge({ a: 1, b: { x: 2 } }, source);
     expect(result.a).toBeNull();
     expect(result.b).toBeUndefined();

@@ -24,7 +24,6 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import {
-  closeChannel,
   computeVoteTally,
   createChannelState,
   recordSubmission,
@@ -49,7 +48,6 @@ import {
 } from '../src/lib/hooks';
 import {
   areAllChannelsComplete,
-  createPhaseState,
   getNextSubPhase,
   getSubPhaseOrder,
   isAnyChannelComplete,

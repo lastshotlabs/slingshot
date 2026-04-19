@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { createCoreRegistrar } from '@lastshotlabs/slingshot-core';
 
 const mongooseModule = await import('mongoose');
+const actualMongo = await import('@lib/mongo');
+const actualRedis = await import('@lib/redis');
 
 const connectPostgresMock = mock(async (connectionString: string) => ({
   pool: {
@@ -29,12 +31,14 @@ mock.module('@lastshotlabs/slingshot-postgres', () => ({
   connectPostgres: connectPostgresMock,
 }));
 mock.module('@lib/mongo', () => ({
+  ...actualMongo,
   connectMongo: connectMongoMock,
   connectAuthMongo: connectAuthMongoMock,
   connectAppMongo: connectAppMongoMock,
   disconnectMongo: disconnectMongoMock,
 }));
 mock.module('@lib/redis', () => ({
+  ...actualRedis,
   connectRedis: connectRedisMock,
   disconnectRedis: disconnectRedisMock,
 }));
@@ -174,6 +178,10 @@ function makeSeparateMongoResult() {
     mongoose: mongooseModule,
   };
 }
+
+afterAll(() => {
+  mock.restore();
+});
 
 beforeEach(() => {
   connectPostgresMock.mockClear();

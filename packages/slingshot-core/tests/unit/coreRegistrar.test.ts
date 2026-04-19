@@ -1,10 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { createCoreRegistrar } from '../../src/coreRegistrar';
 
+function asNever<T>(v: T): never {
+  return v as never;
+}
+
 function createMiddleware() {
-  return (async (_c: unknown, next: () => Promise<void>) => {
+  const fn = async (_c: unknown, next: () => Promise<void>) => {
     await next();
-  }) as never;
+  };
+  return fn as never;
 }
 
 describe('createCoreRegistrar', () => {
@@ -66,30 +71,30 @@ describe('createCoreRegistrar', () => {
     const { registrar, drain } = createCoreRegistrar();
     drain();
 
-    expect(() => registrar.setRouteAuth({} as never)).toThrow(
+    expect(() => registrar.setRouteAuth(asNever({}))).toThrow(
       'CoreRegistrar is finalized; setRouteAuth() cannot be called after drain().',
     );
-    expect(() => registrar.setUserResolver({} as never)).toThrow(
+    expect(() => registrar.setUserResolver(asNever({}))).toThrow(
       'CoreRegistrar is finalized; setUserResolver() cannot be called after drain().',
     );
-    expect(() => registrar.setRateLimitAdapter({} as never)).toThrow(
+    expect(() => registrar.setRateLimitAdapter(asNever({}))).toThrow(
       'CoreRegistrar is finalized; setRateLimitAdapter() cannot be called after drain().',
     );
-    expect(() => registrar.setFingerprintBuilder({} as never)).toThrow(
+    expect(() => registrar.setFingerprintBuilder(asNever({}))).toThrow(
       'CoreRegistrar is finalized; setFingerprintBuilder() cannot be called after drain().',
     );
-    expect(() => registrar.addCacheAdapter('memory' as never, {} as never)).toThrow(
+    expect(() => registrar.addCacheAdapter('memory' as never, asNever({}))).toThrow(
       'CoreRegistrar is finalized; addCacheAdapter() cannot be called after drain().',
     );
-    expect(() => registrar.addEmailTemplates({} as never)).toThrow(
+    expect(() => registrar.addEmailTemplates(asNever({}))).toThrow(
       'CoreRegistrar is finalized; addEmailTemplates() cannot be called after drain().',
     );
   });
 
   test('addCacheAdapter stores adapters by store name', () => {
     const { registrar, drain } = createCoreRegistrar();
-    const memAdapter = { name: 'memory' } as never;
-    const redisAdapter = { name: 'redis' } as never;
+    const memAdapter = asNever({ name: 'memory' });
+    const redisAdapter = asNever({ name: 'redis' });
 
     registrar.addCacheAdapter('memory' as never, memAdapter);
     registrar.addCacheAdapter('redis' as never, redisAdapter);
@@ -103,12 +108,12 @@ describe('createCoreRegistrar', () => {
   test('addEmailTemplates merges multiple template sets', () => {
     const { registrar, drain } = createCoreRegistrar();
 
-    registrar.addEmailTemplates({
+    registrar.addEmailTemplates(asNever({
       welcome: { subject: 'Welcome', html: '<p>Welcome</p>' },
-    } as never);
-    registrar.addEmailTemplates({
+    }));
+    registrar.addEmailTemplates(asNever({
       reset: { subject: 'Reset', html: '<p>Reset</p>' },
-    } as never);
+    }));
 
     const snapshot = drain();
     expect(snapshot.emailTemplates.size).toBe(2);
@@ -124,13 +129,13 @@ describe('createCoreRegistrar', () => {
 
   test('drain returns independent snapshots of maps', () => {
     const { registrar, drain } = createCoreRegistrar();
-    const adapter = { name: 'memory' } as never;
+    const adapter = asNever({ name: 'memory' });
 
     registrar.addCacheAdapter('memory' as never, adapter);
 
     const first = drain();
     // Mutating the first snapshot's map should not affect future drain() calls
-    first.cacheAdapters.set('redis' as never, {} as never);
+    first.cacheAdapters.set('redis' as never, asNever({}));
 
     const second = drain();
     expect(second.cacheAdapters.has('redis' as never)).toBe(false);

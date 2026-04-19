@@ -26,7 +26,8 @@ describe('RouterAdapter.emit()', () => {
     const defaultBus = createMockBus();
     const router = createRouterAdapter({ default: defaultBus });
 
-    router.emit('app:ready' as never, { plugins: [] } as never);
+    const payload = { plugins: [] };
+    router.emit('app:ready' as never, payload as never);
 
     expect(defaultBus.emit).toHaveBeenCalledWith('app:ready', { plugins: [] });
   });
@@ -39,7 +40,8 @@ describe('RouterAdapter.emit()', () => {
       namespaces: { 'community:': nsBus },
     });
 
-    router.emit('community:thread.created' as never, {} as never);
+    const emptyPayload = {};
+    router.emit('community:thread.created' as never, emptyPayload as never);
 
     expect(nsBus.emit).toHaveBeenCalled();
     expect(defaultBus.emit).not.toHaveBeenCalled();

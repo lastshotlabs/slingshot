@@ -62,7 +62,8 @@ function bootWithAuthGuard(): Hono {
   // A protected route that requires auth.
   app.get('/api/protected', c => c.json({ data: 'secret' }));
 
-  const emptyConfig: never = {} as never;
+  const emptyConfigRaw = {};
+  const emptyConfig = emptyConfigRaw as unknown as never;
   plugin.setupMiddleware?.({ app, config: emptyConfig, bus });
   plugin.setupRoutes?.({ app, config: emptyConfig, bus });
   plugin.setupPost?.({ app, config: emptyConfig, bus });

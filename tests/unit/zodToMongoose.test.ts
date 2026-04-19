@@ -4,8 +4,9 @@
  *
  * We mock @lib/mongo to avoid a real mongoose dependency.
  */
-import { describe, expect, mock, test } from 'bun:test';
+import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
+const actualMongo = await import('@lib/mongo');
 
 // Mock the mongo module so getMongooseModule returns a mongoose-like object
 // with a Schema class and Schema.Types.Mixed / Schema.Types.ObjectId
@@ -18,8 +19,13 @@ mock.module('@lib/mongo', () => {
     };
   }
   return {
+    ...actualMongo,
     getMongooseModule: () => ({ Schema: MockSchema }),
   };
+});
+
+afterAll(() => {
+  mock.restore();
 });
 
 // Import AFTER mock

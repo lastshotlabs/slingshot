@@ -55,7 +55,7 @@ function makeUploadApp(options?: {
       await next();
     },
     requireRole:
-      (..._roles: string[]) =>
+      () =>
       async (_c: any, next: () => Promise<void>) => {
         await next();
       },
@@ -496,7 +496,7 @@ describe('createUploadsRouter (root coverage)', () => {
   });
 
   test('uses configuredMaxFileSize as effectiveMaxBytes when request omits maxBytes (lines 310-311)', async () => {
-    const presignPut = mock(async (key: string, opts: Record<string, unknown>) => {
+    const presignPut = mock(async (key: string) => {
       return `https://uploads.example/${encodeURIComponent(key)}`;
     });
     const { app } = makeUploadApp({

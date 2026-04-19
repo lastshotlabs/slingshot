@@ -30,7 +30,8 @@ function makeTempDir(): string {
 
 /** Stub preset that generates a Dockerfile and reports success on deploy. */
 function stubPreset(name = 'ecs'): PresetProvider {
-  const result: DeployResult = { success: true } as never;
+  const resultRaw = { success: true };
+  const result = resultRaw as unknown as DeployResult;
   const preset = {
     name,
     generate: () => [

@@ -4,7 +4,8 @@
  * Targets the uncovered lines:
  * - lines 109-115: confirm() private method — readline-based y/N prompt
  */
-import { describe, expect, mock, test } from 'bun:test';
+import { afterAll, describe, expect, mock, test } from 'bun:test';
+import * as realInfra from './infra/realBunshotInfra';
 
 // Minimal oclif config stub
 function makeOclifConfig() {
@@ -30,10 +31,15 @@ function makeReadlineMock(answer: string) {
   };
 }
 
+afterAll(() => {
+  mock.restore();
+});
+
 describe('Deploy.run()', () => {
   test('--plan flag computes and displays a deploy plan', async () => {
     const planText = 'mock plan output';
     mock.module('@lastshotlabs/slingshot-infra', () => ({
+      ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
       loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
       createRegistryFromConfig: () => ({}),
@@ -62,6 +68,7 @@ describe('Deploy.run()', () => {
 
   test('--dry-run deploys without confirmation prompt', async () => {
     mock.module('@lastshotlabs/slingshot-infra', () => ({
+      ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
       loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
       createRegistryFromConfig: () => ({}),
@@ -92,6 +99,7 @@ describe('Deploy.run()', () => {
 
   test('--yes skips confirmation and deploys directly', async () => {
     mock.module('@lastshotlabs/slingshot-infra', () => ({
+      ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
       loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
       createRegistryFromConfig: () => ({}),
@@ -123,6 +131,7 @@ describe('Deploy.run()', () => {
   test('deploy cancelled when user declines confirmation', async () => {
     mock.module('node:readline', () => makeReadlineMock('n'));
     mock.module('@lastshotlabs/slingshot-infra', () => ({
+      ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
       loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
       createRegistryFromConfig: () => ({}),
@@ -151,6 +160,7 @@ describe('Deploy.run()', () => {
 
   test('shows failure icon when service deploy fails', async () => {
     mock.module('@lastshotlabs/slingshot-infra', () => ({
+      ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
       loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
       createRegistryFromConfig: () => ({}),

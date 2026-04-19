@@ -348,7 +348,8 @@ describe('createDeferredAdminProviders', () => {
     // Without binding, requirePerms should throw (synchronously inside an async call)
     let threw = false;
     try {
-      const subject: never = { id: 'u1', type: 'user' } as never;
+      const subjectData = { id: 'u1', type: 'user' };
+      const subject = subjectData as unknown as never;
       await result.permissions!.evaluator.can(subject, 'read');
     } catch (err) {
       threw = true;
@@ -375,7 +376,8 @@ describe('createDeferredAdminProviders', () => {
     result.bind(pluginState);
 
     // register
-    const def: never = { resourceType: 'test', roles: {} } as never;
+    const defData = { resourceType: 'test', roles: {} };
+    const def = defData as unknown as never;
     result.permissions!.registry.register(def);
     // getActionsForRole
     const actions = result.permissions!.registry.getActionsForRole('test', 'admin');
@@ -384,8 +386,8 @@ describe('createDeferredAdminProviders', () => {
     const types = result.permissions!.registry.listResourceTypes();
     expect(Array.isArray(types)).toBe(true);
     // getDefinition
-    const def = result.permissions!.registry.getDefinition('test');
-    expect(def).toBeUndefined();
+    const defResult = result.permissions!.registry.getDefinition('test');
+    expect(defResult).toBeUndefined();
   });
 
   it('permissions.adapter methods delegate to requirePerms (lines 202-224)', async () => {
@@ -397,14 +399,16 @@ describe('createDeferredAdminProviders', () => {
 
     const adapter = result.permissions!.adapter;
     // All methods should delegate without throwing
-    const grant: never = { id: 'g1' } as never;
+    const grantData = { id: 'g1' };
+    const grant = grantData as unknown as never;
     await adapter.createGrant(grant);
     await adapter.revokeGrant('g1', 'u1', null);
     await adapter.getGrantsForSubject('u1', 'user', null);
     await adapter.getEffectiveGrantsForSubject('u1', 'user', null);
     await adapter.listGrantHistory('u1', 'user');
     await adapter.listGrantsOnResource('resource', 'r1', null);
-    const deleteSubject: never = { id: 'u1', type: 'user' } as never;
+    const deleteSubjectData = { id: 'u1', type: 'user' };
+    const deleteSubject = deleteSubjectData as unknown as never;
     await adapter.deleteAllGrantsForSubject(deleteSubject);
   });
 
@@ -432,13 +436,14 @@ describe('createInMemoryAuditLog', () => {
   it('stores and retrieves log entries', async () => {
     const log = createInMemoryAuditLog();
 
-    const entry: never = {
+    const entryData = {
       userId: 'u1',
       action: 'user.suspend',
       path: '/admin/users/u2/suspend',
       method: 'POST',
       timestamp: new Date().toISOString(),
-    } as never;
+    };
+    const entry = entryData as unknown as never;
     await log.logEntry(entry);
 
     const result = await log.getLogs({});
@@ -449,9 +454,12 @@ describe('createInMemoryAuditLog', () => {
   it('filters by userId', async () => {
     const log = createInMemoryAuditLog();
 
-    const e1: never = { userId: 'u1', action: 'a', path: '/a', method: 'GET' } as never;
-    const e2: never = { userId: 'u2', action: 'b', path: '/b', method: 'POST' } as never;
-    const e3: never = { userId: 'u1', action: 'c', path: '/c', method: 'PUT' } as never;
+    const e1Data = { userId: 'u1', action: 'a', path: '/a', method: 'GET' };
+    const e1 = e1Data as unknown as never;
+    const e2Data = { userId: 'u2', action: 'b', path: '/b', method: 'POST' };
+    const e2 = e2Data as unknown as never;
+    const e3Data = { userId: 'u1', action: 'c', path: '/c', method: 'PUT' };
+    const e3 = e3Data as unknown as never;
     await log.logEntry(e1);
     await log.logEntry(e2);
     await log.logEntry(e3);
@@ -464,20 +472,22 @@ describe('createInMemoryAuditLog', () => {
   it('filters by tenantId', async () => {
     const log = createInMemoryAuditLog();
 
-    const t1Entry: never = {
+    const t1EntryData = {
       userId: 'u1',
       action: 'a',
       path: '/a',
       method: 'GET',
       tenantId: 't1',
-    } as never;
-    const t2Entry: never = {
+    };
+    const t1Entry = t1EntryData as unknown as never;
+    const t2EntryData = {
       userId: 'u1',
       action: 'b',
       path: '/b',
       method: 'GET',
       tenantId: 't2',
-    } as never;
+    };
+    const t2Entry = t2EntryData as unknown as never;
     await log.logEntry(t1Entry);
     await log.logEntry(t2Entry);
 
@@ -490,13 +500,13 @@ describe('createInMemoryAuditLog', () => {
     const log = createInMemoryAuditLog();
 
     for (let i = 0; i < 5; i++) {
-      const pageEntry: never = {
+      const pageEntryData = {
         userId: 'u1',
         action: `action_${i}`,
         path: `/path/${i}`,
         method: 'GET',
-      } as never;
-      await log.logEntry(pageEntry);
+      };
+      await log.logEntry(pageEntryData as unknown as never);
     }
 
     const page1 = await log.getLogs({ limit: 2 });
@@ -515,14 +525,17 @@ describe('createInMemoryAuditLog', () => {
   it('filters by path and method', async () => {
     const log = createInMemoryAuditLog();
 
-    const pathEntry1: never = { userId: 'u1', action: 'a', path: '/admin/users', method: 'GET' } as never;
-    const pathEntry2: never = {
+    const pathEntry1Data = { userId: 'u1', action: 'a', path: '/admin/users', method: 'GET' };
+    const pathEntry1 = pathEntry1Data as unknown as never;
+    const pathEntry2Data = {
       userId: 'u1',
       action: 'b',
       path: '/admin/users',
       method: 'DELETE',
-    } as never;
-    const pathEntry3: never = { userId: 'u1', action: 'c', path: '/admin/roles', method: 'GET' } as never;
+    };
+    const pathEntry2 = pathEntry2Data as unknown as never;
+    const pathEntry3Data = { userId: 'u1', action: 'c', path: '/admin/roles', method: 'GET' };
+    const pathEntry3 = pathEntry3Data as unknown as never;
     await log.logEntry(pathEntry1);
     await log.logEntry(pathEntry2);
     await log.logEntry(pathEntry3);

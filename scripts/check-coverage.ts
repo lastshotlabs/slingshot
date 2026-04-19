@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import {
   discoverOwnedFiles,
   fileNeedsRuntimeCoverage,

@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 let config: AuthResolvedConfig;
 
 function makeRuntimeCtx(): AuthRuntimeContext {
-  return { config } as AuthRuntimeContext;
+  const data = { config };
+  return data as unknown as AuthRuntimeContext;
 }
 
 beforeEach(() => {

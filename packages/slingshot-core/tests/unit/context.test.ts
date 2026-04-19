@@ -32,8 +32,10 @@ describe('defaultValidationErrorFormatter', () => {
 
 describe('defaultHook', () => {
   test('passes through on success (returns undefined)', () => {
-    const hookResult: never = { success: true, data: {} } as never;
-    const hookCtx: never = {} as never;
+    const hookResultData = { success: true, data: {} };
+    const hookResult: never = hookResultData as never;
+    const hookCtxData = {};
+    const hookCtx: never = hookCtxData as never;
     const result = defaultHook(hookResult, hookCtx);
     expect(result).toBeUndefined();
   });
@@ -54,7 +56,8 @@ describe('defaultHook', () => {
       },
     };
     const issues = [{ path: ['name'], message: 'Required', code: 'invalid_type' }];
-    const hookResult: never = { success: false, error: { issues } } as never;
+    const hookResultData = { success: false, error: { issues } };
+    const hookResult: never = hookResultData as never;
     defaultHook(
       hookResult,
       c as never,
@@ -78,7 +81,8 @@ describe('defaultHook', () => {
       json: (body: unknown, status: number) => ({ body, status }),
     };
     const issues = [{ path: [], message: 'Bad', code: 'custom' }];
-    const hookResult: never = { success: false, error: { issues } } as never;
+    const hookResultData = { success: false, error: { issues } };
+    const hookResult: never = hookResultData as never;
     const result = defaultHook(
       hookResult,
       c as never,
@@ -104,7 +108,8 @@ describe('defaultHook', () => {
       },
     };
     const issues = [{ path: ['field'], message: 'Invalid', code: 'invalid_type' }];
-    const hookResult: never = { success: false, error: { issues } } as never;
+    const hookResultData = { success: false, error: { issues } };
+    const hookResult: never = hookResultData as never;
     defaultHook(
       hookResult,
       c as never,
@@ -126,7 +131,8 @@ describe('defaultHook', () => {
       },
     };
     const issues = [{ path: [], message: 'Bad', code: 'custom' }];
-    const hookResult: never = { success: false, error: { issues } } as never;
+    const hookResultData = { success: false, error: { issues } };
+    const hookResult: never = hookResultData as never;
     defaultHook(
       hookResult,
       c as never,

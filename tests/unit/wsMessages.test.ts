@@ -244,8 +244,9 @@ describe('wsMessages (mongo backend)', () => {
   }
 
   function makeMockConn(model: unknown) {
+    const models = {};
     return {
-      models: {} as Record<string, unknown>,
+      models: models as Record<string, unknown>,
       model() {
         return model;
       },
@@ -363,8 +364,9 @@ describe('wsMessages (mongo backend)', () => {
       deleteMany: async () => { throw new Error('db error'); },
     };
     // Need to also provide findById, find, etc for getModel
+    const connModels = {};
     const conn = {
-      models: {} as Record<string, unknown>,
+      models: connModels as Record<string, unknown>,
       model() { return failingModel; },
     };
     const mg = makeMockMongoose();

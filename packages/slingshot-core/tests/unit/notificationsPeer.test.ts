@@ -7,13 +7,13 @@ import {
 
 function makeFakePeerState() {
   return {
-    createBuilder: (_opts: { source: string }) => ({
+    createBuilder: () => ({
       notify: async () => null,
       notifyMany: async () => [],
-      schedule: async () => ({} as never),
+      schedule: async () => ({}),
       cancel: async () => {},
     }),
-    registerDeliveryAdapter: (_adapter: unknown) => {},
+    registerDeliveryAdapter: () => {},
   };
 }
 

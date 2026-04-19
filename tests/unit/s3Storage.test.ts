@@ -155,7 +155,8 @@ describe('s3Storage — put', () => {
   test('uses meta.bucket override', async () => {
     resetCommands();
     const adapter = s3Storage({ bucket: 'default-bucket' });
-    const putMeta: never = { mimeType: 'text/plain', bucket: 'override-bucket' } as never;
+    const putMetaData = { mimeType: 'text/plain', bucket: 'override-bucket' };
+    const putMeta = putMetaData as unknown as never;
     await adapter.put('file.txt', Buffer.from('x'), putMeta);
     expect((sentCommands[0] as { input: Record<string, unknown> }).input.Bucket).toBe(
       'override-bucket',

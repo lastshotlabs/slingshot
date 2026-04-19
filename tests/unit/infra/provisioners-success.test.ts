@@ -211,7 +211,7 @@ describe('provisioner success paths', () => {
     }) as typeof Date.now;
 
     const provisioner = createMongoProvisioner();
-    const mongoConfig = {
+    const mongoConfigData = {
       type: 'mongo',
       provision: true,
       atlas: {
@@ -221,14 +221,16 @@ describe('provisioner success paths', () => {
       stages: {
         dev: { instanceClass: 'M20' },
       },
-    } as MongoResourceConfig;
-    const mongoCtx = {
+    };
+    const mongoConfig = mongoConfigData as unknown as MongoResourceConfig;
+    const mongoCtxData = {
       resourceName: 'mongo',
       config: mongoConfig,
       stageName: 'dev',
       region: 'us-east-1',
       platform: 'testorg',
-    } as ResourceProvisionerContext;
+    };
+    const mongoCtx = mongoCtxData as unknown as ResourceProvisionerContext;
     const result = await provisioner.provision(mongoCtx);
 
     expect(result.status).toBe('provisioned');
@@ -256,21 +258,23 @@ describe('provisioner success paths', () => {
     }) as typeof Date.now;
 
     const provisioner = createMongoProvisioner();
-    const destroyMongoConfig = {
+    const destroyMongoConfigData = {
       type: 'mongo',
       provision: true,
       atlas: {
         orgId: 'org-1',
         projectId: 'proj-1',
       },
-    } as MongoResourceConfig;
-    const destroyCtx = {
+    };
+    const destroyMongoConfig = destroyMongoConfigData as unknown as MongoResourceConfig;
+    const destroyCtxData = {
       resourceName: 'mongo',
       config: destroyMongoConfig,
       stageName: 'dev',
       region: 'us-east-1',
       platform: 'testorg',
-    } as ResourceProvisionerContext;
+    };
+    const destroyCtx = destroyCtxData as unknown as ResourceProvisionerContext;
     await provisioner.destroy(destroyCtx);
 
     // destroy() calls: DELETE cluster, DELETE user, GET cluster (poll until gone)

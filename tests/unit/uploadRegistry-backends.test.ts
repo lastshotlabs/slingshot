@@ -6,7 +6,6 @@ import {
   createPostgresUploadRegistry,
   createMongoUploadRegistry,
   createUploadRegistryFactories,
-  DEFAULT_UPLOAD_REGISTRY_TTL_SECONDS,
 } from '../../src/framework/persistence/uploadRegistry';
 
 // ---------------------------------------------------------------------------
@@ -241,7 +240,7 @@ describe('createSqliteUploadRegistry', () => {
     const registry = createSqliteUploadRegistry(db);
 
     await registry.register({ key: 'del-key', createdAt: Date.now() });
-    const deleted = await registry.delete('del-key');
+    await registry.delete('del-key');
     // After delete, get returns null
     const result = await registry.get('del-key');
     expect(result).toBeNull();
@@ -402,8 +401,9 @@ describe('createMongoUploadRegistry', () => {
       },
     };
 
+    const models = { UploadRegistry: mockModel };
     const appConn = {
-      models: { UploadRegistry: mockModel } as Record<string, unknown>,
+      models: models as Record<string, unknown>,
       model() {
         return mockModel;
       },
@@ -481,8 +481,9 @@ describe('createMongoUploadRegistry', () => {
       },
     };
 
+    const emptyModels = {};
     const appConn = {
-      models: {} as Record<string, unknown>,
+      models: emptyModels as Record<string, unknown>,
       model() {
         return mockModel;
       },
@@ -542,10 +543,11 @@ describe('createUploadRegistryFactories', () => {
       },
     };
 
+    const emptyInfraModels = {};
     const mockInfra = {
       getMongo: () => ({
         conn: {
-          models: {} as Record<string, unknown>,
+          models: emptyInfraModels as Record<string, unknown>,
           model: () => mockModel,
         },
         mg: { Schema: class { index() {} } },

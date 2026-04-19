@@ -51,7 +51,7 @@ describe('mountOptionalEndpoints', () => {
       getWaitingCount: async () => 0,
     }));
     const cleanupStaleSchedulers = mock(async () => {});
-    const mockFactory: never = {
+    const mockFactoryData = {
       createQueue,
       createWorker: mock(() => {
         throw new Error('not used');
@@ -63,7 +63,8 @@ describe('mountOptionalEndpoints', () => {
       createDLQHandler: mock(() => {
         throw new Error('not used');
       }),
-    } as never;
+    };
+    const mockFactory = mockFactoryData as unknown as never;
     const createQueueFactory = spyOn(queueModule, 'createQueueFactory').mockReturnValue(mockFactory);
 
     const app = new OpenAPIHono<AppEnv>();
@@ -192,13 +193,14 @@ describe('mountOptionalEndpoints', () => {
     const cleanupStaleSchedulers = mock(async () => {});
     const createDLQHandler = mock(() => ({}));
 
-    const mockFactory2: never = {
+    const mockFactory2Data = {
       createQueue,
       createWorker,
       createCronWorker,
       cleanupStaleSchedulers,
       createDLQHandler,
-    } as never;
+    };
+    const mockFactory2 = mockFactory2Data as unknown as never;
     spyOn(queueModule, 'createQueueFactory').mockReturnValue(mockFactory2);
 
     const app = new OpenAPIHono<AppEnv>();

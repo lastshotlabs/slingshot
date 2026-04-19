@@ -6,7 +6,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import { attachContext } from '@lastshotlabs/slingshot-core';
-import type { RoomPersistenceConfig, StoredMessage, WsMessageRepository } from '@lastshotlabs/slingshot-core';
+import type { RoomPersistenceConfig, WsMessageRepository } from '@lastshotlabs/slingshot-core';
 import { persistMessage, getMessageHistory, configureRoom } from '../../src/framework/ws/messages';
 import { createMemoryWsMessageRepository } from '../../src/framework/persistence/wsMessages';
 

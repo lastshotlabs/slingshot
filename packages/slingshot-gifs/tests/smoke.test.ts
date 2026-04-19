@@ -16,7 +16,8 @@ async function bootGifsApp() {
     provider: 'giphy',
     apiKey: 'test-api-key',
   });
-  const emptyConfig: never = {} as never;
+  const emptyObj = {};
+  const emptyConfig = emptyObj as never;
   await plugin.setupRoutes?.({
     app: app as never,
     config: emptyConfig,

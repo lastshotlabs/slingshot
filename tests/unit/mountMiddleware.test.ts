@@ -184,7 +184,8 @@ describe('mountFrameworkMiddleware', () => {
 describe('mountTenantMiddleware', () => {
   it('throws in production when tenancy has no onResolve (lines 200-201)', async () => {
     const app = makeApp();
-    const tenancy: never = { resolution: 'subdomain' } as never;
+    const tenancyData = { resolution: 'subdomain' };
+    const tenancy = tenancyData as unknown as never;
     await expect(
       mountTenantMiddleware(app, tenancy, undefined, true),
     ).rejects.toThrow(
@@ -196,7 +197,8 @@ describe('mountTenantMiddleware', () => {
     const app = makeApp();
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      const tenancyDev: never = { resolution: 'subdomain' } as never;
+      const tenancyDevData = { resolution: 'subdomain' };
+      const tenancyDev = tenancyDevData as unknown as never;
       await mountTenantMiddleware(app, tenancyDev, undefined, false);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('[security] Tenancy is configured without an onResolve callback'),
@@ -208,10 +210,11 @@ describe('mountTenantMiddleware', () => {
 
   it('mounts tenant middleware when onResolve is provided', async () => {
     const app = makeApp();
-    const tenancyWithResolve: never = {
+    const tenancyWithResolveData = {
       resolution: 'subdomain',
       onResolve: () => Promise.resolve(null),
-    } as never;
+    };
+    const tenancyWithResolve = tenancyWithResolveData as unknown as never;
     await expect(
       mountTenantMiddleware(
         app,

@@ -35,14 +35,14 @@ describe('getPushFormatterPeerOrNull', () => {
   });
 
   test('returns the peer when registerFormatter is a function', () => {
-    const peer = { registerFormatter: (_type: string, _fn: unknown) => {} };
+    const peer = { registerFormatter: () => {} };
     const map = new Map();
     map.set(PUSH_PLUGIN_STATE_KEY, peer);
     expect(getPushFormatterPeerOrNull(map)).toBe(peer);
   });
 
   test('returns peer from carrier with pluginState', () => {
-    const peer = { registerFormatter: (_type: string, _fn: unknown) => {} };
+    const peer = { registerFormatter: () => {} };
     const map = new Map();
     map.set(PUSH_PLUGIN_STATE_KEY, peer);
     const carrier = { pluginState: map };
@@ -71,7 +71,7 @@ describe('getPushFormatterPeer', () => {
   });
 
   test('returns the peer when available', () => {
-    const peer = { registerFormatter: (_type: string, _fn: unknown) => {} };
+    const peer = { registerFormatter: () => {} };
     const map = new Map();
     map.set(PUSH_PLUGIN_STATE_KEY, peer);
     const result = getPushFormatterPeer(map);
@@ -79,7 +79,7 @@ describe('getPushFormatterPeer', () => {
   });
 
   test('returns peer from carrier', () => {
-    const peer = { registerFormatter: (_type: string, _fn: unknown) => {} };
+    const peer = { registerFormatter: () => {} };
     const map = new Map();
     map.set(PUSH_PLUGIN_STATE_KEY, peer);
     const carrier = { pluginState: map };

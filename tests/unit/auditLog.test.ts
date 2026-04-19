@@ -450,24 +450,29 @@ describe('getAuditLogModel', () => {
     }
     MockSchema.Types = { Mixed: 'Mixed' };
 
-    // Mock the mongoose module
+    const actualMongo = await import('@lib/mongo');
     mock.module('@lib/mongo', () => ({
+      ...actualMongo,
       getMongooseModule: () => ({ Schema: MockSchema }),
     }));
 
-    // Dynamic import to pick up the mock
-    const { getAuditLogModel } = await import('../../src/framework/models/AuditLog');
+    try {
+      // Dynamic import to pick up the mock
+      const { getAuditLogModel } = await import('../../src/framework/models/AuditLog');
 
-    // First call: creates model
-    const model1 = getAuditLogModel(mockConn as any);
-    expect(model1).toBe(mockModel);
-    expect(mockConn.model).toHaveBeenCalledTimes(1);
-    expect(mockSchema.index).toHaveBeenCalledTimes(3); // userId, tenantId, path indexes
+      // First call: creates model
+      const model1 = getAuditLogModel(mockConn as any);
+      expect(model1).toBe(mockModel);
+      expect(mockConn.model).toHaveBeenCalledTimes(1);
+      expect(mockSchema.index).toHaveBeenCalledTimes(3); // userId, tenantId, path indexes
 
-    // Second call: returns cached model
-    const model2 = getAuditLogModel(mockConn as any);
-    expect(model2).toBe(mockModel);
-    // model() should NOT have been called again
-    expect(mockConn.model).toHaveBeenCalledTimes(1);
+      // Second call: returns cached model
+      const model2 = getAuditLogModel(mockConn as any);
+      expect(model2).toBe(mockModel);
+      // model() should NOT have been called again
+      expect(mockConn.model).toHaveBeenCalledTimes(1);
+    } finally {
+      mock.restore();
+    }
   });
 });

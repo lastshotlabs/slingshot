@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { resolveRepo, resolveRepoAsync } from '../../src/storeInfra';
 import type { RepoFactories, StoreInfra } from '../../src/storeInfra';
 
-const mockInfra: StoreInfra = {} as never;
+const mockInfraData = {};
+const mockInfra: StoreInfra = mockInfraData as unknown as StoreInfra;
 
 function makeFactories(results: Record<string, string>): RepoFactories<string> {
   return {

@@ -53,9 +53,12 @@ async function buildApp(signing?: SigningFixture | null | undefined) {
   // Merge with default signing to ensure secret is always present
   signing = signing ? { ...DEFAULT_SIGNING, ...signing } : DEFAULT_SIGNING;
   const app = new Hono();
-  const stub: never = {} as never;
-  const eventBusStub: never = { emit() {} } as never;
-  const oauthStub: never = { providers: {}, stateStore: {} } as never;
+  const stubData = {};
+  const stub = stubData as unknown as never;
+  const eventBusStubData = { emit() {} };
+  const eventBusStub = eventBusStubData as unknown as never;
+  const oauthStubData = { providers: {}, stateStore: {} };
+  const oauthStub = oauthStubData as unknown as never;
   const runtime = {
     adapter: stub,
     eventBus: eventBusStub,

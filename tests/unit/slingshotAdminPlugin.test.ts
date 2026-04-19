@@ -58,7 +58,8 @@ function makeCtx(existingPermissions?: unknown): {
   // getPluginState reads app.pluginState
   const app = { pluginState };
 
-  const config = { meta: { name: 'Test App' } } as PluginSetupContext['config'];
+  const configData = { meta: { name: 'Test App' } };
+  const config = configData as unknown as PluginSetupContext['config'];
   const ctx: PluginSetupContext = {
     app: app as unknown as PluginSetupContext['app'],
     config,

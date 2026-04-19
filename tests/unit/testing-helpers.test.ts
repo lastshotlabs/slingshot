@@ -1,5 +1,6 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
-import { createCookieJar } from '../../src/testing';
+import { afterEach, describe, test, expect, beforeEach } from 'bun:test';
+import { createCookieJar, wrapAppAsTestServer, createTestFullServer } from '../../src/testing';
+import type { E2EServerHandle } from '../../src/testing';
 
 // ---------------------------------------------------------------------------
 // createCookieJar — lightweight cookie accumulator for E2E tests
@@ -122,5 +123,119 @@ describe('createCookieJar', () => {
     expect(parts).toContain('a=1');
     expect(parts).toContain('b=2');
     expect(parts).toContain('c=3');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// wrapAppAsTestServer — wraps a pre-built Hono app as a test server
+// ---------------------------------------------------------------------------
+
+describe('wrapAppAsTestServer', () => {
+  let handle: E2EServerHandle | null = null;
+
+  afterEach(async () => {
+    if (handle) {
+      await handle.cleanup();
+      handle = null;
+    }
+  });
+
+  test('wraps a createApp result into a running E2E server', async () => {
+    const { createApp } = await import('../../src/app');
+    const { app } = await createApp({
+      meta: { name: 'WrapTest' },
+      db: {
+        mongo: false as const,
+        redis: false,
+        sessions: 'memory' as const,
+        cache: 'memory' as const,
+        auth: 'memory' as const,
+      },
+      security: {
+        rateLimit: { windowMs: 60_000, max: 1000 },
+        signing: {
+          secret: 'test-secret-key-must-be-at-least-32-chars!!',
+          sessionBinding: false as const,
+        },
+      },
+      logging: { onLog: () => {} },
+    });
+
+    handle = await wrapAppAsTestServer(app);
+
+    expect(handle.server.port).toBeGreaterThan(0);
+    expect(handle.baseUrl).toStartWith('http://localhost:');
+    expect(handle.wsUrl).toStartWith('ws://localhost:');
+    expect(handle.url).toBe(handle.baseUrl);
+    expect(handle.bus).toBeDefined();
+    expect(typeof handle.stop).toBe('function');
+    expect(typeof handle.cleanup).toBe('function');
+
+    // Verify the server actually responds
+    const res = await fetch(`${handle.baseUrl}/health`);
+    expect(res.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createTestFullServer — creates a full Bun.serve-based test server
+// ---------------------------------------------------------------------------
+
+describe('createTestFullServer', () => {
+  let handle: E2EServerHandle | null = null;
+
+  afterEach(async () => {
+    if (handle) {
+      await handle.cleanup();
+      handle = null;
+    }
+  });
+
+  test('creates a full server with defaults and responds to health check', async () => {
+    handle = await createTestFullServer({
+      routesDir: `${import.meta.dir}/fixtures/empty-routes`,
+      security: {
+        rateLimit: { windowMs: 60_000, max: 1000 },
+        signing: {
+          secret: 'test-secret-key-must-be-at-least-32-chars!!',
+          sessionBinding: false as const,
+        },
+      },
+    });
+
+    expect(handle.server.port).toBeGreaterThan(0);
+    expect(handle.baseUrl).toStartWith('http://localhost:');
+    expect(handle.wsUrl).toStartWith('ws://localhost:');
+    expect(handle.bus).toBeDefined();
+
+    const res = await fetch(`${handle.baseUrl}/health`);
+    expect(res.status).toBe(200);
+  });
+
+  test('restores process.env.PORT after server creation', async () => {
+    const origPort = process.env.PORT;
+    process.env.PORT = '9999';
+
+    handle = await createTestFullServer({
+      routesDir: `${import.meta.dir}/fixtures/empty-routes`,
+      port: 0,
+      security: {
+        rateLimit: { windowMs: 60_000, max: 1000 },
+        signing: {
+          secret: 'test-secret-key-must-be-at-least-32-chars!!',
+          sessionBinding: false as const,
+        },
+      },
+    });
+
+    // PORT should be restored to its original value
+    expect(process.env.PORT).toBe('9999');
+
+    // Clean up
+    if (origPort === undefined) {
+      delete process.env.PORT;
+    } else {
+      process.env.PORT = origPort;
+    }
   });
 });

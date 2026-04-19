@@ -29,14 +29,14 @@ describe('getEmbedsPeerOrNull', () => {
   });
 
   test('returns the peer when unfurl is a function', () => {
-    const peer = { unfurl: async (_urls: string[]) => [] };
+    const peer = { unfurl: async () => [] };
     const map = new Map();
     map.set(EMBEDS_PLUGIN_STATE_KEY, peer);
     expect(getEmbedsPeerOrNull(map)).toBe(peer);
   });
 
   test('returns peer from carrier with pluginState', () => {
-    const peer = { unfurl: async (_urls: string[]) => [] };
+    const peer = { unfurl: async () => [] };
     const map = new Map();
     map.set(EMBEDS_PLUGIN_STATE_KEY, peer);
     const carrier = { pluginState: map };
@@ -59,7 +59,7 @@ describe('getEmbedsPeer', () => {
   });
 
   test('returns the peer when available', () => {
-    const peer = { unfurl: async (_urls: string[]) => [] };
+    const peer = { unfurl: async () => [] };
     const map = new Map();
     map.set(EMBEDS_PLUGIN_STATE_KEY, peer);
     const result = getEmbedsPeer(map);

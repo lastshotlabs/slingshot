@@ -9,7 +9,8 @@ import { attachContext } from '../../src/context/contextStore';
  */
 function createBrandedContext(userResolver: { resolveUserId(req: Request): Promise<string | null> } | null) {
   // Build a minimal context object that satisfies the shape resolveContext checks.
-  const ctx = { userResolver } as Record<string, unknown>;
+  const ctxData = { userResolver };
+  const ctx = ctxData as unknown as Record<string, unknown>;
   // We need a carrier (app) to brand the context through attachContext.
   const app = {};
   attachContext(app, ctx as never);
@@ -21,7 +22,7 @@ function createBrandedContext(userResolver: { resolveUserId(req: Request): Promi
 describe('getUserResolver', () => {
   test('returns the resolver when one is registered', () => {
     const fakeResolver = {
-      resolveUserId: async (_req: Request) => 'user-123',
+      resolveUserId: async () => 'user-123',
     };
     const ctx = createBrandedContext(fakeResolver);
     const result = getUserResolver(ctx);
@@ -37,7 +38,7 @@ describe('getUserResolver', () => {
 
   test('resolves user from the returned resolver', async () => {
     const fakeResolver = {
-      resolveUserId: async (_req: Request) => 'user-456',
+      resolveUserId: async () => 'user-456',
     };
     const ctx = createBrandedContext(fakeResolver);
     const resolver = getUserResolver(ctx);
@@ -49,7 +50,7 @@ describe('getUserResolver', () => {
 describe('getUserResolverOrNull', () => {
   test('returns the resolver when one is registered', () => {
     const fakeResolver = {
-      resolveUserId: async (_req: Request) => 'user-789',
+      resolveUserId: async () => 'user-789',
     };
     const ctx = createBrandedContext(fakeResolver);
     const result = getUserResolverOrNull(ctx);
@@ -66,9 +67,10 @@ describe('getUserResolverOrNull', () => {
 describe('getUserResolver with app carrier', () => {
   test('resolves from an app object that has a context attached', () => {
     const fakeResolver = {
-      resolveUserId: async (_req: Request) => 'user-app',
+      resolveUserId: async () => 'user-app',
     };
-    const ctx = { userResolver: fakeResolver } as Record<string, unknown>;
+    const ctxData = { userResolver: fakeResolver };
+    const ctx = ctxData as unknown as Record<string, unknown>;
     const app = {};
     attachContext(app, ctx as never);
     // Pass the app (not the context) — resolveContext will call getContext(app)

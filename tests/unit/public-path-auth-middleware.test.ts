@@ -8,12 +8,14 @@ import { createIdentifyMiddleware } from '../../packages/slingshot-auth/src/midd
 describe('public path aware auth middleware', () => {
   it('identify middleware bypasses auth work for declared public paths', async () => {
     const app = new Hono<AppEnv>();
-    const ctx: never = {
+    const ctxData = {
       publicPaths: new Set(['/.well-known/*']),
-    } as never;
+    };
+    const ctx = ctxData as unknown as never;
     attachContext(app, ctx);
 
-    const emptyRuntime: never = {} as never;
+    const emptyRuntimeData = {};
+    const emptyRuntime = emptyRuntimeData as unknown as never;
     app.use(createIdentifyMiddleware(emptyRuntime));
     app.get('/.well-known/apple-app-site-association', c =>
       c.json({
@@ -35,9 +37,10 @@ describe('public path aware auth middleware', () => {
 
   it('csrf middleware bypasses validation for declared public paths', async () => {
     const app = new Hono<AppEnv>();
-    const csrfCtx: never = {
+    const csrfCtxData = {
       publicPaths: new Set(['/.well-known/*']),
-    } as never;
+    };
+    const csrfCtx = csrfCtxData as unknown as never;
     attachContext(app, csrfCtx);
 
     app.use(csrfProtection());

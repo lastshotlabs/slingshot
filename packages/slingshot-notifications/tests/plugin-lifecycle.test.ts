@@ -140,10 +140,11 @@ describe('createNotificationsPlugin lifecycle', () => {
 
     await plugin.teardown?.();
 
-    bus.emit('notifications:notification.created', {
+    const postTeardownEvent = {
       notification: { userId: 'user-1', id: 'n-2' },
       preferences: { pushEnabled: true },
-    } as never);
+    };
+    bus.emit('notifications:notification.created', postTeardownEvent as never);
     await bus.drain();
 
     expect(deliver).toHaveBeenCalledTimes(1);

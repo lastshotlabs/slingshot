@@ -34,14 +34,16 @@ describe('resolveEnvironment', () => {
   };
 
   it('returns stage env as base layer', () => {
-    const emptyInfra: never = {} as never;
+    const emptyInfraObj = {};
+    const emptyInfra = emptyInfraObj as never;
     const env = resolveEnvironment(basePlatform as never, emptyInfra, 'dev', emptyRegistry);
     expect(env.NODE_ENV).toBe('development');
     expect(env.LOG_LEVEL).toBe('debug');
   });
 
   it('returns empty object for unknown stage', () => {
-    const emptyInfra: never = {} as never;
+    const emptyInfraObj = {};
+    const emptyInfra = emptyInfraObj as never;
     const env = resolveEnvironment(basePlatform as never, emptyInfra, 'staging', emptyRegistry);
     expect(Object.keys(env)).toHaveLength(0);
   });

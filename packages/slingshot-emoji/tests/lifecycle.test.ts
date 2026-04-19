@@ -30,7 +30,8 @@ function makeAppContext(
   };
 }
 
-const emptyConfig: never = {} as never;
+const emptyConfigRaw = {};
+const emptyConfig = emptyConfigRaw as unknown as never;
 
 describe('slingshot-emoji lifecycle', () => {
   test('setupMiddleware can resolve permissions from pluginState fallback', async () => {
@@ -126,7 +127,8 @@ describe('slingshot-emoji lifecycle', () => {
       bus,
     });
 
-    const deleteEvent: never = { id: 'emoji-1' } as never;
+    const deleteEventRaw = { id: 'emoji-1' };
+    const deleteEvent = deleteEventRaw as unknown as never;
     bus.emit('emoji:emoji.deleted', deleteEvent);
     await Promise.resolve();
 
@@ -160,7 +162,8 @@ describe('slingshot-emoji lifecycle', () => {
       bus,
     });
 
-    const deleteWithKeyEvent: never = { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' } as never;
+    const deleteWithKeyEventRaw = { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' };
+    const deleteWithKeyEvent = deleteWithKeyEventRaw as unknown as never;
     bus.emit('emoji:emoji.deleted', deleteWithKeyEvent);
     await Promise.resolve();
 
@@ -193,7 +196,8 @@ describe('slingshot-emoji lifecycle', () => {
     });
     await plugin.teardown?.();
 
-    const deleteWithKeyEvent: never = { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' } as never;
+    const deleteWithKeyEventRaw = { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' };
+    const deleteWithKeyEvent = deleteWithKeyEventRaw as never;
     bus.emit('emoji:emoji.deleted', deleteWithKeyEvent);
     await Promise.resolve();
 

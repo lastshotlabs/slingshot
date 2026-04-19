@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_REINDEX_SOURCE,
@@ -16,12 +16,16 @@ import {
 
 const disconnectRedisMock = mock(async () => {});
 const disconnectMongoMock = mock(async () => {});
+const actualRedis = await import('@lib/redis');
+const actualMongo = await import('@lib/mongo');
 
 mock.module('@lib/redis', () => ({
+  ...actualRedis,
   disconnectRedis: disconnectRedisMock,
 }));
 
 mock.module('@lib/mongo', () => ({
+  ...actualMongo,
   disconnectMongo: disconnectMongoMock,
 }));
 
@@ -45,6 +49,10 @@ const baseConfig = {
 };
 
 const createdContexts: Array<{ destroy(): Promise<void> }> = [];
+
+afterAll(() => {
+  mock.restore();
+});
 
 afterEach(async () => {
   for (const ctx of createdContexts.splice(0)) {

@@ -1,14 +1,20 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { WsState } from '@lastshotlabs/slingshot-core';
 import { handleIncomingEvent } from '../../src/framework/ws/dispatch';
 import * as rooms from '../../src/framework/ws/rooms';
 
 // Mock the rooms module so publish/subscribe/unsubscribe are observable
+const actualRooms = await import('../../src/framework/ws/rooms');
 mock.module('../../src/framework/ws/rooms', () => ({
+  ...actualRooms,
   publish: mock(() => {}),
   subscribe: mock(() => {}),
   unsubscribe: mock(() => {}),
 }));
+
+afterAll(() => {
+  mock.restore();
+});
 
 function createWsState(overrides?: Partial<WsState>): WsState {
   return {

@@ -6,7 +6,7 @@
  *
  * Skipped automatically when REDIS_URL is not set.
  */
-import { afterEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { createBullMQMailQueue } from '../../src/queues/bullmq.js';
 import { MailSendError } from '../../src/types/provider.js';
 import type { MailProvider } from '../../src/types/provider.js';

@@ -520,6 +520,30 @@ describe('Permissions SQLite adapter', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // parseRoles error branches
+  // ---------------------------------------------------------------------------
+
+  describe('parseRoles validation', () => {
+    test('throws when roles column is not a JSON array', async () => {
+      await adapter.createGrant(makeGrant());
+      // Corrupt the roles column directly in SQLite
+      db.run('UPDATE permission_grants SET roles = ?', ['"not-an-array"']);
+      await expect(adapter.getGrantsForSubject('user-1')).rejects.toThrow(
+        'roles must be a JSON-encoded string array',
+      );
+    });
+
+    test('throws when roles array contains non-string elements', async () => {
+      await adapter.createGrant(makeGrant());
+      // Corrupt the roles column with an array of numbers
+      db.run('UPDATE permission_grants SET roles = ?', ['[1, 2, 3]']);
+      await expect(adapter.getGrantsForSubject('user-1')).rejects.toThrow(
+        'roles must be a JSON-encoded string array',
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // clear
   // ---------------------------------------------------------------------------
 

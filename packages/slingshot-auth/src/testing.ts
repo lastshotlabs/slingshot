@@ -43,8 +43,8 @@ export { createMemoryVerificationTokenRepository } from './lib/emailVerification
 export type { VerificationTokenRepository } from './lib/emailVerification';
 export { createMemoryResetTokenRepository } from './lib/resetPassword';
 export type { ResetTokenRepository } from './lib/resetPassword';
-export { createMemorySessionRepository } from './lib/session';
-export type { SessionRepository } from './lib/session';
+export { createMemorySessionRepository } from './lib/session/index.js';
+export type { SessionRepository } from './lib/session/index.js';
 export { resolveRepo } from '@lastshotlabs/slingshot-core';
 export type { StoreInfra, RepoFactories } from '@lastshotlabs/slingshot-core';
 

@@ -400,6 +400,70 @@ describe('PermissionEvaluator', () => {
     expect(result).toBe(false);
   });
 
+  test('scope mismatch: grant with specific resourceType rejected when scope lacks resourceType', async () => {
+    // Exercise grantMatchesScope line 35: grant.resourceType set but scope.resourceType undefined
+    const mismatchGrant: PermissionGrant = {
+      id: 'type-scoped',
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: 'tenant-a',
+      resourceType: 'post',
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+      grantedAt: new Date(),
+    };
+    const mockAdapter: PermissionsAdapter = {
+      async createGrant() { return ''; },
+      async revokeGrant() { return false; },
+      async getGrantsForSubject() { return [mismatchGrant]; },
+      async getEffectiveGrantsForSubject() { return [mismatchGrant]; },
+      async listGrantHistory() { return []; },
+      async listGrantsOnResource() { return []; },
+      async deleteAllGrantsForSubject() {},
+    };
+    const ev = createPermissionEvaluator({ registry, adapter: mockAdapter });
+    // Scope has tenantId but NO resourceType — grant should not match
+    const result = await ev.can(
+      { subjectId: 'user-1', subjectType: 'user' },
+      'read',
+      { tenantId: 'tenant-a' },
+    );
+    expect(result).toBe(false);
+  });
+
+  test('deny grant that does not cover the action falls through to allow', async () => {
+    // Exercise evaluator lines 134-135: deny grant role does not include the requested action
+    await adapter.createGrant({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['reader'], // reader can only 'read'
+      effect: 'deny',
+      grantedBy: 'system',
+    });
+    await adapter.createGrant({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['owner'], // owner can 'create', 'read', 'update', 'delete'
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+    // 'delete' is denied by reader? No — reader only has ['read'], so deny loop falls through
+    const result = await evaluator.can(
+      { subjectId: 'user-1', subjectType: 'user' },
+      'delete',
+      { resourceType: 'post' },
+    );
+    expect(result).toBe(true);
+  });
+
   test('can() with no scope: super-admin passes, other roles denied', async () => {
     await adapter.createGrant({
       subjectId: 'user-1',

@@ -57,7 +57,7 @@ export {
   createSqliteSessionRepository,
   createRedisSessionRepository,
   createMongoSessionRepository,
-} from './lib/session';
+} from './lib/session/index.js';
 // Note: deleteUserSessions bypasses security events and hooks — use the
 // route handlers or runtime.repos.session directly for mass revocation.
 // createMemorySessionRepository and SessionRepository are available from

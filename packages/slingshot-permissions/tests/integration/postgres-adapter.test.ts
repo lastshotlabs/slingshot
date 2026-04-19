@@ -450,6 +450,26 @@ describe('Postgres permissions adapter — getGrantsForSubject', () => {
     const grants = await adapter.getGrantsForSubject('nobody');
     expect(grants).toEqual([]);
   });
+
+  test('filters by scope resourceType', async () => {
+    await adapter.createGrant(baseGrant({ resourceType: 'post', resourceId: 'p1' }));
+    await adapter.createGrant(baseGrant({ resourceType: 'comment', resourceId: 'c1' }));
+    const grants = await adapter.getGrantsForSubject('user-1', undefined, {
+      resourceType: 'post',
+    });
+    expect(grants).toHaveLength(1);
+    expect(grants[0].resourceType).toBe('post');
+  });
+
+  test('filters by scope resourceId', async () => {
+    await adapter.createGrant(baseGrant({ resourceType: 'post', resourceId: 'p1' }));
+    await adapter.createGrant(baseGrant({ resourceType: 'post', resourceId: 'p2' }));
+    const grants = await adapter.getGrantsForSubject('user-1', undefined, {
+      resourceId: 'p1',
+    });
+    expect(grants).toHaveLength(1);
+    expect(grants[0].resourceId).toBe('p1');
+  });
 });
 
 describe('Postgres permissions adapter — listGrantsOnResource', () => {
@@ -722,6 +742,84 @@ describe('Postgres permissions adapter — listGrantHistory', () => {
     expect(history).toHaveLength(1);
     expect(history[0].subjectId).toBe('user-1');
     expect(history[0].subjectType).toBe('user');
+  });
+});
+
+describe('Postgres permissions adapter — row coercion errors', () => {
+  test('str() throws when column is not a string', async () => {
+    const pool = new MockPool();
+    pool.schemaVersion = 1;
+    const adapter = await makeAdapter(pool);
+
+    // Inject a row with a non-string subject_id to trigger the str() error branch
+    pool['grants'].set('bad-str', {
+      id: 'bad-str',
+      subject_id: 123 as never, // wrong type
+      subject_type: 'user',
+      tenant_id: null,
+      resource_type: null,
+      resource_id: null,
+      roles: ['admin'],
+      effect: 'allow',
+      granted_by: 'system',
+      granted_at: new Date(),
+      reason: null,
+      expires_at: null,
+      revoked_by: null,
+      revoked_at: null,
+    });
+
+    await expect(adapter.getGrantsForSubject(123 as never)).rejects.toThrow('expected string');
+  });
+
+  test('strOrNull() throws when column is neither string nor null', async () => {
+    const pool = new MockPool();
+    pool.schemaVersion = 1;
+    const adapter = await makeAdapter(pool);
+
+    pool['grants'].set('bad-null', {
+      id: 'bad-null',
+      subject_id: 'user-1',
+      subject_type: 'user',
+      tenant_id: 42 as never, // wrong type — should be string | null
+      resource_type: null,
+      resource_id: null,
+      roles: ['admin'],
+      effect: 'allow',
+      granted_by: 'system',
+      granted_at: new Date(),
+      reason: null,
+      expires_at: null,
+      revoked_by: null,
+      revoked_at: null,
+    });
+
+    await expect(adapter.getGrantsForSubject('user-1')).rejects.toThrow('expected string | null');
+  });
+
+  test('dateOrUndef() throws when column is neither Date nor null', async () => {
+    const pool = new MockPool();
+    pool.schemaVersion = 1;
+    const adapter = await makeAdapter(pool);
+
+    pool['grants'].set('bad-date', {
+      id: 'bad-date',
+      subject_id: 'user-1',
+      subject_type: 'user',
+      tenant_id: null,
+      resource_type: null,
+      resource_id: null,
+      roles: ['admin'],
+      effect: 'allow',
+      granted_by: 'system',
+      granted_at: 'not-a-date' as never, // wrong type
+      reason: null,
+      expires_at: null,
+      revoked_by: null,
+      revoked_at: null,
+    });
+
+    await expect(adapter.getGrantsForSubject('user-1')).rejects.toThrow('expected Date | null');
   });
 });
 

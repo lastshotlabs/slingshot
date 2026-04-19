@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  attachContext,
+  createInProcessAdapter,
+  getEmbedsPeerOrNull,
+} from '@lastshotlabs/slingshot-core';
 import { createEmbedsPlugin } from '../src/plugin';
 
 async function bootEmbedsApp() {
@@ -45,5 +49,28 @@ describe('slingshot-embeds smoke', () => {
 
   test('rejects mountPath values that do not start with a slash', () => {
     expect(() => createEmbedsPlugin({ mountPath: 'embeds' })).toThrow();
+  });
+
+  test('publishes an embeds peer when pluginState is available', async () => {
+    const app = new Hono();
+    attachContext(app, {
+      app,
+      pluginState: new Map<string, unknown>(),
+      ws: null,
+      wsEndpoints: {},
+      wsPublish: null,
+      bus: createInProcessAdapter(),
+    } as never);
+
+    const plugin = createEmbedsPlugin();
+    await plugin.setupRoutes?.({
+      app: app as never,
+      config: {} as never,
+      bus: createInProcessAdapter(),
+    });
+
+    const peer = getEmbedsPeerOrNull(app);
+    expect(peer).not.toBeNull();
+    await expect(peer?.unfurl(['http://localhost'])).resolves.toEqual([]);
   });
 });

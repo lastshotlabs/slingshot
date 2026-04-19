@@ -7,7 +7,7 @@
  *
  * @module
  */
-import { faker as defaultFaker, type Faker } from '@faker-js/faker';
+import { type Faker, faker as defaultFaker } from '@faker-js/faker';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -152,7 +152,8 @@ function extractStringConstraints(def: ZodDef): {
         // Extract constraint values for starts_with / ends_with / includes
         if (fmt === 'starts_with') result.prefix = (cd as Record<string, unknown>).prefix as string;
         if (fmt === 'ends_with') result.suffix = (cd as Record<string, unknown>).suffix as string;
-        if (fmt === 'includes') result.includes = (cd as Record<string, unknown>).includes as string;
+        if (fmt === 'includes')
+          result.includes = (cd as Record<string, unknown>).includes as string;
         break;
       }
       case 'regex':
@@ -169,11 +170,22 @@ function extractStringConstraints(def: ZodDef): {
 function extractNumberConstraints(def: ZodDef): {
   min?: number;
   max?: number;
+  minExclusive: boolean;
+  maxExclusive: boolean;
   isInt: boolean;
   multipleOf?: number;
 } {
-  const result: { min?: number; max?: number; isInt: boolean; multipleOf?: number } = {
+  const result: {
+    min?: number;
+    max?: number;
+    minExclusive: boolean;
+    maxExclusive: boolean;
+    isInt: boolean;
+    multipleOf?: number;
+  } = {
     isInt: false,
+    minExclusive: false,
+    maxExclusive: false,
   };
 
   // z.int() sets def.format directly (no checks), while z.number().int()
@@ -187,15 +199,13 @@ function extractNumberConstraints(def: ZodDef): {
     const cd = check._zod.def;
     switch (cd.check) {
       case 'greater_than': {
-        const base = cd.value as number;
-        // For exclusive bounds, nudge by a tiny amount rather than +1
-        // (which is wildly wrong for floats like z.number().gt(0.5))
-        result.min = cd.inclusive ? base : base + 0.01;
+        result.min = cd.value as number;
+        result.minExclusive = !cd.inclusive;
         break;
       }
       case 'less_than': {
-        const base = cd.value as number;
-        result.max = cd.inclusive ? base : base - 0.01;
+        result.max = cd.value as number;
+        result.maxExclusive = !cd.inclusive;
         break;
       }
       case 'number_format': {
@@ -313,7 +323,9 @@ function fakeStringForFormat(format: string, f: Faker): string {
       // Three dot-separated base64url segments
       return [
         Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
-        Buffer.from(JSON.stringify({ sub: f.string.uuid(), iat: Math.floor(Date.now() / 1000) })).toString('base64url'),
+        Buffer.from(
+          JSON.stringify({ sub: f.string.uuid(), iat: Math.floor(Date.now() / 1000) }),
+        ).toString('base64url'),
         f.string.alphanumeric(43),
       ].join('.');
     case 'emoji':
@@ -357,7 +369,8 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
 
     case 'string': {
       const c = extractStringConstraints(def);
-      const hasConstraintFormat = c.prefix !== undefined || c.suffix !== undefined || c.includes !== undefined;
+      const hasConstraintFormat =
+        c.prefix !== undefined || c.suffix !== undefined || c.includes !== undefined;
 
       // String constraint formats (startsWith, endsWith, includes) need
       // special handling — the generated string must satisfy ALL constraints
@@ -398,17 +411,29 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       const c = extractNumberConstraints(def);
       // Derive sane defaults: if only one bound is set, pick the other
       // relative to it so the range is always valid.
-      const min = c.min ?? (c.max !== undefined && c.max < 0 ? c.max - 10000 : 0);
-      const max = c.max ?? (c.min !== undefined && c.min > 10000 ? c.min + 10000 : 10000);
+      // Account for exclusivity when deciding defaults (e.g. lt(0) exclusive
+      // means the effective upper bound is negative, so default min must also be negative).
+      const effectiveMax = c.max !== undefined && c.maxExclusive ? c.max - 1 : c.max;
+      const effectiveMin = c.min !== undefined && c.minExclusive ? c.min + 1 : c.min;
+      const rawMin = c.min ?? (effectiveMax !== undefined && effectiveMax < 0 ? c.max! - 10000 : 0);
+      const rawMax =
+        c.max ?? (effectiveMin !== undefined && effectiveMin > 10000 ? c.min! + 10000 : 10000);
+      // For exclusive bounds on integers, nudge by 1. For floats, we defer
+      // the nudge to the float generator which handles precision naturally.
+      const min = c.minExclusive && c.isInt ? rawMin + 1 : rawMin;
+      const max = c.maxExclusive && c.isInt ? rawMax - 1 : rawMax;
       // multipleOf must be checked before bare isInt — the step-based generator
       // already produces integers when the step itself is an integer, and checking
       // isInt first would shadow the multipleOf constraint entirely.
       if (c.multipleOf) {
-        const stepMin = Math.ceil(min / c.multipleOf);
-        const stepMax = Math.floor(max / c.multipleOf);
+        let stepMin = Math.ceil(min / c.multipleOf);
+        let stepMax = Math.floor(max / c.multipleOf);
+        // For exclusive bounds, exclude the exact boundary multiples
+        if (c.minExclusive && stepMin * c.multipleOf === rawMin) stepMin++;
+        if (c.maxExclusive && stepMax * c.multipleOf === rawMax) stepMax--;
         // When no valid multiple exists in the range, return the nearest one
         if (stepMin > stepMax) {
-          const nearest = Math.round(((min + max) / 2) / c.multipleOf) * c.multipleOf;
+          const nearest = Math.round((min + max) / 2 / c.multipleOf) * c.multipleOf;
           const decStr = c.multipleOf.toString().split('.')[1];
           const decimals = decStr ? decStr.length : 0;
           return decimals > 0 ? Number(nearest.toFixed(decimals)) : nearest;
@@ -420,22 +445,66 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
         const decimals = decStr ? decStr.length : 0;
         return decimals > 0 ? Number(raw.toFixed(decimals)) : raw;
       }
-      if (c.isInt) return f.number.int({ min: Math.ceil(min), max: Math.floor(max) });
-      return f.number.float({ min, max, multipleOf: 0.01 });
+      if (c.isInt) {
+        const intMin = Math.ceil(min);
+        const intMax = Math.floor(max);
+        // Graceful fallback when no integer exists in the range
+        if (intMin > intMax) return intMin;
+        return f.number.int({ min: intMin, max: intMax });
+      }
+      // For floats with exclusive bounds, nudge inward slightly to avoid
+      // generating the exact boundary value.
+      let floatMin = c.minExclusive ? min + Math.max(Math.abs(min) * 1e-10, 1e-15) : min;
+      let floatMax = c.maxExclusive ? max - Math.max(Math.abs(max) * 1e-10, 1e-15) : max;
+      // Graceful fallback when bounds create an inverted range
+      if (floatMin > floatMax) return (rawMin + rawMax) / 2;
+      // Use a precision step appropriate for the range size
+      const range = floatMax - floatMin;
+      const step = range < 0.1 ? range / 10 : range < 1 ? 0.001 : 0.01;
+      return f.number.float({ min: floatMin, max: floatMax, multipleOf: step });
     }
 
     case 'int': {
       const c = extractNumberConstraints(def);
-      const min = c.min ?? (c.max !== undefined && c.max < 0 ? c.max - 10000 : 0);
-      const max = c.max ?? (c.min !== undefined && c.min > 10000 ? c.min + 10000 : 10000);
-      return f.number.int({ min: Math.ceil(min), max: Math.floor(max) });
+      const effectiveMaxI = c.max !== undefined && c.maxExclusive ? c.max - 1 : c.max;
+      const effectiveMinI = c.min !== undefined && c.minExclusive ? c.min + 1 : c.min;
+      const rawMin =
+        c.min ?? (effectiveMaxI !== undefined && effectiveMaxI < 0 ? c.max! - 10000 : 0);
+      const rawMax =
+        c.max ?? (effectiveMinI !== undefined && effectiveMinI > 10000 ? c.min! + 10000 : 10000);
+      const min = c.minExclusive ? rawMin + 1 : rawMin;
+      const max = c.maxExclusive ? rawMax - 1 : rawMax;
+      const intMin = Math.ceil(min);
+      const intMax = Math.floor(max);
+      if (intMin > intMax) return intMin;
+      return f.number.int({ min: intMin, max: intMax });
     }
 
     case 'boolean':
       return f.datatype.boolean();
 
-    case 'bigint':
-      return BigInt(f.number.int({ min: 0, max: Number.MAX_SAFE_INTEGER }));
+    case 'bigint': {
+      let bigMin = 0n;
+      let bigMax = BigInt(Number.MAX_SAFE_INTEGER);
+      if (def.checks) {
+        for (const check of def.checks) {
+          const cd = check._zod.def;
+          if (cd.check === 'greater_than' && typeof cd.value === 'bigint') {
+            bigMin = cd.inclusive ? cd.value : cd.value + 1n;
+          } else if (cd.check === 'less_than' && typeof cd.value === 'bigint') {
+            bigMax = cd.inclusive ? cd.value : cd.value - 1n;
+          }
+        }
+      }
+      // Convert to number range for faker (safe for ranges within Number.MAX_SAFE_INTEGER)
+      const numMin = Number(
+        bigMin < BigInt(-Number.MAX_SAFE_INTEGER) ? BigInt(-Number.MAX_SAFE_INTEGER) : bigMin,
+      );
+      const numMax = Number(
+        bigMax > BigInt(Number.MAX_SAFE_INTEGER) ? BigInt(Number.MAX_SAFE_INTEGER) : bigMax,
+      );
+      return BigInt(f.number.int({ min: numMin, max: numMax }));
+    }
 
     case 'date': {
       let minDate: Date | undefined;
@@ -488,13 +557,16 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
         const fieldPath = path ? `${path}.${key}` : key;
         const hasOverride = opts.overrides && fieldPath in opts.overrides;
         // Also check for nested overrides (e.g. "address.city" when field is "address")
-        const hasNestedOverride = !hasOverride && opts.overrides &&
+        const hasNestedOverride =
+          !hasOverride &&
+          opts.overrides &&
           Object.keys(opts.overrides).some(k => k.startsWith(fieldPath + '.'));
 
         // Detect optional wrapper — the field's def.type is 'optional' or
         // Zod 4 marks it with the optout sentinel on the internals.
         const isWrappedOptional = fieldSchema._zod.def.type === 'optional';
-        const isMarkedOptional = (fieldSchema._zod as Record<string, unknown>).optout === 'optional';
+        const isMarkedOptional =
+          (fieldSchema._zod as Record<string, unknown>).optout === 'optional';
         const isOptional = isWrappedOptional || isMarkedOptional;
 
         if (isOptional && !hasOverride && !hasNestedOverride) {
@@ -504,9 +576,10 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
         // If the field is wrapped in z.optional(), unwrap it so the optional
         // handler doesn't roll the dice a second time. We already decided
         // above that the field should be present.
-        const schemaToWalk = isWrappedOptional && fieldSchema._zod.def.innerType
-          ? fieldSchema._zod.def.innerType
-          : fieldSchema;
+        const schemaToWalk =
+          isWrappedOptional && fieldSchema._zod.def.innerType
+            ? fieldSchema._zod.def.innerType
+            : fieldSchema;
 
         result[key] = walkSchema(schemaToWalk as ZodSchema, {
           ...opts,
@@ -574,12 +647,15 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
           ([k, v]) => typeof v === 'number' && !/^\d+$/.test(k),
         );
         const keys = hasNumericValues
-          ? Object.entries(entries).filter(([k]) => !/^\d+$/.test(k)).map(([, v]) => v) as (string | number)[]
-          : Object.values(entries) as (string | number)[];
+          ? (Object.entries(entries)
+              .filter(([k]) => !/^\d+$/.test(k))
+              .map(([, v]) => v) as (string | number)[])
+          : (Object.values(entries) as (string | number)[]);
         for (const key of keys) {
-          result[key] = walkSchema(valueSchema, {
+          const keyString = String(key);
+          result[keyString] = walkSchema(valueSchema, {
             ...opts,
-            _path: path ? `${path}.${key}` : key,
+            _path: path ? `${path}.${keyString}` : keyString,
             _depth: depth,
           });
         }
@@ -645,7 +721,9 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
         ([k, v]) => typeof v === 'number' && !/^\d+$/.test(k),
       );
       const values = hasNumericValues
-        ? Object.entries(entries).filter(([k]) => !/^\d+$/.test(k)).map(([, v]) => v)
+        ? Object.entries(entries)
+            .filter(([k]) => !/^\d+$/.test(k))
+            .map(([, v]) => v)
         : Object.values(entries);
       return f.helpers.arrayElement(values);
     }
@@ -673,10 +751,17 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       // If the object handler already decided to include this field, skip the roll
       if (!opts._optionalDecided) {
         const hasDirectOverride = opts.overrides && path && path in opts.overrides;
-        const hasNestedOverride = !hasDirectOverride && opts.overrides && path &&
+        const hasNestedOverride =
+          !hasDirectOverride &&
+          opts.overrides &&
+          path &&
           Object.keys(opts.overrides).some(k => k.startsWith(path + '.'));
         // Also check for unpathed overrides (standalone optional wrapping an object)
-        const hasUnpathedNested = !hasDirectOverride && !hasNestedOverride && !path && opts.overrides &&
+        const hasUnpathedNested =
+          !hasDirectOverride &&
+          !hasNestedOverride &&
+          !path &&
+          opts.overrides &&
           Object.keys(opts.overrides).length > 0;
         if (!hasDirectOverride && !hasNestedOverride && !hasUnpathedNested) {
           if (f.number.float({ min: 0, max: 1 }) > optionalRate) return undefined;
@@ -690,9 +775,19 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       if (!inner) return null;
       // Skip null roll when overrides target this path or nested fields
       const hasDirectOverride = opts.overrides && path && path in opts.overrides;
-      const hasNestedOverride = !hasDirectOverride && opts.overrides && path &&
+      const hasNestedOverride =
+        !hasDirectOverride &&
+        opts.overrides &&
+        path &&
         Object.keys(opts.overrides).some(k => k.startsWith(path + '.'));
-      if (!hasDirectOverride && !hasNestedOverride) {
+      // Also check for unpathed overrides (standalone nullable wrapping an object)
+      const hasUnpathedNested =
+        !hasDirectOverride &&
+        !hasNestedOverride &&
+        !path &&
+        opts.overrides &&
+        Object.keys(opts.overrides).length > 0;
+      if (!hasDirectOverride && !hasNestedOverride && !hasUnpathedNested) {
         // 10% chance of null
         if (f.number.float({ min: 0, max: 1 }) < 0.1) return null;
       }
@@ -767,7 +862,10 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       const leftVal = walkSchema(left, { ...opts, _depth: depth });
       const rightVal = walkSchema(right, { ...opts, _depth: depth });
       if (typeof leftVal === 'object' && typeof rightVal === 'object' && leftVal && rightVal) {
-        return { ...leftVal as Record<string, unknown>, ...rightVal as Record<string, unknown> };
+        return {
+          ...(leftVal as Record<string, unknown>),
+          ...(rightVal as Record<string, unknown>),
+        };
       }
       return leftVal;
     }

@@ -29,7 +29,7 @@ import type { OAuthReauthRepository } from './lib/oauthReauth';
 import type { ResetTokenRepository } from './lib/resetPassword';
 import type { SamlRequestIdRepository } from './lib/samlRequestId';
 import type { SecurityGate } from './lib/securityGate';
-import type { SessionRepository } from './lib/session';
+import type { SessionRepository } from './lib/session/index.js';
 
 /**
  * Per-app auth runtime state, created by `bootstrapAuth` and stored in

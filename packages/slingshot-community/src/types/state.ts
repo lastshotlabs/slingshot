@@ -1,4 +1,5 @@
 import type { PermissionEvaluator } from '@lastshotlabs/slingshot-core';
+import { COMMUNITY_PLUGIN_STATE_KEY as CORE_COMMUNITY_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-core';
 
 /**
  * Plugin state key for slingshot-community.
@@ -6,7 +7,7 @@ import type { PermissionEvaluator } from '@lastshotlabs/slingshot-core';
  * Single-sourced constant — no magic string `'slingshot-community'` in
  * cross-package contracts.
  */
-export const COMMUNITY_PLUGIN_STATE_KEY = 'slingshot-community' as const;
+export const COMMUNITY_PLUGIN_STATE_KEY = CORE_COMMUNITY_PLUGIN_STATE_KEY;
 
 export interface CommunityInteractionsPeer {
   readonly peerKind: 'community';

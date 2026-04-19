@@ -13,7 +13,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import type { AuthAdapter } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from '../config/authConfig';
-import type { SessionRepository } from '../lib/session';
+import type { SessionRepository } from '../lib/session/index.js';
 import { setSuspended } from '../lib/suspension';
 
 /**

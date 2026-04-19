@@ -5,7 +5,13 @@ import path from 'node:path';
 type BuildStep = {
   name: string;
   cwd?: string;
+  cleanTargets?: CleanTarget[];
   commands: string[][];
+};
+
+type CleanTarget = {
+  path: string;
+  preserveEntries?: string[];
 };
 
 type WorkspacePackage = {
@@ -137,6 +143,10 @@ const createAliasRewriteCommand = (tsconfigPath: string): string[] => [
 const packageStepsByLayer: BuildStep[][] = packageBuildLayers.map(layer =>
   layer.map(name => ({
     name: `${name} build output`,
+    cleanTargets: [
+      { path: path.join(packageLookup.get(name)!.dir, 'dist') },
+      { path: path.join(packageLookup.get(name)!.dir, '.tmp', 'tsconfig.build.tsbuildinfo') },
+    ],
     commands: [
       createEmitCommand(path.join(packageLookup.get(name)!.dir, 'tsconfig.build.json')),
       createAliasRewriteCommand(path.join(packageLookup.get(name)!.dir, 'tsconfig.build.json')),
@@ -147,6 +157,10 @@ const packageStepsByLayer: BuildStep[][] = packageBuildLayers.map(layer =>
 const frameworkSteps: BuildStep[] = [
   {
     name: 'framework build output',
+    cleanTargets: [
+      { path: path.join('dist', 'src', 'framework') },
+      { path: path.join('.tmp', 'tsconfig.framework.build.tsbuildinfo') },
+    ],
     commands: [
       createEmitCommand('tsconfig.framework.build.json'),
       createAliasRewriteCommand('tsconfig.framework.build.json'),
@@ -157,6 +171,13 @@ const frameworkSteps: BuildStep[] = [
 const rootSteps: BuildStep[] = [
   {
     name: 'root build output',
+    cleanTargets: [
+      {
+        path: path.join('dist', 'src'),
+        preserveEntries: ['framework'],
+      },
+      { path: path.join('.tmp', 'tsconfig.build.tsbuildinfo') },
+    ],
     commands: [
       createEmitCommand('tsconfig.build.json'),
       createAliasRewriteCommand('tsconfig.build.json'),
@@ -198,6 +219,23 @@ function rewriteFrameworkDeclarationImports(): void {
   }
 }
 
+function cleanTarget(target: CleanTarget): void {
+  if (!fs.existsSync(target.path)) return;
+
+  const preserveEntries = new Set(target.preserveEntries ?? []);
+  const stats = fs.statSync(target.path);
+
+  if (!stats.isDirectory() || preserveEntries.size === 0) {
+    fs.rmSync(target.path, { recursive: true, force: true });
+    return;
+  }
+
+  for (const entry of fs.readdirSync(target.path, { withFileTypes: true })) {
+    if (preserveEntries.has(entry.name)) continue;
+    fs.rmSync(path.join(target.path, entry.name), { recursive: true, force: true });
+  }
+}
+
 async function runStep(step: BuildStep): Promise<void> {
   const startedAt = Date.now();
   console.log(`[build] ${step.name}...`);
@@ -206,6 +244,10 @@ async function runStep(step: BuildStep): Promise<void> {
   }, 10_000);
 
   try {
+    for (const cleanTargetEntry of step.cleanTargets ?? []) {
+      cleanTarget(cleanTargetEntry);
+    }
+
     for (const command of step.commands) {
       const proc = Bun.spawn({
         cmd: command,

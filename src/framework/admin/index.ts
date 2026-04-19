@@ -1,4 +1,4 @@
-import { type AdminPluginConfig, createAdminPlugin } from '@lastshotlabs/slingshot-admin';
+import type { AdminPluginConfig } from '@lastshotlabs/slingshot-admin';
 import {
   createSlingshotAuthAccessProvider,
   createSlingshotManagedUserProvider,
@@ -91,6 +91,7 @@ export function createSlingshotAdminPlugin(config: SlingshotAdminPluginConfig): 
     // not guaranteed). Actual route registration is deferred to setupPost (Rule 17).
 
     async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+      const { createAdminPlugin } = await import('@lastshotlabs/slingshot-admin');
       const pluginState = getPluginState(app);
       const runtime = getAuthRuntimeContext(pluginState);
 

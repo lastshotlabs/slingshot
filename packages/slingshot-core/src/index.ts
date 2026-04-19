@@ -167,6 +167,12 @@ export {
 export type { AuthVariables } from './authVariables';
 export type { AuthRuntimePeer } from './authPeer';
 export { AUTH_PLUGIN_STATE_KEY, getAuthRuntimePeer, getAuthRuntimePeerOrNull } from './authPeer';
+export {
+  CHAT_PLUGIN_STATE_KEY,
+  COMMUNITY_PLUGIN_STATE_KEY,
+  EMBEDS_PLUGIN_STATE_KEY,
+  PUSH_PLUGIN_STATE_KEY,
+} from './pluginKeys';
 
 // --- storageAdapter ---
 /** Upload storage adapter interfaces used by framework and media packages. */
@@ -251,6 +257,12 @@ export {
   getNotificationsState,
   getNotificationsStateOrNull,
 } from './notificationsPeer';
+export type { EmbedsPeer } from './embedsPeer';
+export { getEmbedsPeer, getEmbedsPeerOrNull } from './embedsPeer';
+export type { PushFormatterPeer, PushFormatterPeerFn, PushMessageLike } from './pushPeer';
+export { getPushFormatterPeer, getPushFormatterPeerOrNull } from './pushPeer';
+export type { PublishedInteractionsPeer } from './publishedInteractionsPeer';
+export { getPublishedInteractionsPeerOrNull } from './publishedInteractionsPeer';
 
 // --- pluginState ---
 export type { PluginStateCarrier, PluginStateMap } from './pluginState';

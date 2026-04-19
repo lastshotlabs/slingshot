@@ -208,6 +208,16 @@ describe('MemoryPermissionsAdapter', () => {
     expect(miss).toHaveLength(0);
   });
 
+  test('clear removes all grants', async () => {
+    await adapter.createGrant(baseGrant({ subjectId: 'user-1' }));
+    await adapter.createGrant(baseGrant({ subjectId: 'user-2' }));
+    await adapter.clear();
+    const user1 = await adapter.getGrantsForSubject('user-1');
+    const user2 = await adapter.getGrantsForSubject('user-2');
+    expect(user1).toHaveLength(0);
+    expect(user2).toHaveLength(0);
+  });
+
   test('listGrantsOnResource with tenantId=null returns only global grants', async () => {
     await adapter.createGrant(
       baseGrant({

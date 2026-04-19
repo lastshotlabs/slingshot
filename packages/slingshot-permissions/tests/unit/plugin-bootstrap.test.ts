@@ -57,6 +57,32 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     );
   });
 
+  test('permissionsAdapterFactories.mongo calls infra.getMongo() and creates adapter', () => {
+    const conn = { model: () => ({}) };
+    const infra = { getMongo: () => ({ conn }) };
+    const adapter = permissionsAdapterFactories.mongo(infra as never);
+    expect(typeof adapter.createGrant).toBe('function');
+  });
+
+  test('createPermissionsPlugin rejects redis as a permissions store', async () => {
+    const app = new Hono();
+    const ctx = { pluginState: new Map() };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin();
+
+    await expect(
+      plugin.setupMiddleware?.({
+        app: app as never,
+        config: {
+          resolvedStores: { authStore: 'redis' },
+          storeInfra: {},
+        } as never,
+        bus: {} as never,
+      }),
+    ).rejects.toThrow('Redis is not supported as a permissions store');
+  });
+
   test('createPermissionsPlugin seeds frozen permissions state into pluginState', async () => {
     const app = new Hono();
     const ctx = { pluginState: new Map() };

@@ -6,6 +6,7 @@ import { resolveContext } from '../src/context/contextAccess';
 import { attachContext, getContext, getContextOrNull } from '../src/context/contextStore';
 import { createCoreRegistrar } from '../src/coreRegistrar';
 import { getEmailTemplate, getEmailTemplates } from '../src/emailTemplates';
+import { getEmbedsPeer, getEmbedsPeerOrNull } from '../src/embedsPeer';
 import { getNotificationsState, getNotificationsStateOrNull } from '../src/notificationsPeer';
 import { getPermissionsState, getPermissionsStateOrNull } from '../src/permissions';
 import {
@@ -13,6 +14,7 @@ import {
   getPluginStateFromRequest,
   getPluginStateOrNull,
 } from '../src/pluginState';
+import { getPushFormatterPeer, getPushFormatterPeerOrNull } from '../src/pushPeer';
 import { getFingerprintBuilder, getRateLimitAdapter } from '../src/rateLimit';
 import { getRouteAuth, getRouteAuthOrNull } from '../src/routeAuth';
 import { getSearchPluginRuntime, getSearchPluginRuntimeOrNull } from '../src/searchPluginRuntime';
@@ -250,7 +252,21 @@ describe('slingshot-core context accessors', () => {
           registerDeliveryAdapter() {},
         },
       ],
+      [
+        'slingshot-embeds',
+        {
+          unfurl(urls: string[]) {
+            return Promise.resolve(urls.map(url => ({ url })));
+          },
+        },
+      ],
       ['slingshot-permissions', permissionsState],
+      [
+        'slingshot-push',
+        {
+          registerFormatter() {},
+        },
+      ],
       [
         'slingshot-search',
         {
@@ -273,10 +289,14 @@ describe('slingshot-core context accessors', () => {
     expect(getPluginStateOrNull({ pluginState })).toBe(pluginState);
     expect(getAuthRuntimePeer(app)).toEqual({ adapter: {} });
     expect(getAuthRuntimePeerOrNull(app)).toEqual({ adapter: {} });
+    expect(getEmbedsPeer(app)).toBe(pluginState.get('slingshot-embeds'));
+    expect(getEmbedsPeerOrNull(app)).toBe(pluginState.get('slingshot-embeds'));
     expect(getNotificationsState(app)).toBe(pluginState.get('slingshot-notifications'));
     expect(getNotificationsStateOrNull(app)).toBe(pluginState.get('slingshot-notifications'));
     expect(getPermissionsState(app)).toBe(permissionsState);
     expect(getPermissionsStateOrNull(app)).toBe(permissionsState);
+    expect(getPushFormatterPeer(app)).toBe(pluginState.get('slingshot-push'));
+    expect(getPushFormatterPeerOrNull(app)).toBe(pluginState.get('slingshot-push'));
     expect(getSearchPluginRuntime(app)).toBe(pluginState.get('slingshot-search'));
     expect(getSearchPluginRuntimeOrNull(app)).toBe(pluginState.get('slingshot-search'));
 
@@ -295,18 +315,24 @@ describe('slingshot-core context accessors', () => {
 
     expect(getPluginStateOrNull(app)).toBeNull();
     expect(getAuthRuntimePeerOrNull(app)).toBeNull();
+    expect(getEmbedsPeerOrNull(app)).toBeNull();
     expect(getNotificationsStateOrNull(app)).toBeNull();
     expect(getPermissionsStateOrNull(app)).toBeNull();
+    expect(getPushFormatterPeerOrNull(app)).toBeNull();
     expect(getSearchPluginRuntimeOrNull(app)).toBeNull();
     expect(() => getPluginState(app)).toThrow('pluginState is not available for this app');
     expect(() => getAuthRuntimePeer(app)).toThrow(
       'auth runtime peer is not available in pluginState',
     );
+    expect(() => getEmbedsPeer(app)).toThrow('embeds peer is not available in pluginState');
     expect(() => getNotificationsState(app)).toThrow(
       'notifications peer state is not available in pluginState',
     );
     expect(() => getPermissionsState(app)).toThrow(
       'permissions state is not available in pluginState',
+    );
+    expect(() => getPushFormatterPeer(app)).toThrow(
+      'push formatter peer is not available in pluginState',
     );
     expect(() => getSearchPluginRuntime(app)).toThrow(
       'search runtime is not available in pluginState',

@@ -1,7 +1,7 @@
 import { createVerificationToken } from '@auth/lib/emailVerification';
 import { type TokenClaims, signToken, verifyToken } from '@auth/lib/jwt';
 import { createMfaChallenge } from '@auth/lib/mfaChallenge';
-import type { SessionMetadata } from '@auth/lib/session';
+import type { SessionMetadata } from '../lib/session/index.js';
 import { getSuspended } from '@auth/lib/suspension';
 import { generateEmailOtpCode, generateWebAuthnAuthenticationOptions } from '@auth/services/mfa';
 import {

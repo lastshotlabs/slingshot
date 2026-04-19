@@ -1346,6 +1346,94 @@ describe('numeric nativeEnum', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Bigint constraints
+// ---------------------------------------------------------------------------
+
+describe('bigint constraints', () => {
+  it('respects min and max bigint bounds', () => {
+    const schema = z.bigint().min(100n).max(999n);
+    for (let i = 0; i < 100; i++) {
+      const val = generateFromSchema<bigint>(schema as any);
+      expect(typeof val).toBe('bigint');
+      expect(val).toBeGreaterThanOrEqual(100n);
+      expect(val).toBeLessThanOrEqual(999n);
+    }
+  });
+
+  it('respects positive() constraint', () => {
+    const schema = z.bigint().positive();
+    for (let i = 0; i < 100; i++) {
+      const val = generateFromSchema<bigint>(schema as any);
+      expect(val).toBeGreaterThan(0n);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Exclusive number bounds
+// ---------------------------------------------------------------------------
+
+describe('exclusive number bounds', () => {
+  it('handles tiny exclusive float ranges without crashing', () => {
+    const schema = z.number().gt(0).lt(0.01);
+    for (let i = 0; i < 100; i++) {
+      const val = generateFromSchema<number>(schema as any);
+      expect(val).toBeGreaterThan(0);
+      expect(val).toBeLessThan(0.01);
+    }
+  });
+
+  it('handles empty int range gracefully (gt(5).lt(6).int())', () => {
+    const schema = z.number().gt(5).lt(6).int();
+    // Should not throw — no valid integer exists, returns nearest
+    expect(() => generateFromSchema<number>(schema as any)).not.toThrow();
+  });
+
+  it('negative() produces negative values', () => {
+    const schema = z.number().negative();
+    for (let i = 0; i < 100; i++) {
+      const val = generateFromSchema<number>(schema as any);
+      expect(val).toBeLessThan(0);
+    }
+  });
+
+  it('positive() produces positive values', () => {
+    const schema = z.number().positive();
+    for (let i = 0; i < 100; i++) {
+      const val = generateFromSchema<number>(schema as any);
+      expect(val).toBeGreaterThan(0);
+    }
+  });
+
+  it('gt(0).lt(1).multipleOf(0.1) produces valid values', () => {
+    const schema = z.number().gt(0).lt(1).multipleOf(0.1);
+    for (let i = 0; i < 100; i++) {
+      const val = generateFromSchema<number>(schema as any);
+      expect(val).toBeGreaterThan(0);
+      expect(val).toBeLessThan(1);
+      expect(Math.round(val * 10) / 10).toBeCloseTo(val);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Standalone nullable with unpathed overrides
+// ---------------------------------------------------------------------------
+
+describe('standalone nullable + overrides', () => {
+  it('never returns null when overrides target inner fields', () => {
+    const schema = z.nullable(z.object({ name: z.string() }));
+    for (let i = 0; i < 200; i++) {
+      const result = generateFromSchema<any>(schema as any, {
+        overrides: { name: 'Test' },
+      });
+      expect(result).not.toBeNull();
+      expect(result.name).toBe('Test');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // generateExample with non-serializable types
 // ---------------------------------------------------------------------------
 

@@ -29,4 +29,4 @@ export {
   disconnectRedis,
   getRedisConnectionOptions,
   getRedisFromApp,
-} from '../lib/redis';
+} from '../lib/redis.js';

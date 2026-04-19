@@ -3,9 +3,7 @@ import type {
   PluginStateCarrier,
   PluginStateMap,
 } from '@lastshotlabs/slingshot-core';
-import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
-
-const PUSH_PLUGIN_STATE_KEY = 'slingshot-push' as const;
+import { getPushFormatterPeerOrNull } from '@lastshotlabs/slingshot-core';
 
 export type PushFormatterFn = (notification: NotificationRecord) => {
   title: string;
@@ -21,13 +19,5 @@ export interface PushFormatterRegistrar {
 export function probePushFormatterRegistrar(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): PushFormatterRegistrar | null {
-  const pluginState = getPluginStateOrNull(input);
-  const state = pluginState?.get(PUSH_PLUGIN_STATE_KEY) as
-    | { registerFormatter?: PushFormatterRegistrar['registerFormatter'] }
-    | null
-    | undefined;
-  if (!state || typeof state.registerFormatter !== 'function') {
-    return null;
-  }
-  return state as PushFormatterRegistrar;
+  return getPushFormatterPeerOrNull(input) as PushFormatterRegistrar | null;
 }

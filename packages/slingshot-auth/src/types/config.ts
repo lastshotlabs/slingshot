@@ -34,6 +34,28 @@ import type { LockoutConfig } from '../lib/accountLockout';
 import type { OAuthProviderConfig } from '../lib/oauth';
 
 export type { StoreType };
+export type {
+  AccountDeletionConfig,
+  AuthCookieConfig,
+  AuthRateLimitConfig,
+  AuthSessionPolicyConfig,
+  BreachedPasswordConfig,
+  ConcealRegistrationConfig,
+  CsrfCookieConfig,
+  EmailVerificationConfig,
+  JwtConfig,
+  MagicLinkConfig,
+  MfaConfig,
+  MfaEmailOtpConfig,
+  MfaWebAuthnConfig,
+  OidcConfig,
+  PasswordResetConfig,
+  PrimaryField,
+  RefreshTokenConfig,
+  SamlConfig,
+  ScimConfig,
+  StepUpConfig,
+} from '../config/authConfig';
 
 /**
  * Database/store connection configuration for `slingshot-auth`.

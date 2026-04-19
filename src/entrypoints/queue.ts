@@ -29,7 +29,7 @@
  * ```
  */
 
-export { createQueueFactory } from '../lib/queue';
+export { createQueueFactory } from '../lib/queue.js';
 export type {
   Job,
   SlingshotWorker,
@@ -37,4 +37,4 @@ export type {
   DLQOptions,
   QueueFactory,
   QueueRedisCredentials,
-} from '../lib/queue';
+} from '../lib/queue.js';

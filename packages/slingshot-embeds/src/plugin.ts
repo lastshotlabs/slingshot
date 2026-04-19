@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { validatePluginConfig } from '@lastshotlabs/slingshot-core';
+import {
+  EMBEDS_PLUGIN_STATE_KEY,
+  getPluginStateOrNull,
+  validatePluginConfig,
+} from '@lastshotlabs/slingshot-core';
 import { createEmbedCache } from './lib/cache';
 import { validateUrl } from './lib/ssrfGuard';
 import { unfurl } from './lib/unfurl';
@@ -39,11 +43,48 @@ export function createEmbedsPlugin(rawConfig?: unknown): SlingshotPlugin {
     maxEntries: frozenConfig.cacheMaxEntries,
   });
 
+  async function unfurlUrls(urls: string[]): Promise<unknown[]> {
+    const results: unknown[] = [];
+    for (const targetUrl of urls) {
+      const validation = validateUrl(targetUrl, {
+        allowedDomains: frozenConfig.allowedDomains,
+        blockedDomains: frozenConfig.blockedDomains,
+      });
+      if (!validation.valid) {
+        continue;
+      }
+
+      const cached = cache.get(targetUrl);
+      if (cached) {
+        results.push(cached);
+        continue;
+      }
+
+      try {
+        const result = await unfurl(targetUrl, {
+          timeoutMs: frozenConfig.timeoutMs,
+          maxResponseBytes: frozenConfig.maxResponseBytes,
+        });
+        cache.set(targetUrl, result);
+        results.push(result);
+      } catch {
+        // Optional peer integration must fail closed per URL.
+      }
+    }
+    return results;
+  }
+
   return {
-    name: 'slingshot-embeds',
+    name: EMBEDS_PLUGIN_STATE_KEY,
 
     setupRoutes({ app }: PluginSetupContext) {
       const router = new Hono();
+      getPluginStateOrNull(app)?.set(
+        EMBEDS_PLUGIN_STATE_KEY,
+        Object.freeze({
+          unfurl: unfurlUrls,
+        }),
+      );
 
       router.post('/unfurl', async c => {
         let body: unknown;
@@ -82,11 +123,10 @@ export function createEmbedsPlugin(rawConfig?: unknown): SlingshotPlugin {
 
         // Unfurl
         try {
-          const result = await unfurl(targetUrl, {
-            timeoutMs: frozenConfig.timeoutMs,
-            maxResponseBytes: frozenConfig.maxResponseBytes,
-          });
-          cache.set(targetUrl, result);
+          const [result] = await unfurlUrls([targetUrl]);
+          if (!result) {
+            return c.json({ error: 'Failed to unfurl URL: Unknown error' }, 502);
+          }
           return c.json(result);
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Unknown error';

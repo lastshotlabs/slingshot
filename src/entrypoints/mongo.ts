@@ -36,11 +36,11 @@ export {
   disconnectMongo,
   getMongoFromApp,
   getMongooseModule,
-} from '../lib/mongo';
-export type { MongoConnections } from '../lib/mongo';
+} from '../lib/mongo.js';
+export type { MongoConnections } from '../lib/mongo.js';
 export { createMongoAuthAdapter, createAuthUserModel } from '@lastshotlabs/slingshot-auth';
-export { zodToMongoose } from '../framework/lib/zodToMongoose';
+export { zodToMongoose } from '../framework/lib/zodToMongoose.js';
 export type {
   ZodToMongooseConfig,
   ZodToMongooseRefConfig,
-} from '../framework/lib/zodToMongoose';
+} from '../framework/lib/zodToMongoose.js';

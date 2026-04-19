@@ -12,7 +12,7 @@ import { getContext } from '@lastshotlabs/slingshot-core';
 import type { CreateServerConfig } from './server';
 import { createServer, getServerContext } from './server';
 
-export { resetMetrics } from '@framework/metrics/registry';
+export { resetMetrics } from './framework/metrics/registry.js';
 
 export interface E2EServerHandle {
   server: { port: number; stop(close?: boolean): void | Promise<void> };

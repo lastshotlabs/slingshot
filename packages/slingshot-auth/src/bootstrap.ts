@@ -500,7 +500,7 @@ export async function bootstrapAuth(
   const { mfaChallengeFactories } = await import('./lib/mfaChallenge');
   const { verificationTokenFactories } = await import('./lib/emailVerification');
   const { resetTokenFactories } = await import('./lib/resetPassword');
-  const { sessionFactories } = await import('./lib/session');
+  const { sessionFactories } = await import('./lib/session/index.js');
   const { createCredentialStuffingService, credentialStuffingFactories } =
     await import('./lib/credentialStuffing');
   const { createLockoutService, lockoutRepositoryFactories } = await import('./lib/accountLockout');

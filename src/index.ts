@@ -20,8 +20,8 @@ export { getMongoFromApp, getMongooseModule } from './lib/mongo';
 export type { MongoCredentials } from './lib/mongo';
 
 // Admin — framework convenience wrapper (slingshot-auth-backed defaults)
-export { createSlingshotAdminPlugin } from '@framework/admin/index';
-export type { SlingshotAdminPluginConfig } from '@framework/admin/index';
+export { createSlingshotAdminPlugin } from './framework/admin/index.js';
+export type { SlingshotAdminPluginConfig } from './framework/admin/index.js';
 
 // Plugin contracts and event bus
 export type {
@@ -78,8 +78,8 @@ export type {
 } from './app';
 export { createChildSpan } from './app';
 export type { CreateServerConfig, WsConfig, SseConfig, SseEndpointConfig } from './server';
-export type { SseClientData, SseFilter } from '@framework/sse/index';
-export { createSseUpgradeHandler } from '@framework/sse/index';
+export type { SseClientData, SseFilter } from './framework/sse/index.js';
+export { createSseUpgradeHandler } from './framework/sse/index.js';
 
 // Core utilities
 export { HttpError, ValidationError } from '@lastshotlabs/slingshot-core';
@@ -102,10 +102,13 @@ export {
   registerSchema,
   registerSchemas,
 } from '@lastshotlabs/slingshot-core';
-export { zodToMongoose } from '@framework/lib/zodToMongoose';
-export type { ZodToMongooseConfig, ZodToMongooseRefConfig } from '@framework/lib/zodToMongoose';
-export { createDtoMapper } from '@framework/lib/createDtoMapper';
-export type { DtoMapperConfig } from '@framework/lib/createDtoMapper';
+export { zodToMongoose } from './framework/lib/zodToMongoose.js';
+export type {
+  ZodToMongooseConfig,
+  ZodToMongooseRefConfig,
+} from './framework/lib/zodToMongoose.js';
+export { createDtoMapper } from './framework/lib/createDtoMapper.js';
+export type { DtoMapperConfig } from './framework/lib/createDtoMapper.js';
 export type {
   AppEnv,
   AppVariables,
@@ -125,41 +128,45 @@ export {
   createPresignedUrl,
   verifyPresignedUrl,
 } from './lib/signing';
-export { log } from '@framework/lib/logger';
-export { validate } from '@framework/lib/validate';
+export { log } from './framework/lib/logger.js';
+export { validate } from './framework/lib/validate.js';
 export { getClientIp } from '@lastshotlabs/slingshot-core';
 
 // Framework middleware
-export { idempotent } from '@framework/lib/idempotency';
-export type { IdempotencyOptions } from '@framework/lib/idempotency';
-export { botProtection } from '@framework/middleware/botProtection';
-export type { BotProtectionOptions } from '@framework/middleware/botProtection';
-export { rateLimit } from '@framework/middleware/rateLimit';
-export type { RateLimitOptions } from '@framework/middleware/rateLimit';
-export { cacheResponse, bustCache, bustCachePattern } from '@framework/middleware/cacheResponse';
-export { webhookAuth } from '@framework/middleware/webhookAuth';
+export { idempotent } from './framework/lib/idempotency.js';
+export type { IdempotencyOptions } from './framework/lib/idempotency.js';
+export { botProtection } from './framework/middleware/botProtection.js';
+export type { BotProtectionOptions } from './framework/middleware/botProtection.js';
+export { rateLimit } from './framework/middleware/rateLimit.js';
+export type { RateLimitOptions } from './framework/middleware/rateLimit.js';
+export {
+  cacheResponse,
+  bustCache,
+  bustCachePattern,
+} from './framework/middleware/cacheResponse.js';
+export { webhookAuth } from './framework/middleware/webhookAuth.js';
 export type {
   WebhookAuthOptions,
   WebhookTimestampOptions,
-} from '@framework/middleware/webhookAuth';
-export { requireSignedRequest } from '@framework/middleware/requestSigning';
-export type { RequestSigningOptions } from '@framework/middleware/requestSigning';
-export { auditLog } from '@framework/middleware/auditLog';
-export type { AuditLogMiddlewareOptions } from '@framework/middleware/auditLog';
-export { requestId } from '@framework/middleware/requestId';
-export { requestLogger } from '@framework/middleware/requestLogger';
+} from './framework/middleware/webhookAuth.js';
+export { requireSignedRequest } from './framework/middleware/requestSigning.js';
+export type { RequestSigningOptions } from './framework/middleware/requestSigning.js';
+export { auditLog } from './framework/middleware/auditLog.js';
+export type { AuditLogMiddlewareOptions } from './framework/middleware/auditLog.js';
+export { requestId } from './framework/middleware/requestId.js';
+export { requestLogger } from './framework/middleware/requestLogger.js';
 export type {
   RequestLogEntry,
   RequestLoggerOptions,
   LogLevel,
-} from '@framework/middleware/requestLogger';
-export { metricsCollector } from '@framework/middleware/metrics';
-export type { MetricsMiddlewareOptions } from '@framework/middleware/metrics';
-export { requireCaptcha } from '@framework/middleware/captcha';
+} from './framework/middleware/requestLogger.js';
+export { metricsCollector } from './framework/middleware/metrics.js';
+export type { MetricsMiddlewareOptions } from './framework/middleware/metrics.js';
+export { requireCaptcha } from './framework/middleware/captcha.js';
 export type { CaptchaConfig, CaptchaProvider } from '@lastshotlabs/slingshot-core';
 
 // Audit log
-export { createAuditLogProvider } from '@framework/auditLog';
+export { createAuditLogProvider } from './framework/auditLog/index.js';
 export {
   createMetricsState,
   incrementCounter,
@@ -167,15 +174,20 @@ export {
   registerGaugeCallback,
   serializeMetrics,
   closeMetricsQueues,
-} from '@framework/metrics/registry';
+} from './framework/metrics/registry.js';
 export type { AuditLogEntry } from '@lastshotlabs/slingshot-core';
-export type { AuditLogOptions, AuditLogQuery } from '@framework/auditLog';
+export type { AuditLogOptions, AuditLogQuery } from './framework/auditLog/index.js';
 
 // WebSocket — consumer API
-export { createWsUpgradeHandler } from '@framework/ws/index';
-export type { SocketData } from '@framework/ws/index';
-export { publish, getSubscriptions, getRooms, getRoomSubscribers } from '@framework/ws/rooms';
-export type { PublishOptions } from '@framework/ws/rooms';
+export { createWsUpgradeHandler } from './framework/ws/index.js';
+export type { SocketData } from './framework/ws/index.js';
+export {
+  publish,
+  getSubscriptions,
+  getRooms,
+  getRoomSubscribers,
+} from './framework/ws/rooms.js';
+export type { PublishOptions } from './framework/ws/rooms.js';
 export type {
   WsEventContext,
   WsEventHandler,
@@ -185,21 +197,25 @@ export type {
 } from './config/types/ws';
 
 // WebSocket — Transport
-export type { WsTransportAdapter } from '@framework/ws/transport';
-export { InMemoryTransport } from '@framework/ws/transport';
-export { createRedisTransport } from '@framework/ws/redisTransport';
-export type { RedisTransportOptions } from '@framework/ws/redisTransport';
+export type { WsTransportAdapter } from './framework/ws/transport.js';
+export { InMemoryTransport } from './framework/ws/transport.js';
+export { createRedisTransport } from './framework/ws/redisTransport.js';
+export type { RedisTransportOptions } from './framework/ws/redisTransport.js';
 
 // WebSocket — Heartbeat (config type only)
-export type { HeartbeatConfig } from '@framework/ws/heartbeat';
+export type { HeartbeatConfig } from './framework/ws/heartbeat.js';
 
 // WebSocket — Presence (consumer API)
-export { getRoomPresence, getUserPresence } from '@framework/ws/presence';
+export { getRoomPresence, getUserPresence } from './framework/ws/presence.js';
 
 // Tenancy
-export { createTenantService } from '@framework/tenancy/service';
-export type { TenantInfo, CreateTenantOptions, TenantService } from '@framework/tenancy/service';
-export { invalidateTenantCache } from '@framework/middleware/tenant';
+export { createTenantService } from './framework/tenancy/service.js';
+export type {
+  TenantInfo,
+  CreateTenantOptions,
+  TenantService,
+} from './framework/tenancy/service.js';
+export { invalidateTenantCache } from './framework/middleware/tenant.js';
 
 // Pagination helpers
 export {
@@ -210,29 +226,33 @@ export {
   parseCursorParams,
   cursorResponse,
   maybeSignCursor,
-} from '@framework/lib/pagination';
+} from './framework/lib/pagination.js';
 export type {
   OffsetParamDefaults,
   ParsedOffsetParams,
   CursorParamDefaults,
   ParsedCursorParams,
   CursorResult,
-} from '@framework/lib/pagination';
+} from './framework/lib/pagination.js';
 
 // Upload — consumer API
-export { handleUpload } from '@framework/middleware/upload';
-export type { UploadMiddlewareOptions } from '@framework/middleware/upload';
-export { parseUpload } from '@framework/upload/upload';
-export type { UploadOpts } from '@framework/upload/upload';
-export { registerUpload, getUploadRecord, deleteUploadRecord } from '@framework/upload/registry';
+export { handleUpload } from './framework/middleware/upload.js';
+export type { UploadMiddlewareOptions } from './framework/middleware/upload.js';
+export { parseUpload } from './framework/upload/upload.js';
+export type { UploadOpts } from './framework/upload/upload.js';
+export {
+  registerUpload,
+  getUploadRecord,
+  deleteUploadRecord,
+} from './framework/upload/registry.js';
 export type { UploadRecord } from '@lastshotlabs/slingshot-core';
 export type { StorageAdapter, UploadResult } from '@lastshotlabs/slingshot-core';
 export type { UploadConfig, PresignedUrlConfig } from './app';
-export { memoryStorage } from '@framework/adapters/memoryStorage';
-export { localStorage } from '@framework/adapters/localStorage';
-export type { LocalStorageConfig } from '@framework/adapters/localStorage';
-export { s3Storage } from '@framework/adapters/s3Storage';
-export type { S3StorageConfig } from '@framework/adapters/s3Storage';
+export { memoryStorage } from './framework/adapters/memoryStorage.js';
+export { localStorage } from './framework/adapters/localStorage.js';
+export type { LocalStorageConfig } from './framework/adapters/localStorage.js';
+export { s3Storage } from './framework/adapters/s3Storage.js';
+export type { S3StorageConfig } from './framework/adapters/s3Storage.js';
 
 // Config-driven entity persistence
 export { defineEntity, field, index, relation } from '@lastshotlabs/slingshot-core';

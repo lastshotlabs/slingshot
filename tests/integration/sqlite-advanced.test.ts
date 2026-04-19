@@ -292,4 +292,19 @@ describe('SQLite: cache pattern deletion', () => {
     expect(sqliteResult.getCache('cache:test:users:2')).toBeNull();
     expect(sqliteResult.getCache('cache:test:products:1')).toBe('c');
   });
+
+  it('treats LIKE metacharacters and backslashes literally', async () => {
+    sqliteResult.setCache('cache:test:rate%limit_key', 'keep');
+    sqliteResult.setCache('cache:test:rate%limit_key:1', 'delete');
+    sqliteResult.setCache('cache:test:path\\to\\file', 'keep-path');
+    sqliteResult.setCache('cache:test:path\\to\\file:1', 'delete-path');
+
+    sqliteResult.delCachePattern('cache:test:rate%limit_key:*');
+    sqliteResult.delCachePattern('cache:test:path\\to\\file:*');
+
+    expect(sqliteResult.getCache('cache:test:rate%limit_key')).toBe('keep');
+    expect(sqliteResult.getCache('cache:test:rate%limit_key:1')).toBeNull();
+    expect(sqliteResult.getCache('cache:test:path\\to\\file')).toBe('keep-path');
+    expect(sqliteResult.getCache('cache:test:path\\to\\file:1')).toBeNull();
+  });
 });

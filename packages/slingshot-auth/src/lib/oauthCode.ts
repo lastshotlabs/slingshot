@@ -14,6 +14,7 @@ import {
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { OAuthCodePayload } from '../types/oauthCode';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -301,19 +302,16 @@ export function createMongoOAuthCodeRepository(
  * const codeRepo = createPostgresOAuthCodeRepository(pool);
  */
 export function createPostgresOAuthCodeRepository(pool: import('pg').Pool): OAuthCodeRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_oauth_codes (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_oauth_codes (
       code_hash  TEXT PRIMARY KEY,
       payload    TEXT NOT NULL,
       expires_at BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_oauth_codes_expires_at ON auth_oauth_codes(expires_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async store(hash, payload, ttl) {

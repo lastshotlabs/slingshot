@@ -4,6 +4,8 @@
 import type { IdempotencyAdapter, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
+import { createSqliteInitializer } from './sqliteInit';
 
 interface IdempotencyRecord {
   status: number;
@@ -233,10 +235,7 @@ export function createMongoIdempotencyAdapter(
  * @returns A SQLite-backed `IdempotencyAdapter`.
  */
 export function createSqliteIdempotencyAdapter(db: SqliteIdempotencyDatabase): IdempotencyAdapter {
-  let initialized = false;
-
-  function ensureTable() {
-    if (initialized) return;
+  const ensureTable = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS idempotency (
       key       TEXT PRIMARY KEY,
       status    INTEGER NOT NULL,
@@ -252,8 +251,7 @@ export function createSqliteIdempotencyAdapter(db: SqliteIdempotencyDatabase): I
     if (!columns.includes('requestFingerprint')) {
       db.run('ALTER TABLE idempotency ADD COLUMN requestFingerprint TEXT');
     }
-    initialized = true;
-  }
+  });
 
   return {
     get(key) {
@@ -293,6 +291,13 @@ export function createSqliteIdempotencyAdapter(db: SqliteIdempotencyDatabase): I
 // ---------------------------------------------------------------------------
 
 type PgPool = {
+  connect(): Promise<{
+    query(
+      sql: string,
+      params?: unknown[],
+    ): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+    release(): void;
+  }>;
   query(
     sql: string,
     params?: unknown[],
@@ -313,11 +318,8 @@ type PgPool = {
  *   access.
  */
 export function createPostgresIdempotencyAdapter(pool: PgPool): IdempotencyAdapter {
-  let initialized = false;
-
-  async function ensureTable(): Promise<void> {
-    if (initialized) return;
-    await pool.query(`
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`
       CREATE TABLE IF NOT EXISTS slingshot_idempotency (
         key        TEXT PRIMARY KEY,
         status     INTEGER NOT NULL,
@@ -327,11 +329,10 @@ export function createPostgresIdempotencyAdapter(pool: PgPool): IdempotencyAdapt
         request_fingerprint TEXT
       )
     `);
-    await pool.query(
+    await client.query(
       'ALTER TABLE slingshot_idempotency ADD COLUMN IF NOT EXISTS request_fingerprint TEXT',
     );
-    initialized = true;
-  }
+  });
 
   return {
     async get(key) {

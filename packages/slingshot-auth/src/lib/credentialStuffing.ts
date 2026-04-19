@@ -1,6 +1,7 @@
  
 import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -440,23 +441,20 @@ export function createMongoCredentialStuffingRepository(
 export function createPostgresCredentialStuffingRepository(
   pool: import('pg').Pool,
 ): CredentialStuffingRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_credential_stuffing (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_credential_stuffing (
       bucket_key TEXT    NOT NULL,
       member     TEXT    NOT NULL,
       expires_at BIGINT  NOT NULL,
       PRIMARY KEY (bucket_key, member)
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_credential_stuffing_expires_at ON auth_credential_stuffing(expires_at)',
     );
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_credential_stuffing_bucket_key ON auth_credential_stuffing(bucket_key)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async addToSet(key, member, windowMs) {

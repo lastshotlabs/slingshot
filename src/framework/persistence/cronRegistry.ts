@@ -6,6 +6,8 @@
 // ---------------------------------------------------------------------------
 import type { CronRegistryRepository } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
+import { createSqliteInitializer } from './sqliteInit';
 
 // ---------------------------------------------------------------------------
 // Memory
@@ -103,17 +105,21 @@ export function createSqliteCronRegistry(
     query<T>(sql: string): { all(...args: unknown[]): T[] };
   },
 ): CronRegistryRepository {
-  let initialized = false;
+  let initializer: (() => void) | null = null;
 
   function ensureTable() {
-    if (initialized) return;
-    getDb().run(
-      `CREATE TABLE IF NOT EXISTS cron_scheduler_registry (
+    if (!initializer) {
+      const initDb = getDb();
+      initializer = createSqliteInitializer(initDb, () => {
+        initDb.run(
+          `CREATE TABLE IF NOT EXISTS cron_scheduler_registry (
         name TEXT NOT NULL,
         PRIMARY KEY (name)
       )`,
-    );
-    initialized = true;
+        );
+      });
+    }
+    initializer();
   }
 
   return {
@@ -212,6 +218,13 @@ export function createMongoCronRegistry(
 // ---------------------------------------------------------------------------
 
 type PgPool = {
+  connect(): Promise<{
+    query(
+      sql: string,
+      params?: unknown[],
+    ): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+    release(): void;
+  }>;
   query(
     sql: string,
     params?: unknown[],
@@ -235,18 +248,14 @@ type PgPool = {
  */
 export function createPostgresCronRegistry(pool: PgPool, appName: string): CronRegistryRepository {
   const docId = appName || 'default';
-  let initialized = false;
-
-  async function ensureTable(): Promise<void> {
-    if (initialized) return;
-    await pool.query(`
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`
       CREATE TABLE IF NOT EXISTS slingshot_cron_registry (
         id    TEXT PRIMARY KEY,
         names TEXT[] NOT NULL DEFAULT '{}'
       )
     `);
-    initialized = true;
-  }
+  });
 
   return {
     async getAll() {

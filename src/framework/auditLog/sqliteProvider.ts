@@ -4,6 +4,9 @@ import type {
   RuntimeSqliteDatabase,
 } from '@lastshotlabs/slingshot-core';
 import { decodeCursorOrThrow, encodeCursor } from './cursor';
+import { createSqliteInitializer } from '../persistence/sqliteInit';
+
+const sqliteAuditLogInitializers = new WeakMap<RuntimeSqliteDatabase, () => void>();
 
 function isAuditMeta(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -16,27 +19,34 @@ function parseAuditMeta(rawMeta: string | null): Record<string, unknown> | undef
 }
 
 export function ensureSqliteTable(db: RuntimeSqliteDatabase): void {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS audit_logs (
-      id         TEXT PRIMARY KEY,
-      userId     TEXT,
-      sessionId  TEXT,
-      tenantId   TEXT,
-      method     TEXT NOT NULL,
-      path       TEXT NOT NULL,
-      status     INTEGER NOT NULL,
-      ip         TEXT,
-      userAgent  TEXT,
-      action     TEXT,
-      resource   TEXT,
-      resourceId TEXT,
-      meta       TEXT,
-      createdAt  TEXT NOT NULL
-    )
-  `);
-  db.run('CREATE INDEX IF NOT EXISTS idx_al_user   ON audit_logs(userId,   createdAt)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_al_tenant ON audit_logs(tenantId, createdAt)');
-  db.run('CREATE INDEX IF NOT EXISTS idx_al_path   ON audit_logs(path)');
+  let initializer = sqliteAuditLogInitializers.get(db);
+  if (!initializer) {
+    initializer = createSqliteInitializer(db, () => {
+      db.run(`
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id         TEXT PRIMARY KEY,
+          userId     TEXT,
+          sessionId  TEXT,
+          tenantId   TEXT,
+          method     TEXT NOT NULL,
+          path       TEXT NOT NULL,
+          status     INTEGER NOT NULL,
+          ip         TEXT,
+          userAgent  TEXT,
+          action     TEXT,
+          resource   TEXT,
+          resourceId TEXT,
+          meta       TEXT,
+          createdAt  TEXT NOT NULL
+        )
+      `);
+      db.run('CREATE INDEX IF NOT EXISTS idx_al_user   ON audit_logs(userId,   createdAt)');
+      db.run('CREATE INDEX IF NOT EXISTS idx_al_tenant ON audit_logs(tenantId, createdAt)');
+      db.run('CREATE INDEX IF NOT EXISTS idx_al_path   ON audit_logs(path)');
+    });
+    sqliteAuditLogInitializers.set(db, initializer);
+  }
+  initializer();
 }
 
 export function createSqliteAuditLogProvider(

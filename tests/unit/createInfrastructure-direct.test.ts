@@ -8,6 +8,10 @@ const actualRedis = await import('@lib/redis');
 const connectPostgresMock = mock(async (connectionString: string) => ({
   pool: {
     query: async () => ({ rows: [], rowCount: 0 }),
+    connect: async () => ({
+      query: async () => ({ rows: [], rowCount: 0 }),
+      release: () => {},
+    }),
   },
   connectionString,
 }));
@@ -632,7 +636,14 @@ describe('createInfrastructure direct', () => {
     // the error is swallowed (best-effort).
     const poolEndMock = mock(async () => { throw new Error('pg pool.end failed'); });
     connectPostgresMock.mockResolvedValueOnce({
-      pool: { end: poolEndMock, query: async () => ({ rows: [], rowCount: 0 }) },
+      pool: {
+        end: poolEndMock,
+        query: async () => ({ rows: [], rowCount: 0 }),
+        connect: async () => ({
+          query: async () => ({ rows: [], rowCount: 0 }),
+          release: () => {},
+        }),
+      },
       connectionString: 'postgres://test',
     } as any);
     const createInfrastructure = await loadCreateInfrastructure();
@@ -663,7 +674,14 @@ describe('createInfrastructure direct', () => {
   test('cleanup swallows postgres pool.end() error during rollback (lines 229-231)', async () => {
     const poolEndMock = mock(async () => { throw new Error('pg pool end failed'); });
     connectPostgresMock.mockResolvedValueOnce({
-      pool: { end: poolEndMock, query: async () => ({ rows: [], rowCount: 0 }) },
+      pool: {
+        end: poolEndMock,
+        query: async () => ({ rows: [], rowCount: 0 }),
+        connect: async () => ({
+          query: async () => ({ rows: [], rowCount: 0 }),
+          release: () => {},
+        }),
+      },
       connectionString: 'postgres://test',
     } as any);
     // Make Redis connect return null so persistence resolution fails

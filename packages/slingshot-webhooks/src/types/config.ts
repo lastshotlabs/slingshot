@@ -4,6 +4,20 @@ import { WEBHOOK_ROUTES } from '../routes/index';
 import type { InboundProvider } from './inbound';
 import type { WebhookQueue } from './queue';
 
+function normalizeMountPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/')) {
+    throw new Error("mountPath must start with '/'");
+  }
+
+  const normalized = trimmed.replace(/\/+$/, '');
+  if (normalized.length === 0) {
+    throw new Error("mountPath must not be '/'");
+  }
+
+  return normalized;
+}
+
 /**
  * Zod schema for validating `WebhookPluginConfig`.
  */
@@ -73,6 +87,7 @@ export const webhookPluginConfigSchema = z.object({
   mountPath: z
     .string()
     .optional()
+    .transform(value => (value === undefined ? value : normalizeMountPath(value)))
     .describe("URL path prefix for webhook routes. Omit to use '/webhooks'."),
   /** Role required for webhook management routes. Default: `'admin'`. */
   managementRole: z

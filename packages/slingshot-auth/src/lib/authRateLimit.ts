@@ -5,6 +5,7 @@ import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -391,19 +392,16 @@ export function createMongoAuthRateLimitRepository(
 export function createPostgresAuthRateLimitRepository(
   pool: import('pg').Pool,
 ): AuthRateLimitRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_rate_limits (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_rate_limits (
       subject_key TEXT PRIMARY KEY,
       count       INTEGER NOT NULL,
       reset_at    BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_rate_limits_reset_at ON auth_rate_limits(reset_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async get(key) {

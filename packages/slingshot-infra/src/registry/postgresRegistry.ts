@@ -7,7 +7,6 @@ interface PgQueryResult<TResult> {
 }
 
 interface PgClient {
-  connect(): Promise<void>;
   query<TResult = unknown>(
     queryText: string,
     values?: readonly unknown[],
@@ -190,6 +189,8 @@ export function createPostgresRegistry(config: PostgresRegistryConfig): Registry
     async initialize(): Promise<void> {
       const client = await getClient();
       try {
+        await client.query('BEGIN');
+        await client.query(`SELECT pg_advisory_xact_lock($1)`, [lockId]);
         await client.query(`
           CREATE TABLE IF NOT EXISTS ${tableName} (
             id TEXT PRIMARY KEY DEFAULT 'default',
@@ -201,9 +202,19 @@ export function createPostgresRegistry(config: PostgresRegistryConfig): Registry
 
         const initial = createEmptyRegistryDocument('');
         await client.query(
-          `INSERT INTO ${tableName} (id, document) VALUES ('default', $1) ON CONFLICT DO NOTHING`,
+          `INSERT INTO ${tableName} (id, document, version, updated_at)
+           VALUES ('default', $1, 1, now())
+           ON CONFLICT (id) DO NOTHING`,
           [JSON.stringify(initial)],
         );
+        await client.query('COMMIT');
+      } catch (err) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // Preserve the original initialize failure.
+        }
+        throw err;
       } finally {
         await client.end();
       }
@@ -219,7 +230,10 @@ export function createPostgresRegistry(config: PostgresRegistryConfig): Registry
         const res = await client.query<{ version: number }>(
           `SELECT version FROM ${tableName} WHERE id = 'default'`,
         );
-        const etag = res.rows.length > 0 ? String(res.rows[0].version) : '1';
+        if (res.rows.length === 0) {
+          throw new Error('[slingshot-infra] Registry not initialized. Run: slingshot registry init');
+        }
+        const etag = String(res.rows[0].version);
 
         return {
           etag,

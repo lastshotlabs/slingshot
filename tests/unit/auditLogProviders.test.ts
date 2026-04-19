@@ -38,12 +38,18 @@ describe('createPostgresAuditLogProvider', () => {
     const queries: Array<{ sql: string; params?: unknown[] }> = [];
     const rows = rowsForQuery ?? [];
 
+    const runQuery = async (sql: string, params?: unknown[]) => {
+      queries.push({ sql, params });
+      return { rows, rowCount: rows.length };
+    };
+
     const pool = {
       queries,
-      query: async (sql: string, params?: unknown[]) => {
-        queries.push({ sql, params });
-        return { rows, rowCount: rows.length };
-      },
+      query: runQuery,
+      connect: async () => ({
+        query: runQuery,
+        release: () => {},
+      }),
     };
     return pool;
   }
@@ -56,6 +62,8 @@ describe('createPostgresAuditLogProvider', () => {
 
     const createTableQuery = pool.queries.find(q => q.sql.includes('CREATE TABLE IF NOT EXISTS'));
     expect(createTableQuery).toBeDefined();
+    expect(pool.queries.some(q => q.sql.trim() === 'BEGIN')).toBe(true);
+    expect(pool.queries.some(q => q.sql.trim() === 'COMMIT')).toBe(true);
   });
 
   test('logEntry only initializes once (idempotent)', async () => {
@@ -114,6 +122,13 @@ describe('createPostgresAuditLogProvider', () => {
         if (sql.includes('INSERT INTO')) throw new Error('DB constraint error');
         return { rows: [], rowCount: 0 };
       },
+      connect: async () => ({
+        query: async (sql: string) => {
+          if (sql.includes('INSERT INTO')) throw new Error('DB constraint error');
+          return { rows: [], rowCount: 0 };
+        },
+        release: () => {},
+      }),
     };
     const consoleSpy = spyOn(console, 'error').mockImplementation(() => {});
     const provider = createPostgresAuditLogProvider(pool);
@@ -275,6 +290,16 @@ describe('createPostgresAuditLogProvider', () => {
         }
         return { rows: [], rowCount: 0 };
       },
+      connect: async () => ({
+        query: async (sql: string, params?: unknown[]) => {
+          pool.queries.push({ sql, params });
+          if (sql.includes('SELECT *')) {
+            return { rows: fakeRows, rowCount: 4 };
+          }
+          return { rows: [], rowCount: 0 };
+        },
+        release: () => {},
+      }),
     };
 
     const provider = createPostgresAuditLogProvider(pool);
@@ -766,4 +791,3 @@ describe('createMemoryAuditLogProvider — logEntry catch block', () => {
     warnSpy.mockRestore();
   });
 });
-

@@ -63,8 +63,12 @@ function buildAdminMiddleware(role: string): MiddlewareHandler {
 function buildInboundPublicPaths(
   mountPath: string,
   inbound: readonly InboundProvider[] | undefined,
+  disableRoutes: readonly string[] | undefined,
 ): string[] {
   if (!inbound || inbound.length === 0) {
+    return [];
+  }
+  if (disableRoutes?.includes(WEBHOOK_ROUTES.INBOUND)) {
     return [];
   }
   return [`${mountPath}/inbound/*`];
@@ -187,6 +191,11 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
   const mountPath = config.mountPath ?? '/webhooks';
   const managementRole = config.managementRole ?? 'admin';
   const requireWebhookAdmin = buildAdminMiddleware(managementRole);
+  const inboundRoutePatterns = buildInboundPublicPaths(
+    mountPath,
+    config.inbound,
+    config.disableRoutes,
+  );
   let unsubscribers: Array<() => void> = [];
   let innerPlugin: EntityPlugin | undefined;
   let runtimeAdapter: WebhookRuntimeAdapter | undefined;
@@ -194,8 +203,8 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
   return {
     name: WEBHOOKS_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth'],
-    publicPaths: buildInboundPublicPaths(mountPath, config.inbound),
-    csrfExemptPaths: [`${mountPath}/inbound/*`],
+    publicPaths: inboundRoutePatterns,
+    csrfExemptPaths: inboundRoutePatterns,
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
       innerPlugin = createEntityPlugin({

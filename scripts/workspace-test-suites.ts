@@ -63,6 +63,37 @@ function packageSuites(): TestCommandSuite[] {
     });
 }
 
+interface PackageCoverageOverride {
+  coverageTestFiles: string[];
+  configPath?: string;
+}
+
+const packageCoverageOverrides: Record<string, PackageCoverageOverride> = {
+  'slingshot-auth': {
+    coverageTestFiles: [
+      'tests/isolated/csrf-signing-singleton.test.ts',
+      'tests/isolated/jwt-signing-singleton.test.ts',
+      'tests/isolated/memoryCache.test.ts',
+      'tests/isolated/passkey-e2e.test.ts',
+      'tests/isolated/saml-login-parity.test.ts',
+    ],
+  },
+  'slingshot-bullmq': {
+    coverageTestFiles: [
+      'tests/unit/bullmq-adapter.test.ts',
+      'tests/isolated/bullmq-adapter-durable.test.ts',
+    ],
+  },
+  'slingshot-webhooks': {
+    coverageTestFiles: [
+      'tests/isolated/webhooks-bullmq.test.ts',
+      'tests/isolated/webhooks-bullmq-ioredis.test.ts',
+      'tests/isolated/webhooks-bullmq-missing-bullmq.test.ts',
+      'tests/isolated/webhooks-bullmq-missing-ioredis.test.ts',
+    ],
+  },
+};
+
 function activeSuiteFilter(): Set<string> | null {
   const raw = Bun.env.SLINGSHOT_SUITE_FILTER;
   if (raw == null || raw.trim().length === 0) return null;
@@ -112,29 +143,62 @@ export const rootCoverageSuite: CoverageSuite = {
 
 export const packageTestSuites = applySuiteFilter(packageSuites());
 
+function packageCoverageSuites(): CoverageSuite[] {
+  const packagesDir = join(process.cwd(), 'packages');
+  const entries = readdirSync(packagesDir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => entry.name)
+    .sort((a, b) => a.localeCompare(b));
+
+  return entries.flatMap(name => {
+    const testsDir = join(packagesDir, name, 'tests');
+    const packageTests = existsSync(testsDir) ? collectPackageTestFiles(testsDir) : [];
+    const override = packageCoverageOverrides[name];
+    const coverageTestFiles = Array.from(
+      new Set([...packageTests, ...(override?.coverageTestFiles ?? [])]),
+    ).sort((a, b) => a.localeCompare(b));
+
+    if (coverageTestFiles.length === 0) {
+      return [];
+    }
+
+    const defaultConfigPath = normalizePath(join('packages', name, 'bunfig.toml'));
+    const configPath =
+      override?.configPath ??
+      (existsSync(join(process.cwd(), defaultConfigPath)) ? defaultConfigPath : undefined);
+
+    return [
+      {
+        name,
+        testsPath: normalizePath(join('packages', name, 'tests')),
+        testFiles: packageTests.length > 0 ? packageTests : undefined,
+        configPath,
+        coverageDir: `coverage/${name}`,
+        command: [
+          'scripts/run-coverage-files.ts',
+          '--label',
+          name,
+          '--coverage-dir',
+          `coverage/${name}`,
+          ...(configPath ? ['--config', configPath] : []),
+          ...coverageTestFiles,
+        ],
+        ownedGlobs: [`packages/${name}/**/*.ts`, `packages/${name}/**/*.tsx`],
+        ignoredGlobs: [
+          `packages/${name}/node_modules/**`,
+          `packages/${name}/tests/**`,
+          `packages/${name}/dist/**`,
+          `packages/${name}/coverage/**`,
+          `packages/${name}/**/*.d.ts`,
+        ],
+      },
+    ];
+  });
+}
+
 export const coverageSuites: CoverageSuite[] = [
   rootCoverageSuite,
-  ...packageTestSuites.map(testSuite => ({
-    ...testSuite,
-    coverageDir: `coverage/${testSuite.name}`,
-    command: [
-      'test',
-      '--coverage',
-      ...coverageReporterArgs,
-      '--coverage-dir',
-      `coverage/${testSuite.name}`,
-      ...(testSuite.configPath ? ['--config', testSuite.configPath] : []),
-      ...(testSuite.testFiles ?? [testSuite.testsPath]),
-    ],
-    ownedGlobs: [`packages/${testSuite.name}/**/*.ts`, `packages/${testSuite.name}/**/*.tsx`],
-    ignoredGlobs: [
-      `packages/${testSuite.name}/node_modules/**`,
-      `packages/${testSuite.name}/tests/**`,
-      `packages/${testSuite.name}/dist/**`,
-      `packages/${testSuite.name}/coverage/**`,
-      `packages/${testSuite.name}/**/*.d.ts`,
-    ],
-  })),
+  ...packageCoverageSuites(),
 ].filter(suite => {
   const filter = activeSuiteFilter();
   return filter == null || filter.has(suite.name);

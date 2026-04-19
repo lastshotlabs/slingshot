@@ -6,6 +6,7 @@ import { sha256 as hashToken } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -294,20 +295,17 @@ export function createMongoDeletionCancelTokenRepository(
 export function createPostgresDeletionCancelTokenRepository(
   pool: import('pg').Pool,
 ): DeletionCancelTokenRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_deletion_cancel_tokens (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_deletion_cancel_tokens (
       token_hash TEXT PRIMARY KEY,
       user_id    TEXT NOT NULL,
       job_id     TEXT NOT NULL,
       expires_at BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_deletion_cancel_tokens_expires_at ON auth_deletion_cancel_tokens(expires_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async store(hash, userId, jobId, ttl) {

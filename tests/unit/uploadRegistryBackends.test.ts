@@ -101,11 +101,22 @@ describe('createRedisUploadRegistry', () => {
 describe('createSqliteUploadRegistry', () => {
   function makeSqliteDb() {
     const rows = new Map<string, Record<string, unknown>>();
+    let failSql: string | null = null;
+    let failTimes = 0;
 
     return {
       ranSql: [] as string[],
+      failOn(sql: string, times = 1) {
+        failSql = sql;
+        failTimes = times;
+      },
       run(sql: string, params?: unknown[]) {
         this.ranSql.push(sql);
+        const normalized = sql.trim();
+        if (failSql === normalized && failTimes > 0) {
+          failTimes--;
+          throw new Error(`forced failure: ${normalized}`);
+        }
         if (sql.includes('INSERT OR REPLACE') && params) {
           rows.set(params[0] as string, {
             key: params[0],
@@ -148,7 +159,9 @@ describe('createSqliteUploadRegistry', () => {
     const repo = createSqliteUploadRegistry(db as never);
 
     await repo.register(makeRecord());
+    expect(db.ranSql.slice(0, 2)).toEqual(['PRAGMA busy_timeout = 5000', 'BEGIN IMMEDIATE']);
     expect(db.ranSql.some(s => s.includes('CREATE TABLE IF NOT EXISTS'))).toBe(true);
+    expect(db.ranSql).toContain('COMMIT');
   });
 
   test('register and get round-trip', async () => {
@@ -177,6 +190,29 @@ describe('createSqliteUploadRegistry', () => {
     const deleted = await repo.delete('upload-1');
     expect(deleted).toBe(true);
   });
+
+  test('rolls back failed bootstrap work and retries', async () => {
+    const db = makeSqliteDb();
+    db.failOn(
+      `CREATE TABLE IF NOT EXISTS upload_registry (
+      key          TEXT PRIMARY KEY,
+      owner_user_id TEXT,
+      tenant_id    TEXT,
+      mime_type    TEXT,
+      bucket       TEXT,
+      created_at   INTEGER NOT NULL,
+      expires_at   INTEGER NOT NULL
+    )`,
+    );
+    const repo = createSqliteUploadRegistry(db as never);
+
+    expect(() => repo.register(makeRecord())).toThrow('forced failure');
+    expect(db.ranSql).toContain('ROLLBACK');
+
+    db.ranSql.length = 0;
+    await repo.register(makeRecord());
+    expect(db.ranSql).toContain('COMMIT');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -187,36 +223,56 @@ describe('createPostgresUploadRegistry', () => {
   function makePgPool() {
     const queries: Array<{ sql: string; params?: unknown[] }> = [];
     const store = new Map<string, Record<string, unknown>>();
+    let failSql: string | null = null;
+    let failTimes = 0;
+
+    const runQuery = async (sql: string, params?: unknown[]) => {
+      queries.push({ sql, params });
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      if (failSql === normalized && failTimes > 0) {
+        failTimes--;
+        throw new Error(`forced failure: ${normalized}`);
+      }
+      if (sql.includes('BEGIN') || sql.includes('COMMIT') || sql.includes('ROLLBACK')) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes('CREATE TABLE')) return { rows: [], rowCount: 0 };
+      if (sql.includes('INSERT INTO') && params) {
+        store.set(params[0] as string, {
+          key: params[0],
+          owner_user_id: params[1],
+          tenant_id: params[2],
+          mime_type: params[3],
+          bucket: params[4],
+          created_at: params[5],
+          expires_at: params[6],
+        });
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.includes('SELECT') && params) {
+        const row = store.get(params[0] as string);
+        return row ? { rows: [row], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
+      if (sql.includes('DELETE') && params) {
+        const existed = store.has(params[0] as string);
+        store.delete(params[0] as string);
+        return { rows: [], rowCount: existed ? 1 : 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    };
 
     return {
       queries,
       store,
-      async query(sql: string, params?: unknown[]) {
-        queries.push({ sql, params });
-        if (sql.includes('CREATE TABLE')) return { rows: [], rowCount: 0 };
-        if (sql.includes('INSERT INTO') && params) {
-          store.set(params[0] as string, {
-            key: params[0],
-            owner_user_id: params[1],
-            tenant_id: params[2],
-            mime_type: params[3],
-            bucket: params[4],
-            created_at: params[5],
-            expires_at: params[6],
-          });
-          return { rows: [], rowCount: 1 };
-        }
-        if (sql.includes('SELECT') && params) {
-          const row = store.get(params[0] as string);
-          return row ? { rows: [row], rowCount: 1 } : { rows: [], rowCount: 0 };
-        }
-        if (sql.includes('DELETE') && params) {
-          const existed = store.has(params[0] as string);
-          store.delete(params[0] as string);
-          return { rows: [], rowCount: existed ? 1 : 0 };
-        }
-        return { rows: [], rowCount: 0 };
+      failOn(sql: string, times = 1) {
+        failSql = sql;
+        failTimes = times;
       },
+      query: runQuery,
+      connect: async () => ({
+        query: runQuery,
+        release: () => {},
+      }),
     };
   }
 
@@ -225,7 +281,9 @@ describe('createPostgresUploadRegistry', () => {
     const repo = createPostgresUploadRegistry(pool);
 
     await repo.register(makeRecord());
+    expect(pool.queries[0].sql).toBe('BEGIN');
     expect(pool.queries.some(q => q.sql.includes('CREATE TABLE IF NOT EXISTS'))).toBe(true);
+    expect(pool.queries.some(q => q.sql === 'COMMIT')).toBe(true);
   });
 
   test('register and get round-trip', async () => {
@@ -261,6 +319,22 @@ describe('createPostgresUploadRegistry', () => {
 
     const deleted = await repo.delete('missing');
     expect(deleted).toBe(false);
+  });
+
+  test('rolls back failed bootstrap work and retries', async () => {
+    const pool = makePgPool();
+    pool.failOn(
+      'CREATE TABLE IF NOT EXISTS slingshot_upload_registry ( key TEXT PRIMARY KEY, owner_user_id TEXT, tenant_id TEXT, mime_type TEXT, bucket TEXT, created_at BIGINT NOT NULL, expires_at BIGINT NOT NULL )',
+    );
+    const repo = createPostgresUploadRegistry(pool);
+
+    await expect(repo.register(makeRecord())).rejects.toThrow('forced failure');
+    expect(pool.queries.some(q => q.sql === 'ROLLBACK')).toBe(true);
+
+    pool.queries.length = 0;
+    await repo.register(makeRecord());
+    expect(pool.queries[0].sql).toBe('BEGIN');
+    expect(pool.queries.some(q => q.sql === 'COMMIT')).toBe(true);
   });
 });
 

@@ -257,40 +257,49 @@ describe('createPostgresIdempotencyAdapter', () => {
   function createMockPgPool() {
     const rows: Record<string, Record<string, unknown>> = {};
 
-    return {
-      async query(sql: string, params?: unknown[]) {
-        const trimmed = sql.trim();
-        if (trimmed.startsWith('CREATE TABLE')) {
-          return { rows: [], rowCount: 0 };
-        }
-        if (trimmed.startsWith('ALTER TABLE')) {
-          return { rows: [], rowCount: 0 };
-        }
-        if (trimmed.startsWith('SELECT')) {
-          const key = params?.[0] as string;
-          const now = params?.[1] as number;
-          const row = rows[key];
-          if (!row) return { rows: [], rowCount: 0 };
-          if ((row['expires_at'] as number) <= now) return { rows: [], rowCount: 0 };
-          return { rows: [row], rowCount: 1 };
-        }
-        if (trimmed.startsWith('INSERT')) {
-          const key = params?.[0] as string;
-          // ON CONFLICT DO NOTHING — only insert if key doesn't exist
-          if (!rows[key]) {
-            rows[key] = {
-              key,
-              status: params?.[1] as number,
-              body: params?.[2] as string,
-              created_at: params?.[3] as number,
-              expires_at: params?.[4] as number,
-              request_fingerprint: params?.[5] as string | null,
-            };
-          }
-          return { rows: [], rowCount: 1 };
-        }
+    const runQuery = async (sql: string, params?: unknown[]) => {
+      const trimmed = sql.trim();
+      if (trimmed === 'BEGIN' || trimmed === 'COMMIT' || trimmed === 'ROLLBACK') {
         return { rows: [], rowCount: 0 };
-      },
+      }
+      if (trimmed.startsWith('CREATE TABLE')) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (trimmed.startsWith('ALTER TABLE')) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (trimmed.startsWith('SELECT')) {
+        const key = params?.[0] as string;
+        const now = params?.[1] as number;
+        const row = rows[key];
+        if (!row) return { rows: [], rowCount: 0 };
+        if ((row['expires_at'] as number) <= now) return { rows: [], rowCount: 0 };
+        return { rows: [row], rowCount: 1 };
+      }
+      if (trimmed.startsWith('INSERT')) {
+        const key = params?.[0] as string;
+        // ON CONFLICT DO NOTHING — only insert if key doesn't exist
+        if (!rows[key]) {
+          rows[key] = {
+            key,
+            status: params?.[1] as number,
+            body: params?.[2] as string,
+            created_at: params?.[3] as number,
+            expires_at: params?.[4] as number,
+            request_fingerprint: params?.[5] as string | null,
+          };
+        }
+        return { rows: [], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    };
+
+    return {
+      query: runQuery,
+      connect: async () => ({
+        query: runQuery,
+        release: () => {},
+      }),
     };
   }
 

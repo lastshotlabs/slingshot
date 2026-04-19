@@ -8,6 +8,7 @@
  */
 import type { Pool } from 'pg';
 import type { CacheAdapter } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from '../persistence/postgresInit';
 
 /** Background cleanup interval in milliseconds (60 seconds). */
 const CLEANUP_INTERVAL_MS = 60_000;
@@ -48,20 +49,22 @@ function globToLike(pattern: string): string {
  */
 export async function createPostgresCacheAdapter(pool: Pool): Promise<CacheAdapter> {
   let ready = false;
+  const ensureSchema = createPostgresInitializer(pool, async client => {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS cache_entries (
+        key         TEXT        PRIMARY KEY,
+        value       TEXT        NOT NULL,
+        expires_at  TIMESTAMPTZ
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_cache_entries_expires
+        ON cache_entries (expires_at)
+        WHERE expires_at IS NOT NULL
+    `);
+  });
 
-  // Create table and index
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS cache_entries (
-      key         TEXT        PRIMARY KEY,
-      value       TEXT        NOT NULL,
-      expires_at  TIMESTAMPTZ
-    )
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_cache_entries_expires
-      ON cache_entries (expires_at)
-      WHERE expires_at IS NOT NULL
-  `);
+  await ensureSchema();
 
   ready = true;
 
@@ -108,7 +111,7 @@ export async function createPostgresCacheAdapter(pool: Pool): Promise<CacheAdapt
 
     async delPattern(pattern: string): Promise<void> {
       const likePattern = globToLike(pattern);
-      await pool.query('DELETE FROM cache_entries WHERE key LIKE $1', [likePattern]);
+      await pool.query("DELETE FROM cache_entries WHERE key LIKE $1 ESCAPE '\\'", [likePattern]);
     },
 
     isReady(): boolean {

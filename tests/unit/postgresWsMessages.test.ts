@@ -14,15 +14,28 @@ function createMockPool() {
   const calls: QueryCall[] = [];
   const resultQueue: Array<{ rows: Record<string, unknown>[] }> = [];
   let defaultResult: { rows: Record<string, unknown>[] } = { rows: [] };
+  let failSql: string | null = null;
+  let failTimes = 0;
 
-  const pool = {
-    query: async (sql: string, params?: unknown[]) => {
-      calls.push({ sql: sql.replace(/\s+/g, ' ').trim(), params });
+  const runQuery = async (sql: string, params?: unknown[]) => {
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      calls.push({ sql: normalized, params });
+      if (failSql === normalized && failTimes > 0) {
+        failTimes--;
+        throw new Error(`forced failure: ${normalized}`);
+      }
       if (resultQueue.length > 0) {
         return resultQueue.shift()!;
       }
       return defaultResult;
-    },
+    };
+
+  const pool = {
+    query: runQuery,
+    connect: async () => ({
+      query: runQuery,
+      release: () => {},
+    }),
   };
 
   return {
@@ -34,10 +47,16 @@ function createMockPool() {
     enqueueResult(rows: Record<string, unknown>[]) {
       resultQueue.push({ rows });
     },
+    failOn(sql: string, times = 1) {
+      failSql = sql;
+      failTimes = times;
+    },
     reset() {
       calls.length = 0;
       resultQueue.length = 0;
       defaultResult = { rows: [] };
+      failSql = null;
+      failTimes = 0;
     },
   };
 }
@@ -77,6 +96,8 @@ describe('postgresWsMessages', () => {
       await import('../../src/framework/persistence/postgresWsMessages');
     await createPostgresWsMessageRepository(fresh.pool);
 
+    expect(fresh.calls[0].sql).toBe('BEGIN');
+
     const createTableCall = fresh.calls.find(c => c.sql.includes('CREATE TABLE IF NOT EXISTS'));
     expect(createTableCall).toBeDefined();
     expect(createTableCall!.sql).toContain('ws_messages');
@@ -84,6 +105,20 @@ describe('postgresWsMessages', () => {
     const createIndexCall = fresh.calls.find(c => c.sql.includes('CREATE INDEX IF NOT EXISTS'));
     expect(createIndexCall).toBeDefined();
     expect(createIndexCall!.sql).toContain('idx_ws_messages_scope');
+    expect(fresh.calls.at(-1)?.sql).toBe('COMMIT');
+  });
+
+  test('init rolls back if bootstrap DDL fails', async () => {
+    const fresh = createMockPool();
+    fresh.failOn(
+      'CREATE TABLE IF NOT EXISTS ws_messages ( id TEXT PRIMARY KEY, endpoint TEXT NOT NULL, room TEXT NOT NULL, sender_id TEXT, payload JSONB, created_at BIGINT NOT NULL )',
+    );
+    const { createPostgresWsMessageRepository } = await import(
+      '../../src/framework/persistence/postgresWsMessages'
+    );
+
+    await expect(createPostgresWsMessageRepository(fresh.pool)).rejects.toThrow('forced failure');
+    expect(fresh.calls.map(c => c.sql)).toContain('ROLLBACK');
   });
 
   test('persist stores message', async () => {

@@ -1,27 +1,7 @@
-import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { WsState } from '@lastshotlabs/slingshot-core';
-
-type DispatchModule = typeof import('../../src/framework/ws/dispatch');
-
-const publishMock = mock(() => {});
-const subscribeMock = mock(() => {});
-const unsubscribeMock = mock(() => {});
-
-async function loadDispatchModule(): Promise<DispatchModule> {
-  const actualRooms = await import('../../src/framework/ws/rooms');
-  mock.module('../../src/framework/ws/rooms', () => ({
-    ...actualRooms,
-    publish: publishMock,
-    subscribe: subscribeMock,
-    unsubscribe: unsubscribeMock,
-  }));
-
-  return import(`../../src/framework/ws/dispatch.ts?ws-dispatch=${Date.now()}-${Math.random()}`);
-}
-
-afterAll(() => {
-  mock.restore();
-});
+import { handleIncomingEvent } from '../../src/framework/ws/dispatch';
+import { wsEndpointKey } from '../../src/framework/ws/namespace';
 
 function createWsState(overrides?: Partial<WsState>): WsState {
   return {
@@ -56,14 +36,8 @@ function createMockWs(id: string, endpoint = '/ws') {
 
 describe('wsDispatch — handleIncomingEvent', () => {
   let state: WsState;
-  let handleIncomingEvent: DispatchModule['handleIncomingEvent'];
 
-  beforeEach(async () => {
-    mock.restore();
-    publishMock.mockReset();
-    subscribeMock.mockReset();
-    unsubscribeMock.mockReset();
-    ({ handleIncomingEvent } = await loadDispatchModule());
+  beforeEach(() => {
     state = createWsState();
   });
 
@@ -352,6 +326,8 @@ describe('wsDispatch — handleIncomingEvent', () => {
 
   it('context.publish is callable from handler (line 40)', async () => {
     const ws = createMockWs('s1');
+    const serverPublish = mock(() => {});
+    state.server = { publish: serverPublish };
     const handler = mock((_ws: unknown, _payload: unknown, ctx: any) => {
       ctx.publish('myroom', { hello: 'world' });
       return 'done';
@@ -363,13 +339,15 @@ describe('wsDispatch — handleIncomingEvent', () => {
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
-    // rooms.publish mock should have been called
-    expect(publishMock.mock.calls.length).toBeGreaterThan(0);
+    expect(serverPublish).toHaveBeenCalledTimes(1);
+    expect(serverPublish.mock.calls[0][0]).toBe(wsEndpointKey('/ws', 'myroom'));
+    expect(JSON.parse(serverPublish.mock.calls[0][1])).toEqual({ hello: 'world' });
   });
 
   it('context.subscribe is callable from handler (line 43)', async () => {
     const ws = createMockWs('s1');
-    (ws as any).subscribe = mock(() => {});
+    const subscribeSpy = mock(() => {});
+    (ws as any).subscribe = subscribeSpy;
     const handler = mock((_ws: unknown, _payload: unknown, ctx: any) => {
       ctx.subscribe('myroom');
       return 'done';
@@ -381,12 +359,18 @@ describe('wsDispatch — handleIncomingEvent', () => {
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(subscribeMock.mock.calls.length).toBeGreaterThan(0);
+    expect(subscribeSpy).toHaveBeenCalledTimes(1);
+    expect(subscribeSpy.mock.calls[0][0]).toBe(wsEndpointKey('/ws', 'myroom'));
+    expect(ws.data.rooms.has('myroom')).toBe(true);
+    expect(state.roomRegistry.get(wsEndpointKey('/ws', 'myroom'))).toEqual(new Set(['s1']));
   });
 
   it('context.unsubscribe is callable from handler (line 46)', async () => {
     const ws = createMockWs('s1');
-    (ws as any).unsubscribe = mock(() => {});
+    const unsubscribeSpy = mock(() => {});
+    (ws as any).unsubscribe = unsubscribeSpy;
+    ws.data.rooms.add('myroom');
+    state.roomRegistry.set(wsEndpointKey('/ws', 'myroom'), new Set(['s1']));
     const handler = mock((_ws: unknown, _payload: unknown, ctx: any) => {
       ctx.unsubscribe('myroom');
       return 'done';
@@ -398,6 +382,9 @@ describe('wsDispatch — handleIncomingEvent', () => {
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(unsubscribeMock.mock.calls.length).toBeGreaterThan(0);
+    expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
+    expect(unsubscribeSpy.mock.calls[0][0]).toBe(wsEndpointKey('/ws', 'myroom'));
+    expect(ws.data.rooms.has('myroom')).toBe(false);
+    expect(state.roomRegistry.has(wsEndpointKey('/ws', 'myroom'))).toBe(false);
   });
 });

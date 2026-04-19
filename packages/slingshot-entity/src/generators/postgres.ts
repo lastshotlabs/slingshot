@@ -161,13 +161,19 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   lines.push(`export function createPostgres${name}Adapter(pool: Pool): ${name}Adapter {`);
   lines.push(`  const table = '${table}';`);
   lines.push('  let initialized = false;');
+  lines.push('  let initializationPromise: Promise<void> | null = null;');
   lines.push('');
 
   // ensureTable
   lines.push('  async function ensureTable(): Promise<void> {');
   lines.push('    if (initialized) return;');
+  lines.push('    if (initializationPromise) return initializationPromise;');
+  lines.push('    initializationPromise = (async () => {');
+  lines.push("      const client = await pool.connect();");
+  lines.push('      try {');
+  lines.push("        await client.query('BEGIN');");
   lines.push(
-    `    await pool.query(\`CREATE TABLE IF NOT EXISTS \${table} (\\n  ${colDefs.join(',\\n  ')}\\n)\`);`,
+    `        await client.query(\`CREATE TABLE IF NOT EXISTS \${table} (\\n  ${colDefs.join(',\\n  ')}\\n)\`);`,
   );
   if (config.indexes) {
     for (let i = 0; i < config.indexes.length; i++) {
@@ -175,7 +181,7 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
       const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
       const unique = idx.unique ? 'UNIQUE ' : '';
       lines.push(
-        `    await pool.query(\`CREATE ${unique}INDEX IF NOT EXISTS idx_\${table}_${i} ON \${table} (${colList})\`);`,
+        `        await client.query(\`CREATE ${unique}INDEX IF NOT EXISTS idx_\${table}_${i} ON \${table} (${colList})\`);`,
       );
     }
   }
@@ -184,11 +190,28 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
       const uq = config.uniques[i];
       const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
       lines.push(
-        `    await pool.query(\`CREATE UNIQUE INDEX IF NOT EXISTS uidx_\${table}_${i} ON \${table} (${colList})\`);`,
+        `        await client.query(\`CREATE UNIQUE INDEX IF NOT EXISTS uidx_\${table}_${i} ON \${table} (${colList})\`);`,
       );
     }
   }
-  lines.push('    initialized = true;');
+  lines.push("        await client.query('COMMIT');");
+  lines.push('      } catch (error) {');
+  lines.push('        try {');
+  lines.push("          await client.query('ROLLBACK');");
+  lines.push('        } catch {');
+  lines.push('          // Preserve the original bootstrap failure.');
+  lines.push('        }');
+  lines.push('        throw error;');
+  lines.push('      } finally {');
+  lines.push('        client.release();');
+  lines.push('      }');
+  lines.push('      initialized = true;');
+  lines.push('    })();');
+  lines.push('    try {');
+  lines.push('      await initializationPromise;');
+  lines.push('    } finally {');
+  lines.push('      initializationPromise = null;');
+  lines.push('    }');
   lines.push('  }');
   lines.push('');
 

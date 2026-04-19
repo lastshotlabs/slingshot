@@ -92,11 +92,22 @@ describe('createRedisIdempotencyAdapter', () => {
 describe('createSqliteIdempotencyAdapter', () => {
   function makeSqliteDb() {
     const rows = new Map<string, Record<string, unknown>>();
+    let failSql: string | null = null;
+    let failTimes = 0;
 
     return {
       ranSql: [] as string[],
+      failOn(sql: string, times = 1) {
+        failSql = sql;
+        failTimes = times;
+      },
       run(sql: string, params?: unknown[]) {
         this.ranSql.push(sql);
+        const normalized = sql.trim();
+        if (failSql === normalized && failTimes > 0) {
+          failTimes--;
+          throw new Error(`forced failure: ${normalized}`);
+        }
         if (sql.includes('INSERT OR IGNORE') && params) {
           const key = params[0] as string;
           if (rows.has(key)) return; // IGNORE
@@ -149,7 +160,9 @@ describe('createSqliteIdempotencyAdapter', () => {
     const adapter = createSqliteIdempotencyAdapter(db as never);
 
     await adapter.set('k', 'v', 200, 60);
+    expect(db.ranSql.slice(0, 2)).toEqual(['PRAGMA busy_timeout = 5000', 'BEGIN IMMEDIATE']);
     expect(db.ranSql.some(s => s.includes('CREATE TABLE IF NOT EXISTS'))).toBe(true);
+    expect(db.ranSql).toContain('COMMIT');
   });
 
   test('set and get round-trip', async () => {
@@ -193,6 +206,28 @@ describe('createSqliteIdempotencyAdapter', () => {
 
     expect(countAfter).toBe(countBefore);
   });
+
+  test('rolls back failed bootstrap work and retries', async () => {
+    const db = makeSqliteDb();
+    db.failOn(
+      `CREATE TABLE IF NOT EXISTS idempotency (
+      key       TEXT PRIMARY KEY,
+      status    INTEGER NOT NULL,
+      body      TEXT NOT NULL,
+      createdAt INTEGER NOT NULL,
+      expiresAt INTEGER NOT NULL,
+      requestFingerprint TEXT
+    )`,
+    );
+    const adapter = createSqliteIdempotencyAdapter(db as never);
+
+    expect(() => adapter.set('k', 'v', 200, 60)).toThrow('forced failure');
+    expect(db.ranSql).toContain('ROLLBACK');
+
+    db.ranSql.length = 0;
+    await adapter.set('k', 'v', 200, 60);
+    expect(db.ranSql).toContain('COMMIT');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -203,44 +238,61 @@ describe('createPostgresIdempotencyAdapter', () => {
   function makePgPool() {
     const queries: Array<{ sql: string; params?: unknown[] }> = [];
     const store = new Map<string, Record<string, unknown>>();
+    let failSql: string | null = null;
+    let failTimes = 0;
+
+    const runQuery = async (sql: string, params?: unknown[]) => {
+      queries.push({ sql, params });
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      if (failSql === normalized && failTimes > 0) {
+        failTimes--;
+        throw new Error(`forced failure: ${normalized}`);
+      }
+      if (sql.includes('CREATE TABLE') || sql.includes('ALTER TABLE') || sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes('INSERT INTO')) {
+        if (params) {
+          const key = params[0] as string;
+          if (!store.has(key)) {
+            store.set(key, {
+              key,
+              status: params[1] as number,
+              body: params[2] as string,
+              created_at: params[3] as number,
+              expires_at: params[4] as number,
+              request_fingerprint: params[5] as string | null,
+            });
+          }
+        }
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.includes('SELECT')) {
+        if (params) {
+          const key = params[0] as string;
+          const now = params[1] as number;
+          const row = store.get(key);
+          if (row && (row.expires_at as number) > now) {
+            return { rows: [row], rowCount: 1 };
+          }
+        }
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    };
 
     return {
       queries,
       store,
-      async query(sql: string, params?: unknown[]) {
-        queries.push({ sql, params });
-        if (sql.includes('CREATE TABLE') || sql.includes('ALTER TABLE')) {
-          return { rows: [], rowCount: 0 };
-        }
-        if (sql.includes('INSERT INTO')) {
-          if (params) {
-            const key = params[0] as string;
-            if (!store.has(key)) {
-              store.set(key, {
-                key,
-                status: params[1] as number,
-                body: params[2] as string,
-                created_at: params[3] as number,
-                expires_at: params[4] as number,
-                request_fingerprint: params[5] as string | null,
-              });
-            }
-          }
-          return { rows: [], rowCount: 1 };
-        }
-        if (sql.includes('SELECT')) {
-          if (params) {
-            const key = params[0] as string;
-            const now = params[1] as number;
-            const row = store.get(key);
-            if (row && (row.expires_at as number) > now) {
-              return { rows: [row], rowCount: 1 };
-            }
-          }
-          return { rows: [], rowCount: 0 };
-        }
-        return { rows: [], rowCount: 0 };
+      failOn(sql: string, times = 1) {
+        failSql = sql;
+        failTimes = times;
       },
+      query: runQuery,
+      connect: async () => ({
+        query: runQuery,
+        release: () => {},
+      }),
     };
   }
 
@@ -249,7 +301,9 @@ describe('createPostgresIdempotencyAdapter', () => {
     const adapter = createPostgresIdempotencyAdapter(pool);
 
     await adapter.set('k', 'v', 200, 60);
+    expect(pool.queries[0].sql).toBe('BEGIN');
     expect(pool.queries.some(q => q.sql.includes('CREATE TABLE IF NOT EXISTS'))).toBe(true);
+    expect(pool.queries.some(q => q.sql === 'COMMIT')).toBe(true);
   });
 
   test('set and get round-trip', async () => {
@@ -292,6 +346,22 @@ describe('createPostgresIdempotencyAdapter', () => {
     const countAfter = pool.queries.filter(q => q.sql.includes('CREATE TABLE')).length;
 
     expect(countAfter).toBe(countBefore);
+  });
+
+  test('rolls back failed bootstrap work and retries', async () => {
+    const pool = makePgPool();
+    pool.failOn(
+      'CREATE TABLE IF NOT EXISTS slingshot_idempotency ( key TEXT PRIMARY KEY, status INTEGER NOT NULL, body TEXT NOT NULL, created_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, request_fingerprint TEXT )',
+    );
+    const adapter = createPostgresIdempotencyAdapter(pool);
+
+    await expect(adapter.set('k', 'v', 200, 60)).rejects.toThrow('forced failure');
+    expect(pool.queries.some(q => q.sql === 'ROLLBACK')).toBe(true);
+
+    pool.queries.length = 0;
+    await adapter.set('k', 'v', 200, 60);
+    expect(pool.queries[0].sql).toBe('BEGIN');
+    expect(pool.queries.some(q => q.sql === 'COMMIT')).toBe(true);
   });
 });
 

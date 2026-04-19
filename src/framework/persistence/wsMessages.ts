@@ -7,6 +7,7 @@ import type {
   StoredMessage,
   WsMessageRepository,
 } from '@lastshotlabs/slingshot-core';
+import { createSqliteInitializer } from './sqliteInit';
 
 function isStoredMessage(value: unknown): value is StoredMessage {
   if (typeof value !== 'object' || value === null) return false;
@@ -346,7 +347,6 @@ export function createSqliteWsMessageRepository(db: {
   run(sql: string, params?: unknown[]): void;
   query<T>(sql: string): { get(...args: unknown[]): T | null; all(...args: unknown[]): T[] };
 }): WsMessageRepository {
-  let initialized = false;
   const trimCounters = new Map<string, number>();
 
   /**
@@ -360,8 +360,7 @@ export function createSqliteWsMessageRepository(db: {
     return `${endpoint}\0${room}`;
   }
 
-  function ensureTable() {
-    if (initialized) return;
+  const ensureTable = createSqliteInitializer(db, () => {
     db.run(`
       CREATE TABLE IF NOT EXISTS ws_messages (
         id         TEXT PRIMARY KEY,
@@ -375,8 +374,7 @@ export function createSqliteWsMessageRepository(db: {
     db.run(
       'CREATE INDEX IF NOT EXISTS idx_ws_messages_scope ON ws_messages (endpoint, room, created_at DESC)',
     );
-    initialized = true;
-  }
+  });
 
   return {
     persist(message, config) {

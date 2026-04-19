@@ -81,3 +81,12 @@ Documentation package: `packages/docs/` (Astro site, workspace sync, API generat
 
 The complete contributor guide with engineering rules, documentation policy, specs process,
 and detailed agent context strategy lives in the companion `slingshot-docs/` directory.
+
+## Test Commands
+
+- `bun run test`: default non-Docker suite. Runs root tests, isolated root tests, and package-local tests that do not require external services.
+- `bun run test:docker`: Docker-backed integration suite. Runs `tests/docker/` plus package-local live Postgres integrations that need the Docker PostgreSQL instance.
+- `bun run test:e2e`: end-to-end suite with Docker dependencies.
+- `bun run test:all`: full verification pass. Runs `test`, then `test:docker`, then `test:e2e`.
+
+Do not assume `test:all` is a different test universe. It should be a composition of the real entrypoints above.

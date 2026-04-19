@@ -11,6 +11,7 @@ import {
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { OAuthReauthConfirmation, OAuthReauthState } from '../types/oauthReauth';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -418,27 +419,24 @@ export function createMongoOAuthReauthRepository(
 export function createPostgresOAuthReauthRepository(
   pool: import('pg').Pool,
 ): OAuthReauthRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_oauth_reauth_states (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_oauth_reauth_states (
       token_hash TEXT PRIMARY KEY,
       data       TEXT NOT NULL,
       expires_at BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_oauth_reauth_states_expires_at ON auth_oauth_reauth_states(expires_at)',
     );
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_oauth_reauth_confirmations (
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_oauth_reauth_confirmations (
       code_hash  TEXT PRIMARY KEY,
       data       TEXT NOT NULL,
       expires_at BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_oauth_reauth_confirmations_expires_at ON auth_oauth_reauth_confirmations(expires_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async storeState(hash, data, ttl) {

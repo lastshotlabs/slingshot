@@ -95,8 +95,9 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
         lastErr = err instanceof Error ? err : new Error(String(err));
         const retryable = err instanceof WebhookDeliveryError ? err.retryable : true;
         if (!retryable || job.attempts + 1 >= maxAttempts) {
+          const finalJob = { ...job, attempts: job.attempts + 1 };
           pending--;
-          void onDeadLetter?.(job, lastErr);
+          void onDeadLetter?.(finalJob, lastErr);
           return;
         }
         job = { ...job, attempts: job.attempts + 1 };
@@ -115,18 +116,21 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
         ...jobInput,
         createdAt: new Date(),
       };
-      evictOldestArray(jobs, DEFAULT_MAX_ENTRIES);
-      jobs.push(job);
       pending++;
       if (running && processor) {
         void processJob(job);
+      } else {
+        evictOldestArray(jobs, DEFAULT_MAX_ENTRIES);
+        jobs.push(job);
       }
       return Promise.resolve(id);
     },
     start(p: (job: WebhookJob) => Promise<void>): Promise<void> {
       processor = p;
       running = true;
-      for (const job of jobs) {
+      // Flush queued jobs exactly once; completed jobs must not replay on restart.
+      const queuedJobs = jobs.splice(0, jobs.length);
+      for (const job of queuedJobs) {
         void processJob(job);
       }
       return Promise.resolve();

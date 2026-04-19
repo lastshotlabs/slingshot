@@ -17,7 +17,7 @@ import { WebhookDeliveryError } from '../types/queue';
  * @remarks
  * `redis` accepts either a plain connection object `{ host, port?, password? }` or a
  * Redis URL string (e.g. `"redis://localhost:6379"` or `"rediss://..."` for TLS).
- * BullMQ requires `maxRetriesPerRequest: null` on the ioredis client — this is
+ * BullMQ requires `maxRetriesPerRequest: null` on the ioredis client - this is
  * set automatically by the factory and must not be overridden externally.
  *
  * `maxAttempts` and `retryBaseDelayMs` control the exponential-backoff retry policy:
@@ -58,7 +58,7 @@ interface BullMQWebhookQueueConfig {
  * and exposes it as `job.id`. `createdAt` is omitted because BullMQ persists the
  * enqueue wall-clock time as `job.timestamp` (Unix ms); it is reconstructed via
  * `new Date(bullJob.timestamp)` when the processor receives the job. `attempts` is
- * omitted because BullMQ tracks the attempt count as `job.attemptsMade` — it is not
+ * omitted because BullMQ tracks the attempt count as `job.attemptsMade` - it is not
  * stored in the data payload to avoid drift between the two sources of truth.
  */
 type WebhookJobData = Omit<WebhookJob, 'id' | 'createdAt' | 'attempts'>;
@@ -68,6 +68,82 @@ function requireJobId(id: string | number | undefined | null): string {
     throw new Error('BullMQ returned a job without an id');
   }
   return String(id);
+}
+
+function redactRedisTarget(target: BullMQWebhookQueueConfig['redis']): string {
+  if (typeof target === 'string') {
+    try {
+      const url = new URL(target);
+      if (url.username) {
+        url.username = '***';
+      }
+      if (url.password) {
+        url.password = '***';
+      }
+      return url.toString();
+    } catch {
+      return target;
+    }
+  }
+
+  if (!('password' in target) || target.password == null) {
+    return JSON.stringify(target);
+  }
+
+  return JSON.stringify({
+    ...target,
+    password: '***',
+  });
+}
+
+async function loadBullMQModule(): Promise<{
+  Queue: typeof BullQueue;
+  Worker: typeof BullWorker;
+  UnrecoverableError: typeof import('bullmq').UnrecoverableError;
+}> {
+  let namespace: {
+    Queue?: typeof BullQueue;
+    Worker?: typeof BullWorker;
+    UnrecoverableError?: typeof import('bullmq').UnrecoverableError;
+  };
+
+  try {
+    const bullmq = await import('bullmq');
+    namespace = (bullmq as { default?: typeof bullmq }).default ?? bullmq;
+  } catch {
+    throw new Error('BullMQ webhook queue requires bullmq to be installed. Run: bun add bullmq');
+  }
+
+  const { Queue, Worker, UnrecoverableError } = namespace;
+  if (
+    typeof Queue !== 'function' ||
+    typeof Worker !== 'function' ||
+    typeof UnrecoverableError !== 'function'
+  ) {
+    throw new Error(
+      'BullMQ webhook queue requires bullmq Queue, Worker, and UnrecoverableError exports',
+    );
+  }
+
+  return { Queue, Worker, UnrecoverableError };
+}
+
+async function loadIORedisModule(): Promise<typeof Redis> {
+  let namespace: { default?: typeof Redis; Redis?: typeof Redis };
+
+  try {
+    const ioredis = await import('ioredis');
+    namespace = ioredis as { default?: typeof Redis; Redis?: typeof Redis };
+  } catch {
+    throw new Error('BullMQ webhook queue requires ioredis to be installed. Run: bun add ioredis');
+  }
+
+  const IORedis = namespace.default ?? namespace.Redis;
+  if (typeof IORedis !== 'function') {
+    throw new Error('BullMQ webhook queue requires ioredis to export a Redis constructor');
+  }
+
+  return IORedis;
 }
 
 /**
@@ -105,7 +181,7 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
   return {
     name: 'bullmq',
     async enqueue(jobInput: Omit<WebhookJob, 'id' | 'createdAt'>): Promise<string> {
-      if (!queue) throw new Error('BullMQ webhook queue not started — call start() first');
+      if (!queue) throw new Error('BullMQ webhook queue not started - call start() first');
       const job = await queue.add('deliver', jobInput, {
         attempts: maxAttempts,
         backoff: { type: 'exponential', delay: retryBaseDelayMs },
@@ -113,108 +189,120 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
       return requireJobId(job.id);
     },
     async start(processor: (job: WebhookJob) => Promise<void>): Promise<void> {
-      let QueueCtor: typeof BullQueue;
-      let WorkerCtor: typeof BullWorker;
-      let UnrecoverableError: typeof import('bullmq').UnrecoverableError;
-      try {
-        const bullmq = await import('bullmq');
-        QueueCtor = bullmq.Queue;
-        WorkerCtor = bullmq.Worker;
-        UnrecoverableError = bullmq.UnrecoverableError;
-      } catch {
-        throw new Error(
-          'BullMQ webhook queue requires bullmq to be installed. Run: bun add bullmq',
-        );
+      if (queue || worker || connection) {
+        throw new Error('BullMQ webhook queue already started');
       }
 
-      let IORedis: typeof Redis;
-      try {
-        const ioredis = await import('ioredis');
-        const defaultRedis = (ioredis as { default?: typeof Redis }).default;
-        const namedRedis = (ioredis as { Redis?: typeof Redis }).Redis;
-        if (defaultRedis) {
-          IORedis = defaultRedis;
-        } else if (namedRedis) {
-          IORedis = namedRedis;
-        } else {
-          throw new Error('BullMQ webhook queue requires ioredis to export a Redis constructor');
-        }
-      } catch {
-        throw new Error(
-          'BullMQ webhook queue requires ioredis to be installed. Run: bun add ioredis',
-        );
-      }
+      const { Queue: QueueCtor, Worker: WorkerCtor, UnrecoverableError } = await loadBullMQModule();
+      const IORedis = await loadIORedisModule();
 
+      let startedConnection: Redis | null = null;
       try {
-        connection =
+        startedConnection =
           typeof config.redis === 'string'
             ? new IORedis(config.redis, { maxRetriesPerRequest: null })
             : new IORedis({ ...config.redis, maxRetriesPerRequest: null });
-        await connection.ping();
+        await startedConnection.ping();
       } catch (err) {
-        const connStr =
-          typeof config.redis === 'string' ? config.redis : JSON.stringify(config.redis);
         throw new Error(
-          `BullMQ webhook queue: failed to connect to Redis (${connStr}): ${err instanceof Error ? err.message : String(err)}`,
+          `BullMQ webhook queue: failed to connect to Redis (${redactRedisTarget(config.redis)}): ${err instanceof Error ? err.message : String(err)}`,
           { cause: err },
         );
       }
 
-      const conn = connection as unknown as BullConnectionOptions;
-      queue = new QueueCtor(queueName, { connection: conn });
-      worker = new WorkerCtor(
-        queueName,
-        async (bullJob: BullJob<WebhookJobData>) => {
-          const webhookJob: WebhookJob = {
-            id: requireJobId(bullJob.id),
-            deliveryId: bullJob.data.deliveryId,
-            endpointId: bullJob.data.endpointId,
-            url: bullJob.data.url,
-            secret: bullJob.data.secret,
-            event: bullJob.data.event,
-            payload: bullJob.data.payload,
-            attempts: bullJob.attemptsMade,
-            createdAt: new Date(bullJob.timestamp),
-          };
-          try {
-            await processor(webhookJob);
-          } catch (err) {
-            if (err instanceof WebhookDeliveryError && !err.retryable) {
-              throw new UnrecoverableError(err.message);
-            }
-            throw err;
-          }
-        },
-        { connection: conn },
-      );
+      let startedQueue: BullQueue | null = null;
+      let startedWorker: BullWorker | null = null;
 
-      worker.on('failed', (bullJob: BullJob<WebhookJobData> | undefined, err: Error) => {
-        if (!bullJob) return;
-        const isUnrecoverable = err instanceof UnrecoverableError;
-        const isExhausted = bullJob.attemptsMade >= maxAttempts;
-        if (isUnrecoverable || isExhausted) {
-          const webhookJob: WebhookJob = {
-            id: String(bullJob.id),
-            deliveryId: bullJob.data.deliveryId,
-            endpointId: bullJob.data.endpointId,
-            url: bullJob.data.url,
-            secret: bullJob.data.secret,
-            event: bullJob.data.event,
-            payload: bullJob.data.payload,
-            attempts: bullJob.attemptsMade,
-            createdAt: new Date(bullJob.timestamp),
-          };
-          void config.onDeadLetter?.(webhookJob, err);
-        }
-      });
+      try {
+        const conn = startedConnection as unknown as BullConnectionOptions;
+        startedQueue = new QueueCtor(queueName, { connection: conn });
+        startedWorker = new WorkerCtor(
+          queueName,
+          async (bullJob: BullJob<WebhookJobData>) => {
+            const webhookJob: WebhookJob = {
+              id: requireJobId(bullJob.id),
+              deliveryId: bullJob.data.deliveryId,
+              endpointId: bullJob.data.endpointId,
+              url: bullJob.data.url,
+              secret: bullJob.data.secret,
+              event: bullJob.data.event,
+              payload: bullJob.data.payload,
+              attempts: bullJob.attemptsMade,
+              createdAt: new Date(bullJob.timestamp),
+            };
+            try {
+              await processor(webhookJob);
+            } catch (err) {
+              if (err instanceof WebhookDeliveryError && !err.retryable) {
+                throw new UnrecoverableError(err.message);
+              }
+              throw err;
+            }
+          },
+          { connection: conn },
+        );
+
+        startedWorker.on('failed', (bullJob: BullJob<WebhookJobData> | undefined, err: Error) => {
+          if (!bullJob) return;
+          const isUnrecoverable = err instanceof UnrecoverableError;
+          const isExhausted = bullJob.attemptsMade >= maxAttempts;
+          if (isUnrecoverable || isExhausted) {
+            const webhookJob: WebhookJob = {
+              id: requireJobId(bullJob.id),
+              deliveryId: bullJob.data.deliveryId,
+              endpointId: bullJob.data.endpointId,
+              url: bullJob.data.url,
+              secret: bullJob.data.secret,
+              event: bullJob.data.event,
+              payload: bullJob.data.payload,
+              attempts: bullJob.attemptsMade,
+              createdAt: new Date(bullJob.timestamp),
+            };
+            void config.onDeadLetter?.(webhookJob, err);
+          }
+        });
+
+        connection = startedConnection;
+        queue = startedQueue;
+        worker = startedWorker;
+      } catch (err) {
+        await startedWorker?.close().catch(() => undefined);
+        await startedQueue?.close().catch(() => undefined);
+        await startedConnection?.quit().catch(() => undefined);
+        throw err;
+      }
     },
     async stop(): Promise<void> {
-      await worker?.close();
-      await queue?.close();
-      await connection?.quit();
+      const activeWorker = worker;
+      const activeQueue = queue;
+      const activeConnection = connection;
       worker = null;
       queue = null;
       connection = null;
+
+      let firstError: unknown;
+
+      try {
+        await activeWorker?.close();
+      } catch (err) {
+        firstError ??= err;
+      }
+
+      try {
+        await activeQueue?.close();
+      } catch (err) {
+        firstError ??= err;
+      }
+
+      try {
+        await activeConnection?.quit();
+      } catch (err) {
+        firstError ??= err;
+      }
+
+      if (firstError) {
+        throw firstError;
+      }
     },
     async depth(): Promise<number> {
       if (!queue) return 0;

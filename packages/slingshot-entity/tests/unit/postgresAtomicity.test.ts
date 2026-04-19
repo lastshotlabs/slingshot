@@ -296,9 +296,10 @@ describe('Postgres executor atomicity', () => {
 
     expect(error?.message).toBe('insert failed');
 
-    expect(clientQueries).toContain('BEGIN');
-    expect(clientQueries).toContain('ROLLBACK');
-    expect(released.count).toBe(1);
+    expect(clientQueries.filter(sql => sql === 'BEGIN')).toHaveLength(2);
+    expect(clientQueries.filter(sql => sql === 'COMMIT')).toHaveLength(1);
+    expect(clientQueries.filter(sql => sql === 'ROLLBACK')).toHaveLength(1);
+    expect(released.count).toBe(2);
     expect(state.rows).toEqual([{ parent_id: 'p1', id: 'existing', label: 'Existing' }]);
   });
 

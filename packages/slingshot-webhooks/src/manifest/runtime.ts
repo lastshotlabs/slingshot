@@ -98,6 +98,12 @@ function hasMethod(value: BareEntityAdapter, method: string): boolean {
   return typeof value[method] === 'function';
 }
 
+function hasMethods(value: unknown, methods: readonly string[]): value is BareEntityAdapter {
+  if (typeof value !== 'object' || value === null) return false;
+  const adapter = value as BareEntityAdapter;
+  return methods.every(method => hasMethod(adapter, method));
+}
+
 function maskSecret(secret: string): string {
   return secret.length > 4 ? secret.slice(-4) : '****';
 }
@@ -173,9 +179,7 @@ function normalizeLastAttempt(value: WebhookAttempt | undefined): WebhookAttempt
 }
 
 function isEndpointRuntimeAdapter(value: unknown): value is EndpointRuntimeAdapter {
-  if (typeof value !== 'object' || value === null) return false;
-  const adapter = value as BareEntityAdapter;
-  return hasMethod(adapter, 'reveal') && hasMethod(adapter, 'listRaw');
+  return hasMethods(value, ['reveal', 'listRaw', 'findForEvent']);
 }
 
 function requireEndpointRuntimeAdapter(value: BareEntityAdapter): EndpointRuntimeAdapter {
@@ -186,8 +190,29 @@ function requireEndpointRuntimeAdapter(value: BareEntityAdapter): EndpointRuntim
 }
 
 function isDeliveryRuntimeAdapter(value: unknown): value is DeliveryRuntimeAdapter {
-  if (typeof value !== 'object' || value === null) return false;
-  return hasMethod(value as BareEntityAdapter, 'applyTransition');
+  return hasMethods(value, ['applyTransition', 'transition', 'create', 'getById', 'list', 'update']);
+}
+
+function normalizeStatuses(
+  value: WebhookRuntimeAdapter['listDeliveries'] extends (input?: infer T) => Promise<unknown>
+    ? T extends { status?: infer Status }
+      ? Status
+      : never
+    : never,
+): DeliveryTransitionStatus[] | null {
+  if (!value) return null;
+  return Array.isArray(value) ? [...value] : [value];
+}
+
+function requireNextCursor(scope: string, nextCursor: string | undefined, seen: Set<string>): string {
+  if (!nextCursor) {
+    throw new Error(`[slingshot-webhooks] ${scope} returned hasMore without nextCursor`);
+  }
+  if (seen.has(nextCursor)) {
+    throw new Error(`[slingshot-webhooks] ${scope} returned a repeated nextCursor`);
+  }
+  seen.add(nextCursor);
+  return nextCursor;
 }
 
 function requireDeliveryRuntimeAdapter(value: BareEntityAdapter): DeliveryRuntimeAdapter {
@@ -263,25 +288,70 @@ function buildRuntimeAdapter(
       return record ? sanitizeDelivery(record) : null;
     },
     async listDeliveries(input = {}) {
-      const page = await deliveries.list({
-        filter: {
-          ...(input.endpointId ? { endpointId: input.endpointId } : {}),
-        },
-        limit: input.limit,
-        cursor: input.cursor,
-      });
-      const statuses = input.status
-        ? Array.isArray(input.status)
-          ? input.status
-          : [input.status]
-        : null;
-      const items = (page.items as DeliveryRecord[])
-        .filter(item => (statuses ? statuses.includes(item.status) : true))
-        .map(sanitizeDelivery);
+      const filter = {
+        ...(input.endpointId ? { endpointId: input.endpointId } : {}),
+      };
+      const statuses = normalizeStatuses(input.status);
+      if (!statuses) {
+        const page = await deliveries.list({
+          filter,
+          limit: input.limit,
+          cursor: input.cursor,
+        });
+        return {
+          items: (page.items as DeliveryRecord[]).map(sanitizeDelivery),
+          nextCursor: page.nextCursor,
+          hasMore: page.hasMore ?? false,
+        };
+      }
+
+      const items: WebhookDelivery[] = [];
+      const seenCursors = new Set<string>();
+      let cursor = input.cursor;
+      const targetCount = input.limit ?? Number.POSITIVE_INFINITY;
+
+      while (items.length < targetCount) {
+        const page = await deliveries.list({
+          filter,
+          // When filtering client-side against an opaque cursor, fetch at most the
+          // remaining requested items so the returned nextCursor never skips unseen rows.
+          limit: Number.isFinite(targetCount) ? Math.max(1, targetCount - items.length) : 100,
+          cursor,
+        });
+        items.push(
+          ...(page.items as DeliveryRecord[])
+            .filter(item => statuses.includes(item.status))
+            .map(sanitizeDelivery),
+        );
+
+        const hasMore = page.hasMore ?? false;
+        if (!hasMore) {
+          return {
+            items,
+            nextCursor: page.nextCursor,
+            hasMore: false,
+          };
+        }
+
+        const nextCursor = requireNextCursor(
+          'filtered webhook delivery pagination',
+          page.nextCursor,
+          seenCursors,
+        );
+        if (items.length >= targetCount) {
+          return {
+            items,
+            nextCursor,
+            hasMore: true,
+          };
+        }
+        cursor = nextCursor;
+      }
+
       return {
         items,
-        nextCursor: page.nextCursor,
-        hasMore: page.hasMore ?? false,
+        nextCursor: undefined,
+        hasMore: false,
       };
     },
   };
@@ -372,10 +442,24 @@ export function createWebhooksManifestRuntime(
     if (!endpoints) {
       throw new Error('[slingshot-webhooks] endpoint adapter not ready');
     }
-    const page = await endpoints.listRaw({ filter: { enabled: true }, limit: 500 });
-    return page.items.filter(
-      endpoint => endpoint.enabled && endpoint.events.some(pattern => matchGlob(pattern, event)),
-    );
+    const matches: EndpointRecord[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+
+    while (true) {
+      const page = await endpoints.listRaw({ filter: { enabled: true }, limit: 500, cursor });
+      matches.push(
+        ...page.items.filter(
+          endpoint => endpoint.enabled && endpoint.events.some(pattern => matchGlob(pattern, event)),
+        ),
+      );
+
+      if (!(page.hasMore ?? false)) {
+        return matches;
+      }
+
+      cursor = requireNextCursor('webhook endpoint discovery pagination', page.nextCursor, seenCursors);
+    }
   });
 
   customHandlers.register('webhooks.delivery.transition', () => () => async (input: unknown) => {

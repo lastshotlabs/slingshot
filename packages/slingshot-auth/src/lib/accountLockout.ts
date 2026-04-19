@@ -10,6 +10,7 @@ import {
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 
 // ---------------------------------------------------------------------------
@@ -505,26 +506,23 @@ export function createMongoLockoutRepository(
  * const service = createLockoutService({ maxAttempts: 5, lockoutDuration: 900 }, repo);
  */
 export function createPostgresLockoutRepository(pool: import('pg').Pool): LockoutRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_lockout_attempts (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_lockout_attempts (
       subject_key TEXT PRIMARY KEY,
       count       INTEGER NOT NULL,
       expires_at  BIGINT NOT NULL
     )`);
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_locked_accounts (
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_locked_accounts (
       subject_key TEXT PRIMARY KEY,
       expires_at  BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_lockout_attempts_expires_at ON auth_lockout_attempts(expires_at)',
     );
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_locked_accounts_expires_at ON auth_locked_accounts(expires_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async getAttempts(key) {

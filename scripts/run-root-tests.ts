@@ -1,37 +1,52 @@
 import { collectRootTestFiles, partitionRootTestFiles } from './root-test-files';
 
-async function runFiles(label: string, files: string[]): Promise<void> {
+export async function runFiles(
+  label: string,
+  files: string[],
+  spawnFn: typeof Bun.spawn = Bun.spawn,
+): Promise<number> {
   console.log(`test:root -> ${label}`);
-  const proc = Bun.spawn(['bun', 'test', ...files], {
+  const proc = spawnFn(['bun', 'test', ...files], {
     cwd: process.cwd(),
-    stdin: 'inherit',
+    stdin: 'ignore',
     stdout: 'inherit',
     stderr: 'inherit',
   });
-  const code = await proc.exited;
-  if (code !== 0) {
-    process.exit(code);
+  return await proc.exited;
+}
+
+export async function runRootTests(
+  files?: string[],
+  spawnFn: typeof Bun.spawn = Bun.spawn,
+): Promise<number> {
+  const resolvedFiles = files ?? (await collectRootTestFiles());
+  if (resolvedFiles.length === 0) {
+    return 0;
   }
-}
 
-const files = await collectRootTestFiles();
+  const chunkSize = 40;
+  const { bulk, isolated } = partitionRootTestFiles(resolvedFiles);
 
-if (files.length === 0) {
-  process.exit(0);
-}
-
-const chunkSize = 40;
-const { bulk, isolated } = partitionRootTestFiles(files);
-
-for (let index = 0; index < bulk.length; index += chunkSize) {
-  const chunk = bulk.slice(index, index + chunkSize);
-  if (chunk.length > 0) {
-    await runFiles(`bulk ${index / chunkSize + 1}`, chunk);
+  for (let index = 0; index < bulk.length; index += chunkSize) {
+    const chunk = bulk.slice(index, index + chunkSize);
+    if (chunk.length > 0) {
+      const code = await runFiles(`bulk ${index / chunkSize + 1}`, chunk, spawnFn);
+      if (code !== 0) {
+        return code;
+      }
+    }
   }
+
+  for (const file of isolated) {
+    const code = await runFiles(`isolated ${file}`, [file], spawnFn);
+    if (code !== 0) {
+      return code;
+    }
+  }
+
+  return 0;
 }
 
-for (const file of isolated) {
-  await runFiles(`isolated ${file}`, [file]);
+if (import.meta.main) {
+  process.exit(await runRootTests());
 }
-
-process.exit(0);

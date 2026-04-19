@@ -5,6 +5,7 @@ import { DEFAULT_MAX_ENTRIES, evictOldest, sha256 } from '@lastshotlabs/slingsho
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -211,18 +212,15 @@ export function createMongoSamlRequestIdRepository(
 export function createPostgresSamlRequestIdRepository(
   pool: import('pg').Pool,
 ): SamlRequestIdRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_saml_request_ids (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_saml_request_ids (
       hash       TEXT PRIMARY KEY,
       expires_at BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_saml_request_ids_expires_at ON auth_saml_request_ids(expires_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async store(hash, ttl) {

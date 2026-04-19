@@ -28,7 +28,7 @@ import type { SsgConfig } from './types';
 
 // ─── Argument parsing ─────────────────────────────────────────────────────────
 
-function parseArgs(argv: string[]): {
+export function parseArgs(argv: string[]): {
   routesDir: string;
   assetsManifest: string;
   outDir: string;
@@ -89,7 +89,7 @@ const CLIENT_ENTRY_CANDIDATES = [
  * @param clientEntry  - Manifest key for the client entry chunk, or `undefined`
  *                       to auto-detect from {@link CLIENT_ENTRY_CANDIDATES}.
  */
-async function resolveAssetTagsHtml(
+export async function resolveAssetTagsHtml(
   manifestPath: string,
   clientEntry: string | undefined,
 ): Promise<string> {
@@ -158,7 +158,7 @@ async function resolveAssetTagsHtml(
  *
  * Throws when the module cannot be loaded or no renderer is found.
  */
-async function loadRenderer(rendererPath: string): Promise<SlingshotSsrRenderer> {
+export async function loadRenderer(rendererPath: string): Promise<SlingshotSsrRenderer> {
   const absPath = resolve(process.cwd(), rendererPath);
   if (!existsSync(absPath)) {
     throw new Error(
@@ -187,8 +187,7 @@ async function loadRenderer(rendererPath: string): Promise<SlingshotSsrRenderer>
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-async function main(): Promise<void> {
-  const argv = process.argv.slice(2);
+export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   const opts = parseArgs(argv);
 
   const cwd = process.cwd();
@@ -256,7 +255,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err: unknown) => {
-  console.error('[slingshot-ssg] Fatal error:', err);
-  process.exit(1);
-});
+if (import.meta.main) {
+  runCli().catch((err: unknown) => {
+    console.error('[slingshot-ssg] Fatal error:', err);
+    process.exit(1);
+  });
+}

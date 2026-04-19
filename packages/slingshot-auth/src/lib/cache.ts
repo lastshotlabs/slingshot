@@ -80,6 +80,17 @@ interface MemoryCacheEntry {
   expiresAt: number;
 }
 
+function globToRegex(pattern: string): RegExp {
+  const escaped = pattern.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
+  return new RegExp(`^${escaped.replace(/\*/g, '.*')}$`);
+}
+
+function globToSqlLike(pattern: string): string {
+  return pattern
+    .replace(/[\\%_]/g, '\\$&')
+    .replace(/\*/g, '%');
+}
+
 /**
  * Creates an in-memory cache adapter.
  *
@@ -125,7 +136,7 @@ export function createMemoryCacheAdapter(): ICacheAdapter {
       store.delete(key);
     },
     async delPattern(pattern) {
-      const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
+      const regex = globToRegex(pattern);
       for (const key of store.keys()) {
         if (regex.test(key)) store.delete(key);
       }
@@ -197,8 +208,8 @@ export function createSqliteCacheAdapter(db: RuntimeSqliteDatabase): ICacheAdapt
     },
     async delPattern(pattern) {
       init();
-      const likePattern = pattern.replace(/\*/g, '%');
-      db.run('DELETE FROM auth_cache WHERE key LIKE ?', likePattern);
+      const likePattern = globToSqlLike(pattern);
+      db.run("DELETE FROM auth_cache WHERE key LIKE ? ESCAPE '\\'", likePattern);
     },
     isReady() {
       return true;
@@ -250,9 +261,16 @@ export function createRedisCacheAdapter(getRedis: () => RedisLike, appName: stri
     },
     async delPattern(pattern) {
       const redis = getRedis();
-      const fullPattern = `cache:${appName}:${pattern.replace(/\*/g, '*')}`;
-      const keys = await redis.keys(fullPattern);
-      if (keys.length > 0) await redis.del(...keys);
+      const fullPattern = `cache:${appName}:${pattern}`;
+      let cursor = '0';
+
+      do {
+        const [next, keys] = await redis.scan(cursor, 'MATCH', fullPattern, 'COUNT', 100);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+        cursor = next;
+      } while (cursor !== '0');
     },
     isReady() {
       try {

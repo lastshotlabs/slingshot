@@ -14,7 +14,12 @@
  * - Numeric string values
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { createMemoryCacheAdapter } from '../../src/lib/cache';
+import { Database } from 'bun:sqlite';
+import {
+  createMemoryCacheAdapter,
+  createRedisCacheAdapter,
+  createSqliteCacheAdapter,
+} from '../../src/lib/cache';
 import type { ICacheAdapter } from '../../src/lib/cache';
 
 let cache: ICacheAdapter;
@@ -183,6 +188,16 @@ describe('memory cache adapter', () => {
     expect(await cache.get('b:x:z')).toBe('4');
   });
 
+  test('delPattern treats regex metacharacters literally', async () => {
+    await cache.set('literal.user+1', 'keep');
+    await cache.set('literalXuser+1', 'delete');
+
+    await cache.delPattern('literal.user+*');
+
+    expect(await cache.get('literal.user+1')).toBeNull();
+    expect(await cache.get('literalXuser+1')).toBe('delete');
+  });
+
   // ---------------------------------------------------------------------------
   // Factory isolation
   // ---------------------------------------------------------------------------
@@ -194,5 +209,73 @@ describe('memory cache adapter', () => {
 
     expect(await cache.get('shared-key')).toBe('from-cache-1');
     expect(await cache2.get('shared-key')).toBe('from-cache-2');
+  });
+});
+
+describe('sqlite cache adapter', () => {
+  test('delPattern escapes LIKE metacharacters and backslashes', async () => {
+    const db = new Database(':memory:');
+    const cache = createSqliteCacheAdapter(db as unknown as Parameters<typeof createSqliteCacheAdapter>[0]);
+
+    await cache.set('rate%limit_key', 'keep');
+    await cache.set('rate%limit_key:1', 'delete');
+    await cache.set('path\\to\\file', 'keep-path');
+    await cache.set('path\\to\\file:1', 'delete-path');
+
+    await cache.delPattern('rate%limit_key:*');
+    await cache.delPattern('path\\to\\file:*');
+
+    expect(await cache.get('rate%limit_key')).toBe('keep');
+    expect(await cache.get('rate%limit_key:1')).toBeNull();
+    expect(await cache.get('path\\to\\file')).toBe('keep-path');
+    expect(await cache.get('path\\to\\file:1')).toBeNull();
+
+    db.close();
+  });
+});
+
+describe('redis cache adapter', () => {
+  test('delPattern uses SCAN batches instead of KEYS', async () => {
+    const deleted: string[][] = [];
+    const scans: string[] = [];
+    const store = new Map<string, string>([
+      ['cache:app:nonce:1', 'a'],
+      ['cache:app:nonce:2', 'b'],
+      ['cache:app:other:1', 'c'],
+    ]);
+
+    const redis = {
+      async get(key: string) {
+        return store.get(key) ?? null;
+      },
+      async set(key: string, value: string) {
+        store.set(key, value);
+        return 'OK';
+      },
+      async del(...keys: string[]) {
+        deleted.push(keys);
+        for (const key of keys) store.delete(key);
+        return keys.length;
+      },
+      async scan(cursor: string | number, ...args: unknown[]): Promise<[string, string[]]> {
+        scans.push(String(cursor));
+        expect(args).toEqual(['MATCH', 'cache:app:nonce:*', 'COUNT', 100]);
+        if (String(cursor) === '0') {
+          return ['7', ['cache:app:nonce:1']];
+        }
+        return ['0', ['cache:app:nonce:2']];
+      },
+      async keys() {
+        throw new Error('KEYS should not be used');
+      },
+    };
+
+    const cache = createRedisCacheAdapter(() => redis as any, 'app');
+    await cache.delPattern('nonce:*');
+
+    expect(scans).toEqual(['0', '7']);
+    expect(deleted).toEqual([['cache:app:nonce:1'], ['cache:app:nonce:2']]);
+    expect(await cache.get('nonce:1')).toBeNull();
+    expect(await cache.get('other:1')).toBe('c');
   });
 });

@@ -569,33 +569,41 @@ function packagesIndex(packages: WorkspacePackage[]): string {
   return lines.join('\n');
 }
 
-function syncPackageDocs(pkg: WorkspacePackage): void {
+function syncPackageDocs(pkg: WorkspacePackage, destinationRoot: string): void {
   ensurePackageSourceDocs(pkg);
 
-  const destinationRoot = join(outputRoot, pkg.slug);
-  ensureDir(destinationRoot);
-  writeFileSync(join(destinationRoot, 'index.mdx'), packageOverview(pkg));
+  const packageDestinationRoot = join(destinationRoot, pkg.slug);
+  ensureDir(packageDestinationRoot);
+  writeFileSync(join(packageDestinationRoot, 'index.mdx'), packageOverview(pkg));
 
   for (const level of levels) {
-    copyDocsRecursive(pkg, level, join(pkg.docsSourceDir, level), destinationRoot);
+    copyDocsRecursive(pkg, level, join(pkg.docsSourceDir, level), packageDestinationRoot);
   }
 }
 
-async function main(): Promise<void> {
-  const packages = discoverWorkspacePackages();
+export interface SyncWorkspaceDocsOptions {
+  packages?: WorkspacePackage[];
+  outputRootPath?: string;
+}
 
-  rmSync(outputRoot, { recursive: true, force: true });
-  ensureDir(outputRoot);
+export async function main(options: SyncWorkspaceDocsOptions = {}): Promise<void> {
+  const packages = options.packages ?? discoverWorkspacePackages();
+  const destinationRoot = options.outputRootPath ?? outputRoot;
 
-  writeFileSync(join(outputRoot, 'index.mdx'), packagesIndex(packages));
+  rmSync(destinationRoot, { recursive: true, force: true });
+  ensureDir(destinationRoot);
+
+  writeFileSync(join(destinationRoot, 'index.mdx'), packagesIndex(packages));
 
   for (const pkg of packages) {
-    syncPackageDocs(pkg);
+    syncPackageDocs(pkg, destinationRoot);
     console.log(`Synced docs: ${pkg.name}`);
   }
 }
 
-main().catch(error => {
-  console.error(error);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch(error => {
+    console.error(error);
+    process.exit(1);
+  });
+}

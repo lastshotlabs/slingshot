@@ -18,19 +18,19 @@ interface CoverageSummary {
   missingFiles: string[];
 }
 
-function percent(hit: number, found: number): number {
+export function percent(hit: number, found: number): number {
   return found === 0 ? 100 : (hit / found) * 100;
 }
 
-function formatPercent(hit: number, found: number): string {
+export function formatPercent(hit: number, found: number): string {
   return `${percent(hit, found).toFixed(1)}% (${hit}/${found})`;
 }
 
-function suiteEnvPrefix(suite: CoverageSuite): string {
+export function suiteEnvPrefix(suite: CoverageSuite): string {
   return suite.name.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
 }
 
-function readThreshold(
+export function readThreshold(
   suite: CoverageSuite,
   metric: 'LINES' | 'FUNCTIONS' | 'BRANCHES',
 ): number | null {
@@ -42,7 +42,7 @@ function readThreshold(
   return Number.isFinite(value) ? value : null;
 }
 
-function summarizeCoverage(
+export function summarizeCoverage(
   ownedFiles: string[],
   fileCoverage: Map<string, CoverageFileSummary>,
 ): CoverageSummary {
@@ -76,7 +76,7 @@ function summarizeCoverage(
   return summary;
 }
 
-function assertNonEmptyCoverage(suite: CoverageSuite, summary: CoverageSummary): string[] {
+export function assertNonEmptyCoverage(suite: CoverageSuite, summary: CoverageSummary): string[] {
   const failures: string[] = [];
   if (summary.ownedFiles === 0) {
     failures.push(`${suite.name}: no owned files matched ${suite.ownedGlobs.join(', ')}`);
@@ -96,7 +96,7 @@ function assertNonEmptyCoverage(suite: CoverageSuite, summary: CoverageSummary):
   return failures;
 }
 
-function assertThresholds(suite: CoverageSuite, summary: CoverageSummary): string[] {
+export function assertThresholds(suite: CoverageSuite, summary: CoverageSummary): string[] {
   const failures: string[] = [];
   const lineThreshold = readThreshold(suite, 'LINES');
   if (lineThreshold != null && percent(summary.linesHit, summary.linesFound) < lineThreshold) {
@@ -129,38 +129,50 @@ function assertThresholds(suite: CoverageSuite, summary: CoverageSummary): strin
   return failures;
 }
 
-const failures: string[] = [];
+export async function checkCoverage(
+  suites = coverageSuites,
+  io: Pick<typeof console, 'error' | 'log'> = console,
+): Promise<string[]> {
+  const failures: string[] = [];
 
-for (const suite of coverageSuites) {
-  const artifact = coverageArtifactPath(suite);
-  if (!existsSync(artifact)) {
-    failures.push(`${suite.name}: missing coverage artifact at ${artifact}`);
-    continue;
+  for (const suite of suites) {
+    const artifact = coverageArtifactPath(suite);
+    if (!existsSync(artifact)) {
+      failures.push(`${suite.name}: missing coverage artifact at ${artifact}`);
+      continue;
+    }
+
+    const ownedFiles = await discoverOwnedFiles(suite);
+    const report = parseLcov(artifact);
+    const summary = summarizeCoverage(ownedFiles, report.files);
+    io.log(
+      [
+        `${suite.name}:`,
+        `owned files ${summary.ownedFiles}`,
+        `lines ${formatPercent(summary.linesHit, summary.linesFound)}`,
+        `functions ${formatPercent(summary.functionsHit, summary.functionsFound)}`,
+        `branches ${formatPercent(summary.branchesHit, summary.branchesFound)}`,
+      ].join(' '),
+    );
+
+    failures.push(...assertNonEmptyCoverage(suite, summary));
+    failures.push(...assertThresholds(suite, summary));
   }
 
-  const ownedFiles = await discoverOwnedFiles(suite);
-  const report = parseLcov(artifact);
-  const summary = summarizeCoverage(ownedFiles, report.files);
-  console.log(
-    [
-      `${suite.name}:`,
-      `owned files ${summary.ownedFiles}`,
-      `lines ${formatPercent(summary.linesHit, summary.linesFound)}`,
-      `functions ${formatPercent(summary.functionsHit, summary.functionsFound)}`,
-      `branches ${formatPercent(summary.branchesHit, summary.branchesFound)}`,
-    ].join(' '),
-  );
-
-  failures.push(...assertNonEmptyCoverage(suite, summary));
-  failures.push(...assertThresholds(suite, summary));
-}
-
-if (failures.length > 0) {
-  console.error('coverage check failed');
-  for (const failure of failures) {
-    console.error(`- ${failure}`);
+  if (failures.length > 0) {
+    io.error('coverage check failed');
+    for (const failure of failures) {
+      io.error(`- ${failure}`);
+    }
   }
-  process.exit(1);
+
+  return failures;
 }
 
-console.log(`coverage check passed for ${coverageSuites.length} suite(s)`);
+if (import.meta.main) {
+  const failures = await checkCoverage();
+  if (failures.length > 0) {
+    process.exit(1);
+  }
+  console.log(`coverage check passed for ${coverageSuites.length} suite(s)`);
+}

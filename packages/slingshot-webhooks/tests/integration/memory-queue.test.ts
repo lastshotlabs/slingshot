@@ -81,4 +81,40 @@ describe('memory queue', () => {
     expect(deadLetterMock).toHaveBeenCalledTimes(1);
     await q.stop();
   });
+
+  it('does not replay completed jobs after restart', async () => {
+    const processorMock = mock(async () => {});
+    const q = createWebhookMemoryQueue({ maxAttempts: 1 });
+
+    await q.start(processorMock);
+    await q.enqueue(makeJob());
+    await new Promise(r => setTimeout(r, 30));
+    await q.stop();
+
+    await q.start(processorMock);
+    await new Promise(r => setTimeout(r, 30));
+
+    expect(processorMock).toHaveBeenCalledTimes(1);
+    await q.stop();
+  });
+
+  it('reports the final attempt count to dead-letter handlers', async () => {
+    let deadLetterJob: WebhookJob | undefined;
+    const q = createWebhookMemoryQueue({
+      maxAttempts: 3,
+      onDeadLetter: job => {
+        deadLetterJob = job;
+      },
+    });
+
+    await q.start(async () => {
+      throw new Error('delivery failed');
+    });
+    await q.enqueue(makeJob());
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(deadLetterJob).toBeDefined();
+    expect(deadLetterJob?.attempts).toBe(3);
+    await q.stop();
+  });
 });

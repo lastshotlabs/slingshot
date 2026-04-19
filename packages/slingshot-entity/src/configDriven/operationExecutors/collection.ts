@@ -210,8 +210,8 @@ export function collectionSqlite(
 
   function ensureTable(): void {
     if (initialized) return;
+    ensureParentTable();
     runSqliteImmediateTransaction(db, () => {
-      ensureParentTable();
       const cols: string[] = [`${parentKeyCol} TEXT NOT NULL`];
       for (const [name, def] of Object.entries(op.itemFields)) {
         const col = toSnakeCase(name);
@@ -373,32 +373,29 @@ export function collectionPostgres(
       return;
     }
 
-    initializationPromise = (async () => {
-      await withOptionalPostgresTransaction(pool, async queryable => {
-        await ensureParentTable();
-        const cols: string[] = [`${parentKeyCol} TEXT NOT NULL`];
-        for (const [name, def] of Object.entries(op.itemFields)) {
-          const col = toSnakeCase(name);
-          const pgType =
-            def.type === 'integer'
-              ? 'INTEGER'
-              : def.type === 'number'
-                ? 'NUMERIC'
-                : def.type === 'boolean'
-                  ? 'BOOLEAN'
-                  : def.type === 'date'
-                    ? 'TIMESTAMPTZ'
-                    : 'TEXT';
-          cols.push(`${col} ${pgType}`);
-        }
-        await queryable.query(`CREATE TABLE IF NOT EXISTS ${table} (${cols.join(', ')})`);
-      });
-
-      initialized = true;
-    })();
+    await ensureParentTable();
+    initializationPromise = withOptionalPostgresTransaction(pool, async queryable => {
+      const cols: string[] = [`${parentKeyCol} TEXT NOT NULL`];
+      for (const [name, def] of Object.entries(op.itemFields)) {
+        const col = toSnakeCase(name);
+        const pgType =
+          def.type === 'integer'
+            ? 'INTEGER'
+            : def.type === 'number'
+              ? 'NUMERIC'
+              : def.type === 'boolean'
+                ? 'BOOLEAN'
+                : def.type === 'date'
+                  ? 'TIMESTAMPTZ'
+                  : 'TEXT';
+        cols.push(`${col} ${pgType}`);
+      }
+      await queryable.query(`CREATE TABLE IF NOT EXISTS ${table} (${cols.join(', ')})`);
+    });
 
     try {
       await initializationPromise;
+      initialized = true;
     } finally {
       initializationPromise = null;
     }

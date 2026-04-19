@@ -584,8 +584,13 @@ describe('wsMessageFactories', () => {
   });
 
   test('postgres factory returns a Promise resolving to a repository', async () => {
+    const runQuery = async () => ({ rows: [], rowCount: 0 });
     const pool = {
-      query: async () => ({ rows: [], rowCount: 0 }),
+      query: runQuery,
+      connect: async () => ({
+        query: runQuery,
+        release: () => {},
+      }),
     };
     const infra = {
       getPostgres: () => ({ pool }),

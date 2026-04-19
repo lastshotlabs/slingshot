@@ -61,6 +61,23 @@ describe('createPostgresRegistry (docker)', () => {
     expect(Number(res.rows[0].count)).toBe(1);
   });
 
+  it('initialize repairs a pre-created table with no default row', async () => {
+    await pool.query(`
+      CREATE TABLE ${TABLE} (
+        id TEXT PRIMARY KEY DEFAULT 'default',
+        document JSONB NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+
+    const registry = createPostgresRegistry({ connectionString: CONNECTION, table: TABLE });
+    await registry.initialize();
+
+    const res = await pool.query(`SELECT COUNT(*) FROM ${TABLE} WHERE id = 'default'`);
+    expect(Number(res.rows[0].count)).toBe(1);
+  });
+
   // -------------------------------------------------------------------------
   // write + read round-trip
   // -------------------------------------------------------------------------
@@ -182,6 +199,20 @@ describe('createPostgresRegistry (docker)', () => {
     expect(typeof lock.etag).toBe('string');
     expect(lock.release).toBeFunction();
     await lock.release();
+  });
+
+  it('lock fails closed when the registry row is missing', async () => {
+    await pool.query(`
+      CREATE TABLE ${TABLE} (
+        id TEXT PRIMARY KEY DEFAULT 'default',
+        document JSONB NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+
+    const registry = createPostgresRegistry({ connectionString: CONNECTION, table: TABLE });
+    await expect(registry.lock()).rejects.toThrow('Registry not initialized');
   });
 
   it('lock → read → write(etag) → release full cycle', async () => {

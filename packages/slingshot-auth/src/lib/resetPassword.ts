@@ -11,6 +11,7 @@ import {
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from '../config/authConfig';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -290,20 +291,17 @@ export function createMongoResetTokenRepository(
  * const resetTokenRepo = createPostgresResetTokenRepository(pool);
  */
 export function createPostgresResetTokenRepository(pool: import('pg').Pool): ResetTokenRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_reset_tokens (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_reset_tokens (
       token_hash TEXT PRIMARY KEY,
       user_id    TEXT NOT NULL,
       email      TEXT NOT NULL,
       expires_at BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_reset_tokens_expires_at ON auth_reset_tokens(expires_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async create(hash, userId, email, ttl) {

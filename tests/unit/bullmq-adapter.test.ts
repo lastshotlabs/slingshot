@@ -1,10 +1,17 @@
 // Unit tests for the slingshot-bullmq adapter — non-durable paths and validation.
 // No Redis required. No bullmq mock required (durable constructors are never invoked).
 import { describe, expect, it } from 'bun:test';
+import { createBullMQAdapter as createBullMQAdapterFromIndex } from '../../packages/slingshot-bullmq/src';
 import { createBullMQAdapter } from '../../packages/slingshot-bullmq/src/bullmqAdapter';
 
 // Fake connection — never actually connects in these tests (no durable subs)
 const FAKE_CONNECTION = { host: 'localhost', port: 9999 };
+
+describe('slingshot-bullmq package entrypoint', () => {
+  it('re-exports createBullMQAdapter from the package index', () => {
+    expect(createBullMQAdapterFromIndex).toBe(createBullMQAdapter);
+  });
+});
 
 describe('BullMQ adapter — non-durable subscriptions', () => {
   it('emit() with no listeners is a no-op', () => {

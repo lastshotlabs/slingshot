@@ -270,45 +270,50 @@ describe('createSqliteUploadRegistry', () => {
 describe('createPostgresUploadRegistry', () => {
   function createMockPgPool() {
     const rows: Record<string, Record<string, unknown>> = {};
-
-    return {
-      async query(sql: string, params?: unknown[]) {
-        const trimmed = sql.trim();
-        if (trimmed.startsWith('CREATE TABLE')) {
+    const runQuery = async (sql: string, params?: unknown[]) => {
+      const trimmed = sql.trim();
+      if (trimmed.startsWith('CREATE TABLE')) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (trimmed.startsWith('SELECT')) {
+        const key = params?.[0] as string;
+        const now = params?.[1] as number;
+        const row = rows[key];
+        if (!row || (row['expires_at'] as number) <= now) {
           return { rows: [], rowCount: 0 };
         }
-        if (trimmed.startsWith('SELECT')) {
-          const key = params?.[0] as string;
-          const now = params?.[1] as number;
-          const row = rows[key];
-          if (!row || (row['expires_at'] as number) <= now) {
-            return { rows: [], rowCount: 0 };
-          }
-          return { rows: [row], rowCount: 1 };
-        }
-        if (trimmed.startsWith('INSERT')) {
-          const key = params?.[0] as string;
-          rows[key] = {
-            key,
-            owner_user_id: params?.[1] as string | null,
-            tenant_id: params?.[2] as string | null,
-            mime_type: params?.[3] as string | null,
-            bucket: params?.[4] as string | null,
-            created_at: params?.[5] as number,
-            expires_at: params?.[6] as number,
-          };
+        return { rows: [row], rowCount: 1 };
+      }
+      if (trimmed.startsWith('INSERT')) {
+        const key = params?.[0] as string;
+        rows[key] = {
+          key,
+          owner_user_id: params?.[1] as string | null,
+          tenant_id: params?.[2] as string | null,
+          mime_type: params?.[3] as string | null,
+          bucket: params?.[4] as string | null,
+          created_at: params?.[5] as number,
+          expires_at: params?.[6] as number,
+        };
+        return { rows: [], rowCount: 1 };
+      }
+      if (trimmed.startsWith('DELETE')) {
+        const key = params?.[0] as string;
+        if (rows[key]) {
+          Reflect.deleteProperty(rows, key);
           return { rows: [], rowCount: 1 };
         }
-        if (trimmed.startsWith('DELETE')) {
-          const key = params?.[0] as string;
-          if (rows[key]) {
-            Reflect.deleteProperty(rows, key);
-            return { rows: [], rowCount: 1 };
-          }
-          return { rows: [], rowCount: 0 };
-        }
         return { rows: [], rowCount: 0 };
-      },
+      }
+      return { rows: [], rowCount: 0 };
+    };
+
+    return {
+      query: runQuery,
+      connect: async () => ({
+        query: runQuery,
+        release: () => {},
+      }),
     };
   }
 

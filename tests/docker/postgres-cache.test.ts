@@ -63,6 +63,36 @@ describe('Postgres cache adapter (docker)', () => {
     expect(await adapter.get('b:1')).toBe('v3');
   });
 
+  it('delPattern treats LIKE metacharacters literally', async () => {
+    await adapter.set('rate%limit_key:1', 'v1');
+    await adapter.set('rateXlimitYkey:1', 'v2');
+
+    await adapter.delPattern('rate%limit_key:*');
+
+    expect(await adapter.get('rate%limit_key:1')).toBeNull();
+    expect(await adapter.get('rateXlimitYkey:1')).toBe('v2');
+  });
+
+  it('delPattern treats backslashes literally', async () => {
+    await adapter.set('path\\to\\file:1', 'v1');
+    await adapter.set('path/to/file:1', 'v2');
+
+    await adapter.delPattern('path\\to\\file:*');
+
+    expect(await adapter.get('path\\to\\file:1')).toBeNull();
+    expect(await adapter.get('path/to/file:1')).toBe('v2');
+  });
+
+  it('delPattern supports single-character wildcards', async () => {
+    await adapter.set('user:1', 'v1');
+    await adapter.set('user:12', 'v2');
+
+    await adapter.delPattern('user:?');
+
+    expect(await adapter.get('user:1')).toBeNull();
+    expect(await adapter.get('user:12')).toBe('v2');
+  });
+
   it('upsert overwrites', async () => {
     await adapter.set('upsert-key', 'first');
     await adapter.set('upsert-key', 'second');

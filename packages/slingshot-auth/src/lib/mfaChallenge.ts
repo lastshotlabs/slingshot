@@ -13,6 +13,7 @@ import {
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from '../config/authConfig';
 import { isSqliteDuplicateColumnError } from './sqliteSchemaErrors';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -627,10 +628,8 @@ export function createMongoMfaChallengeRepository(
 export function createPostgresMfaChallengeRepository(
   pool: import('pg').Pool,
 ): MfaChallengeRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_mfa_challenges (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_mfa_challenges (
       token              TEXT PRIMARY KEY,
       user_id            TEXT NOT NULL,
       purpose            TEXT NOT NULL DEFAULT 'login',
@@ -641,11 +640,10 @@ export function createPostgresMfaChallengeRepository(
       resend_count       INTEGER NOT NULL DEFAULT 0,
       expires_at         BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_mfa_challenges_expires_at ON auth_mfa_challenges(expires_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async createChallenge(hash, data, ttl) {

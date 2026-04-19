@@ -1,8 +1,16 @@
 import { HttpError } from '@lastshotlabs/slingshot-core';
 import type { AuditLogEntry, AuditLogProvider } from '@lastshotlabs/slingshot-core';
 import { decodeCursor, encodeCursor } from './cursor';
+import { createPostgresInitializer } from '../persistence/postgresInit';
 
 type PgPool = {
+  connect(): Promise<{
+    query(
+      sql: string,
+      params?: unknown[],
+    ): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+    release(): void;
+  }>;
   query(
     sql: string,
     params?: unknown[],
@@ -16,11 +24,8 @@ function toCreatedAtIso(value: unknown): string {
 }
 
 export function createPostgresAuditLogProvider(pool: PgPool, ttlDays?: number): AuditLogProvider {
-  let initialized = false;
-
-  async function ensureTable(): Promise<void> {
-    if (initialized) return;
-    await pool.query(`
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`
       CREATE TABLE IF NOT EXISTS slingshot_audit_logs (
         id          TEXT PRIMARY KEY,
         user_id     TEXT,
@@ -38,15 +43,14 @@ export function createPostgresAuditLogProvider(pool: PgPool, ttlDays?: number): 
         created_at  TIMESTAMPTZ NOT NULL
       )
     `);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_bal_user   ON slingshot_audit_logs(user_id,   created_at)',
     );
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_bal_tenant ON slingshot_audit_logs(tenant_id, created_at)',
     );
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_bal_path   ON slingshot_audit_logs(path)');
-    initialized = true;
-  }
+    await client.query('CREATE INDEX IF NOT EXISTS idx_bal_path   ON slingshot_audit_logs(path)');
+  });
 
   return {
     async logEntry(entry) {

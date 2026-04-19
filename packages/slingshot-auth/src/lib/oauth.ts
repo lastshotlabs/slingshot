@@ -14,6 +14,7 @@ import {
 } from 'arctic';
 import { DEFAULT_MAX_ENTRIES, createEvictExpired, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -432,20 +433,17 @@ export function getConfiguredOAuthProviders(providers: OAuthProviders): Configur
 // ---------------------------------------------------------------------------
 
 export function createPostgresOAuthStateStore(pool: import('pg').Pool): OAuthStateStore {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_oauth_state (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_oauth_state (
       state         TEXT PRIMARY KEY,
       code_verifier TEXT,
       link_user_id  TEXT,
       expires_at    BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_oauth_state_expires_at ON auth_oauth_state(expires_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async store(state, codeVerifier, linkUserId) {

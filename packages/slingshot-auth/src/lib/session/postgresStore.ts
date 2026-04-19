@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { hashToken } from '@lastshotlabs/slingshot-core';
 import { type AuthResolvedConfig, DEFAULT_AUTH_CONFIG } from '../../config/authConfig';
+import { createPostgresInitializer } from '../postgresInit';
 import { getSessionTtlMs, isIdleExpired, shouldPersistSessionMetadata } from './policy';
 import type { SessionRepository } from './repository';
 import type { SessionInfo } from './types';
@@ -8,11 +10,20 @@ import type { SessionInfo } from './types';
 // Postgres repository factory
 // ---------------------------------------------------------------------------
 
+const SESSION_CREATE_LOCK_NAMESPACE = 'slingshot-auth:session:max-sessions:v1';
+
+function sessionCreateLockId(userId: string): string {
+  const digest = createHash('sha256')
+    .update(SESSION_CREATE_LOCK_NAMESPACE)
+    .update('\0')
+    .update(userId)
+    .digest();
+  return digest.readBigInt64BE(0).toString();
+}
+
 export function createPostgresSessionRepository(pool: import('pg').Pool): SessionRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_sessions (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_sessions (
       session_id             TEXT PRIMARY KEY,
       user_id                TEXT NOT NULL,
       token                  TEXT,
@@ -27,16 +38,15 @@ export function createPostgresSessionRepository(pool: import('pg').Pool): Sessio
       fingerprint            TEXT,
       mfa_verified_at        BIGINT
     )`);
-    await pool.query('ALTER TABLE auth_sessions DROP COLUMN IF EXISTS refresh_token_plain');
-    await pool.query(
+    await client.query('ALTER TABLE auth_sessions DROP COLUMN IF EXISTS refresh_token_plain');
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id)',
     );
-    await pool.query(
+    await client.query(
       `CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_sessions_refresh_token
        ON auth_sessions(refresh_token) WHERE refresh_token IS NOT NULL`,
     );
-    tableReady = true;
-  };
+  });
 
   async function deleteSessionImpl(sessionId: string, cfg?: AuthResolvedConfig): Promise<void> {
     if (shouldPersistSessionMetadata(cfg)) {
@@ -83,6 +93,11 @@ export function createPostgresSessionRepository(pool: import('pg').Pool): Sessio
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        // Serialize max-session enforcement per user so concurrent logins
+        // cannot both see the same active count and overrun the cap.
+        await client.query('SELECT pg_advisory_xact_lock($1::bigint)', [
+          sessionCreateLockId(userId),
+        ]);
         // Count active sessions
         const { rows: countRows } = await client.query<{ count: string }>(
           `SELECT COUNT(*) AS count FROM auth_sessions

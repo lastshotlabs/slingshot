@@ -1,26 +1,44 @@
 import { packageTestSuites } from './workspace-test-suites';
+import { type TestCommandSuite } from './workspace-test-suites';
 
-async function runSuite(name: string, command: string[]): Promise<void> {
+export async function runSuite(
+  name: string,
+  command: string[],
+  spawnFn: typeof Bun.spawn = Bun.spawn,
+): Promise<number> {
   console.log(`test -> ${name}`);
-  const proc = Bun.spawn(command, {
+  const proc = spawnFn(command, {
     cwd: process.cwd(),
-    stdin: 'inherit',
+    stdin: 'ignore',
     stdout: 'inherit',
     stderr: 'inherit',
   });
-  const code = await proc.exited;
-  if (code !== 0) {
-    process.exit(code);
+  return await proc.exited;
+}
+
+export async function runPackageTests(
+  suites: TestCommandSuite[] = packageTestSuites,
+  spawnFn: typeof Bun.spawn = Bun.spawn,
+): Promise<number> {
+  for (const suite of suites) {
+    const code = await runSuite(
+      suite.name,
+      [
+        'bun',
+        'test',
+        ...(suite.configPath ? ['--config', suite.configPath] : []),
+        ...(suite.testFiles ?? [suite.testsPath]),
+      ],
+      spawnFn,
+    );
+    if (code !== 0) {
+      return code;
+    }
   }
+
+  return 0;
 }
 
-for (const suite of packageTestSuites) {
-  await runSuite(suite.name, [
-    'bun',
-    'test',
-    ...(suite.configPath ? ['--config', suite.configPath] : []),
-    ...(suite.testFiles ?? [suite.testsPath]),
-  ]);
+if (import.meta.main) {
+  process.exit(await runPackageTests());
 }
-
-process.exit(0);

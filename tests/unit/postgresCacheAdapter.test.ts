@@ -13,12 +13,27 @@ interface QueryCall {
 function createMockPool() {
   const calls: QueryCall[] = [];
   let nextResult: { rows: Record<string, unknown>[] } = { rows: [] };
+  let failSql: string | null = null;
+  let failTimes = 0;
+
+  const runQuery = async (sql: string, params?: unknown[]) => {
+    const normalized = sql.replace(/\s+/g, ' ').trim();
+    calls.push({ sql: normalized, params });
+    if (failSql === normalized && failTimes > 0) {
+      failTimes--;
+      throw new Error(`forced failure: ${normalized}`);
+    }
+    return nextResult;
+  };
+
+  const client = {
+    query: runQuery,
+    release: () => {},
+  };
 
   const pool = {
-    query: async (sql: string, params?: unknown[]) => {
-      calls.push({ sql: sql.replace(/\s+/g, ' ').trim(), params });
-      return nextResult;
-    },
+    query: runQuery,
+    connect: async () => client,
   };
 
   return {
@@ -27,9 +42,15 @@ function createMockPool() {
     setNextResult(rows: Record<string, unknown>[]) {
       nextResult = { rows };
     },
+    failOn(sql: string, times = 1) {
+      failSql = sql;
+      failTimes = times;
+    },
     reset() {
       calls.length = 0;
       nextResult = { rows: [] };
+      failSql = null;
+      failTimes = 0;
     },
   };
 }
@@ -54,6 +75,8 @@ describe('postgresCacheAdapter', () => {
       await import('../../src/framework/boundaryAdapters/postgresCacheAdapter');
     await createPostgresCacheAdapter(fresh.pool);
 
+    expect(fresh.calls[0].sql).toBe('BEGIN');
+
     const createTableCall = fresh.calls.find(c => c.sql.includes('CREATE TABLE IF NOT EXISTS'));
     expect(createTableCall).toBeDefined();
     expect(createTableCall!.sql).toContain('cache_entries');
@@ -61,6 +84,20 @@ describe('postgresCacheAdapter', () => {
     const createIndexCall = fresh.calls.find(c => c.sql.includes('CREATE INDEX IF NOT EXISTS'));
     expect(createIndexCall).toBeDefined();
     expect(createIndexCall!.sql).toContain('idx_cache_entries_expires');
+    expect(fresh.calls.at(-1)?.sql).toBe('COMMIT');
+  });
+
+  test('initialization rolls back on bootstrap failure', async () => {
+    const fresh = createMockPool();
+    fresh.failOn(
+      'CREATE TABLE IF NOT EXISTS cache_entries ( key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at TIMESTAMPTZ )',
+    );
+    const { createPostgresCacheAdapter } = await import(
+      '../../src/framework/boundaryAdapters/postgresCacheAdapter'
+    );
+
+    await expect(createPostgresCacheAdapter(fresh.pool)).rejects.toThrow('forced failure');
+    expect(fresh.calls.map(c => c.sql)).toContain('ROLLBACK');
   });
 
   test('get returns value on cache hit', async () => {
@@ -125,7 +162,7 @@ describe('postgresCacheAdapter', () => {
     await adapter.delPattern('session:*');
 
     expect(mock.calls).toHaveLength(1);
-    expect(mock.calls[0].sql).toContain('DELETE FROM cache_entries WHERE key LIKE $1');
+    expect(mock.calls[0].sql).toContain("DELETE FROM cache_entries WHERE key LIKE $1 ESCAPE '\\'");
     expect(mock.calls[0].params).toEqual(['session:%']);
   });
 
@@ -135,6 +172,14 @@ describe('postgresCacheAdapter', () => {
     expect(mock.calls).toHaveLength(1);
     // % and _ in the original pattern should be escaped
     expect(mock.calls[0].params).toEqual(['rate\\%limit\\_key']);
+  });
+
+  test('delPattern preserves literal backslash escapes for LIKE', async () => {
+    await adapter.delPattern('tenant\\_cache\\%');
+
+    expect(mock.calls).toHaveLength(1);
+    expect(mock.calls[0].sql).toContain("ESCAPE '\\'");
+    expect(mock.calls[0].params).toEqual(['tenant\\\\\\_cache\\\\\\%']);
   });
 
   test('delPattern handles glob ? as single character wildcard', async () => {

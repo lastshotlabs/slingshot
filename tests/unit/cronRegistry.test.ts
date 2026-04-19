@@ -234,22 +234,32 @@ describe('createSqliteCronRegistry — sqlite adapter', () => {
 describe('createPostgresCronRegistry — postgres adapter', () => {
   function makePool(initialRows: { names: string[] }[] = []) {
     const rows = [...initialRows];
-    return {
-      query: async <R extends Record<string, unknown>>(sql: string, params?: unknown[]) => {
-        if (sql.includes('CREATE TABLE')) {
-          return { rows: [] as R[], rowCount: 0 };
-        }
-        if (sql.includes('SELECT names')) {
-          return { rows: rows as unknown as R[], rowCount: rows.length };
-        }
-        if (sql.includes('INSERT INTO')) {
-          const names = params?.[1] as string[];
-          rows.length = 0;
-          rows.push({ names });
-          return { rows: [] as R[], rowCount: 1 };
-        }
+
+    const runQuery = async <R extends Record<string, unknown>>(sql: string, params?: unknown[]) => {
+      if (sql.trim() === 'BEGIN' || sql.trim() === 'COMMIT' || sql.trim() === 'ROLLBACK') {
         return { rows: [] as R[], rowCount: 0 };
-      },
+      }
+      if (sql.includes('CREATE TABLE')) {
+        return { rows: [] as R[], rowCount: 0 };
+      }
+      if (sql.includes('SELECT names')) {
+        return { rows: rows as unknown as R[], rowCount: rows.length };
+      }
+      if (sql.includes('INSERT INTO')) {
+        const names = params?.[1] as string[];
+        rows.length = 0;
+        rows.push({ names });
+        return { rows: [] as R[], rowCount: 1 };
+      }
+      return { rows: [] as R[], rowCount: 0 };
+    };
+
+    return {
+      query: runQuery,
+      connect: async () => ({
+        query: runQuery,
+        release: () => {},
+      }),
     };
   }
 
@@ -496,17 +506,25 @@ describe('cronRegistryFactories', () => {
 
   test('postgres factory creates a postgres-backed registry', async () => {
     const rows: { names: string[] }[] = [];
-    const pool = {
-      query: async (sql: string, params?: unknown[]) => {
-        if (sql.includes('CREATE TABLE')) return { rows: [], rowCount: 0 };
-        if (sql.includes('SELECT names')) return { rows, rowCount: rows.length };
-        if (sql.includes('INSERT INTO')) {
-          rows.length = 0;
-          rows.push({ names: params?.[1] as string[] });
-          return { rows: [], rowCount: 1 };
-        }
+    const runQuery = async (sql: string, params?: unknown[]) => {
+      if (sql.trim() === 'BEGIN' || sql.trim() === 'COMMIT' || sql.trim() === 'ROLLBACK') {
         return { rows: [], rowCount: 0 };
-      },
+      }
+      if (sql.includes('CREATE TABLE')) return { rows: [], rowCount: 0 };
+      if (sql.includes('SELECT names')) return { rows, rowCount: rows.length };
+      if (sql.includes('INSERT INTO')) {
+        rows.length = 0;
+        rows.push({ names: params?.[1] as string[] });
+        return { rows: [], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    };
+    const pool = {
+      query: runQuery,
+      connect: async () => ({
+        query: runQuery,
+        release: () => {},
+      }),
     };
     const infra = {
       getPostgres: () => ({ pool }),

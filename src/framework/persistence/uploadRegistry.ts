@@ -4,6 +4,8 @@
 import type { UploadRecord, UploadRegistryRepository } from '@lastshotlabs/slingshot-core';
 import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
+import { createSqliteInitializer } from './sqliteInit';
 
 export const DEFAULT_UPLOAD_REGISTRY_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
@@ -216,10 +218,7 @@ export function createSqliteUploadRegistry(
   },
   ttlSeconds = DEFAULT_UPLOAD_REGISTRY_TTL_SECONDS,
 ): UploadRegistryRepository {
-  let initialized = false;
-
-  function ensureTable() {
-    if (initialized) return;
+  const ensureTable = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS upload_registry (
       key          TEXT PRIMARY KEY,
       owner_user_id TEXT,
@@ -229,8 +228,7 @@ export function createSqliteUploadRegistry(
       created_at   INTEGER NOT NULL,
       expires_at   INTEGER NOT NULL
     )`);
-    initialized = true;
-  }
+  });
 
   /**
    * Compute the absolute expiry timestamp (epoch ms) for a new upload record.
@@ -298,6 +296,13 @@ export function createSqliteUploadRegistry(
 // ---------------------------------------------------------------------------
 
 type PgPool = {
+  connect(): Promise<{
+    query(
+      sql: string,
+      params?: unknown[],
+    ): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+    release(): void;
+  }>;
   query(
     sql: string,
     params?: unknown[],
@@ -322,11 +327,8 @@ export function createPostgresUploadRegistry(
   pool: PgPool,
   ttlSeconds = DEFAULT_UPLOAD_REGISTRY_TTL_SECONDS,
 ): UploadRegistryRepository {
-  let initialized = false;
-
-  async function ensureTable(): Promise<void> {
-    if (initialized) return;
-    await pool.query(`
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`
       CREATE TABLE IF NOT EXISTS slingshot_upload_registry (
         key            TEXT PRIMARY KEY,
         owner_user_id  TEXT,
@@ -337,8 +339,7 @@ export function createPostgresUploadRegistry(
         expires_at     BIGINT NOT NULL
       )
     `);
-    initialized = true;
-  }
+  });
 
   return {
     async register(record) {

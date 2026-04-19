@@ -10,6 +10,7 @@ import {
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
@@ -278,19 +279,16 @@ export function createMongoMagicLinkRepository(
  * const magicLinkRepo = createPostgresMagicLinkRepository(pool);
  */
 export function createPostgresMagicLinkRepository(pool: import('pg').Pool): MagicLinkRepository {
-  let tableReady = false;
-  const ensureTable = async (): Promise<void> => {
-    if (tableReady) return;
-    await pool.query(`CREATE TABLE IF NOT EXISTS auth_magic_links (
+  const ensureTable = createPostgresInitializer(pool, async client => {
+    await client.query(`CREATE TABLE IF NOT EXISTS auth_magic_links (
       token_hash TEXT PRIMARY KEY,
       user_id    TEXT NOT NULL,
       expires_at BIGINT NOT NULL
     )`);
-    await pool.query(
+    await client.query(
       'CREATE INDEX IF NOT EXISTS idx_auth_magic_links_expires_at ON auth_magic_links(expires_at)',
     );
-    tableReady = true;
-  };
+  });
 
   return {
     async store(hash, userId, ttl) {

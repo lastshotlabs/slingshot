@@ -193,8 +193,13 @@ describe('boundaryCacheFactories — dispatch map', () => {
 
   test('postgres factory creates adapter when pool is provided', async () => {
     // Mock a minimal pg.Pool
+    const runQuery = mock(async () => ({ rows: [], rowCount: 0 }));
     const pool = {
-      query: mock(async () => ({ rows: [], rowCount: 0 })),
+      query: runQuery,
+      connect: mock(async () => ({
+        query: runQuery,
+        release: () => {},
+      })),
     };
     const adapter = await boundaryCacheFactories.postgres({
       redis: null,
@@ -204,6 +209,7 @@ describe('boundaryCacheFactories — dispatch map', () => {
     });
     expect(adapter.name).toBe('postgres');
     expect(adapter.isReady()).toBe(true);
+    expect(pool.connect).toHaveBeenCalled();
   });
 });
 

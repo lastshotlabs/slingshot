@@ -11,21 +11,34 @@ import { createApp, validateAppManifest } from '../src/index.ts';
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
-async function importModule(entrypoint: string): Promise<Record<string, unknown>> {
-  const moduleUrl = pathToFileURL(resolve(repoRoot, entrypoint)).href;
+export async function importModule(
+  entrypoint: string,
+  root = repoRoot,
+): Promise<Record<string, unknown>> {
+  const moduleUrl = pathToFileURL(resolve(root, entrypoint)).href;
   return (await import(moduleUrl)) as Record<string, unknown>;
 }
 
-async function smokeCodeExample(example: CodeAppCheck): Promise<void> {
-  const moduleUrl = pathToFileURL(resolve(repoRoot, example.entrypoint)).href;
-  const mod = (await import(moduleUrl)) as { buildAppConfig?: () => unknown };
+export async function smokeCodeExample(
+  example: CodeAppCheck,
+  options: {
+    createAppFn?: typeof createApp;
+    importModuleFn?: typeof importModule;
+    root?: string;
+  } = {},
+): Promise<void> {
+  const importModuleFn = options.importModuleFn ?? importModule;
+  const createAppFn = options.createAppFn ?? createApp;
+  const mod = (await importModuleFn(example.entrypoint, options.root)) as {
+    buildAppConfig?: () => unknown;
+  };
 
   if (typeof mod.buildAppConfig !== 'function') {
     throw new Error(`${example.entrypoint} must export buildAppConfig()`);
   }
 
   const config = mod.buildAppConfig();
-  const result = await createApp(config as Parameters<typeof createApp>[0]);
+  const result = await createAppFn(config as Parameters<typeof createApp>[0]);
 
   if (!result.app || !result.ctx) {
     throw new Error(`${example.name} did not return a Slingshot app and context`);
@@ -34,18 +47,27 @@ async function smokeCodeExample(example: CodeAppCheck): Promise<void> {
   await result.ctx.destroy();
 }
 
-async function smokeManifestExample(example: ManifestCheck): Promise<void> {
-  const manifestFile = Bun.file(resolve(repoRoot, example.manifestPath));
+export async function smokeManifestExample(
+  example: ManifestCheck,
+  options: {
+    importModuleFn?: typeof importModule;
+    root?: string;
+    validateAppManifestFn?: typeof validateAppManifest;
+  } = {},
+): Promise<void> {
+  const root = options.root ?? repoRoot;
+  const validateAppManifestFn = options.validateAppManifestFn ?? validateAppManifest;
+  const manifestFile = Bun.file(resolve(root, example.manifestPath));
   const raw = await manifestFile.json();
-  const result = validateAppManifest(raw);
+  const result = validateAppManifestFn(raw);
 
   if (!result.success) {
     throw new Error(result.errors.join('\n'));
   }
 
   if (example.handlerModule && example.handlerExports?.length) {
-    const moduleUrl = pathToFileURL(resolve(repoRoot, example.handlerModule)).href;
-    const mod = (await import(moduleUrl)) as Record<string, unknown>;
+    const importModuleFn = options.importModuleFn ?? importModule;
+    const mod = await importModuleFn(example.handlerModule, root);
 
     for (const exportName of example.handlerExports) {
       if (!(exportName in mod)) {
@@ -55,8 +77,15 @@ async function smokeManifestExample(example: ManifestCheck): Promise<void> {
   }
 }
 
-async function smokeModuleExportsExample(example: ModuleExportsCheck): Promise<void> {
-  const mod = await importModule(example.entrypoint);
+export async function smokeModuleExportsExample(
+  example: ModuleExportsCheck,
+  options: {
+    importModuleFn?: typeof importModule;
+    root?: string;
+  } = {},
+): Promise<void> {
+  const importModuleFn = options.importModuleFn ?? importModule;
+  const mod = await importModuleFn(example.entrypoint, options.root);
 
   for (const exportName of example.exports) {
     if (!(exportName in mod)) {
@@ -83,34 +112,56 @@ async function smokeModuleExportsExample(example: ModuleExportsCheck): Promise<v
   }
 }
 
-async function runCheck(exampleName: string, check: ExampleCheckDefinition): Promise<void> {
+export async function runCheck(
+  _exampleName: string,
+  check: ExampleCheckDefinition,
+  options: {
+    createAppFn?: typeof createApp;
+    importModuleFn?: typeof importModule;
+    root?: string;
+    validateAppManifestFn?: typeof validateAppManifest;
+  } = {},
+): Promise<void> {
   if (check.kind === 'code-app') {
-    await smokeCodeExample(check);
+    await smokeCodeExample(check, options);
     return;
   }
 
   if (check.kind === 'manifest') {
-    await smokeManifestExample(check);
+    await smokeManifestExample(check, options);
     return;
   }
 
-  await smokeModuleExportsExample(check);
+  await smokeModuleExportsExample(check, options);
 }
 
-async function run(): Promise<void> {
-  for (const example of exampleRegistry) {
+export async function runExamplesSmoke(
+  registry = exampleRegistry,
+  io: Pick<typeof console, 'error' | 'log'> = console,
+  options: {
+    createAppFn?: typeof createApp;
+    importModuleFn?: typeof importModule;
+    root?: string;
+    validateAppManifestFn?: typeof validateAppManifest;
+    stdout?: Pick<NodeJS.WriteStream, 'write'>;
+  } = {},
+): Promise<void> {
+  const stdout = options.stdout ?? process.stdout;
+  for (const example of registry) {
     for (const check of example.checks) {
-      process.stdout.write(`examples:smoke ${example.name}:${check.kind} ... `);
-      await runCheck(example.name, check);
-      console.log('ok');
+      stdout.write(`examples:smoke ${example.name}:${check.kind} ... `);
+      await runCheck(example.name, check, options);
+      io.log('ok');
     }
   }
 }
 
-try {
-  await run();
-} catch (error) {
-  console.error('examples:smoke failed');
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
+if (import.meta.main) {
+  try {
+    await runExamplesSmoke();
+  } catch (error) {
+    console.error('examples:smoke failed');
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
 }

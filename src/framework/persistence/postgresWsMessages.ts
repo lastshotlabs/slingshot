@@ -9,6 +9,7 @@
  */
 import type { Pool } from 'pg';
 import type { StoredMessage, WsMessageRepository } from '@lastshotlabs/slingshot-core';
+import { createPostgresInitializer } from './postgresInit';
 
 /**
  * Row shape returned by Postgres for the `ws_messages` table.
@@ -58,21 +59,23 @@ function rowToMessage(row: WsMessageRow): StoredMessage {
  * @returns A promise that resolves to a Postgres-backed `WsMessageRepository`.
  */
 export async function createPostgresWsMessageRepository(pool: Pool): Promise<WsMessageRepository> {
-  // Create table and index
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ws_messages (
-      id          TEXT    PRIMARY KEY,
-      endpoint    TEXT    NOT NULL,
-      room        TEXT    NOT NULL,
-      sender_id   TEXT,
-      payload     JSONB,
-      created_at  BIGINT  NOT NULL
-    )
-  `);
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS idx_ws_messages_scope
-      ON ws_messages (endpoint, room, created_at DESC, id DESC)
-  `);
+  const ensureSchema = createPostgresInitializer(pool, async client => {
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ws_messages (
+        id          TEXT    PRIMARY KEY,
+        endpoint    TEXT    NOT NULL,
+        room        TEXT    NOT NULL,
+        sender_id   TEXT,
+        payload     JSONB,
+        created_at  BIGINT  NOT NULL
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_ws_messages_scope
+        ON ws_messages (endpoint, room, created_at DESC, id DESC)
+    `);
+  });
+  await ensureSchema();
 
   return {
     async persist(message, config) {

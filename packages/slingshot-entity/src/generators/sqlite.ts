@@ -179,8 +179,13 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
   // ensureTable
   lines.push('  function ensureTable(): void {');
   lines.push('    if (initialized) return;');
+  lines.push('    let inTransaction = false;');
+  lines.push('    try {');
+  lines.push("      db.run('PRAGMA busy_timeout = 5000');");
+  lines.push("      db.run('BEGIN IMMEDIATE');");
+  lines.push('      inTransaction = true;');
   lines.push(
-    `    db.run(\`CREATE TABLE IF NOT EXISTS \${table} (\\n  ${colDefs.join(',\\n  ')}\\n)\`);`,
+    `      db.run(\`CREATE TABLE IF NOT EXISTS \${table} (\\n  ${colDefs.join(',\\n  ')}\\n)\`);`,
   );
 
   // Indexes
@@ -190,7 +195,7 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
       const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
       const unique = idx.unique ? 'UNIQUE ' : '';
       lines.push(
-        `    db.run(\`CREATE ${unique}INDEX IF NOT EXISTS idx_\${table}_${i} ON \${table} (${colList})\`);`,
+        `      db.run(\`CREATE ${unique}INDEX IF NOT EXISTS idx_\${table}_${i} ON \${table} (${colList})\`);`,
       );
     }
   }
@@ -199,11 +204,23 @@ export function generateSqlite(config: ResolvedEntityConfig): string {
       const uq = config.uniques[i];
       const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
       lines.push(
-        `    db.run(\`CREATE UNIQUE INDEX IF NOT EXISTS uidx_\${table}_${i} ON \${table} (${colList})\`);`,
+        `      db.run(\`CREATE UNIQUE INDEX IF NOT EXISTS uidx_\${table}_${i} ON \${table} (${colList})\`);`,
       );
     }
   }
-  lines.push('    initialized = true;');
+  lines.push("      db.run('COMMIT');");
+  lines.push('      inTransaction = false;');
+  lines.push('      initialized = true;');
+  lines.push('    } catch (error) {');
+  lines.push('      if (inTransaction) {');
+  lines.push('        try {');
+  lines.push("          db.run('ROLLBACK');");
+  lines.push('        } catch {');
+  lines.push('          // Preserve the original bootstrap failure.');
+  lines.push('        }');
+  lines.push('      }');
+  lines.push('      throw error;');
+  lines.push('    }');
   lines.push('  }');
   lines.push('');
 

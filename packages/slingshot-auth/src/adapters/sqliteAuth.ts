@@ -1817,7 +1817,9 @@ export function createSqliteAuthAdapter(
 
     delCachePattern(pattern) {
       // Convert glob pattern (* wildcard) to a SQL LIKE pattern (% wildcard)
-      const likePattern = pattern.replace(/%/g, '\\%').replace(/_/g, '\\_').replace(/\*/g, '%');
+      const likePattern = pattern
+        .replace(/[\\%_]/g, '\\$&')
+        .replace(/\*/g, '%');
       db.run("DELETE FROM cache_entries WHERE key LIKE ? ESCAPE '\\'", [likePattern]);
     },
 

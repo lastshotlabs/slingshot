@@ -65,30 +65,54 @@ function parseProviderIds(raw: string | null | undefined): string[] {
 function backfillOAuthProviderLinks(db: RuntimeSqliteDatabase): void {
   const users = db
     .query<{ id: string; providerIds: string }>('SELECT id, providerIds FROM users')
-    .all();
-  const claimed = new Set<string>();
+    .all()
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const owners = new Map<string, string>();
+  const conflicts = new Map<string, Set<string>>();
 
-  db.transaction(() => {
-    db.run('DELETE FROM oauth_provider_links');
-    for (const user of users) {
-      const normalized: string[] = [];
-      for (const key of parseProviderIds(user.providerIds)) {
-        const separator = key.indexOf(':');
-        if (separator <= 0 || separator === key.length - 1) continue;
-        if (claimed.has(key)) continue;
-        claimed.add(key);
-        normalized.push(key);
-        db.run(
-          'INSERT INTO oauth_provider_links (provider, providerUserId, userId) VALUES (?, ?, ?)',
-          [key.slice(0, separator), key.slice(separator + 1), user.id],
-        );
+  for (const user of users) {
+    const uniqueKeys = new Set(parseProviderIds(user.providerIds));
+    for (const key of uniqueKeys) {
+      const separator = key.indexOf(':');
+      if (separator <= 0 || separator === key.length - 1) continue;
+      const existingOwner = owners.get(key);
+      if (existingOwner === undefined) {
+        owners.set(key, user.id);
+        continue;
       }
-      db.run('UPDATE users SET providerIds = ? WHERE id = ?', [
-        JSON.stringify(normalized),
-        user.id,
-      ]);
+      if (existingOwner !== user.id) {
+        const userIds = conflicts.get(key) ?? new Set<string>([existingOwner]);
+        userIds.add(user.id);
+        conflicts.set(key, userIds);
+      }
     }
-  })();
+  }
+
+  if (conflicts.size > 0) {
+    const summary = [...conflicts.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(0, 5)
+      .map(([key, userIds]) => `${key} -> ${[...userIds].sort().join(', ')}`)
+      .join('; ');
+    throw new Error(
+      `Cannot migrate legacy OAuth provider links because duplicate provider identities are claimed by multiple users. Resolve the conflicts first: ${summary}`,
+    );
+  }
+
+  db.run('DELETE FROM oauth_provider_links');
+  for (const user of users) {
+    const normalized: string[] = [];
+    for (const key of [...new Set(parseProviderIds(user.providerIds))].sort()) {
+      const separator = key.indexOf(':');
+      if (separator <= 0 || separator === key.length - 1) continue;
+      normalized.push(key);
+      db.run(
+        'INSERT INTO oauth_provider_links (provider, providerUserId, userId) VALUES (?, ?, ?)',
+        [key.slice(0, separator), key.slice(separator + 1), user.id],
+      );
+    }
+    db.run('UPDATE users SET providerIds = ? WHERE id = ?', [JSON.stringify(normalized), user.id]);
+  }
 }
 
 const MIGRATIONS: Migration[] = [

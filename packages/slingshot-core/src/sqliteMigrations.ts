@@ -44,12 +44,15 @@ export function runSubsystemMigrations(
   const currentVersion = row?.version ?? 0;
 
   for (let i = currentVersion; i < migrations.length; i++) {
-    migrations[i](db);
-    db.run(
-      `INSERT INTO _slingshot_migrations (subsystem, version) VALUES (?, ?)
-       ON CONFLICT (subsystem) DO UPDATE SET version = excluded.version`,
-      subsystem,
-      i + 1,
-    );
+    const applyMigration = db.transaction(() => {
+      migrations[i](db);
+      db.run(
+        `INSERT INTO _slingshot_migrations (subsystem, version) VALUES (?, ?)
+         ON CONFLICT (subsystem) DO UPDATE SET version = excluded.version`,
+        subsystem,
+        i + 1,
+      );
+    });
+    applyMigration();
   }
 }

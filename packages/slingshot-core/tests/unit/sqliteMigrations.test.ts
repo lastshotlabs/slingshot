@@ -20,6 +20,27 @@ function createTestDb(): RuntimeSqliteDatabase {
         },
       };
     },
+    prepare<T>(sql: string) {
+      const stmt = raw.prepare(sql);
+      return {
+        get(...args: unknown[]) {
+          return stmt.get(...(args as [Record<string, unknown>])) as T | null;
+        },
+        all(...args: unknown[]) {
+          return stmt.all(...(args as [Record<string, unknown>])) as T[];
+        },
+        run(...args: unknown[]) {
+          return stmt.run(...(args as [Record<string, unknown>])) as { changes: number };
+        },
+      };
+    },
+    transaction<T>(fn: () => T) {
+      const tx = raw.transaction(fn);
+      return () => tx();
+    },
+    close() {
+      raw.close();
+    },
   };
 }
 
@@ -74,5 +95,80 @@ describe('runSubsystemMigrations', () => {
     const row = db.query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?').get('empty');
     // bun:sqlite .get() returns null when no row found
     expect(row).toBeNull();
+  });
+
+  test('rolls back migration work when version update fails', () => {
+    const raw = new Database(':memory:');
+    raw.run('CREATE TABLE items (id TEXT PRIMARY KEY)');
+
+    let failVersionWrite = true;
+    const db: RuntimeSqliteDatabase = {
+      run(sql: string, ...args: unknown[]) {
+        if (failVersionWrite && sql.includes('INSERT INTO _slingshot_migrations')) {
+          throw new Error('version write failed');
+        }
+        raw.run(sql, ...(args as [Record<string, unknown>]));
+      },
+      query<T>(sql: string) {
+        const stmt = raw.prepare(sql);
+        return {
+          get(...args: unknown[]) {
+            return stmt.get(...(args as [Record<string, unknown>])) as T | null;
+          },
+          all(...args: unknown[]) {
+            return stmt.all(...(args as [Record<string, unknown>])) as T[];
+          },
+        };
+      },
+      prepare<T>(sql: string) {
+        const stmt = raw.prepare(sql);
+        return {
+          get(...args: unknown[]) {
+            return stmt.get(...(args as [Record<string, unknown>])) as T | null;
+          },
+          all(...args: unknown[]) {
+            return stmt.all(...(args as [Record<string, unknown>])) as T[];
+          },
+          run(...args: unknown[]) {
+            return stmt.run(...(args as [Record<string, unknown>])) as { changes: number };
+          },
+        };
+      },
+      transaction<T>(fn: () => T) {
+        const tx = raw.transaction(fn);
+        return () => tx();
+      },
+      close() {
+        raw.close();
+      },
+    };
+
+    expect(() =>
+      runSubsystemMigrations(db, 'atomic', [
+        d => {
+          d.run('INSERT INTO items (id) VALUES (?)', 'rolled-back');
+        },
+      ]),
+    ).toThrow('version write failed');
+
+    const rows = raw.query<{ id: string }, []>('SELECT id FROM items').all();
+    const versionRow = raw
+      .query<{ version: number }, [string]>(
+        'SELECT version FROM _slingshot_migrations WHERE subsystem = ?',
+      )
+      .get('atomic');
+
+    expect(rows).toEqual([]);
+    expect(versionRow).toBeNull();
+
+    failVersionWrite = false;
+    runSubsystemMigrations(db, 'atomic', [
+      d => {
+        d.run('INSERT INTO items (id) VALUES (?)', 'committed');
+      },
+    ]);
+
+    const committedRows = raw.query<{ id: string }, []>('SELECT id FROM items').all();
+    expect(committedRows).toEqual([{ id: 'committed' }]);
   });
 });

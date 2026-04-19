@@ -26,7 +26,16 @@ async function createPool(url: string): Promise<{ pool: PoolLike; end(): Promise
   const { Pool } = await import('pg');
   const pool = new Pool({ connectionString: url });
   return {
-    pool: { query: (sql, params) => pool.query<PgRow>(sql, params) },
+    pool: {
+      query: (sql, params) => pool.query<PgRow>(sql, params),
+      connect: async () => {
+        const client = await pool.connect();
+        return {
+          query: (sql, params) => client.query<PgRow>(sql, params),
+          release: () => client.release(),
+        };
+      },
+    },
     end: () => pool.end(),
   };
 }

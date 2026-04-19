@@ -18,6 +18,12 @@ export type PgParam = string | number | boolean | null | Date;
 /** A row returned by a `pg` query, keyed by column name with scalar or string-array values. */
 export type PgRow = Record<string, PgParam | string[]>;
 
+/** Minimal query client used for migration transactions. */
+export interface PoolClientLike {
+  query(sql: string, params?: PgParam[]): Promise<{ rows: PgRow[]; rowCount: number | null }>;
+  release(): void;
+}
+
 /**
  * Minimal interface required from a `pg` Pool (or compatible test double).
  *
@@ -32,6 +38,7 @@ export type PgRow = Record<string, PgParam | string[]>;
  */
 export interface PoolLike {
   query(sql: string, params?: PgParam[]): Promise<{ rows: PgRow[]; rowCount: number | null }>;
+  connect(): Promise<PoolClientLike>;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,9 +62,9 @@ type Migration = (pool: PoolLike) => Promise<void>;
  *   `(subject_id, subject_type)` and `(resource_type, resource_id)`.
  *
  * @remarks
- * Unlike the auth adapter, this adapter does not use advisory locking because
- * the DDL is fully idempotent via `IF NOT EXISTS` guards. Running migrations
- * concurrently is safe.
+ * Migrations are serialised with a PostgreSQL advisory transaction lock so
+ * future data backfills and non-idempotent DDL remain safe under concurrent
+ * startup.
  */
 const MIGRATIONS: Migration[] = [
   // v1: initial schema
@@ -90,6 +97,18 @@ const MIGRATIONS: Migration[] = [
   // Add future migrations here.
 ];
 
+const MIGRATION_LOCK_KEY1 = 5412;
+const MIGRATION_LOCK_KEY2 = 1947;
+
+function parseVersion(raw: PgParam | string[] | undefined): number {
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) return raw;
+  if (typeof raw === 'string') {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isInteger(parsed) && parsed >= 0) return parsed;
+  }
+  return 0;
+}
+
 /**
  * Applies any pending permissions schema migrations against the given pool.
  *
@@ -109,21 +128,42 @@ const MIGRATIONS: Migration[] = [
  * ```
  */
 async function runMigrations(pool: PoolLike): Promise<void> {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS _permission_schema_version (
-      version INTEGER NOT NULL DEFAULT 0
-    )
-  `);
-  await pool.query(`
-    INSERT INTO _permission_schema_version (version)
-    SELECT 0 WHERE NOT EXISTS (SELECT 1 FROM _permission_schema_version)
-  `);
-  const { rows } = await pool.query('SELECT version FROM _permission_schema_version');
-  const raw = rows[0]?.version;
-  const currentVersion = typeof raw === 'number' ? raw : 0;
-  for (let i = currentVersion; i < MIGRATIONS.length; i++) {
-    await MIGRATIONS[i](pool);
-    await pool.query('UPDATE _permission_schema_version SET version = $1', [i + 1]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1, $2)', [
+      MIGRATION_LOCK_KEY1,
+      MIGRATION_LOCK_KEY2,
+    ]);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS _permission_schema_version (
+        version INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+
+    const versionResult = await client.query(
+      'SELECT COALESCE(MAX(version), 0) AS version FROM _permission_schema_version',
+    );
+    const currentVersion = parseVersion(versionResult.rows[0]?.version);
+
+    await client.query('DELETE FROM _permission_schema_version');
+    await client.query('INSERT INTO _permission_schema_version (version) VALUES ($1)', [
+      currentVersion,
+    ]);
+    await client.query(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_permission_schema_version_singleton ON _permission_schema_version ((TRUE))',
+    );
+
+    for (let i = currentVersion; i < MIGRATIONS.length; i++) {
+      await MIGRATIONS[i](client);
+      await client.query('UPDATE _permission_schema_version SET version = $1', [i + 1]);
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
 }
 

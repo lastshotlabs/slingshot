@@ -13,7 +13,9 @@ import { createTestApp } from '../setup';
 // ---------------------------------------------------------------------------
 
 async function getCacheResponseMiddleware() {
-  return import('../../src/framework/middleware/cacheResponse');
+  return import(
+    `../../src/framework/middleware/cacheResponse.ts?cache-response-test=${Date.now()}-${Math.random()}`
+  );
 }
 
 beforeEach(async () => {

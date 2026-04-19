@@ -1,12 +1,7 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { AUTH_RUNTIME_KEY } from '@lastshotlabs/slingshot-auth/testing';
 import { PERMISSIONS_STATE_KEY } from '@lastshotlabs/slingshot-core';
 import type { PluginSetupContext } from '@lastshotlabs/slingshot-core';
-import { createSlingshotAdminPlugin } from '../../src/framework/admin';
-import * as realAuth from '../../packages/slingshot-auth/src/index';
-
-// ---------------------------------------------------------------------------
-// Mock @lastshotlabs/slingshot-admin
-// ---------------------------------------------------------------------------
 
 const mockAdminSetupRoutes = mock(async () => {});
 const mockCreateAdminPlugin = mock(() => ({
@@ -14,35 +9,45 @@ const mockCreateAdminPlugin = mock(() => ({
   setupRoutes: mockAdminSetupRoutes,
 }));
 
-mock.module('@lastshotlabs/slingshot-admin', () => ({
-  createAdminPlugin: mockCreateAdminPlugin,
-}));
+async function loadCreateSlingshotAdminPlugin() {
+  mockCreateAdminPlugin.mockImplementation(() => ({
+    name: 'admin',
+    setupRoutes: mockAdminSetupRoutes,
+  }));
 
-// ---------------------------------------------------------------------------
-// Mock @lastshotlabs/slingshot-auth (getAuthRuntimeContext)
-// ---------------------------------------------------------------------------
+  mock.module('@lastshotlabs/slingshot-admin', () => ({
+    createAdminPlugin: mockCreateAdminPlugin,
+  }));
 
-mock.module('@lastshotlabs/slingshot-auth', () => ({
-  ...realAuth,
-  createSlingshotAuthAccessProvider: () => ({ canAccess: async () => true }),
-  createSlingshotManagedUserProvider: () => ({ list: async () => [] }),
-  getAuthRuntimeContext: () => ({
-    adapter: {},
-    config: {},
-    repos: { session: {} },
-    password: { hash: async (p: string) => p },
-  }),
-}));
+  const mod = await import(`../../src/framework/admin/index.ts?admin-plugin=${Date.now()}`);
+  return mod.createSlingshotAdminPlugin;
+}
 
-// ---------------------------------------------------------------------------
-// Helpers — PermissionsState requires adapter + registry + evaluator
-// ---------------------------------------------------------------------------
+afterEach(() => {
+  mock.restore();
+  mockCreateAdminPlugin.mockReset();
+  mockAdminSetupRoutes.mockReset();
+});
 
 function makePermissionsState() {
   return {
     adapter: { createGrant: async () => {} },
     registry: { register: () => {} },
     evaluator: { can: async () => true },
+  };
+}
+
+function createAuthRuntime() {
+  return {
+    adapter: {},
+    config: {
+      admin: {},
+      roles: ['admin'],
+      defaultRole: 'admin',
+    },
+    repos: {
+      session: {},
+    },
   };
 }
 
@@ -54,12 +59,10 @@ function makeCtx(existingPermissions?: unknown): {
   if (existingPermissions !== undefined) {
     pluginState.set(PERMISSIONS_STATE_KEY, existingPermissions);
   }
+  pluginState.set(AUTH_RUNTIME_KEY, createAuthRuntime());
 
-  // getPluginState reads app.pluginState
   const app = { pluginState };
-
-  const configData = { meta: { name: 'Test App' } };
-  const config = configData as unknown as PluginSetupContext['config'];
+  const config = { meta: { name: 'Test App' } } as unknown as PluginSetupContext['config'];
   const ctx: PluginSetupContext = {
     app: app as unknown as PluginSetupContext['app'],
     config,
@@ -75,20 +78,22 @@ function makeCtx(existingPermissions?: unknown): {
 }
 
 describe('createSlingshotAdminPlugin', () => {
-  test('returns a plugin with name "slingshot-admin"', () => {
+  test('returns a plugin with name "slingshot-admin"', async () => {
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const plugin = createSlingshotAdminPlugin({});
     expect(plugin.name).toBe('slingshot-admin');
   });
 
-  test('plugin exposes setupPost and setup lifecycle methods', () => {
+  test('plugin exposes setupPost and setup lifecycle methods', async () => {
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const plugin = createSlingshotAdminPlugin({});
     expect(typeof plugin.setupPost).toBe('function');
     expect(typeof plugin.setup).toBe('function');
   });
 
   test('setupPost throws when no permissions provided and pluginState lacks valid permissions state', async () => {
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const plugin = createSlingshotAdminPlugin({});
-    // No permissions at all
     const { ctx } = makeCtx();
 
     await expect(plugin.setupPost!(ctx)).rejects.toThrow(
@@ -97,10 +102,7 @@ describe('createSlingshotAdminPlugin', () => {
   });
 
   test('setupPost resolves permissions from pluginState when not explicitly provided', async () => {
-    mockCreateAdminPlugin.mockClear();
-    mockAdminSetupRoutes.mockClear();
-
-    // PermissionsState requires adapter + registry + evaluator to be truthy
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const fakePermissions = makePermissionsState();
     const { ctx } = makeCtx(fakePermissions);
 
@@ -112,9 +114,8 @@ describe('createSlingshotAdminPlugin', () => {
     expect(callArg.permissions).toBe(fakePermissions);
   });
 
-  test('setupPost uses explicit permissions from config — takes precedence over pluginState', async () => {
-    mockCreateAdminPlugin.mockClear();
-
+  test('setupPost uses explicit permissions from config and ignores pluginState fallback', async () => {
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const explicitPermissions = makePermissionsState();
     const statePermissions = makePermissionsState();
     const { ctx } = makeCtx(statePermissions);
@@ -127,21 +128,18 @@ describe('createSlingshotAdminPlugin', () => {
   });
 
   test('setupPost publishes resolved permissions to pluginState when key is absent', async () => {
-    mockCreateAdminPlugin.mockClear();
-
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const explicitPermissions = makePermissionsState();
-    const { ctx, pluginState } = makeCtx(); // no existing permissions
+    const { ctx, pluginState } = makeCtx();
 
     const plugin = createSlingshotAdminPlugin({ permissions: explicitPermissions as never });
     await plugin.setupPost!(ctx);
 
-    // Admin plugin should have set PERMISSIONS_STATE_KEY in pluginState
     expect(pluginState.get(PERMISSIONS_STATE_KEY)).toBe(explicitPermissions);
   });
 
   test('setupPost does not overwrite existing PERMISSIONS_STATE_KEY in pluginState', async () => {
-    mockCreateAdminPlugin.mockClear();
-
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const existingPermissions = makePermissionsState();
     const explicitPermissions = makePermissionsState();
     const { ctx, pluginState } = makeCtx(existingPermissions);
@@ -149,13 +147,11 @@ describe('createSlingshotAdminPlugin', () => {
     const plugin = createSlingshotAdminPlugin({ permissions: explicitPermissions as never });
     await plugin.setupPost!(ctx);
 
-    // Existing key should remain — not overwritten
     expect(pluginState.get(PERMISSIONS_STATE_KEY)).toBe(existingPermissions);
   });
 
   test('setup calls setupPost internally', async () => {
-    mockCreateAdminPlugin.mockClear();
-
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const fakePermissions = makePermissionsState();
     const { ctx } = makeCtx(fakePermissions);
 
@@ -166,8 +162,7 @@ describe('createSlingshotAdminPlugin', () => {
   });
 
   test('setupPost calls setupRoutes on the inner admin plugin', async () => {
-    mockAdminSetupRoutes.mockClear();
-
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const fakePermissions = makePermissionsState();
     const { ctx } = makeCtx(fakePermissions);
 
@@ -178,8 +173,7 @@ describe('createSlingshotAdminPlugin', () => {
   });
 
   test('uses default accessProvider and managedUserProvider when not configured', async () => {
-    mockCreateAdminPlugin.mockClear();
-
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const fakePermissions = makePermissionsState();
     const { ctx } = makeCtx(fakePermissions);
 
@@ -192,8 +186,7 @@ describe('createSlingshotAdminPlugin', () => {
   });
 
   test('uses custom accessProvider when provided', async () => {
-    mockCreateAdminPlugin.mockClear();
-
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const customProvider = { canAccess: async () => false };
     const fakePermissions = makePermissionsState();
     const { ctx } = makeCtx(fakePermissions);
@@ -208,8 +201,7 @@ describe('createSlingshotAdminPlugin', () => {
   });
 
   test('uses custom managedUserProvider when provided', async () => {
-    mockCreateAdminPlugin.mockClear();
-
+    const createSlingshotAdminPlugin = await loadCreateSlingshotAdminPlugin();
     const customManagedUserProvider = { list: async () => [] };
     const fakePermissions = makePermissionsState();
     const { ctx } = makeCtx(fakePermissions);

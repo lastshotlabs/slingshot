@@ -3,12 +3,16 @@
  * Covers the Redis adapter methods, the boundaryCacheFactories dispatch map,
  * and the Mongo cache adapter.
  */
-import { describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
   boundaryCacheFactories,
   createRedisBoundaryCacheAdapter,
 } from '../../src/framework/boundaryAdapters/cacheFactories';
 import * as realAuth from '../../packages/slingshot-auth/src/index';
+
+afterEach(() => {
+  mock.restore();
+});
 
 // ---------------------------------------------------------------------------
 // Redis boundary cache adapter

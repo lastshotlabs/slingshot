@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { PermissionGrant } from '@lastshotlabs/slingshot-core';
 import { createPermissionsPostgresAdapter } from '../../src/adapters/postgres';
-import type { PgParam, PgRow, PoolLike } from '../../src/adapters/postgres';
+import type { PgParam, PgRow, PoolClientLike, PoolLike } from '../../src/adapters/postgres';
 
 // ---------------------------------------------------------------------------
 // StoredRow
@@ -94,6 +94,13 @@ class MockPool implements PoolLike {
   private grants = new Map<string, StoredRow>();
   schemaVersion = 0;
 
+  async connect(): Promise<PoolClientLike> {
+    return {
+      query: (sql, params) => this.query(sql, params),
+      release() {},
+    };
+  }
+
   async query(
     sql: string,
     params?: PgParam[],
@@ -102,12 +109,21 @@ class MockPool implements PoolLike {
     const s = sql.trim();
 
     // --- migration: version table ---
+    if (s === 'BEGIN' || s === 'COMMIT' || s === 'ROLLBACK') return { rows: [], rowCount: 0 };
+    if (s.startsWith('SELECT pg_advisory_xact_lock')) return { rows: [], rowCount: 1 };
     if (s.includes('_permission_schema_version')) {
       if (s.startsWith('CREATE TABLE')) return { rows: [], rowCount: 0 };
-      if (s.startsWith('INSERT INTO')) return { rows: [], rowCount: 0 };
-      if (s.startsWith('SELECT version')) {
+      if (s.startsWith('SELECT COALESCE(MAX(version), 0) AS version')) {
         return { rows: [{ version: this.schemaVersion }], rowCount: 1 };
       }
+      if (s === 'DELETE FROM _permission_schema_version') return { rows: [], rowCount: 1 };
+      if (s.startsWith('INSERT INTO')) {
+        const newVersion = params?.[0];
+        if (typeof newVersion === 'number') this.schemaVersion = newVersion;
+        return { rows: [], rowCount: 1 };
+      }
+      if (s.startsWith('CREATE UNIQUE INDEX IF NOT EXISTS idx_permission_schema_version_singleton'))
+        return { rows: [], rowCount: 0 };
       if (s.startsWith('UPDATE')) {
         const newVersion = params?.[0];
         if (typeof newVersion === 'number') this.schemaVersion = newVersion;
@@ -303,9 +319,17 @@ describe('Postgres permissions adapter — migrations', () => {
     const pool = new MockPool(); // schemaVersion starts at 0
     await makeAdapter(pool);
 
-    // Should have: 3 version-table queries + 3 migration DDL + 1 version update = 7
-    expect(pool.captured).toHaveLength(7);
-    const versionUpdate = pool.captured[6];
+    expect(pool.captured.some(q => q.sql === 'BEGIN')).toBe(true);
+    expect(pool.captured.some(q => q.sql.includes('pg_advisory_xact_lock'))).toBe(true);
+    expect(
+      pool.captured.some(q =>
+        q.sql.includes('CREATE UNIQUE INDEX IF NOT EXISTS idx_permission_schema_version_singleton'),
+      ),
+    ).toBe(true);
+    const versionUpdate = pool.captured.findLast(q =>
+      q.sql.includes('UPDATE _permission_schema_version'),
+    );
+    expect(versionUpdate).toBeDefined();
     expect(versionUpdate.sql).toContain('UPDATE _permission_schema_version');
     expect(versionUpdate.params).toEqual([1]);
   });
@@ -315,9 +339,35 @@ describe('Postgres permissions adapter — migrations', () => {
     pool.schemaVersion = 1; // already migrated
     await makeAdapter(pool);
 
-    // Only the 3 version-table queries; no DDL or version update
-    expect(pool.captured).toHaveLength(3);
-    expect(pool.captured.every(q => q.sql.includes('_permission_schema_version'))).toBe(true);
+    expect(pool.captured.some(q => q.sql === 'BEGIN')).toBe(true);
+    expect(pool.captured.some(q => q.sql === 'COMMIT')).toBe(true);
+    expect(pool.captured.some(q => q.sql.includes('UPDATE _permission_schema_version'))).toBe(
+      false,
+    );
+    expect(pool.captured.some(q => q.sql.includes('CREATE TABLE IF NOT EXISTS permission_grants'))).toBe(
+      false,
+    );
+  });
+
+  test('canonicalizes duplicate version rows before applying migrations', async () => {
+    const pool = new MockPool();
+    pool.schemaVersion = 1;
+
+    await makeAdapter(pool);
+
+    const maxVersionRead = pool.captured.find(q =>
+      q.sql.includes('SELECT COALESCE(MAX(version), 0) AS version'),
+    );
+    const deleteRows = pool.captured.find(q => q.sql === 'DELETE FROM _permission_schema_version');
+    const reinsert = pool.captured.find(
+      q =>
+        q.sql === 'INSERT INTO _permission_schema_version (version) VALUES ($1)' &&
+        q.params?.[0] === 1,
+    );
+
+    expect(maxVersionRead).toBeDefined();
+    expect(deleteRows).toBeDefined();
+    expect(reinsert).toBeDefined();
   });
 });
 

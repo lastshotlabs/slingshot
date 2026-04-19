@@ -41,7 +41,7 @@ function cidrMatchesIpv4(cidr: string, ip: string): boolean {
   return (ipv4ToUint32(network) & mask) === (ipv4ToUint32(ip) & mask);
 }
 
-const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/;
+const IPV4_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 
 /**
  * Normalize an IP address string for comparison.
@@ -128,8 +128,8 @@ export const botProtection = ({ blockList = [] }: BotProtectionOptions): Middlew
   // than silently mismatching at request time.
   for (const entry of blockList) {
     const network = entry.includes('/') ? entry.slice(0, entry.indexOf('/')) : entry;
-    if (IPV4_RE.test(network)) {
-      ipv4ToUint32(network); // throws on invalid octet values
+    if (!network.includes(':') && network.includes('.')) {
+      ipv4ToUint32(network); // throws on invalid octet values and malformed dotted IPv4 strings
     }
   }
 

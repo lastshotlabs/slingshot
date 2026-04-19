@@ -4,32 +4,34 @@
  *
  * We mock @lib/mongo to avoid a real mongoose dependency.
  */
-import { afterAll, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
-const actualMongo = await import('@lib/mongo');
 
-// Mock the mongo module so getMongooseModule returns a mongoose-like object
-// with a Schema class and Schema.Types.Mixed / Schema.Types.ObjectId
-mock.module('@lib/mongo', () => {
-  // eslint-disable-next-line @typescript-eslint/no-extraneous-class
-  class MockSchema {
-    static Types = {
-      Mixed: 'Mixed',
-      ObjectId: 'ObjectId',
+let zodToMongoose: typeof import('../../src/framework/lib/zodToMongoose').zodToMongoose;
+
+async function loadZodToMongoose() {
+  const actualMongo = await import('@lib/mongo');
+  mock.module('@lib/mongo', () => {
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class
+    class MockSchema {
+      static Types = {
+        Mixed: 'Mixed',
+        ObjectId: 'ObjectId',
+      };
+    }
+    return {
+      ...actualMongo,
+      getMongooseModule: () => ({ Schema: MockSchema }),
     };
-  }
-  return {
-    ...actualMongo,
-    getMongooseModule: () => ({ Schema: MockSchema }),
-  };
-});
+  });
 
-afterAll(() => {
+  return import(`../../src/framework/lib/zodToMongoose.ts?zod-to-mongoose=${Date.now()}`);
+}
+
+beforeEach(async () => {
   mock.restore();
+  ({ zodToMongoose } = await loadZodToMongoose());
 });
-
-// Import AFTER mock
-import { zodToMongoose } from '../../src/framework/lib/zodToMongoose';
 
 describe('zodToMongoose — basic field type conversion', () => {
   test('converts ZodString to { type: String }', () => {

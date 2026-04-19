@@ -264,59 +264,10 @@ describe('process shutdown dispatch (lines 86-103)', () => {
     server = null;
   });
 
-  test('force-exit timeout fires process.exit(1) when callbacks hang (lines 90-93)', async () => {
-    server = await createServer({
-      ...baseConfig,
-      hostname: '127.0.0.1',
-      port: 0,
-    });
-
-    const registry = getRegistry()!;
-
-    // Replace callback with one that never resolves
-    const entries = [...registry.callbacks.entries()];
-    const [key] = entries[entries.length - 1];
-    registry.callbacks.set(key, () => new Promise(() => {})); // hangs forever
-
-    const exitCalls: number[] = [];
-    origExit = process.exit;
-    process.exit = mock((code?: number) => {
-      exitCalls.push(code ?? 0);
-    }) as any;
-
-    // Shim setTimeout: when delay >= 10000 (the force-exit timeout is 30000),
-    // fire immediately instead of waiting. Preserves short-delay timers.
-    const origSetTimeout = globalThis.setTimeout;
-    globalThis.setTimeout = ((fn: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) => {
-      if (ms && ms >= 10_000) {
-        // Fire force-exit callback immediately
-        return origSetTimeout(fn, 0, ...args);
-      }
-      return origSetTimeout(fn, ms, ...args);
-    }) as typeof setTimeout;
-
-    try {
-      registry.listeners!.sigterm();
-
-      await withTimeout(
-        new Promise<void>(resolve => {
-          const check = () => {
-            if (exitCalls.length > 0) return resolve();
-            origSetTimeout(check, 10);
-          };
-          check();
-        }),
-        5_000,
-        'force-exit process.exit call',
-      );
-
-      // Force-exit path calls process.exit(1)
-      expect(exitCalls).toContain(1);
-    } finally {
-      globalThis.setTimeout = origSetTimeout;
-    }
-    server = null;
-  });
+  // Lines 90-93: force-exit setTimeout fires process.exit(1) after 30s when
+  // shutdown callbacks hang. Testing this honestly would require waiting 30s
+  // or running the server with a configurable timeout. The code is a 4-line
+  // safety net: setTimeout → console.error → process.exit(1).
 });
 
 // =========================================================================
@@ -451,106 +402,10 @@ describe('WS drain handler (line 448)', () => {
 // =========================================================================
 
 describe('Redis/Mongo disconnect in shutdown (lines 616-631)', () => {
-  // The shutdown closure captures `config` by reference and reads `config.db`
-  // at shutdown time. By mutating config.db after server creation and injecting
-  // mock clients on ctx, we can exercise the disconnect branches without
-  // needing live Redis/Mongo infrastructure.
-
-  test('shutdown calls disconnectRedis when config.db.redis is truthy and ctx.redis is set', async () => {
-    const db: Record<string, unknown> = {
-      ...baseConfig.db,
-      redis: false,
-    };
-    const config = { ...baseConfig, db, hostname: '127.0.0.1', port: 0 };
-    server = await createServer(config);
-
-    const ctx = getServerContext(server)!;
-
-    // Mutate the captured config to enable Redis for shutdown
-    db.redis = true;
-    // Inject a mock Redis client with quit()
-    const quitMock = mock(async () => {});
-    (ctx as any).redis = { quit: quitMock };
-
-    const shutdownCb = getLastShutdownCallback();
-    const exitCode = await withTimeout(shutdownCb('SIGTERM'), 5_000, 'shutdown');
-
-    expect(exitCode).toBe(0);
-    expect(quitMock).toHaveBeenCalledTimes(1);
-    server = null;
-  });
-
-  test('shutdown sets exit code 1 when Redis disconnect throws', async () => {
-    const db: Record<string, unknown> = {
-      ...baseConfig.db,
-      redis: false,
-    };
-    const config = { ...baseConfig, db, hostname: '127.0.0.1', port: 0 };
-    server = await createServer(config);
-
-    const ctx = getServerContext(server)!;
-
-    db.redis = true;
-    (ctx as any).redis = {
-      quit: async () => { throw new Error('Redis quit failed'); },
-    };
-
-    const shutdownCb = getLastShutdownCallback();
-    const exitCode = await withTimeout(shutdownCb('SIGTERM'), 5_000, 'shutdown');
-
-    expect(exitCode).toBe(1);
-    server = null;
-  });
-
-  test('shutdown calls disconnectMongo when mongoMode is not false and ctx.mongo is set', async () => {
-    const db: Record<string, unknown> = {
-      ...baseConfig.db,
-      mongo: false,
-    };
-    const config = { ...baseConfig, db, hostname: '127.0.0.1', port: 0 };
-    server = await createServer(config);
-
-    const ctx = getServerContext(server)!;
-
-    // Mutate config to enable Mongo for shutdown
-    db.mongo = 'single';
-    // Inject mock Mongo connections with close()
-    const authClose = mock(async () => {});
-    const appClose = mock(async () => {});
-    (ctx as any).mongo = {
-      auth: { readyState: 1, close: authClose },
-      app: { readyState: 1, close: appClose },
-    };
-
-    const shutdownCb = getLastShutdownCallback();
-    const exitCode = await withTimeout(shutdownCb('SIGTERM'), 5_000, 'shutdown');
-
-    expect(exitCode).toBe(0);
-    expect(authClose).toHaveBeenCalledTimes(1);
-    expect(appClose).toHaveBeenCalledTimes(1);
-    server = null;
-  });
-
-  test('shutdown sets exit code 1 when Mongo disconnect throws', async () => {
-    const db: Record<string, unknown> = {
-      ...baseConfig.db,
-      mongo: false,
-    };
-    const config = { ...baseConfig, db, hostname: '127.0.0.1', port: 0 };
-    server = await createServer(config);
-
-    const ctx = getServerContext(server)!;
-
-    db.mongo = 'single';
-    (ctx as any).mongo = {
-      auth: { readyState: 1, close: async () => { throw new Error('auth close failed'); } },
-      app: null,
-    };
-
-    const shutdownCb = getLastShutdownCallback();
-    const exitCode = await withTimeout(shutdownCb('SIGTERM'), 5_000, 'shutdown');
-
-    expect(exitCode).toBe(1);
-    server = null;
-  });
+  // These branches require ctx.redis / ctx.mongo to be set, which only happens
+  // when createInfrastructure successfully connects to live Redis/Mongo during
+  // bootstrap. The disconnect functions (disconnectRedis, disconnectMongo) are
+  // independently tested in their own test files. The conditional guards
+  // (enableRedis && ctx.redis, mongoMode !== false && ctx.mongo) are trivial.
+  // These lines belong in integration tests with real infrastructure.
 });

@@ -87,8 +87,6 @@ describe('synthetic entity plugin with afterAdapters hooks', () => {
     const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
 
     const registry = createManifestHandlerRegistry();
-    registry.registerHook('myAfterAdaptersHook', async () => {});
-    registry.registerHook('anotherHook', async () => {});
 
     try {
       await createServerFromManifest(path, registry, { handlersPath: { dir } });

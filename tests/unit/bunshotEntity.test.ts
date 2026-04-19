@@ -173,7 +173,7 @@ describe('generated schemas.ts', () => {
     const schemas = files['schemas.ts'];
     expect(schemas).toContain('id: z.string(),');
     expect(schemas).toContain("type: z.enum(['text', 'image', 'system']),");
-    expect(schemas).toContain('metadata: z.unknown().optional(),');
+    expect(schemas).toContain('metadata: z.unknown().nullable().optional(),');
     expect(schemas).toContain('createdAt: z.coerce.date(),');
   });
 

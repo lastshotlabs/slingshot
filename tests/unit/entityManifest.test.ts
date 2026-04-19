@@ -253,7 +253,7 @@ describe('Entity Manifest Resolution', () => {
     const registry = createEntityHandlerRegistry();
     registry.register(
       'my-scorer',
-      () => (_driver: unknown) => (record: Record<string, unknown>) => (record.score as number) * 2,
+      () => () => (record: Record<string, unknown>) => (record.score as number) * 2,
     );
 
     const manifest = {
@@ -283,7 +283,7 @@ describe('Entity Handler Registry', () => {
   it('registers and resolves handlers', () => {
     const registry = createEntityHandlerRegistry();
     // HandlerFactory: (params?) => (backendDriver) => handler
-    registry.register('double', () => (_driver: unknown) => (x: number) => x * 2);
+    registry.register('double', () => () => (x: number) => x * 2);
     const backendFactory = registry.resolve('double') as (driver: unknown) => (x: number) => number;
     const handler = backendFactory(null);
     expect(handler(5)).toBe(10);
@@ -296,9 +296,9 @@ describe('Entity Handler Registry', () => {
 
   it('supports parent/child composition', () => {
     const parent = createEntityHandlerRegistry();
-    parent.register('base-fn', () => (_driver: unknown) => 'from-parent');
+    parent.register('base-fn', () => () => 'from-parent');
     const child = parent.extend();
-    child.register('child-fn', () => (_driver: unknown) => 'from-child');
+    child.register('child-fn', () => () => 'from-child');
 
     const baseFn = child.resolve('base-fn') as (d: unknown) => string;
     const childFn = child.resolve('child-fn') as (d: unknown) => string;
@@ -310,9 +310,9 @@ describe('Entity Handler Registry', () => {
 
   it('lists all handlers including parent', () => {
     const parent = createEntityHandlerRegistry();
-    parent.register('a', () => (_d: unknown) => {});
+    parent.register('a', () => () => {});
     const child = parent.extend();
-    child.register('b', () => (_d: unknown) => {});
+    child.register('b', () => () => {});
     expect(child.list()).toContain('a');
     expect(child.list()).toContain('b');
   });
@@ -377,13 +377,13 @@ describe('Manifest → Runtime Integration', () => {
     expect(m1.id).toBeDefined();
 
     // Operations work
-    const byRoom = await (adapter as Record<string, Function>).getByRoom({ roomId: 'r1' });
+    const byRoom = await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({ roomId: 'r1' });
     expect(byRoom.items.length).toBe(1);
 
-    const delivered = await (adapter as Record<string, Function>).markDelivered({ id: m1.id });
+    const delivered = await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({ id: m1.id });
     expect(delivered.status).toBe('delivered');
 
-    const searchResults = await (adapter as Record<string, Function>).searchContent('hello');
+    const searchResults = await (adapter as Record<string, (...args: unknown[]) => unknown>).searchContent('hello');
     expect(searchResults.length).toBe(1);
   });
 
@@ -399,7 +399,7 @@ describe('Manifest → Runtime Integration', () => {
     // HandlerFactory: (params?) => (backendDriver) => handler
     registry.register(
       'double-score',
-      () => (_driver: unknown) => async (record: Record<string, unknown>) => ({
+      () => () => async (record: Record<string, unknown>) => ({
         ...record,
         score: (record.score as number) * 2,
       }),
@@ -420,7 +420,7 @@ describe('Manifest → Runtime Integration', () => {
     const adapter = createEntityFactories(config, operations).memory();
     const item = await adapter.create({ score: 5 });
 
-    const fn = (adapter as Record<string, Function>).doubleScore;
+    const fn = (adapter as Record<string, (...args: unknown[]) => unknown>).doubleScore;
     expect(typeof fn).toBe('function');
     const result = await fn(item);
     expect(result.score).toBe(10);

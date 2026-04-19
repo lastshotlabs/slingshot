@@ -24,7 +24,7 @@ function buildRateLimitApp(opts: {
   const app = new Hono<AppEnv>();
   const rateLimitAdapter = opts.rateLimitAdapter ?? createMemoryRateLimitAdapter();
   const fingerprintBuilder = opts.fingerprintBuilder ?? {
-    buildFingerprint: async (_req: Request) => 'test-fingerprint',
+    buildFingerprint: async () => 'test-fingerprint',
   };
 
   const ctx = {
@@ -137,7 +137,7 @@ describe('rateLimit middleware', () => {
   test('fingerprint check is skipped when fingerprintLimit is false', async () => {
     let fpBuilderCalled = false;
     const customAdapter = {
-      async trackAttempt(_key: string) {
+      async trackAttempt() {
         return false; // never block
       },
     };

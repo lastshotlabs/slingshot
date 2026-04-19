@@ -34,13 +34,14 @@ function makeConfig(
       break;
     }
   }
-  return {
+  const entity = {
     name,
     fields,
     _pkField: pkField,
     _storageName: name.toLowerCase() + 's',
     search,
-  } as ResolvedEntityConfig;
+  };
+  return entity as ResolvedEntityConfig;
 }
 
 // ---------------------------------------------------------------------------

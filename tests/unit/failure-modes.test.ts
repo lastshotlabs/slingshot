@@ -18,7 +18,7 @@ import {
 } from '@auth/lib/mfaChallenge';
 import type { MfaChallengeRepository } from '@auth/lib/mfaChallenge';
 import { Database } from 'bun:sqlite';
-import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 // ---------------------------------------------------------------------------
 // 1. Event bus — listener error isolation
 // ---------------------------------------------------------------------------

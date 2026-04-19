@@ -17,7 +17,7 @@ const assetsManifest = new URL('../client-manifest.json', import.meta.url).pathn
 const staticDir = new URL('../dist/static/', import.meta.url).pathname;
 
 const inMemoryKv: KvNamespace = {
-  async get(_key) {
+  async get() {
     return null;
   },
   async put() {},

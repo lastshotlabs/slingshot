@@ -1,7 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type {
-  SlingshotEventBus,
-  SlingshotEventMap,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import { getContext } from '@lastshotlabs/slingshot-core';
@@ -145,7 +143,7 @@ describe('shutdown cleanup', () => {
     const { app } = await createApp({ ...baseConfig, plugins: [] });
     const meta = getContext(app)!;
     const bus = meta.bus;
-    const blocker = Promise.withResolvers<void>();
+    const blocker = Promise.withResolvers<undefined>();
     let observed = false;
 
     bus.on('app:shutdown', async () => {
@@ -164,7 +162,7 @@ describe('shutdown cleanup', () => {
     expect(observed).toBe(false);
     expect(shutdownResolved).toBe(false);
 
-    blocker.resolve();
+    blocker.resolve(undefined);
     await shutdownPromise;
 
     expect(observed).toBe(true);

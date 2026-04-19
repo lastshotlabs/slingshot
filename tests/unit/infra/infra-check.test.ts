@@ -42,9 +42,9 @@ let mockCompare: CompareResult = { warnings: [], infos: [], suggestions: [] };
 
 const mockLoadPlatformConfig = mock(async () => ({ config: mockPlatformConfig }));
 const mockLoadInfraConfig = mock(async () => ({ config: mockInfraConfig }));
-const mockDeriveUsesFromAppConfig = mock((_cfg: Record<string, unknown>) => mockDerivedUses);
-const mockAuditWebsocketScaling = mock((_cfg: Record<string, unknown>) => mockWsAudit);
-const mockCompareInfraResources = mock((_args: CompareArgs) => mockCompare);
+const mockDeriveUsesFromAppConfig = mock(() => mockDerivedUses);
+const mockAuditWebsocketScaling = mock(() => mockWsAudit);
+const mockCompareInfraResources = mock(() => mockCompare);
 
 mock.module('@lastshotlabs/slingshot-infra', () => ({
   // Spread real implementations so other test files that import from direct source paths

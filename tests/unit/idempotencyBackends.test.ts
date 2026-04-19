@@ -5,7 +5,7 @@
  *   - Postgres (createPostgresIdempotencyAdapter)
  *   - Mongo (createMongoIdempotencyAdapter)
  */
-import { describe, expect, test, beforeEach, mock } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import {
   createRedisIdempotencyAdapter,
   createSqliteIdempotencyAdapter,
@@ -26,7 +26,7 @@ describe('createRedisIdempotencyAdapter', () => {
         const entry = store.get(key);
         return entry?.value ?? null;
       },
-      async set(key: string, value: string, _exFlag: 'EX', ttl: number, _nx: 'NX') {
+      async set(key: string, value: string, _exFlag: 'EX', ttl: number) {
         if (store.has(key)) return null; // NX semantics
         store.set(key, { value, ttl });
         return 'OK';
@@ -91,7 +91,6 @@ describe('createRedisIdempotencyAdapter', () => {
 
 describe('createSqliteIdempotencyAdapter', () => {
   function makeSqliteDb() {
-    const tables = new Map<string, unknown[]>();
     const rows = new Map<string, Record<string, unknown>>();
 
     return {
@@ -305,7 +304,7 @@ describe('createMongoIdempotencyAdapter', () => {
     const store = new Map<string, Record<string, unknown>>();
 
     const model = {
-      findOne(filter: Record<string, unknown>, _projection: string) {
+      findOne(filter: Record<string, unknown>) {
         return {
           lean: async () => {
             const key = filter.key as string;
@@ -340,14 +339,15 @@ describe('createMongoIdempotencyAdapter', () => {
     mockSchema.prototype.index = function () { return this; };
 
     const mongoosePkg = {
-      Schema: function (...args: unknown[]) {
+      Schema: function () {
         return { index: () => ({}) };
       },
     };
 
+    const connModels: Record<string, unknown> = {};
     const conn = {
-      models: {} as Record<string, unknown>,
-      model(_name: string, _schema: unknown) {
+      models: connModels,
+      model() {
         conn.models['Idempotency'] = model;
         return model;
       },
@@ -399,12 +399,11 @@ describe('createMongoIdempotencyAdapter', () => {
 
   test('non-duplicate errors are re-thrown', async () => {
     const { conn, mongoosePkg } = makeMongoSetup();
-    const adapter = createMongoIdempotencyAdapter(conn, mongoosePkg);
+    createMongoIdempotencyAdapter(conn, mongoosePkg);
 
     // Override the model to throw a non-duplicate error
     (conn.models['Idempotency'] as any) = undefined; // reset
-    const origModel = conn.model;
-    conn.model = function (_name: string, _schema: unknown) {
+    conn.model = function () {
       const m = {
         findOne: () => ({ lean: async () => null }),
         create: async () => {
@@ -415,7 +414,7 @@ describe('createMongoIdempotencyAdapter', () => {
       };
       conn.models['Idempotency'] = m;
       return m;
-    } as typeof origModel;
+    } as typeof conn.model;
 
     // Create a fresh adapter with the error-throwing model
     const errorAdapter = createMongoIdempotencyAdapter(conn, mongoosePkg);

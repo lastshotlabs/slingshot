@@ -138,15 +138,15 @@ class FakeRedis {
     throw new Error('FakeRedis.eval received unsupported script');
   }
 
-  async lpush(key: string, _value: string): Promise<number> {
+  async lpush(): Promise<number> {
     return 0;
   }
 
-  async ltrim(_key: string, _start: number, _stop: number): Promise<string> {
+  async ltrim(): Promise<string> {
     return 'OK';
   }
 
-  async lrange(_key: string, _start: number, _stop: number): Promise<string[]> {
+  async lrange(): Promise<string[]> {
     return [];
   }
 

@@ -21,7 +21,7 @@ interface MockRedisInstance {
   triggerPmessage(pattern: string, channel: string, payload: string): void;
   publish(channel: string, payload: string): Promise<number>;
   psubscribe(pattern: string): Promise<void>;
-  on(event: string, handler: Function): MockRedisInstance;
+  on(event: string, handler: (...args: unknown[]) => unknown): MockRedisInstance;
   disconnect(): void;
 }
 

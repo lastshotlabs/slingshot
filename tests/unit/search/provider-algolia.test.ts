@@ -250,7 +250,7 @@ describe('createAlgoliaProvider', () => {
   });
 
   it('search posts to /query endpoint with search key', async () => {
-    fetchMock.mockImplementation((url: string) => {
+    fetchMock.mockImplementation(() => {
       return Promise.resolve(
         new Response(
           JSON.stringify({

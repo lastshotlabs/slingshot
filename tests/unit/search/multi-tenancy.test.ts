@@ -10,7 +10,7 @@
  * - Federated: mixed tenant/non-tenant entities handled correctly
  * - No tenantId: no filter injection for filtered mode entities
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import type { EntitySearchConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { deriveIndexSettings } from '../../../packages/slingshot-search/src/indexSettings';
 import { createSearchManager } from '../../../packages/slingshot-search/src/searchManager';
@@ -25,7 +25,7 @@ function makeEntity(
   storageName: string,
   searchConfig: EntitySearchConfig,
 ): ResolvedEntityConfig {
-  return {
+  const entity = {
     name,
     _storageName: storageName,
     _pkField: 'id',
@@ -35,7 +35,8 @@ function makeEntity(
       orgId: { type: 'string' } as any,
     },
     search: searchConfig,
-  } as ResolvedEntityConfig;
+  };
+  return entity as ResolvedEntityConfig;
 }
 
 // ============================================================================

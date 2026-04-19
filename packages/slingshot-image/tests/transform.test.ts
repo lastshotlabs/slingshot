@@ -1,5 +1,5 @@
 // packages/slingshot-image/tests/transform.test.ts
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { ImageTransformError } from '../src/types';
 
 // We test transformImage behavior. Since sharp is optional and likely not

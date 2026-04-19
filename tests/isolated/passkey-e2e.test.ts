@@ -208,7 +208,7 @@ describe('passkey login — snapshot ApiClient ↔ slingshot', () => {
     tokenStore.value = null; // start the login flow unauthenticated
 
     // Step 1 — get challenge (same call snapshot's usePasskeyLoginOptions makes)
-    const { options, passkeyToken } = await api.post<{ options: any; passkeyToken: string }>(
+    const { passkeyToken } = await api.post<{ options: any; passkeyToken: string }>(
       '/auth/passkey/login-options',
       {},
     );

@@ -34,26 +34,16 @@ const baseConfig = {
 };
 
 describe('cleanupBootstrapFailure', () => {
-  test('cleans up bus and sqlite when buildContext throws (permissions adapter fails)', async () => {
-    // permissions: { adapter: 'postgres' } without postgres configured
-    // causes infra.getPostgres() to throw inside buildContext,
-    // triggering cleanupBootstrapFailure with real bus + sqlite infra.
-    await expect(
-      createApp({
-        ...baseConfig,
-        permissions: { adapter: 'postgres' },
-      }),
-    ).rejects.toThrow('Postgres');
-
-    // cleanupBootstrapFailure ran without crashing — the error propagated
-    // cleanly, proving lines 340-346 (bus shutdown), 365-371 (sqlite close),
-    // and 373-377 (secret destroy) executed.
-  });
-
-  test('cleans up custom secrets provider with destroy()', async () => {
+  test('calls bus.shutdown AND secrets.destroy during cleanup', async () => {
+    const busShutdown = mock(async () => {});
     const secretDestroy = mock(async () => {});
+    const bus = {
+      publish: async () => {},
+      subscribe: () => ({ unsubscribe: () => {} }),
+      shutdown: busShutdown,
+    };
     const secrets: SecretRepository = {
-      name: 'test-destroy-secrets',
+      name: 'test-secrets',
       get: async () => null,
       getMany: async () => new Map(),
       destroy: secretDestroy,
@@ -62,36 +52,19 @@ describe('cleanupBootstrapFailure', () => {
     await expect(
       createApp({
         ...baseConfig,
+        eventBus: bus,
         secrets,
         permissions: { adapter: 'postgres' },
       }),
     ).rejects.toThrow('Postgres');
 
-    // Line 374: bootstrap.secretBundle.provider.destroy?.() was called
+    // Both cleanup paths ran — line 342 (bus.shutdown) and line 374 (secrets.destroy)
+    expect(busShutdown).toHaveBeenCalledTimes(1);
     expect(secretDestroy).toHaveBeenCalledTimes(1);
   });
 
-  test('cleans up custom event bus shutdown()', async () => {
-    const busShutdown = mock(async () => {});
-    const bus = {
-      publish: async () => {},
-      subscribe: () => ({ unsubscribe: () => {} }),
-      shutdown: busShutdown,
-    };
-
-    await expect(
-      createApp({
-        ...baseConfig,
-        eventBus: bus,
-        permissions: { adapter: 'postgres' },
-      }),
-    ).rejects.toThrow('Postgres');
-
-    // Line 342: bootstrap.bus.shutdown?.() was called
-    expect(busShutdown).toHaveBeenCalledTimes(1);
-  });
-
-  test('survives when bus.shutdown throws', async () => {
+  test('bus.shutdown error does not prevent secrets.destroy from running', async () => {
+    const secretDestroy = mock(async () => {});
     const bus = {
       publish: async () => {},
       subscribe: () => ({ unsubscribe: () => {} }),
@@ -99,18 +72,35 @@ describe('cleanupBootstrapFailure', () => {
         throw new Error('bus shutdown failed');
       },
     };
+    const secrets: SecretRepository = {
+      name: 'test-secrets',
+      get: async () => null,
+      getMany: async () => new Map(),
+      destroy: secretDestroy,
+    };
 
-    // Should still propagate the original permissions error, not the bus error
-    await expect(
-      createApp({
-        ...baseConfig,
-        eventBus: bus,
-        permissions: { adapter: 'postgres' },
-      }),
-    ).rejects.toThrow('Postgres');
+    const error = await createApp({
+      ...baseConfig,
+      eventBus: bus,
+      secrets,
+      permissions: { adapter: 'postgres' },
+    }).catch((e: Error) => e);
+
+    // The original error propagated, not the bus error
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('Postgres');
+
+    // secrets.destroy still ran despite bus.shutdown throwing (line 374)
+    expect(secretDestroy).toHaveBeenCalledTimes(1);
   });
 
-  test('survives when secrets.destroy throws', async () => {
+  test('secrets.destroy error does not change the propagated error', async () => {
+    const busShutdown = mock(async () => {});
+    const bus = {
+      publish: async () => {},
+      subscribe: () => ({ unsubscribe: () => {} }),
+      shutdown: busShutdown,
+    };
     const secrets: SecretRepository = {
       name: 'failing-destroy-secrets',
       get: async () => null,
@@ -120,13 +110,45 @@ describe('cleanupBootstrapFailure', () => {
       },
     };
 
-    // Should still propagate the original permissions error
-    await expect(
-      createApp({
+    const error = await createApp({
+      ...baseConfig,
+      eventBus: bus,
+      secrets,
+      permissions: { adapter: 'postgres' },
+    }).catch((e: Error) => e);
+
+    // The original error propagated, not the secrets error
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('Postgres');
+
+    // bus.shutdown still ran (it's called before secrets.destroy, line 342)
+    expect(busShutdown).toHaveBeenCalledTimes(1);
+  });
+
+  test('sqlite db is closed during cleanup (handle unusable after failure)', async () => {
+    // Use a file-based sqlite path so we can verify the handle is released
+    const tmpPath = `${import.meta.dir}/fixtures/.test-cleanup-${Date.now()}.sqlite`;
+
+    try {
+      await createApp({
         ...baseConfig,
-        secrets,
+        db: { ...baseConfig.db, sqlite: tmpPath },
         permissions: { adapter: 'postgres' },
-      }),
-    ).rejects.toThrow('Postgres');
+      });
+    } catch {
+      // expected — permissions adapter fails
+    }
+
+    // If cleanupBootstrapFailure closed the db (line 367), we should be able
+    // to open a fresh connection to the file without contention.
+    const { Database } = await import('bun:sqlite');
+    const db = new Database(tmpPath);
+    // If the handle wasn't closed, this would throw or show lock contention
+    db.exec('CREATE TABLE cleanup_proof (id INTEGER PRIMARY KEY)');
+    db.close();
+
+    // Clean up the temp file
+    const fs = await import('node:fs');
+    try { fs.unlinkSync(tmpPath); } catch { /* best-effort */ }
   });
 });

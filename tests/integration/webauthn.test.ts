@@ -131,7 +131,7 @@ describe('WebAuthn routes', () => {
   });
 
   test('POST /auth/mfa/webauthn/register completes registration', async () => {
-    const { token, userId } = await registerUser('wa-rt-reg@example.com');
+    const { token } = await registerUser('wa-rt-reg@example.com');
 
     const optsRes = await app.request('/auth/mfa/webauthn/register-options', {
       method: 'POST',

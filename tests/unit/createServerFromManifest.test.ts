@@ -629,6 +629,45 @@ describe('createServerFromManifest', () => {
       }
     });
 
+    it('rejects duplicate handler names across auto-loaded handler files', async () => {
+      const dir = join(tmpdir(), `slingshot-handler-dupes-${Date.now()}`);
+      mkdirSync(dir, { recursive: true });
+
+      const handlersDir = join(dir, 'handlers');
+      mkdirSync(handlersDir, { recursive: true });
+      writeFileSync(
+        join(handlersDir, 'a.ts'),
+        'export function duplicate() { return "a"; }\n',
+        'utf-8',
+      );
+      writeFileSync(
+        join(handlersDir, 'b.ts'),
+        'export function duplicate() { return "b"; }\n',
+        'utf-8',
+      );
+
+      writeFileSync(
+        join(dir, 'app.manifest.json'),
+        JSON.stringify({
+          manifestVersion: 1,
+          handlers: { dir: './handlers' },
+        }),
+        'utf-8',
+      );
+
+      const registry = createManifestHandlerRegistry();
+      const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
+
+      try {
+        await expectRejectMessage(
+          createServerFromManifest(join(dir, 'app.manifest.json'), registry),
+          'Duplicate handler "duplicate" registration',
+        );
+      } finally {
+        serverSpy.mockRestore();
+      }
+    });
+
     it('loads hooks from handler files', async () => {
       const dir = join(tmpdir(), `slingshot-hooks-${Date.now()}`);
       mkdirSync(dir, { recursive: true });
@@ -741,11 +780,9 @@ describe('createServerFromManifest', () => {
       });
       const path = writeTempManifest(manifest);
 
-      const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(
-        () => {
-          return makePlugin('mock-plugin');
-        },
-      );
+      const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(() => {
+        return makePlugin('mock-plugin');
+      });
       const serverSpy = spyOn(serverModule, 'createServer').mockImplementation(() => {
         return Promise.resolve(makeTestServer());
       });
@@ -799,11 +836,16 @@ describe('createServerFromManifest', () => {
         expect(entityConfig).toBeDefined();
         expect(entityConfig!['mountPath']).toBe('/api/v2');
         const manifestBlock = entityConfig!['manifest'] as Record<string, unknown>;
-        const hooks = manifestBlock['hooks'] as { afterAdapters: Array<{ handler: string; params?: unknown }> };
+        const hooks = manifestBlock['hooks'] as {
+          afterAdapters: Array<{ handler: string; params?: unknown }>;
+        };
         expect(hooks).toBeDefined();
         expect(hooks.afterAdapters).toHaveLength(2);
         expect(hooks.afterAdapters[0]).toEqual({ handler: 'myHook' });
-        expect(hooks.afterAdapters[1]).toEqual({ handler: 'myHookWithParams', params: { key: 'value' } });
+        expect(hooks.afterAdapters[1]).toEqual({
+          handler: 'myHookWithParams',
+          params: { key: 'value' },
+        });
       } finally {
         loadSpy.mockRestore();
         serverSpy.mockRestore();

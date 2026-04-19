@@ -52,7 +52,7 @@ function createTestPersistence(): ResolvedPersistence {
       async getAll() {
         return new Set<string>();
       },
-      async save(_names: ReadonlySet<string>) {},
+      async save() {},
     },
   };
 }
@@ -134,7 +134,7 @@ describe('idempotency middleware', () => {
         body: JSON.stringify({}),
       });
 
-    const res1 = await req();
+    await req();
     const res2 = await req();
 
     expect(count.n).toBe(1); // handler only called once
@@ -270,7 +270,7 @@ describe('idempotency write-collision paths', () => {
     let getCallCount = 0;
 
     const mockAdapter = {
-      async get(_k: string) {
+      async get() {
         getCallCount++;
         if (getCallCount === 1) return null; // first get: cache miss → execute handler
         // second get after set: return stored value with DIFFERENT fingerprint
@@ -345,7 +345,7 @@ describe('idempotency write-collision paths', () => {
     let getCallCount = 0;
 
     const mockAdapter = {
-      async get(_k: string) {
+      async get() {
         getCallCount++;
         if (getCallCount === 1) return null; // cache miss on first check
         // After our set() no-op, return value stored by other request (same fingerprint, different body)
@@ -451,7 +451,7 @@ describe('idempotency — non-text response skips caching (lines 104-109)', () =
       await next();
     });
     app.use('/stream', idempotent());
-    app.post('/stream', async c => {
+    app.post('/stream', async () => {
       // Create a response whose clone().text() will fail
       const stream = new ReadableStream({
         start(ctrl) {
@@ -461,7 +461,6 @@ describe('idempotency — non-text response skips caching (lines 104-109)', () =
       });
       // Override the response with one whose text() will throw
       const res = new Response(stream);
-      const originalClone = res.clone.bind(res);
       // Read the original body to lock the stream, then clone will fail
       return res;
     });

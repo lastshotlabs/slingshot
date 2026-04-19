@@ -208,7 +208,7 @@ describe('destroyResources', () => {
       },
     });
     const registry = makeRegistry(doc);
-    const destroy = mock(async (_ctx: ResourceProvisionerContext) => {
+    const destroy = mock(async () => {
       throw new Error('provisioner destroy failed');
     });
 
@@ -217,7 +217,7 @@ describe('destroyResources', () => {
       stageName: 'dev',
       registry,
       provisioners: {
-        get: (_type: string) => ({ destroy }),
+        get: () => ({ destroy }),
       },
     });
 

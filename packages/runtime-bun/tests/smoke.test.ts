@@ -37,6 +37,8 @@ describe('runtime-bun smoke', () => {
     const update = db.prepare<{ value: string }>('UPDATE items SET value = ? WHERE id = ?');
     expect(update.run('beta', 'a').changes).toBe(1);
 
+    const preparedSelect = db.prepare<{ id: string }>('SELECT id FROM items ORDER BY id');
+
     const transfer = db.transaction(() => {
       db.run('INSERT INTO items VALUES (?, ?)', 'b', 'bravo');
       db.run('INSERT INTO items VALUES (?, ?)', 'c', 'charlie');
@@ -52,11 +54,15 @@ describe('runtime-bun smoke', () => {
         .all()
         .map(row => row.id),
     ).toEqual(['a', 'b', 'c']);
+    expect(preparedSelect.all().map(row => row.id)).toEqual(['a', 'b', 'c']);
 
     db.query('INSERT INTO items VALUES (?, ?)').run('d', 'delta');
     expect(
       db.query<{ value: string }>('SELECT value FROM items WHERE id = ?').get('d')?.value,
     ).toBe('delta');
+    expect(
+      db.prepare<{ value: string }>('SELECT value FROM items WHERE id = ?').get('missing'),
+    ).toBeNull();
 
     db.close();
   });
@@ -101,6 +107,51 @@ describe('runtime-bun smoke', () => {
       expect(await response.text()).toBe('ok');
     } finally {
       server.stop(true);
+    }
+  });
+
+  test('delegates publish and upgrade to the underlying Bun server', () => {
+    const originalServe = Bun.serve;
+    const publishCalls: Array<{ channel: string; msg: string }> = [];
+    const upgradeCalls: Array<{ req: Request; options: { data: unknown } }> = [];
+
+    Object.assign(Bun, {
+      serve(options: Parameters<typeof Bun.serve>[0]) {
+        return {
+          port: undefined,
+          stop() {
+            return undefined;
+          },
+          publish(channel: string, msg: string) {
+            publishCalls.push({ channel, msg });
+          },
+          upgrade(req: Request, options: { data: unknown }) {
+            upgradeCalls.push({ req, options });
+            return true;
+          },
+        };
+      },
+    });
+
+    try {
+      const runtime = bunRuntime();
+      const server = runtime.server.listen({
+        port: 4310,
+        fetch() {
+          return new Response('ok');
+        },
+      });
+      const request = new Request('http://localhost/ws');
+      const upgradeOptions = { data: { userId: 'user-1' } };
+
+      expect(server.port).toBe(4310);
+      expect(server.upgrade(request, upgradeOptions)).toBe(true);
+      server.publish('room:alpha', 'hello');
+
+      expect(upgradeCalls).toEqual([{ req: request, options: upgradeOptions }]);
+      expect(publishCalls).toEqual([{ channel: 'room:alpha', msg: 'hello' }]);
+    } finally {
+      Object.assign(Bun, { serve: originalServe });
     }
   });
 });

@@ -35,9 +35,10 @@ describe('public path aware auth middleware', () => {
 
   it('csrf middleware bypasses validation for declared public paths', async () => {
     const app = new Hono<AppEnv>();
-    attachContext(app, {
+    const csrfCtx: never = {
       publicPaths: new Set(['/.well-known/*']),
-    } as never);
+    } as never;
+    attachContext(app, csrfCtx);
 
     app.use(csrfProtection());
     app.post('/.well-known/assetlinks.json', c => c.json({ ok: true }));

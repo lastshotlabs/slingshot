@@ -196,9 +196,9 @@ describe('wireSecurityEventConfig', () => {
     expect(received[0].meta?.actorId).toBe('admin');
   });
 
-  test('all security event types are wired', () => {
+  test('all security event types are wired', async () => {
     // This is a compile-time + runtime check that SECURITY_EVENT_TYPES covers expected keys
-    const { SECURITY_EVENT_TYPES } = require('@lastshotlabs/slingshot-core');
+    const { SECURITY_EVENT_TYPES } = await import('@lastshotlabs/slingshot-core');
     expect(SECURITY_EVENT_TYPES.length).toBe(31);
   });
 

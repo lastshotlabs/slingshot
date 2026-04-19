@@ -284,9 +284,15 @@ describe('SQLite close in graceful shutdown (lines 634-639)', () => {
     const ctx = getServerContext(server)!;
     expect(ctx.sqliteDb).not.toBeNull();
 
+    // Verify db works before shutdown
+    ctx.sqliteDb!.run('CREATE TABLE shutdown_proof (id INTEGER PRIMARY KEY)');
+
     const shutdownCb = getLastShutdownCallback();
     const exitCode = await withTimeout(shutdownCb('SIGTERM'), 5_000, 'shutdown');
     expect(exitCode).toBe(0);
+
+    // After shutdown, the db handle should be closed — operations should throw
+    expect(() => ctx.sqliteDb!.run('SELECT 1 FROM shutdown_proof')).toThrow();
     server = null;
   });
 

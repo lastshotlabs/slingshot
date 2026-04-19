@@ -7,7 +7,7 @@ import type { AdminPrincipal } from '@lastshotlabs/slingshot-core';
 // Jose function mocks — injected via deps parameter, no module-level mock needed.
 // ---------------------------------------------------------------------------
 
-const mockJwtVerify = mock(async (_token: any, _keyset: any, _opts: any) => ({
+const mockJwtVerify = mock(async () => ({
   payload: {
     sub: 'auth0|user-123',
     email: 'admin@example.com',
@@ -16,7 +16,7 @@ const mockJwtVerify = mock(async (_token: any, _keyset: any, _opts: any) => ({
   },
 }));
 
-const mockCreateRemoteJWKSet = mock((_url: URL) => 'mock-jwks' as any);
+const mockCreateRemoteJWKSet = mock(() => 'mock-jwks' as any);
 
 const deps = {
   jwtVerify: mockJwtVerify,

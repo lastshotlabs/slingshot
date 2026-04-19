@@ -13,7 +13,7 @@ function createMockRedisInstance() {
     published: [] as Array<{ channel: string; payload: string }>,
     subscribedPatterns: [] as string[],
     disconnected: false,
-    pmessageHandlers: [] as Function[],
+    pmessageHandlers: [] as Array<(...args: unknown[]) => unknown>,
     publish(channel: string, payload: string) {
       this.published.push({ channel, payload });
       return Promise.resolve(1);
@@ -22,7 +22,7 @@ function createMockRedisInstance() {
       this.subscribedPatterns.push(pattern);
       return Promise.resolve();
     },
-    on(event: string, handler: Function) {
+    on(event: string, handler: (...args: unknown[]) => unknown) {
       if (event === 'pmessage') this.pmessageHandlers.push(handler);
       return this;
     },

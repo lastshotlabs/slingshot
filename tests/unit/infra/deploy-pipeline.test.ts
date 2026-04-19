@@ -4,7 +4,6 @@ import type { DefineInfraConfig } from '../../../packages/slingshot-infra/src/ty
 import type { DefinePlatformConfig } from '../../../packages/slingshot-infra/src/types/platform';
 import type {
   DeployResult,
-  GeneratedFile,
   PresetProvider,
 } from '../../../packages/slingshot-infra/src/types/preset';
 import type {

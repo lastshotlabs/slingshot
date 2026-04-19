@@ -53,27 +53,30 @@ async function buildApp(signing?: SigningFixture | null | undefined) {
   // Merge with default signing to ensure secret is always present
   signing = signing ? { ...DEFAULT_SIGNING, ...signing } : DEFAULT_SIGNING;
   const app = new Hono();
+  const stub: never = {} as never;
+  const eventBusStub: never = { emit() {} } as never;
+  const oauthStub: never = { providers: {}, stateStore: {} } as never;
   const runtime = {
-    adapter: {} as never,
-    eventBus: { emit() {} } as never,
+    adapter: stub,
+    eventBus: eventBusStub,
     config: DEFAULT_AUTH_CONFIG,
-    stores: {} as never,
+    stores: stub,
     signing: signing ?? null,
     dataEncryptionKeys: [],
-    oauth: { providers: {}, stateStore: {} } as never,
+    oauth: oauthStub,
     lockout: null,
-    rateLimit: {} as never,
+    rateLimit: stub,
     credentialStuffing: null,
     queueFactory: null,
     repos: {
-      oauthCode: {} as never,
-      oauthReauth: {} as never,
-      magicLink: {} as never,
-      deletionCancelToken: {} as never,
-      mfaChallenge: {} as never,
+      oauthCode: stub,
+      oauthReauth: stub,
+      magicLink: stub,
+      deletionCancelToken: stub,
+      mfaChallenge: stub,
       samlRequestId: null,
-      verificationToken: {} as never,
-      resetToken: {} as never,
+      verificationToken: stub,
+      resetToken: stub,
       session: sessionRepo,
     },
   };
@@ -216,7 +219,7 @@ describe('session binding', () => {
 
   test('getSessionFingerprint stores and retrieves', async () => {
     const sessionId = 'sess-fp-1';
-    const token = await makeSessionToken('user-fp', sessionId);
+    await makeSessionToken('user-fp', sessionId);
     await setSessionFingerprint(sessionRepo, sessionId, 'test-fingerprint-hash');
     const fp = await getSessionFingerprint(sessionRepo, sessionId);
     expect(fp).toBe('test-fingerprint-hash');

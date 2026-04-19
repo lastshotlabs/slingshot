@@ -210,7 +210,7 @@ describe('BullMQ adapter — durable subscription setup (mocked bullmq)', () => 
 
   it('off() on a durable listener throws', () => {
     const bus = createBullMQAdapter({ connection: FAKE_CONNECTION });
-    const listener = (_p: { userId: string; sessionId: string }) => {};
+    const listener = () => {};
     bus.on('auth:login', listener, { durable: true, name: 'off-test' });
 
     expect(() => {
@@ -220,7 +220,7 @@ describe('BullMQ adapter — durable subscription setup (mocked bullmq)', () => 
 
   it('off() on a non-durable listener with the same function does not throw', () => {
     const bus = createBullMQAdapter({ connection: FAKE_CONNECTION });
-    const listener = (_p: { userId: string; sessionId: string }) => {};
+    const listener = () => {};
     // Register as non-durable first — off() should work fine
     bus.on('auth:login', listener);
     expect(() => {

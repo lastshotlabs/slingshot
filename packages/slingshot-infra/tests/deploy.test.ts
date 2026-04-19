@@ -34,13 +34,15 @@ describe('resolveEnvironment', () => {
   };
 
   it('returns stage env as base layer', () => {
-    const env = resolveEnvironment(basePlatform as never, {} as never, 'dev', emptyRegistry);
+    const emptyInfra: never = {} as never;
+    const env = resolveEnvironment(basePlatform as never, emptyInfra, 'dev', emptyRegistry);
     expect(env.NODE_ENV).toBe('development');
     expect(env.LOG_LEVEL).toBe('debug');
   });
 
   it('returns empty object for unknown stage', () => {
-    const env = resolveEnvironment(basePlatform as never, {} as never, 'staging', emptyRegistry);
+    const emptyInfra: never = {} as never;
+    const env = resolveEnvironment(basePlatform as never, emptyInfra, 'staging', emptyRegistry);
     expect(Object.keys(env)).toHaveLength(0);
   });
 
@@ -123,6 +125,8 @@ describe('resolveEnvironment', () => {
 // ---------------------------------------------------------------------------
 
 describe('computeDeployPlan', () => {
+  const stacksInfraRaw = { stacks: ['main'] };
+  const stacksInfra = stacksInfraRaw as never;
   const emptyRegistry: RegistryDocument = {
     version: 1,
     services: {},
@@ -132,7 +136,7 @@ describe('computeDeployPlan', () => {
 
   it('marks new service as add', () => {
     const plan = computeDeployPlan({
-      infra: { stacks: ['main'] } as never,
+      infra: stacksInfra,
       stageName: 'dev',
       registry: emptyRegistry,
       imageTag: 'v1',
@@ -157,7 +161,7 @@ describe('computeDeployPlan', () => {
       },
     };
     const plan = computeDeployPlan({
-      infra: { stacks: ['main'] } as never,
+      infra: stacksInfra,
       stageName: 'dev',
       registry,
       imageTag: 'v1',
@@ -180,7 +184,7 @@ describe('computeDeployPlan', () => {
       },
     };
     const plan = computeDeployPlan({
-      infra: { stacks: ['main'] } as never,
+      infra: stacksInfra,
       stageName: 'dev',
       registry,
       imageTag: 'v2',
@@ -205,8 +209,10 @@ describe('computeDeployPlan', () => {
         },
       },
     };
+    const newStackRaw = { stacks: ['new-stack'] };
+    const newStackInfra = newStackRaw as never;
     const plan = computeDeployPlan({
-      infra: { stacks: ['new-stack'] } as never,
+      infra: newStackInfra,
       stageName: 'dev',
       registry,
       imageTag: 'v2',
@@ -217,14 +223,15 @@ describe('computeDeployPlan', () => {
   });
 
   it('handles multi-service infra', () => {
+    const multiServiceInfra = {
+      stacks: ['main'],
+      services: {
+        api: { path: 'packages/api' },
+        worker: { path: 'packages/worker', stacks: ['workers'] },
+      },
+    };
     const plan = computeDeployPlan({
-      infra: {
-        stacks: ['main'],
-        services: {
-          api: { path: 'packages/api' },
-          worker: { path: 'packages/worker', stacks: ['workers'] },
-        },
-      } as never,
+      infra: multiServiceInfra as never,
       stageName: 'dev',
       registry: emptyRegistry,
       imageTag: 'v1',
@@ -249,14 +256,15 @@ describe('computeDeployPlan', () => {
         },
       },
     };
+    const multiInfra2 = {
+      stacks: ['main'],
+      services: {
+        api: { path: 'packages/api' },
+        worker: { path: 'packages/worker' },
+      },
+    };
     const plan = computeDeployPlan({
-      infra: {
-        stacks: ['main'],
-        services: {
-          api: { path: 'packages/api' },
-          worker: { path: 'packages/worker' },
-        },
-      } as never,
+      infra: multiInfra2 as never,
       stageName: 'dev',
       registry,
       imageTag: 'v1',
@@ -407,7 +415,7 @@ describe('runRollback', () => {
         calls.push('read');
         return doc ? structuredClone(doc) : null;
       },
-      async write(d: RegistryDocument) {
+      async write() {
         calls.push('write');
         return { etag: 'new' };
       },

@@ -31,7 +31,8 @@ describe('definePlatform', () => {
   });
 
   it('throws on missing required fields', () => {
-    expect(() => definePlatform({} as never)).toThrow('[slingshot-infra] Invalid platform config');
+    const empty: never = {} as never;
+    expect(() => definePlatform(empty)).toThrow('[slingshot-infra] Invalid platform config');
   });
 
   it('accepts s3 registry with bucket', () => {

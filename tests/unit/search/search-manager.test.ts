@@ -11,7 +11,7 @@ import type { SearchPluginConfig } from '../../../packages/slingshot-search/src/
 // ============================================================================
 
 function makeEntity(overrides?: Partial<ResolvedEntityConfig>): ResolvedEntityConfig {
-  return {
+  const entity = {
     name: 'Article',
     fields: {},
     _pkField: 'id',
@@ -25,7 +25,8 @@ function makeEntity(overrides?: Partial<ResolvedEntityConfig>): ResolvedEntityCo
       },
     },
     ...overrides,
-  } as ResolvedEntityConfig;
+  };
+  return entity as ResolvedEntityConfig;
 }
 
 function makePluginConfig(overrides?: Partial<SearchPluginConfig>): SearchPluginConfig {

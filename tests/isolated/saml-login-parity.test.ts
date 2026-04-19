@@ -21,7 +21,7 @@ import { HttpError, createInProcessAdapter } from '@lastshotlabs/slingshot-core'
 
 const mockSaml = {
   initSaml: async () => ({ sp: {} as any, idp: {} as any }),
-  createAuthnRequest: (_sp: any, _idp: any) => ({
+  createAuthnRequest: () => ({
     redirectUrl: 'https://idp.example.com/sso',
     id: 'req-id',
   }),
@@ -39,7 +39,7 @@ const mockSaml = {
     lastName: 'Luser',
     displayName: 'Sam Luser',
   }),
-  getSamlSpMetadata: (_sp: any) => '<EntityDescriptor />',
+  getSamlSpMetadata: () => '<EntityDescriptor />',
 } as unknown as typeof import('@auth/lib/saml');
 
 const TEST_SIGNING = { secret: 'test-secret-key-must-be-at-least-32-chars!!' };

@@ -57,7 +57,7 @@ Control handler auto-loading with the top-level `handlers` field:
 ```
 
 - **String** — path to a single handlers file, relative to the manifest.
-- **`{ "dir": "..." }`** — directory of handler files. All `.ts` and `.js` files (excluding `.d.ts`) are loaded in sorted order.
+- **`{ "dir": "..." }`** — directory of handler files. All `.ts` and `.js` files (excluding `.d.ts`) are loaded in sorted order for determinism only; duplicate export names are rejected instead of using file order as precedence.
 - **`false`** — disable handler auto-loading entirely.
 - **Omitted** — defaults to `slingshot.handlers.ts` in the manifest's directory (loaded if it exists, silently skipped if not).
 
@@ -78,7 +78,7 @@ export async function onLog(entry: RequestLogEntry) {
 }
 ```
 
-If a referenced handler isn't exported from the handlers file, `slingshot start` throws before serving any requests.
+If a referenced handler isn't exported from the handlers file, `slingshot start` throws before serving any requests. Duplicate handler names, plugin names, event-bus names, secret-provider names, and hook names also throw during registration instead of silently overriding earlier entries.
 
 ### The `hooks` export
 
@@ -188,6 +188,11 @@ registry.registerSecretProvider('vault', (config: Record<string, unknown>) => {
 
 const server = await createServerFromManifest('./app.manifest.json', registry);
 ```
+
+Registry names are unique within each bucket. Treat strings such as `'resolveTenant'`,
+`'redis'`, or `'my-analytics-plugin'` as public IDs owned by the code that registers
+them. If two modules try to register the same name, startup fails instead of using
+last-write-wins behavior.
 
 ## The plugin dispatch table
 

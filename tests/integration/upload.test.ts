@@ -1,9 +1,7 @@
 import { AUTH_RUNTIME_KEY } from '@auth/runtime';
 import type { AuthRuntimeContext } from '@auth/runtime';
 import { describe, expect, it } from 'bun:test';
-import type { Context } from 'hono';
 import { attachContext, createRouter } from '@lastshotlabs/slingshot-core';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { memoryStorage } from '../../src/framework/adapters/memoryStorage';
 import { handleUpload } from '../../src/framework/middleware/upload';
 import { createUploadsRouter } from '../../src/framework/routes/uploads';
@@ -176,10 +174,10 @@ describe('handleUpload middleware', () => {
         calls.push({ key, meta });
         return {};
       },
-      async get(_key: string) {
+      async get() {
         return null;
       },
-      async delete(_key: string) {},
+      async delete() {},
     };
     const { app } = createUploadApp(mockAdapter);
     app.use('/upload', async (c, next) => {
@@ -205,10 +203,10 @@ describe('handleUpload middleware', () => {
         calls.push({ key, meta });
         return {};
       },
-      async get(_key: string) {
+      async get() {
         return null;
       },
-      async delete(_key: string) {},
+      async delete() {},
     };
     const { app } = createUploadApp(mockAdapter);
     app.post('/upload', handleUpload({ field: 'file' }), async c => {
@@ -308,13 +306,13 @@ describe('presigned URL route', () => {
   it('enforces upload.allowedMimeTypes for presigned uploads', async () => {
     const presignCalls: Array<{ key: string; opts: any }> = [];
     const mockAdapter = {
-      async put(_key: string, _data: any, _meta: any) {
+      async put() {
         return {};
       },
-      async get(_key: string) {
+      async get() {
         return null;
       },
-      async delete(_key: string) {},
+      async delete() {},
       async presignPut(key: string, opts: any) {
         presignCalls.push({ key, opts });
         return `https://example.com/upload/${encodeURIComponent(key)}`;
@@ -398,14 +396,14 @@ describe('presigned URL route', () => {
 
   it('rejects requested presigned upload sizes above upload.maxFileSize', async () => {
     const mockAdapter = {
-      async put(_key: string, _data: any, _meta: any) {
+      async put() {
         return {};
       },
-      async get(_key: string) {
+      async get() {
         return null;
       },
-      async delete(_key: string) {},
-      async presignPut(_key: string, _opts: any) {
+      async delete() {},
+      async presignPut() {
         return 'https://example.com/upload';
       },
     };
@@ -472,13 +470,13 @@ describe('presigned URL route account-state hardening', () => {
   it('blocks stale suspended sessions from minting upload URLs', async () => {
     const presignCalls: Array<{ key: string; opts: any }> = [];
     const storage = {
-      async put(_key: string, _data: any, _meta: any) {
+      async put() {
         return {};
       },
-      async get(_key: string) {
+      async get() {
         return null;
       },
-      async delete(_key: string) {},
+      async delete() {},
       async presignPut(key: string, opts: any) {
         presignCalls.push({ key, opts });
         return `https://example.com/upload/${encodeURIComponent(key)}`;
@@ -518,13 +516,13 @@ describe('presigned URL route account-state hardening', () => {
 
   it('blocks stale unverified sessions from presigning downloads', async () => {
     const storage = {
-      async put(_key: string, _data: any, _meta: any) {
+      async put() {
         return {};
       },
-      async get(_key: string) {
+      async get() {
         return null;
       },
-      async delete(_key: string) {},
+      async delete() {},
       async presignPut(key: string) {
         return `https://example.com/upload/${encodeURIComponent(key)}`;
       },
@@ -586,21 +584,6 @@ describe('presigned URL route account-state hardening', () => {
 
 describe('s3Storage bucket selection', () => {
   it('uses meta.bucket over config.bucket when present', async () => {
-    const calls: Array<Record<string, unknown>> = [];
-
-    // Mock the S3 require
-    const mockSend = async (command: any) => {
-      calls.push(command.input ?? command);
-      return {};
-    };
-    const mockClient = { send: mockSend };
-    const mockPutObjectCommand = class {
-      input: any;
-      constructor(params: any) {
-        this.input = params;
-      }
-    };
-
     // We test the bucket selection logic directly by constructing a minimal mock
     // that mimics what s3Storage does: `const bucket = meta.bucket ?? config.bucket`
     const configBucket = 'default-bucket';

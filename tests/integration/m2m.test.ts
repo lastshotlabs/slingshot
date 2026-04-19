@@ -36,12 +36,12 @@ function buildApp() {
   const app = new Hono();
   const adapter = memoryAuthAdapter;
   const sessionRepo = createMemorySessionRepository();
-  const stores: never = {} as never;
+  const emptyStores = {};
   const runtime = {
     adapter,
     config,
     eventBus: { emit: () => {}, on: () => {}, off: () => {} },
-    stores,
+    stores: emptyStores as never,
     password: runtimePassword,
     signing: { secret: 'test-secret-key-must-be-at-least-32-chars!!' },
     dataEncryptionKeys: [],

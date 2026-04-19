@@ -86,7 +86,7 @@ const mockCreateRegistryFromConfig = mock(() => ({
 }));
 
 const mockCreatePresetRegistry = mock((presets: unknown) => ({
-  get: (_name: string) => presets,
+  get: () => presets,
 }));
 
 const mockCreateEcsPreset = mock(() => ({

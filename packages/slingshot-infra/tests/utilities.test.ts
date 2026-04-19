@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'bun:test';
+
+/** Cast a value to `never` without triggering object-literal type assertions. */
+function asNever<T>(value: T): never {
+  return value as never;
+}
 import { resolvePlatformConfig } from '../src/config/resolvePlatformConfig';
 import { deepMerge } from '../src/override/resolveOverrides';
 import { createPresetRegistry } from '../src/preset/presetRegistry';
@@ -59,24 +64,24 @@ describe('deepMerge', () => {
 
 describe('resolveDomain', () => {
   it('returns base domain when no suffix or config', () => {
-    const result = resolveDomain('api.myapp.com', 'prod', {} as never);
+    const result = resolveDomain('api.myapp.com', 'prod', asNever({}));
     expect(result).toBe('api.myapp.com');
   });
 
   it('applies domainSuffix by extracting subdomain', () => {
-    const result = resolveDomain('api.myapp.com', 'dev', {
+    const result = resolveDomain('api.myapp.com', 'dev', asNever({
       domainSuffix: '.dev.myapp.com',
-    } as never);
+    }));
     expect(result).toBe('api.dev.myapp.com');
   });
 
   it('concatenates suffix when domain has no dot', () => {
-    const result = resolveDomain('localhost', 'dev', { domainSuffix: '.dev.myapp.com' } as never);
+    const result = resolveDomain('localhost', 'dev', asNever({ domainSuffix: '.dev.myapp.com' }));
     expect(result).toBe('localhost.dev.myapp.com');
   });
 
   it('uses stage-specific domain from domainConfig when present', () => {
-    const result = resolveDomain('api.myapp.com', 'prod', {} as never, {
+    const result = resolveDomain('api.myapp.com', 'prod', asNever({}), {
       stages: { prod: 'api.production.myapp.com' },
     });
     expect(result).toBe('api.production.myapp.com');
@@ -86,7 +91,7 @@ describe('resolveDomain', () => {
     const result = resolveDomain(
       'api.myapp.com',
       'dev',
-      { domainSuffix: '.dev.myapp.com' } as never,
+      asNever({ domainSuffix: '.dev.myapp.com' }),
       { stages: { dev: 'api.custom-dev.myapp.com' } },
     );
     expect(result).toBe('api.custom-dev.myapp.com');
@@ -96,16 +101,16 @@ describe('resolveDomain', () => {
     const result = resolveDomain(
       'api.myapp.com',
       'staging',
-      { domainSuffix: '.staging.myapp.com' } as never,
+      asNever({ domainSuffix: '.staging.myapp.com' }),
       { stages: { prod: 'api.production.myapp.com' } },
     );
     expect(result).toBe('api.staging.myapp.com');
   });
 
   it('applies domainSuffix even for prod when the stage declares one', () => {
-    const result = resolveDomain('api.myapp.com', 'prod', {
+    const result = resolveDomain('api.myapp.com', 'prod', asNever({
       domainSuffix: '.prod.myapp.com',
-    } as never);
+    }));
     expect(result).toBe('api.prod.myapp.com');
   });
 });
@@ -232,8 +237,10 @@ describe('resolveRequiredKeys', () => {
 // ---------------------------------------------------------------------------
 
 describe('createPresetRegistry', () => {
-  const fakePreset = (name: string) =>
-    ({ name, generate: () => [], deploy: async () => ({ success: true }) }) as never;
+  const fakePreset = (name: string) => {
+    const p = { name, generate: () => [], deploy: async () => ({ success: true }) };
+    return p as never;
+  };
 
   it('returns registered preset by name', () => {
     const reg = createPresetRegistry([fakePreset('ecs'), fakePreset('ec2-nginx')]);
@@ -267,13 +274,15 @@ describe('createPresetRegistry', () => {
 // ---------------------------------------------------------------------------
 
 describe('createProvisionerRegistry', () => {
-  const fakeProvisioner = (type: string) =>
-    ({
+  const fakeProvisioner = (type: string) => {
+    const p = {
       resourceType: type,
       provision: async () => ({ status: 'provisioned', outputs: {}, connectionEnv: {} }),
       destroy: async () => {},
       getConnectionEnv: () => ({}),
-    }) as never;
+    };
+    return p as never;
+  };
 
   it('returns registered provisioner by type', () => {
     const reg = createProvisionerRegistry([fakeProvisioner('postgres'), fakeProvisioner('redis')]);

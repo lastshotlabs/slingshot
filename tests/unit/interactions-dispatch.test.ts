@@ -52,6 +52,16 @@ describe('dispatchInteraction', () => {
     const updates: unknown[] = [];
     const handler = buildHandler();
 
+    const evaluator = {
+      async can() {
+        return true;
+      },
+    } as never;
+    const rateLimit = {
+      async trackAttempt() {
+        return false;
+      },
+    } as never;
     const outcome = await dispatchInteraction(
       {
         handlers: {
@@ -61,16 +71,8 @@ describe('dispatchInteraction', () => {
             return handler;
           },
         },
-        evaluator: {
-          async can() {
-            return true;
-          },
-        } as never,
-        rateLimit: {
-          async trackAttempt() {
-            return false;
-          },
-        } as never,
+        evaluator,
+        rateLimit,
         peers: {
           chat: null,
           community: {
@@ -126,6 +128,16 @@ describe('dispatchInteraction', () => {
   it('returns forbidden when the component permission check fails', async () => {
     const handler = buildHandler();
 
+    const forbidEvaluator = {
+      async can() {
+        return false;
+      },
+    } as never;
+    const forbidRateLimit = {
+      async trackAttempt() {
+        return false;
+      },
+    } as never;
     const outcome = await dispatchInteraction(
       {
         handlers: {
@@ -135,16 +147,8 @@ describe('dispatchInteraction', () => {
             return handler;
           },
         },
-        evaluator: {
-          async can() {
-            return false;
-          },
-        } as never,
-        rateLimit: {
-          async trackAttempt() {
-            return false;
-          },
-        } as never,
+        evaluator: forbidEvaluator,
+        rateLimit: forbidRateLimit,
         peers: {
           chat: null,
           community: {

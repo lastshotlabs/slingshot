@@ -565,8 +565,8 @@ describe('createServer with SSE events', () => {
     // We need a plugin that registers events as client-safe before SSE setup.
     const ssePlugin = {
       name: 'sse-test-plugin',
-      setupPost({ app }: { app: unknown }) {
-        const { getContext } = require('@lastshotlabs/slingshot-core');
+      async setupPost({ app }: { app: unknown }) {
+        const { getContext } = await import('@lastshotlabs/slingshot-core');
         const ctx = getContext(app);
         ctx.bus.registerClientSafeEvents(['test:event']);
       },
@@ -624,8 +624,8 @@ describe('SSE HTTP endpoint', () => {
   test('SSE endpoint responds with text/event-stream', async () => {
     const ssePlugin = {
       name: 'sse-http-test-plugin',
-      setupPost({ app }: { app: unknown }) {
-        const { getContext } = require('@lastshotlabs/slingshot-core');
+      async setupPost({ app }: { app: unknown }) {
+        const { getContext } = await import('@lastshotlabs/slingshot-core');
         const ctx = getContext(app);
         ctx.bus.registerClientSafeEvents(['test:sse-http']);
       },

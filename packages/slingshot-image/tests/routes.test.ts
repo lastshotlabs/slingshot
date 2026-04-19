@@ -1,5 +1,5 @@
 // packages/slingshot-image/tests/routes.test.ts
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { Hono } from 'hono';
 import { createMemoryImageCache } from '../src/cache';
 import { buildImageRouter } from '../src/routes';

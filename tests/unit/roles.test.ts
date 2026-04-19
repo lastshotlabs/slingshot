@@ -12,10 +12,8 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { createTestApp } from '../setup';
 
 let adapter: ReturnType<typeof createMemoryAuthAdapter>;
-let app: any;
-
 beforeEach(async () => {
-  app = await createTestApp();
+  await createTestApp();
   adapter = createMemoryAuthAdapter();
 });
 

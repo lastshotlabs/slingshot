@@ -319,7 +319,9 @@ function generateOutputLines(
         `      ${getResourceOutputKey(resource.name, 'Port')}: ${name}.port,`,
       ];
     case 'kafka':
-      return [`      ${getResourceOutputKey(resource.name, 'Brokers')}: ${name}Cluster.bootstrapBrokers,`];
+      return [
+        `      ${getResourceOutputKey(resource.name, 'Brokers')}: ${name}Cluster.bootstrapBrokers,`,
+      ];
     case 'mongo':
       return [
         `      ${getResourceOutputKey(resource.name, 'Endpoint')}: ${name}Cluster.endpoint,`,

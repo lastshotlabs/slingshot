@@ -73,7 +73,7 @@ function makeApp(
 ) {
   const requireRoleSpy =
     options?.requireRoleSpy ??
-    mock((_roles: string[]) => {
+    mock(() => {
       return async (_c: unknown, next: () => Promise<void>) => {
         await next();
       };
@@ -115,21 +115,21 @@ function makeQueueFactory(overrides?: {
   const counts = overrides?.counts ?? { waiting: jobs.length };
 
   return {
-    createQueue(_name: string) {
+    createQueue() {
       return {
-        async getJobs(_states: string[], _start = 0, _end = 19) {
+        async getJobs() {
           return jobs;
         },
-        async getJobCounts(_state: string) {
+        async getJobCounts() {
           return counts;
         },
         async getJob(id: string) {
           return jobs.find(job => job.id === id) ?? null;
         },
-        async getJobLogs(_id: string) {
+        async getJobLogs() {
           return logs;
         },
-        async getWaiting(_start = 0, _end = 19) {
+        async getWaiting() {
           return waitingJobs;
         },
         async getWaitingCount() {
@@ -276,22 +276,22 @@ describe('createJobsRouter (root coverage)', () => {
   });
 
   test('passes state and pagination filters through to the queue adapter', async () => {
-    const getJobs = mock(async (_states: string[], _start = 0, _end = 19) => [
+    const getJobs = mock(async () => [
       makeFakeJob({ id: 'failed-job', state: 'failed' }),
     ]);
-    const getJobCounts = mock(async (_state: string) => ({ failed: 1 }));
+    const getJobCounts = mock(async () => ({ failed: 1 }));
     const queueFactory = {
-      createQueue(_name: string) {
+      createQueue() {
         return {
           getJobs,
           getJobCounts,
           async getJob(id: string) {
             return makeFakeJob({ id });
           },
-          async getJobLogs(_id: string) {
+          async getJobLogs() {
             return { logs: [], count: 0 };
           },
-          async getWaiting(_start = 0, _end = 19) {
+          async getWaiting() {
             return [];
           },
           async getWaitingCount() {

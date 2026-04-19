@@ -16,7 +16,7 @@ describe('resolveUserId', () => {
 
   test('calls resolver.resolveUserId with the request', async () => {
     const req = new Request('http://example.com');
-    const resolveUserIdMock = mock(async (_req: Request) => 'user-123');
+    const resolveUserIdMock = mock(async () => 'user-123');
     const resolver = { resolveUserId: resolveUserIdMock };
     await resolveUserId(req, resolver);
     expect(resolveUserIdMock).toHaveBeenCalledWith(req);

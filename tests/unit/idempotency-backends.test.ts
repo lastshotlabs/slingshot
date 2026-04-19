@@ -80,7 +80,6 @@ describe('createRedisIdempotencyAdapter', () => {
         value: string,
         exFlag: 'EX',
         ttl: number,
-        nx: 'NX',
       ) {
         if (store.has(key)) return null; // NX semantics
         store.set(key, { value, expiresAt: Date.now() + ttl * 1000 });
@@ -138,6 +137,7 @@ describe('createRedisIdempotencyAdapter', () => {
 describe('createSqliteIdempotencyAdapter', () => {
   function createMockSqliteDb() {
     // Use Bun's built-in SQLite for an in-memory database
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { Database } = require('bun:sqlite');
     const db = new Database(':memory:');
     return {
@@ -256,13 +256,11 @@ describe('createSqliteIdempotencyAdapter', () => {
 describe('createPostgresIdempotencyAdapter', () => {
   function createMockPgPool() {
     const rows: Record<string, Record<string, unknown>> = {};
-    let tableCreated = false;
 
     return {
       async query(sql: string, params?: unknown[]) {
         const trimmed = sql.trim();
         if (trimmed.startsWith('CREATE TABLE')) {
-          tableCreated = true;
           return { rows: [], rowCount: 0 };
         }
         if (trimmed.startsWith('ALTER TABLE')) {
@@ -335,7 +333,7 @@ describe('createMongoIdempotencyAdapter', () => {
   function createMockMongoEnv() {
     const docs: Record<string, Record<string, unknown>> = {};
     const mockModel = {
-      findOne(filter: Record<string, unknown>, _projection: string) {
+      findOne(filter: Record<string, unknown>) {
         return {
           lean() {
             const key = filter['key'] as string;
@@ -363,18 +361,18 @@ describe('createMongoIdempotencyAdapter', () => {
       },
     };
 
+    const models: Record<string, unknown> = { Idempotency: mockModel };
     const appConn = {
-      models: { Idempotency: mockModel } as Record<string, unknown>,
-      model(_name: string, _schema: unknown) {
+      models,
+      model() {
         return mockModel;
       },
     };
 
     // Minimal mock of mongoose Schema
     const mongoosePkg = {
-      Schema: class MockSchema {
-        constructor(_def: unknown, _opts?: unknown) {}
-      },
+      // eslint-disable-next-line @typescript-eslint/no-extraneous-class
+      Schema: class MockSchema {},
     };
 
     return { appConn, mongoosePkg, docs };
@@ -429,10 +427,12 @@ describe('createMongoIdempotencyAdapter', () => {
       },
     };
 
+    const swallowModels: Record<string, unknown> = { Idempotency: mockModel };
     const appConn = {
-      models: { Idempotency: mockModel } as Record<string, unknown>,
+      models: swallowModels,
       model: () => mockModel,
     };
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class
     const adapter = createMongoIdempotencyAdapter(appConn, { Schema: class {} });
 
     await adapter.set('k', '{}', 200, 60);
@@ -450,10 +450,12 @@ describe('createMongoIdempotencyAdapter', () => {
       },
     };
 
+    const rethrowModels: Record<string, unknown> = { Idempotency: mockModel };
     const appConn = {
-      models: { Idempotency: mockModel } as Record<string, unknown>,
+      models: rethrowModels,
       model: () => mockModel,
     };
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class
     const adapter = createMongoIdempotencyAdapter(appConn, { Schema: class {} });
 
     await expect(adapter.set('k', '{}', 200, 60)).rejects.toThrow('Connection lost');
@@ -472,7 +474,7 @@ describe('createMongoIdempotencyAdapter', () => {
   test('creates model lazily when not in appConn.models', async () => {
     const docs: Record<string, Record<string, unknown>> = {};
     const mockModel = {
-      findOne(filter: Record<string, unknown>, _projection: string) {
+      findOne(filter: Record<string, unknown>) {
         return {
           lean() {
             const key = filter['key'] as string;
@@ -490,16 +492,16 @@ describe('createMongoIdempotencyAdapter', () => {
       },
     };
 
+    const lazyModels: Record<string, unknown> = {}; // empty — no pre-registered model
     const appConn = {
-      models: {} as Record<string, unknown>, // empty — no pre-registered model
-      model(_name: string, _schema: unknown) {
+      models: lazyModels,
+      model() {
         return mockModel;
       },
     };
 
-    class MockSchema {
-      constructor(_def: unknown, _opts?: unknown) {}
-    }
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class
+    class MockSchema {}
 
     const adapter = createMongoIdempotencyAdapter(appConn, { Schema: MockSchema });
     await adapter.set('lazy-key', '{"ok":true}', 200, 60);
@@ -531,7 +533,7 @@ describe('idempotencyFactories', () => {
   test('mongo factory calls infra.getMongo and returns an adapter', async () => {
     const docs: Record<string, Record<string, unknown>> = {};
     const mockModel = {
-      findOne(filter: Record<string, unknown>, _projection: string) {
+      findOne(filter: Record<string, unknown>) {
         return {
           lean() {
             const key = filter['key'] as string;
@@ -544,12 +546,14 @@ describe('idempotencyFactories', () => {
       },
     };
 
+    const factoryModels: Record<string, unknown> = {};
     const mockConn = {
-      models: {} as Record<string, unknown>,
+      models: factoryModels,
       model: () => mockModel,
     };
 
     const mockInfra = {
+      // eslint-disable-next-line @typescript-eslint/no-extraneous-class
       getMongo: () => ({ conn: mockConn, mg: { Schema: class {} } }),
       appName: 'test',
     };

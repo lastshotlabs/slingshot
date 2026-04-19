@@ -35,7 +35,7 @@ afterEach(() => {
     for (const suffix of ['', '-wal', '-shm']) {
       try {
         fs.unlinkSync(f + suffix);
-      } catch {}
+      } catch { /* empty */ }
     }
   }
 });

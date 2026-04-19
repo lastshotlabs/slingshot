@@ -377,7 +377,7 @@ describe('QueueFactory methods', () => {
   test('factory.createDLQHandler: onDeadLetter callback error is caught (line 157)', async () => {
     const factory = createQueueFactory(REDIS_CREDS);
     const sourceWorker = new MockWorker('src', async () => {});
-    const errorSpy = mock((..._args: unknown[]) => {});
+    const errorSpy = mock(() => {});
     const origError = console.error;
     console.error = errorSpy as typeof console.error;
 

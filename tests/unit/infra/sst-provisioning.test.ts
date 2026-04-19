@@ -2,6 +2,7 @@ import { describe, expect, it, mock } from 'bun:test';
 import {
   type ResourceProvisionEntry,
   generateResourceSstConfig,
+  getResourceOutputKey,
 } from '../../../packages/slingshot-infra/src/resource/generateResourceSst';
 import {
   type ProcessRunner,
@@ -20,7 +21,7 @@ import type { ResourceProvisionerContext } from '../../../packages/slingshot-inf
 mock.module('../../../packages/slingshot-infra/src/resource/provisionViaSst', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { spawnSync } = require('node:child_process') as typeof import('node:child_process');
-   
+
   const { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } =
     require('node:fs') as typeof import('node:fs');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -310,6 +311,11 @@ describe('generateResourceSstConfig', () => {
 
     expect(config).toContain('--- section:resource-db ---');
     expect(config).toContain('--- end:resource-db ---');
+  });
+
+  it('uses shared output-key generation for sanitized resource names', () => {
+    expect(getResourceOutputKey('my-events', 'Brokers')).toBe('myeventsBrokers');
+    expect(getResourceOutputKey('cache_01', 'Host')).toBe('cache01Host');
   });
 
   it('includes VPC section', () => {

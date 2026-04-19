@@ -79,6 +79,10 @@ registry.registerEventBus('bullmq', () =>
 await createServerFromManifest('./app.manifest.json', registry);
 ```
 
+Registry event-bus names are unique. Use `'bullmq'` here only when you want to
+own that built-in slot explicitly; duplicate registrations fail instead of
+quietly overriding an earlier factory.
+
 ## Redis event bus
 
 ```bash

@@ -1,4 +1,3 @@
-import type { Server } from 'bun';
 import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
 import { getContext } from '@lastshotlabs/slingshot-core';
 import type { CreateAppConfig } from '../src/app';

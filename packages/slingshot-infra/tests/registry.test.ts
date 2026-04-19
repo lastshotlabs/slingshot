@@ -220,20 +220,24 @@ describe('createRegistryFromConfig', () => {
   });
 
   it('throws for S3 without bucket', () => {
-    expect(() => createRegistryFromConfig({ provider: 's3' } as never)).toThrow('bucket');
+    const s3Config = { provider: 's3' };
+    expect(() => createRegistryFromConfig(s3Config as never)).toThrow('bucket');
   });
 
   it('throws for Redis without url', () => {
-    expect(() => createRegistryFromConfig({ provider: 'redis' } as never)).toThrow('url');
+    const redisConfig = { provider: 'redis' };
+    expect(() => createRegistryFromConfig(redisConfig as never)).toThrow('url');
   });
 
   it('throws for Postgres without connectionString', () => {
-    expect(() => createRegistryFromConfig({ provider: 'postgres' } as never)).toThrow(
+    const pgConfig = { provider: 'postgres' };
+    expect(() => createRegistryFromConfig(pgConfig as never)).toThrow(
       'connectionString',
     );
   });
 
   it('throws for local without path', () => {
-    expect(() => createRegistryFromConfig({ provider: 'local' } as never)).toThrow('path');
+    const localConfig = { provider: 'local' };
+    expect(() => createRegistryFromConfig(localConfig as never)).toThrow('path');
   });
 });

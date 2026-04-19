@@ -97,7 +97,7 @@ function createMockSearchManager(provider: SearchProvider): SearchManager {
     getProvider: mock(() => provider),
     getProviderByKey: mock(() => provider),
     getEntityTenantConfig: mock(() => undefined),
-    resolveStorageName: mock((_name: string) => null),
+    resolveStorageName: mock(() => null),
     teardown: mock(async () => {}),
   };
 }
@@ -113,7 +113,7 @@ function createMockTransformRegistry(): SearchTransformRegistry {
 }
 
 function createTestEntity(overrides?: Partial<ResolvedEntityConfig>): ResolvedEntityConfig {
-  return {
+  const entity = {
     name: 'Article',
     fields: {},
     _pkField: 'id',
@@ -126,7 +126,8 @@ function createTestEntity(overrides?: Partial<ResolvedEntityConfig>): ResolvedEn
       },
     },
     ...overrides,
-  } as ResolvedEntityConfig;
+  };
+  return entity as ResolvedEntityConfig;
 }
 
 const basePluginConfig: SearchPluginConfig = {

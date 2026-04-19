@@ -59,11 +59,11 @@ class FakeQueue {
     this.name = name;
   }
 
-  async getJobs(_states: string[], _start = 0, _end = 19): Promise<FakeJob[]> {
+  async getJobs(): Promise<FakeJob[]> {
     return _jobs;
   }
 
-  async getJobCounts(_state: string): Promise<Record<string, number>> {
+  async getJobCounts(): Promise<Record<string, number>> {
     return _counts;
   }
 
@@ -71,11 +71,11 @@ class FakeQueue {
     return _jobs.find(j => j.id === id) ?? null;
   }
 
-  async getJobLogs(_id: string): Promise<{ logs: string[]; count: number }> {
+  async getJobLogs(): Promise<{ logs: string[]; count: number }> {
     return _logs;
   }
 
-  async getWaiting(_start = 0, _end = 19): Promise<FakeJob[]> {
+  async getWaiting(): Promise<FakeJob[]> {
     return _waitingJobs;
   }
 
@@ -90,6 +90,7 @@ mock.module('../../src/lib/queue', () => ({
   }),
 }));
 
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 mock.module('ioredis', () => ({ default: class {} }));
 mock.module('bullmq', () => ({}));
 
@@ -124,7 +125,7 @@ function makeRouter(
       await next();
     },
     requireRole:
-      (..._roles: string[]) =>
+      () =>
       async (_c: any, next: any) => {
         await next();
       },

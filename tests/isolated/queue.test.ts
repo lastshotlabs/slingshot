@@ -5,7 +5,7 @@
  * Mocks bullmq BEFORE importing queue.ts so require("bullmq") inside
  * requireBullMQ() returns our mock implementation.
  */
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 // ---------------------------------------------------------------------------
 // Now import queue.ts (uses lazy require("bullmq") inside functions)
 // ---------------------------------------------------------------------------
@@ -112,24 +112,23 @@ class MockWorker {
 
 // Keep a reference to the last constructed instances for assertions
 let lastQueue: MockQueue | null = null;
-let lastWorker: MockWorker | null = null;
-
 mock.module('bullmq', () => ({
   Queue: class extends MockQueue {
     constructor(name: string) {
       super(name);
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
       lastQueue = this;
     }
   },
   Worker: class extends MockWorker {
     constructor(name: string, processor: unknown, opts: unknown) {
       super(name, processor, opts);
-      lastWorker = this;
     }
   },
 }));
 
 // Also mock redis so getRedisConnectionOptions() doesn't throw (REDIS_HOST missing)
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 mock.module('ioredis', () => ({ default: class {} }));
 
 const QUEUE_CREDS = { host: 'localhost:6379' };

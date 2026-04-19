@@ -35,11 +35,14 @@ async function makeSessionToken(userId: string, sessionId: string): Promise<stri
 
 function buildApp(maxAge?: number) {
   const app = new Hono();
+  const emptyAdapter = {};
+  const emptyEventBus = { emit() {} };
+  const emptyStores = {};
   const runtime = {
-    adapter: {} as never,
-    eventBus: { emit() {} } as never,
+    adapter: emptyAdapter as never,
+    eventBus: emptyEventBus as never,
     config: DEFAULT_AUTH_CONFIG,
-    stores: {} as never,
+    stores: emptyStores as never,
     signing: { secret: 'test-secret-key-must-be-at-least-32-chars!!' },
     dataEncryptionKeys: [],
     repos: {

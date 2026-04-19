@@ -203,7 +203,7 @@ describe('slingshot generate CLI', () => {
     ]);
 
     spyOn(cmd, 'log').mockImplementation(() => {});
-    const errorSpy = spyOn(cmd, 'error').mockImplementation((msg: string) => {
+    spyOn(cmd, 'error').mockImplementation((msg: string) => {
       throw new Error(msg);
     });
 
@@ -222,7 +222,7 @@ describe('slingshot generate CLI', () => {
     ]);
 
     spyOn(cmd, 'log').mockImplementation(() => {});
-    const errorSpy = spyOn(cmd, 'error').mockImplementation((msg: string) => {
+    spyOn(cmd, 'error').mockImplementation((msg: string) => {
       throw new Error(msg);
     });
 

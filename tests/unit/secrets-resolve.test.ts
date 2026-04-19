@@ -9,13 +9,11 @@ import { describe, expect, test } from 'bun:test';
 import type { SecretRepository, SecretSchema, SecretStoreType } from '@lastshotlabs/slingshot-core';
 
 function createMockProvider(secrets: Record<string, string>): SecretRepository {
-  let initCalled = false;
-
   return {
     name: 'mock',
 
     async initialize() {
-      initCalled = true;
+      // tracked by caller
     },
 
     async get(key) {

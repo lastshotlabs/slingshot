@@ -17,7 +17,7 @@ let sesClientConstructorCallCount = 0;
 // Record args passed to the last SendEmailCommand construction
 let lastSendEmailCommandParams: Record<string, unknown> | null = null;
 
-function MockSESv2Client(_config: unknown) {
+function MockSESv2Client() {
   sesClientConstructorCallCount++;
   return { send: latestClientSend };
 }

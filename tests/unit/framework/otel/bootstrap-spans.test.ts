@@ -1,8 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { trace } from '@opentelemetry/api';
-import type { Tracer } from '@opentelemetry/api';
 import { describe, expect, mock, test } from 'bun:test';
-import type { AppEnv, SlingshotEventBus, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import { withSpan, withSpanSync } from '../../../../src/framework/otel/spans';
 import { getTracer, isTracingEnabled } from '../../../../src/framework/otel/tracer';
@@ -108,7 +106,7 @@ describe('bootstrap span helpers with no-op tracer', () => {
 
 describe('plugin lifecycle spans', () => {
   // Minimal framework config stub — plugins in these tests don't use it
-  const frameworkConfig = {} as Parameters<typeof runPluginMiddleware>[2];
+  const frameworkConfig: Parameters<typeof runPluginMiddleware>[2] = {} as Parameters<typeof runPluginMiddleware>[2];
 
   function makePlugin(name: string, deps?: string[]): SlingshotPlugin {
     return {

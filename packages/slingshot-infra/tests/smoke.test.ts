@@ -17,8 +17,8 @@ import { parseRegistryUrl } from '../src/registry/parseRegistryUrl';
 import { generateInfraTemplate } from '../src/scaffold/infraTemplate';
 import { generatePlatformTemplate } from '../src/scaffold/platformTemplate';
 import { resolveRequiredKeys } from '../src/secrets/resolveRequiredKeys';
-import type { DeployResult, GeneratedFile, PresetProvider } from '../src/types/preset';
-import type { RegistryDocument, RegistryProvider } from '../src/types/registry';
+import type { DeployResult, PresetProvider } from '../src/types/preset';
+import type { RegistryDocument } from '../src/types/registry';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -30,13 +30,15 @@ function makeTempDir(): string {
 
 /** Stub preset that generates a Dockerfile and reports success on deploy. */
 function stubPreset(name = 'ecs'): PresetProvider {
-  return {
+  const result: DeployResult = { success: true } as never;
+  const preset = {
     name,
     generate: () => [
       { path: 'Dockerfile', content: 'FROM node:20\nCMD ["node"]', ephemeral: false },
     ],
-    deploy: async () => ({ success: true }) as DeployResult,
-  } as PresetProvider;
+    deploy: async () => result,
+  };
+  return preset as unknown as PresetProvider;
 }
 
 function createFrozenPlatform() {
@@ -379,9 +381,10 @@ describe('smoke: config derivation chain', () => {
         },
       },
     };
+    const infraConfig = { uses, env: { APP_NAME: 'myapp' } };
     const env = resolveEnvironment(
       platform as never,
-      { uses, env: { APP_NAME: 'myapp' } } as never,
+      infraConfig as never,
       'dev',
       registry,
     );

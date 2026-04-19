@@ -239,30 +239,6 @@ async function bootFromManifest(): Promise<Harness> {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: POST to dispatch route
-// ---------------------------------------------------------------------------
-
-async function dispatch(
-  app: Hono,
-  body: Record<string, unknown>,
-  opts: { auth?: boolean } = { auth: true },
-) {
-  const headers: Record<string, string> = { 'content-type': 'application/json' };
-  if (opts.auth !== false) {
-    // attachContext middleware sets slingshotCtx; route reads authUserId from c.get()
-    // We simulate auth by setting the authUserId directly via a middleware-injected
-    // key. The dispatch route reads c.get('authUserId'), which is set by the test
-    // context middleware. We pass it via the x-test-user pattern used in other tests.
-    headers['x-test-user'] = 'user_test';
-  }
-  return app.request('http://slingshot.local/interactions/dispatch', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

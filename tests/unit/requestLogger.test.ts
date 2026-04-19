@@ -1,5 +1,5 @@
 import { trace } from '@opentelemetry/api';
-import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { otelRequestMiddleware } from '../../src/framework/middleware/otelRequest';

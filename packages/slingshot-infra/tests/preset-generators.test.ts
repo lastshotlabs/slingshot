@@ -3,32 +3,41 @@ import { createEc2NginxPreset } from '../src/preset/ec2-nginx/ec2NginxPreset';
 import { createEcsPreset } from '../src/preset/ecs/ecsPreset';
 import type { PresetContext } from '../src/types/preset';
 
+/** Cast a plain object to `never` without triggering object-literal type assertions. */
+function asNever<T>(value: T): never {
+  return value as never;
+}
+
 // ---------------------------------------------------------------------------
 // Minimal PresetContext builder
 // ---------------------------------------------------------------------------
 
 function makeContext(overrides?: Partial<PresetContext>): PresetContext {
+  const platformStub = {
+    org: 'testco',
+    provider: 'aws',
+    region: 'us-east-1',
+    registry: { provider: 'local', path: '.slingshot/registry.json' },
+    stages: {
+      dev: { env: { NODE_ENV: 'development' } },
+      prod: { env: { NODE_ENV: 'production' } },
+    },
+    stacks: { main: { preset: 'ecs' } },
+  };
+  const infraStub = {
+    stacks: ['main'],
+    port: 3000,
+    size: 'small',
+    healthCheck: '/health',
+  };
+  const stageStub = { env: { NODE_ENV: 'development' } };
+  const stackStub = { preset: 'ecs' };
   return {
-    platform: {
-      org: 'testco',
-      provider: 'aws',
-      region: 'us-east-1',
-      registry: { provider: 'local', path: '.slingshot/registry.json' },
-      stages: {
-        dev: { env: { NODE_ENV: 'development' } },
-        prod: { env: { NODE_ENV: 'production' } },
-      },
-      stacks: { main: { preset: 'ecs' } },
-    } as never,
-    infra: {
-      stacks: ['main'],
-      port: 3000,
-      size: 'small',
-      healthCheck: '/health',
-    } as never,
-    stage: { env: { NODE_ENV: 'development' } } as never,
+    platform: platformStub as never,
+    infra: infraStub as never,
+    stage: stageStub as never,
     stageName: 'dev',
-    stack: { preset: 'ecs' } as never,
+    stack: stackStub as never,
     stackName: 'main',
     registry: {
       version: 1,
@@ -104,7 +113,7 @@ describe('ECS preset: generate()', () => {
         size: 'small',
         healthCheck: '/health',
         logging: { driver: 'fluentd', fluentd: {} },
-      } as never,
+      }),
     });
     const files = preset.generate(ctx);
     const fluentd = files.find(f => f.path.includes('fluent'));
@@ -138,7 +147,7 @@ describe('ECS preset: multi-service', () => {
 
   it('generates one Dockerfile per service on the stack', () => {
     const ctx = makeContext({
-      infra: {
+      infra: asNever({
         stacks: ['main'],
         port: 3000,
         size: 'small',
@@ -148,7 +157,7 @@ describe('ECS preset: multi-service', () => {
           worker: { port: 4000, stacks: ['main'] },
           scheduler: { port: 5000, stacks: ['other'] },
         },
-      } as never,
+      }),
     });
     const files = preset.generate(ctx);
     const dockerfiles = files.filter(f => f.path.startsWith('Dockerfile'));
@@ -221,13 +230,13 @@ describe('EC2/nginx preset: generate() with nginx', () => {
 
   it('generates nginx.conf instead of Caddyfile', () => {
     const ctx = makeContext({
-      infra: {
+      infra: asNever({
         stacks: ['main'],
         port: 3000,
         size: 'small',
         healthCheck: '/health',
         domain: 'api.example.com',
-      } as never,
+      }),
     });
     const files = preset.generate(ctx);
     const nginx = files.find(f => f.path === 'nginx.conf');
@@ -255,7 +264,7 @@ describe('EC2/nginx preset: multi-service', () => {
 
   it('generates Dockerfiles for each service on the stack', () => {
     const ctx = makeContext({
-      infra: {
+      infra: asNever({
         stacks: ['main'],
         port: 3000,
         size: 'small',
@@ -265,7 +274,7 @@ describe('EC2/nginx preset: multi-service', () => {
           worker: { port: 4000, stacks: ['main'] },
           scheduler: { port: 5000, stacks: ['other'] },
         },
-      } as never,
+      }),
     });
     const files = preset.generate(ctx);
     const dockerfiles = files.filter(f => f.path.startsWith('Dockerfile'));
@@ -274,7 +283,7 @@ describe('EC2/nginx preset: multi-service', () => {
 
   it('docker-compose includes all services on the stack', () => {
     const ctx = makeContext({
-      infra: {
+      infra: asNever({
         stacks: ['main'],
         port: 3000,
         size: 'small',
@@ -283,7 +292,7 @@ describe('EC2/nginx preset: multi-service', () => {
           api: { port: 3000, stacks: ['main'], domain: 'api.example.com' },
           worker: { port: 4000, stacks: ['main'] },
         },
-      } as never,
+      }),
     });
     const files = preset.generate(ctx);
     const compose = files.find(f => f.path === 'docker-compose.yml');
@@ -301,13 +310,13 @@ describe('EC2/nginx preset: fluentd logging', () => {
 
   it('generates fluentd config when logging driver is fluentd', () => {
     const ctx = makeContext({
-      infra: {
+      infra: asNever({
         stacks: ['main'],
         port: 3000,
         size: 'small',
         healthCheck: '/health',
         logging: { driver: 'fluentd', fluentd: {} },
-      } as never,
+      }),
     });
     const files = preset.generate(ctx);
     const fluentd = files.find(f => f.path.includes('fluent'));

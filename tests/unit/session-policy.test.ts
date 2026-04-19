@@ -30,10 +30,10 @@ let repo: SessionRepository;
  */
 function adapterAsRepo(adapter: ReturnType<typeof createMemoryAuthAdapter>): SessionRepository {
   return {
-    createSession: async (userId, token, sessionId, metadata?, cfg?) => {
+    createSession: async (userId, token, sessionId, metadata?) => {
       adapter.memoryCreateSession(userId, token, sessionId, metadata);
     },
-    atomicCreateSession: async (userId, token, sessionId, maxSessions, metadata?, cfg?) => {
+    atomicCreateSession: async (userId, token, sessionId, maxSessions, metadata?) => {
       adapter.memoryAtomicCreateSession(userId, token, sessionId, maxSessions, metadata);
     },
     getSession: async (sessionId, cfg?) => {

@@ -5,7 +5,6 @@ import { describe, expect, mock, test, beforeEach } from 'bun:test';
 // ---------------------------------------------------------------------------
 
 const storedParams = new Map<string, string>();
-let getByPathCallCount = 0;
 let getParamCallCount = 0;
 let getParamsCallCount = 0;
 
@@ -17,7 +16,6 @@ class MockSSMClient {
   async send(command: unknown) {
     const cmd = command as { _type: string; input: Record<string, unknown> };
     if (cmd._type === 'GetParametersByPathCommand') {
-      getByPathCallCount++;
       const prefix = cmd.input.Path as string;
       const params = Array.from(storedParams.entries())
         .filter(([k]) => k.startsWith(prefix))

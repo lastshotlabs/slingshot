@@ -7,22 +7,6 @@ function makeClient(id = 'client-1') {
   return { id, userId: null, endpoint };
 }
 
-async function readStream(stream: ReadableStream<Uint8Array>, maxChunks = 10): Promise<string> {
-  const reader = stream.getReader();
-  const dec = new TextDecoder();
-  let result = '';
-  let count = 0;
-  while (count < maxChunks) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    result += dec.decode(value);
-    count++;
-    // Stop after we have meaningful content (avoid blocking forever)
-    if (result.includes('event:') || result.includes(': connected')) break;
-  }
-  reader.releaseLock();
-  return result;
-}
 
 describe('createSseRegistry', () => {
   test('createClientStream returns a ReadableStream', () => {
@@ -288,7 +272,7 @@ describe('createSseUpgradeHandler', () => {
 
   test('uses custom userResolver when provided', async () => {
     const userResolver = {
-      resolveUserId: async (_req: Request) => 'user-abc',
+      resolveUserId: async () => 'user-abc',
     };
     const upgrade = createSseUpgradeHandler('/events', userResolver);
     const req = new Request('http://localhost/events');

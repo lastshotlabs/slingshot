@@ -1,0 +1,44 @@
+{
+  "name": "@lastshotlabs/slingshot-kafka",
+  "version": "0.0.2",
+  "description": "Kafka event bus adapter and Kafka connectors for Slingshot",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-kafka"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "cd ../.. && bun test packages/slingshot-kafka/tests"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "kafkajs": "^2.2.4",
+    "zod": ">=4.0 <5"
+  },
+  "devDependencies": {
+    "kafkajs": "^2.2.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

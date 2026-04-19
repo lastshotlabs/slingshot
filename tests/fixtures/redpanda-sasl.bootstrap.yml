@@ -1,0 +1,4 @@
+enable_sasl: true
+admin_api_require_auth: true
+superusers:
+  - superuser

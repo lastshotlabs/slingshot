@@ -1,0 +1,64 @@
+redpanda:
+  data_directory: /var/lib/redpanda/data
+  seed_servers: []
+  rpc_server:
+    address: 0.0.0.0
+    port: 33147
+  advertised_rpc_api:
+    address: redpanda-tls
+    port: 33147
+  kafka_api:
+    - name: internal
+      address: 0.0.0.0
+      port: 9092
+    - name: external
+      address: 0.0.0.0
+      port: 39094
+    - name: external-mtls
+      address: 0.0.0.0
+      port: 49095
+  advertised_kafka_api:
+    - name: internal
+      address: redpanda-tls
+      port: 9092
+    - name: external
+      address: localhost
+      port: 39094
+    - name: external-mtls
+      address: localhost
+      port: 49095
+  kafka_api_tls:
+    - name: external
+      key_file: /etc/redpanda/certs/broker.key
+      cert_file: /etc/redpanda/certs/broker.crt
+      truststore_file: /etc/redpanda/certs/ca.crt
+      enabled: true
+      require_client_auth: false
+    - name: external-mtls
+      key_file: /etc/redpanda/certs/broker.key
+      cert_file: /etc/redpanda/certs/broker.crt
+      truststore_file: /etc/redpanda/certs/ca.crt
+      enabled: true
+      require_client_auth: true
+  admin:
+    address: 0.0.0.0
+    port: 9644
+  developer_mode: true
+
+pandaproxy: {}
+
+schema_registry: {}
+
+rpk:
+  tune_network: false
+  tune_disk_scheduler: false
+  tune_disk_nomerges: false
+  tune_disk_irq: false
+  tune_fstrim: false
+  tune_cpu: false
+  tune_aio_events: false
+  tune_clocksource: false
+  tune_swappiness: false
+  enable_memory_locking: false
+  tune_coredump: false
+  coredump_dir: /var/lib/redpanda/coredump

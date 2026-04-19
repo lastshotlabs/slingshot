@@ -152,14 +152,14 @@ describe('runSubsystemMigrations', () => {
     ).toThrow('version write failed');
 
     const rows = raw.query<{ id: string }, []>('SELECT id FROM items').all();
-    const versionRow = raw
-      .query<{ version: number }, [string]>(
-        'SELECT version FROM _slingshot_migrations WHERE subsystem = ?',
+    const migrationTable = raw
+      .query<{ name: string }, [string]>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
       )
-      .get('atomic');
+      .get('_slingshot_migrations');
 
     expect(rows).toEqual([]);
-    expect(versionRow).toBeNull();
+    expect(migrationTable).toBeNull();
 
     failVersionWrite = false;
     runSubsystemMigrations(db, 'atomic', [
@@ -170,6 +170,51 @@ describe('runSubsystemMigrations', () => {
 
     const committedRows = raw.query<{ id: string }, []>('SELECT id FROM items').all();
     expect(committedRows).toEqual([{ id: 'committed' }]);
+  });
+
+  test('takes an immediate write lock before reading the current version', () => {
+    const calls: string[] = [];
+    const db: RuntimeSqliteDatabase = {
+      run(sql: string) {
+        calls.push(sql.trim());
+      },
+      query<T>(_sql: string) {
+        calls.push('SELECT version');
+        return {
+          get() {
+            return null as T | null;
+          },
+          all() {
+            return [] as T[];
+          },
+        };
+      },
+      prepare<T>() {
+        return {
+          get() {
+            return null as T | null;
+          },
+          all() {
+            return [] as T[];
+          },
+          run() {
+            return { changes: 0 };
+          },
+        };
+      },
+      transaction<T>(fn: () => T) {
+        return () => fn();
+      },
+      close() {},
+    };
+
+    runSubsystemMigrations(db, 'lock-order', []);
+
+    expect(calls[0]).toBe('PRAGMA busy_timeout = 5000');
+    expect(calls[1]).toBe('BEGIN IMMEDIATE');
+    expect(calls[2]).toContain('CREATE TABLE IF NOT EXISTS _slingshot_migrations');
+    expect(calls[3]).toBe('SELECT version');
+    expect(calls.at(-1)).toBe('COMMIT');
   });
 
   test('fails closed when subsystem version is newer than this binary supports', () => {

@@ -282,11 +282,14 @@ export const createServer = async <T extends object = object>(
         const result = await upgradeHandler(c.req.raw);
         if (result instanceof Response) return result;
         const stream = sseRegistry.createClientStream(ssePath, result, heartbeatMs);
-        c.header('Content-Type', 'text/event-stream');
-        c.header('Cache-Control', 'no-cache');
-        c.header('Connection', 'keep-alive');
-        c.header('X-Accel-Buffering', 'no');
-        return c.newResponse(stream);
+        return new Response(stream, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          },
+        });
       });
     }
   }
@@ -565,9 +568,13 @@ export const createServer = async <T extends object = object>(
       let exitCode = 0;
 
       try {
-        await server.stop();
-
         if (ctx.ws) stopHeartbeat(ctx.ws);
+
+        // Close long-lived SSE responses before stopping the listener so
+        // runtimes that wait on active connections do not hang shutdown.
+        sseRegistry.closeAll();
+
+        await server.stop(true);
 
         // Plugin teardown runs BEFORE WS transport disconnect so plugins can
         // still publish to rooms (e.g. "user X disconnected" broadcasts).
@@ -582,9 +589,8 @@ export const createServer = async <T extends object = object>(
           exitCode = 1;
         }
 
-        // SSE teardown — close streams first so no fanout fires after unsubscribe,
-        // then remove bus listeners, both before bus shutdown.
-        sseRegistry.closeAll();
+        // SSE teardown — streams are already closed above to unblock listener
+        // shutdown; remove bus listeners here before bus shutdown.
         for (const { key, listener } of sseBusListeners)
           slingshotBus.off(key as keyof SlingshotEventMap, listener as (payload: unknown) => void);
 

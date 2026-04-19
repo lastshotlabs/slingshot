@@ -41,6 +41,10 @@ export async function wrapAppAsTestServer(app: {
   const wsUrl = `ws://localhost:${server.port}`;
   const ctx = getContext(app);
   const bus: SlingshotEventBus = ctx.bus;
+  const cleanup = async () => {
+    await server.stop(true);
+    await ctx.destroy();
+  };
   return {
     server,
     baseUrl,
@@ -48,7 +52,7 @@ export async function wrapAppAsTestServer(app: {
     url: baseUrl,
     bus,
     stop: () => server.stop(true),
-    cleanup: async () => server.stop(true),
+    cleanup,
   };
 }
 
@@ -94,6 +98,10 @@ export async function createTestFullServer(
   const ctx = getServerContext(bunServer);
   if (!ctx) throw new Error('[slingshot] createTestFullServer: context not found on server');
   const bus: SlingshotEventBus = ctx.bus;
+  const cleanup = async () => {
+    await bunServer.stop(true);
+    await ctx.destroy();
+  };
   return {
     server,
     baseUrl,
@@ -101,7 +109,7 @@ export async function createTestFullServer(
     url: baseUrl,
     bus,
     stop: () => bunServer.stop(true),
-    cleanup: async () => bunServer.stop(true),
+    cleanup,
   };
 }
 

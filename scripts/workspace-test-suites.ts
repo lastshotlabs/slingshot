@@ -4,6 +4,7 @@ import { join } from 'node:path';
 export interface TestCommandSuite {
   name: string;
   testsPath: string;
+  testFiles?: string[];
   configPath?: string;
 }
 
@@ -20,6 +21,26 @@ function normalizePath(value: string): string {
   return value.replace(/\\/g, '/');
 }
 
+function collectPackageTestFiles(testsDir: string): string[] {
+  const files: string[] = [];
+
+  for (const entry of readdirSync(testsDir, { withFileTypes: true })) {
+    const fullPath = join(testsDir, entry.name);
+
+    if (entry.isDirectory()) {
+      files.push(...collectPackageTestFiles(fullPath));
+      continue;
+    }
+
+    if (!entry.isFile()) continue;
+    if (!/\.test\.tsx?$/.test(entry.name)) continue;
+
+    files.push(normalizePath(fullPath));
+  }
+
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
 function packageSuites(): TestCommandSuite[] {
   const packagesDir = join(process.cwd(), 'packages');
   const entries = readdirSync(packagesDir, { withFileTypes: true })
@@ -31,10 +52,12 @@ function packageSuites(): TestCommandSuite[] {
     .filter(name => existsSync(join(packagesDir, name, 'tests')))
     .map(name => {
       const testsPath = normalizePath(join('packages', name, 'tests'));
+      const testFiles = collectPackageTestFiles(join(packagesDir, name, 'tests'));
       const configPath = normalizePath(join('packages', name, 'bunfig.toml'));
       return {
         name,
         testsPath,
+        testFiles,
         configPath: existsSync(join(process.cwd(), configPath)) ? configPath : undefined,
       };
     });
@@ -101,7 +124,7 @@ export const coverageSuites: CoverageSuite[] = [
       '--coverage-dir',
       `coverage/${testSuite.name}`,
       ...(testSuite.configPath ? ['--config', testSuite.configPath] : []),
-      testSuite.testsPath,
+      ...(testSuite.testFiles ?? [testSuite.testsPath]),
     ],
     ownedGlobs: [`packages/${testSuite.name}/**/*.ts`, `packages/${testSuite.name}/**/*.tsx`],
     ignoredGlobs: [

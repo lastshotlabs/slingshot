@@ -19,7 +19,7 @@ for (const suite of packageTestSuites) {
     'bun',
     'test',
     ...(suite.configPath ? ['--config', suite.configPath] : []),
-    suite.testsPath,
+    ...(suite.testFiles ?? [suite.testsPath]),
   ]);
 }
 

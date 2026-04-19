@@ -30,6 +30,9 @@ function parseSqliteMigrationVersion(
  *
  * The `_slingshot_migrations` table is created automatically if it doesn't exist.
  * Each row records the highest migration index applied for a given subsystem.
+ * Migration execution is serialized with `BEGIN IMMEDIATE` so concurrent
+ * processes cannot both read the same stale version and race each other
+ * through the same schema change.
  *
  * @param db - The SQLite database handle.
  * @param subsystem - A stable identifier for this subsystem (e.g. `'auth'`, `'permissions'`).
@@ -51,20 +54,27 @@ export function runSubsystemMigrations(
   subsystem: string,
   migrations: ReadonlyArray<(db: RuntimeSqliteDatabase) => void>,
 ): void {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS _slingshot_migrations (
-      subsystem TEXT NOT NULL PRIMARY KEY,
-      version   INTEGER NOT NULL
-    )
-  `);
+  let inTransaction = false;
+  try {
+    // Let a concurrent startup wait briefly for the active writer instead of
+    // failing immediately with "database is locked".
+    db.run('PRAGMA busy_timeout = 5000');
+    db.run('BEGIN IMMEDIATE');
+    inTransaction = true;
 
-  const row = db
-    .query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
-    .get(subsystem);
-  const currentVersion = parseSqliteMigrationVersion(row?.version, subsystem, migrations.length);
+    db.run(`
+      CREATE TABLE IF NOT EXISTS _slingshot_migrations (
+        subsystem TEXT NOT NULL PRIMARY KEY,
+        version   INTEGER NOT NULL
+      )
+    `);
 
-  for (let i = currentVersion; i < migrations.length; i++) {
-    const applyMigration = db.transaction(() => {
+    const row = db
+      .query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
+      .get(subsystem);
+    const currentVersion = parseSqliteMigrationVersion(row?.version, subsystem, migrations.length);
+
+    for (let i = currentVersion; i < migrations.length; i++) {
       migrations[i](db);
       db.run(
         `INSERT INTO _slingshot_migrations (subsystem, version) VALUES (?, ?)
@@ -72,7 +82,18 @@ export function runSubsystemMigrations(
         subsystem,
         i + 1,
       );
-    });
-    applyMigration();
+    }
+
+    db.run('COMMIT');
+    inTransaction = false;
+  } catch (err) {
+    if (inTransaction) {
+      try {
+        db.run('ROLLBACK');
+      } catch {
+        // Preserve the original migration failure when rollback itself errors.
+      }
+    }
+    throw err;
   }
 }

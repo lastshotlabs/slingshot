@@ -91,6 +91,7 @@ export async function runCoverageFiles(
   const isolated = files.filter(file => fileRequiresIsolatedProcess(file));
   const artifacts: string[] = [];
   let runCounter = 0;
+  let exitCode = 0;
 
   rmSync(coverageDir, { recursive: true, force: true });
   mkdirSync(coverageDir, { recursive: true });
@@ -111,10 +112,10 @@ export async function runCoverageFiles(
         configPath,
         spawnFn,
       );
-      if (code !== 0) {
-        return code;
-      }
       artifacts.push(join(runDir, 'lcov.info'));
+      if (code !== 0 && exitCode === 0) {
+        exitCode = code;
+      }
     }
   }
 
@@ -122,14 +123,14 @@ export async function runCoverageFiles(
     const baseName = file.replace(/[\\/]/g, '-').replace(/[^A-Za-z0-9._-]/g, '_');
     const runDir = nextRunCoverageDir(`isolated-${baseName}`);
     const code = await runCoverage(`${label}:isolated`, runDir, [file], configPath, spawnFn);
-    if (code !== 0) {
-      return code;
-    }
     artifacts.push(join(runDir, 'lcov.info'));
+    if (code !== 0 && exitCode === 0) {
+      exitCode = code;
+    }
   }
 
   mergeLcovArtifacts(artifacts, join(coverageDir, 'lcov.info'));
-  return 0;
+  return exitCode;
 }
 
 if (import.meta.main) {

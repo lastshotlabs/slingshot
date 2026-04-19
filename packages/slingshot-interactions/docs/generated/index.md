@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-interact
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-interactions`
-- Version: `0.0.1`
+- Version: `0.0.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: Interactive message components and dispatch orchestration for slingshot

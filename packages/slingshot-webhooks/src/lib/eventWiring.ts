@@ -1,4 +1,8 @@
-import type { SlingshotEventBus, SlingshotEventMap } from '@lastshotlabs/slingshot-core';
+import type {
+  SlingshotEventBus,
+  SlingshotEventMap,
+  SubscriptionOpts,
+} from '@lastshotlabs/slingshot-core';
 import { WEBHOOK_DEFAULT_SUBSCRIBABLE_EVENTS } from '../subscribableEvents';
 import type { WebhookAdapter } from '../types/adapter';
 import type { WebhookPluginConfig } from '../types/config';
@@ -35,6 +39,12 @@ export function wireEventSubscriptions(
   const subscribedKeys = universe.filter(key =>
     patterns.some(pattern => matchGlob(pattern, key as string)),
   );
+  const subscriptionOpts: SubscriptionOpts | undefined = config.busSubscription?.durable
+    ? {
+        durable: true,
+        name: config.busSubscription.name,
+      }
+    : undefined;
 
   return subscribedKeys.map(key => {
     const handler = async (_payload: SlingshotEventMap[typeof key]) => {
@@ -77,7 +87,14 @@ export function wireEventSubscriptions(
         }
       }
     };
-    bus.on(key, handler as (payload: SlingshotEventMap[typeof key]) => void | Promise<void>);
+    bus.on(
+      key,
+      handler as (payload: SlingshotEventMap[typeof key]) => void | Promise<void>,
+      subscriptionOpts,
+    );
+    if (subscriptionOpts?.durable) {
+      return () => {};
+    }
     return () => bus.off(key, handler as (payload: SlingshotEventMap[typeof key]) => void);
   });
 }

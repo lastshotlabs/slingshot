@@ -418,13 +418,20 @@ export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promi
 
     async create(email, passwordHash) {
       const id = crypto.randomUUID();
-      await db.insert(users).values({
-        id,
-        email: email.toLowerCase(),
-        passwordHash,
-        emailVerified: false,
-        suspended: false,
-      });
+      try {
+        await db.insert(users).values({
+          id,
+          email: email.toLowerCase(),
+          passwordHash,
+          emailVerified: false,
+          suspended: false,
+        });
+      } catch (err) {
+        if (isUniqueViolation(err)) {
+          throw new HttpError(409, 'Email already registered');
+        }
+        throw err;
+      }
       return { id };
     },
 

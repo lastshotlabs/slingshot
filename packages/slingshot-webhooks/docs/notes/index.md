@@ -9,6 +9,7 @@ description: Working notes for @lastshotlabs/slingshot-webhooks
 
 - Capture doc gaps discovered while touching this package.
 - Keep migration breadcrumbs here before promoting them into the human guide.
+- See `webhook-handler-runtime-refactor.md` for the staged refactor scaffold tied to the handler runtime branch.
 
 ## Private Notes
 

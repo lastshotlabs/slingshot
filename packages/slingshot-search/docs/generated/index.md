@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-search
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-search`
-- Version: `0.0.1`
+- Version: `0.0.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: Enterprise search plugin for Slingshot — per-entity search with Meilisearch, Typesense, Elasticsearch, Algolia, or DB-native providers

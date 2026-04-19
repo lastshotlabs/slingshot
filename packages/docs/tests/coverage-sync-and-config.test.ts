@@ -121,7 +121,12 @@ describe('docs content config', () => {
     }));
 
     const mod = await import('../src/content.config');
+    const docsCollection = mod.collections.docs as unknown as {
+      schema: unknown;
+      kind: string;
+    };
 
-    expect(mod.collections.docs).toEqual({ schema: docsSchemaToken, kind: 'collection' });
+    expect(docsCollection.kind).toBe('collection');
+    expect(docsCollection.schema).toBe(docsSchemaToken);
   });
 });

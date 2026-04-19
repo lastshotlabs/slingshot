@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-m2m
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-m2m`
-- Version: `0.0.1`
+- Version: `0.0.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: Machine-to-machine (M2M) OAuth2 client credentials plugin for Slingshot

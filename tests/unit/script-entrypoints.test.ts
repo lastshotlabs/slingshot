@@ -156,29 +156,52 @@ describe('script entrypoints', () => {
 
     const coverageDir = join(tempDir, 'coverage-files');
     const coverageCalls: SpawnCalls = [];
-    const coverageSpawn = createSpawnStub(cmd => {
+    let coverageRunIndex = 0;
+    const coverageSpawn = ((cmd: string[]) => {
       const runDir = cmd[cmd.indexOf('--coverage-dir') + 1];
       mkdirSync(runDir, { recursive: true });
       writeFileSync(
         join(runDir, 'lcov.info'),
-        `SF:scripts/ensure-pagefind-link.ts\nLF:1\nLH:1\nend_of_record\n`,
+        [
+          coverageRunIndex === 0
+            ? 'SF:scripts/ensure-pagefind-link.ts'
+            : 'SF:scripts/run-coverage-files.ts',
+          'LF:1',
+          'LH:1',
+          'end_of_record',
+          '',
+        ].join('\n'),
         'utf8',
       );
-    }, coverageCalls);
+      coverageCalls.push({ cmd });
+      return { exited: Promise.resolve(coverageRunIndex++ === 0 ? 1 : 0) } as ReturnType<
+        typeof Bun.spawn
+      >;
+    }) as typeof Bun.spawn;
 
     expect(runCoverageFilesModule.parseArgs(['--coverage-dir', coverageDir, '--label', 'demo', 'a.test.ts']).label).toBe(
       'demo',
     );
     expect(
       await runCoverageFilesModule.runCoverageFiles(
-        ['--coverage-dir', coverageDir, '--label', 'demo', 'tests/unit/webhookAuth.test.ts'],
+        [
+          '--coverage-dir',
+          coverageDir,
+          '--label',
+          'demo',
+          'tests/unit/webhookAuth.test.ts',
+          'tests/unit/auditLogProviders.test.ts',
+        ],
         coverageSpawn,
       ),
-    ).toBe(0);
+    ).toBe(1);
     expect(readFileSync(join(coverageDir, 'lcov.info'), 'utf8')).toContain(
       'SF:scripts/ensure-pagefind-link.ts',
     );
-    expect(coverageCalls).toHaveLength(1);
+    expect(readFileSync(join(coverageDir, 'lcov.info'), 'utf8')).toContain(
+      'SF:scripts/run-coverage-files.ts',
+    );
+    expect(coverageCalls).toHaveLength(2);
 
     const rootCalls: SpawnCalls = [];
     expect(

@@ -1,10 +1,14 @@
 import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
 import { getContext } from '@lastshotlabs/slingshot-core';
 import type { CreateAppConfig } from '../src/app';
-import { runPluginTeardown } from '../src/framework/runPluginLifecycle';
 import { createServer, getServerContext } from '../src/server';
 import type { CreateServerConfig } from '../src/server';
 import { logTestBackend, resolveTestDbConfig } from './e2e/helpers/backend-factory';
+import {
+  dbConfigUsesPostgres,
+  resetPostgresE2eState,
+  resolveTestPostgresUrl,
+} from './e2e/helpers/postgres';
 import { createTestApp } from './setup';
 
 // Re-export portable test utilities from the /testing subpath
@@ -22,9 +26,22 @@ logTestBackend();
 export async function createTestHttpServer(
   overrides?: Partial<CreateAppConfig>,
   authOverrides?: any,
+  options?: { resetBackend?: boolean },
 ): Promise<import('../src/testing').E2EServerHandle> {
   const dbConfig = resolveTestDbConfig();
-  const app = await createTestApp({ db: dbConfig, ...overrides }, authOverrides);
+  const mergedDbConfig = { ...dbConfig, ...overrides?.db };
+  const explicitAuthAdapter = authOverrides?.auth?.adapter !== undefined;
+  if (explicitAuthAdapter) {
+    if (overrides?.db?.auth === undefined) mergedDbConfig.auth = 'memory';
+    if (overrides?.db?.sessions === undefined) mergedDbConfig.sessions = 'memory';
+  }
+  if (options?.resetBackend !== false && dbConfigUsesPostgres(mergedDbConfig)) {
+    await resetPostgresE2eState(resolveTestPostgresUrl());
+  }
+  const app = await createTestApp(
+    { ...overrides, db: mergedDbConfig },
+    authOverrides,
+  );
   const server = Bun.serve({ port: 0, fetch: app.fetch });
   const baseUrl = `http://localhost:${server.port}`;
   const wsUrl = `ws://localhost:${server.port}`;
@@ -37,12 +54,12 @@ export async function createTestHttpServer(
     url: baseUrl,
     bus,
     stop: async () => {
-      await runPluginTeardown([...ctx.plugins]);
       server.stop(true);
+      await ctx.destroy();
     },
     cleanup: async () => {
-      await runPluginTeardown([...ctx.plugins]);
       server.stop(true);
+      await ctx.destroy();
     },
   };
 }
@@ -53,12 +70,17 @@ export async function createTestHttpServer(
  */
 export async function createTestFullServer(
   config?: Partial<CreateServerConfig>,
+  options?: { resetBackend?: boolean },
 ): Promise<import('../src/testing').E2EServerHandle> {
   const dbConfig = resolveTestDbConfig();
+  const mergedDbConfig = { ...dbConfig, ...config?.db };
+  if (options?.resetBackend !== false && dbConfigUsesPostgres(mergedDbConfig)) {
+    await resetPostgresE2eState(resolveTestPostgresUrl());
+  }
   const fullConfig: CreateServerConfig = {
     routesDir: import.meta.dir + '/fixtures/routes',
     meta: { name: 'E2E Test App' },
-    db: dbConfig,
+    db: mergedDbConfig,
     security: {
       rateLimit: { windowMs: 60_000, max: 1000 },
     },
@@ -77,7 +99,13 @@ export async function createTestFullServer(
     wsUrl,
     url: baseUrl,
     bus,
-    stop: () => server.stop(true),
-    cleanup: async () => server.stop(true),
+    stop: async () => {
+      server.stop(true);
+      await ctx?.destroy();
+    },
+    cleanup: async () => {
+      server.stop(true);
+      await ctx?.destroy();
+    },
   };
 }

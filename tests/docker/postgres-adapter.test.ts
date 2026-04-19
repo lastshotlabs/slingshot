@@ -93,6 +93,17 @@ describe('PostgresAdapter (docker)', () => {
     expect(result).toBeNull();
   });
 
+  test('create throws HttpError(409) for duplicate email', async () => {
+    const hash = await Bun.password.hash('pw');
+    await adapter.create('duplicate@example.com', hash);
+
+    const thrown = await adapter.create('duplicate@example.com', hash).catch(e => e);
+
+    expect(thrown).toBeInstanceOf(HttpError);
+    expect((thrown as HttpError).status).toBe(409);
+    expect((thrown as HttpError).message).toBe('Email already registered');
+  });
+
   test('verifyPassword', async () => {
     const hash = await Bun.password.hash('hunter2');
     const { id } = await adapter.create('bob@example.com', hash);

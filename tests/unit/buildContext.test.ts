@@ -650,6 +650,24 @@ describe('buildContext lifecycle', () => {
     expect(ctx.ws?.transport).toBeNull();
   });
 
+  test('destroy closes the postgres pool when postgres infra is configured', async () => {
+    const poolEnd = mock(async () => {});
+    const { ctx } = await createDirectContext({
+      infra: {
+        postgres: {
+          pool: {
+            end: poolEnd,
+          },
+          db: {} as any,
+        } as any,
+      },
+    });
+
+    await ctx.destroy();
+
+    expect(poolEnd).toHaveBeenCalledTimes(1);
+  });
+
   test('ReadonlyMap views exercise all methods (lines 159-183)', async () => {
     const { ctx } = await createDirectContext();
     const cacheAdapter1 = {

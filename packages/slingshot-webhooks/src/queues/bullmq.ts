@@ -196,19 +196,21 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
       const { Queue: QueueCtor, Worker: WorkerCtor, UnrecoverableError } = await loadBullMQModule();
       const IORedis = await loadIORedisModule();
 
-      let startedConnection: Redis | null = null;
-      try {
-        startedConnection =
-          typeof config.redis === 'string'
-            ? new IORedis(config.redis, { maxRetriesPerRequest: null })
-            : new IORedis({ ...config.redis, maxRetriesPerRequest: null });
-        await startedConnection.ping();
-      } catch (err) {
-        throw new Error(
-          `BullMQ webhook queue: failed to connect to Redis (${redactRedisTarget(config.redis)}): ${err instanceof Error ? err.message : String(err)}`,
-          { cause: err },
-        );
-      }
+      const startedConnection = await (async (): Promise<Redis> => {
+        try {
+          const redis =
+            typeof config.redis === 'string'
+              ? new IORedis(config.redis, { maxRetriesPerRequest: null })
+              : new IORedis({ ...config.redis, maxRetriesPerRequest: null });
+          await redis.ping();
+          return redis;
+        } catch (err) {
+          throw new Error(
+            `BullMQ webhook queue: failed to connect to Redis (${redactRedisTarget(config.redis)}): ${err instanceof Error ? err.message : String(err)}`,
+            { cause: err },
+          );
+        }
+      })();
 
       let startedQueue: BullQueue | null = null;
       let startedWorker: BullWorker | null = null;
@@ -268,7 +270,7 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
       } catch (err) {
         await startedWorker?.close().catch(() => undefined);
         await startedQueue?.close().catch(() => undefined);
-        await startedConnection?.quit().catch(() => undefined);
+        await startedConnection.quit().catch(() => undefined);
         throw err;
       }
     },

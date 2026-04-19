@@ -1,5 +1,6 @@
 import type {
   EntityRouteDataScopeConfig,
+  PolicyAction,
   PolicyDecision,
   PolicyResolver,
 } from './entityRouteConfig';
@@ -42,6 +43,15 @@ type AuthRuntimeLike = {
     } | null;
   } | null;
 };
+
+function resolvePolicyAction(action: string): PolicyAction {
+  if (action.startsWith('operation:')) {
+    return { kind: 'operation', name: action.slice('operation:'.length) };
+  }
+
+  const routeAction: Exclude<PolicyAction, { kind: 'operation'; name: string }>['kind'] = action;
+  return { kind: routeAction };
+}
 
 function resolveDotPath(value: unknown, path: string): unknown {
   let current: unknown = value;
@@ -482,15 +492,7 @@ export function enforcePolicy(config: {
 
     const decision = coercePolicyDecision(
       await resolver({
-        action:
-          config.action.startsWith('operation:')
-            ? { kind: 'operation', name: config.action.slice('operation:'.length) }
-            : ({ kind: config.action } as
-                | { kind: 'create' }
-                | { kind: 'list' }
-                | { kind: 'get' }
-                | { kind: 'update' }
-                | { kind: 'delete' }),
+        action: resolvePolicyAction(config.action),
         userId: meta.authUserId,
         tenantId: meta.tenantId,
         record: null,
@@ -546,15 +548,7 @@ export async function checkPolicy(
 
   const decision = coercePolicyDecision(
     await resolver({
-      action:
-        config.action.startsWith('operation:')
-          ? { kind: 'operation', name: config.action.slice('operation:'.length) }
-          : ({ kind: config.action } as
-              | { kind: 'create' }
-              | { kind: 'list' }
-              | { kind: 'get' }
-              | { kind: 'update' }
-              | { kind: 'delete' }),
+      action: resolvePolicyAction(config.action),
       userId: meta.authUserId,
       tenantId: meta.tenantId,
       record: config.record,

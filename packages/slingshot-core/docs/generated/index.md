@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-core
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-core`
-- Version: `0.0.1`
+- Version: `0.0.2`
 - Kind: Workspace package
 - Role: contracts package
 - Description: Core plugin contract, context, event bus, and shared types for Slingshot
@@ -25,6 +25,7 @@ bun add @lastshotlabs/slingshot-core
 
 - `.`
 - `./content`
+- `./faker`
 - `./testing`
 
 ## Package Scripts
@@ -36,6 +37,7 @@ bun add @lastshotlabs/slingshot-core
 ## Dependencies
 
 - `@asteasolutions/zod-to-openapi`: `>=7.0`
+- `@faker-js/faker`: `>=10.0`
 - `@hono/zod-openapi`: `>=0.18`
 
 ## Peer Dependencies

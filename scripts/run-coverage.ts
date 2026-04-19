@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { filterLcovContentToOwnedFiles } from './coverage-lcov';
 import { coverageArtifactPath, coverageSuites } from './workspace-test-suites';
@@ -27,14 +27,15 @@ export async function runCoverage(
   rmSync('coverage', { recursive: true, force: true });
   const stagedArtifacts = new Map<string, string>();
   const rawArtifacts: string[] = [];
+  let exitCode = 0;
 
   for (const suite of suites) {
     const code = await runSuite(suite.name, suite.command, spawnFn);
-    if (code !== 0) {
-      return code;
-    }
     const artifactPath = coverageArtifactPath(suite);
-    rawArtifacts.push(readFileSync(artifactPath, 'utf8').trim());
+    rawArtifacts.push(existsSync(artifactPath) ? readFileSync(artifactPath, 'utf8').trim() : '');
+    if (code !== 0 && exitCode === 0) {
+      exitCode = code;
+    }
   }
 
   rmSync('coverage', { recursive: true, force: true });
@@ -52,7 +53,7 @@ export async function runCoverage(
     writeFileSync(artifactPath, content, 'utf8');
   }
 
-  return 0;
+  return exitCode;
 }
 
 if (import.meta.main) {

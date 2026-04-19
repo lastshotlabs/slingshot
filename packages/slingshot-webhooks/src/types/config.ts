@@ -72,6 +72,31 @@ export const webhookPluginConfigSchema = z.object({
     .describe(
       'Retry configuration overrides for the webhook delivery queue. Omit to use the queue defaults.',
     ),
+  /** Optional event-bus subscription settings for webhook intake. */
+  busSubscription: z
+    .object({
+      durable: z
+        .boolean()
+        .optional()
+        .describe(
+          'When true, request a durable event-bus subscription so source events can survive process restarts on adapters that support it.',
+        ),
+      name: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          'Stable durable subscriber name. Required when durable is true on queue-backed event bus adapters.',
+        ),
+    })
+    .optional()
+    .refine(
+      value => !value?.durable || !!value.name,
+      'busSubscription.name is required when busSubscription.durable is true',
+    )
+    .describe(
+      'Controls how the webhook plugin subscribes to source events on the application bus. Omit to use a normal in-process subscription.',
+    ),
   /** Inbound webhook providers mounted under `<mountPath>/inbound/:provider`. */
   inbound: z
     .array(

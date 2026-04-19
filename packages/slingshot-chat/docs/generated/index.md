@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-chat
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-chat`
-- Version: `0.0.1`
+- Version: `0.0.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: Real-time chat with rooms, messages, membership, and encryption for Slingshot

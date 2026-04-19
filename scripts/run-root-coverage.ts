@@ -16,6 +16,7 @@ export async function runRootCoverage(
   const { bulk, isolated } = partitionRootTestFiles(resolvedFiles);
   const artifacts: string[] = [];
   let runCounter = 0;
+  let exitCode = 0;
 
   rmSync('coverage/root', { recursive: true, force: true });
   mkdirSync('coverage/root', { recursive: true });
@@ -54,10 +55,10 @@ export async function runRootCoverage(
       );
 
       const code = await proc.exited;
-      if (code !== 0) {
-        return code;
-      }
       artifacts.push(join(runDir, 'lcov.info'));
+      if (code !== 0 && exitCode === 0) {
+        exitCode = code;
+      }
     }
   }
 
@@ -90,14 +91,14 @@ export async function runRootCoverage(
     );
 
     const code = await proc.exited;
-    if (code !== 0) {
-      return code;
-    }
     artifacts.push(join(runDir, 'lcov.info'));
+    if (code !== 0 && exitCode === 0) {
+      exitCode = code;
+    }
   }
 
   mergeLcovArtifacts(artifacts, 'coverage/root/lcov.info');
-  return 0;
+  return exitCode;
 }
 
 if (import.meta.main) {

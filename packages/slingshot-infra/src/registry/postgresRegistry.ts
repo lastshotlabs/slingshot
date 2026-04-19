@@ -7,6 +7,7 @@ interface PgQueryResult<TResult> {
 }
 
 interface PgClient {
+  connect(): Promise<void>;
   query<TResult = unknown>(
     queryText: string,
     values?: readonly unknown[],

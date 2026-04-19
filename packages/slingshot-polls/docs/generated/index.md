@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-polls
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-polls`
-- Version: `0.0.1`
+- Version: `0.0.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: Multiple-choice polls attachable to any user content for slingshot

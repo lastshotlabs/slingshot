@@ -36,9 +36,9 @@ export interface TriggerAdapter<TEvent = unknown, TResult = unknown> {
  */
 export interface FunctionsHooks {
   onInit?(ctx: SlingshotContext): void | Promise<void>;
-  beforeInvoke?(args: BeforeInvokeArgs): void | Promise<void | InvokeAbort>;
+  beforeInvoke?(args: BeforeInvokeArgs): InvokeAbort | undefined | Promise<InvokeAbort | undefined>;
   afterInvoke?(args: AfterInvokeArgs): void | Promise<void>;
-  onError?(args: OnErrorArgs): void | Promise<void | ErrorDisposition>;
+  onError?(args: OnErrorArgs): ErrorDisposition | undefined | Promise<ErrorDisposition | undefined>;
   onRecordError?(args: RecordErrorArgs): 'retry' | 'drop' | Promise<'retry' | 'drop'>;
   onShutdown?(ctx: SlingshotContext): void | Promise<void>;
 }

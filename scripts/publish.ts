@@ -31,32 +31,12 @@ type PublishablePackage = {
   manifest: PackageManifest;
 };
 
-const ROOT_DIR = process.cwd();
-const PACKAGES_DIR = path.join(ROOT_DIR, 'packages');
-const args = new Set(process.argv.slice(2));
-
-const rawTarget = [...args].find(arg => arg.startsWith('--target='))?.slice('--target='.length);
-if (rawTarget !== 'github' && rawTarget !== 'npm') {
-  throw new Error(
-    '[publish] Missing or invalid --target. Expected --target=github or --target=npm.',
-  );
+export interface PublishArgs {
+  shouldDryRun: boolean;
+  shouldPublish: boolean;
+  skipExisting: boolean;
+  target: PublishTarget;
 }
-
-const target: PublishTarget = rawTarget;
-const shouldPublish = args.has('--publish');
-const shouldDryRun = args.has('--dry-run');
-const skipExisting = args.has('--skip-existing');
-
-if (shouldPublish && shouldDryRun) {
-  throw new Error('[publish] Use either --publish or --dry-run, not both.');
-}
-
-const targetRegistry =
-  target === 'github' ? 'https://npm.pkg.github.com' : 'https://registry.npmjs.org';
-const stageRoot = path.join(ROOT_DIR, '.tmp', 'publish', target);
-const repoLicensePath = path.join(ROOT_DIR, 'LICENSE');
-
-const versionByPackageName = new Map<string, string>();
 
 function parseJsonFile<T>(filePath: string): T {
   return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
@@ -66,7 +46,30 @@ function sanitizeStageSegment(segment: string): string {
   return segment.replace(/[\\/]/g, '__');
 }
 
-function rewriteWorkspaceSpecifier(specifier: string, version: string): string {
+export function parsePublishArgs(argv: string[]): PublishArgs {
+  const args = new Set(argv);
+  const rawTarget = [...args].find(arg => arg.startsWith('--target='))?.slice('--target='.length);
+  if (rawTarget !== 'github' && rawTarget !== 'npm') {
+    throw new Error(
+      '[publish] Missing or invalid --target. Expected --target=github or --target=npm.',
+    );
+  }
+
+  const shouldPublish = args.has('--publish');
+  const shouldDryRun = args.has('--dry-run');
+  if (shouldPublish && shouldDryRun) {
+    throw new Error('[publish] Use either --publish or --dry-run, not both.');
+  }
+
+  return {
+    target: rawTarget,
+    shouldPublish,
+    shouldDryRun,
+    skipExisting: args.has('--skip-existing'),
+  };
+}
+
+export function rewriteWorkspaceSpecifier(specifier: string, version: string): string {
   if (!specifier.startsWith('workspace:')) return specifier;
 
   const range = specifier.slice('workspace:'.length);
@@ -79,6 +82,7 @@ function rewriteWorkspaceSpecifier(specifier: string, version: string): string {
 function rewriteDependencySection(
   section: Record<string, string> | undefined,
   sectionName: keyof DependencySections,
+  versionByPackageName: ReadonlyMap<string, string>,
 ): Record<string, string> | undefined {
   if (!section) return section;
 
@@ -108,7 +112,7 @@ function rewriteDependencySection(
  * path aliases (e.g. @auth/*) and may sit alongside stale build artifacts.
  * Published packages should resolve through the compiled dist/ output only.
  */
-function stripBunExportCondition(
+export function stripBunExportCondition(
   exports: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!exports || typeof exports !== 'object') return exports;
@@ -126,7 +130,11 @@ function stripBunExportCondition(
   return cleaned;
 }
 
-function rewriteManifest(manifest: PackageManifest): PackageManifest {
+export function rewriteManifest(
+  manifest: PackageManifest,
+  targetRegistry: string,
+  versionByPackageName: ReadonlyMap<string, string>,
+): PackageManifest {
   const rewritten: PackageManifest = {
     ...manifest,
     publishConfig: {
@@ -134,13 +142,26 @@ function rewriteManifest(manifest: PackageManifest): PackageManifest {
       registry: targetRegistry,
       access: 'public',
     },
-    dependencies: rewriteDependencySection(manifest.dependencies, 'dependencies'),
+    dependencies: rewriteDependencySection(
+      manifest.dependencies,
+      'dependencies',
+      versionByPackageName,
+    ),
     optionalDependencies: rewriteDependencySection(
       manifest.optionalDependencies,
       'optionalDependencies',
+      versionByPackageName,
     ),
-    peerDependencies: rewriteDependencySection(manifest.peerDependencies, 'peerDependencies'),
-    devDependencies: rewriteDependencySection(manifest.devDependencies, 'devDependencies'),
+    peerDependencies: rewriteDependencySection(
+      manifest.peerDependencies,
+      'peerDependencies',
+      versionByPackageName,
+    ),
+    devDependencies: rewriteDependencySection(
+      manifest.devDependencies,
+      'devDependencies',
+      versionByPackageName,
+    ),
   };
 
   // Strip "bun" export condition — consumers should resolve through dist/, not raw src/
@@ -157,10 +178,15 @@ function rewriteManifest(manifest: PackageManifest): PackageManifest {
   return rewritten;
 }
 
-function collectPublishablePackages(): PublishablePackage[] {
+export function collectPublishablePackages(
+  rootDir: string,
+  stageRoot: string,
+): { packages: PublishablePackage[]; versionByPackageName: Map<string, string> } {
+  const packagesDir = path.join(rootDir, 'packages');
+  const versionByPackageName = new Map<string, string>();
   const packages: PublishablePackage[] = [];
 
-  const rootManifest = parseJsonFile<PackageManifest>(path.join(ROOT_DIR, 'package.json'));
+  const rootManifest = parseJsonFile<PackageManifest>(path.join(rootDir, 'package.json'));
   if (!rootManifest.name || !rootManifest.version) {
     throw new Error('[publish] Root package.json must define both "name" and "version".');
   }
@@ -168,20 +194,20 @@ function collectPublishablePackages(): PublishablePackage[] {
   packages.push({
     name: rootManifest.name,
     version: rootManifest.version,
-    sourceDir: ROOT_DIR,
+    sourceDir: rootDir,
     relativeDir: '.',
     stageDir: path.join(stageRoot, 'root'),
     manifest: rootManifest,
   });
 
   const workspaceDirs = fs
-    .readdirSync(PACKAGES_DIR, { withFileTypes: true })
+    .readdirSync(packagesDir, { withFileTypes: true })
     .filter(entry => entry.isDirectory())
     .map(entry => entry.name)
     .sort((left, right) => left.localeCompare(right));
 
   for (const workspaceDir of workspaceDirs) {
-    const sourceDir = path.join(PACKAGES_DIR, workspaceDir);
+    const sourceDir = path.join(packagesDir, workspaceDir);
     const manifestPath = path.join(sourceDir, 'package.json');
     if (!fs.existsSync(manifestPath)) continue;
 
@@ -204,12 +230,12 @@ function collectPublishablePackages(): PublishablePackage[] {
     });
   }
 
-  return packages;
+  return { packages, versionByPackageName };
 }
 
 function copyPathIfPresent(sourcePath: string, destPath: string, warnings: string[]): void {
   if (!fs.existsSync(sourcePath)) {
-    warnings.push(`[publish] Missing file entry: ${path.relative(ROOT_DIR, sourcePath)}`);
+    warnings.push(`[publish] Missing file entry: ${sourcePath}`);
     return;
   }
 
@@ -217,7 +243,15 @@ function copyPathIfPresent(sourcePath: string, destPath: string, warnings: strin
   fs.cpSync(sourcePath, destPath, { recursive: true, force: true });
 }
 
-function stagePackage(pkg: PublishablePackage): string[] {
+export function stagePackage(
+  pkg: PublishablePackage,
+  options: {
+    repoLicensePath: string;
+    rootDir: string;
+    targetRegistry: string;
+    versionByPackageName: ReadonlyMap<string, string>;
+  },
+): string[] {
   const warnings: string[] = [];
   fs.rmSync(pkg.stageDir, { recursive: true, force: true });
   fs.mkdirSync(pkg.stageDir, { recursive: true });
@@ -234,12 +268,18 @@ function stagePackage(pkg: PublishablePackage): string[] {
   }
 
   const packageLicensePath = path.join(pkg.sourceDir, 'LICENSE');
-  const licenseSource = fs.existsSync(packageLicensePath) ? packageLicensePath : repoLicensePath;
+  const licenseSource = fs.existsSync(packageLicensePath)
+    ? packageLicensePath
+    : options.repoLicensePath;
   if (fs.existsSync(licenseSource)) {
     copyPathIfPresent(licenseSource, path.join(pkg.stageDir, 'LICENSE'), warnings);
   }
 
-  const stagedManifest = rewriteManifest(pkg.manifest);
+  const stagedManifest = rewriteManifest(
+    pkg.manifest,
+    options.targetRegistry,
+    options.versionByPackageName,
+  );
   fs.writeFileSync(
     path.join(pkg.stageDir, 'package.json'),
     `${JSON.stringify(stagedManifest, null, 2)}\n`,
@@ -270,7 +310,10 @@ async function runCommand(
   return { exitCode, stdout, stderr };
 }
 
-async function packageVersionExists(pkg: PublishablePackage): Promise<boolean> {
+export async function packageVersionExists(
+  pkg: PublishablePackage,
+  targetRegistry: string,
+): Promise<boolean> {
   const spec = `${pkg.name}@${pkg.version}`;
   const result = await runCommand(
     ['npm', 'view', spec, 'version', '--json', `--registry=${targetRegistry}`],
@@ -279,17 +322,31 @@ async function packageVersionExists(pkg: PublishablePackage): Promise<boolean> {
   return result.exitCode === 0 && result.stdout.includes(pkg.version);
 }
 
-async function publishPackage(pkg: PublishablePackage, dryRun: boolean): Promise<void> {
-  if (!dryRun && skipExisting && (await packageVersionExists(pkg))) {
-    console.log(`[publish] Skipping ${pkg.name}@${pkg.version}; already present on ${target}.`);
+export async function publishPackage(
+  pkg: PublishablePackage,
+  options: {
+    dryRun: boolean;
+    skipExisting: boolean;
+    target: PublishTarget;
+    targetRegistry: string;
+  },
+): Promise<void> {
+  if (
+    !options.dryRun &&
+    options.skipExisting &&
+    (await packageVersionExists(pkg, options.targetRegistry))
+  ) {
+    console.log(
+      `[publish] Skipping ${pkg.name}@${pkg.version}; already present on ${options.target}.`,
+    );
     return;
   }
 
   const command = ['npm', 'publish', '--access', 'public'];
-  if (dryRun) command.push('--dry-run');
+  if (options.dryRun) command.push('--dry-run');
 
   console.log(
-    `[publish] ${dryRun ? 'Dry-running' : 'Publishing'} ${pkg.name}@${pkg.version} to ${target}...`,
+    `[publish] ${options.dryRun ? 'Dry-running' : 'Publishing'} ${pkg.name}@${pkg.version} to ${options.target}...`,
   );
   const result = await runCommand(command, pkg.stageDir);
   if (result.exitCode !== 0) {
@@ -301,24 +358,54 @@ async function publishPackage(pkg: PublishablePackage, dryRun: boolean): Promise
   }
 }
 
-const publishablePackages = collectPublishablePackages();
-fs.rmSync(stageRoot, { recursive: true, force: true });
-fs.mkdirSync(stageRoot, { recursive: true });
+export async function runPublish(argv = process.argv.slice(2)): Promise<number> {
+  const rootDir = process.cwd();
+  const { target, shouldPublish, shouldDryRun, skipExisting } = parsePublishArgs(argv);
+  const targetRegistry =
+    target === 'github' ? 'https://npm.pkg.github.com' : 'https://registry.npmjs.org';
+  const stageRoot = path.join(rootDir, '.tmp', 'publish', target);
+  const repoLicensePath = path.join(rootDir, 'LICENSE');
+  const { packages: publishablePackages, versionByPackageName } = collectPublishablePackages(
+    rootDir,
+    stageRoot,
+  );
 
-const warnings: string[] = [];
-for (const pkg of publishablePackages) {
-  warnings.push(...stagePackage(pkg));
-}
+  fs.rmSync(stageRoot, { recursive: true, force: true });
+  fs.mkdirSync(stageRoot, { recursive: true });
 
-console.log(
-  `[publish] Staged ${publishablePackages.length} package(s) for ${target} in ${path.relative(ROOT_DIR, stageRoot)}`,
-);
-for (const warning of warnings) {
-  console.warn(warning);
-}
-
-if (shouldPublish || shouldDryRun) {
+  const warnings: string[] = [];
   for (const pkg of publishablePackages) {
-    await publishPackage(pkg, shouldDryRun);
+    warnings.push(
+      ...stagePackage(pkg, {
+        repoLicensePath,
+        rootDir,
+        targetRegistry,
+        versionByPackageName,
+      }),
+    );
   }
+
+  console.log(
+    `[publish] Staged ${publishablePackages.length} package(s) for ${target} in ${path.relative(rootDir, stageRoot)}`,
+  );
+  for (const warning of warnings) {
+    console.warn(warning);
+  }
+
+  if (shouldPublish || shouldDryRun) {
+    for (const pkg of publishablePackages) {
+      await publishPackage(pkg, {
+        dryRun: shouldDryRun,
+        skipExisting,
+        target,
+        targetRegistry,
+      });
+    }
+  }
+
+  return 0;
+}
+
+if (import.meta.main) {
+  process.exit(await runPublish());
 }

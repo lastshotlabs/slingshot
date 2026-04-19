@@ -43,4 +43,14 @@ describe('createWebhookPlugin', () => {
       }),
     ).toThrow(/mountPath must start with '\//i);
   });
+
+  it('requires a durable bus subscription name when durability is enabled', () => {
+    expect(() =>
+      createWebhookPlugin({
+        busSubscription: {
+          durable: true,
+        },
+      }),
+    ).toThrow(/busSubscription\.name is required/i);
+  });
 });

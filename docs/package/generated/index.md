@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot`
-- Version: `0.0.1`
+- Version: `0.0.2`
 - Kind: Root package
 - Role: app assembly package
 - Description: Config-driven backend framework built on Hono. Plugin-driven, manifest-first.
@@ -60,13 +60,14 @@ bun add @lastshotlabs/slingshot
 - `release:minor`: `bun run --filter '*' version minor && npm version minor && bun run release`
 - `release:patch`: `bun run --filter '*' version patch && npm version patch && bun run release`
 - `start`: `bun src/index.ts`
-- `test`: `bun run test:root && bun run test:isolated && bun test --config packages/slingshot-core/bunfig.toml packages/slingshot-core/tests && bun test --config packages/slingshot-permissions/bunfig.toml packages/slingshot-permissions/tests`
-- `test:all`: `bun test tests/unit tests/integration && bun run test:docker:up && bun test --config bunfig.docker.toml --concurrency=1 tests/docker/ && bun test --config bunfig.e2e.toml tests/e2e/; bun run test:docker:down`
+- `test`: `bun run test:root && bun run test:isolated && bun scripts/run-package-tests.ts`
+- `test:all`: `bun run test && bun run test:docker && bun run test:e2e`
 - `test:coverage`: `bun scripts/run-coverage.ts`
 - `test:coverage:check`: `bun run test:coverage && bun scripts/check-coverage.ts`
 - `test:coverage:full`: `bun run test:docker:up && bun test --coverage --config bunfig.ci.toml tests/unit tests/integration tests/docker; bun run test:docker:down`
-- `test:docker`: `bun run test:docker:up && bun test --config bunfig.docker.toml --concurrency=1 tests/docker/`
+- `test:docker`: `bun run test:docker:up && bun run test:docker:run; bun run test:docker:down`
 - `test:docker:down`: `docker compose -f docker-compose.test.yml down`
+- `test:docker:run`: `bun scripts/run-docker-tests.ts`
 - `test:docker:up`: `docker compose -f docker-compose.test.yml up -d --wait`
 - `test:docs`: `bun test packages/docs/tests`
 - `test:e2e`: `bun run test:docker:up && bun test --config bunfig.e2e.toml tests/e2e/; bun run test:docker:down`
@@ -74,7 +75,7 @@ bun add @lastshotlabs/slingshot
 - `test:e2e:mongo`: `TEST_BACKEND=mongo bun run test:e2e:ci`
 - `test:e2e:postgres`: `TEST_BACKEND=postgres bun run test:e2e:ci`
 - `test:e2e:sqlite`: `TEST_BACKEND=sqlite bun run test:e2e:ci`
-- `test:isolated`: `bun test tests/isolated/config-lock.test.ts tests/isolated/memoryCache.test.ts tests/isolated/zodToMongoose.test.ts && bun test tests/isolated/optional-deps.test.ts && bun test tests/isolated/jwt-signing-singleton.test.ts && bun test tests/isolated/csrf-signing-singleton.test.ts && bun test tests/isolated/auth0Access.test.ts && bun test tests/isolated/queue.test.ts && bun test tests/isolated/jobs-router.test.ts && bun test tests/isolated/queued-deletion.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts && bun test tests/isolated/passkey-e2e.test.ts && bun run test:docs`
+- `test:isolated`: `bun test tests/isolated/config-lock.test.ts tests/isolated/memoryCache.test.ts tests/isolated/zodToMongoose.test.ts && bun test tests/isolated/optional-deps.test.ts && bun test tests/isolated/jwt-signing-singleton.test.ts && bun test tests/isolated/csrf-signing-singleton.test.ts && bun test tests/isolated/auth0Access.test.ts && bun test tests/isolated/queue.test.ts && bun test tests/isolated/jobs-router.test.ts && bun test tests/isolated/queued-deletion.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts && bun test tests/isolated/webhooks-bullmq.test.ts && bun test tests/isolated/webhooks-bullmq-ioredis.test.ts && bun test tests/isolated/webhooks-bullmq-missing-bullmq.test.ts && bun test tests/isolated/webhooks-bullmq-missing-ioredis.test.ts && bun test tests/isolated/passkey-e2e.test.ts`
 - `test:node`: `vitest run --config vitest.config.ts`
 - `test:root`: `bun scripts/run-root-tests.ts`
 - `typecheck`: `node --max-old-space-size=4096 ./node_modules/typescript/bin/tsc -b tsconfig.typecheck.json --pretty false`

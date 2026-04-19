@@ -1,6 +1,22 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { createServer, getServerContext } from '../../src/server';
 
+const connectPostgresMock = mock(async (_connectionString: string) => ({
+  pool: {
+    query: async () => ({ rows: [], rowCount: 0 }),
+    connect: async () => ({
+      query: async () => ({ rows: [], rowCount: 0 }),
+      release: () => {},
+    }),
+    end: async () => {},
+  },
+  db: {},
+}));
+
+mock.module('@lastshotlabs/slingshot-postgres', () => ({
+  connectPostgres: connectPostgresMock,
+}));
+
 // ---------------------------------------------------------------------------
 // Shutdown registry helpers
 // ---------------------------------------------------------------------------
@@ -83,6 +99,8 @@ let server: Awaited<ReturnType<typeof createServer>> | null = null;
 let origExit: typeof process.exit | null = null;
 
 afterEach(async () => {
+  connectPostgresMock.mockClear();
+
   // Restore process.exit if we mocked it
   if (origExit) {
     process.exit = origExit;
@@ -327,6 +345,39 @@ describe('SQLite close in graceful shutdown (lines 634-639)', () => {
 
     // Restore and actually close
     try { origClose(); } catch { /* already closed or error */ }
+    server = null;
+  });
+});
+
+describe('Postgres close in graceful shutdown', () => {
+  test('shutdown closes the Postgres pool', async () => {
+    const poolEnd = mock(async () => {});
+    connectPostgresMock.mockResolvedValueOnce({
+      pool: {
+        query: async () => ({ rows: [], rowCount: 0 }),
+        connect: async () => ({
+          query: async () => ({ rows: [], rowCount: 0 }),
+          release: () => {},
+        }),
+        end: poolEnd,
+      },
+      db: {},
+    } as any);
+
+    server = await createServer({
+      ...baseConfig,
+      hostname: '127.0.0.1',
+      port: 0,
+      db: {
+        ...baseConfig.db,
+        postgres: 'postgresql://postgres:postgres@localhost:5433/slingshot_test',
+      },
+    });
+
+    const shutdownCb = getLastShutdownCallback();
+    const exitCode = await withTimeout(shutdownCb('SIGTERM'), 5_000, 'shutdown');
+    expect(exitCode).toBe(0);
+    expect(poolEnd).toHaveBeenCalledTimes(1);
     server = null;
   });
 });

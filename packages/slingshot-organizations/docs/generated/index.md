@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-organiza
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-organizations`
-- Version: `0.0.1`
+- Version: `0.0.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: Organizations and groups management plugin for Slingshot

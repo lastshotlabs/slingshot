@@ -206,20 +206,19 @@ describe('slingshot-postgres adapter — error paths', () => {
 
   // ── Unique constraint violations (pg error code 23505) ────────────────────
   //
-  // The adapter does NOT wrap 23505 errors — they bubble up raw from drizzle/pg.
-  // The only exception is findOrCreateByProvider which checks email uniqueness
-  // manually (with a SELECT) and throws HttpError(409) before the INSERT happens.
+  // Duplicate-email creates are normalized to the public HttpError contract.
+  // Other duplicate-safe paths either avoid conflicts via SQL upserts or
+  // retain their existing explicit conflict handling.
 
   describe('unique constraint violation (23505)', () => {
-    test('create: 23505 bubbles up raw', async () => {
+    test('create: 23505 becomes HttpError(409)', async () => {
       const err = uniqueConstraintError();
       mockDbImpl = { insert: () => throwingBuilder(err) };
       const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
       const thrown = await adapter.create('dup@example.com', 'hash').catch(e => e);
-      expect(thrown).toBeInstanceOf(Error);
-      // The adapter does NOT wrap — raw pg error with code 23505 propagates
-      expect((thrown as Error & { code?: string }).code).toBe('23505');
-      expect(thrown.message).toContain('duplicate key');
+      expect(thrown).toBeInstanceOf(HttpError);
+      expect((thrown as HttpError).status).toBe(409);
+      expect((thrown as HttpError).message).toBe('Email already registered');
     });
 
     test('addRole: 23505 does NOT occur because onConflictDoNothing() is used', async () => {

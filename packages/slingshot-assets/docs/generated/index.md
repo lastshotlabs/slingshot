@@ -8,7 +8,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-assets
 ## Package Facts
 
 - Package: `@lastshotlabs/slingshot-assets`
-- Version: `0.0.1`
+- Version: `0.0.2`
 - Kind: Workspace package
 - Role: feature package
 - Description: Entity-backed asset storage, upload metadata, and storage adapter resolution for Slingshot

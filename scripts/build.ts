@@ -196,8 +196,9 @@ const steps = packagesOnly ? [] : [...frameworkSteps, ...rootSteps];
 const formatSeconds = (startedAt: number): string =>
   `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
 
-function rewriteFrameworkDeclarationImports(): void {
-  const frameworkDistDir = path.join('dist', 'src', 'framework');
+export function rewriteFrameworkDeclarationImports(
+  frameworkDistDir = path.join('dist', 'src', 'framework'),
+): void {
   if (!fs.existsSync(frameworkDistDir)) return;
 
   const queue = [frameworkDistDir];
@@ -224,7 +225,7 @@ function rewriteFrameworkDeclarationImports(): void {
   }
 }
 
-function cleanTarget(target: CleanTarget): void {
+export function cleanTarget(target: CleanTarget): void {
   if (!fs.existsSync(target.path)) return;
 
   const preserveEntries = new Set(target.preserveEntries ?? []);
@@ -299,26 +300,34 @@ async function runPackageLayer(layerIndex: number, stepsInLayer: BuildStep[]): P
   }
 }
 
-for (let index = 0; index < packageStepsByLayer.length; index += 1) {
-  const layer = packageStepsByLayer[index];
-  if (layer) await runPackageLayer(index, layer);
+export async function runBuild(): Promise<number> {
+  for (let index = 0; index < packageStepsByLayer.length; index += 1) {
+    const layer = packageStepsByLayer[index];
+    if (layer) await runPackageLayer(index, layer);
+  }
+
+  // Sync README.md from docs/human/index.md for each workspace package
+  for (const entry of fs.readdirSync('packages', { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === 'docs') continue;
+    const humanDoc = path.join('packages', entry.name, 'docs', 'human', 'index.md');
+    const readme = path.join('packages', entry.name, 'README.md');
+    if (fs.existsSync(humanDoc)) {
+      fs.copyFileSync(humanDoc, readme);
+    }
+  }
+
+  for (const step of steps) {
+    await runStep(step);
+    if (step.name === 'root build output') {
+      console.log('[build] framework declaration import rewrite...');
+      rewriteFrameworkDeclarationImports();
+      console.log('[build] framework declaration import rewrite done');
+    }
+  }
+
+  return 0;
 }
 
-// Sync README.md from docs/human/index.md for each workspace package
-for (const entry of fs.readdirSync('packages', { withFileTypes: true })) {
-  if (!entry.isDirectory() || entry.name === 'docs') continue;
-  const humanDoc = path.join('packages', entry.name, 'docs', 'human', 'index.md');
-  const readme = path.join('packages', entry.name, 'README.md');
-  if (fs.existsSync(humanDoc)) {
-    fs.copyFileSync(humanDoc, readme);
-  }
-}
-
-for (const step of steps) {
-  await runStep(step);
-  if (step.name === 'root build output') {
-    console.log('[build] framework declaration import rewrite...');
-    rewriteFrameworkDeclarationImports();
-    console.log('[build] framework declaration import rewrite done');
-  }
+if (import.meta.main) {
+  process.exit(await runBuild());
 }

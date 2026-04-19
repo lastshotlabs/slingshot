@@ -25,10 +25,11 @@
  *   SLINGSHOT_E2E_AUTH_BACKEND=mongo SLINGSHOT_E2E_SESSION_BACKEND=redis bun run test:e2e:ci
  */
 import type { DbConfig } from '../../../src/app';
+import { resolveTestPostgresUrl } from './postgres';
 
 export type BackendName = 'memory' | 'sqlite' | 'mongo' | 'postgres';
 
-type StoreType = 'memory' | 'sqlite' | 'mongo' | 'redis';
+type StoreType = 'memory' | 'sqlite' | 'mongo' | 'redis' | 'postgres';
 
 /**
  * Resolve the global default backend from TEST_BACKEND env var.
@@ -59,8 +60,7 @@ function backendToStoreType(backend: BackendName): StoreType {
     case 'mongo':
       return 'mongo';
     case 'postgres':
-      // Postgres is auth-only currently; sessions/cache fall back to memory
-      return 'memory';
+      return 'postgres';
     default:
       throw new Error(`Unknown test backend: ${backend}`);
   }
@@ -69,7 +69,7 @@ function backendToStoreType(backend: BackendName): StoreType {
 /**
  * Map a BackendName to the auth adapter store type.
  */
-function backendToAuthType(backend: BackendName): 'memory' | 'sqlite' | 'mongo' {
+function backendToAuthType(backend: BackendName): 'memory' | 'sqlite' | 'mongo' | 'postgres' {
   switch (backend) {
     case 'memory':
       return 'memory';
@@ -78,10 +78,7 @@ function backendToAuthType(backend: BackendName): 'memory' | 'sqlite' | 'mongo' 
     case 'mongo':
       return 'mongo';
     case 'postgres':
-      // Postgres auth adapter is injected separately via auth.adapter config,
-      // not via db.auth. For now, fall back to memory — the postgres adapter
-      // will be wired when slingshot-postgres E2E support is added.
-      return 'memory';
+      return 'postgres';
     default:
       throw new Error(`Unknown test backend: ${backend}`);
   }
@@ -121,6 +118,9 @@ export function resolveTestDbConfig(): DbConfig {
   // SQLite uses in-memory database for tests — no file on disk
   if (sessions === 'sqlite' || cache === 'sqlite' || auth === 'sqlite') {
     config.sqlite = ':memory:';
+  }
+  if (sessions === 'postgres' || cache === 'postgres' || auth === 'postgres') {
+    config.postgres = resolveTestPostgresUrl();
   }
 
   return config;

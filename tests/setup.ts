@@ -52,35 +52,39 @@ export function adminPlugin(overrides: Partial<SlingshotAdminPluginConfig> = {})
 
 export function authPlugin(overrides: Partial<AuthPluginConfig> = {}): SlingshotPlugin {
   const { auth, db, security, ...restOverrides } = overrides;
-  const adapter = auth?.adapter ?? createMemoryAuthAdapter();
-  return createAuthPlugin({
-    auth: {
-      adapter,
-      roles: ['admin', 'user'],
-      defaultRole: 'user',
-      jwt: {
-        issuer: 'http://localhost',
-        audience: 'slingshot-tests',
-        ...auth?.jwt,
-      },
-      rateLimit: {
-        register: { windowMs: 60_000, max: 1000 },
-        login: { windowMs: 60_000, max: 1000 },
-        forgotPassword: { windowMs: 60_000, max: 1000 },
-        resetPassword: { windowMs: 60_000, max: 1000 },
-        verifyEmail: { windowMs: 60_000, max: 1000 },
-        resendVerification: { windowMs: 60_000, max: 1000 },
-        mfaVerify: { windowMs: 60_000, max: 1000 },
-        mfaEmailOtpInitiate: { windowMs: 60_000, max: 1000 },
-        mfaResend: { windowMs: 60_000, max: 1000 },
-        setPassword: { windowMs: 60_000, max: 1000 },
-        mfaDisable: { windowMs: 60_000, max: 1000 },
-        oauthUnlink: { windowMs: 60_000, max: 1000 },
-        deleteAccount: { windowMs: 60_000, max: 1000 },
-        ...auth?.rateLimit,
-      },
-      ...auth,
+  const adapter =
+    auth?.adapter ?? (db?.auth === undefined || db.auth === 'memory' ? createMemoryAuthAdapter() : undefined);
+  const authConfig: NonNullable<AuthPluginConfig['auth']> = {
+    roles: ['admin', 'user'],
+    defaultRole: 'user',
+    jwt: {
+      issuer: 'http://localhost',
+      audience: 'slingshot-tests',
+      ...auth?.jwt,
     },
+    rateLimit: {
+      register: { windowMs: 60_000, max: 1000 },
+      login: { windowMs: 60_000, max: 1000 },
+      forgotPassword: { windowMs: 60_000, max: 1000 },
+      resetPassword: { windowMs: 60_000, max: 1000 },
+      verifyEmail: { windowMs: 60_000, max: 1000 },
+      resendVerification: { windowMs: 60_000, max: 1000 },
+      mfaVerify: { windowMs: 60_000, max: 1000 },
+      mfaEmailOtpInitiate: { windowMs: 60_000, max: 1000 },
+      mfaResend: { windowMs: 60_000, max: 1000 },
+      setPassword: { windowMs: 60_000, max: 1000 },
+      mfaDisable: { windowMs: 60_000, max: 1000 },
+      oauthUnlink: { windowMs: 60_000, max: 1000 },
+      deleteAccount: { windowMs: 60_000, max: 1000 },
+      ...auth?.rateLimit,
+    },
+    ...auth,
+  };
+  if (adapter !== undefined) {
+    authConfig.adapter = adapter;
+  }
+  return createAuthPlugin({
+    auth: authConfig,
     db: {
       sessions: 'memory',
       oauthState: 'memory',
@@ -120,15 +124,42 @@ export async function createTestApp(
   overrides?: Partial<CreateAppConfig>,
   authOverrides?: Partial<AuthPluginConfig>,
 ) {
+  const mergedDb = { ...baseConfig.db, ...overrides?.db };
+  const explicitAuthAdapter = authOverrides?.auth?.adapter !== undefined;
+  const inheritedAuthDb = explicitAuthAdapter
+    ? {
+        sqlite: mergedDb.sqlite,
+        mongo: mergedDb.mongo,
+        redis: mergedDb.redis,
+        postgres: mergedDb.postgres,
+        auth: 'memory' as const,
+        sessions: 'memory' as const,
+        oauthState: 'memory' as const,
+      }
+    : {
+        sqlite: mergedDb.sqlite,
+        mongo: mergedDb.mongo,
+        redis: mergedDb.redis,
+        postgres: mergedDb.postgres,
+        sessions: mergedDb.sessions,
+        auth: mergedDb.auth,
+      };
   const oauthPlugin = authOverrides?.auth?.oauth?.providers != null ? [createOAuthPlugin()] : [];
+  const mergedAuthOverrides: Partial<AuthPluginConfig> = {
+    ...authOverrides,
+    db: {
+      ...inheritedAuthDb,
+      ...authOverrides?.db,
+    },
+  };
   const config: CreateAppConfig = {
     ...baseConfig,
     ...overrides,
     meta: { ...baseConfig.meta, ...overrides?.meta },
-    db: { ...baseConfig.db, ...overrides?.db },
+    db: mergedDb,
     security: { ...baseConfig.security, ...overrides?.security },
     logging: { ...baseConfig.logging, ...overrides?.logging },
-    plugins: [authPlugin(authOverrides ?? {}), ...oauthPlugin, ...(overrides?.plugins ?? [])],
+    plugins: [authPlugin(mergedAuthOverrides), ...oauthPlugin, ...(overrides?.plugins ?? [])],
   };
   const { app, ctx } = await createApp(config);
   (app as any).ctx = ctx;

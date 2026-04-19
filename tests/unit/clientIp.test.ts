@@ -2,9 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import { getClientIp, setStandaloneTrustProxy } from '@lastshotlabs/slingshot-core';
 
 function mockContext(headers: Record<string, string> = {}, socketIp?: string) {
+  const raw: Request = new Request('http://localhost');
   return {
     req: {
-      raw: {} as Request,
+      raw,
       header(name: string) {
         return headers[name.toLowerCase()];
       },

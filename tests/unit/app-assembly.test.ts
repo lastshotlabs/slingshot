@@ -98,7 +98,6 @@ describe('app assembly', () => {
     disconnectMongoMock.mockClear();
 
     const secretDestroy = mock(async () => {});
-    const busShutdown = mock(async () => {});
 
     await expect(
       createApp({
@@ -239,7 +238,7 @@ describe('app assembly', () => {
       name: 'validation-error-plugin',
       setupRoutes({ app }) {
         const router = createRouter();
-        router.get('/throw-validation', (_c) => {
+        router.get('/throw-validation', () => {
           throw new ValidationError([{ code: 'custom', message: 'bad input', path: [] }]);
         });
         app.route('/', router);
@@ -264,7 +263,7 @@ describe('app assembly', () => {
       name: 'broken-fmt-plugin',
       setupRoutes({ app }) {
         const router = createRouter();
-        router.get('/throw-validation-broken-fmt', (_c) => {
+        router.get('/throw-validation-broken-fmt', () => {
           throw new ValidationError([{ code: 'custom', message: 'bad input', path: ['field'] }]);
         });
         app.route('/', router);

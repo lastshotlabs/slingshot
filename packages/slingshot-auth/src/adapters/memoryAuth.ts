@@ -332,7 +332,7 @@ export function createMemoryAuthAdapter(
   // Return the combined AuthAdapter + MemoryAuthStores object
   // -------------------------------------------------------------------------
 
-  /* eslint-disable @typescript-eslint/require-await -- Memory adapter is synchronous but implements async AuthAdapter interface */
+   
   return {
     // -----------------------------------------------------------------------
     // AuthAdapter methods
@@ -1443,5 +1443,5 @@ export function createMemoryAuthAdapter(
       return { userId: entry.userId, purpose: entry.purpose };
     },
   };
-  /* eslint-enable @typescript-eslint/require-await */
+   
 }

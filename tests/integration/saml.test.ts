@@ -41,8 +41,9 @@ function createRuntime(
     signing?: AuthRuntimeContext['signing'];
   },
 ): AuthRuntimeContext {
+  const emptyAdapter = {};
   return {
-    adapter: {} as AuthRuntimeContext['adapter'],
+    adapter: emptyAdapter as AuthRuntimeContext['adapter'],
     eventBus: { emit() {} } as unknown as AuthRuntimeContext['eventBus'],
     config: resolvedConfig,
     stores: {
@@ -130,7 +131,8 @@ describe('SAML routes - not configured', () => {
 });
 
 describe('SAML login initiation CSRF protection', () => {
-  function createMockSamlImpl() {
+  function createMockSamlImpl(): typeof import('@auth/lib/saml') {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
     return {
       initSaml: async () => ({
         sp: {

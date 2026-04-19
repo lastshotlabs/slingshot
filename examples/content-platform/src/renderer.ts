@@ -1,4 +1,3 @@
-import type { SlingshotContext } from '../../../packages/slingshot-core/src/index.ts';
 import type {
   PageLoaderResult,
   SlingshotSsrRenderer,
@@ -17,11 +16,11 @@ function htmlResponse(title: string, body: string, shell: SsrShell): Response {
 }
 
 export const renderer: SlingshotSsrRenderer = {
-  async resolve(_url: URL, _bsCtx: SlingshotContext): Promise<SsrRouteMatch | null> {
+  async resolve(): Promise<SsrRouteMatch | null> {
     return null;
   },
 
-  async render(match: SsrRouteMatch, shell: SsrShell, _bsCtx: SlingshotContext): Promise<Response> {
+  async render(match: SsrRouteMatch, shell: SsrShell): Promise<Response> {
     return htmlResponse(
       'Content Platform',
       `<main><h1>SSR page</h1><p>${match.url.pathname}</p></main>`,
@@ -32,7 +31,6 @@ export const renderer: SlingshotSsrRenderer = {
   async renderChain(
     chain: SsrRouteChain,
     shell: SsrShell,
-    _bsCtx: SlingshotContext,
   ): Promise<Response> {
     return htmlResponse(
       'Content Platform',
@@ -44,7 +42,6 @@ export const renderer: SlingshotSsrRenderer = {
   async renderPage(
     result: PageLoaderResult,
     shell: SsrShell,
-    _bsCtx: SlingshotContext,
   ): Promise<Response> {
     return htmlResponse(
       'Content Platform',

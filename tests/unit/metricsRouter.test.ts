@@ -6,7 +6,7 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { attachContext } from '@lastshotlabs/slingshot-core';
-import { createMetricsState, resetMetrics } from '../../src/framework/metrics/registry';
+import { createMetricsState } from '../../src/framework/metrics/registry';
 import { createMetricsRouter } from '../../src/framework/routes/metrics';
 import type { MetricsState } from '../../src/framework/metrics/registry';
 
@@ -106,7 +106,7 @@ describe('createMetricsRouter — array middleware auth', () => {
   });
 
   test('middleware can short-circuit the request', async () => {
-    const blockMw = mock(async (c: any, _next: () => Promise<void>) => {
+    const blockMw = mock(async (c: any) => {
       return c.json({ error: 'unauthorized' }, 401);
     });
 

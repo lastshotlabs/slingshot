@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { HttpError } from '@lastshotlabs/slingshot-core';
 import { verifyToken } from '../../src/lib/jwt';
 import {
   assertLoginEmailVerified,
@@ -348,7 +347,7 @@ describe('refresh', () => {
     const runtime = makeTestRuntime({
       refreshToken: { accessTokenExpiry: 900, refreshTokenExpiry: 86400 },
     });
-    const { refreshToken, sessionId } = await createSessionForUser('user-1', runtime);
+    const { refreshToken } = await createSessionForUser('user-1', runtime);
     expect(refreshToken).toBeString();
 
     const result = await refresh(refreshToken!, runtime);

@@ -37,9 +37,10 @@ function bootApp(config: Parameters<typeof createDeepLinksPlugin>[0]): Hono {
 
   const plugin = createDeepLinksPlugin(config);
   // Deep-links is setup-only — just call setupMiddleware + setupRoutes
-  plugin.setupMiddleware?.({ app, config: {} as never, bus });
-  plugin.setupRoutes?.({ app, config: {} as never, bus });
-  plugin.setupPost?.({ app, config: {} as never, bus });
+  const emptyConfig: never = {} as never;
+  plugin.setupMiddleware?.({ app, config: emptyConfig, bus });
+  plugin.setupRoutes?.({ app, config: emptyConfig, bus });
+  plugin.setupPost?.({ app, config: emptyConfig, bus });
 
   return app;
 }

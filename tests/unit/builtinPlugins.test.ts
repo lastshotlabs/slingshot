@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import {
   BUILTIN_PLUGINS,
   createBuiltinPluginFactory,
@@ -167,7 +167,7 @@ describe('createBuiltinPluginFactory', () => {
 
   it('calls resolveAdminManifestConfig with no string strategies (line 68-89, returns plugin directly)', () => {
     const fakePlugin = { name: 'slingshot-admin' };
-    const fakeFactory = (_config?: Record<string, unknown>) => fakePlugin;
+    const fakeFactory = () => fakePlugin;
     const wrapped = createBuiltinPluginFactory('slingshot-admin', fakeFactory, undefined, '/app');
     const result = wrapped({ someField: 'value' });
     // When no string strategies, bind is null so plugin is returned as-is
@@ -178,9 +178,9 @@ describe('createBuiltinPluginFactory', () => {
     const fakePlugin = {
       name: 'slingshot-admin',
       dependencies: ['slingshot-entity'],
-      setupRoutes: async (_ctx: unknown) => {},
+      setupRoutes: async () => {},
     };
-    const fakeFactory = (_config?: Record<string, unknown>) => fakePlugin as never;
+    const fakeFactory = () => fakePlugin as never;
     const wrapped = createBuiltinPluginFactory('slingshot-admin', fakeFactory, undefined, '/app');
     const result = wrapped({
       accessProvider: 'slingshot-auth',
@@ -194,11 +194,11 @@ describe('createBuiltinPluginFactory', () => {
 
   it('resolves admin with slingshot-auth strategy — no setupRoutes on original (line 82 branch)', () => {
     const fakePlugin = { name: 'slingshot-admin' };
-    const fakeFactory = (_config?: Record<string, unknown>) => fakePlugin as never;
+    const fakeFactory = () => fakePlugin as never;
     const wrapped = createBuiltinPluginFactory('slingshot-admin', fakeFactory, undefined, '/app');
     const result = wrapped({
       accessProvider: 'slingshot-auth',
-    }) as typeof fakePlugin & { setupRoutes?: Function };
+    }) as typeof fakePlugin & { setupRoutes?: (...args: unknown[]) => unknown };
     // Should be wrapped — setupRoutes is defined but origSetupRoutes is undefined
     expect(result).not.toBe(fakePlugin);
     expect(typeof result.setupRoutes).toBe('function');
@@ -209,11 +209,11 @@ describe('createBuiltinPluginFactory', () => {
     const fakePlugin = {
       name: 'slingshot-admin',
       dependencies: [],
-      setupRoutes: async (_ctx: unknown) => {
+      setupRoutes: async () => {
         setupRoutesCalled = true;
       },
     };
-    const fakeFactory = (_config?: Record<string, unknown>) => fakePlugin as never;
+    const fakeFactory = () => fakePlugin as never;
     const wrapped = createBuiltinPluginFactory('slingshot-admin', fakeFactory, undefined, '/app');
     const result = wrapped({
       accessProvider: 'slingshot-auth',

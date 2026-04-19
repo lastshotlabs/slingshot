@@ -252,12 +252,6 @@ describe('postgresWsMessages', () => {
   });
 
   test('clear swallows errors', async () => {
-    const errorPool = {
-      query: async () => {
-        throw new Error('connection lost');
-      },
-    } as unknown as import('pg').Pool;
-
     const { createPostgresWsMessageRepository } =
       await import('../../src/framework/persistence/postgresWsMessages');
     // Need to create with a pool that succeeds on init but fails on clear

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { AppEnv, SlingshotContext } from '@lastshotlabs/slingshot-core';
 import { requireRole } from '../../src/middleware/requireRole';
@@ -33,10 +33,12 @@ function buildApp(opts: {
 
   // Inject slingshotCtx with the mock adapter as auth runtime
   app.use('*', async (c, next) => {
-    const runtime = { adapter } as AuthRuntimeContext;
-    c.set('slingshotCtx', {
+    const runtimePartial = { adapter };
+    const runtime = runtimePartial as AuthRuntimeContext;
+    const ctxPartial = {
       pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
-    } as SlingshotContext);
+    };
+    c.set('slingshotCtx', ctxPartial as SlingshotContext);
     // Simulate auth context vars
     c.set('authUserId', userId);
     if (tenantId !== null) {
@@ -274,12 +276,15 @@ describe('requireRole — sets roles on context', () => {
 describe('requireRole — adapter missing getEffectiveRoles', () => {
   test('throws error when adapter lacks getEffectiveRoles', async () => {
     const app = new Hono<AppEnv>();
-    const adapter = {} as AuthRuntimeContext['adapter'];
+    const emptyAdapter = {};
+    const adapter = emptyAdapter as AuthRuntimeContext['adapter'];
     app.use('*', async (c, next) => {
-      const runtime = { adapter } as AuthRuntimeContext;
-      c.set('slingshotCtx', {
+      const runtimePartial = { adapter };
+      const runtime = runtimePartial as AuthRuntimeContext;
+      const ctxPartial = {
         pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
-      } as SlingshotContext);
+      };
+      c.set('slingshotCtx', ctxPartial as SlingshotContext);
       c.set('authUserId', 'user-1');
       await next();
     });

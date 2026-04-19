@@ -1,4 +1,8 @@
+import { ASSETS_PLUGIN_STATE_KEY as CORE_ASSETS_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-core';
 import type { PaginatedResult, StorageAdapter } from '@lastshotlabs/slingshot-core';
+
+/** Stable plugin-state key published by `slingshot-assets`. */
+export const ASSETS_PLUGIN_STATE_KEY = CORE_ASSETS_PLUGIN_STATE_KEY;
 
 /**
  * Manifest-compatible storage adapter reference.
@@ -154,7 +158,7 @@ export interface AssetAdapter {
 }
 
 /**
- * Runtime state stored in `SlingshotContext.pluginState` under `'slingshot-assets'`.
+ * Runtime state stored in `SlingshotContext.pluginState` under `ASSETS_PLUGIN_STATE_KEY`.
  */
 export interface AssetsPluginState {
   /** Resolved asset adapter for the active store backend. */

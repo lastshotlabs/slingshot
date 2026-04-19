@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import { createManifestHandlerRegistry } from '../../src/lib/manifestHandlerRegistry';
-import type { ManifestHandlerRegistry } from '../../src/lib/manifestHandlerRegistry';
 
 describe('createManifestHandlerRegistry', () => {
   it('returns a fresh registry on each call', () => {
@@ -41,12 +40,20 @@ describe('createManifestHandlerRegistry', () => {
         '[ManifestHandlerRegistry] Unknown handler "unknown". Registered: [known]',
       );
     });
+
+    it('throws on duplicate handler registration', () => {
+      const reg = createManifestHandlerRegistry();
+      reg.registerHandler('dup', () => null);
+      expect(() => reg.registerHandler('dup', () => null)).toThrow(
+        '[ManifestHandlerRegistry] Duplicate handler "dup" registration. Registry names must be unique.',
+      );
+    });
   });
 
   describe('plugin bucket', () => {
     it('registers and resolves a plugin', () => {
       const reg = createManifestHandlerRegistry();
-      const plugin = { name: 'test-plugin' } as never;
+      const plugin: never = { name: 'test-plugin' } as never;
       reg.registerPlugin('my-plugin', () => plugin);
       expect(reg.resolvePlugin('my-plugin')).toBe(plugin);
     });
@@ -56,7 +63,8 @@ describe('createManifestHandlerRegistry', () => {
       let received: Record<string, unknown> | undefined;
       reg.registerPlugin('p', config => {
         received = config;
-        return {} as never;
+        const p: never = {} as never;
+        return p;
       });
       reg.resolvePlugin('p', { posture: 'web-saas' });
       expect(received).toEqual({ posture: 'web-saas' });
@@ -64,7 +72,8 @@ describe('createManifestHandlerRegistry', () => {
 
     it('hasPlugin returns true when registered', () => {
       const reg = createManifestHandlerRegistry();
-      reg.registerPlugin('p', () => ({}) as never);
+      const fakePlugin: never = {} as never;
+      reg.registerPlugin('p', () => fakePlugin);
       expect(reg.hasPlugin('p')).toBe(true);
     });
 
@@ -75,9 +84,19 @@ describe('createManifestHandlerRegistry', () => {
 
     it('throws with name and registered list for unknown plugin', () => {
       const reg = createManifestHandlerRegistry();
-      reg.registerPlugin('known-plugin', () => ({}) as never);
+      const knownPlugin: never = {} as never;
+      reg.registerPlugin('known-plugin', () => knownPlugin);
       expect(() => reg.resolvePlugin('unknown-plugin')).toThrow(
         '[ManifestHandlerRegistry] Unknown plugin "unknown-plugin". Registered: [known-plugin]',
+      );
+    });
+
+    it('throws on duplicate plugin registration', () => {
+      const reg = createManifestHandlerRegistry();
+      const fakePlugin: never = {} as never;
+      reg.registerPlugin('dup-plugin', () => fakePlugin);
+      expect(() => reg.registerPlugin('dup-plugin', () => fakePlugin)).toThrow(
+        '[ManifestHandlerRegistry] Duplicate plugin "dup-plugin" registration. Registry names must be unique.',
       );
     });
   });
@@ -85,14 +104,15 @@ describe('createManifestHandlerRegistry', () => {
   describe('event bus bucket', () => {
     it('registers and resolves an event bus', () => {
       const reg = createManifestHandlerRegistry();
-      const bus = { on: () => {} } as never;
+      const bus: never = { on: () => {} } as never;
       reg.registerEventBus('redis', () => bus);
       expect(reg.resolveEventBus('redis')).toBe(bus);
     });
 
     it('hasEventBus returns true when registered', () => {
       const reg = createManifestHandlerRegistry();
-      reg.registerEventBus('redis', () => ({}) as never);
+      const fakeBus: never = {} as never;
+      reg.registerEventBus('redis', () => fakeBus);
       expect(reg.hasEventBus('redis')).toBe(true);
     });
 
@@ -103,9 +123,19 @@ describe('createManifestHandlerRegistry', () => {
 
     it('throws with name and registered list for unknown bus', () => {
       const reg = createManifestHandlerRegistry();
-      reg.registerEventBus('redis', () => ({}) as never);
+      const fakeBus2: never = {} as never;
+      reg.registerEventBus('redis', () => fakeBus2);
       expect(() => reg.resolveEventBus('unknown-bus')).toThrow(
         '[ManifestHandlerRegistry] Unknown event bus "unknown-bus". Registered: [redis]',
+      );
+    });
+
+    it('throws on duplicate event bus registration', () => {
+      const reg = createManifestHandlerRegistry();
+      const fakeBus: never = {} as never;
+      reg.registerEventBus('dup-bus', () => fakeBus);
+      expect(() => reg.registerEventBus('dup-bus', () => fakeBus)).toThrow(
+        '[ManifestHandlerRegistry] Duplicate event bus "dup-bus" registration. Registry names must be unique.',
       );
     });
   });
@@ -113,7 +143,7 @@ describe('createManifestHandlerRegistry', () => {
   describe('secret provider bucket', () => {
     it('registers and resolves a secret provider', () => {
       const reg = createManifestHandlerRegistry();
-      const repo = { get: async () => null } as never;
+      const repo: never = { get: async () => null } as never;
       reg.registerSecretProvider('vault', () => repo);
       expect(reg.resolveSecretProvider('vault', {})).toBe(repo);
     });
@@ -123,7 +153,8 @@ describe('createManifestHandlerRegistry', () => {
       let received: Record<string, unknown> | undefined;
       reg.registerSecretProvider('custom', config => {
         received = config;
-        return {} as never;
+        const sp: never = {} as never;
+        return sp;
       });
       reg.resolveSecretProvider('custom', { endpoint: 'https://vault.example.com' });
       expect(received).toEqual({ endpoint: 'https://vault.example.com' });
@@ -131,9 +162,19 @@ describe('createManifestHandlerRegistry', () => {
 
     it('throws with name and registered list for unknown provider', () => {
       const reg = createManifestHandlerRegistry();
-      reg.registerSecretProvider('vault', () => ({}) as never);
+      const fakeRepo: never = {} as never;
+      reg.registerSecretProvider('vault', () => fakeRepo);
       expect(() => reg.resolveSecretProvider('unknown-provider', {})).toThrow(
         '[ManifestHandlerRegistry] Unknown secret provider "unknown-provider". Registered: [vault]',
+      );
+    });
+
+    it('throws on duplicate secret provider registration', () => {
+      const reg = createManifestHandlerRegistry();
+      const fakeRepo: never = {} as never;
+      reg.registerSecretProvider('vault', () => fakeRepo);
+      expect(() => reg.registerSecretProvider('vault', () => fakeRepo)).toThrow(
+        '[ManifestHandlerRegistry] Duplicate secret provider "vault" registration. Registry names must be unique.',
       );
     });
   });
@@ -164,6 +205,14 @@ describe('createManifestHandlerRegistry', () => {
         '[ManifestHandlerRegistry] Unknown hook "unknown-hook". Registered: [known-hook]',
       );
     });
+
+    it('throws on duplicate hook registration', () => {
+      const reg = createManifestHandlerRegistry();
+      reg.registerHook('dup-hook', () => {});
+      expect(() => reg.registerHook('dup-hook', () => {})).toThrow(
+        '[ManifestHandlerRegistry] Duplicate hook "dup-hook" registration. Registry names must be unique.',
+      );
+    });
   });
 
   describe('isolation between instances', () => {
@@ -171,10 +220,11 @@ describe('createManifestHandlerRegistry', () => {
       const r1 = createManifestHandlerRegistry();
       const r2 = createManifestHandlerRegistry();
 
+      const neverVal: never = {} as never;
       r1.registerHandler('h', () => 'r1');
-      r1.registerPlugin('p', () => ({}) as never);
-      r1.registerEventBus('bus', () => ({}) as never);
-      r1.registerSecretProvider('sp', () => ({}) as never);
+      r1.registerPlugin('p', () => neverVal);
+      r1.registerEventBus('bus', () => neverVal);
+      r1.registerSecretProvider('sp', () => neverVal);
       r1.registerHook('hook', () => {});
 
       expect(r2.hasHandler('h')).toBe(false);

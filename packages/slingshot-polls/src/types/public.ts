@@ -1,3 +1,5 @@
+import { POLLS_PLUGIN_STATE_KEY as CORE_POLLS_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-core';
+
 /**
  * Public types for `@lastshotlabs/slingshot-polls`.
  *
@@ -15,7 +17,7 @@
  * Plain string matching the `plugin.name`. Consumers look up polls
  * state via `ctx.pluginState.get(POLLS_PLUGIN_STATE_KEY)`.
  */
-export const POLLS_PLUGIN_STATE_KEY = 'slingshot-polls' as const;
+export const POLLS_PLUGIN_STATE_KEY = CORE_POLLS_PLUGIN_STATE_KEY;
 
 // --- Create inputs ---
 

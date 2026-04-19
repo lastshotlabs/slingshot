@@ -31,7 +31,6 @@ import type {
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
 import {
-  PERMISSIONS_STATE_KEY,
   SUPER_ADMIN_ROLE,
   getPermissionsStateOrNull,
 } from '@lastshotlabs/slingshot-core';

@@ -292,7 +292,7 @@ describe('requestLogger middleware', () => {
     app.use(requestLogger({ onLog: entry => { logs.push(entry); } }));
     // Throw a plain object — not an Error instance
     app.use(async () => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error
+       
       throw { code: 'CUSTOM', detail: 'custom error' };
     });
 

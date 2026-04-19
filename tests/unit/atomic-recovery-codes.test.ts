@@ -15,10 +15,9 @@ import { createTestApp } from '../setup';
 // ---------------------------------------------------------------------------
 
 let adapter: ReturnType<typeof createMemoryAuthAdapter>;
-let app: any;
 
 beforeEach(async () => {
-  app = await createTestApp(
+  await createTestApp(
     {},
     {
       auth: {

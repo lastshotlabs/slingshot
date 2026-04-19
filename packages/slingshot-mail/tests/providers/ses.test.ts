@@ -8,7 +8,7 @@ import { MailSendError } from '../../src/types/provider.js';
 // ---------------------------------------------------------------------------
 
 // Track the latest instance created by new SESv2Client() so tests can control it.
-let latestClientSend: ReturnType<typeof mock> = mock(async () => ({
+const latestClientSend: ReturnType<typeof mock> = mock(async () => ({
   MessageId: 'ses-default',
   $metadata: { httpStatusCode: 200 },
 }));

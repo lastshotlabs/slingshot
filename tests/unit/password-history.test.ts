@@ -1,5 +1,5 @@
 import { createMemoryAuthAdapter } from '@auth/adapters/memoryAuth';
-import { checkPasswordNotReused, recordPasswordChange } from '@auth/lib/passwordHistory';
+import { checkPasswordNotReused } from '@auth/lib/passwordHistory';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { createTestApp } from '../setup';

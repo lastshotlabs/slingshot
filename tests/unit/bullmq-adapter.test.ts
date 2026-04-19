@@ -88,7 +88,7 @@ describe('BullMQ adapter — validation', () => {
 
   it('off() on a non-registered event is a no-op', () => {
     const bus = createBullMQAdapter({ connection: FAKE_CONNECTION });
-    const listener = (_p: { userId: string; sessionId: string }) => {};
+    const listener = () => {};
     expect(() => bus.off('auth:login', listener)).not.toThrow();
   });
 

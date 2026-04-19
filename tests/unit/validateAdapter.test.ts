@@ -140,7 +140,7 @@ describe('validateAdapterCapabilities', () => {
     expect(message).toContain('createGroup');
     expect(message).toContain('getEffectiveRoles');
     // All errors are in one message (not just the first)
-    const bulletCount = (message.match(/^  -/gm) ?? []).length;
+    const bulletCount = (message.match(/^ {2}-/gm) ?? []).length;
     expect(bulletCount).toBeGreaterThan(5);
   });
 

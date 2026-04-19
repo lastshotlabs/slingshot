@@ -17,7 +17,12 @@ import { resolveImageConfig } from './image/serve';
 import type { ImageCacheAdapter } from './image/types';
 import { assetManifest } from './manifest/assetManifest';
 import { createAssetsManifestRuntime } from './manifest/runtime';
-import type { AssetAdapter, AssetsPluginConfig, AssetsPluginState } from './types';
+import {
+  ASSETS_PLUGIN_STATE_KEY,
+  type AssetAdapter,
+  type AssetsPluginConfig,
+  type AssetsPluginState,
+} from './types';
 
 function isImageCacheAdapter(value: unknown): value is ImageCacheAdapter {
   if (typeof value !== 'object' || value === null) return false;
@@ -39,7 +44,7 @@ function isImageCacheAdapter(value: unknown): value is ImageCacheAdapter {
  */
 export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlugin {
   const config = Object.freeze(
-    validatePluginConfig('slingshot-assets', rawConfig, assetsPluginConfigSchema),
+    validatePluginConfig(ASSETS_PLUGIN_STATE_KEY, rawConfig, assetsPluginConfigSchema),
   );
   const mountPath = config.mountPath ?? '/assets';
   const storage = resolveStorageAdapter(config.storage);
@@ -72,7 +77,7 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
   });
 
   return {
-    name: 'slingshot-assets',
+    name: ASSETS_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth', 'slingshot-permissions'],
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
@@ -86,7 +91,7 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
         })();
 
       innerPlugin = createEntityPlugin({
-        name: 'slingshot-assets',
+        name: ASSETS_PLUGIN_STATE_KEY,
         mountPath,
         manifest: assetManifest,
         manifestRuntime,
@@ -108,7 +113,7 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
           storage,
           config,
         });
-        getPluginState(app).set('slingshot-assets', state);
+        getPluginState(app).set(ASSETS_PLUGIN_STATE_KEY, state);
       }
     },
 

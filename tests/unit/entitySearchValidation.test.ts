@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import { field } from '../../packages/slingshot-core/src/entityConfig';
 import { validateEntityConfig } from '../../packages/slingshot-entity/src/validation';
 
 // ---------------------------------------------------------------------------

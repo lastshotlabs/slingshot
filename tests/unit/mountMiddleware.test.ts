@@ -10,7 +10,7 @@
  * - Lines 239-244: mountCors with custom object options
  * - Lines 248-250: mountCors wildcard warning in production
  */
-import { describe, expect, it, mock, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { OpenAPIHono } from '@hono/zod-openapi';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { createMetricsState } from '../../src/framework/metrics/registry';
@@ -184,8 +184,9 @@ describe('mountFrameworkMiddleware', () => {
 describe('mountTenantMiddleware', () => {
   it('throws in production when tenancy has no onResolve (lines 200-201)', async () => {
     const app = makeApp();
+    const tenancy: never = { resolution: 'subdomain' } as never;
     await expect(
-      mountTenantMiddleware(app, { resolution: 'subdomain' } as never, undefined, true),
+      mountTenantMiddleware(app, tenancy, undefined, true),
     ).rejects.toThrow(
       '[security] Tenancy is configured without an onResolve callback.',
     );
@@ -195,7 +196,8 @@ describe('mountTenantMiddleware', () => {
     const app = makeApp();
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      await mountTenantMiddleware(app, { resolution: 'subdomain' } as never, undefined, false);
+      const tenancyDev: never = { resolution: 'subdomain' } as never;
+      await mountTenantMiddleware(app, tenancyDev, undefined, false);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('[security] Tenancy is configured without an onResolve callback'),
       );
@@ -206,13 +208,14 @@ describe('mountTenantMiddleware', () => {
 
   it('mounts tenant middleware when onResolve is provided', async () => {
     const app = makeApp();
+    const tenancyWithResolve: never = {
+      resolution: 'subdomain',
+      onResolve: () => Promise.resolve(null),
+    } as never;
     await expect(
       mountTenantMiddleware(
         app,
-        {
-          resolution: 'subdomain',
-          onResolve: () => Promise.resolve(null),
-        } as never,
+        tenancyWithResolve,
         undefined,
         false,
       ),

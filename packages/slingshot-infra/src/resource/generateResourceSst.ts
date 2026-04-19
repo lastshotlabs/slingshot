@@ -92,6 +92,35 @@ ${outputBlock}
 }
 
 /**
+ * Sanitize a resource name for use as a TypeScript identifier and SST output key prefix.
+ *
+ * Strips all characters that are not ASCII letters or digits. This is necessary
+ * because resource names from the infra config may contain hyphens, underscores,
+ * or other punctuation that are invalid in JavaScript variable names.
+ *
+ * @param name - The raw resource name (e.g. `'my-db'`, `'cache_01'`).
+ * @returns The sanitized name with only `[a-zA-Z0-9]` characters (e.g. `'mydb'`, `'cache01'`).
+ */
+export function sanitizeResourceName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9]/g, '');
+}
+
+/**
+ * Build the SST output key for a resource attribute.
+ *
+ * Provisioners and the generated `sst.config.ts` both use this helper so the
+ * output naming contract lives in one place instead of being reconstructed by
+ * string convention in multiple files.
+ *
+ * @param resourceName - Raw resource name from the infra config.
+ * @param attribute - Output suffix such as `'Host'`, `'Port'`, or `'Brokers'`.
+ * @returns The generated output key (e.g. `'mydbHost'`).
+ */
+export function getResourceOutputKey(resourceName: string, attribute: string): string {
+  return `${sanitizeResourceName(resourceName)}${attribute}`;
+}
+
+/**
  * Dispatch to the correct SST/Pulumi resource block generator for a single resource.
  *
  * @param resource - The resource entry describing the type and configuration.
@@ -126,7 +155,7 @@ function generateResourceBlock(resource: ResourceProvisionEntry): string {
  */
 function generatePostgresBlock(resource: ResourceProvisionEntry): string {
   const { min, max } = mapInstanceClassToAcu(resource.instanceClass ?? 'db.t3.micro');
-  const name = sanitizeName(resource.name);
+  const name = sanitizeResourceName(resource.name);
 
   return `    // --- section:resource-${resource.name} ---
     const ${name} = new sst.aws.Postgres("${capitalize(name)}", {
@@ -150,7 +179,7 @@ function generatePostgresBlock(resource: ResourceProvisionEntry): string {
  * @returns The TypeScript resource block string, including section markers.
  */
 function generateRedisBlock(resource: ResourceProvisionEntry): string {
-  const name = sanitizeName(resource.name);
+  const name = sanitizeResourceName(resource.name);
 
   return `    // --- section:resource-${resource.name} ---
     const ${name} = new sst.aws.Redis("${capitalize(name)}", {
@@ -171,7 +200,7 @@ function generateRedisBlock(resource: ResourceProvisionEntry): string {
  * @returns The TypeScript resource block string, including section markers.
  */
 function generateKafkaBlock(resource: ResourceProvisionEntry): string {
-  const name = sanitizeName(resource.name);
+  const name = sanitizeResourceName(resource.name);
   const instanceType = mapToKafkaInstanceType(resource.instanceClass ?? 'kafka.t3.small');
 
   return `    // --- section:resource-${resource.name} ---
@@ -206,7 +235,7 @@ function generateKafkaBlock(resource: ResourceProvisionEntry): string {
  * @returns The TypeScript resource block string, including section markers.
  */
 function generateMongoBlock(resource: ResourceProvisionEntry): string {
-  const name = sanitizeName(resource.name);
+  const name = sanitizeResourceName(resource.name);
   const instanceClass = resource.instanceClass ?? 'db.t3.medium';
 
   return `    // --- section:resource-${resource.name} ---
@@ -237,7 +266,7 @@ function generateMongoBlock(resource: ResourceProvisionEntry): string {
  * @returns The TypeScript resource block string, including section markers.
  */
 function generateDocumentDbBlock(resource: ResourceProvisionEntry): string {
-  const name = sanitizeName(resource.name);
+  const name = sanitizeResourceName(resource.name);
   const instanceClass = resource.instanceClass ?? 'db.t3.medium';
 
   return `    // --- section:resource-${resource.name} ---
@@ -273,33 +302,36 @@ function generateOutputLines(
   resource: ResourceProvisionEntry,
   opts: GenerateResourceSstOptions,
 ): string[] {
-  const name = sanitizeName(resource.name);
+  const name = sanitizeResourceName(resource.name);
 
   switch (resource.type) {
     case 'postgres':
       return [
-        `      ${name}Host: ${name}.host,`,
-        `      ${name}Port: ${name}.port,`,
-        `      ${name}Username: ${name}.username,`,
-        `      ${name}Password: ${name}.password,`,
-        `      ${name}Database: ${name}.database,`,
+        `      ${getResourceOutputKey(resource.name, 'Host')}: ${name}.host,`,
+        `      ${getResourceOutputKey(resource.name, 'Port')}: ${name}.port,`,
+        `      ${getResourceOutputKey(resource.name, 'Username')}: ${name}.username,`,
+        `      ${getResourceOutputKey(resource.name, 'Password')}: ${name}.password,`,
+        `      ${getResourceOutputKey(resource.name, 'Database')}: ${name}.database,`,
       ];
     case 'redis':
-      return [`      ${name}Host: ${name}.host,`, `      ${name}Port: ${name}.port,`];
+      return [
+        `      ${getResourceOutputKey(resource.name, 'Host')}: ${name}.host,`,
+        `      ${getResourceOutputKey(resource.name, 'Port')}: ${name}.port,`,
+      ];
     case 'kafka':
-      return [`      ${name}Brokers: ${name}Cluster.bootstrapBrokers,`];
+      return [`      ${getResourceOutputKey(resource.name, 'Brokers')}: ${name}Cluster.bootstrapBrokers,`];
     case 'mongo':
       return [
-        `      ${name}Endpoint: ${name}Cluster.endpoint,`,
-        `      ${name}Port: ${name}Cluster.port,`,
+        `      ${getResourceOutputKey(resource.name, 'Endpoint')}: ${name}Cluster.endpoint,`,
+        `      ${getResourceOutputKey(resource.name, 'Port')}: ${name}Cluster.port,`,
       ];
     case 'documentdb':
       return [
-        `      ${name}Host: ${name}Cluster.endpoint,`,
-        `      ${name}Port: ${name}Cluster.port,`,
-        `      ${name}Username: "admin",`,
-        `      ${name}Password: ${name}Password.value,`,
-        `      ${name}Database: "${opts.org}",`,
+        `      ${getResourceOutputKey(resource.name, 'Host')}: ${name}Cluster.endpoint,`,
+        `      ${getResourceOutputKey(resource.name, 'Port')}: ${name}Cluster.port,`,
+        `      ${getResourceOutputKey(resource.name, 'Username')}: "admin",`,
+        `      ${getResourceOutputKey(resource.name, 'Password')}: ${name}Password.value,`,
+        `      ${getResourceOutputKey(resource.name, 'Database')}: "${opts.org}",`,
       ];
     default:
       return [];
@@ -367,20 +399,6 @@ function mapToKafkaInstanceType(instanceClass: string): string {
     'cache.t3.micro': 'kafka.t3.small',
   };
   return mapping[instanceClass] ?? 'kafka.t3.small';
-}
-
-/**
- * Sanitize a resource name for use as a TypeScript identifier and SST component name.
- *
- * Strips all characters that are not ASCII letters or digits. This is necessary
- * because resource names from the infra config may contain hyphens, underscores,
- * or other punctuation that are invalid in JavaScript variable names.
- *
- * @param name - The raw resource name (e.g. `'my-db'`, `'cache_01'`).
- * @returns The sanitized name with only `[a-zA-Z0-9]` characters (e.g. `'mydb'`, `'cache01'`).
- */
-function sanitizeName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9]/g, '');
 }
 
 /**

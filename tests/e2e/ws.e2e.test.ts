@@ -140,8 +140,6 @@ describe('WebSocket E2E — room pub/sub', () => {
   });
 
   test('two clients: subscriber receives message published by server to room', async () => {
-    const received: any[] = [];
-
     handle = await createTestFullServer({
       ws: {
         endpoints: {
@@ -272,7 +270,7 @@ describe('WebSocket E2E — server error handler', () => {
         endpoints: {
           '/chat': {
             // Custom upgrade that always throws — triggers the Bun error() handler
-            upgrade: async (_req, _server) => {
+            upgrade: async () => {
               throw new Error('forced error for testing');
             },
           },
@@ -302,7 +300,7 @@ describe('WebSocket E2E — lifecycle hooks', () => {
         endpoints: {
           '/chat': {
             on: {
-              close: async (_socket, _code, _reason) => {
+              close: async () => {
                 closeFired.push('closed');
               },
             },
@@ -335,7 +333,7 @@ describe('WebSocket E2E — lifecycle hooks', () => {
         endpoints: {
           '/chat': {
             on: {
-              open: async _socket => {
+              open: async () => {
                 openFired.push('opened');
               },
             },
@@ -364,7 +362,6 @@ describe('WebSocket E2E — lifecycle hooks', () => {
 describe('WebSocket E2E — multiple endpoints', () => {
   test("endpoints are independent — subscriber on /chat doesn't receive /notifications traffic", async () => {
     const chatMessages: any[] = [];
-    const notifMessages: any[] = [];
 
     handle = await createTestFullServer({
       ws: {

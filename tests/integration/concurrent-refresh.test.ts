@@ -43,7 +43,7 @@ describe('concurrent refresh token rotation', () => {
       }),
     );
     expect(regRes.status).toBe(201);
-    const { refreshToken: rt1, token } = await regRes.json();
+    const { refreshToken: rt1 } = await regRes.json();
     expect(rt1).toBeString();
 
     // Fire two concurrent refresh requests with the same token

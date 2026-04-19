@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';

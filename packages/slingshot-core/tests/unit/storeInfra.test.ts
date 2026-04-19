@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { resolveRepo, resolveRepoAsync } from '../../src/storeInfra';
 import type { RepoFactories, StoreInfra } from '../../src/storeInfra';
 
-const mockInfra = {} as StoreInfra;
+const mockInfra: StoreInfra = {} as never;
 
 function makeFactories(results: Record<string, string>): RepoFactories<string> {
   return {

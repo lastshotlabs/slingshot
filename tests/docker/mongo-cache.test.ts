@@ -1,7 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import {
-  bustCache,
-  bustCachePattern,
   getCacheModel,
 } from '../../src/framework/middleware/cacheResponse';
 import {

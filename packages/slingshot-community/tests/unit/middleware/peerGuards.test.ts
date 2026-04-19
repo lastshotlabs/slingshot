@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import { attachContext } from '@lastshotlabs/slingshot-core';
+import {
+  ASSETS_PLUGIN_STATE_KEY,
+  POLLS_PLUGIN_STATE_KEY,
+  attachContext,
+} from '@lastshotlabs/slingshot-core';
 import {
   buildAttachmentRequiredGuard,
   buildPollRequiredGuard,
@@ -9,8 +13,8 @@ import {
 function buildApp(opts: { hasPolls?: boolean; hasAssets?: boolean }) {
   const app = new Hono() as unknown as Parameters<typeof buildPollRequiredGuard>[0];
   const pluginState = new Map<string, unknown>();
-  if (opts.hasPolls) pluginState.set('slingshot-polls', {});
-  if (opts.hasAssets) pluginState.set('slingshot-assets', {});
+  if (opts.hasPolls) pluginState.set(POLLS_PLUGIN_STATE_KEY, {});
+  if (opts.hasAssets) pluginState.set(ASSETS_PLUGIN_STATE_KEY, {});
 
   attachContext(app, {
     app,

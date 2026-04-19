@@ -575,12 +575,13 @@ describe('DELETE /auth/me', () => {
 
   test('emits security.auth.account.deleted event', async () => {
     const emitted: Array<{ event: string; payload: unknown }> = [];
-    runtime.eventBus = {
+    const eventBus: ReturnType<typeof makeEventBus> = {
       ...makeEventBus(),
       emit: ((event: string, payload: unknown) => {
         emitted.push({ event, payload });
       }) as ReturnType<typeof makeEventBus>['emit'],
-    } as ReturnType<typeof makeEventBus>;
+    };
+    runtime.eventBus = eventBus;
     app = buildApp(runtime);
 
     const { token, userId } = await seedAndLogin(app, runtime);

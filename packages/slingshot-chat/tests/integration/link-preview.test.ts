@@ -125,7 +125,7 @@ describe('Link preview attachment', () => {
 
   it('does not fail when the embeds provider throws', async () => {
     const failingEmbeds = {
-      async unfurl(_urls: string[]): Promise<MockEmbedData[]> {
+      async unfurl(): Promise<MockEmbedData[]> {
         throw new Error('Embeds provider unavailable');
       },
     };

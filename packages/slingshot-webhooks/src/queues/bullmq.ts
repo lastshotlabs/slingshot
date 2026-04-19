@@ -5,6 +5,7 @@ import type {
   Worker as BullWorker,
 } from 'bullmq';
 import type { Redis } from 'ioredis';
+import { WEBHOOKS_PLUGIN_STATE_KEY } from '../types/public';
 import type { WebhookJob, WebhookQueue } from '../types/queue';
 import { WebhookDeliveryError } from '../types/queue';
 
@@ -30,7 +31,7 @@ interface BullMQWebhookQueueConfig {
    * a Redis URL string (e.g. `"redis://localhost:6379"`).
    */
   redis: { host: string; port?: number; password?: string } | string;
-  /** BullMQ queue name. Default: `'slingshot-webhooks'`. */
+  /** BullMQ queue name. Default: `WEBHOOKS_PLUGIN_STATE_KEY`. */
   queueName?: string;
   /**
    * Maximum number of delivery attempts before a job is dead-lettered.
@@ -94,7 +95,7 @@ function requireJobId(id: string | number | undefined | null): string {
  * ```
  */
 export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): WebhookQueue {
-  const queueName = config.queueName ?? 'slingshot-webhooks';
+  const queueName = config.queueName ?? WEBHOOKS_PLUGIN_STATE_KEY;
   const maxAttempts = config.maxAttempts ?? 5;
   const retryBaseDelayMs = config.retryBaseDelayMs ?? 1000;
   let queue: BullQueue | null = null;

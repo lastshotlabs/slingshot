@@ -76,9 +76,19 @@ export function createManifestHandlerRegistry(): ManifestHandlerRegistry {
     return entry;
   }
 
+  function registerUnique<T>(map: Map<string, T>, name: string, value: T, kind: string): void {
+    if (map.has(name)) {
+      throw new Error(
+        `[ManifestHandlerRegistry] Duplicate ${kind} "${name}" registration. ` +
+          'Registry names must be unique.',
+      );
+    }
+    map.set(name, value);
+  }
+
   return {
     registerHandler(name, factory) {
-      handlers.set(name, factory);
+      registerUnique(handlers, name, factory, 'handler');
     },
     resolveHandler(name, params) {
       return require(handlers, name, 'handler')(params);
@@ -88,7 +98,7 @@ export function createManifestHandlerRegistry(): ManifestHandlerRegistry {
     },
 
     registerPlugin(name, factory) {
-      plugins.set(name, factory);
+      registerUnique(plugins, name, factory, 'plugin');
     },
     resolvePlugin(name, config) {
       return require(plugins, name, 'plugin')(config);
@@ -98,7 +108,7 @@ export function createManifestHandlerRegistry(): ManifestHandlerRegistry {
     },
 
     registerEventBus(name, factory) {
-      eventBuses.set(name, factory);
+      registerUnique(eventBuses, name, factory, 'event bus');
     },
     resolveEventBus(name, config) {
       return require(eventBuses, name, 'event bus')(config);
@@ -108,14 +118,14 @@ export function createManifestHandlerRegistry(): ManifestHandlerRegistry {
     },
 
     registerSecretProvider(name, factory) {
-      secretProviders.set(name, factory);
+      registerUnique(secretProviders, name, factory, 'secret provider');
     },
     resolveSecretProvider(name, config) {
       return require(secretProviders, name, 'secret provider')(config);
     },
 
     registerHook(name, hook) {
-      hooks.set(name, hook);
+      registerUnique(hooks, name, hook, 'hook');
     },
     resolveHook(name) {
       return require(hooks, name, 'hook');

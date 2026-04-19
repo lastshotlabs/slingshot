@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { type E2EServerHandle, createCookieJar, createTestHttpServer } from '../setup-e2e';
 
 let handle: E2EServerHandle;

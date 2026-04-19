@@ -45,9 +45,10 @@ describe('deriveRequiredSecrets', () => {
   });
 
   test('requires postgres apps to provide only redis secrets by default', () => {
-    const result = deriveRequiredSecrets({
+    const input: Parameters<typeof deriveRequiredSecrets>[0] & { postgres: string } = {
       postgres: 'postgres://user:pass@localhost:5432/app',
-    } as Parameters<typeof deriveRequiredSecrets>[0] & { postgres: string });
+    } as Parameters<typeof deriveRequiredSecrets>[0] & { postgres: string };
+    const result = deriveRequiredSecrets(input);
 
     expect(result.required).toContain('REDIS_HOST');
     expect(result.required).not.toContain('MONGO_USER');

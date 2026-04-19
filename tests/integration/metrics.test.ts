@@ -2,7 +2,6 @@ import { AUTH_RUNTIME_KEY } from '@auth/runtime';
 import type { AuthRuntimeContext } from '@auth/runtime';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { getContext } from '@lastshotlabs/slingshot-core';
 import { authHeader, createTestApp } from '../setup';
 
 function getRuntime(app: any): AuthRuntimeContext {

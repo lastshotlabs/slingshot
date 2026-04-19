@@ -168,9 +168,11 @@ export type { AuthVariables } from './authVariables';
 export type { AuthRuntimePeer } from './authPeer';
 export { AUTH_PLUGIN_STATE_KEY, getAuthRuntimePeer, getAuthRuntimePeerOrNull } from './authPeer';
 export {
+  ASSETS_PLUGIN_STATE_KEY,
   CHAT_PLUGIN_STATE_KEY,
   COMMUNITY_PLUGIN_STATE_KEY,
   EMBEDS_PLUGIN_STATE_KEY,
+  POLLS_PLUGIN_STATE_KEY,
   PUSH_PLUGIN_STATE_KEY,
 } from './pluginKeys';
 

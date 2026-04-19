@@ -1,7 +1,7 @@
 import type { BearerAuthClient } from '@auth/config/authConfig';
 import { createBearerAuth } from '@auth/middleware/bearerAuth';
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 /**
  * Build a minimal Hono app with bearerAuth applied globally,

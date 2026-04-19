@@ -57,13 +57,13 @@ describe('createSlingshotAuthAccessProvider — verifyRequest', () => {
   });
 
   test('returns AdminPrincipal with roles when user is found', async () => {
-    mockAdapter.getUser = async (_id: string) => ({
+    mockAdapter.getUser = async () => ({
       id: 'user-1',
       email: 'alice@example.com',
       displayName: 'Alice',
       suspended: false,
     });
-    mockAdapter.getRoles = async (_id: string) => ['admin', 'editor'];
+    mockAdapter.getRoles = async () => ['admin', 'editor'];
 
     const provider = createSlingshotAuthAccessProvider();
     const result = await provider.verifyRequest(makeContext(mockAdapter as AuthAdapter, 'user-1'));
@@ -78,7 +78,7 @@ describe('createSlingshotAuthAccessProvider — verifyRequest', () => {
   });
 
   test('returns empty roles array when adapter.getRoles is not implemented', async () => {
-    mockAdapter.getUser = async (_id: string) => ({
+    mockAdapter.getUser = async () => ({
       id: 'user-2',
       email: 'bob@example.com',
       suspended: false,

@@ -312,7 +312,7 @@ describe('buildContext lifecycle', () => {
     const secretDestroy = overrides?.secretDestroy ?? mock(async () => {});
     const app = createRouter();
     const entityRegistry = createEntityRegistry();
-    const infra = {
+    const infra: Parameters<typeof buildContext>[0]['infra'] = {
       frameworkConfig: {
         entityRegistry,
         trustProxy: false,
@@ -483,7 +483,7 @@ describe('buildContext lifecycle', () => {
   test('locks context store infra except for the reindex source slot', async () => {
     const { ctx } = await createDirectContext();
     const storeInfra = getContextStoreInfra(ctx);
-    const replacement = (_storageName: string) => null;
+    const replacement = () => null;
 
     expect(storeInfra).not.toBeNull();
     expect(Object.isExtensible(storeInfra)).toBe(false);

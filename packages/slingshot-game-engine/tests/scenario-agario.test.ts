@@ -41,11 +41,9 @@ import {
   setScore,
 } from '../src/lib/scoring';
 import {
-  type JsonPatchOp,
   applyPatches,
   deepCloneState,
   diffState,
-  validateJsonSerializable,
 } from '../src/lib/state';
 import type { ReadonlyHandlerContext } from '../src/types/models';
 

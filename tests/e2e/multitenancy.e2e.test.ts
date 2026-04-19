@@ -4,7 +4,7 @@
  * Spins up a real Bun HTTP server (via createTestHttpServer) and exercises
  * tenant resolution, scoping, and rejection over real HTTP using fetch().
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { type E2EServerHandle, createTestHttpServer } from '../setup-e2e';
 
 // ---------------------------------------------------------------------------

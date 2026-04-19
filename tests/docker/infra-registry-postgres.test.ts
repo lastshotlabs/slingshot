@@ -205,7 +205,7 @@ describe('createPostgresRegistry (docker)', () => {
     };
 
     // Write with etag from lock
-    const { etag: newEtag } = await registry.write(doc!, lock.etag);
+    await registry.write(doc!, lock.etag);
     await lock.release();
 
     // Verify

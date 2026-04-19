@@ -2,6 +2,7 @@ export { createWebhookPlugin } from './plugin';
 export { webhooksManifest } from './manifest/webhooksManifest';
 export { WEBHOOK_ROUTES } from './routes/index';
 export type { WebhookRoute } from './routes/index';
+export { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 
 export { webhookPluginConfigSchema } from './types/config';
 export type { WebhookPluginConfig } from './types/config';

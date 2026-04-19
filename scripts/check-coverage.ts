@@ -1,5 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { type CoverageSuite, coverageArtifactPath, coverageSuites } from './coverage-suites';
+import {
+  discoverOwnedFiles,
+  fileNeedsRuntimeCoverage,
+  parseLcov,
+  type CoverageFileSummary,
+} from './coverage-lcov';
+import { type CoverageSuite, coverageArtifactPath, coverageSuites } from './workspace-test-suites';
 
 interface CoverageSummary {
   linesFound: number;
@@ -8,29 +14,8 @@ interface CoverageSummary {
   functionsHit: number;
   branchesFound: number;
   branchesHit: number;
-}
-
-function parseLcovSummary(path: string): CoverageSummary {
-  const summary: CoverageSummary = {
-    linesFound: 0,
-    linesHit: 0,
-    functionsFound: 0,
-    functionsHit: 0,
-    branchesFound: 0,
-    branchesHit: 0,
-  };
-
-  const content = readFileSync(path, 'utf8');
-  for (const rawLine of content.split(/\r?\n/)) {
-    if (rawLine.startsWith('LF:')) summary.linesFound += Number(rawLine.slice(3));
-    if (rawLine.startsWith('LH:')) summary.linesHit += Number(rawLine.slice(3));
-    if (rawLine.startsWith('FNF:')) summary.functionsFound += Number(rawLine.slice(4));
-    if (rawLine.startsWith('FNH:')) summary.functionsHit += Number(rawLine.slice(4));
-    if (rawLine.startsWith('BRF:')) summary.branchesFound += Number(rawLine.slice(4));
-    if (rawLine.startsWith('BRH:')) summary.branchesHit += Number(rawLine.slice(4));
-  }
-
-  return summary;
+  ownedFiles: number;
+  missingFiles: string[];
 }
 
 function percent(hit: number, found: number): number {
@@ -57,13 +42,56 @@ function readThreshold(
   return Number.isFinite(value) ? value : null;
 }
 
+function summarizeCoverage(
+  ownedFiles: string[],
+  fileCoverage: Map<string, CoverageFileSummary>,
+): CoverageSummary {
+  const runtimeOwnedFiles = ownedFiles.filter(fileNeedsRuntimeCoverage);
+  const summary: CoverageSummary = {
+    linesFound: 0,
+    linesHit: 0,
+    functionsFound: 0,
+    functionsHit: 0,
+    branchesFound: 0,
+    branchesHit: 0,
+    ownedFiles: runtimeOwnedFiles.length,
+    missingFiles: [],
+  };
+
+  for (const file of runtimeOwnedFiles) {
+    const entry = fileCoverage.get(file);
+    if (!entry) {
+      summary.missingFiles.push(file);
+      continue;
+    }
+
+    summary.linesFound += entry.linesFound;
+    summary.linesHit += entry.linesHit;
+    summary.functionsFound += entry.functionsFound;
+    summary.functionsHit += entry.functionsHit;
+    summary.branchesFound += entry.branchesFound;
+    summary.branchesHit += entry.branchesHit;
+  }
+
+  return summary;
+}
+
 function assertNonEmptyCoverage(suite: CoverageSuite, summary: CoverageSummary): string[] {
   const failures: string[] = [];
+  if (summary.ownedFiles === 0) {
+    failures.push(`${suite.name}: no owned files matched ${suite.ownedGlobs.join(', ')}`);
+  }
   if (summary.linesFound === 0) {
     failures.push(`${suite.name}: no executable lines were captured`);
   }
   if (summary.functionsFound === 0) {
     failures.push(`${suite.name}: no functions were captured`);
+  }
+  if (summary.missingFiles.length > 0) {
+    const preview = summary.missingFiles.slice(0, 5).join(', ');
+    failures.push(
+      `${suite.name}: ${summary.missingFiles.length} owned file(s) were never loaded under coverage${preview ? ` (${preview})` : ''}`,
+    );
   }
   return failures;
 }
@@ -110,10 +138,13 @@ for (const suite of coverageSuites) {
     continue;
   }
 
-  const summary = parseLcovSummary(artifact);
+  const ownedFiles = await discoverOwnedFiles(suite);
+  const report = parseLcov(artifact);
+  const summary = summarizeCoverage(ownedFiles, report.files);
   console.log(
     [
       `${suite.name}:`,
+      `owned files ${summary.ownedFiles}`,
       `lines ${formatPercent(summary.linesHit, summary.linesFound)}`,
       `functions ${formatPercent(summary.functionsHit, summary.functionsFound)}`,
       `branches ${formatPercent(summary.branchesHit, summary.branchesFound)}`,

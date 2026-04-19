@@ -39,7 +39,7 @@ describe('concurrent session creation at maxSessions limit', () => {
       }),
     );
     expect(regRes.status).toBe(201);
-    const { token: regToken } = await regRes.json();
+    await regRes.json();
 
     // Login to create session 2
     const login1 = await app.request(

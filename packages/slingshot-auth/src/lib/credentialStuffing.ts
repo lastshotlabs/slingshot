@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await */
+ 
 import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { RedisLike } from '../types/redis';

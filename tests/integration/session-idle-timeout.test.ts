@@ -7,7 +7,7 @@
 import { AUTH_RUNTIME_KEY } from '@auth/runtime';
 import type { AuthRuntimeContext } from '@auth/runtime';
 import type { OpenAPIHono } from '@hono/zod-openapi';
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { authHeader, createTestApp } from '../setup';
 
 const json = (body: Record<string, unknown>) => ({
@@ -66,8 +66,7 @@ describe('session idle timeout', () => {
     const repo = getSessionRepo(app);
 
     // Manually backdate lastActiveAt so the session is considered idle-expired
-    const sessions = await repo.getUserSessions(userId);
-    const sessionId = sessions[0].sessionId;
+    await repo.getUserSessions(userId);
     // Simulate time passing by directly calling updateSessionLastActive with a stale time
     // We achieve this by manipulating the in-memory store via a private helper:
     // Instead, create a fresh session with a backdated lastActiveAt by using the raw store.

@@ -11,10 +11,10 @@ function createMockKv(): KvNamespace & { _store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
     _store: store,
-    async get(key: string, _opts: { type: 'text' }): Promise<string | null> {
+    async get(key: string): Promise<string | null> {
       return store.get(key) ?? null;
     },
-    async put(key: string, value: string, _opts?: { expirationTtl?: number }): Promise<void> {
+    async put(key: string, value: string): Promise<void> {
       store.set(key, value);
     },
     async delete(key: string): Promise<void> {

@@ -39,7 +39,7 @@ interface HttpResponse<T = unknown> {
   readonly data: T | undefined;
 }
 
-/* eslint-disable @typescript-eslint/no-unnecessary-type-parameters */
+ 
 interface HttpClient {
   get<T>(path: string): Promise<{ readonly status: number; readonly data: T }>;
   post<T>(path: string, body?: unknown): Promise<{ readonly status: number; readonly data: T }>;
@@ -47,7 +47,7 @@ interface HttpClient {
   delete<T>(path: string, body?: unknown): Promise<{ readonly status: number; readonly data: T }>;
   send<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>>;
 }
-/* eslint-enable @typescript-eslint/no-unnecessary-type-parameters */
+ 
 
 function createHttpClient(config: HttpClientConfig) {
   const { applicationId, apiKey, timeoutMs, retries, retryDelayMs } = config;

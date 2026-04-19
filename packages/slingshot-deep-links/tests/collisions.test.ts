@@ -1,7 +1,7 @@
 /**
  * Tests for warnOnPathCollisions.
  */
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import { warnOnPathCollisions } from '../src/collisions';
 import type { DeepLinksConfig } from '../src/config';

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { authHeader, createTestApp } from '../setup';
 
 const json = (body: unknown) => ({

@@ -116,8 +116,9 @@ function stripBunExportCondition(
   const cleaned: Record<string, unknown> = {};
   for (const [entrypoint, conditions] of Object.entries(exports)) {
     if (typeof conditions === 'object' && conditions !== null && !Array.isArray(conditions)) {
-      const { bun: _, ...rest } = conditions as Record<string, unknown>;
-      cleaned[entrypoint] = rest;
+      const copy = { ...(conditions as Record<string, unknown>) };
+      delete copy['bun'];
+      cleaned[entrypoint] = copy;
     } else {
       cleaned[entrypoint] = conditions;
     }

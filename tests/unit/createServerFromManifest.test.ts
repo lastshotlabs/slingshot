@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import { mkdirSync, writeFileSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
@@ -741,14 +741,12 @@ describe('createServerFromManifest', () => {
       });
       const path = writeTempManifest(manifest);
 
-      let capturedConfig: Record<string, unknown> | undefined;
       const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(
-        (config?: Record<string, unknown>) => {
-          capturedConfig = config;
+        () => {
           return makePlugin('mock-plugin');
         },
       );
-      const serverSpy = spyOn(serverModule, 'createServer').mockImplementation(config => {
+      const serverSpy = spyOn(serverModule, 'createServer').mockImplementation(() => {
         return Promise.resolve(makeTestServer());
       });
 

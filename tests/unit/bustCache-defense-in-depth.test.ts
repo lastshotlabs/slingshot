@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { attachContext, createRouter } from '@lastshotlabs/slingshot-core';
 import type { CacheAdapter } from '@lastshotlabs/slingshot-core';
 

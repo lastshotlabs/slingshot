@@ -75,7 +75,7 @@ describe('InProcessAdapter (createInProcessAdapter)', () => {
 
   test('shutdown waits for in-flight async listeners before resolving', async () => {
     const bus = createInProcessAdapter();
-    const blocker = Promise.withResolvers<void>();
+    const blocker = Promise.withResolvers<undefined>();
     let finished = false;
 
     bus.on('app:ready', async () => {

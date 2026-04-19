@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { Secret, TOTP } from 'otpauth';
 import { HttpError } from '@lastshotlabs/slingshot-core';
-import { createLoginRouter } from '../../src/routes/login';
 import { createMfaRouter } from '../../src/routes/mfa';
 import { makeEventBus, makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
 import type { MutableTestRuntime } from '../helpers/runtime';
@@ -22,22 +21,6 @@ function buildApp(runtime: MutableTestRuntime) {
       (err instanceof HttpError ? err.status : 500) as ContentfulStatusCode,
     ),
   );
-  app.route('/', createMfaRouter({}, runtime));
-  return app;
-}
-
-/**
- * Build an app that also mounts the login router (for MFA-verify flow testing).
- */
-function buildAppWithLogin(runtime: MutableTestRuntime) {
-  const app = wrapWithRuntime(runtime);
-  app.onError((err, c) =>
-    c.json(
-      { error: err.message },
-      (err instanceof HttpError ? err.status : 500) as ContentfulStatusCode,
-    ),
-  );
-  app.route('/', createLoginRouter({ primaryField: 'email' }, runtime));
   app.route('/', createMfaRouter({}, runtime));
   return app;
 }

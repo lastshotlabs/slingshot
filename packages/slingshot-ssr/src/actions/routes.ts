@@ -58,7 +58,8 @@ export interface ActionRouterConfig {
    * `withActionContext()`. When omitted, those ambient calls throw with a
    * clear error explaining that ISR is not configured.
    *
-   * Pass the `IsrInvalidators` stored in `pluginState` under `'slingshot-ssr:isr'`.
+   * Pass the `IsrInvalidators` stored in `pluginState` under
+   * `SSR_ISR_INVALIDATORS_STATE_KEY`.
    */
   readonly isrInvalidators?: ActionIsrInvalidators;
 }

@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs';
-import { coverageSuites } from './coverage-suites';
+import { filterLcovToOwnedFiles } from './coverage-lcov';
+import { coverageArtifactPath, coverageSuites } from './workspace-test-suites';
 
 const repoRoot = process.cwd();
 
@@ -21,4 +22,5 @@ rmSync('coverage', { recursive: true, force: true });
 
 for (const suite of coverageSuites) {
   await runSuite(suite.name, suite.command);
+  await filterLcovToOwnedFiles(coverageArtifactPath(suite), suite);
 }

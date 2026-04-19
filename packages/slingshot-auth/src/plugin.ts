@@ -241,7 +241,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
               entry.endsWith('*') ? path.startsWith(entry.slice(0, -1)) : path === entry,
             );
             if (bypassed) return next();
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Hono's generic Context intentionally widens the env parameter
+             
             return bearerAuthMiddleware(c as Context<AppEnv>, next);
           });
         }

@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { MiddlewareHandler } from 'hono';
 import type {
-  NotificationsPeerState,
   PluginSetupContext,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';

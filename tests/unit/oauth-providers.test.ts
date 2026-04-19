@@ -2,39 +2,41 @@ import { createOAuthProviders, getConfiguredOAuthProviders } from '@auth/lib/oau
 import type { OAuthProviderConfig } from '@auth/lib/oauth';
 import { describe, expect, test } from 'bun:test';
 
+/* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/naming-convention */
 // Type-level checks: verify all new provider config shapes are present in OAuthProviderConfig
-type AssertExtends<T, _U extends T> = true;
+type AssertExtends<T, U extends T> = true;
 
 // linkedin
-type _LinkedInConfig = AssertExtends<
+type LinkedInConfig = AssertExtends<
   OAuthProviderConfig['linkedin'],
   { clientId: string; clientSecret: string; redirectUri: string } | undefined
 >;
 
 // twitter (clientSecret is string | null for public clients)
-type _TwitterConfig = AssertExtends<
+type TwitterConfig = AssertExtends<
   OAuthProviderConfig['twitter'],
   { clientId: string; clientSecret: string | null; redirectUri: string } | undefined
 >;
 
 // gitlab (baseUrl is optional — defaults to gitlab.com)
-type _GitLabConfig = AssertExtends<
+type GitLabConfig = AssertExtends<
   OAuthProviderConfig['gitlab'],
   | { baseUrl?: string; clientId: string; clientSecret: string | null; redirectUri: string }
   | undefined
 >;
 
 // slack (redirectUri is string | null)
-type _SlackConfig = AssertExtends<
+type SlackConfig = AssertExtends<
   OAuthProviderConfig['slack'],
   { clientId: string; clientSecret: string; redirectUri: string | null } | undefined
 >;
 
 // bitbucket
-type _BitbucketConfig = AssertExtends<
+type BitbucketConfig = AssertExtends<
   OAuthProviderConfig['bitbucket'],
   { clientId: string; clientSecret: string; redirectUri: string } | undefined
 >;
+/* eslint-enable @typescript-eslint/no-unused-vars, @typescript-eslint/naming-convention */
 
 describe('OAuth provider config types', () => {
   test('OAuthProviderConfig accepts all new provider keys', () => {

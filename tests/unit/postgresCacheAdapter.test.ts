@@ -165,7 +165,7 @@ describe('postgresCacheAdapter', () => {
     const originalSetInterval = globalThis.setInterval;
     const mockTimer = { unref: () => {} };
 
-    globalThis.setInterval = (fn: TimerHandler, _delay?: number, ..._args: unknown[]) => {
+    globalThis.setInterval = (fn: TimerHandler) => {
       capturedCallback = fn as () => Promise<void>;
       return mockTimer as unknown as ReturnType<typeof setInterval>;
     };
@@ -196,7 +196,7 @@ describe('postgresCacheAdapter', () => {
     const originalSetInterval = globalThis.setInterval;
     const mockTimer = { unref: () => {} };
 
-    globalThis.setInterval = (fn: TimerHandler, _delay?: number, ..._args: unknown[]) => {
+    globalThis.setInterval = (fn: TimerHandler) => {
       capturedCallback = fn as () => Promise<void>;
       return mockTimer as unknown as ReturnType<typeof setInterval>;
     };

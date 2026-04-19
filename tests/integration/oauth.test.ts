@@ -3,7 +3,7 @@ import type { OAuthCodeRepository } from '@auth/lib/oauthCode';
 import { getAuthRuntimeContext } from '@auth/runtime';
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { getContext } from '@lastshotlabs/slingshot-core';
-import { authHeader, createTestApp } from '../setup';
+import { createTestApp } from '../setup';
 
 let app: any;
 let oauthCodeRepo: OAuthCodeRepository;

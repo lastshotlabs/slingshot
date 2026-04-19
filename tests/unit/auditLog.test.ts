@@ -384,9 +384,12 @@ describe('createAuditLogFactories', () => {
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     const factories = createAuditLogFactories();
     // Minimal mock connection — createMongoAuditLogProvider only needs conn
-    const mockConn = {
-      models: {} as Record<string, unknown>,
-      model: (_name: string, _schema: unknown) => ({
+    const mockConn: {
+      models: Record<string, unknown>;
+      model: (...args: unknown[]) => unknown;
+    } = {
+      models: {},
+      model: () => ({
         create: async () => {},
         find: () => ({ sort: () => ({ limit: () => ({ lean: async () => [] }) }) }),
       }),
@@ -434,7 +437,7 @@ describe('getAuditLogModel', () => {
     // Mock connection
     const mockConn = {
       models: {} as Record<string, unknown>,
-      model: mock((_name: string, _schema: unknown) => {
+      model: mock(() => {
         mockConn.models['AuditLog'] = mockModel;
         return mockModel;
       }),

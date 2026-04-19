@@ -18,7 +18,7 @@ const baseConfig = {
 
 describe('SlingshotContext middleware', () => {
   test("c.get('slingshotCtx') returns the SlingshotContext in a route handler", async () => {
-    const { app, ctx } = await createApp(baseConfig);
+    const { app } = await createApp(baseConfig);
 
     // Add a test route that reads the context
     const router = createRouter();

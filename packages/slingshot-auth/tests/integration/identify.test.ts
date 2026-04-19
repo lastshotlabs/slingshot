@@ -28,10 +28,11 @@ function buildApp(signingOverride?: Record<string, unknown>) {
   const signing = signingOverride ?? runtime.signing;
   const app = new Hono<AppEnv>();
   app.use('*', async (c, next) => {
-    c.set('slingshotCtx', {
+    const ctxPartial = {
       signing,
       pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
-    } as SlingshotContext);
+    };
+    c.set('slingshotCtx', ctxPartial as SlingshotContext);
     await next();
   });
   app.use('*', createIdentifyMiddleware(runtime));
@@ -273,7 +274,7 @@ describe('session fingerprint binding', () => {
 
   test('matching fingerprint on subsequent request — authenticated', async () => {
     const app = buildFingerprintApp('unauthenticate');
-    const { userId, sessionId, token } = await createAuthenticatedSession();
+    const { userId, token } = await createAuthenticatedSession();
 
     // First request sets the fingerprint
     await app.request('/test', {
@@ -293,7 +294,7 @@ describe('session fingerprint binding', () => {
 
   test('onMismatch=unauthenticate — mismatched UA clears identity', async () => {
     const app = buildFingerprintApp('unauthenticate');
-    const { sessionId, token } = await createAuthenticatedSession();
+    const { token } = await createAuthenticatedSession();
 
     // First request sets fingerprint with UA-A
     await app.request('/test', {
@@ -359,10 +360,8 @@ describe('session fingerprint binding', () => {
 describe('passthrough behavior', () => {
   test('middleware never short-circuits — always calls next()', async () => {
     const app = buildApp();
-    let handlerCalled = false;
     // Replace the test handler to track execution
     app.get('/passthrough', c => {
-      handlerCalled = true;
       return c.json({ ok: true });
     });
     // Mount identify on this path too

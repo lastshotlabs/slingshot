@@ -5,7 +5,7 @@
  *   GET    /auth/sessions           → { sessions: [{ sessionId, isActive, ... }] }
  *   DELETE /auth/sessions/:sessionId → 200
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { type E2EServerHandle, createTestHttpServer } from '../setup-e2e';
 
 let handle: E2EServerHandle;
@@ -103,7 +103,7 @@ describe('GET /auth/sessions — E2E', () => {
 describe('DELETE /auth/sessions/:sessionId — E2E', () => {
   test('revokes a specific session — that token becomes invalid', async () => {
     const { token: token1 } = await register('sessions-revoke@example.com');
-    const { token: token2 } = await login('sessions-revoke@example.com');
+    await login('sessions-revoke@example.com');
 
     // List sessions
     const listRes = await getSessions(token1);
@@ -140,7 +140,7 @@ describe('DELETE /auth/sessions/:sessionId — E2E', () => {
 
   test('revoked session token is rejected by /auth/me', async () => {
     const { token: token1 } = await register('sessions-invalidate@example.com');
-    const { token: token2 } = await login('sessions-invalidate@example.com');
+    await login('sessions-invalidate@example.com');
 
     // List sessions with token1 to get session IDs
     const listRes = await getSessions(token1);

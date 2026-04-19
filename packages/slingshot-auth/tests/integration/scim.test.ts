@@ -105,7 +105,7 @@ describe('SCIM deprovisioning modes', () => {
 
   test('onDeprovision=custom function — custom handler is called with the userId, returns 204', async () => {
     const userId = await seedUser(runtime, 'carol@example.com');
-    const customFn = mock(async (_userId: string) => {});
+    const customFn = mock(async () => {});
     runtime = {
       ...runtime,
       config: {

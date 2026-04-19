@@ -56,8 +56,10 @@ describe('wireSecurityEventConfig', () => {
     wireSecurityEventConfig(bus, { onEvent });
 
     // Emit every security event and verify onEvent is called for each
+    const emptyObj = {};
+    const emptyPayload = emptyObj as never;
     for (const eventType of SECURITY_EVENT_TYPES) {
-      bus.emit(eventType, {} as never);
+      bus.emit(eventType, emptyPayload);
     }
 
     expect(onEvent).toHaveBeenCalledTimes(SECURITY_EVENT_TYPES.length);
@@ -237,7 +239,9 @@ describe('wireSecurityEventConfig', () => {
 
   it('is a no-op when cfg has no onEvent', () => {
     const bus = new InProcessAdapter();
-    wireSecurityEventConfig(bus, {} as SecurityEventsConfig);
+    const cfgObj = {};
+    const emptyCfg = cfgObj as SecurityEventsConfig;
+    wireSecurityEventConfig(bus, emptyCfg);
     bus.emit('security.auth.login.success', { userId: 'u1' });
   });
 
@@ -293,8 +297,10 @@ describe('wireSecurityEventConfig', () => {
       onEvent: e => wiredEvents.add(e.eventType),
     });
 
+    const emptyObj = {};
+    const emptyPayload = emptyObj as never;
     for (const eventType of SECURITY_EVENT_TYPES) {
-      bus.emit(eventType, {} as never);
+      bus.emit(eventType, emptyPayload);
     }
 
     for (const eventType of SECURITY_EVENT_TYPES) {
@@ -312,8 +318,10 @@ describe('wireSecurityEventConfig', () => {
     const events: SecurityEvent[] = [];
     wireSecurityEventConfig(bus, { onEvent: e => events.push(e) });
 
+    const emptyObj = {};
+    const emptyPayload = emptyObj as never;
     for (const eventType of SECURITY_EVENT_TYPES) {
-      bus.emit(eventType, {} as never);
+      bus.emit(eventType, emptyPayload);
     }
 
     for (const event of events) {
@@ -362,8 +370,10 @@ describe('wireSecurityEventConfig', () => {
       include: [],
     });
 
+    const emptyObj = {};
+    const emptyPayload = emptyObj as never;
     for (const eventType of SECURITY_EVENT_TYPES) {
-      bus.emit(eventType, {} as never);
+      bus.emit(eventType, emptyPayload);
     }
 
     expect(events).toHaveLength(SECURITY_EVENT_TYPES.length);

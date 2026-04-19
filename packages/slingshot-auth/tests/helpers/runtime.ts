@@ -139,10 +139,11 @@ export function makeTestRuntime(
 export function wrapWithRuntime(runtime: AuthRuntimeContext): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
   app.use('*', async (c, next) => {
-    c.set('slingshotCtx', {
+    const ctxPartial = {
       signing: runtime.signing,
       pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
-    } as SlingshotContext);
+    };
+    c.set('slingshotCtx', ctxPartial as SlingshotContext);
     await next();
   });
   return app;

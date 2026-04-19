@@ -13,7 +13,7 @@ import {
 // ---------------------------------------------------------------------------
 
 function fakeContext(vars: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
-  return {
+  const ctx = {
     get(key: string) {
       return vars[key];
     },
@@ -26,7 +26,8 @@ function fakeContext(vars: Record<string, unknown> = {}, headers: Record<string,
       },
     },
     env: {},
-  } as never; // opaque cast — strategies only read context variables and headers
+  };
+  return ctx as never; // opaque cast — strategies only read context variables and headers
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +120,7 @@ describe('resolveUploadAuthStrategy', () => {
 describe('resolveLoggingStrategy', () => {
   it('"json" calls console.log with JSON.stringify', () => {
     const fn = resolveLoggingStrategy('json');
-    const spy = mock((..._args: unknown[]) => {});
+    const spy = mock(() => {});
     const origLog = console.log;
     console.log = spy as typeof console.log;
     try {
@@ -137,7 +138,7 @@ describe('resolveLoggingStrategy', () => {
 
   it('"pretty" formats as "METHOD path status durationms"', () => {
     const fn = resolveLoggingStrategy('pretty');
-    const spy = mock((..._args: unknown[]) => {});
+    const spy = mock(() => {});
     const origLog = console.log;
     console.log = spy as typeof console.log;
     try {

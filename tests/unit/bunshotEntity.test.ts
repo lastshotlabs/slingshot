@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs';
+import { existsSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import {
   defineEntity,
@@ -423,7 +423,7 @@ describe('generated index.ts', () => {
 describe('zero slingshot-entity runtime dependency', () => {
   it('no generated file imports from slingshot-entity or slingshot-core', () => {
     const files = generate(Message);
-    for (const [filename, content] of Object.entries(files)) {
+    for (const [, content] of Object.entries(files)) {
       // Check actual import statements, not comments
       const importLines = content.split('\n').filter(l => l.startsWith('import'));
       for (const line of importLines) {
@@ -509,7 +509,7 @@ describe('generated search with $and/$or filters', () => {
     await adapter.create({ roomId: 'r1', content: 'goodbye' });
 
     // Search with $and filter: roomId=r1 AND status != deleted
-    const results = await (adapter as unknown as Record<string, Function>).filteredSearch('hello', {
+    const results = await (adapter as unknown as Record<string, (...args: unknown[]) => unknown>).filteredSearch('hello', {
       roomId: 'r1',
     });
 
@@ -542,7 +542,7 @@ describe('generated search with $and/$or filters', () => {
     await adapter.create({ category: 'food', content: 'typescript cookies' });
     await adapter.create({ category: 'sports', content: 'typescript league' });
 
-    const results = await (adapter as unknown as Record<string, Function>).searchByCategory(
+    const results = await (adapter as unknown as Record<string, (...args: unknown[]) => unknown>).searchByCategory(
       'typescript',
       {
         cat1: 'tech',

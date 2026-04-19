@@ -371,7 +371,7 @@ describe('generateMigrationMongo', () => {
     expect(generateMigrationMongo(plan)).toBe(script);
     // Should parse without syntax errors (ignoring the undefined `db`
     // identifier — we only care the script is syntactically valid JS).
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+     
     expect(() => new Function('db', script)).not.toThrow();
   });
 

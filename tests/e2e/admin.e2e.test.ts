@@ -5,7 +5,7 @@
  * (auth guard, role guard) and core CRUD operations over raw fetch().
  */
 import { addUserRole } from '@auth/lib/roles';
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import {
   adminPlugin,
   createMemoryAuthAdapter,

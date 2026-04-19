@@ -5,8 +5,6 @@
  * (concealed vs non-concealed) instead of a single call with a runtime ternary.
  * Each branch should properly validate request bodies and enforce rate limits.
  */
-import { AUTH_RUNTIME_KEY } from '@auth/runtime';
-import type { AuthRuntimeContext } from '@auth/runtime';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { createTestApp } from '../setup';

@@ -342,7 +342,7 @@ describe('parseCursorParams — signing', () => {
   });
 
   it('verifies and returns cursor when signing is active with valid cursor', () => {
-    const { signCursor } = require('../../src/lib/signing');
+    const { signCursor } = await import('../../src/lib/signing');
     const secret = 'test-secret-32-chars-long-xxxxxxx';
     const signed = signCursor('page-2', secret);
     const signing = { config: { cursors: true }, secret };
@@ -365,30 +365,30 @@ describe('parseCursorParams — signing', () => {
 
 describe('maybeSignCursor', () => {
   it('returns null when cursor is null', () => {
-    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
+    const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
     expect(maybeSignCursor(null)).toBeNull();
   });
 
   it('returns cursor as-is when no signing config', () => {
-    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
+    const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
     expect(maybeSignCursor('cursor-abc')).toBe('cursor-abc');
   });
 
   it('returns cursor as-is when signing cursors is disabled', () => {
-    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
+    const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
     const signing = { config: { cursors: false }, secret: 'secret' };
     expect(maybeSignCursor('cursor-abc', signing as any)).toBe('cursor-abc');
   });
 
   it('returns cursor as-is when secret is null', () => {
-    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
+    const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
     const signing = { config: { cursors: true }, secret: null };
     expect(maybeSignCursor('cursor-abc', signing as any)).toBe('cursor-abc');
   });
 
   it('returns signed cursor when signing is active', () => {
-    const { maybeSignCursor } = require('../../src/framework/lib/pagination');
-    const { verifyCursor } = require('../../src/lib/signing');
+    const { maybeSignCursor } = await import('../../src/framework/lib/pagination');
+    const { verifyCursor } = await import('../../src/lib/signing');
     const secret = 'test-secret-32-chars-long-xxxxxxx';
     const signing = { config: { cursors: true }, secret };
     const signed = maybeSignCursor('page-3', signing as any);

@@ -1,7 +1,7 @@
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { getContext } from '@lastshotlabs/slingshot-core';
-import { authHeader, createTestApp } from '../setup';
+import { createTestApp } from '../setup';
 
 let app: OpenAPIHono<any>;
 const captured: { email: string; token: string }[] = [];

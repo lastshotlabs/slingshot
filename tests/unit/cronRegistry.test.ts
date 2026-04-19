@@ -134,7 +134,7 @@ describe('createRedisCronRegistry — redis adapter', () => {
     store.set('cron-registry:app', JSON.stringify({ not: 'an array' }));
     const redis = {
       get: async (key: string) => store.get(key) ?? null,
-      set: async (_key: string, _value: string) => {},
+      set: async () => {},
     };
     const repo = createRedisCronRegistry(() => redis, 'app');
     const result = await repo.getAll();
@@ -146,7 +146,7 @@ describe('createRedisCronRegistry — redis adapter', () => {
     store.set('cron-registry:app', JSON.stringify(['valid', 42, null, 'also-valid']));
     const redis = {
       get: async (key: string) => store.get(key) ?? null,
-      set: async (_key: string, _value: string) => {},
+      set: async () => {},
     };
     const repo = createRedisCronRegistry(() => redis, 'app');
     const result = await repo.getAll();
@@ -186,8 +186,8 @@ describe('createSqliteCronRegistry — sqlite adapter', () => {
           table.push(params[0] as string);
         }
       },
-      query: <T>(_sql: string) => ({
-        all: (..._args: unknown[]) => table.map(name => ({ name }) as unknown as T),
+      query: <T>() => ({
+        all: () => table.map(name => ({ name }) as unknown as T),
       }),
       _tableCreated: () => tableCreated,
     };
@@ -292,7 +292,6 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
       findByIdAndUpdate: async (
         id: string,
         update: { $set: { names: string[] } },
-        _opts: object,
       ) => {
         store.set(id, { names: update.$set.names });
         return null;
@@ -301,15 +300,14 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
 
     const conn = {
       models: {} as Record<string, unknown>,
-      model(_name: string, _schema: unknown) {
+      model() {
         return model;
       },
     };
 
     const mg = {
-      Schema: class {
-        constructor(_def: object, _opts?: object) {}
-      },
+      // eslint-disable-next-line @typescript-eslint/no-extraneous-class
+      Schema: class {},
     };
 
     return { conn, mg, model, store };
@@ -366,17 +364,16 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
   test('getAll returns empty set when doc has no names field', async () => {
     const conn = {
       models: {} as Record<string, unknown>,
-      model(_name: string, _schema: unknown) {
+      model() {
         return {
-          findById: (_id: string) => ({ lean: () => Promise.resolve({}) }),
+          findById: () => ({ lean: () => Promise.resolve({}) }),
           findByIdAndUpdate: async () => null,
         };
       },
     };
     const mg = {
-      Schema: class {
-        constructor(_def: object, _opts?: object) {}
-      },
+      // eslint-disable-next-line @typescript-eslint/no-extraneous-class
+      Schema: class {},
     };
     const { createMongoCronRegistry } = await import(
       '../../src/framework/persistence/cronRegistry'
@@ -397,7 +394,6 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
       findByIdAndUpdate: async (
         id: string,
         update: { $set: { names: string[] } },
-        _opts: object,
       ) => {
         store.set(id, { names: update.$set.names });
         return null;
@@ -405,12 +401,11 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
     };
     const conn = {
       models: {} as Record<string, unknown>,
-      model: (_n: string, _s: unknown) => model,
+      model: () => model,
     };
     const mg = {
-      Schema: class {
-        constructor(_def: object, _opts?: object) {}
-      },
+      // eslint-disable-next-line @typescript-eslint/no-extraneous-class
+      Schema: class {},
     };
     const { createMongoCronRegistry } = await import(
       '../../src/framework/persistence/cronRegistry'
@@ -460,8 +455,8 @@ describe('cronRegistryFactories', () => {
         if (sql.includes('DELETE FROM')) { table.length = 0; return; }
         if (sql.includes('INSERT INTO') && params) { table.push(params[0] as string); }
       },
-      query: <T>(_sql: string) => ({
-        all: (..._args: unknown[]) => table.map(name => ({ name }) as unknown as T),
+      query: <T>() => ({
+        all: () => table.map(name => ({ name }) as unknown as T),
       }),
     };
     const infra = { getSqliteDb: () => db };
@@ -475,15 +470,16 @@ describe('cronRegistryFactories', () => {
     const store = new Map<string, { names: string[] }>();
     const model = {
       findById: (id: string) => ({ lean: () => Promise.resolve(store.get(id) ?? null) }),
-      findByIdAndUpdate: async (id: string, update: { $set: { names: string[] } }, _opts: object) => {
+      findByIdAndUpdate: async (id: string, update: { $set: { names: string[] } }) => {
         store.set(id, { names: update.$set.names });
       },
     };
     const conn = {
       models: {} as Record<string, unknown>,
-      model: (_n: string, _s: unknown) => model,
+      model: () => model,
     };
-    const mg = { Schema: class { constructor(_def: object, _opts?: object) {} } };
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class
+    const mg = { Schema: class {} };
     const infra = {
       getMongo: () => ({ conn, mg }),
       appName: 'mongo-factory-app',

@@ -5,10 +5,10 @@
  * This proves the generated code is valid TypeScript that runs correctly.
  */
 import { Database } from 'bun:sqlite';
-import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { defineEntity, field, generate, index } from '../../packages/slingshot-entity/src/index';
+import { defineEntity, field, generate } from '../../packages/slingshot-entity/src/index';
 
 // ---------------------------------------------------------------------------
 // Minimal adapter shape for typing dynamic imports

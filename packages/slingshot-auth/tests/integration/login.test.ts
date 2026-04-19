@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { HttpError } from '@lastshotlabs/slingshot-core';
 import { createLockoutService, createMemoryLockoutRepository } from '../../src/lib/accountLockout';

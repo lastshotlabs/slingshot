@@ -10,9 +10,10 @@ import { createEmbedsPlugin } from '../src/plugin';
 async function bootEmbedsApp() {
   const app = new Hono();
   const plugin = createEmbedsPlugin();
+  const emptyConfig: never = {} as never;
   await plugin.setupRoutes?.({
     app: app as never,
-    config: {} as never,
+    config: emptyConfig,
     bus: createInProcessAdapter(),
   });
   return app;
@@ -53,19 +54,21 @@ describe('slingshot-embeds smoke', () => {
 
   test('publishes an embeds peer when pluginState is available', async () => {
     const app = new Hono();
-    attachContext(app, {
+    const appCtx: never = {
       app,
       pluginState: new Map<string, unknown>(),
       ws: null,
       wsEndpoints: {},
       wsPublish: null,
       bus: createInProcessAdapter(),
-    } as never);
+    } as never;
+    attachContext(app, appCtx);
 
     const plugin = createEmbedsPlugin();
+    const emptyConfig2: never = {} as never;
     await plugin.setupRoutes?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig2,
       bus: createInProcessAdapter(),
     });
 

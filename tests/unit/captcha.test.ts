@@ -6,7 +6,6 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { verifyCaptcha } from '../../src/framework/lib/captcha';
 import { requireCaptcha } from '../../src/framework/middleware/captcha';
-import { HttpError } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
 // verifyCaptcha tests
@@ -239,15 +238,15 @@ function makeMiddlewareContext(overrides: {
     req: {
       method,
       path: '/test',
-      header: (_name: string) => undefined,
+      header: () => undefined,
       json: async () => body,
       raw: new Request('http://localhost/test', { method }),
     },
     res: { status: 200 },
     get: (key: string) => store.get(key),
     set: (key: string, value: unknown) => store.set(key, value),
-    json: mock((_body: unknown, _status?: number) => new Response()),
-    header: mock((_name: string, _value: string) => {}),
+    json: mock(() => new Response()),
+    header: mock(() => {}),
   } as any;
 }
 

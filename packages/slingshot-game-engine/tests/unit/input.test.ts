@@ -321,7 +321,8 @@ describe('acceptInput', () => {
 
 describe('validateInput', () => {
   test('returns valid with parsed data on success', () => {
-    const def = { schema: z.string() } as ChannelDefinition;
+    const raw = { schema: z.string() };
+    const def = raw as unknown as ChannelDefinition;
     const result = validateInput(def, 'hello');
     expect(result.valid).toBeTrue();
     if (result.valid) {
@@ -330,7 +331,8 @@ describe('validateInput', () => {
   });
 
   test('returns valid with coerced data', () => {
-    const def = { schema: z.number() } as ChannelDefinition;
+    const raw = { schema: z.number() };
+    const def = raw as unknown as ChannelDefinition;
     const result = validateInput(def, 42);
     expect(result.valid).toBeTrue();
     if (result.valid) {
@@ -339,7 +341,8 @@ describe('validateInput', () => {
   });
 
   test('returns rejection ack on validation failure', () => {
-    const def = { schema: z.number() } as ChannelDefinition;
+    const raw = { schema: z.number() };
+    const def = raw as unknown as ChannelDefinition;
     const result = validateInput(def, 'not-a-number');
     expect(result.valid).toBeFalse();
     if (!result.valid) {
@@ -350,7 +353,8 @@ describe('validateInput', () => {
   });
 
   test('includes sequence in rejection ack', () => {
-    const def = { schema: z.string().min(5) } as ChannelDefinition;
+    const raw = { schema: z.string().min(5) };
+    const def = raw as unknown as ChannelDefinition;
     const result = validateInput(def, 'hi', 42);
     expect(result.valid).toBeFalse();
     if (!result.valid) {
@@ -359,9 +363,10 @@ describe('validateInput', () => {
   });
 
   test('validates complex schemas', () => {
-    const def = {
+    const raw = {
       schema: z.object({ x: z.number(), y: z.number() }),
-    } as ChannelDefinition;
+    };
+    const def = raw as unknown as ChannelDefinition;
     const result = validateInput(def, { x: 1, y: 2 });
     expect(result.valid).toBeTrue();
     if (result.valid) {
@@ -370,9 +375,10 @@ describe('validateInput', () => {
   });
 
   test('rejects missing required fields', () => {
-    const def = {
+    const raw = {
       schema: z.object({ x: z.number(), y: z.number() }),
-    } as ChannelDefinition;
+    };
+    const def = raw as unknown as ChannelDefinition;
     const result = validateInput(def, { x: 1 });
     expect(result.valid).toBeFalse();
   });

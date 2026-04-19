@@ -52,7 +52,8 @@ function buildApp(banAdapter: BanAdapter, principal?: { subject: string; roles: 
 
 describe('banCheck middleware', () => {
   test('blocks banned user with 403', async () => {
-    const app = buildApp(stubAdapter([{ userId: 'u1', containerId: 'c1' } as Partial<Ban>]), {
+    const ban: Partial<Ban> = { userId: 'u1', containerId: 'c1' };
+    const app = buildApp(stubAdapter([ban]), {
       subject: 'u1',
       roles: [],
     });
@@ -75,7 +76,8 @@ describe('banCheck middleware', () => {
   });
 
   test('passes through when no principal (public route)', async () => {
-    const app = buildApp(stubAdapter([{ userId: 'u1', containerId: 'c1' } as Partial<Ban>]));
+    const ban: Partial<Ban> = { userId: 'u1', containerId: 'c1' };
+    const app = buildApp(stubAdapter([ban]));
     const res = await app.request('/containers/c1/threads', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -86,8 +88,9 @@ describe('banCheck middleware', () => {
 
   test('allows user whose ban has expired', async () => {
     const pastDate = new Date(Date.now() - 60_000).toISOString();
+    const expiredBan: Partial<Ban> = { userId: 'u1', containerId: 'c1', expiresAt: pastDate };
     const app = buildApp(
-      stubAdapter([{ userId: 'u1', containerId: 'c1', expiresAt: pastDate } as Partial<Ban>]),
+      stubAdapter([expiredBan]),
       { subject: 'u1', roles: [] },
     );
     const res = await app.request('/containers/c1/threads', {
@@ -100,8 +103,9 @@ describe('banCheck middleware', () => {
 
   test('blocks user whose ban has not expired', async () => {
     const futureDate = new Date(Date.now() + 3_600_000).toISOString();
+    const activeBan: Partial<Ban> = { userId: 'u1', containerId: 'c1', expiresAt: futureDate };
     const app = buildApp(
-      stubAdapter([{ userId: 'u1', containerId: 'c1', expiresAt: futureDate } as Partial<Ban>]),
+      stubAdapter([activeBan]),
       { subject: 'u1', roles: [] },
     );
     const res = await app.request('/containers/c1/threads', {
@@ -113,15 +117,14 @@ describe('banCheck middleware', () => {
   });
 
   test('allows user whose ban has been lifted (unbannedAt set)', async () => {
+    const liftedBan: Partial<Ban> = {
+      userId: 'u1',
+      containerId: 'c1',
+      unbannedAt: new Date().toISOString(),
+      unbannedBy: 'mod-1',
+    };
     const app = buildApp(
-      stubAdapter([
-        {
-          userId: 'u1',
-          containerId: 'c1',
-          unbannedAt: new Date().toISOString(),
-          unbannedBy: 'mod-1',
-        } as Partial<Ban>,
-      ]),
+      stubAdapter([liftedBan]),
       { subject: 'u1', roles: [] },
     );
     const res = await app.request('/containers/c1/threads', {
@@ -133,6 +136,7 @@ describe('banCheck middleware', () => {
   });
 
   test('passes through when no containerId is resolvable', async () => {
+    const noContainerBan: Partial<Ban> = { userId: 'u1', containerId: 'c1' };
     const app = new Hono();
     app.use('*', async (c, next) => {
       setVar(c, 'communityPrincipal', { subject: 'u1', roles: [] });
@@ -141,7 +145,7 @@ describe('banCheck middleware', () => {
     app.use(
       '*',
       createBanCheckMiddleware({
-        banAdapter: stubAdapter([{ userId: 'u1', containerId: 'c1' } as Partial<Ban>]),
+        banAdapter: stubAdapter([noContainerBan]),
       }),
     );
     app.get('/noop', c => c.json({ ok: true }));

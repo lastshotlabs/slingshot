@@ -6,7 +6,6 @@ import { createTestApp } from '../setup';
 // (createApp() rejects) rather than silently misconfiguring the server.
 // ---------------------------------------------------------------------------
 
-const baseRoutes = import.meta.dir + '/../fixtures/routes';
 const createdApps: Array<{ destroy(): Promise<void> }> = [];
 
 afterEach(async () => {

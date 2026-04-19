@@ -456,9 +456,11 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       // means the effective upper bound is negative, so default min must also be negative).
       const effectiveMax = c.max !== undefined && c.maxExclusive ? c.max - 1 : c.max;
       const effectiveMin = c.min !== undefined && c.minExclusive ? c.min + 1 : c.min;
-      const rawMin = c.min ?? (effectiveMax !== undefined && effectiveMax < 0 ? c.max! - 10000 : 0);
+      const rawMin =
+        c.min ?? (effectiveMax !== undefined && effectiveMax < 0 ? (c.max ?? 0) - 10000 : 0);
       const rawMax =
-        c.max ?? (effectiveMin !== undefined && effectiveMin > 10000 ? c.min! + 10000 : 10000);
+        c.max ??
+        (effectiveMin !== undefined && effectiveMin > 10000 ? (c.min ?? 0) + 10000 : 10000);
       // For exclusive bounds on integers, nudge by 1. For floats, we defer
       // the nudge to the float generator which handles precision naturally.
       const min = c.minExclusive && c.isInt ? rawMin + 1 : rawMin;
@@ -495,8 +497,8 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       }
       // For floats with exclusive bounds, nudge inward slightly to avoid
       // generating the exact boundary value.
-      let floatMin = c.minExclusive ? min + Math.max(Math.abs(min) * 1e-10, 1e-15) : min;
-      let floatMax = c.maxExclusive ? max - Math.max(Math.abs(max) * 1e-10, 1e-15) : max;
+      const floatMin = c.minExclusive ? min + Math.max(Math.abs(min) * 1e-10, 1e-15) : min;
+      const floatMax = c.maxExclusive ? max - Math.max(Math.abs(max) * 1e-10, 1e-15) : max;
       // Graceful fallback when bounds create an inverted range
       if (floatMin > floatMax) return (rawMin + rawMax) / 2;
       // Use a precision step appropriate for the range size
@@ -510,9 +512,10 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       const effectiveMaxI = c.max !== undefined && c.maxExclusive ? c.max - 1 : c.max;
       const effectiveMinI = c.min !== undefined && c.minExclusive ? c.min + 1 : c.min;
       const rawMin =
-        c.min ?? (effectiveMaxI !== undefined && effectiveMaxI < 0 ? c.max! - 10000 : 0);
+        c.min ?? (effectiveMaxI !== undefined && effectiveMaxI < 0 ? (c.max ?? 0) - 10000 : 0);
       const rawMax =
-        c.max ?? (effectiveMinI !== undefined && effectiveMinI > 10000 ? c.min! + 10000 : 10000);
+        c.max ??
+        (effectiveMinI !== undefined && effectiveMinI > 10000 ? (c.min ?? 0) + 10000 : 10000);
       const min = c.minExclusive ? rawMin + 1 : rawMin;
       const max = c.maxExclusive ? rawMax - 1 : rawMax;
       const intMin = Math.ceil(min);
@@ -635,13 +638,14 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
     }
 
     case 'array': {
-      if (!def.element) return [];
+      const elementSchema = def.element;
+      if (!elementSchema) return [];
       const ac = extractArrayConstraints(def);
       const min = ac.min ?? 1;
       const max = ac.max ?? Math.max(min, 3);
       const count = f.number.int({ min, max });
       return Array.from({ length: count }, (_, i) =>
-        walkSchema(def.element!, {
+        walkSchema(elementSchema as ZodSchema, {
           ...opts,
           _path: path ? `${path}.${i}` : `${i}`,
           _depth: depth,

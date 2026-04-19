@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import { otelRequestMiddleware } from '../../src/framework/middleware/otelRequest';
 import type { Span, TextMapGetter, Tracer } from '@opentelemetry/api';
-import { SpanStatusCode, propagation, context as otelContext } from '@opentelemetry/api';
+import { SpanStatusCode, propagation } from '@opentelemetry/api';
 
 // ---------------------------------------------------------------------------
 // Mock span that records all calls for assertions
@@ -276,7 +276,7 @@ describe('otelRequestMiddleware', () => {
 
     const { c } = createMockContext();
 
-    const thrownNext = () => Promise.reject('string error'); // eslint-disable-line prefer-promise-reject-errors
+    const thrownNext = () => Promise.reject('string error');  
 
     await expect(middleware(c as any, thrownNext)).rejects.toBe('string error');
 

@@ -42,7 +42,7 @@ describe('GET /auth/sessions', () => {
 
   test('lists multiple sessions from separate logins', async () => {
     const { token: token1 } = await registerUser();
-    const { token: token2 } = await loginUser();
+    await loginUser();
 
     const res = await app.request('/auth/sessions', { headers: authHeader(token1) });
     expect(res.status).toBe(200);
@@ -66,7 +66,7 @@ describe('GET /auth/sessions', () => {
 describe('DELETE /auth/sessions/:sessionId', () => {
   test('revokes a specific session', async () => {
     const { token: token1 } = await registerUser();
-    const { token: token2 } = await loginUser();
+    await loginUser();
 
     // List sessions to get IDs
     const listRes = await app.request('/auth/sessions', { headers: authHeader(token1) });

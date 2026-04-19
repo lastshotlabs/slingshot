@@ -8,11 +8,13 @@ import { createIdentifyMiddleware } from '../../packages/slingshot-auth/src/midd
 describe('public path aware auth middleware', () => {
   it('identify middleware bypasses auth work for declared public paths', async () => {
     const app = new Hono<AppEnv>();
-    attachContext(app, {
+    const ctx: never = {
       publicPaths: new Set(['/.well-known/*']),
-    } as never);
+    } as never;
+    attachContext(app, ctx);
 
-    app.use(createIdentifyMiddleware({} as never));
+    const emptyRuntime: never = {} as never;
+    app.use(createIdentifyMiddleware(emptyRuntime));
     app.get('/.well-known/apple-app-site-association', c =>
       c.json({
         authUserId: c.get('authUserId'),

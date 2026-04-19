@@ -8,7 +8,7 @@
  *
  * Uses createTestHttpServer() with real plugin instances over raw fetch().
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import type { E2EServerHandle } from '../setup-e2e';
 import { createTestHttpServer } from '../setup-e2e';

@@ -132,7 +132,7 @@ describe('SQLite adapter', () => {
       '/auth/login',
       json({ email: 'sqdel@example.com', password: 'password123' }),
     );
-    const { token: t2 } = await login2.json();
+    await login2.json();
 
     // List sessions and delete the second one
     const sessRes = await app.request('/auth/sessions', { headers: authHeader(token) });

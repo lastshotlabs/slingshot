@@ -3,7 +3,11 @@ import type {
   ResourceProvisioner,
   ResourceProvisionerContext,
 } from '../../types/resource';
-import { type ResourceProvisionEntry, generateResourceSstConfig } from '../generateResourceSst';
+import {
+  type ResourceProvisionEntry,
+  generateResourceSstConfig,
+  getResourceOutputKey,
+} from '../generateResourceSst';
 import { destroyViaSst, provisionViaSst } from '../provisionViaSst';
 
 /**
@@ -75,15 +79,14 @@ export function createPostgresProvisioner(): ResourceProvisioner {
         };
       }
 
-      const name = ctx.resourceName.replace(/[^a-zA-Z0-9]/g, '');
       const outputs = result.outputs;
 
       const conn: Record<string, string> = {
-        host: outputs[`${name}Host`] ?? '',
-        port: outputs[`${name}Port`] ?? '5432',
-        user: outputs[`${name}Username`] ?? 'postgres',
-        password: outputs[`${name}Password`] ?? '',
-        database: outputs[`${name}Database`] ?? ctx.platform,
+        host: outputs[getResourceOutputKey(ctx.resourceName, 'Host')] ?? '',
+        port: outputs[getResourceOutputKey(ctx.resourceName, 'Port')] ?? '5432',
+        user: outputs[getResourceOutputKey(ctx.resourceName, 'Username')] ?? 'postgres',
+        password: outputs[getResourceOutputKey(ctx.resourceName, 'Password')] ?? '',
+        database: outputs[getResourceOutputKey(ctx.resourceName, 'Database')] ?? ctx.platform,
       };
 
       return {

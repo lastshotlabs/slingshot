@@ -52,9 +52,45 @@ function stringifyWsPayload(rawData: unknown): string {
   throw new TypeError('Unsupported WebSocket message payload type');
 }
 
-export const __runtimeNodeInternals = {
+function resolveNodeRequestListener(
+  first: unknown,
+  second?: unknown,
+): ((...args: unknown[]) => void) | null {
+  if (typeof second === 'function') return second as (...args: unknown[]) => void;
+  if (typeof first === 'function') return first as (...args: unknown[]) => void;
+  return null;
+}
+
+function resolveListenPort(port: number | undefined): number {
+  return port ?? 3000;
+}
+
+function attachNodeRequestListener(
+  server: { on(event: 'request', listener: (...args: unknown[]) => void): unknown },
+  first: unknown,
+  second?: unknown,
+): void {
+  const listener = resolveNodeRequestListener(first, second);
+  if (listener) {
+    server.on('request', listener);
+  }
+}
+
+function deleteChannelIfEmpty(
+  channels: Map<string, Set<unknown>>,
+  channel: string,
+  subs: Set<unknown> | undefined,
+): void {
+  if (subs?.size === 0) channels.delete(channel);
+}
+
+export const runtimeNodeInternals = {
   toBufferChunk,
   stringifyWsPayload,
+  resolveListenPort,
+  resolveNodeRequestListener,
+  attachNodeRequestListener,
+  deleteChannelIfEmpty,
 };
 
 // ---------------------------------------------------------------------------
@@ -224,7 +260,7 @@ function createNodeServer(): RuntimeServerFactory {
         httpServer = createServer();
       }
 
-      let port = opts.port ?? 3000;
+      let port = resolveListenPort(opts.port);
 
       // Wrap the fetch handler to forward uncaught errors to opts.error when provided.
       // Without this, errors from the fetch handler are swallowed by @hono/node-server.
@@ -252,15 +288,13 @@ function createNodeServer(): RuntimeServerFactory {
             // incoming requests are actually handled. Handle both 1-arg and 2-arg
             // calling conventions defensively.
             createServer: ((first: unknown, second?: unknown) => {
-              const listener =
-                typeof second === 'function'
-                  ? (second as (...args: unknown[]) => void)
-                  : typeof first === 'function'
-                    ? (first as (...args: unknown[]) => void)
-                    : null;
-              if (listener) {
-                httpServer.on('request', listener);
-              }
+              attachNodeRequestListener(
+                httpServer as {
+                  on(event: 'request', listener: (...args: unknown[]) => void): unknown;
+                },
+                first,
+                second,
+              );
               return httpServer;
             }) as typeof import('node:http').createServer,
           },
@@ -326,7 +360,8 @@ function createNodeServer(): RuntimeServerFactory {
 
       /** Wrap a raw `ws` WebSocket in the RuntimeWebSocket contract. */
       function wrapWs(ws: WsWebSocket, data: unknown): RuntimeWebSocket {
-        const handler = wsHandler!;
+        if (!wsHandler) throw new Error('wrapWs called without a websocket handler');
+        const handler = wsHandler;
         const subscribedChannels = new Set<string>();
 
         const rtWs: RuntimeWebSocket = {
@@ -353,7 +388,7 @@ function createNodeServer(): RuntimeServerFactory {
             subscribedChannels.delete(channel);
             const subs = channels.get(channel);
             subs?.delete(ws);
-            if (subs?.size === 0) channels.delete(channel);
+            deleteChannelIfEmpty(channels as Map<string, Set<unknown>>, channel, subs);
           },
         };
 
@@ -368,7 +403,7 @@ function createNodeServer(): RuntimeServerFactory {
           for (const ch of subscribedChannels) {
             const subs = channels.get(ch);
             subs?.delete(ws);
-            if (subs?.size === 0) channels.delete(ch);
+            deleteChannelIfEmpty(channels as Map<string, Set<unknown>>, ch, subs);
           }
           void Promise.resolve(handler.close(rtWs, code, stringifyWsPayload(reason))).catch(
             (error: unknown) => {

@@ -20,9 +20,7 @@ import {
 } from '../../packages/slingshot-core/src/entityConfig';
 import type {
   EntityAdapter,
-  InferCreateInput,
   InferEntity,
-  InferUpdateInput,
 } from '../../packages/slingshot-core/src/entityConfig';
 import { resolveRepo } from '../../packages/slingshot-core/src/storeInfra';
 import type { StoreInfra } from '../../packages/slingshot-core/src/storeInfra';
@@ -57,8 +55,6 @@ const Ticket = defineEntity('Ticket', {
 });
 
 type TicketEntity = InferEntity<typeof ticketFields>;
-type CreateTicketInput = InferCreateInput<typeof ticketFields>;
-type UpdateTicketInput = InferUpdateInput<typeof ticketFields>;
 
 const tokenFields = {
   key: field.string({ primary: true }),

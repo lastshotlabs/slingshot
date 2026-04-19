@@ -23,6 +23,16 @@ import type {
   SubPhaseDefinition,
 } from '../../src/types/models';
 
+/** Helper to create partial PhaseDefinition stubs without object literal assertions. */
+function phaseDef(partial: Record<string, unknown>): PhaseDefinition {
+  return partial as unknown as PhaseDefinition;
+}
+
+/** Helper to create partial SubPhaseDefinition stubs. */
+function subPhaseDef(partial: Record<string, unknown>): SubPhaseDefinition {
+  return partial as unknown as SubPhaseDefinition;
+}
+
 /** Minimal ReadonlyHandlerContext stub for tests. */
 function stubCtx(overrides: Partial<ReadonlyHandlerContext> = {}): ReadonlyHandlerContext {
   return {
@@ -89,67 +99,67 @@ describe('createPhaseState', () => {
 
 describe('getAdvanceTrigger', () => {
   test('returns explicit advance trigger', () => {
-    const def = { advance: 'allChannelsComplete' } as PhaseDefinition;
+    const def = phaseDef({ advance: 'allChannelsComplete' });
     expect(getAdvanceTrigger(def)).toBe('allChannelsComplete');
   });
 
   test('defaults to timeout when timeout is set', () => {
-    const def = { timeout: 30000 } as PhaseDefinition;
+    const def = phaseDef({ timeout: 30000 });
     expect(getAdvanceTrigger(def)).toBe('timeout');
   });
 
   test('defaults to manual when no advance or timeout', () => {
-    const def = {} as PhaseDefinition;
+    const def = phaseDef({});
     expect(getAdvanceTrigger(def)).toBe('manual');
   });
 });
 
 describe('resolveTimeout', () => {
   test('returns null when no timeout', () => {
-    const def = {} as PhaseDefinition;
+    const def = phaseDef({});
     expect(resolveTimeout(def, stubCtx())).toBeNull();
   });
 
   test('returns static timeout value', () => {
-    const def = { timeout: 5000 } as PhaseDefinition;
+    const def = phaseDef({ timeout: 5000 });
     expect(resolveTimeout(def, stubCtx())).toBe(5000);
   });
 
   test('resolves dynamic timeout function', () => {
-    const def = {
+    const def = phaseDef({
       timeout: (ctx: ReadonlyHandlerContext) => ctx.currentRound * 1000,
-    } as PhaseDefinition;
+    });
     expect(resolveTimeout(def, stubCtx({ currentRound: 3 }))).toBe(3000);
   });
 });
 
 describe('resolveDelay', () => {
   test('returns 0 when no delay', () => {
-    const def = {} as PhaseDefinition;
+    const def = phaseDef({});
     expect(resolveDelay(def, stubCtx())).toBe(0);
   });
 
   test('returns static delay value', () => {
-    const def = { delay: 2000 } as PhaseDefinition;
+    const def = phaseDef({ delay: 2000 });
     expect(resolveDelay(def, stubCtx())).toBe(2000);
   });
 });
 
 describe('isPhaseEnabled', () => {
   test('returns true by default', () => {
-    const def = {} as PhaseDefinition;
+    const def = phaseDef({});
     expect(isPhaseEnabled(def, stubCtx())).toBeTrue();
   });
 
   test('returns static boolean', () => {
-    expect(isPhaseEnabled({ enabled: false } as PhaseDefinition, stubCtx())).toBeFalse();
-    expect(isPhaseEnabled({ enabled: true } as PhaseDefinition, stubCtx())).toBeTrue();
+    expect(isPhaseEnabled(phaseDef({ enabled: false }), stubCtx())).toBeFalse();
+    expect(isPhaseEnabled(phaseDef({ enabled: true }), stubCtx())).toBeTrue();
   });
 
   test('evaluates dynamic function', () => {
-    const def = {
+    const def = phaseDef({
       enabled: (ctx: ReadonlyHandlerContext) => ctx.currentRound > 1,
-    } as PhaseDefinition;
+    });
     expect(isPhaseEnabled(def, stubCtx({ currentRound: 1 }))).toBeFalse();
     expect(isPhaseEnabled(def, stubCtx({ currentRound: 2 }))).toBeTrue();
   });
@@ -157,66 +167,70 @@ describe('isPhaseEnabled', () => {
 
 describe('isConditionalNext', () => {
   test('detects pipe-separated conditional', () => {
-    const def = { next: 'phaseA|phaseB' } as PhaseDefinition;
+    const def = phaseDef({ next: 'phaseA|phaseB' });
     expect(isConditionalNext(def)).toBeTrue();
   });
 
   test('returns false for simple string', () => {
-    const def = { next: 'phaseA' } as PhaseDefinition;
+    const def = phaseDef({ next: 'phaseA' });
     expect(isConditionalNext(def)).toBeFalse();
   });
 });
 
 describe('getSubPhaseOrder', () => {
   test('returns empty array when no sub-phases', () => {
-    const def = {} as PhaseDefinition;
+    const def = phaseDef({});
     expect(getSubPhaseOrder(def)).toEqual([]);
   });
 
   test('returns sub-phase order when defined', () => {
-    const def = {
+    const raw = {
       subPhases: { a: {}, b: {} },
       subPhaseOrder: ['b', 'a'],
-    } as unknown as PhaseDefinition;
+    };
+    const def = raw as unknown as PhaseDefinition;
     expect(getSubPhaseOrder(def)).toEqual(['b', 'a']);
   });
 });
 
 describe('getNextSubPhase', () => {
   test('returns next enabled sub-phase', () => {
-    const def = {
+    const raw = {
       subPhases: {
-        first: {} as SubPhaseDefinition,
-        second: {} as SubPhaseDefinition,
+        first: subPhaseDef({}),
+        second: subPhaseDef({}),
       },
       subPhaseOrder: ['first', 'second'],
-    } as unknown as PhaseDefinition;
+    };
+    const def = raw as unknown as PhaseDefinition;
 
     const result = getNextSubPhase(def, -1, stubCtx());
     expect(result).toEqual({ name: 'first', index: 0 });
   });
 
   test('returns null when at end of order', () => {
-    const def = {
+    const raw = {
       subPhases: {
-        first: {} as SubPhaseDefinition,
+        first: subPhaseDef({}),
       },
       subPhaseOrder: ['first'],
-    } as unknown as PhaseDefinition;
+    };
+    const def = raw as unknown as PhaseDefinition;
 
     const result = getNextSubPhase(def, 0, stubCtx());
     expect(result).toBeNull();
   });
 
   test('skips disabled sub-phases', () => {
-    const def = {
+    const raw = {
       subPhases: {
-        first: {} as SubPhaseDefinition,
-        second: { enabled: false } as SubPhaseDefinition,
-        third: {} as SubPhaseDefinition,
+        first: subPhaseDef({}),
+        second: subPhaseDef({ enabled: false }),
+        third: subPhaseDef({}),
       },
       subPhaseOrder: ['first', 'second', 'third'],
-    } as unknown as PhaseDefinition;
+    };
+    const def = raw as unknown as PhaseDefinition;
 
     const result = getNextSubPhase(def, 0, stubCtx());
     expect(result).toEqual({ name: 'third', index: 2 });

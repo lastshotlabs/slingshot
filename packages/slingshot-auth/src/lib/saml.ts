@@ -156,9 +156,9 @@ export async function initSaml(
   // structural validator in development. Production requires the full validator.
   try {
     // @ts-expect-error — optional peer dependency; type declarations may not be installed
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- untyped optional peer dep
+     
     const validator = await import('@authenio/samlify-xsd-schema-validator');
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- untyped optional peer dep
+     
     samlify.setSchemaValidator(validator);
   } catch {
     if (isProd()) {

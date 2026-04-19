@@ -353,37 +353,20 @@ describe('outer catch in graceful shutdown (lines 642-643)', () => {
 });
 
 // =========================================================================
-// 4. Bun.serve error handler — HTTP-only path (lines 530-531)
-//    The error handler on the HTTP-only Bun.serve path. Hono typically
-//    catches route errors internally, so the Bun error handler only fires
-//    when Hono's fetch itself throws before producing a Response.
+// 4. Bun.serve error handlers (lines 485-486, 530-531) — documented as
+//    uncoverable without Bun internals
 // =========================================================================
 
-describe('Bun.serve error handler — HTTP-only path (lines 530-531)', () => {
-  test('error handler returns 500 JSON response', async () => {
-    // The HTTP-only path error handler (line 530) is structurally identical
-    // to the WS path error handler. Hono catches most route-level errors
-    // internally and returns its own error response, so the Bun.serve
-    // error(err) callback only fires for truly unhandled fetch exceptions.
-    // Testing in server-lifecycle.test.ts already covers the WS-path error
-    // handler (section 17). The HTTP-only path requires the fetch function
-    // itself to throw synchronously before Hono can catch — which cannot
-    // be reliably triggered without patching Bun.serve internals.
-    //
-    // We verify the HTTP-only server starts and handles errors via Hono's
-    // own error handler instead.
-    const { SlingshotPlugin } = await import('@lastshotlabs/slingshot-core');
-
-    server = await createServer({
-      ...baseConfig,
-      hostname: '127.0.0.1',
-      port: 0,
-      // No ws config → HTTP-only path
-    });
-
-    // A route that throws goes through Hono's onError, not Bun's error handler
-    const res = await fetch(`http://127.0.0.1:${server.port}/nonexistent`);
-    expect(res.status).toBe(404);
+describe('Bun.serve error handlers (lines 485-486, 530-531)', () => {
+  test.skip('error(err) only fires when app.fetch throws outside Hono — not triggerable in unit tests', () => {
+    // Both the WS-path (line 485) and HTTP-only-path (line 530) error handlers
+    // are callbacks passed to Bun.serve({ error(err) { ... } }). Bun invokes
+    // them only when the fetch function itself throws synchronously before
+    // producing a Response. Hono wraps all route handlers in try/catch and
+    // returns its own error response, so route-level errors never reach the
+    // Bun error callback. To trigger it you'd need to cause Hono's internal
+    // fetch to throw before it can catch — which requires patching Bun.serve
+    // internals or the Hono prototype, neither of which is reliable.
   });
 });
 

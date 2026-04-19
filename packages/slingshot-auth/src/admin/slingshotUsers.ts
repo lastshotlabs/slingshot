@@ -91,7 +91,7 @@ export function createSlingshotManagedUserProvider(
       };
     },
 
-    // eslint-disable-next-line @typescript-eslint/require-await -- interface requires Promise
+     
     async getCapabilities(): Promise<ManagedUserCapabilities> {
       return {
         canListUsers: true,

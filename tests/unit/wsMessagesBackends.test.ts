@@ -378,7 +378,7 @@ describe('createMongoWsMessageRepository', () => {
 
   function makeMockConn(docs: MockDoc[] = []) {
     const created: MockDoc[] = [];
-    let sortedDocs = docs.slice();
+    const sortedDocs = docs.slice();
 
     const chainBuilder = (filteredDocs: MockDoc[]) => ({
       sort: (_order: object) => chainBuilder(filteredDocs),

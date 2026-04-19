@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await */
+ 
 import { DEFAULT_MAX_ENTRIES, hashToken, timingSafeEqual } from '@lastshotlabs/slingshot-core';
 import { type AuthResolvedConfig, DEFAULT_AUTH_CONFIG } from '../../config/authConfig';
 import { getSessionTtlMs, isIdleExpired, shouldPersistSessionMetadata } from './policy';

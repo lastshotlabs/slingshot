@@ -4,7 +4,7 @@
  * Targets uncovered lines: 132-138, 289-291, 298-300, 303-305, 307,
  * 340-436, 470, 514-566.
  */
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { describe, expect, it, mock, spyOn } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -211,7 +211,7 @@ describe('manifest seed', () => {
   it('seeds users that do not exist', async () => {
     const createdUsers: Array<{ email: string; hash: string }> = [];
     const fakeAdapter = {
-      findByEmail: mock(async (_email: string) => null),
+      findByEmail: mock(async () => null),
       create: mock(async (email: string, hash: string) => {
         createdUsers.push({ email, hash });
         return { id: `user-${email}` };
@@ -789,7 +789,7 @@ describe('entity handler and hook registration into entity plugin', () => {
     // Note: 'notRegistered' handler is NOT registered in the registry
 
     const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(
-      (config?: Record<string, unknown>) => makePlugin('mock-plugin'),
+      () => makePlugin('mock-plugin'),
     );
     const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
 
@@ -822,7 +822,7 @@ describe('entity handler and hook registration into entity plugin', () => {
     // 'nonexistentHook' is NOT registered
 
     const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(
-      (config?: Record<string, unknown>) => makePlugin('mock-plugin'),
+      () => makePlugin('mock-plugin'),
     );
     const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
 

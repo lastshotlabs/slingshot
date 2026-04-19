@@ -9,21 +9,21 @@ const connectPostgresMock = mock(async (connectionString: string) => ({
   },
   connectionString,
 }));
-const connectRedisMock = mock(async (_creds: unknown) => ({ kind: 'redis-client' }));
-const disconnectRedisMock = mock(async (_client: unknown) => {});
-const connectMongoMock = mock(async (_creds: unknown) => ({
+const connectRedisMock = mock(async () => ({ kind: 'redis-client' }));
+const disconnectRedisMock = mock(async () => {});
+const connectMongoMock = mock(async () => ({
   authConn: mongooseModule.createConnection(),
   appConn: mongooseModule.createConnection(),
   mongoose: mongooseModule,
 }));
-const connectAuthMongoMock = mock(async (_creds: unknown) => ({
+const connectAuthMongoMock = mock(async () => ({
   authConn: mongooseModule.createConnection(),
   mongoose: mongooseModule,
 }));
-const connectAppMongoMock = mock(async (_creds: unknown) => ({
+const connectAppMongoMock = mock(async () => ({
   appConn: mongooseModule.createConnection(),
 }));
-const disconnectMongoMock = mock(async (_auth: unknown, _app: unknown) => {});
+const disconnectMongoMock = mock(async () => {});
 
 mock.module('@lastshotlabs/slingshot-postgres', () => ({
   connectPostgres: connectPostgresMock,

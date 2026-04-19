@@ -313,7 +313,7 @@ describe('default wrapper', () => {
   });
 
   test('default with innerType walks inner', () => {
-    const inner = z.string();
+    z.string();
     const schema = z.string().default('fb');
     const val = walkSchema(schema as any, { seed: 1 });
     expect(typeof val).toBe('string');

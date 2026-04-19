@@ -8,7 +8,7 @@
  * - buildSubscribeGuard() returns a guard function when ws is configured
  * - Typing handlers from buildEntityReceiveHandlers broadcast correctly
  */
-import { describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import type {
   EntityChannelConfig,
   ResolvedEntityConfig,

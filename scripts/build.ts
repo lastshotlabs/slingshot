@@ -141,17 +141,21 @@ const createAliasRewriteCommand = (tsconfigPath: string): string[] => [
 ];
 
 const packageStepsByLayer: BuildStep[][] = packageBuildLayers.map(layer =>
-  layer.map(name => ({
-    name: `${name} build output`,
-    cleanTargets: [
-      { path: path.join(packageLookup.get(name)!.dir, 'dist') },
-      { path: path.join(packageLookup.get(name)!.dir, '.tmp', 'tsconfig.build.tsbuildinfo') },
-    ],
-    commands: [
-      createEmitCommand(path.join(packageLookup.get(name)!.dir, 'tsconfig.build.json')),
-      createAliasRewriteCommand(path.join(packageLookup.get(name)!.dir, 'tsconfig.build.json')),
-    ],
-  })),
+  layer.map(name => {
+    const pkg = packageLookup.get(name);
+    if (!pkg) throw new Error(`Unknown package "${name}" in build layers`);
+    return {
+      name: `${name} build output`,
+      cleanTargets: [
+        { path: path.join(pkg.dir, 'dist') },
+        { path: path.join(pkg.dir, '.tmp', 'tsconfig.build.tsbuildinfo') },
+      ],
+      commands: [
+        createEmitCommand(path.join(pkg.dir, 'tsconfig.build.json')),
+        createAliasRewriteCommand(path.join(pkg.dir, 'tsconfig.build.json')),
+      ],
+    };
+  }),
 );
 
 const frameworkSteps: BuildStep[] = [
@@ -198,7 +202,8 @@ function rewriteFrameworkDeclarationImports(): void {
 
   const queue = [frameworkDistDir];
   while (queue.length > 0) {
-    const currentDir = queue.pop()!;
+    const currentDir = queue.pop();
+    if (!currentDir) break;
     for (const entry of fs.readdirSync(currentDir, { withFileTypes: true })) {
       const fullPath = path.join(currentDir, entry.name);
       if (entry.isDirectory()) {
@@ -280,7 +285,8 @@ async function runPackageLayer(layerIndex: number, stepsInLayer: BuildStep[]): P
 
   while (queue.length > 0 || running.size > 0) {
     while (queue.length > 0 && running.size < maxParallelPackageBuilds) {
-      const step = queue.shift()!;
+      const step = queue.shift();
+      if (!step) break;
       const task = runStep(step).finally(() => {
         running.delete(task);
       });
@@ -294,7 +300,8 @@ async function runPackageLayer(layerIndex: number, stepsInLayer: BuildStep[]): P
 }
 
 for (let index = 0; index < packageStepsByLayer.length; index += 1) {
-  await runPackageLayer(index, packageStepsByLayer[index]!);
+  const layer = packageStepsByLayer[index];
+  if (layer) await runPackageLayer(index, layer);
 }
 
 // Sync README.md from docs/human/index.md for each workspace package

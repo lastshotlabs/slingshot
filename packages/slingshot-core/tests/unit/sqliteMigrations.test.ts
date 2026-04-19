@@ -20,7 +20,7 @@ function createTestDb(): RuntimeSqliteDatabase {
         },
       };
     },
-  } as RuntimeSqliteDatabase;
+  };
 }
 
 describe('runSubsystemMigrations', () => {

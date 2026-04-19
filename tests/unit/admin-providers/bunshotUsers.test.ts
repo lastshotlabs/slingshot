@@ -11,7 +11,7 @@ import type { ManagedUserRecord } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------
 
 const mockSetSuspended = mock(
-  async (_adapter: AuthAdapter, _userId: string, _suspended: boolean, _reason?: string) => {},
+  async () => {},
 );
 
 mock.module('@auth/lib/suspension', () => ({
@@ -37,8 +37,8 @@ function baseUser(overrides: Record<string, any> = {}) {
 let mockAdapter: Partial<AuthAdapter>;
 let mockSessionRepo: SessionRepository;
 
-const mockGetUserSessions = mock(async (_userId: string, _cfg?: any) => [] as any[]);
-const mockDeleteSession = mock(async (_sessionId: string, _cfg?: any) => {});
+const mockGetUserSessions = mock(async () => [] as any[]);
+const mockDeleteSession = mock(async () => {});
 
 beforeEach(() => {
   // Reset call counts on every mock
@@ -186,7 +186,7 @@ describe('getUser', () => {
   });
 
   test('returns ManagedUserRecord when user is found', async () => {
-    mockAdapter.getUser = async (_id: string) => baseUser();
+    mockAdapter.getUser = async () => baseUser();
     const provider = createSlingshotManagedUserProvider(
       mockAdapter as AuthAdapter,
       DEFAULT_AUTH_CONFIG,
@@ -239,10 +239,10 @@ describe('unsuspendUser', () => {
 describe('updateUser', () => {
   test('calls adapter.updateProfile and re-fetches the user', async () => {
     let updateProfileCalled = false;
-    mockAdapter.updateProfile = async (_id: string, _profile: any) => {
+    mockAdapter.updateProfile = async () => {
       updateProfileCalled = true;
     };
-    mockAdapter.getUser = async (_id: string) => baseUser({ displayName: 'Alice Updated' });
+    mockAdapter.getUser = async () => baseUser({ displayName: 'Alice Updated' });
     const provider = createSlingshotManagedUserProvider(
       mockAdapter as AuthAdapter,
       DEFAULT_AUTH_CONFIG,
@@ -283,7 +283,7 @@ describe('deleteUser', () => {
     mockDeleteSession.mockImplementation(async () => {
       calls.push('deleteSession');
     });
-    mockAdapter.deleteUser = async (_id: string) => {
+    mockAdapter.deleteUser = async () => {
       calls.push('deleteUser');
     };
     const provider = createSlingshotManagedUserProvider(

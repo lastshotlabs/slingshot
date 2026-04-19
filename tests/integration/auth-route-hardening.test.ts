@@ -9,7 +9,7 @@
  *  - DELETE /auth/mfa: expanded schema + verifyAnyFactor
  *  - POST /auth/step-up: expanded schema + verifyAnyFactor
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import * as OTPAuth from 'otpauth';
 import { getContext } from '@lastshotlabs/slingshot-core';
 import { authHeader, createTestApp } from '../setup';

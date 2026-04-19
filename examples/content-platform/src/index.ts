@@ -17,12 +17,12 @@ const assetsManifest = new URL('../client-manifest.json', import.meta.url).pathn
 const staticDir = new URL('../dist/static/', import.meta.url).pathname;
 
 const inMemoryKv: KvNamespace = {
-  async get(_key, _options) {
+  async get(_key) {
     return null;
   },
-  async put(_key, _value, _options) {},
-  async delete(_key) {},
-  async list(_options) {
+  async put() {},
+  async delete() {},
+  async list() {
     return { keys: [] };
   },
 };
@@ -30,7 +30,7 @@ const inMemoryKv: KvNamespace = {
 export function buildAppConfig(): CreateAppConfig {
   return {
     runtime: edgeRuntime({
-      fileStore: async (_path: string) => null,
+      fileStore: async () => null,
     }),
     db: { mongo: false, redis: false },
     security: {

@@ -5,7 +5,7 @@
  * the memory adapter emits `auth:delivery.email_verification` and
  * `auth:delivery.password_reset` events that carry the token.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { type E2EServerHandle, createTestHttpServer } from '../setup-e2e';
 
 // ---------------------------------------------------------------------------

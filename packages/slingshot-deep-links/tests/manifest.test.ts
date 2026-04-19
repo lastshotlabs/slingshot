@@ -35,10 +35,11 @@ function bootFromManifestJson(manifestJson: string): Hono {
     bus,
   } as unknown as Parameters<typeof attachContext>[1]);
 
+  const emptyConfig: never = {} as never;
   const plugin = createDeepLinksPlugin(parsed);
-  plugin.setupMiddleware?.({ app, config: {} as never, bus });
-  plugin.setupRoutes?.({ app, config: {} as never, bus });
-  plugin.setupPost?.({ app, config: {} as never, bus });
+  plugin.setupMiddleware?.({ app, config: emptyConfig, bus });
+  plugin.setupRoutes?.({ app, config: emptyConfig, bus });
+  plugin.setupPost?.({ app, config: emptyConfig, bus });
 
   return app;
 }

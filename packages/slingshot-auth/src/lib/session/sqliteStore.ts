@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await */
+ 
 import { hashToken } from '@lastshotlabs/slingshot-core';
 import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import { type AuthResolvedConfig, DEFAULT_AUTH_CONFIG } from '../../config/authConfig';

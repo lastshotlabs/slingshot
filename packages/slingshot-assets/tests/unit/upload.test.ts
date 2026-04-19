@@ -38,7 +38,7 @@ function makeContext(fields: Record<string, unknown>, adapter: StorageAdapter = 
   return {
     req: {
       parseBody: async () => fields,
-      header: (_name: string) => undefined,
+      header: () => undefined,
     },
     get(key: string) {
       switch (key) {
@@ -54,7 +54,7 @@ function makeContext(fields: Record<string, unknown>, adapter: StorageAdapter = 
           return null;
       }
     },
-    set(_key: string, _value: unknown) {},
+    set() {},
   } as unknown as Context<AppEnv>;
 }
 

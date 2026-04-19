@@ -14,7 +14,7 @@
  *   - Legitimate custom claims (e.g. `role`, `tenantId`) are preserved
  *   - postLogin hook with no customClaims is still harmless (token has correct sub/sid)
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { verifyToken } from '../../src/lib/jwt';
 import { createLoginRouter } from '../../src/routes/login';
 import { makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
@@ -112,7 +112,7 @@ describe('reserved JWT claims stripping via postLogin hook (F13)', () => {
   test('multiple legitimate custom claims are all preserved in the token', async () => {
     const runtime = makeTestRuntime({
       hooks: {
-        postLogin: async ({ userId }: { userId: string }) => ({
+        postLogin: async () => ({
           customClaims: {
             // Reserved (stripped)
             sub: 'evil',

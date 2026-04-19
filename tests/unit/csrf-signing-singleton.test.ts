@@ -1,35 +1,32 @@
 import { DEFAULT_AUTH_CONFIG } from '@auth/config/authConfig';
 import { csrfProtection } from '@auth/middleware/csrf';
 import { AUTH_RUNTIME_KEY, type AuthRuntimeContext } from '@auth/runtime';
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { createHmac } from 'crypto';
 import { Hono } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
-function makeSecret(label: string): string {
-  // Pad to at least 32 chars
-  return (label + '-'.repeat(32)).substring(0, Math.max(32, label.length));
-}
-
-beforeEach(() => {});
-
 function buildCsrfApp(secret: string) {
   const app = new Hono<AppEnv>();
-  const runtime = {
-    adapter: {} as never,
-    eventBus: { emit() {} } as never,
+  const adapter = {} as never;
+  const eventBus = { emit() {} } as never;
+  const rateLimit = null as never;
+  const runtime: AuthRuntimeContext = {
+    adapter,
+    eventBus,
     config: DEFAULT_AUTH_CONFIG,
     signing: { secret },
     dataEncryptionKeys: [],
     lockout: null,
-    rateLimit: null as never,
+    rateLimit,
     credentialStuffing: null,
   } as unknown as AuthRuntimeContext;
+  const slingshotCtx = {
+    signing: runtime.signing,
+    pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
+  } as never;
   app.use('*', async (c, next) => {
-    c.set('slingshotCtx', {
-      signing: runtime.signing,
-      pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
-    } as never);
+    c.set('slingshotCtx', slingshotCtx);
     await next();
   });
   app.use('*', csrfProtection({ checkOrigin: false, signing: runtime.signing }));

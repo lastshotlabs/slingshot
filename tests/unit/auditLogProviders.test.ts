@@ -3,7 +3,7 @@
  *   - src/framework/auditLog/postgresProvider.ts (lines 12-14, 21-47, 51-144)
  *   - src/framework/auditLog/mongoProvider.ts (lines 10-76)
  */
-import { describe, expect, spyOn, test, beforeEach } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import type { AuditLogEntry } from '@lastshotlabs/slingshot-core';
 import { createPostgresAuditLogProvider } from '../../src/framework/auditLog/postgresProvider';
 import { encodeCursor } from '../../src/framework/auditLog/cursor';
@@ -355,10 +355,10 @@ describe('createMongoAuditLogProvider', () => {
   } = {}) {
     const { docs = [], ttlDays, throwOnCreate = false, captureFilter } = opts;
     const created: object[] = [];
-    let returnDocs = docs.slice();
+    const returnDocs = docs.slice();
 
-    const sortChain = {
-      sort: (_order: object) => sortChain,
+    const sortChain: Record<string, (...args: unknown[]) => unknown> = {
+      sort: () => sortChain,
       limit: (n: number) => ({
         lean: async () => returnDocs.slice(0, n),
       }),
@@ -625,8 +625,8 @@ describe('createMongoAuditLogProvider', () => {
     const mockModelForLimit = {
       created: [] as object[],
       create: async (doc: object) => { mockModelForLimit.created.push(doc); return doc; },
-      find: (_filter: object) => ({
-        sort: (_order: object) => ({
+      find: () => ({
+        sort: () => ({
           limit: (n: number) => {
             capturedLimit = n;
             return { lean: async () => [] };
@@ -705,8 +705,8 @@ describe('createMongoAuditLogProvider', () => {
     const mockModelForLimit = {
       created: [] as object[],
       create: async (doc: object) => { mockModelForLimit.created.push(doc); return doc; },
-      find: (_filter: object) => ({
-        sort: (_order: object) => ({
+      find: () => ({
+        sort: () => ({
           limit: (n: number) => {
             capturedLimit = n;
             return { lean: async () => [] };

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await */
+ 
 import { DEFAULT_MAX_ENTRIES, createEvictExpired, evictOldest } from '@lastshotlabs/slingshot-core';
 import { sha256 as hashToken } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------

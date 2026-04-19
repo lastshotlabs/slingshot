@@ -263,9 +263,8 @@ describe('challenge TTL', () => {
   test('challenge expires after TTL elapses', async () => {
     const repo = createMemoryMfaChallengeRepository();
     // Use a very short TTL via config override
-    const token = await createMfaChallenge(repo, 'user-1', undefined, {
-      mfa: { challengeTtlSeconds: 0 },
-    } as import('../../src/config/authConfig').AuthResolvedConfig);
+    const mfaConfigPartial = { mfa: { challengeTtlSeconds: 0 } };
+    const token = await createMfaChallenge(repo, 'user-1', undefined, mfaConfigPartial as import('../../src/config/authConfig').AuthResolvedConfig);
 
     // TTL of 0 seconds means expiresAt = Date.now() + 0 => already expired
     // The memory repo checks expiresAt <= Date.now()

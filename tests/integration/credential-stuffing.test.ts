@@ -3,7 +3,7 @@ import {
   createCredentialStuffingService,
   createMemoryCredentialStuffingRepository,
 } from '@auth/lib/credentialStuffing';
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 let svc: CredentialStuffingService;
 

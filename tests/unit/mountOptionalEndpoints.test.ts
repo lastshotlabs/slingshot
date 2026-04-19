@@ -51,7 +51,7 @@ describe('mountOptionalEndpoints', () => {
       getWaitingCount: async () => 0,
     }));
     const cleanupStaleSchedulers = mock(async () => {});
-    const createQueueFactory = spyOn(queueModule, 'createQueueFactory').mockReturnValue({
+    const mockFactory: never = {
       createQueue,
       createWorker: mock(() => {
         throw new Error('not used');
@@ -63,7 +63,8 @@ describe('mountOptionalEndpoints', () => {
       createDLQHandler: mock(() => {
         throw new Error('not used');
       }),
-    } as never);
+    } as never;
+    const createQueueFactory = spyOn(queueModule, 'createQueueFactory').mockReturnValue(mockFactory);
 
     const app = new OpenAPIHono<AppEnv>();
     mountOptionalEndpoints(
@@ -135,7 +136,7 @@ describe('mountOptionalEndpoints', () => {
 
     // The uploads router should be mounted — check that /uploads/* routes exist
     // by requesting a route that the uploads router would define (it should not 404 the same as /noop-path)
-    const res = await app.request('/no-uploads-route-xyz');
+    await app.request('/no-uploads-route-xyz');
     // With uploads router mounted, unmatched paths return 404 from the app
     // The key point is no crash during mounting
     expect(app).toBeDefined();
@@ -191,13 +192,14 @@ describe('mountOptionalEndpoints', () => {
     const cleanupStaleSchedulers = mock(async () => {});
     const createDLQHandler = mock(() => ({}));
 
-    spyOn(queueModule, 'createQueueFactory').mockReturnValue({
+    const mockFactory2: never = {
       createQueue,
       createWorker,
       createCronWorker,
       cleanupStaleSchedulers,
       createDLQHandler,
-    } as never);
+    } as never;
+    spyOn(queueModule, 'createQueueFactory').mockReturnValue(mockFactory2);
 
     const app = new OpenAPIHono<AppEnv>();
     mountOptionalEndpoints(

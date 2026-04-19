@@ -148,7 +148,8 @@ describe('evaluateFilter', () => {
   test('fallback strict equality for unknown shape', () => {
     const record = { x: 42 };
     // Pass an operator object with no recognized key to trigger fallback
-    expect(evaluateFilter(record, { x: { $unknown: true } as never })).toBe(false);
+    const unknownOp: never = { $unknown: true } as never;
+    expect(evaluateFilter(record, { x: unknownOp })).toBe(false);
   });
 
   // --- param:x in operator values ---

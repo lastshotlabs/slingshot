@@ -57,7 +57,7 @@ function createFakePostgresInfra(): {
     }
     if (sql === 'COMMIT') {
       const committed = transactionData ?? {};
-      for (const key of Object.keys(data)) delete data[key];
+      for (const key of Object.keys(data)) Reflect.deleteProperty(data, key);
       for (const [table, rows] of Object.entries(committed)) {
         data[table] = rows.map(row => ({ ...row }));
       }

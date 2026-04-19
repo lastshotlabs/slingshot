@@ -61,7 +61,6 @@ function resolveSsrRuntimeStrategy(strategy: string): unknown {
           get(_target, prop) {
             if (!resolved) {
               // Synchronous require — runtime packages are expected to be installed
-              // eslint-disable-next-line @typescript-eslint/no-require-imports
               const mod = require(entry.pkg) as Record<string, unknown>;
               const factory = mod[entry.factory] as () => unknown;
               resolved = factory();

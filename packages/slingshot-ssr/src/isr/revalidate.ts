@@ -1,12 +1,15 @@
 // packages/slingshot-ssr/src/isr/revalidate.ts
 import type { IsrCacheAdapter } from './types';
 
+/** Stable plugin-state key used by `slingshot-ssr` ISR invalidators. */
+export const SSR_ISR_INVALIDATORS_STATE_KEY = 'slingshot-ssr:isr' as const;
+
 /**
  * ISR invalidation utilities bound to a specific cache adapter instance.
  *
  * Created by `createIsrInvalidators()` and stored in `pluginState` under
- * `'slingshot-ssr:isr'`. Server actions and route handlers retrieve them via
- * `bsCtx.pluginState.get('slingshot-ssr:isr')`.
+ * `SSR_ISR_INVALIDATORS_STATE_KEY`. Server actions and route handlers retrieve
+ * them via `bsCtx.pluginState.get(SSR_ISR_INVALIDATORS_STATE_KEY)`.
  */
 export interface IsrInvalidators {
   /**
@@ -19,7 +22,7 @@ export interface IsrInvalidators {
    *
    * @example
    * ```ts
-   * const { revalidatePath } = bsCtx.pluginState.get('slingshot-ssr:isr');
+   * const { revalidatePath } = bsCtx.pluginState.get(SSR_ISR_INVALIDATORS_STATE_KEY);
    * await revalidatePath('/posts');
    * ```
    */
@@ -35,7 +38,7 @@ export interface IsrInvalidators {
    *
    * @example
    * ```ts
-   * const { revalidateTag } = bsCtx.pluginState.get('slingshot-ssr:isr');
+   * const { revalidateTag } = bsCtx.pluginState.get(SSR_ISR_INVALIDATORS_STATE_KEY);
    * await revalidateTag('posts');              // all listing pages
    * await revalidateTag(`post:${post.id}`);   // specific post page
    * ```
@@ -57,10 +60,10 @@ export interface IsrInvalidators {
  * ```ts
  * // In plugin setup:
  * const invalidators = createIsrInvalidators(isrAdapter);
- * getContext(app).pluginState.set('slingshot-ssr:isr', invalidators);
+ * getContext(app).pluginState.set(SSR_ISR_INVALIDATORS_STATE_KEY, invalidators);
  *
  * // In a server action or route handler:
- * const { revalidatePath, revalidateTag } = bsCtx.pluginState.get('slingshot-ssr:isr');
+ * const { revalidatePath, revalidateTag } = bsCtx.pluginState.get(SSR_ISR_INVALIDATORS_STATE_KEY);
  * await revalidatePath('/posts');
  * await revalidateTag('posts');
  * ```

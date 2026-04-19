@@ -127,7 +127,7 @@ describe('BullMQ adapter — validation', () => {
 
   it('off() on a durable listener throws', () => {
     const bus = createBullMQAdapter({ connection: REDIS_CONNECTION });
-    const listener = (_p: { userId: string; sessionId: string }) => {};
+    const listener = () => {};
     bus.on('auth:login', listener, { durable: true, name: uniqueName('off-durable') });
 
     expect(() => {

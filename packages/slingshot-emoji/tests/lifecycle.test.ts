@@ -30,6 +30,8 @@ function makeAppContext(
   };
 }
 
+const emptyConfig: never = {} as never;
+
 describe('slingshot-emoji lifecycle', () => {
   test('setupMiddleware can resolve permissions from pluginState fallback', async () => {
     const app = new Hono();
@@ -42,7 +44,7 @@ describe('slingshot-emoji lifecycle', () => {
 
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig,
       bus: createInProcessAdapter(),
     });
 
@@ -72,7 +74,7 @@ describe('slingshot-emoji lifecycle', () => {
     await expect(
       plugin.setupMiddleware?.({
         app: app as never,
-        config: {} as never,
+        config: emptyConfig,
         bus: createInProcessAdapter(),
       }),
     ).rejects.toThrow('No permissions available');
@@ -89,12 +91,12 @@ describe('slingshot-emoji lifecycle', () => {
 
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig,
       bus,
     });
     await plugin.setupPost?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig,
       bus,
     });
 
@@ -105,7 +107,7 @@ describe('slingshot-emoji lifecycle', () => {
 
   test('delete cascade warns and skips deletes when uploadKey is missing', async () => {
     const app = new Hono();
-    const deleteMock = mock(async (_uploadKey: string) => {});
+    const deleteMock = mock(async () => {});
     const ctx = makeAppContext(new Map(), { delete: deleteMock });
     ctx.app = app;
     attachContext(app, ctx as never);
@@ -115,16 +117,17 @@ describe('slingshot-emoji lifecycle', () => {
 
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig,
       bus,
     });
     await plugin.setupPost?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig,
       bus,
     });
 
-    bus.emit('emoji:emoji.deleted', { id: 'emoji-1' } as never);
+    const deleteEvent: never = { id: 'emoji-1' } as never;
+    bus.emit('emoji:emoji.deleted', deleteEvent);
     await Promise.resolve();
 
     expect(deleteMock).not.toHaveBeenCalled();
@@ -135,7 +138,7 @@ describe('slingshot-emoji lifecycle', () => {
 
   test('delete cascade removes uploaded files when uploadKey is present', async () => {
     const app = new Hono();
-    const deleteMock = mock(async (_uploadKey: string) => {});
+    const deleteMock = mock(async () => {});
     const ctx = makeAppContext(new Map(), { delete: deleteMock });
     ctx.app = app;
     attachContext(app, ctx as never);
@@ -148,16 +151,17 @@ describe('slingshot-emoji lifecycle', () => {
 
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig,
       bus,
     });
     await plugin.setupPost?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig,
       bus,
     });
 
-    bus.emit('emoji:emoji.deleted', { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' } as never);
+    const deleteWithKeyEvent: never = { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' } as never;
+    bus.emit('emoji:emoji.deleted', deleteWithKeyEvent);
     await Promise.resolve();
 
     expect(deleteMock).toHaveBeenCalledTimes(1);
@@ -169,7 +173,7 @@ describe('slingshot-emoji lifecycle', () => {
 
   test('teardown unregisters the delete cascade listener', async () => {
     const app = new Hono();
-    const deleteMock = mock(async (_uploadKey: string) => {});
+    const deleteMock = mock(async () => {});
     const ctx = makeAppContext(new Map(), { delete: deleteMock });
     ctx.app = app;
     attachContext(app, ctx as never);
@@ -179,17 +183,18 @@ describe('slingshot-emoji lifecycle', () => {
 
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig,
       bus,
     });
     await plugin.setupPost?.({
       app: app as never,
-      config: {} as never,
+      config: emptyConfig,
       bus,
     });
     await plugin.teardown?.();
 
-    bus.emit('emoji:emoji.deleted', { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' } as never);
+    const deleteWithKeyEvent: never = { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' } as never;
+    bus.emit('emoji:emoji.deleted', deleteWithKeyEvent);
     await Promise.resolve();
 
     expect(deleteMock).not.toHaveBeenCalled();

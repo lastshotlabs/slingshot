@@ -90,7 +90,7 @@ describe('Disconnect / reconnect scenario', () => {
       const config = resolveDisconnectConfig(
         {},
         {
-          gracePeriodMs: _ctx => 5_000,
+          gracePeriodMs: () => 5_000,
         },
         {} as any,
       );

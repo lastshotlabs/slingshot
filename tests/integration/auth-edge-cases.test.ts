@@ -1,5 +1,5 @@
 import { createMemoryAuthAdapter } from '@auth/adapters/memoryAuth';
-import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import { getContext } from '@lastshotlabs/slingshot-core';
 import { authHeader, createTestApp } from '../setup';

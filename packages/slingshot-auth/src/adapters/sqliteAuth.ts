@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await -- sync implementations of an async AuthAdapter interface */
+ 
 import type {
   AuthAdapter,
   GroupRecord,

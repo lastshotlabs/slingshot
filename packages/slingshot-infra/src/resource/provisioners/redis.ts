@@ -3,7 +3,11 @@ import type {
   ResourceProvisioner,
   ResourceProvisionerContext,
 } from '../../types/resource';
-import { type ResourceProvisionEntry, generateResourceSstConfig } from '../generateResourceSst';
+import {
+  type ResourceProvisionEntry,
+  generateResourceSstConfig,
+  getResourceOutputKey,
+} from '../generateResourceSst';
 import { destroyViaSst, provisionViaSst } from '../provisionViaSst';
 
 /**
@@ -70,11 +74,10 @@ export function createRedisProvisioner(): ResourceProvisioner {
         };
       }
 
-      const name = ctx.resourceName.replace(/[^a-zA-Z0-9]/g, '');
       const outputs = result.outputs;
 
-      const host = outputs[`${name}Host`] ?? '';
-      const port = outputs[`${name}Port`] ?? '6379';
+      const host = outputs[getResourceOutputKey(ctx.resourceName, 'Host')] ?? '';
+      const port = outputs[getResourceOutputKey(ctx.resourceName, 'Port')] ?? '6379';
 
       const conn: Record<string, string> = {
         host,

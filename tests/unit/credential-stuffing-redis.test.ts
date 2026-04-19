@@ -4,7 +4,7 @@ import {
   createMemoryCredentialStuffingRepository,
   createRedisCredentialStuffingRepository,
 } from '@auth/lib/credentialStuffing';
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 
 // ---------------------------------------------------------------------------
 // Memory store tests

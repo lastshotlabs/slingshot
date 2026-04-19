@@ -30,12 +30,13 @@ import { resolveStorageAdapter } from '../adapters/index';
 import { memoryStorage } from '../adapters/memory';
 import { createAssetFactories } from '../entities/factories';
 import { createAssetsPlugin } from '../plugin';
-import type {
-  Asset,
-  AssetAdapter,
-  AssetsPluginConfig,
-  AssetsPluginState,
-  CreateAssetInput,
+import {
+  ASSETS_PLUGIN_STATE_KEY,
+  type Asset,
+  type AssetAdapter,
+  type AssetsPluginConfig,
+  type AssetsPluginState,
+  type CreateAssetInput,
 } from '../types';
 
 /**
@@ -191,7 +192,7 @@ export async function createAssetsTestApp(
   await plugin.setupRoutes?.(setupContext);
   await plugin.setupPost?.(setupContext);
 
-  const state = pluginState.get('slingshot-assets') as AssetsPluginState | undefined;
+  const state = pluginState.get(ASSETS_PLUGIN_STATE_KEY) as AssetsPluginState | undefined;
   if (!state) {
     throw new Error('Assets plugin did not register state');
   }

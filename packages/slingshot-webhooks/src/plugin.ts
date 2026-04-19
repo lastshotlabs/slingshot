@@ -23,6 +23,7 @@ import { WEBHOOK_ROUTES } from './routes/index';
 import type { WebhookPluginConfig } from './types/config';
 import { webhookPluginConfigSchema } from './types/config';
 import type { InboundProvider } from './types/inbound';
+import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
 
@@ -175,7 +176,7 @@ async function resolveTestDelivery(
  */
 export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPlugin {
   const config = deepFreeze(
-    validatePluginConfig('slingshot-webhooks', rawConfig, webhookPluginConfigSchema),
+    validatePluginConfig(WEBHOOKS_PLUGIN_STATE_KEY, rawConfig, webhookPluginConfigSchema),
   );
   const queue: WebhookQueue =
     config.queue === 'memory' || !config.queue
@@ -191,14 +192,14 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
   let runtimeAdapter: WebhookRuntimeAdapter | undefined;
 
   return {
-    name: 'slingshot-webhooks',
+    name: WEBHOOKS_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth'],
     publicPaths: buildInboundPublicPaths(mountPath, config.inbound),
     csrfExemptPaths: [`${mountPath}/inbound/*`],
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
       innerPlugin = createEntityPlugin({
-        name: 'slingshot-webhooks',
+        name: WEBHOOKS_PLUGIN_STATE_KEY,
         mountPath,
         manifest: webhooksManifest,
         manifestRuntime: createWebhooksManifestRuntime(adapter => {
@@ -246,7 +247,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       if (!runtimeAdapter) {
         throw new Error('[slingshot-webhooks] Manifest adapters were not resolved during setup');
       }
-      getPluginState(app).set('slingshot-webhooks', runtimeAdapter);
+      getPluginState(app).set(WEBHOOKS_PLUGIN_STATE_KEY, runtimeAdapter);
       unsubscribers = await activate(bus, config, queue, runtimeAdapter);
     },
 

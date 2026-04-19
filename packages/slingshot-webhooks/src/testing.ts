@@ -18,6 +18,7 @@ import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import type { WebhookRuntimeAdapter } from './manifest/runtime';
 import { createWebhookPlugin } from './plugin';
 import type { WebhookPluginConfig } from './types/config';
+import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 
 function unsupportedInfra(name: string): never {
   throw new Error(`Test store infra does not support ${name}`);
@@ -149,7 +150,7 @@ export async function createWebhooksTestApp(
   await plugin.setupRoutes?.(setupContext);
   await plugin.setupPost?.(setupContext);
 
-  const runtime = pluginState.get('slingshot-webhooks') as WebhookRuntimeAdapter | undefined;
+  const runtime = pluginState.get(WEBHOOKS_PLUGIN_STATE_KEY) as WebhookRuntimeAdapter | undefined;
   if (!runtime) {
     throw new Error('Webhook plugin did not register runtime state');
   }

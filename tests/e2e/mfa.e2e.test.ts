@@ -12,7 +12,7 @@
  *   POST /auth/mfa/verify        → { token, userId }
  *   POST /auth/mfa/recovery-codes → { recoveryCodes: string[] }
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import * as OTPAuth from 'otpauth';
 import { type E2EServerHandle, createTestHttpServer } from '../setup-e2e';
 

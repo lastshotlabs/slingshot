@@ -5,7 +5,6 @@
  * per-tenant namespacing, cache HIT/MISS behavior, and non-2xx bypass,
  * using the in-memory cache adapter via createTestApp().
  */
-import type { OpenAPIHono } from '@hono/zod-openapi';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { createTestApp } from '../setup';
 
@@ -17,10 +16,8 @@ async function getCacheResponseMiddleware() {
   return import('../../src/framework/middleware/cacheResponse');
 }
 
-let app: OpenAPIHono<any>;
-
 beforeEach(async () => {
-  app = await createTestApp();
+  await createTestApp();
 });
 
 // ---------------------------------------------------------------------------
@@ -72,8 +69,6 @@ describe('getCacheModel — guard', () => {
   test('creates and registers CacheEntry model when not yet on connection (lines 38-48)', async () => {
     const { getCacheModel } = await getCacheResponseMiddleware();
     const registeredModels: Record<string, unknown> = {};
-    const schemaInstances: unknown[] = [];
-    const mongoose = await import('mongoose');
     const fakeConn = {
       models: registeredModels,
       model(name: string, schema: unknown) {
@@ -82,8 +77,6 @@ describe('getCacheModel — guard', () => {
         return m;
       },
     } as any;
-    // Patch getMongooseModule to return real mongoose for schema creation
-    const origGetMongoose = (await import('../../src/lib/mongo')).getMongooseModule;
     // getCacheModel uses getMongooseModule() internally — real mongoose is available
     const result = getCacheModel(fakeConn);
     expect(result).toBeDefined();

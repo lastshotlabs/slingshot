@@ -9,6 +9,7 @@
  */
 export { createAssetsPlugin } from './plugin';
 export { assetManifest } from './manifest/assetManifest';
+export { ASSETS_PLUGIN_STATE_KEY } from './types';
 
 export type {
   Asset,

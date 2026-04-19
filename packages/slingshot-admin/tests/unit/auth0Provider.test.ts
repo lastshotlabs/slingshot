@@ -13,27 +13,30 @@ function makeStubDeps(overrides?: Partial<Auth0Deps>): Auth0Deps {
   return {
     // cast needed: jose's JWKS function type has internal tracking properties
     // (coolingDown, fresh, jwks) that are irrelevant in test stubs
-    createRemoteJWKSet: mock(() => (() => Promise.resolve({} as never)) as never) as never,
+    createRemoteJWKSet: mock(() => (() => Promise.resolve({} as never)) as never) as Auth0Deps['createRemoteJWKSet'],
     // cast needed: jose's JWTVerifyResult requires a `key` field (ResolvedKey) that
     // is not present in test payloads
-    jwtVerify: mock(async () => ({
-      payload: {
-        sub: 'auth0|user-123',
-        aud: AUDIENCE,
-        iss: `https://${DOMAIN}/`,
-        email: 'alice@example.com',
-        name: 'Alice',
-        extra_claim: 'value',
-      },
-      protectedHeader: { alg: 'RS256' },
-      key: {} as CryptoKey,
-    })) as never,
+    jwtVerify: mock(async () => {
+      const key: CryptoKey = {} as never;
+      return {
+        payload: {
+          sub: 'auth0|user-123',
+          aud: AUDIENCE,
+          iss: `https://${DOMAIN}/`,
+          email: 'alice@example.com',
+          name: 'Alice',
+          extra_claim: 'value',
+        },
+        protectedHeader: { alg: 'RS256' },
+        key,
+      };
+    }) as Auth0Deps['jwtVerify'],
     ...overrides,
   };
 }
 
-function makeContext(token?: string) {
-  return {
+function makeContext(token?: string): never {
+  const ctx: never = {
     req: {
       header: (name: string) => {
         if (name === 'authorization') return token ? `Bearer ${token}` : undefined;
@@ -41,6 +44,7 @@ function makeContext(token?: string) {
       },
     },
   } as never;
+  return ctx;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +87,7 @@ describe('createAuth0AccessProvider', () => {
     const deps = makeStubDeps();
     const provider = createAuth0AccessProvider({ domain: DOMAIN, audience: AUDIENCE }, deps);
 
-    const ctx = {
+    const ctx: never = {
       req: {
         header: (name: string) => (name === 'authorization' ? 'Basic credentials' : undefined),
       },
@@ -104,11 +108,14 @@ describe('createAuth0AccessProvider', () => {
 
   test('returns null when sub claim is missing', async () => {
     const deps = makeStubDeps({
-      jwtVerify: mock(async () => ({
-        payload: { aud: AUDIENCE, iss: `https://${DOMAIN}/` },
-        protectedHeader: { alg: 'RS256' },
-        key: {} as CryptoKey,
-      })) as never,
+      jwtVerify: mock(async () => {
+        const key: CryptoKey = {} as never;
+        return {
+          payload: { aud: AUDIENCE, iss: `https://${DOMAIN}/` },
+          protectedHeader: { alg: 'RS256' },
+          key,
+        };
+      }) as Auth0Deps['jwtVerify'],
     });
     const provider = createAuth0AccessProvider({ domain: DOMAIN, audience: AUDIENCE }, deps);
 

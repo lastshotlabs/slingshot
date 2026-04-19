@@ -47,23 +47,21 @@ let emitted: Array<{ event: string; payload: unknown }>;
 
 // Capture the magic link token from the event bus
 let capturedMagicToken: string | null;
-let capturedMagicLink: string | null;
 
 beforeEach(() => {
   runtime = makeTestRuntime({ concealRegistration: null });
   emitted = [];
   capturedMagicToken = null;
-  capturedMagicLink = null;
-  runtime.eventBus = {
+  const eventBusOverride: ReturnType<typeof makeEventBus> = {
     ...makeEventBus(event => emitted.push({ event, payload: null })),
     emit: ((event: string, payload: unknown) => {
       emitted.push({ event, payload });
       if (event === 'auth:delivery.magic_link' && payload && typeof payload === 'object') {
         capturedMagicToken = (payload as Record<string, string>).token;
-        capturedMagicLink = (payload as Record<string, string>).link;
       }
-    }) as never,
-  } as never;
+    }) as ReturnType<typeof makeEventBus>['emit'],
+  };
+  runtime.eventBus = eventBusOverride;
   app = buildApp(runtime);
 });
 

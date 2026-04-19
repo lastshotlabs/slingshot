@@ -99,15 +99,15 @@ describe('diffState', () => {
   });
 
   test('handles type changes', () => {
-    const prev = { a: 'string' as unknown } as Record<string, unknown>;
-    const curr = { a: 42 as unknown } as Record<string, unknown>;
+    const prev: Record<string, unknown> = { a: 'string' as unknown };
+    const curr: Record<string, unknown> = { a: 42 as unknown };
     const patches = diffState(prev, curr);
     expect(patches).toEqual([{ op: 'replace', path: '/a', value: 42 }]);
   });
 
   test('detects array replacement when content changes', () => {
-    const prev = { items: [1, 2, 3] as unknown } as Record<string, unknown>;
-    const curr = { items: [1, 2, 4] as unknown } as Record<string, unknown>;
+    const prev: Record<string, unknown> = { items: [1, 2, 3] as unknown };
+    const curr: Record<string, unknown> = { items: [1, 2, 4] as unknown };
     const patches = diffState(prev, curr);
     expect(patches).toHaveLength(1);
     expect(patches[0].op).toBe('replace');

@@ -1,13 +1,12 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import type { AppEnv, SlingshotContext } from '@lastshotlabs/slingshot-core';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { HttpError } from '@lastshotlabs/slingshot-core';
 import { requireMfaSetup } from '../../src/middleware/requireMfaSetup';
 import { requireStepUp } from '../../src/middleware/requireStepUp';
 import { requireVerifiedEmail } from '../../src/middleware/requireVerifiedEmail';
 import { userAuth } from '../../src/middleware/userAuth';
-import { AUTH_RUNTIME_KEY } from '../../src/runtime';
 import { makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
 import type { MutableTestRuntime } from '../helpers/runtime';
 

@@ -1,7 +1,7 @@
 /**
  * Tests for src/framework/middleware/auditLog.ts (lines 57-96)
  */
-import { describe, expect, mock, spyOn, test, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { AuditLogEntry, AuditLogProvider } from '@lastshotlabs/slingshot-core';
 import { auditLog } from '../../src/framework/middleware/auditLog';
 
@@ -45,8 +45,8 @@ function makeContext(overrides: {
     res: { status },
     get: (key: string) => store.get(key) ?? undefined,
     set: (key: string, value: unknown) => store.set(key, value),
-    json: mock((_body: unknown, _status?: number) => new Response()),
-    header: mock((_name: string, _value: string) => {}),
+    json: mock(() => new Response()),
+    header: mock(() => {}),
   } as unknown as import('hono').Context<import('@lastshotlabs/slingshot-core').AppEnv>;
 }
 

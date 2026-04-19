@@ -238,7 +238,6 @@ describe('POST /auth/magic-link/verify', () => {
       },
     );
 
-    let shortToken: string | undefined;
     let shortResolve: (t: string) => void;
     const shortPromise = new Promise<string>(r => {
       shortResolve = r;
@@ -256,7 +255,7 @@ describe('POST /auth/magic-link/verify', () => {
       '/auth/magic-link/request',
       json({ identifier: 'expire@example.com' }),
     );
-    shortToken = await shortPromise;
+    const shortToken = await shortPromise;
     getBus(shortTtlApp).off('auth:delivery.magic_link', handler);
 
     // Wait for token to expire

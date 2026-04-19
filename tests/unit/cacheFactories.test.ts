@@ -29,7 +29,7 @@ function createMockRedisClient() {
       for (const k of keys) store.delete(k);
       return keys.length;
     }),
-    scan: mock(async (cursor: string, _match: string, _pattern: string, _count: string, _n: number): Promise<[string, string[]]> => {
+    scan: mock(async (): Promise<[string, string[]]> => {
       // Simple mock: return all matching keys on first call, '0' cursor to end loop
       return ['0', [...store.keys()]];
     }),
@@ -260,7 +260,7 @@ describe('createMongoBoundaryCacheAdapter', () => {
     const store = new Map<string, { value: string; expiresAt?: Date }>();
 
     return {
-      findOne: mock((filter: { key: string }, _projection?: string) => {
+      findOne: mock((filter: { key: string }) => {
         const doc = store.get(filter.key);
         return {
           lean: () => Promise.resolve(doc ? { value: doc.value } : null),
@@ -270,7 +270,6 @@ describe('createMongoBoundaryCacheAdapter', () => {
         async (
           filter: { key: string },
           update: { $set: { value: string; expiresAt?: Date } },
-          _opts: object,
         ) => {
           store.set(filter.key, { value: update.$set.value, expiresAt: update.$set.expiresAt });
         },
@@ -278,7 +277,7 @@ describe('createMongoBoundaryCacheAdapter', () => {
       deleteOne: mock(async (filter: { key: string }) => {
         store.delete(filter.key);
       }),
-      deleteMany: mock(async (_filter: object) => {}),
+      deleteMany: mock(async () => {}),
       store,
     };
   }

@@ -1,5 +1,4 @@
 import type {
-  PermissionsState,
   PluginSetupContext,
   SlingshotPlugin,
   StoreInfra,

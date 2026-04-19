@@ -665,7 +665,7 @@ describe('EntityPluginEntryFactories — composite path (entityKey present)', ()
       ],
     });
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable
+     
     await expect(plugin.setupRoutes!({ app, config: fw, bus })).rejects.toThrow('wrong-key');
   });
 
@@ -1110,7 +1110,7 @@ describe('activityLog', () => {
     const plugin = createEntityPlugin({ name: 'p', manifest });
     await plugin.setupRoutes!({ app, config: fw, bus });
 
-    // eslint-disable-next-line @typescript-eslint/await-thenable
+     
     await expect(plugin.setupPost!({ app, config: fw, bus })).rejects.toThrow(
       'Target entity "MissingEntity" not found in resolved adapters',
     );

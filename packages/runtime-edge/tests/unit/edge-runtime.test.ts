@@ -44,7 +44,7 @@ describe('edgeRuntime()', () => {
 
     it('returns null for unknown paths from fileStore', async () => {
       const runtime = edgeRuntime({
-        fileStore: async _path => null,
+        fileStore: async () => null,
       });
       expect(await runtime.readFile('/nonexistent')).toBeNull();
     });
@@ -122,7 +122,8 @@ describe('edgeRuntime()', () => {
 
     it('server.listen() throws with a clear message', () => {
       const runtime = edgeRuntime();
-      expect(() => runtime.server.listen({} as never)).toThrow('[runtime-edge]');
+      const opts: never = {} as never;
+      expect(() => runtime.server.listen(opts)).toThrow('[runtime-edge]');
     });
 
     it('fs.write() rejects with a clear message', async () => {

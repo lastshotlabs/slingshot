@@ -183,7 +183,8 @@ describe('slingshot-core utilities', () => {
     all.pop();
     expect(registry.getAll()).toHaveLength(2);
     expect(registry.filter(config => config.name === 'Comment')).toEqual([comment]);
-    expect(() => registry.register({ ...post } as never)).toThrow(
+    const duplicate: never = { ...post } as never;
+    expect(() => registry.register(duplicate)).toThrow(
       "Entity 'Post' (namespace: community) is already registered",
     );
   });

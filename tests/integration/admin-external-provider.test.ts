@@ -23,7 +23,7 @@ function createMockAccessProvider(
   const provider: AdminAccessProvider & { lastRequest: { verified: boolean } } = {
     name: 'mock',
     lastRequest: state.lastRequest,
-    async verifyRequest(_c) {
+    async verifyRequest() {
       return allowAll ? MOCK_PRINCIPAL : null;
     },
   };
@@ -33,10 +33,10 @@ function createMockAccessProvider(
 function createMockManagedUserProvider(): ManagedUserProvider {
   return {
     name: 'mock-users',
-    async listUsers(_input) {
+    async listUsers() {
       return { items: [], total: 0 };
     },
-    async getUser(_userId) {
+    async getUser() {
       return null;
     },
     async getCapabilities() {

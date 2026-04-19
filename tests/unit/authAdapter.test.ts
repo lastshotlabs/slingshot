@@ -63,7 +63,7 @@ describe('AuthAdapter type contract', () => {
       async findByEmail() {
         return null;
       },
-      async create(_email, _hash) {
+      async create() {
         return { id: 'new-user-id' };
       },
       async verifyPassword() {
@@ -124,7 +124,7 @@ describe('AuthAdapter type contract', () => {
       async consumeRecoveryCode() {
         return false;
       },
-      async findOrCreateByProvider(_provider, _providerId, _profile) {
+      async findOrCreateByProvider() {
         return { id: 'oauth-user', created: true };
       },
       async linkProvider() {},

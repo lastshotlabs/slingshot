@@ -92,8 +92,7 @@ describe('refresh token rotation', () => {
     const { refreshToken: rt1 } = await regRes.json();
 
     // Rotate once
-    const refreshRes = await app.request('/auth/refresh', json({ refreshToken: rt1 }));
-    const { refreshToken: rt2 } = await refreshRes.json();
+    await app.request('/auth/refresh', json({ refreshToken: rt1 }));
 
     // Immediately use old token (within 2s grace window)
     const graceRes = await app.request('/auth/refresh', json({ refreshToken: rt1 }));

@@ -52,7 +52,7 @@ describe('concealed registration timing', () => {
   });
 
   test('registering an already-registered email returns 200 and calls onExistingAccount', async () => {
-    const onExistingAccount = mock(async (_: string) => {});
+    const onExistingAccount = mock(async () => {});
 
     // Seed an existing user via the adapter's create method
     await runtime.adapter.create('alice@example.com', null as unknown as string);

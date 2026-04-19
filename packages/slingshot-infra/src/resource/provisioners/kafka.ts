@@ -3,7 +3,11 @@ import type {
   ResourceProvisioner,
   ResourceProvisionerContext,
 } from '../../types/resource';
-import { type ResourceProvisionEntry, generateResourceSstConfig } from '../generateResourceSst';
+import {
+  type ResourceProvisionEntry,
+  generateResourceSstConfig,
+  getResourceOutputKey,
+} from '../generateResourceSst';
 import { destroyViaSst, provisionViaSst } from '../provisionViaSst';
 
 /**
@@ -75,8 +79,7 @@ export function createKafkaProvisioner(): ResourceProvisioner {
         };
       }
 
-      const name = ctx.resourceName.replace(/[^a-zA-Z0-9]/g, '');
-      const brokers = result.outputs[`${name}Brokers`] ?? '';
+      const brokers = result.outputs[getResourceOutputKey(ctx.resourceName, 'Brokers')] ?? '';
 
       return {
         status: 'provisioned',

@@ -57,7 +57,7 @@ export default class Fire extends Command {
   async run(): Promise<void> {
     const { flags } = await this.parse(Fire);
 
-    let schema: any;
+    let schema: { _zod: { def: { type: string } } };
     let label: string;
 
     if (flags.manifest) {
@@ -93,7 +93,7 @@ export default class Fire extends Command {
       }
 
       const schemas = generateSchemas(entry.config);
-      const schemaMap: Record<string, any> = {
+      const schemaMap: Record<string, { _zod: { def: { type: string } } }> = {
         create: schemas.createSchema,
         update: schemas.updateSchema,
         entity: schemas.entitySchema,

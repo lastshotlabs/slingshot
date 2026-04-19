@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import { requestLogger } from '../../src/framework/middleware/requestLogger';
 import type { RequestLogEntry } from '../../src/framework/middleware/requestLogger';
@@ -29,7 +29,7 @@ function createMinimalApp(logEntries: RequestLogEntry[]) {
   });
 
   app.get('/throw-string', () => {
-    throw 'string error value'; // eslint-disable-line no-throw-literal
+    throw 'string error value';  
   });
 
   return app;

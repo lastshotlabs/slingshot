@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { __runtimeNodeInternals, nodeRuntime } from '../../packages/runtime-node/src/index';
+import { runtimeNodeInternals, nodeRuntime } from '../../packages/runtime-node/src/index';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,18 +65,18 @@ function waitForSocketEnd(socket: import('node:net').Socket): Promise<void> {
 
 describe('WebSocket payload normalization helpers', () => {
   it('returns strings unchanged', () => {
-    expect(__runtimeNodeInternals.stringifyWsPayload('plain-text')).toBe('plain-text');
+    expect(runtimeNodeInternals.stringifyWsPayload('plain-text')).toBe('plain-text');
   });
 
   it('converts typed-array views into Buffer slices', () => {
     const bytes = new Uint8Array([65, 66, 67, 68]);
     const view = new Uint8Array(bytes.buffer, 1, 2);
-    const chunk = __runtimeNodeInternals.toBufferChunk(view);
+    const chunk = runtimeNodeInternals.toBufferChunk(view);
     expect(chunk?.toString()).toBe('BC');
   });
 
   it('stringifies chunk arrays composed of mixed supported payload types', () => {
-    const value = __runtimeNodeInternals.stringifyWsPayload([
+    const value = runtimeNodeInternals.stringifyWsPayload([
       'A',
       new Uint8Array([66]),
       new Uint8Array([67]).buffer,
@@ -86,14 +86,56 @@ describe('WebSocket payload normalization helpers', () => {
 
   it('throws for unsupported chunk-array entries', () => {
     expect(() =>
-      __runtimeNodeInternals.stringifyWsPayload(['ok', { bad: true }]),
+      runtimeNodeInternals.stringifyWsPayload(['ok', { bad: true }]),
     ).toThrowError('Unsupported WebSocket message chunk type');
   });
 
   it('throws for unsupported top-level payloads', () => {
-    expect(() => __runtimeNodeInternals.stringifyWsPayload({ nope: true })).toThrowError(
+    expect(() => runtimeNodeInternals.stringifyWsPayload({ nope: true })).toThrowError(
       'Unsupported WebSocket message payload type',
     );
+  });
+
+  it('prefers the second createServer callback argument, then the first, then null', () => {
+    const first = vi.fn();
+    const second = vi.fn();
+
+    expect(runtimeNodeInternals.resolveNodeRequestListener(first, second)).toBe(second);
+    expect(runtimeNodeInternals.resolveNodeRequestListener(first)).toBe(first);
+    expect(runtimeNodeInternals.resolveNodeRequestListener({ nope: true })).toBeNull();
+  });
+
+  it('defaults the listen port to 3000 only when no port is provided', () => {
+    expect(runtimeNodeInternals.resolveListenPort(undefined)).toBe(3000);
+    expect(runtimeNodeInternals.resolveListenPort(4321)).toBe(4321);
+  });
+
+  it('attaches a request listener only when a callback shape resolves to one', () => {
+    const server = { on: vi.fn() };
+    const first = vi.fn();
+    const second = vi.fn();
+
+    runtimeNodeInternals.attachNodeRequestListener(server, first, second);
+    runtimeNodeInternals.attachNodeRequestListener(server, first);
+    runtimeNodeInternals.attachNodeRequestListener(server, { nope: true });
+
+    expect(server.on).toHaveBeenCalledTimes(2);
+    expect(server.on).toHaveBeenNthCalledWith(1, 'request', second);
+    expect(server.on).toHaveBeenNthCalledWith(2, 'request', first);
+  });
+
+  it('deletes channels only when the subscriber set is empty', () => {
+    const channels = new Map<string, Set<unknown>>([
+      ['keep', new Set([1])],
+      ['drop', new Set()],
+    ]);
+
+    runtimeNodeInternals.deleteChannelIfEmpty(channels, 'keep', channels.get('keep'));
+    runtimeNodeInternals.deleteChannelIfEmpty(channels, 'drop', channels.get('drop'));
+    runtimeNodeInternals.deleteChannelIfEmpty(channels, 'missing', undefined);
+
+    expect(channels.has('keep')).toBe(true);
+    expect(channels.has('drop')).toBe(false);
   });
 });
 
@@ -428,6 +470,38 @@ describe('RuntimeServerFactory (@hono/node-server)', () => {
     }
   });
 
+  it('rejects listen() when the requested port is already in use', async () => {
+    const http = await import('node:http');
+    const occupied = http.createServer();
+
+    await new Promise<void>((resolve, reject) => {
+      occupied.listen(0, '127.0.0.1', () => resolve());
+      occupied.once('error', reject);
+    });
+
+    const address = occupied.address();
+    if (!address || typeof address === 'string') {
+      occupied.close();
+      throw new Error('Expected an IPv4/IPv6 address object from occupied test server');
+    }
+
+    const runtime = nodeRuntime();
+
+    try {
+      await expect(
+        runtime.server.listen({
+          port: address.port,
+          hostname: '127.0.0.1',
+          fetch: () => new Response('ok'),
+        }),
+      ).rejects.toBeTruthy();
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        occupied.close(err => (err ? reject(err) : resolve()));
+      });
+    }
+  });
+
   it('calls opts.error when the fetch handler throws', async () => {
     const runtime = nodeRuntime();
     const server = await runtime.server.listen({
@@ -541,38 +615,6 @@ describe('WebSocket (ws)', () => {
       ws.close();
     } finally {
       await server.stop(true);
-    }
-  });
-
-  it('defaults listen() to port 3000 and tolerates all createServer callback shapes', async () => {
-    const firstArgListener = vi.fn();
-    const secondArgListener = vi.fn();
-    const originalResponse = global.Response;
-
-    vi.doMock('@hono/node-server', () => ({
-      serve(
-        options: {
-          port: number;
-          createServer: (...args: unknown[]) => unknown;
-        },
-        onListen: (info: { port: number }) => void,
-      ) {
-        expect(options.port).toBe(3000);
-        options.createServer(firstArgListener);
-        options.createServer({}, secondArgListener);
-        options.createServer({});
-        onListen({ port: 3000 });
-      },
-    }));
-
-    try {
-      const runtime = nodeRuntime();
-      const server = await runtime.server.listen({
-        fetch: () => new originalResponse('ok'),
-      });
-      expect(server.port).toBe(3000);
-    } finally {
-      vi.doUnmock('@hono/node-server');
     }
   });
 
@@ -748,8 +790,11 @@ describe('WebSocket (ws)', () => {
     });
 
     try {
+      const clientOpen = deferred();
       const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+      ws.on('open', () => clientOpen.resolve());
       await unsubscribed.promise;
+      await clientOpen.promise;
       server.publish!('solo', 'ghost');
       ws.close();
     } finally {

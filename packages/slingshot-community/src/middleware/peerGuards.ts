@@ -15,7 +15,11 @@ import type { Context, Next } from 'hono';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+import {
+  ASSETS_PLUGIN_STATE_KEY,
+  POLLS_PLUGIN_STATE_KEY,
+  getPluginStateOrNull,
+} from '@lastshotlabs/slingshot-core';
 
 /**
  * Build the 503 guard for poll features in community threads/replies.
@@ -34,7 +38,7 @@ export function buildPollRequiredGuard(app: Hono<AppEnv>) {
     }
 
     if (body.poll) {
-      const hasPolls = getPluginStateOrNull(app)?.has('slingshot-polls') ?? false;
+      const hasPolls = getPluginStateOrNull(app)?.has(POLLS_PLUGIN_STATE_KEY) ?? false;
       if (!hasPolls) {
         throw new HTTPException(503, {
           message:
@@ -65,7 +69,7 @@ export function buildAttachmentRequiredGuard(app: Hono<AppEnv>) {
     }
 
     if (Array.isArray(body.attachments) && body.attachments.length > 0) {
-      const hasAssets = getPluginStateOrNull(app)?.has('slingshot-assets') ?? false;
+      const hasAssets = getPluginStateOrNull(app)?.has(ASSETS_PLUGIN_STATE_KEY) ?? false;
       if (!hasAssets) {
         throw new HTTPException(503, {
           message:

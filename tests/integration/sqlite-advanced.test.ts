@@ -127,10 +127,9 @@ describe('SQLite: MFA operations', () => {
 
 describe('SQLite: tenant roles', () => {
   let adapter: any;
-  let app: any;
 
   beforeEach(async () => {
-    app = await createTestApp({
+    await createTestApp({
       db: {
         mongo: false,
         redis: false,
@@ -180,10 +179,9 @@ describe('SQLite: tenant roles', () => {
 
 describe('SQLite: WebAuthn credentials', () => {
   let adapter: any;
-  let app: any;
 
   beforeEach(async () => {
-    app = await createTestApp({
+    await createTestApp({
       db: {
         mongo: false,
         redis: false,

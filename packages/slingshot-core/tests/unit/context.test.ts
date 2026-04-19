@@ -32,7 +32,9 @@ describe('defaultValidationErrorFormatter', () => {
 
 describe('defaultHook', () => {
   test('passes through on success (returns undefined)', () => {
-    const result = defaultHook({ success: true, data: {} } as never, {} as never);
+    const hookResult: never = { success: true, data: {} } as never;
+    const hookCtx: never = {} as never;
+    const result = defaultHook(hookResult, hookCtx);
     expect(result).toBeUndefined();
   });
 
@@ -52,8 +54,9 @@ describe('defaultHook', () => {
       },
     };
     const issues = [{ path: ['name'], message: 'Required', code: 'invalid_type' }];
+    const hookResult: never = { success: false, error: { issues } } as never;
     defaultHook(
-      { success: false, error: { issues } } as never,
+      hookResult,
       c as never,
     );
     expect(capturedStatus).toBe(400);
@@ -75,8 +78,9 @@ describe('defaultHook', () => {
       json: (body: unknown, status: number) => ({ body, status }),
     };
     const issues = [{ path: [], message: 'Bad', code: 'custom' }];
+    const hookResult: never = { success: false, error: { issues } } as never;
     const result = defaultHook(
-      { success: false, error: { issues } } as never,
+      hookResult,
       c as never,
     ) as { body: { custom: boolean }; status: number };
     expect(result.body.custom).toBe(true);
@@ -100,8 +104,9 @@ describe('defaultHook', () => {
       },
     };
     const issues = [{ path: ['field'], message: 'Invalid', code: 'invalid_type' }];
+    const hookResult: never = { success: false, error: { issues } } as never;
     defaultHook(
-      { success: false, error: { issues } } as never,
+      hookResult,
       c as never,
     );
     expect((capturedBody as { requestId: string }).requestId).toBe('req-fallback');
@@ -121,8 +126,9 @@ describe('defaultHook', () => {
       },
     };
     const issues = [{ path: [], message: 'Bad', code: 'custom' }];
+    const hookResult: never = { success: false, error: { issues } } as never;
     defaultHook(
-      { success: false, error: { issues } } as never,
+      hookResult,
       c as never,
     );
     expect((capturedBody as { requestId: string }).requestId).toBe('unknown');

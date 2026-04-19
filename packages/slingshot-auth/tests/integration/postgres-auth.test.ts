@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 const TEST_POSTGRES_URL = process.env['TEST_POSTGRES_URL'];
 
 describe.skipIf(!TEST_POSTGRES_URL)('Auth postgres adapter integration', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+   
   let Pool: typeof import('pg').Pool;
   let pool: import('pg').Pool;
 

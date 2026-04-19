@@ -21,8 +21,6 @@ import {
 
 let memoryAuthAdapter: ReturnType<typeof createMemoryAuthAdapter>;
 
-const TEST_SESSION_STORE = 'memory' as const;
-
 let config: AuthResolvedConfig;
 const runtimePassword = {
   hash: (plain: string) => Bun.password.hash(plain),
@@ -38,11 +36,12 @@ function buildApp() {
   const app = new Hono();
   const adapter = memoryAuthAdapter;
   const sessionRepo = createMemorySessionRepository();
+  const stores: never = {} as never;
   const runtime = {
     adapter,
     config,
     eventBus: { emit: () => {}, on: () => {}, off: () => {} },
-    stores: {} as never,
+    stores,
     password: runtimePassword,
     signing: { secret: 'test-secret-key-must-be-at-least-32-chars!!' },
     dataEncryptionKeys: [],
@@ -154,11 +153,11 @@ describe('M2M client credentials', () => {
         client_secret: clientSecret,
       }),
     });
-    const { access_token } = await tokenRes.json();
+    const { access_token: accessToken } = await tokenRes.json();
 
     // Use token
     const res = await app.request('/protected', {
-      headers: { 'x-user-token': access_token },
+      headers: { 'x-user-token': accessToken },
     });
     expect(res.status).toBe(200);
   });
@@ -182,10 +181,10 @@ describe('M2M client credentials', () => {
         client_secret: clientSecret,
       }),
     });
-    const { access_token } = await tokenRes.json();
+    const { access_token: accessToken } = await tokenRes.json();
 
     const res = await app.request('/protected', {
-      headers: { 'x-user-token': access_token },
+      headers: { 'x-user-token': accessToken },
     });
     expect(res.status).toBe(403);
   });

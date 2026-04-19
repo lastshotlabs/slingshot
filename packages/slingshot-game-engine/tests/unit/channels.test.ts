@@ -56,13 +56,14 @@ function stubCtx(): ReadonlyHandlerContext {
 }
 
 function makeCollectDef(overrides: Partial<ChannelDefinition> = {}): ChannelDefinition {
-  return {
-    mode: 'collect',
-    from: 'all-players',
+  const base = {
+    mode: 'collect' as const,
+    from: 'all-players' as const,
     schema: z.string(),
     timeout: undefined,
     ...overrides,
-  } as ChannelDefinition;
+  };
+  return base as unknown as ChannelDefinition;
 }
 
 describe('createChannelState', () => {
@@ -127,7 +128,8 @@ describe('collect mode', () => {
 
 describe('race mode', () => {
   test('accepts first claimer', () => {
-    const def = { mode: 'race', from: 'all-players', schema: z.string() } as ChannelDefinition;
+    const raceDef = { mode: 'race' as const, from: 'all-players' as const, schema: z.string() };
+    const def = raceDef as unknown as ChannelDefinition;
     const state = createChannelState('buzzer', def, stubCtx());
     const result = recordSubmission(state, 'alice', 'buzz', []);
     expect(result.accepted).toBeTrue();
@@ -136,7 +138,8 @@ describe('race mode', () => {
   });
 
   test('rejects after max claimed reached', () => {
-    const def = { mode: 'race', from: 'all-players', schema: z.string() } as ChannelDefinition;
+    const raceDef2 = { mode: 'race' as const, from: 'all-players' as const, schema: z.string() };
+    const def = raceDef2 as unknown as ChannelDefinition;
     const state = createChannelState('buzzer', def, stubCtx());
     recordSubmission(state, 'alice', 'buzz', []);
     const result = recordSubmission(state, 'bob', 'buzz', []);
@@ -147,7 +150,8 @@ describe('race mode', () => {
 
 describe('free mode', () => {
   test('accepts any submission', () => {
-    const def = { mode: 'free', from: 'all-players', schema: z.string() } as ChannelDefinition;
+    const freeDef = { mode: 'free' as const, from: 'all-players' as const, schema: z.string() };
+    const def = freeDef as unknown as ChannelDefinition;
     const state = createChannelState('chat', def, stubCtx());
     const r1 = recordSubmission(state, 'alice', 'hello', []);
     const r2 = recordSubmission(state, 'alice', 'world', []);

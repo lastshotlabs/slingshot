@@ -9,11 +9,10 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { createTestApp } from '../setup';
 
 const oauthStateStore = createMemoryOAuthStateStore();
-let app: any;
 let repo: OAuthCodeRepository;
 
 beforeEach(async () => {
-  app = await createTestApp();
+  await createTestApp();
   repo = createMemoryOAuthCodeRepository();
 });
 // ---------------------------------------------------------------------------

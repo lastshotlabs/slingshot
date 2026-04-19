@@ -20,8 +20,6 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import {
-  type MutableChannelState,
-  closeChannel,
   createChannelState,
   recordSubmission,
 } from '../src/lib/channels';
@@ -31,13 +29,6 @@ import {
   resolveRelayTargetsFull,
   sessionRoom,
 } from '../src/lib/display';
-import {
-  createPhaseState,
-  getAdvanceTrigger,
-  isPhaseEnabled,
-  resolveFirstPhase,
-  resolveNextPhase,
-} from '../src/lib/phases';
 import { createSeededRng } from '../src/lib/rng';
 import {
   addScore,
@@ -268,7 +259,8 @@ describe('Skribbl.io clone scenario', () => {
         if (userId === 'drawer') {
           return state;
         }
-        const { word: _word, ...visible } = state;
+        const { word: _omit, ...visible } = state;
+        void _omit;
         return visible;
       };
 
@@ -283,7 +275,8 @@ describe('Skribbl.io clone scenario', () => {
     test('compute scoped deltas per player', () => {
       const scopeHandler = (state: Record<string, unknown>, userId: string) => {
         if (userId === 'drawer') return state;
-        const { word: _word, ...visible } = state;
+        const { word: _omit, ...visible } = state;
+        void _omit;
         return visible;
       };
 

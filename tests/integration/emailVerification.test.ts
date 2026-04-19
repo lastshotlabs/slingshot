@@ -1,14 +1,12 @@
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { getContext } from '@lastshotlabs/slingshot-core';
-import { authHeader, createTestApp } from '../setup';
+import { createTestApp } from '../setup';
 
 let app: OpenAPIHono<any>;
-let capturedToken: string | undefined;
 const getBus = (targetApp: object) => getContext(targetApp).bus;
 
 beforeEach(async () => {
-  capturedToken = undefined;
   // Create the required app so the global config has required: true
   app = await createTestApp(
     {},
@@ -46,7 +44,6 @@ describe('email verification (required)', () => {
     );
     getBus(app).off('auth:delivery.email_verification', handler);
     expect(captured).toBeString();
-    capturedToken = captured;
   });
 
   test('register does not issue a live session before verification', async () => {

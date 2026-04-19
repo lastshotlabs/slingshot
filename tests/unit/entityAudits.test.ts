@@ -28,10 +28,11 @@ const Message = defineEntity('Message', {
 describe('Entity Audits', () => {
   describe('structural checks', () => {
     it('catches onUpdate on non-date field', () => {
-      const BadEntity = defineEntity('Bad', {
+      const onUpdate = { onUpdate: 'now' } as never;
+      defineEntity('Bad', {
         fields: {
           id: field.string({ primary: true }),
-          name: field.string({ onUpdate: 'now' } as never), // force bad config
+          name: field.string(onUpdate), // force bad config
         },
       });
       // This would be caught at defineEntity level normally,

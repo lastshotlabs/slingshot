@@ -15,6 +15,7 @@ import {
 } from '@framework/ws/heartbeat';
 import { type SocketData, createWsUpgradeHandler } from '@framework/ws/index';
 import { wsEndpointKey } from '@framework/ws/namespace';
+import { getContextStoreInfra } from '@framework/persistence/internalRepoResolution';
 import { trackSocket, untrackSocket } from '@framework/ws/presence';
 import { checkRateLimit, cleanupRateLimitBucket } from '@framework/ws/rateLimit';
 import { writeSession } from '@framework/ws/recovery';
@@ -643,6 +644,18 @@ export const createServer = async <T extends object = object>(
           } catch (e) {
             console.error('[shutdown] SQLite close error:', e);
             exitCode = 1;
+          }
+        }
+        const storeInfra = getContextStoreInfra(ctx);
+        if (storeInfra) {
+          try {
+            const postgres = storeInfra.getPostgres();
+            await postgres.pool.end();
+          } catch (e) {
+            if (!(e instanceof Error && e.message.includes('Postgres is not configured'))) {
+              console.error('[shutdown] Postgres disconnect error:', e);
+              exitCode = 1;
+            }
           }
         }
       } catch (e) {

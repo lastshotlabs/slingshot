@@ -500,6 +500,13 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
             /* best-effort */
           }
         }
+        if (infra.postgres) {
+          try {
+            await infra.postgres.pool.end();
+          } catch {
+            /* best-effort */
+          }
+        }
         await secretBundle.provider.destroy?.();
       })();
 

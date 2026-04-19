@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import type { SearchIndexSettings, SearchIndexTask, SearchProvider } from '../src/types/provider';
-import type { SearchQuery, SuggestQuery } from '../src/types/query';
+import type { SearchQuery } from '../src/types/query';
 import type { SearchResponse, SuggestResponse } from '../src/types/response';
 
 // ============================================================================
@@ -113,7 +113,7 @@ function makeMinimalProvider(overrides: Partial<SearchProvider> = {}): SearchPro
       return Promise.all(queries.map(({ indexName, query }) => base.search(indexName, query)));
     },
 
-    async suggest(_indexName: string, query: SuggestQuery): Promise<SuggestResponse> {
+    async suggest(): Promise<SuggestResponse> {
       // Basic stub: return no suggestions
       return { suggestions: [], processingTimeMs: 0 };
     },
@@ -162,7 +162,7 @@ describe('provider capability mismatches', () => {
     // Simulates a provider that does not support full-text search (throws NotImplementedError).
     // The system should surface the error clearly rather than silently swallowing it.
     const provider = makeMinimalProvider({
-      search: async (_indexName: string, _query: SearchQuery): Promise<SearchResponse> => {
+      search: async (): Promise<SearchResponse> => {
         throw new Error('Search is not supported by this provider');
       },
     });
@@ -185,7 +185,7 @@ describe('provider capability mismatches', () => {
     // Simulates a provider that does not support autocomplete suggestions.
     // The suggest route should surface the error clearly to the caller.
     const provider = makeMinimalProvider({
-      suggest: async (_indexName: string, _query: SuggestQuery): Promise<SuggestResponse> => {
+      suggest: async (): Promise<SuggestResponse> => {
         throw new Error('Suggest is not supported by this provider');
       },
     });

@@ -226,8 +226,8 @@ describe('POST /_snapshot/action - ISR invalidation context', () => {
   });
 
   test('delegates revalidateTag to the configured ISR invalidators', async () => {
-    const revalidatePath = mock(async (_path: string) => undefined);
-    const revalidateTag = mock(async (_tag: string) => undefined);
+    const revalidatePath = mock(async () => undefined);
+    const revalidateTag = mock(async () => undefined);
     const app = makeApp([], { revalidatePath, revalidateTag });
 
     const res = await app.request('/_snapshot/action', {

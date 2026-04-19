@@ -53,7 +53,7 @@ function createTestInfra(options: {
   searchManager: SearchManager;
   pluginState: Map<string, unknown>;
 }): FrameworkStoreInfra {
-  const { entityRegistry, searchManager, pluginState } = options;
+  const { entityRegistry, pluginState } = options;
   const registeredEntities = new Set<string>();
 
   function getSearchPluginRuntime(): SearchPluginRuntime | null {

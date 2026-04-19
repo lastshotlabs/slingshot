@@ -1,14 +1,62 @@
 import { describe, expect, it, mock } from 'bun:test';
+import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
+
+function makeRuntimeStub(serveLabel: string, supportsAsyncLocalStorage = true): SlingshotRuntime & {
+  serve: () => string;
+} {
+  return {
+    password: {
+      hash: (plain: string) => Bun.password.hash(plain),
+      verify: (plain: string, hash: string) => Bun.password.verify(plain, hash),
+    },
+    sqlite: {
+      open: () => ({
+        run: () => {},
+        query: () => ({
+          get: () => null,
+          all: () => [],
+          run: () => {},
+        }),
+        prepare: () => ({
+          get: () => null,
+          all: () => [],
+          run: () => ({ changes: 0 }),
+        }),
+        transaction: fn => fn,
+        close: () => {},
+      }),
+    },
+    server: {
+      listen: () => ({
+        port: 3000,
+        stop: () => {},
+        upgrade: () => false,
+        publish: () => {},
+      }),
+    },
+    fs: {
+      write: async () => {},
+      readFile: async () => null,
+      exists: async () => false,
+    },
+    glob: {
+      scan: async () => [],
+    },
+    readFile: async () => null,
+    supportsAsyncLocalStorage,
+    serve: () => serveLabel,
+  };
+}
 
 // Mock runtime packages before importing the module under test
 mock.module('@lastshotlabs/slingshot-runtime-bun', () => ({
-  bunRuntime: () => ({ serve: () => 'bun-serve' }),
+  bunRuntime: () => makeRuntimeStub('bun-serve'),
 }));
 mock.module('@lastshotlabs/slingshot-runtime-node', () => ({
-  nodeRuntime: () => ({ serve: () => 'node-serve' }),
+  nodeRuntime: () => makeRuntimeStub('node-serve'),
 }));
 mock.module('@lastshotlabs/slingshot-runtime-edge', () => ({
-  edgeRuntime: () => ({ serve: () => 'edge-serve' }),
+  edgeRuntime: () => makeRuntimeStub('edge-serve', false),
 }));
 
 import {

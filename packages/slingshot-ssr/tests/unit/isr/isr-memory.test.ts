@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { createMemoryIsrCache } from '../../../src/isr/memory';
 import type { IsrCacheEntry } from '../../../src/isr/types';
 

@@ -14,7 +14,7 @@ function createAdapter(seedEndpoints: WebhookEndpoint[] = []): WebhookAdapter {
     async getEndpoint(id) {
       return endpoints.find(endpoint => endpoint.id === id) ?? null;
     },
-    async findEndpointsForEvent(_event) {
+    async findEndpointsForEvent() {
       return endpoints;
     },
     async createDelivery(input) {

@@ -13,8 +13,8 @@ import { revalidatePath, revalidateTag, withActionContext } from '../../../src/a
 
 function makeCtx() {
   return {
-    revalidatePath: vi.fn(async (_path: string) => undefined),
-    revalidateTag: vi.fn(async (_tag: string) => undefined),
+    revalidatePath: vi.fn(async () => undefined),
+    revalidateTag: vi.fn(async () => undefined),
   };
 }
 

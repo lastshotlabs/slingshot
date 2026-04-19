@@ -10,7 +10,7 @@
 // - Middleware detection (Phase 29): server/middleware.ts discovery
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { initRouteTree, invalidateRouteTree, resolveRouteChain } from '../../src/resolver';
 
 /** Normalize to forward slashes for cross-platform path assertions. */

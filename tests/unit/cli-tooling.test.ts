@@ -9,9 +9,14 @@ describe('CLI tooling', () => {
     const run = mock(async () => {});
     const flush = mock(async () => {});
     const originalArgv = process.argv;
+    const actualOclif = await import('@oclif/core');
 
     process.argv = ['bun', 'slingshot', 'deploy', '--help'];
-    mock.module('@oclif/core', () => ({ run, flush }));
+    mock.module('@oclif/core', () => ({
+      ...actualOclif,
+      run,
+      flush,
+    }));
 
     try {
       await import(`../../src/cli/index.ts?cli=${Date.now()}`);

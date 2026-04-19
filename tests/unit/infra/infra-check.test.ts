@@ -21,12 +21,6 @@ type WsDiagnostic = {
 
 type WsAuditResult = { diagnostics: readonly WsDiagnostic[] };
 
-type CompareArgs = {
-  infraUses: string[];
-  platformResources: string[];
-  derivedUses: string[];
-};
-
 type CompareResult = {
   warnings: { resource: string; message: string }[];
   infos: { resource: string; message: string }[];

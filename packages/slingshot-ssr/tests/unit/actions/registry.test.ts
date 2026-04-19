@@ -1,15 +1,6 @@
 // packages/slingshot-ssr/tests/unit/actions/registry.test.ts
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { clearActionCache, resolveAction } from '../../../src/actions/registry';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** A fake module used in dynamic import mocks. */
-const fakeModule = {
-  createPost: async (formData: FormData) => ({ title: formData.get('title') }),
-  deletePost: async (id: string) => ({ deleted: id }),
-  notAFunction: 'I am a string, not a function',
-};
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 

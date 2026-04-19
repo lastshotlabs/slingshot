@@ -15,7 +15,7 @@ function createMockRedis(): RedisLike & {
     _store,
     _sets,
 
-    async set(key: string, value: string, _mode?: 'EX', _ttl?: number): Promise<unknown> {
+    async set(key: string, value: string): Promise<unknown> {
       _store.set(key, value);
       return 'OK';
     },

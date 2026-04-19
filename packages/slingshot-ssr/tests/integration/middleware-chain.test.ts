@@ -179,7 +179,7 @@ describe('defineRoute — Phase 30: type-safe route definition', () => {
     const { defineRoute } = await import('../../src/types');
 
     const route = defineRoute({
-      load: async _ctx => ({ data: { name: 'test' } }),
+      load: async () => ({ data: { name: 'test' } }),
       Page: ({ loaderData }) => loaderData.name as unknown,
     });
 
@@ -191,7 +191,7 @@ describe('defineRoute — Phase 30: type-safe route definition', () => {
     const { defineRoute } = await import('../../src/types');
 
     const route = defineRoute({
-      load: async _ctx => ({ data: { title: 'Hello' } }),
+      load: async () => ({ data: { title: 'Hello' } }),
       Page: () => null,
       meta: async (_ctx, result) => ({ title: result.data.title }),
     });

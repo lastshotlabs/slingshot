@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Hono } from 'hono';
 import { buildSsrMiddleware } from '../../src/middleware';
-import type { SlingshotSsrRenderer, SsrRouteChain, SsrRouteMatch } from '../../src/types';
+import type { SlingshotSsrRenderer, SsrRouteMatch } from '../../src/types';
 
 // A minimal mock renderer for testing middleware in isolation.
 // The middleware is tested without a real SlingshotContext — it uses
@@ -236,7 +236,7 @@ describe('SSR middleware — Phase 25: renderChain dispatch', () => {
         renderCalled = true;
         return new Response('<html>render</html>', { headers: { 'Content-Type': 'text/html' } });
       },
-      renderChain: async (_chain: SsrRouteChain) => {
+      renderChain: async () => {
         renderChainCalled = true;
         return new Response('<html>renderChain</html>', {
           headers: { 'Content-Type': 'text/html' },

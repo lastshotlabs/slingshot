@@ -18,7 +18,7 @@ function makeJob(overrides?: Partial<WebhookJob>): Omit<WebhookJob, 'id' | 'crea
 
 describe('memory queue', () => {
   it('calls processor for enqueued job', async () => {
-    const processorMock = mock(async (_job: WebhookJob) => {});
+    const processorMock = mock(async () => {});
     const q = createWebhookMemoryQueue({ maxAttempts: 3 });
     await q.start(processorMock);
     await q.enqueue(makeJob());
@@ -29,9 +29,9 @@ describe('memory queue', () => {
   });
 
   it('retries on failure up to maxAttempts, then calls onDeadLetter', async () => {
-    const deadLetterMock = mock((_job: WebhookJob, _err: Error) => {});
+    const deadLetterMock = mock(() => {});
     let callCount = 0;
-    const processor = async (_job: WebhookJob) => {
+    const processor = async () => {
       callCount++;
       throw new Error('delivery failed');
     };
@@ -46,7 +46,7 @@ describe('memory queue', () => {
 
   it('depth decreases after job is processed', async () => {
     const q = createWebhookMemoryQueue({ maxAttempts: 1 });
-    const processorMock = mock(async (_job: WebhookJob) => {});
+    const processorMock = mock(async () => {});
     await q.start(processorMock);
 
     expect(await q.depth!()).toBe(0);
@@ -67,9 +67,9 @@ describe('memory queue', () => {
   });
 
   it('stops immediately on non-retryable error', async () => {
-    const deadLetterMock = mock((_job: WebhookJob, _err: Error) => {});
+    const deadLetterMock = mock(() => {});
     let callCount = 0;
-    const processor = async (_job: WebhookJob) => {
+    const processor = async () => {
       callCount++;
       throw new WebhookDeliveryError('permanent failure', false, 400);
     };

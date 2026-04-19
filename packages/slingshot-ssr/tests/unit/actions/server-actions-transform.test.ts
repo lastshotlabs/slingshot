@@ -8,9 +8,7 @@
 //
 // This file is intentionally minimal — the detailed transform tests are in the
 // snapshot package where the plugin lives.
-import path from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { clearActionCache, resolveAction } from '../../../src/actions/registry';
 import { ActionRedirect, buildActionRouter } from '../../../src/actions/routes';
 
 describe('ActionRedirect (exported from actions/routes)', () => {

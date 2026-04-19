@@ -43,7 +43,7 @@ function makeInfra(
   resolveSource?: (name: string) => AsyncIterable<Record<string, unknown>> | null,
 ): StoreInfra {
   const infra = {} as unknown as StoreInfra;
-  Reflect.set(infra, RESOLVE_REINDEX_SOURCE, resolveSource ?? ((_name: string) => null));
+  Reflect.set(infra, RESOLVE_REINDEX_SOURCE, resolveSource ?? (() => null));
   return infra;
 }
 

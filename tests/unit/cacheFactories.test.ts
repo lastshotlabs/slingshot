@@ -8,6 +8,7 @@ import {
   boundaryCacheFactories,
   createRedisBoundaryCacheAdapter,
 } from '../../src/framework/boundaryAdapters/cacheFactories';
+import * as realAuth from '../../packages/slingshot-auth/src/index';
 
 // ---------------------------------------------------------------------------
 // Redis boundary cache adapter
@@ -219,6 +220,7 @@ describe('boundaryCacheFactories — sqlite happy path', () => {
     };
     // Mock the slingshot-auth import used by createSqliteBoundaryCacheAdapter
     mock.module('@lastshotlabs/slingshot-auth', () => ({
+      ...realAuth,
       createSqliteCacheAdapter: () => mockAdapter,
     }));
 

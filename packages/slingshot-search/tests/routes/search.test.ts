@@ -215,12 +215,10 @@ async function buildTestApp(overrides?: Partial<SearchPluginConfig>): Promise<Te
 
 describe('search routes', () => {
   let app: Hono;
-  let manager: SearchManager;
 
   beforeEach(async () => {
     const built = await buildTestApp();
     app = built.app;
-    manager = built.manager;
   });
 
   it('GET /search/:entity returns search results', async () => {

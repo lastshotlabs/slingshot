@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import { PERMISSIONS_STATE_KEY } from '@lastshotlabs/slingshot-core';
 import type { PluginSetupContext } from '@lastshotlabs/slingshot-core';
 import { createSlingshotAdminPlugin } from '../../src/framework/admin';
+import * as realAuth from '../../packages/slingshot-auth/src/index';
 
 // ---------------------------------------------------------------------------
 // Mock @lastshotlabs/slingshot-admin
@@ -22,6 +23,7 @@ mock.module('@lastshotlabs/slingshot-admin', () => ({
 // ---------------------------------------------------------------------------
 
 mock.module('@lastshotlabs/slingshot-auth', () => ({
+  ...realAuth,
   createSlingshotAuthAccessProvider: () => ({ canAccess: async () => true }),
   createSlingshotManagedUserProvider: () => ({ list: async () => [] }),
   getAuthRuntimeContext: () => ({

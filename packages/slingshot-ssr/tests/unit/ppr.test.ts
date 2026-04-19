@@ -25,21 +25,22 @@ function makeMockCache(): PprCacheShape & { stored: Map<string, unknown> } {
 function makeExtractShell(
   ok = true,
 ): (element: MockReactElement) => Promise<{ shellHtml: string; ok: boolean }> {
-  return async (_element: MockReactElement) => ({
+  return async () => ({
     shellHtml: ok ? '<div>shell content</div>' : '',
     ok,
   });
 }
 
 function makeRoutes(paths: string[]): PprRouteDescriptor[] {
-  return paths.map(path => ({
-    path,
-    element: {
+  return paths.map(path => {
+    const raw = {
       type: 'div',
       props: { children: path },
       key: null,
-    } as MockReactElement,
-  }));
+    };
+    const element = raw as unknown as MockReactElement;
+    return { path, element };
+  });
 }
 
 describe('prerenderPprShells', () => {
@@ -82,7 +83,7 @@ describe('prerenderPprShells', () => {
 
   it('handles a mix of successful and failed shells', async () => {
     let callCount = 0;
-    const extractShell = async (_element: MockReactElement) => {
+    const extractShell = async () => {
       callCount++;
       const ok = callCount % 2 === 1;
       return { shellHtml: ok ? '<div>ok</div>' : '', ok };

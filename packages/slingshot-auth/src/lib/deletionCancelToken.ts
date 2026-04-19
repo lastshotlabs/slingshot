@@ -6,6 +6,7 @@ import { sha256 as hashToken } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -94,10 +95,7 @@ export function createMemoryDeletionCancelTokenRepository(): DeletionCancelToken
 export function createSqliteDeletionCancelTokenRepository(
   db: RuntimeSqliteDatabase,
 ): DeletionCancelTokenRepository {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS auth_deletion_cancel_tokens (
       tokenHash TEXT PRIMARY KEY,
       userId    TEXT NOT NULL,
@@ -107,8 +105,7 @@ export function createSqliteDeletionCancelTokenRepository(
     db.run(
       'CREATE INDEX IF NOT EXISTS idx_auth_deletion_cancel_tokens_expiresAt ON auth_deletion_cancel_tokens(expiresAt)',
     );
-    initialized = true;
-  }
+  });
 
   return {
     async store(hash, userId, jobId, ttl) {

@@ -10,6 +10,7 @@ import {
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createSqliteInitializer } from './sqliteInit';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -235,10 +236,7 @@ export function createMemoryLockoutRepository(): LockoutRepository {
  * const service = createLockoutService({ maxAttempts: 5, lockoutDuration: 900 }, repo);
  */
 export function createSqliteLockoutRepository(db: RuntimeSqliteDatabase): LockoutRepository {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS auth_lockout_attempts (
       subjectKey TEXT PRIMARY KEY,
       count      INTEGER NOT NULL,
@@ -254,8 +252,7 @@ export function createSqliteLockoutRepository(db: RuntimeSqliteDatabase): Lockou
     db.run(
       'CREATE INDEX IF NOT EXISTS idx_auth_locked_accounts_expiresAt ON auth_locked_accounts(expiresAt)',
     );
-    initialized = true;
-  }
+  });
 
   return {
     async getAttempts(key) {

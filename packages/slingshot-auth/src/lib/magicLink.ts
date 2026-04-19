@@ -10,6 +10,7 @@ import {
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -94,10 +95,7 @@ export function createMemoryMagicLinkRepository(): MagicLinkRepository {
  * const magicLinkRepo = createSqliteMagicLinkRepository(db);
  */
 export function createSqliteMagicLinkRepository(db: RuntimeSqliteDatabase): MagicLinkRepository {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS auth_magic_links (
       tokenHash TEXT PRIMARY KEY,
       userId    TEXT NOT NULL,
@@ -106,8 +104,7 @@ export function createSqliteMagicLinkRepository(db: RuntimeSqliteDatabase): Magi
     db.run(
       'CREATE INDEX IF NOT EXISTS idx_auth_magic_links_expiresAt ON auth_magic_links(expiresAt)',
     );
-    initialized = true;
-  }
+  });
 
   return {
     async store(hash, userId, ttl) {

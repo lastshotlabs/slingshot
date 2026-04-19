@@ -6,6 +6,7 @@ import {
   isSqliteMissingColumnError,
   isSqliteUnsupportedDropColumnError,
 } from '../sqliteSchemaErrors';
+import { createSqliteInitializer } from '../sqliteInit';
 import { getSessionTtlMs, isIdleExpired } from './policy';
 import type { SessionRepository } from './repository';
 import type { SessionInfo } from './types';
@@ -37,8 +38,6 @@ import type { SessionInfo } from './types';
  * migrations have run.
  */
 export function createSqliteSessionRepository(db: RuntimeSqliteDatabase): SessionRepository {
-  let initialized = false;
-
   interface CountRow {
     count: number;
   }
@@ -65,8 +64,7 @@ export function createSqliteSessionRepository(db: RuntimeSqliteDatabase): Sessio
     mfaVerifiedAt: number | null;
   }
 
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     // Sessions table is created by sqliteAuth adapter's initSchema.
     // Only create if it doesn't exist (standalone usage).
     db.run(`CREATE TABLE IF NOT EXISTS sessions (
@@ -105,8 +103,7 @@ export function createSqliteSessionRepository(db: RuntimeSqliteDatabase): Sessio
     db.run(
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_refreshToken ON sessions(refreshToken) WHERE refreshToken IS NOT NULL',
     );
-    initialized = true;
-  }
+  });
 
   function deleteSessionImpl(sessionId: string, cfg?: AuthResolvedConfig): void {
     init();

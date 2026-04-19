@@ -1,6 +1,7 @@
  
 import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -159,18 +160,14 @@ export function createMemoryCacheAdapter(): ICacheAdapter {
  * await cache.set('rate:user-1', '5', 60);
  */
 export function createSqliteCacheAdapter(db: RuntimeSqliteDatabase): ICacheAdapter {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS auth_cache (
       key       TEXT PRIMARY KEY,
       value     TEXT NOT NULL,
       expiresAt INTEGER NOT NULL
     )`);
     db.run('CREATE INDEX IF NOT EXISTS idx_auth_cache_expiresAt ON auth_cache(expiresAt)');
-    initialized = true;
-  }
+  });
 
   return {
     name: 'sqlite',

@@ -13,6 +13,7 @@ import {
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from '../config/authConfig';
 import { isSqliteDuplicateColumnError } from './sqliteSchemaErrors';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -285,10 +286,7 @@ export function createMemoryMfaChallengeRepository(): MfaChallengeRepository {
 export function createSqliteMfaChallengeRepository(
   db: RuntimeSqliteDatabase,
 ): MfaChallengeRepository {
-  let tableCreated = false;
-
-  function ensureTable() {
-    if (tableCreated) return;
+  const ensureTable = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS mfa_challenges (
       token             TEXT PRIMARY KEY,
       userId            TEXT NOT NULL,
@@ -323,8 +321,7 @@ export function createSqliteMfaChallengeRepository(
       'webauthnChallenge',
     );
     addColumnIfMissing(db, 'ALTER TABLE mfa_challenges ADD COLUMN sessionId TEXT', 'sessionId');
-    tableCreated = true;
-  }
+  });
 
   return {
     async createChallenge(hash, data, ttl) {

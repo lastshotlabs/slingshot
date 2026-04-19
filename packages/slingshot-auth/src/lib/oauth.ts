@@ -14,6 +14,7 @@ import {
 } from 'arctic';
 import { DEFAULT_MAX_ENTRIES, createEvictExpired, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 /**
@@ -200,10 +201,7 @@ export function createMemoryOAuthStateStore(): OAuthStateStore {
 // ---------------------------------------------------------------------------
 
 export function createSqliteOAuthStateStore(db: RuntimeSqliteDatabase): OAuthStateStore {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS oauth_states (
       state      TEXT PRIMARY KEY,
       codeVerifier TEXT,
@@ -211,8 +209,7 @@ export function createSqliteOAuthStateStore(db: RuntimeSqliteDatabase): OAuthSta
       expiresAt  INTEGER NOT NULL
     )`);
     db.run('CREATE INDEX IF NOT EXISTS idx_oauth_states_expiresAt ON oauth_states(expiresAt)');
-    initialized = true;
-  }
+  });
 
   return {
     async store(state, codeVerifier, linkUserId) {

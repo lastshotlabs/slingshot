@@ -5,6 +5,7 @@ import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -161,18 +162,14 @@ export function createMemoryAuthRateLimitRepository(): AuthRateLimitRepository {
 export function createSqliteAuthRateLimitRepository(
   db: RuntimeSqliteDatabase,
 ): AuthRateLimitRepository {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS auth_rate_limit (
       subjectKey TEXT PRIMARY KEY,
       count      INTEGER NOT NULL,
       resetAt    INTEGER NOT NULL
     )`);
     db.run('CREATE INDEX IF NOT EXISTS idx_auth_rate_limit_resetAt ON auth_rate_limit(resetAt)');
-    initialized = true;
-  }
+  });
 
   return {
     async get(key) {

@@ -31,11 +31,11 @@ describe('resolveDomain', () => {
     expect(result).toBe('api.dev.myapp.com');
   });
 
-  it('prod stage gets base domain as-is', () => {
-    const stage: StageConfig = { domainSuffix: '.staging.myapp.com' };
+  it('prod stage applies domainSuffix when explicitly declared', () => {
+    const stage: StageConfig = { domainSuffix: '.prod.myapp.com' };
 
     const result = resolveDomain('api.myapp.com', 'prod', stage);
-    expect(result).toBe('api.myapp.com');
+    expect(result).toBe('api.prod.myapp.com');
   });
 
   it('subdomain extraction with suffix application', () => {

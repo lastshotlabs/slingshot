@@ -5,6 +5,7 @@ import { DEFAULT_MAX_ENTRIES, evictOldest, sha256 } from '@lastshotlabs/slingsho
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -102,19 +103,17 @@ export function createMemorySamlRequestIdRepository(): SamlRequestIdRepository {
 export function createSqliteSamlRequestIdRepository(
   db: RuntimeSqliteDatabase | null | undefined,
 ): SamlRequestIdRepository {
-  let tableCreated = false;
-
-  function ensureTable(): void {
-    if (!db) return;
-    if (tableCreated) return;
-    db.run(`
+  const ensureTable =
+    db === null || db === undefined
+      ? () => {}
+      : createSqliteInitializer(db, () => {
+          db.run(`
       CREATE TABLE IF NOT EXISTS saml_request_ids (
         hash TEXT PRIMARY KEY,
         expires_at INTEGER NOT NULL
       )
     `);
-    tableCreated = true;
-  }
+        });
 
   return {
     async store(hash, ttl) {

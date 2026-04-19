@@ -11,6 +11,7 @@ import {
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from '../config/authConfig';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -115,10 +116,7 @@ export function createMemoryVerificationTokenRepository(): VerificationTokenRepo
 export function createSqliteVerificationTokenRepository(
   db: RuntimeSqliteDatabase,
 ): VerificationTokenRepository {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS auth_verification_tokens (
       tokenHash TEXT PRIMARY KEY,
       userId    TEXT NOT NULL,
@@ -128,8 +126,7 @@ export function createSqliteVerificationTokenRepository(
     db.run(
       'CREATE INDEX IF NOT EXISTS idx_auth_verification_tokens_expiresAt ON auth_verification_tokens(expiresAt)',
     );
-    initialized = true;
-  }
+  });
 
   return {
     async create(hash, userId, email, ttl) {

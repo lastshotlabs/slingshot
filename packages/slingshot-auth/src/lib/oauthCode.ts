@@ -14,6 +14,7 @@ import {
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { OAuthCodePayload } from '../types/oauthCode';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -105,10 +106,7 @@ export function createMemoryOAuthCodeRepository(): OAuthCodeRepository {
  * const codeRepo = createSqliteOAuthCodeRepository(db);
  */
 export function createSqliteOAuthCodeRepository(db: RuntimeSqliteDatabase): OAuthCodeRepository {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS auth_oauth_codes (
       codeHash     TEXT PRIMARY KEY,
       payload      TEXT NOT NULL,
@@ -117,8 +115,7 @@ export function createSqliteOAuthCodeRepository(db: RuntimeSqliteDatabase): OAut
     db.run(
       'CREATE INDEX IF NOT EXISTS idx_auth_oauth_codes_expiresAt ON auth_oauth_codes(expiresAt)',
     );
-    initialized = true;
-  }
+  });
 
   return {
     async store(hash, payload, ttl) {

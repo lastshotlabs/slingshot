@@ -11,6 +11,7 @@ import {
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { OAuthReauthConfirmation, OAuthReauthState } from '../types/oauthReauth';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
@@ -125,10 +126,7 @@ export function createMemoryOAuthReauthRepository(): OAuthReauthRepository {
 export function createSqliteOAuthReauthRepository(
   db: RuntimeSqliteDatabase,
 ): OAuthReauthRepository {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS auth_oauth_reauth_states (
       tokenHash TEXT PRIMARY KEY,
       data      TEXT NOT NULL,
@@ -145,8 +143,7 @@ export function createSqliteOAuthReauthRepository(
     db.run(
       'CREATE INDEX IF NOT EXISTS idx_auth_oauth_reauth_confirmations_expiresAt ON auth_oauth_reauth_confirmations(expiresAt)',
     );
-    initialized = true;
-  }
+  });
 
   return {
     async storeState(hash, data, ttl) {

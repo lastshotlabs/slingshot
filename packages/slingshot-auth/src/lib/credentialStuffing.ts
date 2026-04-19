@@ -1,6 +1,7 @@
  
 import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
 
 /**
@@ -223,10 +224,7 @@ export function createMemoryCredentialStuffingRepository(): CredentialStuffingRe
 export function createSqliteCredentialStuffingRepository(
   db: RuntimeSqliteDatabase,
 ): CredentialStuffingRepository {
-  let initialized = false;
-
-  function init(): void {
-    if (initialized) return;
+  const init = createSqliteInitializer(db, () => {
     db.run(`CREATE TABLE IF NOT EXISTS auth_credential_stuffing (
       bucketKey TEXT NOT NULL,
       member    TEXT NOT NULL,
@@ -239,8 +237,7 @@ export function createSqliteCredentialStuffingRepository(
     db.run(
       'CREATE INDEX IF NOT EXISTS idx_auth_credential_stuffing_bucketKey ON auth_credential_stuffing(bucketKey)',
     );
-    initialized = true;
-  }
+  });
 
   return {
     async addToSet(key, member, windowMs) {

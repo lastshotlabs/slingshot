@@ -20,12 +20,9 @@ export function resolveDomain(
     return domainConfig.stages[stageName];
   }
 
-  if (stageName === 'prod') {
-    return baseDomain;
-  }
-
   // Apply domainSuffix when the stage declares one.
-  // Production stages typically omit domainSuffix so the base domain is used as-is.
+  // Production stages typically omit domainSuffix so the base domain is used as-is,
+  // but an explicit suffix should still be honored when provided.
   if (stage.domainSuffix) {
     // e.g. api.myapp.com + suffix ".dev.myapp.com" -> api.dev.myapp.com
     // Extract subdomain, apply suffix

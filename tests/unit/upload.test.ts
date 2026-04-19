@@ -173,8 +173,8 @@ describe('parseUpload', () => {
     const body: Record<string, File | File[]> = { ...fields };
     return {
       req: {
-        parseBody: async (_opts?: any) => body as any,
-        header: (_name: string) => undefined,
+        parseBody: async () => body as any,
+        header: () => undefined,
       },
       get: (key: string) => {
         if (key === 'slingshotCtx') return slingshotCtx;
@@ -183,7 +183,7 @@ describe('parseUpload', () => {
         if (key === 'uploadBucket') return undefined;
         return null;
       },
-      set: (_key: string, _val: any) => {},
+      set: () => {},
     } as unknown as Context<AppEnv>;
   };
 
@@ -282,7 +282,7 @@ describe('generateUploadKeyFromFilename', () => {
       undefined,
       {},
       {
-        generateKey: (file, _ctx) => `fallback/${file.name}`,
+        generateKey: (file) => `fallback/${file.name}`,
       },
     );
     expect(key).toBe('fallback/upload');

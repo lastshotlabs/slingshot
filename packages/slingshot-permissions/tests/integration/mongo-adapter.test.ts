@@ -18,8 +18,7 @@ import type {
 
 mock.module('mongoose', () => {
   class MockSchema {
-    constructor(_def: object, _opts?: object) {}
-    index(..._args: object[]) {
+    index() {
       return this;
     }
   }
@@ -108,7 +107,7 @@ function createMockConnection(): { conn: MongoConnectionLike; store: Map<string,
   };
 
   const conn: MongoConnectionLike = {
-    model: (_name: string, _schema: object) => Grant,
+    model: () => Grant,
   };
 
   return { conn, store };

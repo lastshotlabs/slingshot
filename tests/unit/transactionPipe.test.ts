@@ -65,7 +65,9 @@ const MessageOps = defineOperations(Message, {
 
 // Type aliases derived from the concrete entity factories.
 // Using module-level factory instances lets ReturnType infer the concrete adapter types.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _roomFactories = createEntityFactories(Room);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _messageFactories = createEntityFactories(Message, MessageOps.operations);
 type RoomAdapter = ReturnType<typeof _roomFactories.memory>;
 type MessageAdapter = ReturnType<typeof _messageFactories.memory>;

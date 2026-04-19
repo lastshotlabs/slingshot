@@ -94,7 +94,7 @@ function attachInteractionsContext(app: Hono, bus: InProcessAdapter, withPermiss
     pluginState.set(PERMISSIONS_STATE_KEY, createFakePermissionsState());
   }
 
-  attachContext(app, {
+  const ctx = {
     app,
     pluginState,
     rateLimitAdapter: {
@@ -107,7 +107,8 @@ function attachInteractionsContext(app: Hono, bus: InProcessAdapter, withPermiss
     wsEndpoints: {},
     wsPublish: null,
     bus,
-  } as never);
+  };
+  attachContext(app, ctx as never);
 
   app.use('*', async (c, next) => {
     const user = c.req.header('x-test-user');
@@ -119,7 +120,7 @@ function attachInteractionsContext(app: Hono, bus: InProcessAdapter, withPermiss
 }
 
 function createFrameworkConfig() {
-  return {
+  const cfg = {
     resolvedStores: {
       sessions: 'memory',
       oauthState: 'memory',
@@ -145,7 +146,8 @@ function createFrameworkConfig() {
       },
     },
     password: Bun.password,
-  } as never;
+  };
+  return cfg as never;
 }
 
 describe('createInteractionsPlugin lifecycle', () => {

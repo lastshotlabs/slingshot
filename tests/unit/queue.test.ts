@@ -281,14 +281,14 @@ describe('QueueFactory methods', () => {
       maxSize: 2,
     });
     const dlqQueue = result.dlqQueue as unknown as MockQueue;
-    dlqQueue.add = mockDlqAdd;
+    dlqQueue.add = mockDlqAdd as typeof dlqQueue.add;
     // After adding, getWaitingCount returns a number > maxSize
-    dlqQueue.getWaitingCount = mock(async () => 5);
+    dlqQueue.getWaitingCount = mock(async () => 5) as typeof dlqQueue.getWaitingCount;
     dlqQueue.getWaiting = mock(async () => [
       { remove: removeMock },
       { remove: removeMock },
       { remove: removeMock },
-    ]);
+    ]) as typeof dlqQueue.getWaiting;
 
     const failedJob = {
       id: 'job-trim',
@@ -320,7 +320,7 @@ describe('QueueFactory methods', () => {
       data: { payload: 42 },
       opts: { delay: 1000, priority: 5, attempts: 3, backoff: { type: 'exponential' } },
       remove: removeMock,
-    }));
+    })) as typeof dlqQueue.getJob;
 
     await result.retryJob('dlq:job-retry');
     expect(removeMock).toHaveBeenCalledTimes(1);
@@ -342,7 +342,7 @@ describe('QueueFactory methods', () => {
       data: { payload: 99 },
       opts: { delay: 500 },
       remove: removeMock,
-    }));
+    })) as typeof dlqQueue.getJob;
 
     await result.retryJob('dlq:job-retry2');
     expect(removeMock).toHaveBeenCalledTimes(1);

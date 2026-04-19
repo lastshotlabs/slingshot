@@ -103,7 +103,7 @@ describe('createUploadsRouter (root coverage)', () => {
     const { app, records } = makeUploadApp({
       adapter: {
         presignPut,
-        delete: async (_key: string) => {},
+        delete: async () => {},
       },
       uploadConfig: {
         allowedMimeTypes: ['application/pdf'],
@@ -384,7 +384,7 @@ describe('createUploadsRouter (root coverage)', () => {
   });
 
   test('returns 404 for deletes when the upload record is missing and external keys are disabled', async () => {
-    const deleteSpy = mock(async (_key: string) => {});
+    const deleteSpy = mock(async () => {});
     const { app } = makeUploadApp({
       adapter: {
         delete: deleteSpy,
@@ -407,7 +407,7 @@ describe('createUploadsRouter (root coverage)', () => {
     const { app } = makeUploadApp({
       adapter: {
         // no presignPut
-        delete: async (_key: string) => {},
+        delete: async () => {},
       },
     });
 
@@ -543,7 +543,7 @@ describe('createUploadsRouter (root coverage)', () => {
   });
 
   test('deletes registered uploads for the owner and removes the registry record', async () => {
-    const deleteSpy = mock(async (_key: string) => {});
+    const deleteSpy = mock(async () => {});
     const { app, records } = makeUploadApp({
       adapter: {
         delete: deleteSpy,

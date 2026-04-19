@@ -11,11 +11,12 @@ import { createRawHtmlRenderer } from '../../src/renderers/rawHtml.js';
 import type { MailMessage, MailProvider, SendResult } from '../../src/types/provider.js';
 
 const MOCK_CFG = {} as unknown as SlingshotFrameworkConfig;
+const MOCK_APP: never = {} as never;
 
 function makeMockProvider(opts?: { healthCheckFails?: boolean }): MailProvider {
   const provider: MailProvider = {
     name: 'mock',
-    send: mock(async (_message: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+    send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
   };
   if (opts?.healthCheckFails) {
     provider.healthCheck = mock(async () => {
@@ -65,7 +66,7 @@ describe('createMailPlugin lifecycle', () => {
       subscriptions: [{ event: 'auth:delivery.password_reset', template: 'missing_template' }],
     });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     const warnMsgs = warnSpy.mock.calls.map(call => (call as string[])[0]);
     const templateWarnMsg = warnMsgs.find(m => m.includes('missing_template'));
@@ -94,7 +95,7 @@ describe('createMailPlugin lifecycle', () => {
       subscriptions: [{ event: 'auth:delivery.password_reset', template: 'missing_template' }],
     });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     expect(warnSpy).not.toHaveBeenCalled();
 
@@ -122,7 +123,7 @@ describe('createMailPlugin lifecycle', () => {
     });
 
     // Should not throw
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     expect(warnSpy).not.toHaveBeenCalled();
 
@@ -144,7 +145,7 @@ describe('createMailPlugin lifecycle', () => {
     });
 
     // Should not throw
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
     const warnMsg = (warnSpy.mock.calls[0] as string[])[0];
@@ -168,7 +169,7 @@ describe('createMailPlugin lifecycle', () => {
       queue,
     });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     expect(warnSpy).not.toHaveBeenCalled();
 
@@ -212,7 +213,7 @@ describe('createMailPlugin lifecycle', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     expect(warnSpy).toHaveBeenCalledTimes(2);
     const warnMsgs = warnSpy.mock.calls.map(call => (call as string[])[0]);

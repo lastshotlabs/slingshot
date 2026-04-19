@@ -360,7 +360,7 @@ describe('buildContext lifecycle', () => {
       mongo: null,
       postgres: null,
       ...overrides?.infra,
-    } as Parameters<typeof buildContext>[0]['infra'];
+    };
 
     const ctx = await buildContext({
       app,

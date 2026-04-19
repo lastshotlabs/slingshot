@@ -10,17 +10,6 @@ import type { RoomPersistenceConfig, StoredMessage, WsMessageRepository } from '
 import { persistMessage, getMessageHistory, configureRoom } from '../../src/framework/ws/messages';
 import { createMemoryWsMessageRepository } from '../../src/framework/persistence/wsMessages';
 
-function makeStoredMessage(overrides: Partial<StoredMessage> = {}): StoredMessage {
-  return {
-    id: crypto.randomUUID(),
-    endpoint: '/ws',
-    room: 'general',
-    senderId: 'user-1',
-    payload: { text: 'hello' },
-    createdAt: Date.now(),
-    ...overrides,
-  };
-}
 
 function buildAppWithPersistence(opts: {
   wsMessages?: WsMessageRepository;
@@ -184,7 +173,7 @@ describe('getMessageHistory', () => {
   test('delegates to persistence.wsMessages.getHistory', async () => {
     const mockRepo: WsMessageRepository = {
       async persist(msg) { return msg; },
-      async getHistory(endpoint, room, opts) {
+      async getHistory(endpoint, room) {
         return [
           { id: 'test-id', endpoint, room, senderId: null, payload: 'from-mock', createdAt: Date.now() },
         ];

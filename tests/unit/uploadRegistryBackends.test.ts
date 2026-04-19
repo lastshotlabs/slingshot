@@ -35,7 +35,7 @@ describe('createRedisUploadRegistry', () => {
     return {
       store,
       async get(key: string) { return store.get(key) ?? null; },
-      async set(key: string, value: string, _ex?: 'EX', _ttl?: number) {
+      async set(key: string, value: string) {
         store.set(key, value);
         return 'OK';
       },
@@ -298,7 +298,7 @@ describe('createMongoUploadRegistry', () => {
 
     const conn = {
       models: {} as Record<string, unknown>,
-      model(_name: string, _schema: unknown) {
+      model() {
         conn.models['UploadRegistry'] = model;
         return model;
       },

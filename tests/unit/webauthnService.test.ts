@@ -11,7 +11,7 @@ import type { OpenAPIHono } from '@hono/zod-openapi';
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import { getContext } from '@lastshotlabs/slingshot-core';
-import { authHeader, createTestApp } from '../setup';
+import { createTestApp } from '../setup';
 
 // ---------------------------------------------------------------------------
 // Mock @simplewebauthn/server BEFORE any app imports
@@ -112,7 +112,7 @@ describe('generateWebAuthnAuthenticationOptions', () => {
   });
 
   test('returns challenge+options when user has credentials', async () => {
-    const { token, userId } = await registerUser('wa-auth-cred@example.com');
+    const { userId } = await registerUser('wa-auth-cred@example.com');
 
     // Register a WebAuthn credential first
     const { registrationToken } = await initiateWebAuthnRegistration(userId, getRuntime());

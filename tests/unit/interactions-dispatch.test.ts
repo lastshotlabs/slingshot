@@ -56,12 +56,12 @@ describe('dispatchInteraction', () => {
       async can() {
         return true;
       },
-    } as never;
+    } as unknown as never;
     const rateLimit = {
       async trackAttempt() {
         return false;
       },
-    } as never;
+    } as unknown as never;
     const outcome = await dispatchInteraction(
       {
         handlers: {
@@ -132,12 +132,12 @@ describe('dispatchInteraction', () => {
       async can() {
         return false;
       },
-    } as never;
+    } as unknown as never;
     const forbidRateLimit = {
       async trackAttempt() {
         return false;
       },
-    } as never;
+    } as unknown as never;
     const outcome = await dispatchInteraction(
       {
         handlers: {

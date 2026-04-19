@@ -12,7 +12,7 @@ import type { MailProvider } from '../../src/types/provider.js';
 let workerFailedHandler: ((job: unknown, err: Error) => void) | null = null;
 let capturedProcessor: ((job: { data: unknown }) => Promise<void>) | null = null;
 
-const mockQueueAdd = mock(async (_name: string, _data: unknown, _opts: unknown) => ({
+const mockQueueAdd = mock(async () => ({
   id: 'job-123',
 }));
 const mockQueueClose = mock(async () => {});
@@ -262,7 +262,7 @@ describe('createBullMQMailQueue', () => {
 
   describe('Worker failed handler', () => {
     it('attemptsMade >= maxAttempts → config.onDeadLetter called', async () => {
-      const onDeadLetter = mock((_job: unknown, _err: Error) => {});
+      const onDeadLetter = mock(() => {});
 
       const q = createBullMQMailQueue({
         redis: { host: 'localhost' },
@@ -319,7 +319,7 @@ describe('createBullMQMailQueue', () => {
     });
 
     it('non-retryable error → onDeadLetter receives original MailSendError with full context', async () => {
-      const onDeadLetter = mock((_job: unknown, _err: Error) => {});
+      const onDeadLetter = mock(() => {});
       const originalErr = new MailSendError('Invalid recipient', false, 422, 'provider data');
       const provider = makeProvider(async () => {
         throw originalErr;
@@ -355,7 +355,7 @@ describe('createBullMQMailQueue', () => {
     });
 
     it('non-retryable error with maxAttempts > 1 → onDeadLetter called on first attempt (not after all retries)', async () => {
-      const onDeadLetter = mock((_job: unknown, _err: Error) => {});
+      const onDeadLetter = mock(() => {});
       const originalErr = new MailSendError('Invalid recipient', false, 422);
       const provider = makeProvider(async () => {
         throw originalErr;

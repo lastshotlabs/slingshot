@@ -13,13 +13,13 @@ type AnyPayload = SlingshotEventMap[keyof SlingshotEventMap];
 // ---------------------------------------------------------------------------
 
 function makeBus() {
-  const handlers: Map<string, Set<Function>> = new Map();
+  const handlers: Map<string, Set<(...args: unknown[]) => unknown>> = new Map();
   return {
-    on: mock((event: string, handler: Function) => {
+    on: mock((event: string, handler: (...args: unknown[]) => unknown) => {
       if (!handlers.has(event)) handlers.set(event, new Set());
       handlers.get(event)!.add(handler);
     }),
-    off: mock((event: string, handler: Function) => {
+    off: mock((event: string, handler: (...args: unknown[]) => unknown) => {
       handlers.get(event)?.delete(handler);
     }),
     emit: async (event: string, payload: unknown) => {
@@ -86,7 +86,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -127,7 +127,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -149,7 +149,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -171,7 +171,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -195,7 +195,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -217,7 +217,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -246,7 +246,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -279,7 +279,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -302,7 +302,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -334,7 +334,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -353,7 +353,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -378,7 +378,7 @@ describe('wireSubscriptions', () => {
     const config: MailPluginConfig = {
       provider: {
         name: 'test',
-        send: mock(async (_m: MailMessage): Promise<SendResult> => ({ status: 'sent' })),
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
       },
       renderer,
       from: 'no-reply@example.com',
@@ -391,7 +391,7 @@ describe('wireSubscriptions', () => {
     expect(bus.on as ReturnType<typeof mock>).toHaveBeenCalledTimes(1);
     const call = (bus.on as ReturnType<typeof mock>).mock.calls[0] as [
       string,
-      Function,
+      (...args: unknown[]) => unknown,
       { durable: boolean; name: string },
     ];
     const opts = call[2];

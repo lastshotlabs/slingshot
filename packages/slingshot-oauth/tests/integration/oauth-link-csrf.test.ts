@@ -58,14 +58,15 @@ describe('OAuth link initiation CSRF protection', () => {
 
   beforeEach(() => {
     runtime = makeTestRuntime();
-    runtime.oauth.providers.google = {
+    const provider = {
       createAuthorizationURL(state: string, codeVerifier: string) {
         const url = new URL('https://provider.example/authorize');
         url.searchParams.set('state', state);
         url.searchParams.set('code_verifier', codeVerifier);
         return url;
       },
-    } as never;
+    };
+    runtime.oauth.providers.google = provider as never;
   });
 
   test('cookie-authenticated POST /auth/google/link rejects requests without CSRF proof', async () => {
@@ -122,14 +123,15 @@ describe('OAuth link initiation CSRF protection', () => {
 
   test('returns 403 for suspended accounts when route guard is responsible', async () => {
     runtime = makeTestRuntime({ checkSuspensionOnIdentify: false });
-    runtime.oauth.providers.google = {
+    const suspendedProvider = {
       createAuthorizationURL(state: string, codeVerifier: string) {
         const url = new URL('https://provider.example/authorize');
         url.searchParams.set('state', state);
         url.searchParams.set('code_verifier', codeVerifier);
         return url;
       },
-    } as never;
+    };
+    runtime.oauth.providers.google = suspendedProvider as never;
 
     const app = buildApp(runtime);
     const { userId, token } = await createSession(runtime, 'suspended-link@example.com', 'sess-s1');
@@ -165,14 +167,15 @@ describe('OAuth login initiation CSRF protection', () => {
 
   beforeEach(() => {
     runtime = makeTestRuntime();
-    runtime.oauth.providers.google = {
+    const loginProvider = {
       createAuthorizationURL(state: string, codeVerifier: string) {
         const url = new URL('https://provider.example/authorize');
         url.searchParams.set('state', state);
         url.searchParams.set('code_verifier', codeVerifier);
         return url;
       },
-    } as never;
+    };
+    runtime.oauth.providers.google = loginProvider as never;
   });
 
   test('anonymous POST /auth/google rejects requests without CSRF proof', async () => {
@@ -226,13 +229,14 @@ describe('OAuth reauth initiation CSRF protection', () => {
         promptType: 'login',
       },
     });
-    runtime.oauth.providers.github = {
+    const reauthProvider = {
       createAuthorizationURL(state: string) {
         const url = new URL('https://provider.example/reauth');
         url.searchParams.set('state', state);
         return url;
       },
-    } as never;
+    };
+    runtime.oauth.providers.github = reauthProvider as never;
   });
 
   async function createLinkedSession() {
@@ -306,13 +310,14 @@ describe('OAuth reauth initiation CSRF protection', () => {
         promptType: 'login',
       },
     });
-    runtime.oauth.providers.github = {
+    const verifyProvider = {
       createAuthorizationURL(state: string) {
         const url = new URL('https://provider.example/reauth');
         url.searchParams.set('state', state);
         return url;
       },
-    } as never;
+    };
+    runtime.oauth.providers.github = verifyProvider as never;
 
     const app = buildApp(runtime, ['github']);
     const { id: userId } = await runtime.adapter.create('reauth-verify@example.com', 'hash');
@@ -349,13 +354,14 @@ describe('OAuth reauth initiation CSRF protection', () => {
 describe('OAuth continuation stale-session protection', () => {
   test('google link callback returns 403 for suspended accounts and does not link the provider', async () => {
     const runtime = makeTestRuntime();
-    runtime.oauth.providers.google = {
+    const callbackProvider = {
       validateAuthorizationCode() {
         return Promise.resolve({
           accessToken: () => 'provider-access-token',
         });
       },
-    } as never;
+    };
+    runtime.oauth.providers.google = callbackProvider as never;
 
     const mockFetch = spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ sub: 'google-sub-1' }), {

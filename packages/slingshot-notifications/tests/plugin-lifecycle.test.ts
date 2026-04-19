@@ -11,22 +11,24 @@ import { NOTIFICATIONS_PLUGIN_STATE_KEY } from '../src/state';
 import type { NotificationsPluginState } from '../src/state';
 
 function createFrameworkConfig() {
-  return {
+  const cfg = {
     resolvedStores: { authStore: 'memory' },
     storeInfra: {},
     entityRegistry: createEntityRegistry(),
-  } as never;
+  };
+  return cfg as never;
 }
 
 function attachMinimalContext(app: Hono, bus: InProcessAdapter) {
-  attachContext(app, {
+  const ctx = {
     app,
     pluginState: new Map(),
     ws: null,
     wsEndpoints: {},
     wsPublish: null,
     bus,
-  } as never);
+  };
+  attachContext(app, ctx as never);
 }
 
 describe('createNotificationsPlugin lifecycle', () => {
@@ -115,8 +117,9 @@ describe('createNotificationsPlugin lifecycle', () => {
     expect(Object.isFrozen(state)).toBe(true);
     expect(state?.config.mountPath).toBe('/notifications');
 
-    const deliver = mock(async (_event: unknown) => {});
-    state?.registerDeliveryAdapter({ deliver } as never);
+    const deliver = mock(async () => {});
+    const adapter = { deliver };
+    state?.registerDeliveryAdapter(adapter as never);
 
     const created = await state?.createBuilder({ source: 'community' }).notify({
       userId: 'user-1',

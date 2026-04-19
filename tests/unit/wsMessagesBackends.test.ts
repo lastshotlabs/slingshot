@@ -367,7 +367,7 @@ describe('createMongoWsMessageRepository', () => {
         public def: object,
         public opts: object,
       ) {}
-      index(_def: object, _opts?: object) {}
+      index() {}
     }
 
     const mongoose = {
@@ -381,9 +381,9 @@ describe('createMongoWsMessageRepository', () => {
     const sortedDocs = docs.slice();
 
     const chainBuilder = (filteredDocs: MockDoc[]) => ({
-      sort: (_order: object) => chainBuilder(filteredDocs),
+      sort: () => chainBuilder(filteredDocs),
       limit: (n: number) => ({
-        select: (_fields: string) =>
+        select: () =>
           Promise.resolve(filteredDocs.slice(0, n).map(d => ({ _id: d._id }))),
         lean: () => Promise.resolve(filteredDocs.slice(0, n)),
       }),
@@ -397,17 +397,17 @@ describe('createMongoWsMessageRepository', () => {
         sortedDocs.push(doc);
         return doc;
       },
-      countDocuments: async (_filter: object) => sortedDocs.length,
-      find: (_filter: object) => chainBuilder(sortedDocs.slice().reverse()),
+      countDocuments: async () => sortedDocs.length,
+      find: () => chainBuilder(sortedDocs.slice().reverse()),
       findById: (id: string) => ({
         lean: async () => sortedDocs.find(d => d._id === id) ?? null,
       }),
-      deleteMany: async (_filter: object) => ({ deletedCount: 1 }),
+      deleteMany: async () => ({ deletedCount: 1 }),
     };
 
     const conn = {
       models: {} as Record<string, unknown>,
-      model: (_name: string, _schema: unknown) => model,
+      model: () => model,
     };
 
     return { conn, model };
@@ -549,7 +549,7 @@ describe('wsMessageFactories', () => {
   test('mongo factory creates a repository from infra.getMongo()', () => {
     const conn = {
       models: {},
-      model: (_name: string, _schema: unknown) => ({
+      model: () => ({
         create: async () => ({}),
         countDocuments: async () => 0,
         find: () => ({ sort: () => ({ limit: () => ({ lean: async () => [] }) }) }),
@@ -558,9 +558,9 @@ describe('wsMessageFactories', () => {
       }),
     };
     const mg = {
+      // eslint-disable-next-line @typescript-eslint/no-extraneous-class
       Schema: class {
         static Types = { Mixed: 'Mixed' };
-        constructor() {}
         index() {}
       },
     };
@@ -573,7 +573,7 @@ describe('wsMessageFactories', () => {
 
   test('postgres factory returns a Promise resolving to a repository', async () => {
     const pool = {
-      query: async (_sql: string, _params?: unknown[]) => ({ rows: [], rowCount: 0 }),
+      query: async () => ({ rows: [], rowCount: 0 }),
     };
     const infra = {
       getPostgres: () => ({ pool }),

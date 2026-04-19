@@ -4,12 +4,12 @@ import { describe, expect, it, mock } from 'bun:test';
 // Module mocks — Bun hoists these before static imports.
 // ---------------------------------------------------------------------------
 
-const resolveUserIdMock = mock(async (_req: Request, _resolver: unknown) => null as string | null);
+const resolveUserIdMock = mock(async () => null as string | null);
 mock.module('@framework/lib/resolveUserId', () => ({
   resolveUserId: resolveUserIdMock,
 }));
 
-const setStandaloneClientIpMock = mock((_req: Request, _ip: string) => {});
+const setStandaloneClientIpMock = mock(() => {});
 const originalCore = await import('@lastshotlabs/slingshot-core');
 mock.module('@lastshotlabs/slingshot-core', () => ({
   ...originalCore,
@@ -27,8 +27,8 @@ function createMockServer(overrides?: {
   upgrade?: (req: Request, opts: unknown) => boolean;
 }) {
   return {
-    requestIP: overrides?.requestIP ?? ((_req: Request) => ({ address: '127.0.0.1' })),
-    upgrade: overrides?.upgrade ?? ((_req: Request, _opts: unknown) => true),
+    requestIP: overrides?.requestIP ?? (() => ({ address: '127.0.0.1' })),
+    upgrade: overrides?.upgrade ?? (() => true),
   } as any;
 }
 
@@ -82,7 +82,7 @@ describe('createWsUpgradeHandler', () => {
     resolveUserIdMock.mockImplementation(async () => 'user-42');
     let capturedData: any = null;
     const server = createMockServer({
-      upgrade: (_req: Request, opts: any) => {
+      upgrade: (_req: unknown, opts: any) => {
         capturedData = opts?.data;
         return true;
       },

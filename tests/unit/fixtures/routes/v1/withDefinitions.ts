@@ -1,5 +1,4 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { z } from '@hono/zod-openapi';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 export const router = new OpenAPIHono<AppEnv>();

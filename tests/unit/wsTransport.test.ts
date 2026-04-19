@@ -112,7 +112,7 @@ describe('WsTransportAdapter', () => {
     it('does not call transport when none is set', () => {
       const serverCalls: string[] = [];
       const mockServer = {
-        publish(topic: string, _data: string) {
+        publish(topic: string) {
           serverCalls.push(topic);
         },
       } as any;
@@ -127,7 +127,7 @@ describe('WsTransportAdapter', () => {
     it('catches transport publish errors without breaking local delivery', async () => {
       const serverCalls: string[] = [];
       const mockServer = {
-        publish(topic: string, _data: string) {
+        publish(topic: string) {
           serverCalls.push(topic);
         },
       } as any;
@@ -154,7 +154,7 @@ describe('WsTransportAdapter', () => {
     it('skips inbound messages from the same instance', async () => {
       const serverCalls: string[] = [];
       const mockServer = {
-        publish(topic: string, _data: string) {
+        publish(topic: string) {
           serverCalls.push(topic);
         },
       } as any;

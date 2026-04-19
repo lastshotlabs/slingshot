@@ -298,8 +298,9 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
       },
     };
 
+    const cronModels: Record<string, unknown> = {};
     const conn = {
-      models: {} as Record<string, unknown>,
+      models: cronModels,
       model() {
         return model;
       },
@@ -362,8 +363,9 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
   });
 
   test('getAll returns empty set when doc has no names field', async () => {
+    const emptyModels: Record<string, unknown> = {};
     const conn = {
-      models: {} as Record<string, unknown>,
+      models: emptyModels,
       model() {
         return {
           findById: () => ({ lean: () => Promise.resolve({}) }),
@@ -399,8 +401,9 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
         return null;
       },
     };
+    const saveModels: Record<string, unknown> = {};
     const conn = {
-      models: {} as Record<string, unknown>,
+      models: saveModels,
       model: () => model,
     };
     const mg = {
@@ -474,8 +477,9 @@ describe('cronRegistryFactories', () => {
         store.set(id, { names: update.$set.names });
       },
     };
+    const upsertModels: Record<string, unknown> = {};
     const conn = {
-      models: {} as Record<string, unknown>,
+      models: upsertModels,
       model: () => model,
     };
     // eslint-disable-next-line @typescript-eslint/no-extraneous-class

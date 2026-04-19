@@ -28,7 +28,7 @@ const Message = defineEntity('Message', {
 describe('Entity Audits', () => {
   describe('structural checks', () => {
     it('catches onUpdate on non-date field', () => {
-      const onUpdate = { onUpdate: 'now' } as never;
+      const onUpdate = { onUpdate: 'now' } as unknown as never;
       defineEntity('Bad', {
         fields: {
           id: field.string({ primary: true }),

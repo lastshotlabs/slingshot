@@ -147,7 +147,7 @@ describe('wsHeartbeat', () => {
       ping() {
         throw new Error('simulated ping failure');
       },
-      close(_code?: number, _reason?: string) {},
+      close() {},
     } as any;
 
     registerSocket(state, throwingWs, 's-throw', ENDPOINT);

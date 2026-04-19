@@ -435,8 +435,9 @@ describe('getAuditLogModel', () => {
     const mockModel = { modelName: 'AuditLog' };
 
     // Mock connection
+    const connModels: Record<string, unknown> = {};
     const mockConn = {
-      models: {} as Record<string, unknown>,
+      models: connModels,
       model: mock(() => {
         mockConn.models['AuditLog'] = mockModel;
         return mockModel;

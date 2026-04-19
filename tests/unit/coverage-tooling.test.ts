@@ -13,6 +13,7 @@ describe('coverage tooling', () => {
   });
 
   afterEach(async () => {
+    mock.restore();
     Bun.env.SLINGSHOT_SUITE_FILTER = originalSuiteFilter;
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});

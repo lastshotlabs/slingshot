@@ -8,8 +8,8 @@ import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 function buildCsrfApp(secret: string) {
   const app = new Hono<AppEnv>();
-  const adapter = {} as never;
-  const eventBus = { emit() {} } as never;
+  const adapter = {} as unknown as never;
+  const eventBus = { emit() {} } as unknown as never;
   const rateLimit = null as never;
   const runtime: AuthRuntimeContext = {
     adapter,
@@ -24,7 +24,7 @@ function buildCsrfApp(secret: string) {
   const slingshotCtx = {
     signing: runtime.signing,
     pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
-  } as never;
+  } as unknown as never;
   app.use('*', async (c, next) => {
     c.set('slingshotCtx', slingshotCtx);
     await next();

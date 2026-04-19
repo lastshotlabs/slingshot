@@ -3,7 +3,8 @@ import type { ZodIssue } from 'zod';
 import { defaultValidationErrorFormatter } from '@lastshotlabs/slingshot-core';
 
 function makeIssue(path: (string | number)[], message: string): ZodIssue {
-  return { code: 'custom', path, message } as ZodIssue;
+  const issue = { code: 'custom', path, message };
+  return issue as ZodIssue;
 }
 
 describe('defaultValidationErrorFormatter', () => {

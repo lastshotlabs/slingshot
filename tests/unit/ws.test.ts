@@ -43,7 +43,7 @@ function createMockWs(id: string) {
     unsubscribe(room: string) {
       subscribed.delete(room);
     },
-    send(_data: string) {},
+    send() {},
     _subscribed: subscribed,
   } as any;
 }

@@ -15,7 +15,6 @@
  *   - Security event is emitted on successful unlink
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { Hono } from 'hono';
 import { setSuspended } from '../../../slingshot-auth/src/lib/suspension';
 import { createOAuthRouter } from '../../src/routes/oauth';
 import { makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';

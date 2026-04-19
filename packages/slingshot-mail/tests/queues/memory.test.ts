@@ -169,7 +169,7 @@ describe('createMemoryQueue', () => {
     const deadLetterCallback = mock(() => {});
     // We cannot easily fill 10,000 slots, so test the notification logic directly
     // by starting with a full map. Use a low maxAttempts to keep the queue stopped.
-    const queue = createMemoryQueue({ onDeadLetter: deadLetterCallback });
+    createMemoryQueue({ onDeadLetter: deadLetterCallback });
 
     // Fill the queue past capacity without starting it (jobs stay pending)
     // We test the eviction path by manually verifying notification fires.

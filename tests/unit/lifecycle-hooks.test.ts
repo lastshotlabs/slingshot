@@ -389,13 +389,13 @@ describe('postLogin hook', () => {
 
 describe('prePasswordChange hook config', () => {
   test('createAuthResolvedConfig includes hooks', () => {
-    const hook = async (_data: { userId: string } & HookContext) => {};
+    const hook = async () => {};
     const built = createAuthResolvedConfig({ hooks: { prePasswordChange: hook } });
     expect(built.hooks.prePasswordChange).toBe(hook);
   });
 
   test('postPasswordChange is stored via createAuthResolvedConfig', () => {
-    const post = async (_data: { userId: string } & HookContext) => {};
+    const post = async () => {};
     const built = createAuthResolvedConfig({ hooks: { postPasswordChange: post } });
     expect(built.hooks.postPasswordChange).toBe(post);
   });

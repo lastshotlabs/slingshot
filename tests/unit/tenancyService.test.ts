@@ -2,9 +2,9 @@ import { describe, expect, mock, test } from 'bun:test';
 
 // Mock mongoose module to avoid actual DB connection
 mock.module('mongoose', () => {
+  // eslint-disable-next-line @typescript-eslint/no-extraneous-class
   class Schema {
     static Types = { Mixed: 'Mixed' };
-    constructor(_def: unknown, _opts?: unknown) {}
   }
   return {
     default: { Schema },
@@ -67,9 +67,9 @@ function makeConnection(
 // We mock the mongo module to avoid real mongoose.
 mock.module('../../src/lib/mongo', () => ({
   getMongooseModule: () => ({
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class
     Schema: class Schema {
       static Types = { Mixed: 'Mixed' };
-      constructor(_def: unknown, _opts?: unknown) {}
     },
   }),
 }));

@@ -7,6 +7,7 @@ import { createRawHtmlRenderer } from '../../src/renderers/rawHtml.js';
 import type { MailMessage, MailProvider, SendResult } from '../../src/types/provider.js';
 
 const MOCK_CFG = {} as unknown as SlingshotFrameworkConfig;
+const MOCK_APP: never = {} as never;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,7 +79,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     bus.emit('auth:delivery.password_reset', {
       email: 'user@example.com',
@@ -125,7 +126,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     bus.emit('auth:delivery.welcome', {
       email: 'new@example.com',
@@ -165,7 +166,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     // Teardown before emitting
     await plugin.teardown!();
@@ -206,7 +207,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     bus.emit('auth:delivery.email_otp', { email: 'user@example.com', code: '123456' });
     await flushMicrotasks();
@@ -240,7 +241,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
     // Should not throw
     bus.emit('security.auth.login.success', { userId: 'u1', ip: '127.0.0.1' });
@@ -260,9 +261,9 @@ describe('createMailPlugin integration', () => {
 
     const plugin = createMailPlugin({ provider, renderer, from: 'noreply@example.com', queue });
 
-    await plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus });
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
 
-    await expect(plugin.setupPost!({ app: {} as never, config: MOCK_CFG, bus })).rejects.toThrow(
+    await expect(plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus })).rejects.toThrow(
       'already activated',
     );
 

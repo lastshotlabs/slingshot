@@ -81,8 +81,8 @@ describe('wsMessages (memory backend)', () => {
   });
 
   test('before cursor returns messages before the cursor', async () => {
-    const m1 = await repo.persist(makeMessage('chat', { payload: '1' }), defaults);
-    const m2 = await repo.persist(makeMessage('chat', { payload: '2' }), defaults);
+    await repo.persist(makeMessage('chat', { payload: '1' }), defaults);
+    await repo.persist(makeMessage('chat', { payload: '2' }), defaults);
     const m3 = await repo.persist(makeMessage('chat', { payload: '3' }), defaults);
 
     const history = await repo.getHistory(ENDPOINT, 'chat', { before: m3.id });
@@ -93,8 +93,8 @@ describe('wsMessages (memory backend)', () => {
 
   test('after cursor returns messages after the cursor', async () => {
     const m1 = await repo.persist(makeMessage('chat', { payload: '1' }), defaults);
-    const m2 = await repo.persist(makeMessage('chat', { payload: '2' }), defaults);
-    const m3 = await repo.persist(makeMessage('chat', { payload: '3' }), defaults);
+    await repo.persist(makeMessage('chat', { payload: '2' }), defaults);
+    await repo.persist(makeMessage('chat', { payload: '3' }), defaults);
 
     const history = await repo.getHistory(ENDPOINT, 'chat', { after: m1.id });
     expect(history).toHaveLength(2);
@@ -214,7 +214,7 @@ describe('wsMessages (mongo backend)', () => {
             });
             return {
               limit: (n: number) => ({
-                select: async (_fields: string) => filtered.slice(0, n).map(d => ({ _id: d._id })),
+                select: async () => filtered.slice(0, n).map(d => ({ _id: d._id })),
                 lean: async () => filtered.slice(0, n),
               }),
             };
@@ -246,7 +246,7 @@ describe('wsMessages (mongo backend)', () => {
   function makeMockConn(model: unknown) {
     return {
       models: {} as Record<string, unknown>,
-      model(_name: string, _schema: unknown) {
+      model() {
         return model;
       },
     };
@@ -254,8 +254,7 @@ describe('wsMessages (mongo backend)', () => {
 
   function makeMockMongoose() {
     const SchemaClass = class {
-      constructor(_def: object, _opts?: object) {}
-      index(_spec: object, _opts?: object) {}
+      index() {}
     } as any;
     SchemaClass.Types = { Mixed: 'Mixed' };
     return { Schema: SchemaClass };
@@ -292,7 +291,7 @@ describe('wsMessages (mongo backend)', () => {
   });
 
   test('getHistory with before cursor applies $or filter', async () => {
-    const { model, docs } = makeMockMongoModel();
+    const { model } = makeMockMongoModel();
     const conn = makeMockConn(model);
     const mg = makeMockMongoose();
     const repo = createMongoWsMessageRepository(conn as any, mg);
@@ -312,7 +311,7 @@ describe('wsMessages (mongo backend)', () => {
   });
 
   test('getHistory with after cursor applies $or filter', async () => {
-    const { model, docs } = makeMockMongoModel();
+    const { model } = makeMockMongoModel();
     const conn = makeMockConn(model);
     const mg = makeMockMongoose();
     const repo = createMongoWsMessageRepository(conn as any, mg);
@@ -366,7 +365,7 @@ describe('wsMessages (mongo backend)', () => {
     // Need to also provide findById, find, etc for getModel
     const conn = {
       models: {} as Record<string, unknown>,
-      model(_name: string, _schema: unknown) { return failingModel; },
+      model() { return failingModel; },
     };
     const mg = makeMockMongoose();
     const repo = createMongoWsMessageRepository(conn as any, mg);

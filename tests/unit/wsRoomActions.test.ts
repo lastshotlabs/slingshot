@@ -618,7 +618,6 @@ describe('subscribe / unsubscribe with presence and trackDelivery', () => {
     const state = makePresenceState();
     state.socketUsers.set('sock-1', 'user-1');
 
-    const sentTexts: string[] = [];
     // Use per-socket publish path by registering sockets
     const ws = mockWs('sock-1');
     subscribe(state, ws, 'room-1', { trackDelivery: true });

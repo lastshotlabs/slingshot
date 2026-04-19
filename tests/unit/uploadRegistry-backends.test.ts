@@ -145,8 +145,8 @@ describe('createRedisUploadRegistry', () => {
 // ---------------------------------------------------------------------------
 
 describe('createSqliteUploadRegistry', () => {
-  function createMockSqliteDb() {
-    const { Database } = require('bun:sqlite');
+  async function createMockSqliteDb() {
+    const { Database } = await import('bun:sqlite');
     const db = new Database(':memory:');
     return {
       run(sql: string, params?: unknown[]) {
@@ -174,7 +174,7 @@ describe('createSqliteUploadRegistry', () => {
   }
 
   test('register and get a record', async () => {
-    const db = createMockSqliteDb();
+    const db = await createMockSqliteDb();
     const registry = createSqliteUploadRegistry(db);
 
     const now = Date.now();
@@ -200,7 +200,7 @@ describe('createSqliteUploadRegistry', () => {
   });
 
   test('get returns null for missing key', async () => {
-    const db = createMockSqliteDb();
+    const db = await createMockSqliteDb();
     const registry = createSqliteUploadRegistry(db);
 
     const result = await registry.get('nonexistent');
@@ -210,7 +210,7 @@ describe('createSqliteUploadRegistry', () => {
   });
 
   test('get returns null for expired entries', async () => {
-    const db = createMockSqliteDb();
+    const db = await createMockSqliteDb();
     const registry = createSqliteUploadRegistry(db, 0); // 0 TTL
 
     await registry.register({ key: 'expired', createdAt: Date.now() });
@@ -223,7 +223,7 @@ describe('createSqliteUploadRegistry', () => {
   });
 
   test('register overwrites existing key (INSERT OR REPLACE)', async () => {
-    const db = createMockSqliteDb();
+    const db = await createMockSqliteDb();
     const registry = createSqliteUploadRegistry(db);
 
     await registry.register({ key: 'replace-key', ownerUserId: 'user-1', createdAt: Date.now() });
@@ -237,7 +237,7 @@ describe('createSqliteUploadRegistry', () => {
   });
 
   test('delete removes existing key', async () => {
-    const db = createMockSqliteDb();
+    const db = await createMockSqliteDb();
     const registry = createSqliteUploadRegistry(db);
 
     await registry.register({ key: 'del-key', createdAt: Date.now() });
@@ -250,7 +250,7 @@ describe('createSqliteUploadRegistry', () => {
   });
 
   test('handles null optional fields', async () => {
-    const db = createMockSqliteDb();
+    const db = await createMockSqliteDb();
     const registry = createSqliteUploadRegistry(db);
 
     await registry.register({ key: 'minimal', createdAt: Date.now() });
@@ -303,7 +303,7 @@ describe('createPostgresUploadRegistry', () => {
         if (trimmed.startsWith('DELETE')) {
           const key = params?.[0] as string;
           if (rows[key]) {
-            delete rows[key];
+            Reflect.deleteProperty(rows, key);
             return { rows: [], rowCount: 1 };
           }
           return { rows: [], rowCount: 0 };
@@ -376,7 +376,7 @@ describe('createMongoUploadRegistry', () => {
   function createMockMongoEnv() {
     const docs: Record<string, Record<string, unknown>> = {};
     const mockModel = {
-      updateOne(filter: Record<string, unknown>, update: Record<string, unknown>, _opts: Record<string, unknown>) {
+      updateOne(filter: Record<string, unknown>, update: Record<string, unknown>) {
         const key = filter['key'] as string;
         const setData = update['$set'] as Record<string, unknown>;
         docs[key] = { ...setData };
@@ -395,7 +395,7 @@ describe('createMongoUploadRegistry', () => {
       deleteOne(filter: Record<string, unknown>) {
         const key = filter['key'] as string;
         if (docs[key]) {
-          delete docs[key];
+          Reflect.deleteProperty(docs, key);
           return Promise.resolve({ deletedCount: 1 });
         }
         return Promise.resolve({ deletedCount: 0 });
@@ -404,14 +404,14 @@ describe('createMongoUploadRegistry', () => {
 
     const appConn = {
       models: { UploadRegistry: mockModel } as Record<string, unknown>,
-      model(_name: string, _schema: unknown) {
+      model() {
         return mockModel;
       },
     };
 
     const mongoosePkg = {
+      // eslint-disable-next-line @typescript-eslint/no-extraneous-class
       Schema: class MockSchema {
-        constructor(_def: unknown, _opts?: unknown) {}
         index() {}
       },
     };
@@ -483,13 +483,13 @@ describe('createMongoUploadRegistry', () => {
 
     const appConn = {
       models: {} as Record<string, unknown>,
-      model(_name: string, _schema: unknown) {
+      model() {
         return mockModel;
       },
     };
 
+    // eslint-disable-next-line @typescript-eslint/no-extraneous-class
     class MockSchema {
-      constructor(_def: unknown, _opts?: unknown) {}
       index() {}
     }
 
@@ -526,7 +526,7 @@ describe('createUploadRegistryFactories', () => {
   test('mongo factory calls infra.getMongo and returns a working adapter', async () => {
     const docs: Record<string, Record<string, unknown>> = {};
     const mockModel = {
-      updateOne(filter: Record<string, unknown>, update: Record<string, unknown>, _opts: Record<string, unknown>) {
+      updateOne(filter: Record<string, unknown>, update: Record<string, unknown>) {
         docs[filter['key'] as string] = (update as any)['$set'];
         return Promise.resolve();
       },

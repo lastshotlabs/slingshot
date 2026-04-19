@@ -46,7 +46,7 @@ describe('publish() options', () => {
   });
 
   it('no options — uses server.publish fast path, no per-socket iteration', () => {
-    const serverPublish = mock((_channel: string, _msg: string) => {});
+    const serverPublish = mock(() => {});
     state.server = { publish: serverPublish };
 
     // Register a socket in the registry to prove it's NOT iterated

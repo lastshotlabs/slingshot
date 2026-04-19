@@ -5,7 +5,7 @@
  * for cases that need next() to be called, and test the content-length
  * pre-check directly for the 413 path.
  */
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import { attachContext } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';

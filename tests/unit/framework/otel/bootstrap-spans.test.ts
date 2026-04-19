@@ -106,7 +106,7 @@ describe('bootstrap span helpers with no-op tracer', () => {
 
 describe('plugin lifecycle spans', () => {
   // Minimal framework config stub — plugins in these tests don't use it
-  const frameworkConfig: Parameters<typeof runPluginMiddleware>[2] = {} as Parameters<typeof runPluginMiddleware>[2];
+  const frameworkConfig = {} as unknown as Parameters<typeof runPluginMiddleware>[2];
 
   function makePlugin(name: string, deps?: string[]): SlingshotPlugin {
     return {

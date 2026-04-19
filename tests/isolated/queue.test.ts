@@ -120,11 +120,7 @@ mock.module('bullmq', () => ({
       lastQueue = this;
     }
   },
-  Worker: class extends MockWorker {
-    constructor(name: string, processor: unknown, opts: unknown) {
-      super(name, processor, opts);
-    }
-  },
+  Worker: MockWorker,
 }));
 
 // Also mock redis so getRedisConnectionOptions() doesn't throw (REDIS_HOST missing)

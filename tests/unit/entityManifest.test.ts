@@ -564,7 +564,7 @@ describe('customOpSchema — http field', () => {
 
   it('accepts custom op with handler only (existing path unchanged)', () => {
     const registry = createEntityHandlerRegistry();
-    registry.register('sendEmail', { memory: () => async () => ({}) } as never);
+    registry.register('sendEmail', { memory: () => async () => ({}) } as unknown as never);
     const result = validateEntityManifest({
       name: 'Item',
       fields: { id: { type: 'string', primary: true } },

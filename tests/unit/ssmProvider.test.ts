@@ -146,7 +146,7 @@ describe('get', () => {
   test('re-throws non-ParameterNotFound errors', async () => {
     // Override the mock to throw a different error
     storedParams.set('/app/prod/BAD', 'value');
-    const repo = createSsmSecretRepository({ pathPrefix: '/app/prod/' });
+    createSsmSecretRepository({ pathPrefix: '/app/prod/' });
 
     // Manually make the param throw a different error by removing it
     // so the mock throws ParameterNotFound — instead, test a server error

@@ -1,6 +1,10 @@
-import { describe, expect, mock, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 
 describe('CLI tooling', () => {
+  afterEach(() => {
+    mock.restore();
+  });
+
   test('CLI entrypoint delegates to oclif run and flush', async () => {
     const run = mock(async () => {});
     const flush = mock(async () => {});

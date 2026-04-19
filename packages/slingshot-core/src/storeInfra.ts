@@ -26,6 +26,7 @@
  */
 import type { Connection } from 'mongoose';
 import type { Pool } from 'pg';
+import type { PostgresHealthCheckResult, PostgresPoolStatsSnapshot } from './postgresRuntime';
 import type { RedisLike } from './redis';
 import type { RuntimeSqliteDatabase } from './runtime';
 import type { StoreType } from './storeType';
@@ -107,6 +108,10 @@ export interface PostgresBundle {
    * Typed as `unknown` in core — cast to `NodePgDatabase` from `slingshot-postgres` for full type safety.
    */
   readonly db: unknown;
+  /** Active Postgres readiness probe. Present on framework-created bundles. */
+  readonly healthCheck?: (timeoutMs?: number) => Promise<PostgresHealthCheckResult>;
+  /** Runtime pool and query statistics. Present on framework-created bundles. */
+  readonly getStats?: () => PostgresPoolStatsSnapshot;
 }
 
 /**

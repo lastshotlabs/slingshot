@@ -152,6 +152,17 @@ export type { SigningConfig } from './signing';
 
 // --- redis ---
 export type { RedisLike } from './redis';
+export type {
+  PostgresHealthCheckResult,
+  PostgresMigrationMode,
+  PostgresPoolRuntime,
+  PostgresPoolStatsSnapshot,
+} from './postgresRuntime';
+export {
+  attachPostgresPoolRuntime,
+  createPostgresPoolRuntime,
+  getPostgresPoolRuntime,
+} from './postgresRuntime';
 
 // --- clientIp ---
 /** Client IP helpers for runtime-aware proxy and standalone request handling. */

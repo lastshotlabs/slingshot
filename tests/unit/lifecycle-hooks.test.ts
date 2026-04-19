@@ -24,12 +24,6 @@ const TEST_SIGNING: SigningConfig = { secret: 'test-secret-key-must-be-at-least-
 
 let config: AuthResolvedConfig;
 
-const jsonRequest = (body: Record<string, unknown>) => ({
-  method: 'POST' as const,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(body),
-});
-
 const TEST_HOOK_CTX: HookContext = {
   ip: '127.0.0.1',
   userAgent: 'test-agent/1.0',

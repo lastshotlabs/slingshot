@@ -80,7 +80,6 @@ import { createSsmSecretRepository } from '../../src/framework/secrets/providers
 
 beforeEach(() => {
   storedParams.clear();
-  getByPathCallCount = 0;
   getParamCallCount = 0;
   getParamsCallCount = 0;
 });

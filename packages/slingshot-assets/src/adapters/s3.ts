@@ -1,4 +1,7 @@
+import { createRequire } from 'node:module';
 import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
+
+const require = createRequire(import.meta.url);
 
 /**
  * Configuration for the S3-compatible storage adapter.
@@ -67,7 +70,6 @@ interface LibStorageModule {
 
 function requireS3Client(): S3ClientModule {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@aws-sdk/client-s3') as S3ClientModule;
   } catch {
     throw new Error('@aws-sdk/client-s3 is not installed. Run: bun add @aws-sdk/client-s3');
@@ -76,7 +78,6 @@ function requireS3Client(): S3ClientModule {
 
 function requirePresigner(): PresignerModule {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@aws-sdk/s3-request-presigner') as PresignerModule;
   } catch {
     throw new Error(
@@ -87,7 +88,6 @@ function requirePresigner(): PresignerModule {
 
 function requireLibStorage(): LibStorageModule {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('@aws-sdk/lib-storage') as LibStorageModule;
   } catch {
     throw new Error('@aws-sdk/lib-storage is not installed. Run: bun add @aws-sdk/lib-storage');

@@ -5,7 +5,7 @@ import path from 'node:path';
 type BuildStep = {
   name: string;
   cwd?: string;
-  command: string[];
+  commands: string[][];
 };
 
 type WorkspacePackage = {
@@ -114,59 +114,59 @@ const maxParallelPackageBuilds = Math.max(
   ),
 );
 
+const createEmitCommand = (tsconfigPath: string): string[] => [
+  'bun',
+  'x',
+  'tsc',
+  '-p',
+  tsconfigPath,
+  '--noCheck',
+];
+
+const createAliasRewriteCommand = (tsconfigPath: string): string[] => [
+  'bun',
+  'x',
+  'tsc-alias',
+  '-p',
+  tsconfigPath,
+  '--resolve-full-paths',
+  '--resolve-full-extension',
+  '.js',
+];
+
 const packageStepsByLayer: BuildStep[][] = packageBuildLayers.map(layer =>
   layer.map(name => ({
-    name: `${name} typescript emit`,
-    command: [
-      'bun',
-      'x',
-      'tsc',
-      '-p',
-      path.join(packageLookup.get(name)!.dir, 'tsconfig.build.json'),
-      '--noCheck',
+    name: `${name} build output`,
+    commands: [
+      createEmitCommand(path.join(packageLookup.get(name)!.dir, 'tsconfig.build.json')),
+      createAliasRewriteCommand(path.join(packageLookup.get(name)!.dir, 'tsconfig.build.json')),
     ],
   })),
 );
 
-const authAliasStep: BuildStep[] = workspacePackageNames.has('@lastshotlabs/slingshot-auth')
-  ? [
-      {
-        name: '@lastshotlabs/slingshot-auth alias rewrite',
-        command: [
-          'bun',
-          'x',
-          'tsc-alias',
-          '-p',
-          path.join('packages', 'slingshot-auth', 'tsconfig.build.json'),
-        ],
-      },
-    ]
-  : [];
-
 const frameworkSteps: BuildStep[] = [
   {
-    name: 'framework typescript emit',
-    command: ['bun', 'x', 'tsc', '-p', 'tsconfig.framework.build.json', '--noCheck'],
-  },
-  {
-    name: 'framework alias rewrite',
-    command: ['bun', 'x', 'tsc-alias', '-p', 'tsconfig.framework.build.json'],
+    name: 'framework build output',
+    commands: [
+      createEmitCommand('tsconfig.framework.build.json'),
+      createAliasRewriteCommand('tsconfig.framework.build.json'),
+    ],
   },
 ];
 
 const rootSteps: BuildStep[] = [
   {
-    name: 'root typescript emit',
-    command: ['bun', 'x', 'tsc', '-p', 'tsconfig.build.json', '--noCheck'],
+    name: 'root build output',
+    commands: [
+      createEmitCommand('tsconfig.build.json'),
+      createAliasRewriteCommand('tsconfig.build.json'),
+    ],
   },
-  { name: 'alias rewrite', command: ['bun', 'x', 'tsc-alias', '-p', 'tsconfig.build.json'] },
-  { name: 'cli bundle', command: ['bun', 'x', 'tsup', '--config', 'tsup.cli.config.ts'] },
-  { name: 'oclif manifest', command: ['bun', 'x', 'oclif', 'manifest', '.'] },
+  { name: 'cli bundle', commands: [['bun', 'x', 'tsup', '--config', 'tsup.cli.config.ts']] },
+  { name: 'oclif manifest', commands: [['bun', 'x', 'oclif', 'manifest', '.']] },
 ];
 
-const steps = packagesOnly
-  ? [...authAliasStep]
-  : [...authAliasStep, ...frameworkSteps, ...rootSteps];
+const steps = packagesOnly ? [] : [...frameworkSteps, ...rootSteps];
 
 const formatSeconds = (startedAt: number): string =>
   `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
@@ -201,23 +201,30 @@ function rewriteFrameworkDeclarationImports(): void {
 async function runStep(step: BuildStep): Promise<void> {
   const startedAt = Date.now();
   console.log(`[build] ${step.name}...`);
-  const proc = Bun.spawn({
-    cmd: step.command,
-    cwd: step.cwd,
-    stdout: 'inherit',
-    stderr: 'inherit',
-    stdin: 'inherit',
-  });
   const heartbeat = setInterval(() => {
     console.log(`[build] ${step.name} still running after ${formatSeconds(startedAt)}...`);
   }, 10_000);
 
-  const exitCode = await proc.exited.finally(() => clearInterval(heartbeat));
-  if (exitCode !== 0) {
-    console.error(
-      `[build] ${step.name} failed after ${formatSeconds(startedAt)} (exit ${exitCode})`,
-    );
-    process.exit(exitCode);
+  try {
+    for (const command of step.commands) {
+      const proc = Bun.spawn({
+        cmd: command,
+        cwd: step.cwd,
+        stdout: 'inherit',
+        stderr: 'inherit',
+        stdin: 'inherit',
+      });
+
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        console.error(
+          `[build] ${step.name} failed after ${formatSeconds(startedAt)} (exit ${exitCode})`,
+        );
+        process.exit(exitCode);
+      }
+    }
+  } finally {
+    clearInterval(heartbeat);
   }
   console.log(`[build] ${step.name} done in ${formatSeconds(startedAt)}`);
 }
@@ -260,7 +267,7 @@ for (const entry of fs.readdirSync('packages', { withFileTypes: true })) {
 
 for (const step of steps) {
   await runStep(step);
-  if (step.name === 'framework alias rewrite') {
+  if (step.name === 'framework build output') {
     console.log('[build] framework declaration import rewrite...');
     rewriteFrameworkDeclarationImports();
     console.log('[build] framework declaration import rewrite done');

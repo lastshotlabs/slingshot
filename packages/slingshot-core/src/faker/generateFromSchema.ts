@@ -147,6 +147,8 @@ export function generateExample<T>(
     optionalRate: 1.0,
     overrides,
   });
-  // Strip undefined for JSON-clean output
-  return JSON.parse(JSON.stringify(result)) as T;
+  // Strip undefined and coerce non-serializable types (BigInt, Symbol) for JSON-clean output
+  return JSON.parse(JSON.stringify(result, (_key, value) =>
+    typeof value === 'bigint' ? Number(value) : value,
+  )) as T;
 }

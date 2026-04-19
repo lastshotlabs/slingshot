@@ -44,5 +44,8 @@
     "@lastshotlabs/slingshot-core": "workspace:*",
     "@lastshotlabs/slingshot-ssr": "workspace:*",
     "typescript": "*"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

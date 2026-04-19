@@ -1,17 +1,11 @@
 import type { PluginStateCarrier, PluginStateMap } from '@lastshotlabs/slingshot-core';
-import { resolvePluginState } from '@lastshotlabs/slingshot-core';
+import { probeInteractionsPeer } from './probe';
 import type { CommunityInteractionsPeer } from './types';
 
+const COMMUNITY_PLUGIN_STATE_KEY = 'slingshot-community' as const;
+
 export function probeCommunityPeer(
-  input: PluginStateMap | PluginStateCarrier | null | undefined,
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): CommunityInteractionsPeer | null {
-  const pluginState = resolvePluginState(input);
-  const state = pluginState?.get('slingshot-community') as
-    | { interactionsPeer?: CommunityInteractionsPeer }
-    | null
-    | undefined;
-  if (!state?.interactionsPeer) return null;
-  if (typeof state.interactionsPeer.resolveMessageByKindAndId !== 'function') return null;
-  if (typeof state.interactionsPeer.updateComponents !== 'function') return null;
-  return state.interactionsPeer;
+  return probeInteractionsPeer<CommunityInteractionsPeer>(input, COMMUNITY_PLUGIN_STATE_KEY);
 }

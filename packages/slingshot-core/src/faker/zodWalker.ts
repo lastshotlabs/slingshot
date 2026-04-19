@@ -406,7 +406,19 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       if (c.multipleOf) {
         const stepMin = Math.ceil(min / c.multipleOf);
         const stepMax = Math.floor(max / c.multipleOf);
-        return f.number.int({ min: stepMin, max: stepMax }) * c.multipleOf;
+        // When no valid multiple exists in the range, return the nearest one
+        if (stepMin > stepMax) {
+          const nearest = Math.round(((min + max) / 2) / c.multipleOf) * c.multipleOf;
+          const decStr = c.multipleOf.toString().split('.')[1];
+          const decimals = decStr ? decStr.length : 0;
+          return decimals > 0 ? Number(nearest.toFixed(decimals)) : nearest;
+        }
+        const raw = f.number.int({ min: stepMin, max: stepMax }) * c.multipleOf;
+        // Round to the step's decimal precision to avoid IEEE 754 drift
+        // (e.g. 4359 * 0.1 = 435.90000000000001 instead of 435.9)
+        const decStr = c.multipleOf.toString().split('.')[1];
+        const decimals = decStr ? decStr.length : 0;
+        return decimals > 0 ? Number(raw.toFixed(decimals)) : raw;
       }
       if (c.isInt) return f.number.int({ min: Math.ceil(min), max: Math.floor(max) });
       return f.number.float({ min, max, multipleOf: 0.01 });
@@ -426,6 +438,23 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       return BigInt(f.number.int({ min: 0, max: Number.MAX_SAFE_INTEGER }));
 
     case 'date': {
+      let minDate: Date | undefined;
+      let maxDate: Date | undefined;
+      if (def.checks) {
+        for (const check of def.checks) {
+          const cd = check._zod.def;
+          if (cd.check === 'greater_than' && cd.value instanceof Date) {
+            minDate = cd.value;
+          } else if (cd.check === 'less_than' && cd.value instanceof Date) {
+            maxDate = cd.value;
+          }
+        }
+      }
+      if (minDate || maxDate) {
+        const from = minDate ?? new Date(0);
+        const to = maxDate ?? new Date();
+        return f.date.between({ from, to });
+      }
       return f.date.recent();
     }
 
@@ -534,15 +563,40 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
     case 'record': {
       const valueSchema = def.valueType;
       if (!valueSchema) return {};
-      const count = f.number.int({ min: 1, max: 3 });
+      const keySchema = def.keyType;
       const result: Record<string, unknown> = {};
-      for (let i = 0; i < count; i++) {
-        const key = f.lorem.word();
-        result[key] = walkSchema(valueSchema, {
-          ...opts,
-          _path: path ? `${path}.${key}` : key,
-          _depth: depth,
-        });
+
+      // For enum-keyed records, Zod requires ALL enum values as keys.
+      // Filter out reverse-mappings from numeric nativeEnums (same logic as enum handler).
+      if (keySchema && keySchema._zod.def.type === 'enum' && keySchema._zod.def.entries) {
+        const entries = keySchema._zod.def.entries;
+        const hasNumericValues = Object.entries(entries).some(
+          ([k, v]) => typeof v === 'number' && !/^\d+$/.test(k),
+        );
+        const keys = hasNumericValues
+          ? Object.entries(entries).filter(([k]) => !/^\d+$/.test(k)).map(([, v]) => v) as (string | number)[]
+          : Object.values(entries) as (string | number)[];
+        for (const key of keys) {
+          result[key] = walkSchema(valueSchema, {
+            ...opts,
+            _path: path ? `${path}.${key}` : key,
+            _depth: depth,
+          });
+        }
+      } else {
+        const count = f.number.int({ min: 1, max: 3 });
+        for (let i = 0; i < count; i++) {
+          // Walk the key schema if present to produce valid keys,
+          // otherwise fall back to a random word.
+          const key = keySchema
+            ? String(walkSchema(keySchema, { ...opts, _depth: depth }))
+            : f.lorem.word();
+          result[key] = walkSchema(valueSchema, {
+            ...opts,
+            _path: path ? `${path}.${key}` : key,
+            _depth: depth,
+          });
+        }
       }
       return result;
     }
@@ -584,7 +638,15 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
     case 'enum': {
       const entries = def.entries;
       if (!entries) return f.lorem.word();
-      const values = Object.values(entries);
+      // Numeric nativeEnums produce reverse-mapped entries like { "0": "Low", Low: 0 }.
+      // Filter out the reverse mappings (numeric-string keys whose values are strings)
+      // so we only pick valid enum values.
+      const hasNumericValues = Object.entries(entries).some(
+        ([k, v]) => typeof v === 'number' && !/^\d+$/.test(k),
+      );
+      const values = hasNumericValues
+        ? Object.entries(entries).filter(([k]) => !/^\d+$/.test(k)).map(([, v]) => v)
+        : Object.values(entries);
       return f.helpers.arrayElement(values);
     }
 
@@ -610,7 +672,13 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       if (!inner) return undefined;
       // If the object handler already decided to include this field, skip the roll
       if (!opts._optionalDecided) {
-        if (!(opts.overrides && path && path in opts.overrides)) {
+        const hasDirectOverride = opts.overrides && path && path in opts.overrides;
+        const hasNestedOverride = !hasDirectOverride && opts.overrides && path &&
+          Object.keys(opts.overrides).some(k => k.startsWith(path + '.'));
+        // Also check for unpathed overrides (standalone optional wrapping an object)
+        const hasUnpathedNested = !hasDirectOverride && !hasNestedOverride && !path && opts.overrides &&
+          Object.keys(opts.overrides).length > 0;
+        if (!hasDirectOverride && !hasNestedOverride && !hasUnpathedNested) {
           if (f.number.float({ min: 0, max: 1 }) > optionalRate) return undefined;
         }
       }
@@ -620,8 +688,14 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
     case 'nullable': {
       const inner = def.innerType;
       if (!inner) return null;
-      // 10% chance of null
-      if (f.number.float({ min: 0, max: 1 }) < 0.1) return null;
+      // Skip null roll when overrides target this path or nested fields
+      const hasDirectOverride = opts.overrides && path && path in opts.overrides;
+      const hasNestedOverride = !hasDirectOverride && opts.overrides && path &&
+        Object.keys(opts.overrides).some(k => k.startsWith(path + '.'));
+      if (!hasDirectOverride && !hasNestedOverride) {
+        // 10% chance of null
+        if (f.number.float({ min: 0, max: 1 }) < 0.1) return null;
+      }
       return walkSchema(inner, { ...opts, _depth: depth });
     }
 
@@ -649,8 +723,19 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       return walkSchema(inner, { ...opts, _depth: depth });
     }
 
+    case 'nonoptional': {
+      let inner = def.innerType;
+      if (!inner) return undefined;
+      // Skip the optional wrapper that nonoptional negates — without this,
+      // the optional handler would roll the dice and sometimes return undefined
+      // even though the field is required.
+      if (inner._zod.def.type === 'optional' && inner._zod.def.innerType) {
+        inner = inner._zod.def.innerType;
+      }
+      return walkSchema(inner, { ...opts, _depth: depth });
+    }
+
     case 'readonly':
-    case 'nonoptional':
     case 'success': {
       const inner = def.innerType;
       if (!inner) return undefined;

@@ -48,5 +48,8 @@
   "devDependencies": {
     "bullmq": "^5.70.4",
     "ioredis": "5.10.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

@@ -4,6 +4,7 @@ import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingsho
 import {
   deepFreeze,
   getContextOrNull,
+  getPluginState,
   getRouteAuthOrNull,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -11,6 +12,7 @@ import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { getOrganizationsAuthRuntime } from './lib/authRuntime';
 import { organizationsManifest } from './manifest/organizationsManifest';
 import { createOrganizationsManifestRuntime } from './manifest/runtime';
+import { ORGANIZATIONS_ORG_SERVICE_STATE_KEY, type OrganizationsOrgService } from './orgService';
 
 const memberRoleSchema = z.enum(['owner', 'admin', 'member']);
 
@@ -87,6 +89,19 @@ export function createOrganizationsPlugin(
   ];
 
   let innerPlugin: ReturnType<typeof createEntityPlugin> | undefined;
+  let orgAdapterRef:
+    | {
+        create(input: Record<string, unknown>): Promise<{ id: string }>;
+        list(opts: { filter?: Record<string, unknown>; limit?: number }): Promise<{
+          items: ReadonlyArray<Record<string, unknown>>;
+        }>;
+      }
+    | undefined;
+  let memberAdapterRef:
+    | {
+        create(input: Record<string, unknown>): Promise<unknown>;
+      }
+    | undefined;
 
   return {
     name: 'slingshot-organizations',
@@ -121,6 +136,10 @@ export function createOrganizationsPlugin(
           authRuntime,
           invitationTtlSeconds: config.organizations?.invitationTtlSeconds ?? 7 * 24 * 60 * 60,
           defaultMemberRole: config.organizations?.defaultMemberRole ?? 'member',
+          onAdaptersCaptured(adapters) {
+            orgAdapterRef = adapters.organizations as typeof orgAdapterRef;
+            memberAdapterRef = adapters.members as typeof memberAdapterRef;
+          },
         }),
         middleware: {
           inviteCreateDefaults: async (c, next) => {
@@ -153,6 +172,45 @@ export function createOrganizationsPlugin(
 
     async setupPost(ctx: PluginSetupContext) {
       await innerPlugin?.setupPost?.(ctx);
+      if (!orgAdapterRef || !memberAdapterRef) {
+        return;
+      }
+      const orgAdapter = orgAdapterRef;
+      const memberAdapter = memberAdapterRef;
+
+      const orgService: OrganizationsOrgService = {
+        async getOrgBySlug(slug) {
+          const page = await orgAdapter.list({
+            filter: { slug },
+            limit: 1,
+          });
+          const org = page.items[0];
+          return org && typeof org.id === 'string' ? { id: org.id } : null;
+        },
+        async createOrg(data) {
+          const created = await orgAdapter.create({
+            name: data.name,
+            slug: data.slug,
+            ...(data.tenantId !== undefined ? { tenantId: data.tenantId } : {}),
+            ...(data.metadata !== undefined ? { metadata: data.metadata } : {}),
+          });
+          return { id: created.id };
+        },
+        async addOrgMember(orgId, userId, roles, invitedBy) {
+          const role = roles?.find(
+            (candidate): candidate is 'owner' | 'admin' | 'member' =>
+              candidate === 'owner' || candidate === 'admin' || candidate === 'member',
+          );
+          return memberAdapter.create({
+            orgId,
+            userId,
+            role: role ?? config.organizations?.defaultMemberRole ?? 'member',
+            ...(invitedBy ? { invitedBy } : {}),
+          });
+        },
+      };
+
+      getPluginState(ctx.app).set(ORGANIZATIONS_ORG_SERVICE_STATE_KEY, orgService);
     },
 
     async teardown() {

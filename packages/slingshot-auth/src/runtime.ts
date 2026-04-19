@@ -1,5 +1,6 @@
 import type {
   AuthAdapter,
+  AuthRuntimePeer,
   DataEncryptionKey,
   PluginStateCarrier,
   PluginStateMap,
@@ -8,7 +9,11 @@ import type {
   SigningConfig,
   SlingshotEventBus,
 } from '@lastshotlabs/slingshot-core';
-import { getPluginStateFromRequest, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+import {
+  AUTH_PLUGIN_STATE_KEY,
+  getPluginStateFromRequest,
+  getPluginStateOrNull,
+} from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from './config/authConfig';
 import type { AuthQueueFactory } from './infra/queue';
 import type { LockoutService } from './lib/accountLockout';
@@ -96,7 +101,7 @@ export interface AuthRuntimeContext {
  *   await next();
  * });
  */
-export const AUTH_RUNTIME_KEY = 'slingshot-auth';
+export const AUTH_RUNTIME_KEY = AUTH_PLUGIN_STATE_KEY;
 
 /**
  * Retrieves the `AuthRuntimeContext` from plugin state.
@@ -137,7 +142,9 @@ export function getAuthRuntimeContextOrNull(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): AuthRuntimeContext | null {
   const pluginState = getPluginStateOrNull(input);
-  const runtime = pluginState?.get(AUTH_RUNTIME_KEY) as AuthRuntimeContext | undefined;
+  const runtime = pluginState?.get(AUTH_RUNTIME_KEY) as
+    | (AuthRuntimeContext & AuthRuntimePeer)
+    | undefined;
   if (!runtime?.adapter) {
     return null;
   }

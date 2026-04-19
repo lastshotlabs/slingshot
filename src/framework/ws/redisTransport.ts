@@ -1,8 +1,11 @@
+import { createRequire } from 'node:module';
 import type { default as RedisClass, RedisOptions } from 'ioredis';
 import { wsEndpointKey } from './namespace';
 import type { WsTransportAdapter } from './transport';
 
 export type { WsTransportAdapter };
+
+const require = createRequire(import.meta.url);
 
 export interface RedisTransportOptions {
   /** ioredis connection options or a Redis URL string */
@@ -28,8 +31,6 @@ function hasDefaultRedisConstructor(value: unknown): value is { default: RedisCo
 
 function requireIoredis(): new (opts: RedisOptions | string) => RedisClass {
   try {
-    // Bun supports require() in ESM; this defers the import to call time
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod: unknown = require('ioredis');
     if (hasDefaultRedisConstructor(mod)) return mod.default;
     if (isRedisConstructor(mod)) return mod;

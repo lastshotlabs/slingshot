@@ -619,10 +619,11 @@ export interface SlingshotContext {
    * 2. **Dynamic registration** — plugins are registered at runtime, not at type-definition
    *    time. A `Map` makes dynamic `get` / `set` access natural without needing index
    *    signatures that would weaken the type of unrelated keys.
-   * 3. **Cross-plugin communication** — plugins that depend on each other can look up
-   *    their peer's state via `ctx.pluginState.get('slingshot-auth')` in `setupPost`,
-   *    after the peer has already stored its state. A plain record would require casting
-   *    an intersection type, which is fragile when plugins are optional.
+   * 3. **Cross-plugin communication** — plugins that depend on each other can publish
+   *    runtime state under stable plugin keys and read it back through package-level
+   *    accessors during `setupPost()`, after the peer has already stored its state.
+   *    A plain record would require casting an intersection type, which is fragile
+   *    when plugins are optional.
    *
    * Values are `unknown` — each plugin is responsible for casting or validating its own
    * state when reading from the map.

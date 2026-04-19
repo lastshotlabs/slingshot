@@ -4,17 +4,17 @@
 // directly instead of storing them in module globals. Module-level proxy
 // objects (authConnection, appConnection, mongoose) are removed.
 // Use getMongoFromApp(app) for context-aware access.
+import { createRequire } from 'node:module';
 import { log } from '@framework/lib/logger';
 import type { Connection, Mongoose } from 'mongoose';
 import { getContext } from '@lastshotlabs/slingshot-core';
 
 type MongooseModule = Mongoose;
+const require = createRequire(import.meta.url);
 
 /** Lazy mongoose module loader — caching a require() result, not runtime state. */
 function requireMongoose(): MongooseModule {
   try {
-    // Bun supports require() in ESM; this defers the import to call time
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('mongoose') as unknown as { default?: MongooseModule } & MongooseModule;
     return mod.default ?? mod;
   } catch {

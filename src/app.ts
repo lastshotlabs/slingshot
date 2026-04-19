@@ -1,5 +1,9 @@
 import type {
   AuthCookieConfig,
+  AccountDeletionConfig,
+  AuthRateLimitConfig,
+  AuthSessionPolicyConfig,
+  BreachedPasswordConfig,
   ConcealRegistrationConfig,
   CsrfCookieConfig,
   EmailVerificationConfig,
@@ -15,7 +19,7 @@ import type {
   SamlConfig,
   ScimConfig,
   StepUpConfig,
-} from '@auth/config/authConfig';
+} from '@lastshotlabs/slingshot-auth';
 import { buildContext, finalizeContext } from '@framework/buildContext';
 import { validateAppConfig } from '@framework/config/schema';
 import type { InfrastructureResult } from '@framework/createInfrastructure';
@@ -86,12 +90,12 @@ export type { SecretsConfig } from './config/types/secrets';
 export type { PermissionsConfig } from './config/types/permissions';
 export type { FrameworkSecretsLiteral } from '@framework/secrets';
 
-export type { BreachedPasswordConfig } from '@auth/config/authConfig';
-export type { AuthRateLimitConfig } from '@auth/config/authConfig';
+export type { BreachedPasswordConfig };
+export type { AuthRateLimitConfig };
 // AuthConfig and OAuthConfig are now defined in @lastshotlabs/slingshot-auth and imported above.
 // Re-export them for consumers that import from the framework root.
 export type { AuthConfig, OAuthConfig };
-export type { AccountDeletionConfig, AuthSessionPolicyConfig } from '@auth/config/authConfig';
+export type { AccountDeletionConfig, AuthSessionPolicyConfig };
 export type {
   PrimaryField,
   EmailVerificationConfig,

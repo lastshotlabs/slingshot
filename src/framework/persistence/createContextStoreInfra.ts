@@ -10,6 +10,7 @@ import {
   RESOLVE_COMPOSITE_FACTORIES,
   RESOLVE_ENTITY_FACTORIES,
   RESOLVE_REINDEX_SOURCE,
+  getSearchPluginRuntimeOrNull,
 } from '@lastshotlabs/slingshot-core';
 import { createCompositeFactories, createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import {
@@ -42,20 +43,7 @@ interface CreateContextStoreInfraOptions {
  *   value does not satisfy the expected interface.
  */
 function getSearchPluginRuntime(pluginState: Map<string, unknown>): SearchPluginRuntime | null {
-  const value = pluginState.get('slingshot-search');
-  if (typeof value !== 'object' || value === null) return null;
-
-  // pluginState is Map<string, unknown>. The search plugin stores a
-  // SearchPluginRuntime-shaped object — validate the shape at the boundary.
-  const candidate = value as Record<string, unknown>;
-  if (
-    typeof candidate.ensureConfigEntity !== 'function' ||
-    typeof candidate.getSearchClient !== 'function'
-  ) {
-    return null;
-  }
-
-  return value as unknown as SearchPluginRuntime;
+  return getSearchPluginRuntimeOrNull(pluginState);
 }
 
 /**

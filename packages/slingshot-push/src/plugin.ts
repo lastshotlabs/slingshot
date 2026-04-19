@@ -6,8 +6,8 @@ import type {
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
-  NOTIFICATIONS_PLUGIN_STATE_KEY,
   deepFreeze,
+  getNotificationsStateOrNull,
   getPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -284,9 +284,7 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
       const pluginState = getPluginState(app);
       pluginState.set(PUSH_PLUGIN_STATE_KEY, state);
 
-      const notificationsState = pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
-        | NotificationsPeerState
-        | undefined;
+      const notificationsState = getNotificationsStateOrNull(pluginState);
       if (notificationsState) {
         notificationsState.registerDeliveryAdapter(state.createDeliveryAdapter());
       }

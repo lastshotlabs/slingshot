@@ -9,6 +9,11 @@
  * depend on core — same rationale as `SearchProviderContract`.
  */
 import type { ResolvedEntityConfig } from './entityConfig';
+import type { PluginStateCarrier, PluginStateMap } from './pluginState';
+import { getPluginStateOrNull } from './pluginState';
+
+/** Stable plugin-state key published by `slingshot-search`. */
+export const SEARCH_PLUGIN_STATE_KEY = 'slingshot-search' as const;
 
 /**
  * Per-entity search client interface resolved by the search plugin at runtime.
@@ -128,4 +133,38 @@ export interface SearchPluginRuntime {
    * @returns The `SearchClientLike` for this entity, or `null` if not registered.
    */
   getSearchClient(entityStorageName: string): SearchClientLike | null;
+}
+
+/**
+ * Retrieve the search plugin runtime from plugin state.
+ */
+export function getSearchPluginRuntime(
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
+): SearchPluginRuntime {
+  const runtime = getSearchPluginRuntimeOrNull(input);
+  if (!runtime) {
+    throw new Error('[slingshot-search] search runtime is not available in pluginState');
+  }
+  return runtime;
+}
+
+/**
+ * Retrieve the search plugin runtime from plugin state when search is active.
+ */
+export function getSearchPluginRuntimeOrNull(
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
+): SearchPluginRuntime | null {
+  const pluginState = getPluginStateOrNull(input);
+  const runtime = pluginState?.get(SEARCH_PLUGIN_STATE_KEY);
+  if (typeof runtime !== 'object' || runtime === null) {
+    return null;
+  }
+
+  const ensureConfigEntity = Reflect.get(runtime, 'ensureConfigEntity');
+  const getSearchClient = Reflect.get(runtime, 'getSearchClient');
+  if (typeof ensureConfigEntity !== 'function' || typeof getSearchClient !== 'function') {
+    return null;
+  }
+
+  return runtime as SearchPluginRuntime;
 }

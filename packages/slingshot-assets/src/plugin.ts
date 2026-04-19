@@ -4,7 +4,7 @@ import type {
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
-  PERMISSIONS_STATE_KEY,
+  getPermissionsStateOrNull,
   getPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -77,7 +77,7 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
       const permissions: PermissionsState =
-        (getPluginState(app).get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined) ??
+        getPermissionsStateOrNull(getPluginState(app)) ??
         (() => {
           throw new Error(
             '[slingshot-assets] No permissions available. Register createPermissionsPlugin() ' +

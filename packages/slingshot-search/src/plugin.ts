@@ -21,6 +21,7 @@ import type {
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
+  SEARCH_PLUGIN_STATE_KEY,
   getPluginState,
   validateAdapterShape,
   validatePluginConfig,
@@ -180,7 +181,7 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
           return searchManager.getSearchClient(entityStorageName);
         },
       };
-      getPluginState(app).set('slingshot-search', runtime);
+      getPluginState(app).set(SEARCH_PLUGIN_STATE_KEY, runtime);
     },
 
     async teardown() {

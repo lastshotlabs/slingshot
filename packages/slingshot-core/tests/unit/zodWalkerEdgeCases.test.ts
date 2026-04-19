@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { z } from 'zod';
-import { generateFromSchema, generateMany, walkSchema } from '../../src/faker';
+import { generateFromSchema, generateMany, generateExample, walkSchema } from '../../src/faker';
 
 // ---------------------------------------------------------------------------
 // Bug regression: double optional roll
@@ -1106,5 +1106,258 @@ describe('string: combined constraint formats', () => {
       const val = generateFromSchema(schema as any, { seed: i });
       expect(schema.safeParse(val).success).toBe(true);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// multipleOf floating-point precision
+// ---------------------------------------------------------------------------
+
+describe('number: multipleOf floating-point precision', () => {
+  it('multipleOf(0.1) produces valid multiples', () => {
+    const schema = z.number().multipleOf(0.1);
+    for (let i = 0; i < 50; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('multipleOf(0.01) produces valid multiples', () => {
+    const schema = z.number().multipleOf(0.01);
+    for (let i = 0; i < 50; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('multipleOf(0.001) with range produces valid multiples', () => {
+    const schema = z.number().multipleOf(0.001).gte(0).lte(100);
+    for (let i = 0; i < 50; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Record with typed keys
+// ---------------------------------------------------------------------------
+
+describe('record with typed keys', () => {
+  it('enum-keyed record produces all required keys', () => {
+    const schema = z.record(z.enum(['a', 'b', 'c']), z.number());
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('string-keyed record with min length produces valid keys', () => {
+    const schema = z.record(z.string().min(5), z.number());
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('plain string-keyed record still works', () => {
+    const schema = z.record(z.string(), z.string().email());
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Nullable + nested overrides
+// ---------------------------------------------------------------------------
+
+describe('nullable + nested overrides', () => {
+  it('never returns null when overrides target inner fields', () => {
+    const schema = z.object({
+      address: z.nullable(z.object({
+        city: z.string(),
+        zip: z.string(),
+      })),
+    });
+    // Run many times — the old bug had ~10% null rate
+    for (let i = 0; i < 200; i++) {
+      const result = generateFromSchema<any>(schema as any, {
+        overrides: { 'address.city': 'Portland' },
+      });
+      expect(result.address).not.toBeNull();
+      expect(result.address.city).toBe('Portland');
+    }
+  });
+
+  it('never returns null when override targets the nullable field directly', () => {
+    const schema = z.object({
+      name: z.nullable(z.string()),
+    });
+    for (let i = 0; i < 200; i++) {
+      const result = generateFromSchema<any>(schema as any, {
+        overrides: { name: 'Alice' },
+      });
+      expect(result.name).toBe('Alice');
+    }
+  });
+
+  it('still returns null sometimes when no overrides present', () => {
+    const schema = z.object({
+      tag: z.nullable(z.string()),
+    });
+    let nullCount = 0;
+    for (let i = 0; i < 500; i++) {
+      const result = generateFromSchema<any>(schema as any);
+      if (result.tag === null) nullCount++;
+    }
+    // Should see some nulls (~10% of 500 = ~50)
+    expect(nullCount).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Optional + nested overrides (standalone)
+// ---------------------------------------------------------------------------
+
+describe('optional + nested overrides', () => {
+  it('never returns undefined when standalone optional wraps object with overrides', () => {
+    const schema = z.optional(z.object({ city: z.string(), zip: z.string() }));
+    for (let i = 0; i < 200; i++) {
+      const result = generateFromSchema<any>(schema as any, {
+        overrides: { city: 'Portland' },
+      });
+      expect(result).toBeDefined();
+      expect(result.city).toBe('Portland');
+    }
+  });
+
+  it('still returns undefined sometimes when no overrides present', () => {
+    const schema = z.optional(z.string());
+    let undefinedCount = 0;
+    for (let i = 0; i < 500; i++) {
+      const result = generateFromSchema<any>(schema as any);
+      if (result === undefined) undefinedCount++;
+    }
+    expect(undefinedCount).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Date constraints
+// ---------------------------------------------------------------------------
+
+describe('date constraints', () => {
+  it('respects min and max date bounds', () => {
+    const minDate = new Date('2024-01-01');
+    const maxDate = new Date('2024-12-31');
+    const schema = z.date().min(minDate).max(maxDate);
+    for (let i = 0; i < 100; i++) {
+      const d = generateFromSchema<Date>(schema as any);
+      expect(d).toBeInstanceOf(Date);
+      expect(d.getTime()).toBeGreaterThanOrEqual(minDate.getTime());
+      expect(d.getTime()).toBeLessThanOrEqual(maxDate.getTime());
+    }
+  });
+
+  it('respects min-only date bound', () => {
+    const minDate = new Date('2025-06-01');
+    const schema = z.date().min(minDate);
+    for (let i = 0; i < 50; i++) {
+      const d = generateFromSchema<Date>(schema as any);
+      expect(d).toBeInstanceOf(Date);
+      expect(d.getTime()).toBeGreaterThanOrEqual(minDate.getTime());
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Empty multipleOf range
+// ---------------------------------------------------------------------------
+
+describe('empty multipleOf range', () => {
+  it('does not throw when no valid multiple exists in range', () => {
+    // gt(1).lt(3).multipleOf(5) — no multiple of 5 between 1 and 3
+    const schema = z.number().gt(1).lt(3).multipleOf(5);
+    expect(() => generateFromSchema<number>(schema as any)).not.toThrow();
+  });
+
+  it('returns a number (nearest valid multiple)', () => {
+    const schema = z.number().gt(1).lt(3).multipleOf(5);
+    const val = generateFromSchema<number>(schema as any);
+    expect(typeof val).toBe('number');
+    expect(Number.isNaN(val)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// z.object().required() — nonoptional wrapping optional
+// ---------------------------------------------------------------------------
+
+describe('nonoptional (z.object().required())', () => {
+  it('always includes fields made required via .required()', () => {
+    const schema = z.object({
+      a: z.string().optional(),
+      b: z.number().optional(),
+    }).required();
+    for (let i = 0; i < 200; i++) {
+      const result = generateFromSchema<any>(schema as any);
+      expect(result.a).toBeDefined();
+      expect(typeof result.a).toBe('string');
+      expect(result.b).toBeDefined();
+      expect(typeof result.b).toBe('number');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Numeric nativeEnum
+// ---------------------------------------------------------------------------
+
+describe('numeric nativeEnum', () => {
+  enum Priority { Low = 0, Medium = 1, High = 2 }
+
+  it('only generates numeric values, not reverse-mapped strings', () => {
+    const schema = z.nativeEnum(Priority);
+    for (let i = 0; i < 100; i++) {
+      const val = generateFromSchema<Priority>(schema as any);
+      expect(typeof val).toBe('number');
+      expect([0, 1, 2]).toContain(val);
+    }
+  });
+
+  it('generates correct keys for enum-keyed record with numeric nativeEnum', () => {
+    const schema = z.record(z.nativeEnum(Priority), z.string());
+    const result = generateFromSchema<any>(schema as any);
+    const keys = Object.keys(result).sort();
+    // Keys should be "0", "1", "2" (JS object keys are always strings)
+    expect(keys).toEqual(['0', '1', '2']);
+  });
+
+  it('still works correctly with string nativeEnums', () => {
+    enum Color { Red = 'red', Green = 'green', Blue = 'blue' }
+    const schema = z.nativeEnum(Color);
+    for (let i = 0; i < 100; i++) {
+      const val = generateFromSchema<Color>(schema as any);
+      expect(['red', 'green', 'blue']).toContain(val);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateExample with non-serializable types
+// ---------------------------------------------------------------------------
+
+describe('generateExample', () => {
+  it('handles BigInt fields without crashing', () => {
+    const schema = z.object({
+      id: z.bigint(),
+      name: z.string(),
+    });
+    const example = generateExample(schema as any);
+    expect(example).toBeDefined();
+    expect(typeof (example as any).id).toBe('number');
+    expect(typeof (example as any).name).toBe('string');
   });
 });

@@ -7,10 +7,10 @@ import type {
   WsPluginEndpoint,
 } from '@lastshotlabs/slingshot-core';
 import {
-  NOTIFICATIONS_PLUGIN_STATE_KEY,
-  PERMISSIONS_STATE_KEY,
   deepFreeze,
   getContext,
+  getNotificationsState,
+  getPermissionsState,
   getPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -41,18 +41,6 @@ import type { Message as ChatMessage, ChatPluginConfig, ChatPluginState } from '
 import { buildIncomingDispatch } from './ws/incoming';
 
 type PluginApp = PluginSetupContext['app'];
-
-function getPluginStateValue(app: PluginApp, key: string): unknown {
-  return getPluginState(app).get(key);
-}
-
-function requirePluginStateValue(app: PluginApp, key: string, message: string): unknown {
-  const value = getPluginStateValue(app, key);
-  if (!value) {
-    throw new Error(message);
-  }
-  return value;
-}
 
 /**
  * Create the slingshot-chat plugin using the manifest-driven entity system.
@@ -113,16 +101,8 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
     dependencies: ['slingshot-auth', 'slingshot-notifications', 'slingshot-permissions'],
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      const permissions = requirePluginStateValue(
-        app,
-        PERMISSIONS_STATE_KEY,
-        '[slingshot-chat] No permissions available. Register createPermissionsPlugin() before this plugin.',
-      ) as PermissionsState;
-      notificationsStateRef = requirePluginStateValue(
-        app,
-        NOTIFICATIONS_PLUGIN_STATE_KEY,
-        '[slingshot-chat] slingshot-notifications is a required dependency. Register createNotificationsPlugin() before this plugin.',
-      ) as NotificationsPeerState;
+      const permissions = getPermissionsState(app) as PermissionsState;
+      notificationsStateRef = getNotificationsState(app) as NotificationsPeerState;
       permissionsRef = permissions;
 
       getPluginState(app).set(CHAT_PLUGIN_STATE_KEY, {
@@ -305,7 +285,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
             }, 30_000);
           }
 
-          const chatState = getPluginStateValue(app, CHAT_PLUGIN_STATE_KEY) as
+          const chatState = getPluginState(app).get(CHAT_PLUGIN_STATE_KEY) as
             | ChatPluginState
             | undefined;
           if (!chatState) return;

@@ -46,5 +46,8 @@
   },
   "peerDependencies": {
     "hono": ">=4.12.12 <5"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

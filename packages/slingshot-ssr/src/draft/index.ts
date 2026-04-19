@@ -1,5 +1,6 @@
 import type { Context as HonoContext } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
+import { getAsyncLocalStorageConstructor } from '../asyncLocalStorage';
 
 // packages/slingshot-ssr/src/draft/index.ts
 // AsyncLocalStorage-based draft mode context for slingshot-ssr.
@@ -34,17 +35,7 @@ type AlsConstructor = typeof import('node:async_hooks').AsyncLocalStorage;
  * 2. `require('node:async_hooks').AsyncLocalStorage` — Node / Bun.
  * 3. `null` — edge runtime with no polyfill; draft mode degrades gracefully.
  */
-const getAls = (): AlsConstructor | null => {
-  if (typeof (globalThis as Record<string, unknown>).AsyncLocalStorage !== 'undefined') {
-    return (globalThis as Record<string, unknown>).AsyncLocalStorage as AlsConstructor;
-  }
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return (require('node:async_hooks') as typeof import('node:async_hooks')).AsyncLocalStorage;
-  } catch {
-    return null;
-  }
-};
+const getAls = (): AlsConstructor | null => getAsyncLocalStorageConstructor();
 
 // ─── Cookie name ──────────────────────────────────────────────────────────────
 

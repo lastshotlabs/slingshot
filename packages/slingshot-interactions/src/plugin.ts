@@ -7,7 +7,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   getContext,
-  getPermissionsState,
+  getPermissionsStateOrNull,
   getRateLimitAdapter,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
@@ -92,7 +92,12 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
       const ctx = getContext(app);
-      const permissions: PermissionsState = getPermissionsState(ctx.pluginState);
+      const permissions = getPermissionsStateOrNull(ctx.pluginState);
+      if (!permissions) {
+        throw new Error(
+          '[slingshot-interactions] Permissions state not found. Register createPermissionsPlugin() first.',
+        );
+      }
 
       bus.registerClientSafeEvents(['interactions:event.dispatched', 'interactions:event.failed']);
 

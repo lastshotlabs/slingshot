@@ -7,10 +7,11 @@ import type {
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
-  NOTIFICATIONS_PLUGIN_STATE_KEY,
   PERMISSIONS_STATE_KEY,
   deepFreeze,
   getContextOrNull,
+  getNotificationsStateOrNull,
+  getPermissionsStateOrNull,
   getPluginStateOrNull,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -269,7 +270,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
 
       const pluginState = getPluginStateOrNull(app);
       const permissions: PermissionsState =
-        (pluginState?.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined) ??
+        getPermissionsStateOrNull(app) ??
         (() => {
           throw new Error(
             '[slingshot-community] No permissions available. Register createPermissionsPlugin() before this plugin.',
@@ -462,9 +463,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
     async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
       const appCtx = getContextOrNull(app);
       const pluginState = getPluginStateOrNull(app);
-      notificationsStateRef ??= pluginState?.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
-        | NotificationsPeerState
-        | undefined;
+      notificationsStateRef ??= getNotificationsStateOrNull(pluginState) ?? undefined;
       if (!notificationsStateRef) {
         throw new Error(
           '[slingshot-community] slingshot-notifications is a required dependency. ' +

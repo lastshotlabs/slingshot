@@ -6,8 +6,8 @@ import type {
   StorageAdapter,
 } from '@lastshotlabs/slingshot-core';
 import {
-  PERMISSIONS_STATE_KEY,
   getContext,
+  getPermissionsStateOrNull,
   getPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -98,7 +98,7 @@ export function createEmojiPlugin(rawConfig: unknown): SlingshotPlugin {
       // Resolve permissions — explicit config wins, pluginState fallback.
       const permissions: PermissionsState | undefined =
         explicitPermissions ??
-        (getPluginState(app).get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined) ??
+        getPermissionsStateOrNull(getPluginState(app)) ??
         (() => {
           throw new Error(
             '[slingshot-emoji] No permissions available. Either pass `permissions` ' +

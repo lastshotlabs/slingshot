@@ -7,11 +7,31 @@ export { createAuthPlugin } from './plugin';
 export { authPluginConfigSchema } from './types/config';
 /** Public config types accepted by `createAuthPlugin()` and related auth builders. */
 export type {
+  AccountDeletionConfig,
   AuthPluginConfig,
   AuthDbConfig,
   AuthSecurityConfig,
   AuthConfig,
+  AuthCookieConfig,
+  AuthRateLimitConfig,
+  AuthSessionPolicyConfig,
+  BreachedPasswordConfig,
+  ConcealRegistrationConfig,
+  CsrfCookieConfig,
+  EmailVerificationConfig,
+  JwtConfig,
+  MagicLinkConfig,
+  MfaConfig,
+  MfaEmailOtpConfig,
+  MfaWebAuthnConfig,
   OAuthConfig,
+  OidcConfig,
+  PasswordResetConfig,
+  PrimaryField,
+  RefreshTokenConfig,
+  SamlConfig,
+  ScimConfig,
+  StepUpConfig,
 } from './types/config';
 
 // Session / JWT
@@ -53,8 +73,12 @@ export { createMemoryAuthAdapter } from './adapters/memoryAuth';
 export type { MemoryAuthStores } from './adapters/memoryAuth';
 /** Mongo-backed auth adapter factory for production deployments using Mongo persistence. */
 export { createMongoAuthAdapter } from './adapters/mongoAuth';
+/** Mongoose model factory for the auth user collection. */
+export { createAuthUserModel } from './models/AuthUser';
 /** SQLite-backed auth adapter factory for embedded or single-node deployments. */
 export { createSqliteAuthAdapter } from './adapters/sqliteAuth';
+/** SQLite cache adapter used by framework boundary adapters. */
+export { createSqliteCacheAdapter } from './lib/cache';
 
 // Email templates
 /** Built-in auth email template renderer and template registry. */
@@ -66,9 +90,7 @@ export type { EmailTemplate, TemplateVariables } from './lib/emailTemplates';
 export { createAuthResolvedConfig } from './config/authConfig';
 export type {
   AuthResolvedConfig,
-  OidcConfig,
   HookContext,
-  AuthRateLimitConfig,
 } from './config/authConfig';
 
 // Event bus utilities

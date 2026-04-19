@@ -3,14 +3,15 @@
 // Phase 1 singleton elimination: connectRedis() returns the client directly
 // instead of storing it in a module global. disconnectRedis() accepts the
 // client as a parameter. Use getRedisFromApp(app) for context-aware access.
+import { createRequire } from 'node:module';
 import { log } from '@framework/lib/logger';
 import type { default as RedisClass, RedisOptions } from 'ioredis';
 import { getContext } from '@lastshotlabs/slingshot-core';
 
+const require = createRequire(import.meta.url);
+
 function requireIoredis(): new (opts: RedisOptions) => RedisClass {
   try {
-    // Bun supports require() in ESM; this defers the import to call time
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require('ioredis') as unknown as {
       default?: new (opts: RedisOptions) => RedisClass;
     } & (new (opts: RedisOptions) => RedisClass);

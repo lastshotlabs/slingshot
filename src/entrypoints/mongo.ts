@@ -38,7 +38,9 @@ export {
   getMongooseModule,
 } from '../lib/mongo';
 export type { MongoConnections } from '../lib/mongo';
-export { createMongoAuthAdapter } from '@auth/adapters/mongoAuth';
-export { createAuthUserModel } from '@auth/models/AuthUser';
-export { zodToMongoose } from '@framework/lib/zodToMongoose';
-export type { ZodToMongooseConfig, ZodToMongooseRefConfig } from '@framework/lib/zodToMongoose';
+export { createMongoAuthAdapter, createAuthUserModel } from '@lastshotlabs/slingshot-auth';
+export { zodToMongoose } from '../framework/lib/zodToMongoose';
+export type {
+  ZodToMongooseConfig,
+  ZodToMongooseRefConfig,
+} from '../framework/lib/zodToMongoose';

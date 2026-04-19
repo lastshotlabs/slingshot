@@ -1,7 +1,9 @@
-/* eslint-disable @typescript-eslint/no-require-imports -- mongoose is an optional peer dep resolved at runtime */
 // Auth-internal Mongo utilities.
 // Connection handles are injected via runtimeInfra — no context threading.
+import { createRequire } from 'node:module';
 import type { Connection, Mongoose } from 'mongoose';
+
+const require = createRequire(import.meta.url);
 
 /**
  * Returns the provided Mongoose instance, or lazily `require()`s it from the host project.
@@ -26,9 +28,7 @@ import type { Connection, Mongoose } from 'mongoose';
 export function resolveMongoose(mg?: Mongoose): Mongoose {
   if (mg) return mg;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- untyped dynamic require
     const mod = require('mongoose');
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return -- untyped dynamic require
     return mod.default ?? mod;
   } catch {
     throw new Error('mongoose is not installed. Run: bun add mongoose');

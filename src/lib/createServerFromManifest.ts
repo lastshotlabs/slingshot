@@ -6,6 +6,7 @@ import { dirname, resolve } from 'path';
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import { SUPER_ADMIN_ROLE, getPermissionsStateOrNull } from '@lastshotlabs/slingshot-core';
 import type { PermissionsAdapter } from '@lastshotlabs/slingshot-core';
+import { getOrganizationsOrgServiceOrNull } from '@lastshotlabs/slingshot-organizations';
 import { createServer, getServerContext } from '../server';
 import { createBuiltinPluginFactory, loadBuiltinPlugin } from './builtinPlugins';
 import { validateAppManifest } from './manifest';
@@ -239,26 +240,6 @@ function interpolateEnvVars(value: unknown, path: string): unknown {
  * await createServerFromManifest(import.meta.dir + '/app.manifest.json');
  * ```
  */
-/** Minimal structural type for the OrgService stored in plugin state. */
-type SeedOrgService = {
-  getOrgBySlug(slug: string): Promise<{ id: string } | null>;
-  createOrg(data: {
-    name: string;
-    slug: string;
-    tenantId?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<{ id: string }>;
-  addOrgMember(
-    orgId: string,
-    userId: string,
-    roles?: string[],
-    invitedBy?: string,
-  ): Promise<unknown>;
-};
-
-/** Plugin state key used by `slingshot-organizations` to store the OrgService. */
-const ORG_SERVICE_STATE_KEY = 'slingshot-organizations.orgService';
-
 type BuiltinBullMQAdapterOptions = {
   connection: ReturnType<typeof getRedisConnectionOptions>;
   prefix?: string;
@@ -370,7 +351,7 @@ async function runManifestSeed(
   const permsState = getPermissionsStateOrNull(ctx.pluginState) as
     | ({ adapter: PermissionsAdapter } & object)
     | null;
-  const orgService = ctx.pluginState.get(ORG_SERVICE_STATE_KEY) as SeedOrgService | undefined;
+  const orgService = getOrganizationsOrgServiceOrNull(ctx.pluginState);
 
   // Track seeded user IDs by email for org member wiring.
   const seededUserIds = new Map<string, string>();

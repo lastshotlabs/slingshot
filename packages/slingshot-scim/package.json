@@ -40,5 +40,8 @@
     "@lastshotlabs/slingshot-auth": {
       "optional": false
     }
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

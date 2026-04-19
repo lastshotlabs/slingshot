@@ -1,3 +1,6 @@
+import type { PluginStateCarrier, PluginStateMap } from './pluginState';
+import { getPluginStateOrNull } from './pluginState';
+
 /**
  * Stable plugin-state key published by `slingshot-notifications`.
  *
@@ -96,4 +99,40 @@ export interface NotificationBuilder {
 export interface NotificationsPeerState {
   readonly createBuilder: (opts: { source: string }) => NotificationBuilder;
   readonly registerDeliveryAdapter: (adapter: DeliveryAdapter) => void;
+}
+
+/**
+ * Retrieve the notifications peer state from plugin state.
+ */
+export function getNotificationsState(
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
+): NotificationsPeerState {
+  const state = getNotificationsStateOrNull(input);
+  if (!state) {
+    throw new Error(
+      '[slingshot-notifications] notifications peer state is not available in pluginState',
+    );
+  }
+  return state;
+}
+
+/**
+ * Retrieve the notifications peer state from plugin state when present.
+ */
+export function getNotificationsStateOrNull(
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
+): NotificationsPeerState | null {
+  const pluginState = getPluginStateOrNull(input);
+  const state = pluginState?.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
+    | NotificationsPeerState
+    | null
+    | undefined;
+  if (
+    !state ||
+    typeof state.createBuilder !== 'function' ||
+    typeof state.registerDeliveryAdapter !== 'function'
+  ) {
+    return null;
+  }
+  return state;
 }

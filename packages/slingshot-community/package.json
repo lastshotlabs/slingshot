@@ -56,5 +56,8 @@
     "pg": {
       "optional": true
     }
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

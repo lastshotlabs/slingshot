@@ -3,6 +3,7 @@
 // Queue helpers require explicit Redis credentials or a queue factory created
 // from startup-resolved secrets. No process.env fallback here — framework code
 // should resolve secrets at startup and pass them in.
+import { createRequire } from 'node:module';
 import type {
   Job,
   Processor,
@@ -13,10 +14,10 @@ import type {
 } from 'bullmq';
 import { type RedisCredentials, getRedisConnectionOptions } from './redis';
 
+const require = createRequire(import.meta.url);
+
 function requireBullMQ(): typeof import('bullmq') {
   try {
-    // Bun supports require() in ESM; this defers the import to call time.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('bullmq') as typeof import('bullmq');
   } catch {
     throw new Error('bullmq is not installed. Run: bun add bullmq');

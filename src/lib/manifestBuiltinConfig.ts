@@ -1,9 +1,12 @@
+import { createRequire } from 'node:module';
 import type { Context } from 'hono';
 import { resolve } from 'path';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import type { AppManifestHandlerRef } from './manifest';
 import { createDeferredAdminProviders } from './manifestAdminProviders';
 import type { ManifestHandlerRegistry } from './manifestHandlerRegistry';
+
+const require = createRequire(import.meta.url);
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

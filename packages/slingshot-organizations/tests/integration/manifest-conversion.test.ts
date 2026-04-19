@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import { type AuthRuntimeContext, createAuthResolvedConfig } from '@lastshotlabs/slingshot-auth';
+import {
+  type AuthRuntimeContext,
+  createAuthResolvedConfig,
+  getAuthRuntimeContext,
+} from '@lastshotlabs/slingshot-auth';
 import {
   createAuthRateLimitService,
   createCredentialStuffingService,
@@ -39,6 +43,7 @@ import type {
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { organizationsManifest } from '../../src/manifest/organizationsManifest';
+import { getOrganizationsOrgServiceOrNull } from '../../src/orgService';
 import { createOrganizationsPlugin } from '../../src/plugin';
 
 function createFrameworkConfig(): SlingshotFrameworkConfig & {
@@ -610,7 +615,7 @@ describe('organizations manifest conversion', () => {
     expect(createInvite.status).toBe(201);
     const invite = (await createInvite.json()) as { token: string };
 
-    const authRuntime = pluginState.get('slingshot-auth') as AuthRuntimeContext;
+    const authRuntime = getAuthRuntimeContext(pluginState) as AuthRuntimeContext;
     if (!authRuntime.adapter.setEmailVerified) {
       throw new Error('memory auth adapter is missing setEmailVerified');
     }
@@ -697,5 +702,26 @@ describe('organizations manifest conversion', () => {
     const mine = (await listMine.json()) as Array<{ id: string }>;
     expect(mine.some(entry => entry.id === orgA.id)).toBe(true);
     expect(mine.some(entry => entry.id === orgB.id)).toBe(true);
+  });
+
+  test('publishes org service for manifest seed and other runtime consumers', async () => {
+    const orgService = getOrganizationsOrgServiceOrNull(pluginState);
+    expect(orgService).not.toBeNull();
+    if (!orgService) {
+      throw new Error('organizations org service was not published');
+    }
+
+    const created = await orgService.createOrg({
+      name: 'Seeded Org',
+      slug: 'seeded-org',
+    });
+    expect(created.id).toBeString();
+
+    const found = await orgService.getOrgBySlug('seeded-org');
+    expect(found?.id).toBe(created.id);
+
+    await expect(
+      orgService.addOrgMember(created.id, memberId, ['admin'], adminId),
+    ).resolves.toBeDefined();
   });
 });

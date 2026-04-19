@@ -90,7 +90,7 @@ export function createRedisBoundaryCacheAdapter(
 export async function createSqliteBoundaryCacheAdapter(
   sqliteDb: RuntimeSqliteDatabase,
 ): Promise<CacheAdapter> {
-  const { createSqliteCacheAdapter } = await import('@auth/lib/cache');
+  const { createSqliteCacheAdapter } = await import('@lastshotlabs/slingshot-auth');
   return createSqliteCacheAdapter(sqliteDb);
 }
 

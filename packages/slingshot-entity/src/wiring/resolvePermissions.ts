@@ -10,7 +10,7 @@ import type {
   PermissionsAdapter,
 } from '@lastshotlabs/slingshot-core';
 import type { PermissionsState } from '@lastshotlabs/slingshot-core';
-import { PERMISSIONS_STATE_KEY, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+import { getPermissionsStateOrNull } from '@lastshotlabs/slingshot-core';
 
 /** The shape of the permissions config on EntityPluginConfig. */
 export interface ResolvedPermissions {
@@ -23,7 +23,7 @@ export interface ResolvedPermissions {
  * Create a lazy permissions resolver.
  *
  * On first call, resolves from `explicitPermissions` if provided, otherwise
- * reads from `pluginState[PERMISSIONS_STATE_KEY]`. Caches the result so
+ * reads from shared permissions plugin state. Caches the result so
  * subsequent calls return the same value without re-reading pluginState.
  *
  * @param explicitPermissions - Permissions passed directly in EntityPluginConfig.
@@ -44,9 +44,7 @@ export function createPermissionsResolver(
       return cached;
     }
 
-    const state = getPluginStateOrNull(app)?.get(PERMISSIONS_STATE_KEY) as
-      | PermissionsState
-      | undefined;
+    const state = getPermissionsStateOrNull(app) as PermissionsState | null;
     if (state) {
       cached = {
         evaluator: state.evaluator,

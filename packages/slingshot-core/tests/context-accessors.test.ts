@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
+import { getAuthRuntimePeer, getAuthRuntimePeerOrNull } from '../src/authPeer';
 import { getCacheAdapter, getCacheAdapterOrNull } from '../src/cache';
 import { resolveContext } from '../src/context/contextAccess';
 import { attachContext, getContext, getContextOrNull } from '../src/context/contextStore';
 import { createCoreRegistrar } from '../src/coreRegistrar';
 import { getEmailTemplate, getEmailTemplates } from '../src/emailTemplates';
+import { getNotificationsState, getNotificationsStateOrNull } from '../src/notificationsPeer';
 import { getPermissionsState, getPermissionsStateOrNull } from '../src/permissions';
 import {
   getPluginState,
@@ -13,6 +15,7 @@ import {
 } from '../src/pluginState';
 import { getFingerprintBuilder, getRateLimitAdapter } from '../src/rateLimit';
 import { getRouteAuth, getRouteAuthOrNull } from '../src/routeAuth';
+import { getSearchPluginRuntime, getSearchPluginRuntimeOrNull } from '../src/searchPluginRuntime';
 import { getUserResolver, getUserResolverOrNull } from '../src/userResolver';
 
 function createMiddleware() {
@@ -216,7 +219,49 @@ describe('slingshot-core context accessors', () => {
     };
     const pluginState = new Map([
       ['slingshot-auth', { adapter: {} }],
+      [
+        'slingshot-notifications',
+        {
+          createBuilder() {
+            return {
+              notify() {
+                return Promise.resolve(null);
+              },
+              notifyMany() {
+                return Promise.resolve([]);
+              },
+              schedule() {
+                return Promise.resolve({
+                  id: 'notification-1',
+                  userId: 'user-1',
+                  source: 'test',
+                  type: 'test',
+                  read: false,
+                  dispatched: false,
+                  priority: 'normal',
+                  createdAt: new Date().toISOString(),
+                });
+              },
+              cancel() {
+                return Promise.resolve();
+              },
+            };
+          },
+          registerDeliveryAdapter() {},
+        },
+      ],
       ['slingshot-permissions', permissionsState],
+      [
+        'slingshot-search',
+        {
+          ensureConfigEntity() {
+            return Promise.resolve();
+          },
+          getSearchClient() {
+            return null;
+          },
+        },
+      ],
     ]);
     const ctx = createContextFixture({ pluginState });
 
@@ -226,8 +271,14 @@ describe('slingshot-core context accessors', () => {
     expect(getPluginStateOrNull(app)).toBe(pluginState);
     expect(getPluginState(ctx as never)).toBe(pluginState);
     expect(getPluginStateOrNull({ pluginState })).toBe(pluginState);
+    expect(getAuthRuntimePeer(app)).toEqual({ adapter: {} });
+    expect(getAuthRuntimePeerOrNull(app)).toEqual({ adapter: {} });
+    expect(getNotificationsState(app)).toBe(pluginState.get('slingshot-notifications'));
+    expect(getNotificationsStateOrNull(app)).toBe(pluginState.get('slingshot-notifications'));
     expect(getPermissionsState(app)).toBe(permissionsState);
     expect(getPermissionsStateOrNull(app)).toBe(permissionsState);
+    expect(getSearchPluginRuntime(app)).toBe(pluginState.get('slingshot-search'));
+    expect(getSearchPluginRuntimeOrNull(app)).toBe(pluginState.get('slingshot-search'));
 
     app.get('/plugin-state', c => {
       const requestPluginState = getPluginStateFromRequest(c as never);
@@ -243,10 +294,22 @@ describe('slingshot-core context accessors', () => {
     const app = new Hono();
 
     expect(getPluginStateOrNull(app)).toBeNull();
+    expect(getAuthRuntimePeerOrNull(app)).toBeNull();
+    expect(getNotificationsStateOrNull(app)).toBeNull();
     expect(getPermissionsStateOrNull(app)).toBeNull();
+    expect(getSearchPluginRuntimeOrNull(app)).toBeNull();
     expect(() => getPluginState(app)).toThrow('pluginState is not available for this app');
+    expect(() => getAuthRuntimePeer(app)).toThrow(
+      'auth runtime peer is not available in pluginState',
+    );
+    expect(() => getNotificationsState(app)).toThrow(
+      'notifications peer state is not available in pluginState',
+    );
     expect(() => getPermissionsState(app)).toThrow(
       'permissions state is not available in pluginState',
+    );
+    expect(() => getSearchPluginRuntime(app)).toThrow(
+      'search runtime is not available in pluginState',
     );
   });
 

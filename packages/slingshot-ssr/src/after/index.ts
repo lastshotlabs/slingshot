@@ -11,6 +11,7 @@
 // created fresh per request.
 //
 // Edge compat: uses the same lazy getAls() pattern as actions/context.ts.
+import { getAsyncLocalStorageConstructor } from '../asyncLocalStorage';
 
 type AlsConstructor = typeof import('node:async_hooks').AsyncLocalStorage;
 
@@ -20,17 +21,7 @@ type AfterQueue = Array<() => void | Promise<void>>;
  * Returns the `AsyncLocalStorage` constructor, or `null` on edge runtimes.
  * Resolution order: globalThis polyfill → node:async_hooks → null.
  */
-const getAls = (): AlsConstructor | null => {
-  if (typeof (globalThis as Record<string, unknown>).AsyncLocalStorage !== 'undefined') {
-    return (globalThis as Record<string, unknown>).AsyncLocalStorage as AlsConstructor;
-  }
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return (require('node:async_hooks') as typeof import('node:async_hooks')).AsyncLocalStorage;
-  } catch {
-    return null;
-  }
-};
+const getAls = (): AlsConstructor | null => getAsyncLocalStorageConstructor();
 
 const AlsClass = getAls();
 const afterStore: InstanceType<AlsConstructor> | null = AlsClass

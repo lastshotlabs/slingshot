@@ -165,6 +165,8 @@ export {
 // --- authVariables ---
 /** Request-context variable typing for auth-aware Hono handlers. */
 export type { AuthVariables } from './authVariables';
+export type { AuthRuntimePeer } from './authPeer';
+export { AUTH_PLUGIN_STATE_KEY, getAuthRuntimePeer, getAuthRuntimePeerOrNull } from './authPeer';
 
 // --- storageAdapter ---
 /** Upload storage adapter interfaces used by framework and media packages. */
@@ -244,7 +246,11 @@ export type {
   NotifyManyInput,
   ResolvedPreference,
 } from './notificationsPeer';
-export { NOTIFICATIONS_PLUGIN_STATE_KEY } from './notificationsPeer';
+export {
+  NOTIFICATIONS_PLUGIN_STATE_KEY,
+  getNotificationsState,
+  getNotificationsStateOrNull,
+} from './notificationsPeer';
 
 // --- pluginState ---
 export type { PluginStateCarrier, PluginStateMap } from './pluginState';
@@ -376,6 +382,11 @@ export type {
   SearchClientLike,
   SearchQueryLike,
   SearchResponseLike,
+} from './searchPluginRuntime';
+export {
+  SEARCH_PLUGIN_STATE_KEY,
+  getSearchPluginRuntime,
+  getSearchPluginRuntimeOrNull,
 } from './searchPluginRuntime';
 
 // --- Config-driven operation types (shared between slingshot-data and framework) ---

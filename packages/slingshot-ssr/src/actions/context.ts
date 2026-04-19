@@ -21,6 +21,7 @@
 // injection) and `revalidatePath`/`revalidateTag` become silent no-ops with a
 // console warning, matching the behaviour declared by `supportsAsyncLocalStorage:
 // false` in `runtime-edge`.
+import { getAsyncLocalStorageConstructor } from '../asyncLocalStorage';
 
 // ─── Lazy ALS loader ─────────────────────────────────────────────────────────
 
@@ -35,17 +36,7 @@ type AlsConstructor = typeof import('node:async_hooks').AsyncLocalStorage;
  * 2. `require('node:async_hooks').AsyncLocalStorage` — Node / Bun.
  * 3. `null` — edge runtime with no polyfill; ALS features degrade gracefully.
  */
-const getAls = (): AlsConstructor | null => {
-  if (typeof (globalThis as Record<string, unknown>).AsyncLocalStorage !== 'undefined') {
-    return (globalThis as Record<string, unknown>).AsyncLocalStorage as AlsConstructor;
-  }
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return (require('node:async_hooks') as typeof import('node:async_hooks')).AsyncLocalStorage;
-  } catch {
-    return null;
-  }
-};
+const getAls = (): AlsConstructor | null => getAsyncLocalStorageConstructor();
 
 // ─── Context interface ────────────────────────────────────────────────────────
 

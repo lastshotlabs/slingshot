@@ -1,5 +1,6 @@
 // Auth-internal BullMQ queue/worker factory.
 // Redis connection captured once at factory creation — no per-call threading.
+import { createRequire } from 'node:module';
 import type {
   ConnectionOptions,
   Job,
@@ -11,9 +12,10 @@ import type {
 } from 'bullmq';
 import type * as IORedis from 'ioredis';
 
+const require = createRequire(import.meta.url);
+
 function requireBullMQ(): typeof import('bullmq') {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-return
     return require('bullmq');
   } catch {
     throw new Error('bullmq is not installed. Run: bun add bullmq');

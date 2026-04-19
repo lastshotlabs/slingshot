@@ -1,6 +1,9 @@
 import type { Context } from 'hono';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getPluginStateFromRequestOrNull } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, AuthRuntimePeer } from '@lastshotlabs/slingshot-core';
+import {
+  getAuthRuntimePeerOrNull,
+  getPluginStateFromRequestOrNull,
+} from '@lastshotlabs/slingshot-core';
 
 type AccountGuardFailure = {
   error: 'Account suspended' | 'Email not verified';
@@ -14,8 +17,8 @@ type AuthAdapterLike = {
   getEmailVerified?: (userId: string) => Promise<boolean | null | undefined>;
 };
 
-type AuthRuntimeLike = {
-  adapter?: AuthAdapterLike;
+type AuthRuntimeLike = AuthRuntimePeer & {
+  adapter: AuthAdapterLike;
   config?: {
     primaryField?: string;
     emailVerification?: {
@@ -24,12 +27,9 @@ type AuthRuntimeLike = {
   };
 };
 
-const AUTH_RUNTIME_KEY = 'slingshot-auth';
-
 function getAuthRuntime(c: Context<AppEnv, string>): AuthRuntimeLike | null {
-  const pluginState = getPluginStateFromRequestOrNull(c);
-  const runtime = pluginState?.get(AUTH_RUNTIME_KEY);
-  if (!runtime || typeof runtime !== 'object') {
+  const runtime = getAuthRuntimePeerOrNull(getPluginStateFromRequestOrNull(c));
+  if (!runtime) {
     return null;
   }
   return runtime as AuthRuntimeLike;

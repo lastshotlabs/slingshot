@@ -219,6 +219,7 @@ type PluginApp = Parameters<
 async function createCommunityHarness(opts?: {
   userId?: string;
   containerCreation?: 'admin' | 'user';
+  pushRegistry?: { registerFormatter(type: string, fn: unknown): void };
 }): Promise<Harness> {
   const userId = opts?.userId ?? 'user-1';
   const evaluator = createEvaluator();
@@ -233,43 +234,47 @@ async function createCommunityHarness(opts?: {
   });
 
   const app = new Hono() as unknown as PluginApp;
+  const pluginStateEntries: Array<readonly [string, unknown]> = [
+    [PERMISSIONS_STATE_KEY, { evaluator, registry, adapter: permAdapter }] as const,
+    [
+      'slingshot-notifications',
+      {
+        config: Object.freeze({
+          mountPath: '/notifications',
+          sseEnabled: true,
+          ssePath: '/notifications/sse',
+          dispatcher: { enabled: true, intervalMs: 30_000, maxPerTick: 500 },
+          rateLimit: {
+            perSourcePerUserPerWindow: 100,
+            windowMs: 3_600_000,
+            backend: 'memory',
+          },
+          defaultPreferences: {
+            pushEnabled: true,
+            emailEnabled: true,
+            inAppEnabled: true,
+          },
+        }),
+        notifications: notifications.notifications,
+        preferences: notifications.preferences,
+        dispatcher: {
+          start() {},
+          stop() {},
+          async tick() {
+            return 0;
+          },
+        },
+        createBuilder: ({ source }: { source: string }) => notifications.createBuilder(source),
+        registerDeliveryAdapter() {},
+      },
+    ],
+  ];
+  if (opts?.pushRegistry) {
+    pluginStateEntries.push(['slingshot-push', opts.pushRegistry]);
+  }
   attachContext(app, {
     app,
-    pluginState: new Map<string, unknown>([
-      [PERMISSIONS_STATE_KEY, { evaluator, registry, adapter: permAdapter }] as const,
-      [
-        'slingshot-notifications',
-        {
-          config: Object.freeze({
-            mountPath: '/notifications',
-            sseEnabled: true,
-            ssePath: '/notifications/sse',
-            dispatcher: { enabled: true, intervalMs: 30_000, maxPerTick: 500 },
-            rateLimit: {
-              perSourcePerUserPerWindow: 100,
-              windowMs: 3_600_000,
-              backend: 'memory',
-            },
-            defaultPreferences: {
-              pushEnabled: true,
-              emailEnabled: true,
-              inAppEnabled: true,
-            },
-          }),
-          notifications: notifications.notifications,
-          preferences: notifications.preferences,
-          dispatcher: {
-            start() {},
-            stop() {},
-            async tick() {
-              return 0;
-            },
-          },
-          createBuilder: ({ source }: { source: string }) => notifications.createBuilder(source),
-          registerDeliveryAdapter() {},
-        },
-      ],
-    ]),
+    pluginState: new Map<string, unknown>(pluginStateEntries),
     ws: null,
     wsEndpoints: {},
     wsPublish: null,
@@ -347,6 +352,24 @@ describe('createCommunityPlugin — smoke', () => {
       disableRoutes: ['reports', 'bans'],
     });
     expect(plugin.name).toBe('slingshot-community');
+  });
+
+  test('registers community push formatters through the optional peer boundary', async () => {
+    const registered = new Map<string, unknown>();
+
+    await createCommunityHarness({
+      pushRegistry: {
+        registerFormatter(type, fn) {
+          registered.set(type, fn);
+        },
+      },
+    });
+
+    expect(registered.has('community:reply')).toBe(true);
+    expect(registered.has('community:mention')).toBe(true);
+    expect(registered.has('community:ban')).toBe(true);
+    expect(registered.has('community:warning')).toBe(true);
+    expect(registered.has('community:thread.subscribed_reply')).toBe(true);
   });
 });
 

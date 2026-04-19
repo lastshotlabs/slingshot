@@ -30,6 +30,7 @@
  * @module
  */
 import { generateFromSchema, type GenerateOptions } from '@lastshotlabs/slingshot-core/faker';
+import { faker as defaultFaker } from '@faker-js/faker';
 import type { ResolvedEntityConfig } from '../types/entity';
 
 // ---------------------------------------------------------------------------
@@ -89,10 +90,17 @@ export function createEntitySeeder<Entity = unknown, CreateInput = unknown>(
     pkField: config._pkField,
 
     async seed(count: number, overrides?: Record<string, unknown>): Promise<Entity[]> {
+      // Resolve faker ONCE before the loop so we don't re-seed on every
+      // iteration (which would produce identical records).
+      const f = generateOptions?.faker ?? defaultFaker;
+      if (generateOptions?.seed !== undefined) f.seed(generateOptions.seed);
+
       const results: Entity[] = [];
       for (let i = 0; i < count; i++) {
         const input = generateFromSchema<CreateInput>(createSchema, {
           ...generateOptions,
+          seed: undefined,
+          faker: f,
           overrides,
         });
         const entity = await adapter.create(input);
@@ -173,6 +181,13 @@ export async function seedAll(
 
   const records = new Map<string, unknown[]>();
 
+  // Resolve faker ONCE before all entity loops to avoid re-seeding
+  const { faker: fakerInstance } = await import('@faker-js/faker');
+  const f = options.generateOptions?.faker ?? fakerInstance;
+  if (options.generateOptions?.seed !== undefined) {
+    f.seed(options.generateOptions.seed);
+  }
+
   for (const config of sorted) {
     const entry = entryByName.get(config.name);
     if (!entry) continue;
@@ -180,16 +195,7 @@ export async function seedAll(
     const entityPlan = plan[config.name];
     if (!entityPlan) continue;
 
-    const seeder = createEntitySeeder({
-      config: entry.config,
-      adapter: entry.adapter,
-      createSchema: entry.createSchema,
-      generateOptions: options.generateOptions,
-    });
-
     const seeded: unknown[] = [];
-    const { faker: fakerInstance } = await import('@faker-js/faker');
-    const f = options.generateOptions?.faker ?? fakerInstance;
 
     for (let i = 0; i < entityPlan.count; i++) {
       const perRecordOverrides: Record<string, unknown> = { ...entityPlan.overrides };
@@ -213,7 +219,16 @@ export async function seedAll(
         }
       }
 
-      const entity = await seeder.seedOne(perRecordOverrides);
+      // Call generateFromSchema directly instead of seeder.seedOne to avoid
+      // re-seeding on every iteration — seedOne would pass generateOptions.seed
+      // on every call, resetting the PRNG and producing near-identical records.
+      const input = generateFromSchema(entry.createSchema, {
+        ...options.generateOptions,
+        seed: undefined,
+        faker: f,
+        overrides: perRecordOverrides,
+      });
+      const entity = await entry.adapter.create(input);
       seeded.push(entity);
     }
 

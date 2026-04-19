@@ -9,7 +9,8 @@ import {
   type PermissionsState,
   type PluginSetupContext,
   type SlingshotPlugin,
-  getContext,
+  getPermissionsStateOrNull,
+  getPluginState,
 } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -90,13 +91,13 @@ export function createSlingshotAdminPlugin(config: SlingshotAdminPluginConfig): 
     // not guaranteed). Actual route registration is deferred to setupPost (Rule 17).
 
     async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      const ctx = getContext(app);
-      const runtime = getAuthRuntimeContext(ctx);
+      const pluginState = getPluginState(app);
+      const runtime = getAuthRuntimeContext(pluginState);
 
       // All setupRoutes phases have now completed — safe to read cross-plugin state.
       let permissions = config.permissions;
       if (!permissions) {
-        const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
+        const state = getPermissionsStateOrNull(pluginState) as PermissionsState | null;
         if (!state) {
           throw new Error(
             '[slingshot-admin] permissions not provided and not found in pluginState. ' +
@@ -108,8 +109,8 @@ export function createSlingshotAdminPlugin(config: SlingshotAdminPluginConfig): 
       }
 
       // Publish resolved permissions so other plugins can read them.
-      if (!ctx.pluginState.has(PERMISSIONS_STATE_KEY)) {
-        ctx.pluginState.set(PERMISSIONS_STATE_KEY, permissions);
+      if (!getPermissionsStateOrNull(pluginState)) {
+        pluginState.set(PERMISSIONS_STATE_KEY, permissions);
       }
 
       // Register routes in setupPost — all plugins' setupRoutes have completed and

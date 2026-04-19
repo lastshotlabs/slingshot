@@ -201,4 +201,26 @@ describe('createChatPlugin', () => {
 
     plugin.teardown?.();
   });
+
+  it('registers chat push formatters through the optional peer boundary', async () => {
+    const registered = new Map<string, unknown>();
+    const peersPluginState = new Map<string, unknown>([
+      [
+        'slingshot-push',
+        {
+          registerFormatter(type: string, formatter: unknown) {
+            registered.set(type, formatter);
+          },
+        },
+      ],
+    ]);
+
+    await createChatTestApp({}, { peersPluginState });
+
+    expect(registered.has('chat:mention')).toBe(true);
+    expect(registered.has('chat:reply')).toBe(true);
+    expect(registered.has('chat:dm')).toBe(true);
+    expect(registered.has('chat:invite')).toBe(true);
+    expect(registered.has('chat:poll')).toBe(true);
+  });
 });

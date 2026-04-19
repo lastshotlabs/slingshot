@@ -11,6 +11,7 @@ import {
   PERMISSIONS_STATE_KEY,
   deepFreeze,
   getContext,
+  getPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -33,6 +34,8 @@ import { buildAttachmentRequiredGuard, buildPollRequiredGuard } from './middlewa
 import { createReplyCountDecrementMiddleware } from './middleware/replyCountDecrement';
 import { createReplyCountUpdateMiddleware } from './middleware/replyCountUpdate';
 import { createRoomCreatorGrantMiddleware } from './middleware/roomCreatorGrant';
+import { probeEmbedsPeer } from './peers/embeds';
+import { probePushFormatterRegistry } from './peers/push';
 import { CHAT_PLUGIN_STATE_KEY } from './state';
 import type { Message as ChatMessage, ChatPluginConfig, ChatPluginState } from './types';
 import { buildIncomingDispatch } from './ws/incoming';
@@ -40,7 +43,7 @@ import { buildIncomingDispatch } from './ws/incoming';
 type PluginApp = PluginSetupContext['app'];
 
 function getPluginStateValue(app: PluginApp, key: string): unknown {
-  return getContext(app).pluginState.get(key);
+  return getPluginState(app).get(key);
 }
 
 function requirePluginStateValue(app: PluginApp, key: string, message: string): unknown {
@@ -122,7 +125,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
       ) as NotificationsPeerState;
       permissionsRef = permissions;
 
-      getContext(app).pluginState.set(CHAT_PLUGIN_STATE_KEY, {
+      getPluginState(app).set(CHAT_PLUGIN_STATE_KEY, {
         interactionsPeer: {
           peerKind: 'chat',
           async resolveMessageByKindAndId(kind, id) {
@@ -228,16 +231,12 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
             });
           }
 
-          const pushState = getPluginStateValue(app, 'slingshot-push') as
-            | { registerFormatter(type: string, formatter: unknown): void }
-            | undefined;
-          if (pushState?.registerFormatter) {
-            registerChatPushFormatters(pushState as never);
+          const pushState = probePushFormatterRegistry(app);
+          if (pushState) {
+            registerChatPushFormatters(pushState);
           }
 
-          const embedsState = getPluginStateValue(app, 'slingshot-embeds') as
-            | { unfurl(urls: string[]): Promise<unknown[]> }
-            | undefined;
+          const embedsState = probeEmbedsPeer(app);
           if (embedsState && messageAdapterRef) {
             const msgAdapter = messageAdapterRef;
             postBus.on('chat:message.created', async (payload: Record<string, unknown>) => {
@@ -406,7 +405,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
           },
           evaluator: permissionsRef.evaluator,
         };
-        getContext(app).pluginState.set(CHAT_PLUGIN_STATE_KEY, chatState);
+        getPluginState(app).set(CHAT_PLUGIN_STATE_KEY, chatState);
         app.route(`${mountPath}/encryption`, buildEncryptionRouter(chatState));
       }
     },

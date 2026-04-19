@@ -1,3 +1,6 @@
+import { getPluginStateOrNull } from './pluginState';
+import type { PluginStateCarrier, PluginStateMap } from './pluginState';
+
 // ── Models ──────────────────────────────────────────────────────────────────
 
 /**
@@ -388,6 +391,38 @@ export interface PermissionsState {
   registry: PermissionRegistry;
   /** The backing persistence adapter for grants. */
   adapter: PermissionsAdapter;
+}
+
+/**
+ * Resolve `PermissionsState` from plugin state when the permissions plugin is present.
+ *
+ * Returns `null` for absent or malformed state so optional integrations can fail
+ * closed without inspecting raw map entries themselves.
+ */
+export function getPermissionsStateOrNull(
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
+): PermissionsState | null {
+  const pluginState = getPluginStateOrNull(input);
+  const state = pluginState?.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
+  if (!state?.adapter || !state.registry || !state.evaluator) {
+    return null;
+  }
+  return state;
+}
+
+/**
+ * Resolve `PermissionsState` from plugin state.
+ *
+ * Throws when `slingshot-permissions` has not published its runtime state.
+ */
+export function getPermissionsState(
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
+): PermissionsState {
+  const state = getPermissionsStateOrNull(input);
+  if (!state) {
+    throw new Error('[slingshot-permissions] permissions state is not available in pluginState');
+  }
+  return state;
 }
 
 // ── Validation ──────────────────────────────────────────────────────────────

@@ -1,8 +1,4 @@
-import type {
-  PermissionEvaluator,
-  RateLimitAdapter,
-  SlingshotContext,
-} from '@lastshotlabs/slingshot-core';
+import type { PermissionEvaluator, RateLimitAdapter } from '@lastshotlabs/slingshot-core';
 import { componentTreeSchema, modalSchema } from '../components/schema';
 import type { MessageKind } from '../components/types';
 import type { InteractionResponseStatus } from '../entities/interactionEvent';
@@ -16,7 +12,6 @@ import type { CompiledHandlerTable } from './contracts';
 
 /** Runtime dependencies required by the interaction orchestrator. */
 export interface DispatchDeps {
-  readonly ctx: SlingshotContext;
   readonly handlers: CompiledHandlerTable;
   readonly evaluator: PermissionEvaluator;
   readonly rateLimit: RateLimitAdapter;

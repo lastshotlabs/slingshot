@@ -1,6 +1,6 @@
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { getContextOrNull } from '@lastshotlabs/slingshot-core';
+import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 import { createScimRouter } from './routes/scim';
 
 /**
@@ -36,7 +36,7 @@ export function createScimPlugin(): SlingshotPlugin {
     dependencies: ['slingshot-auth'],
 
     setupRoutes({ app }: PluginSetupContext) {
-      const runtime = getAuthRuntimeContext(getContextOrNull(app));
+      const runtime = getAuthRuntimeContext(getPluginStateOrNull(app));
       if (!runtime.config.scim) {
         throw new Error(
           '[slingshot-scim] SCIM is not configured in slingshot-auth. Set auth.scim in the auth plugin config.',

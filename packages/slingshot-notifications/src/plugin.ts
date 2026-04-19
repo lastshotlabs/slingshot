@@ -6,7 +6,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
-  getContext,
+  getPluginState,
   resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -160,7 +160,7 @@ export function createNotificationsPlugin(
         },
       });
 
-      getContext(app).pluginState.set(NOTIFICATIONS_PLUGIN_STATE_KEY, state);
+      getPluginState(app).set(NOTIFICATIONS_PLUGIN_STATE_KEY, state);
       dispatcher.start();
 
       teardown = async () => {

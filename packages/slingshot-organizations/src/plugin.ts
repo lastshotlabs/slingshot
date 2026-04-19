@@ -106,7 +106,7 @@ export function createOrganizationsPlugin(
       }
 
       const slingshotCtx = getContextOrNull(ctx.app);
-      const authRuntime = getOrganizationsAuthRuntime(slingshotCtx);
+      const authRuntime = getOrganizationsAuthRuntime(slingshotCtx?.pluginState);
       const routeAuth = slingshotCtx ? getRouteAuthOrNull(slingshotCtx) : null;
       if (!routeAuth) {
         throw new Error(

@@ -1,7 +1,7 @@
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { AuthRateLimitConfig } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { getContextOrNull } from '@lastshotlabs/slingshot-core';
+import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 import { createOAuthRouter } from './routes/oauth';
 
 /**
@@ -83,7 +83,7 @@ export function createOAuthPlugin(options?: OAuthPluginOptions): SlingshotPlugin
     dependencies: ['slingshot-auth'],
 
     setupRoutes({ app }: PluginSetupContext) {
-      const runtime = getAuthRuntimeContext(getContextOrNull(app));
+      const runtime = getAuthRuntimeContext(getPluginStateOrNull(app));
       const providers = Object.keys(runtime.oauth.providers);
       if (providers.length === 0) return;
 

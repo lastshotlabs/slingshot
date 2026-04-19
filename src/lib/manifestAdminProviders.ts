@@ -10,6 +10,7 @@
  * auth and permissions plugins have initialized their state.
  */
 import type { Context } from 'hono';
+import { getAuthRuntimeContextOrNull } from '@lastshotlabs/slingshot-auth';
 import type { AuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type {
   AdminAccessProvider,
@@ -29,7 +30,11 @@ import type {
   PermissionsState,
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
-import { PERMISSIONS_STATE_KEY, SUPER_ADMIN_ROLE } from '@lastshotlabs/slingshot-core';
+import {
+  PERMISSIONS_STATE_KEY,
+  SUPER_ADMIN_ROLE,
+  getPermissionsStateOrNull,
+} from '@lastshotlabs/slingshot-core';
 
 /**
  * Create deferred admin providers that resolve real implementations lazily.
@@ -65,10 +70,10 @@ export function createDeferredAdminProviders(config: Record<string, unknown>): {
         config['accessProvider'] === 'slingshot-auth' ||
         config['managedUserProvider'] === 'slingshot-auth'
       ) {
-        authRuntime = pluginState.get('slingshot-auth') as AuthRuntimeContext | null;
+        authRuntime = getAuthRuntimeContextOrNull(pluginState);
       }
       if (config['permissions'] === 'slingshot-permissions') {
-        permsState = pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | null;
+        permsState = getPermissionsStateOrNull(pluginState);
       }
     },
   };

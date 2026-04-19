@@ -1,12 +1,14 @@
 import type {
   AuthAdapter,
   DataEncryptionKey,
+  PluginStateCarrier,
+  PluginStateMap,
   ResolvedStores,
   RuntimePassword,
   SigningConfig,
-  SlingshotContext,
   SlingshotEventBus,
 } from '@lastshotlabs/slingshot-core';
+import { getPluginStateFromRequest, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from './config/authConfig';
 import type { AuthQueueFactory } from './infra/queue';
 import type { LockoutService } from './lib/accountLockout';
@@ -26,9 +28,10 @@ import type { SessionRepository } from './lib/session';
 
 /**
  * Per-app auth runtime state, created by `bootstrapAuth` and stored in
- * `SlingshotContext.pluginState` under the `AUTH_RUNTIME_KEY` symbol.
+ * `pluginState` under the `AUTH_RUNTIME_KEY` symbol.
  *
- * Access it via `getAuthRuntimeContext(ctx)` from a `SlingshotContext`, or
+ * Access it via `getAuthRuntimeContext(ctx.pluginState)` from plugin setup code,
+ * `getAuthRuntimeContext(ctx)` from any object that carries `pluginState`, or
  * `getAuthRuntimeFromRequest(c)` from a Hono request context inside an auth route.
  *
  * All properties are `readonly`. The `config` object is deep-frozen. The `repos` map
@@ -77,7 +80,7 @@ export interface AuthRuntimeContext {
 }
 
 /**
- * Key used to store and retrieve the `AuthRuntimeContext` from `SlingshotContext.pluginState`
+ * Key used to store and retrieve the `AuthRuntimeContext` from `pluginState`
  * and from Hono request context.
  *
  * @remarks
@@ -96,12 +99,12 @@ export interface AuthRuntimeContext {
 export const AUTH_RUNTIME_KEY = 'slingshot-auth';
 
 /**
- * Retrieves the `AuthRuntimeContext` from a `SlingshotContext`.
+ * Retrieves the `AuthRuntimeContext` from plugin state.
  *
- * Use this inside framework-level code that has access to the `SlingshotContext` directly
- * (e.g., `setupPost` hooks, admin providers, or server-side utilities).
+ * Use this inside framework-level code that has access to the per-app `pluginState`
+ * map directly (e.g., `setupPost` hooks, admin providers, or server-side utilities).
  *
- * @param ctx - The `SlingshotContext` instance, typically obtained via `getContext(app)`.
+ * @param input - The app `pluginState` map or any object that carries it.
  * @returns The `AuthRuntimeContext` for the app.
  *
  * @throws {Error} When the auth plugin has not been initialised on this context.
@@ -111,15 +114,32 @@ export const AUTH_RUNTIME_KEY = 'slingshot-auth';
  * import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
  *
  * const ctx = getContext(app);
- * const runtime = getAuthRuntimeContext(ctx);
+ * const runtime = getAuthRuntimeContext(ctx.pluginState);
  * const adapter = runtime.adapter;
  */
 export function getAuthRuntimeContext(
-  ctx: SlingshotContext | null | undefined,
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): AuthRuntimeContext {
-  const runtime = ctx?.pluginState.get(AUTH_RUNTIME_KEY) as AuthRuntimeContext | undefined;
+  const runtime = getAuthRuntimeContextOrNull(input);
+  if (!runtime) {
+    throw new Error('[slingshot-auth] auth runtime context is not available in pluginState');
+  }
+  return runtime;
+}
+
+/**
+ * Retrieves the `AuthRuntimeContext` from plugin state when auth has published it.
+ *
+ * Returns `null` instead of throwing so optional-auth bootstrap paths can fail
+ * closed without digging through raw `pluginState` entries.
+ */
+export function getAuthRuntimeContextOrNull(
+  input: PluginStateMap | PluginStateCarrier | object | null | undefined,
+): AuthRuntimeContext | null {
+  const pluginState = getPluginStateOrNull(input);
+  const runtime = pluginState?.get(AUTH_RUNTIME_KEY) as AuthRuntimeContext | undefined;
   if (!runtime?.adapter) {
-    throw new Error('[slingshot-auth] auth runtime context is not available on SlingshotContext');
+    return null;
   }
   return runtime;
 }
@@ -127,9 +147,8 @@ export function getAuthRuntimeContext(
 /**
  * Retrieves the `AuthRuntimeContext` from a Hono request context.
  *
- * Use this inside Hono route handlers and middleware where `SlingshotContext` is
- * available via `c.get('slingshotCtx')`. This is the standard accessor for auth
- * services inside route files.
+ * Use this inside Hono route handlers and middleware. This resolves the current
+ * request's app `pluginState` and returns the auth runtime published into it.
  *
  * @param c - A Hono context object (or any object with a `get(key)` method).
  * @returns The `AuthRuntimeContext` for the current request.
@@ -147,5 +166,5 @@ export function getAuthRuntimeContext(
  * });
  */
 export function getAuthRuntimeFromRequest(c: { get(key: string): unknown }): AuthRuntimeContext {
-  return getAuthRuntimeContext(c.get('slingshotCtx') as SlingshotContext | undefined);
+  return getAuthRuntimeContext(getPluginStateFromRequest(c));
 }

@@ -10,7 +10,7 @@ import type {
   PermissionsAdapter,
 } from '@lastshotlabs/slingshot-core';
 import type { PermissionsState } from '@lastshotlabs/slingshot-core';
-import { PERMISSIONS_STATE_KEY, getContextOrNull } from '@lastshotlabs/slingshot-core';
+import { PERMISSIONS_STATE_KEY, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 
 /** The shape of the permissions config on EntityPluginConfig. */
 export interface ResolvedPermissions {
@@ -44,7 +44,7 @@ export function createPermissionsResolver(
       return cached;
     }
 
-    const state = getContextOrNull(app)?.pluginState.get(PERMISSIONS_STATE_KEY) as
+    const state = getPluginStateOrNull(app)?.get(PERMISSIONS_STATE_KEY) as
       | PermissionsState
       | undefined;
     if (state) {

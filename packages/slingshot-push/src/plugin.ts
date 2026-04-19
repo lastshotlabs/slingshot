@@ -8,7 +8,7 @@ import type {
 import {
   NOTIFICATIONS_PLUGIN_STATE_KEY,
   deepFreeze,
-  getContext,
+  getPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -281,9 +281,10 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
         },
       };
 
-      getContext(app).pluginState.set(PUSH_PLUGIN_STATE_KEY, state);
+      const pluginState = getPluginState(app);
+      pluginState.set(PUSH_PLUGIN_STATE_KEY, state);
 
-      const notificationsState = getContext(app).pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
+      const notificationsState = pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
         | NotificationsPeerState
         | undefined;
       if (notificationsState) {

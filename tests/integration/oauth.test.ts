@@ -50,7 +50,7 @@ describe('OAuth exchange endpoint', () => {
       },
     );
     const ctx = getContext(app);
-    const runtime = getAuthRuntimeContext(ctx);
+    const runtime = getAuthRuntimeContext(ctx.pluginState);
     oauthCodeRepo = runtime.repos.oauthCode;
   });
 
@@ -125,7 +125,7 @@ describe('OAuth exchange endpoint', () => {
       },
     );
     const refreshCtx = getContext(appWithRefresh);
-    const refreshRuntime = getAuthRuntimeContext(refreshCtx);
+    const refreshRuntime = getAuthRuntimeContext(refreshCtx.pluginState);
 
     const code = await storeOAuthCode(
       refreshRuntime.repos.oauthCode,
@@ -196,7 +196,7 @@ describe('OAuth exchange endpoint CSRF protection', () => {
         },
       },
     );
-    const runtime = getAuthRuntimeContext(getContext(csrfApp));
+    const runtime = getAuthRuntimeContext(getContext(csrfApp).pluginState);
     const code = await storeOAuthCode(
       runtime.repos.oauthCode,
       {

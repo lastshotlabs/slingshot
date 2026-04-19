@@ -499,7 +499,7 @@ type ProfileFields = {
  * import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
  *
  * // Advanced: mount manually without the plugin
- * app.route('/scim', createScimRouter(getAuthRuntimeContext(ctx)));
+ * app.route('/scim', createScimRouter(getAuthRuntimeContext(ctx.pluginState)));
  * ```
  */
 export function createScimRouter(runtime: AuthRuntimeContext) {

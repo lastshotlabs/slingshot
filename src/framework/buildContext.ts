@@ -16,6 +16,7 @@ import { runPluginTeardown } from '@framework/runPluginLifecycle';
 import type { ResolvedSecretBundle } from '@framework/secrets/resolveSecretBundle';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { SigningConfig } from '@lib/signingConfig';
+import { getAuthRuntimeContextOrNull } from '@lastshotlabs/slingshot-auth';
 import type {
   CaptchaConfig,
   CoreRegistrarSnapshot,
@@ -360,9 +361,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     const evaluator = createPermissionEvaluator({
       registry,
       adapter,
-      groupResolver: createAuthGroupResolver(
-        () => pluginState.get('slingshot-auth') as { adapter?: object } | null | undefined,
-      ),
+      groupResolver: createAuthGroupResolver(() => getAuthRuntimeContextOrNull(pluginState)),
     });
 
     pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));

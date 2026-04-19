@@ -10,7 +10,8 @@ import { createTestApp } from '../setup';
 
 describe('requireVerifiedEmail middleware', () => {
   let app: OpenAPIHono<any>;
-  const getRuntime = (targetApp: object) => getAuthRuntimeContext(getContext(targetApp));
+  const getRuntime = (targetApp: object) =>
+    getAuthRuntimeContext(getContext(targetApp).pluginState);
 
   beforeEach(async () => {
     app = await createTestApp(

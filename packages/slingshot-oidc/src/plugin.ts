@@ -1,6 +1,6 @@
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { getContextOrNull } from '@lastshotlabs/slingshot-core';
+import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 import { isJwksLoaded } from './lib/jwks';
 import { createOidcRouter } from './routes/oidc';
 
@@ -40,7 +40,7 @@ export function createOidcPlugin(): SlingshotPlugin {
     dependencies: ['slingshot-auth'],
 
     setupRoutes({ app }: PluginSetupContext) {
-      const runtime = getAuthRuntimeContext(getContextOrNull(app));
+      const runtime = getAuthRuntimeContext(getPluginStateOrNull(app));
       if (!runtime.config.oidc) {
         throw new Error(
           '[slingshot-oidc] OIDC is not configured in slingshot-auth. Set auth.oidc in the auth plugin config.',

@@ -6,8 +6,8 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
-  PERMISSIONS_STATE_KEY,
   getContext,
+  getPermissionsState,
   getRateLimitAdapter,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
@@ -92,14 +92,7 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
       const ctx = getContext(app);
-      const permissions = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as
-        | PermissionsState
-        | undefined;
-      if (!permissions) {
-        throw new Error(
-          '[slingshot-interactions] Permissions state not found. Register createPermissionsPlugin() first.',
-        );
-      }
+      const permissions: PermissionsState = getPermissionsState(ctx.pluginState);
 
       bus.registerClientSafeEvents(['interactions:event.dispatched', 'interactions:event.failed']);
 
@@ -129,8 +122,8 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
         rateLimitWindowMs: config.rateLimit.windowMs,
         rateLimitMax: config.rateLimit.max,
         peers: {
-          chat: probeChatPeer(ctx),
-          community: probeCommunityPeer(ctx),
+          chat: probeChatPeer(ctx.pluginState),
+          community: probeCommunityPeer(ctx.pluginState),
         },
         repos: {
           interactionEvents: null,
@@ -168,7 +161,7 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
       }
 
       stateRef.repos.interactionEvents = interactionEventsAdapterRef;
-      buildDispatchRoute(app, getContext(app), stateRef, config.mountPath);
+      buildDispatchRoute(app, stateRef, config.mountPath);
     },
 
     async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {

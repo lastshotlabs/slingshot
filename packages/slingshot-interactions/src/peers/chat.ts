@@ -1,8 +1,12 @@
-import type { SlingshotContext } from '@lastshotlabs/slingshot-core';
+import type { PluginStateCarrier, PluginStateMap } from '@lastshotlabs/slingshot-core';
+import { resolvePluginState } from '@lastshotlabs/slingshot-core';
 import type { ChatInteractionsPeer } from './types';
 
-export function probeChatPeer(ctx: SlingshotContext): ChatInteractionsPeer | null {
-  const state = ctx.pluginState.get('slingshot-chat') as
+export function probeChatPeer(
+  input: PluginStateMap | PluginStateCarrier | null | undefined,
+): ChatInteractionsPeer | null {
+  const pluginState = resolvePluginState(input);
+  const state = pluginState?.get('slingshot-chat') as
     | { interactionsPeer?: ChatInteractionsPeer }
     | null
     | undefined;

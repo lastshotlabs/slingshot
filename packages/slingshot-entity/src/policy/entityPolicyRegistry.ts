@@ -1,9 +1,13 @@
-import type { SlingshotContext } from '@lastshotlabs/slingshot-core';
-import type { PolicyResolver } from '@lastshotlabs/slingshot-core';
+import type {
+  PluginStateCarrier,
+  PluginStateMap,
+  PolicyResolver,
+} from '@lastshotlabs/slingshot-core';
+import { resolvePluginState } from '@lastshotlabs/slingshot-core';
 
 /**
  * Plugin state key under which the policy registry lives on
- * `SlingshotContext.pluginState`.
+ * app `pluginState`.
  *
  * Convention: `pluginState` is `Map<string, unknown>` keyed by the owning
  * plugin's `name` field. `slingshot-entity` owns this slot.
@@ -35,16 +39,23 @@ interface SlingshotEntityPluginState {
 }
 
 /**
- * Retrieve or create the policy registry for the given `SlingshotContext`.
+ * Retrieve or create the policy registry for the given app `pluginState`.
  * Called by `registerEntityPolicy` and by `slingshot-entity`'s `setupRoutes`.
  */
-export function getOrCreateEntityPolicyRegistry(ctx: SlingshotContext): EntityPolicyRegistry {
-  let state = ctx.pluginState.get(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY) as
+export function getOrCreateEntityPolicyRegistry(
+  input: PluginStateMap | PluginStateCarrier | null | undefined,
+): EntityPolicyRegistry {
+  const pluginState = resolvePluginState(input);
+  if (!pluginState) {
+    throw new Error('[slingshot-entity] pluginState is not available for policy registry access');
+  }
+
+  let state = pluginState.get(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY) as
     | SlingshotEntityPluginState
     | undefined;
   if (!state) {
     state = {};
-    ctx.pluginState.set(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, state);
+    pluginState.set(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, state);
   }
   if (!state[POLICY_REGISTRY_SLOT]) {
     state[POLICY_REGISTRY_SLOT] = createEntityPolicyRegistry();

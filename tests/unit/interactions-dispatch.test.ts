@@ -54,7 +54,6 @@ describe('dispatchInteraction', () => {
 
     const outcome = await dispatchInteraction(
       {
-        ctx: {} as never,
         handlers: {
           byPrefix: { [handler.prefix]: handler },
           sortedKeys: [handler.prefix],
@@ -129,7 +128,6 @@ describe('dispatchInteraction', () => {
 
     const outcome = await dispatchInteraction(
       {
-        ctx: {} as never,
         handlers: {
           byPrefix: { [handler.prefix]: handler },
           sortedKeys: [handler.prefix],

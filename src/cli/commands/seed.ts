@@ -15,7 +15,6 @@ export default class Seed extends Command {
     '<%= config.bin %> seed --manifest ./slingshot.entities.json --count 50 --seed 42',
     '<%= config.bin %> seed --manifest ./slingshot.entities.json --entities User,Post --count 100',
     '<%= config.bin %> seed --manifest ./slingshot.entities.json --count 10 --output ./fixtures',
-    '<%= config.bin %> seed --manifest ./slingshot.entities.json --clean',
   ];
 
   static override flags = {
@@ -40,10 +39,6 @@ export default class Seed extends Command {
     output: Flags.string({
       char: 'o',
       description: 'Directory to write generated JSON fixtures (instead of DB insert)',
-    }),
-    clean: Flags.boolean({
-      description: 'Clear all entity data before seeding',
-      default: false,
     }),
     'dry-run': Flags.boolean({
       description: 'Preview generated data without persisting',
@@ -93,8 +88,13 @@ export default class Seed extends Command {
     const { generateSchemas } = await import('@lastshotlabs/slingshot-entity');
 
     const allRecords = new Map<string, unknown[]>();
-    const genOpts = flags.seed !== undefined ? { seed: flags.seed } : {};
     const { faker: fakerInstance } = await import('@faker-js/faker');
+
+    // Seed faker ONCE before the loop — passing { seed } on every iteration
+    // would re-seed to the same state and produce identical records.
+    if (flags.seed !== undefined) {
+      fakerInstance.seed(flags.seed);
+    }
 
     for (const config of sorted) {
       const schemas = generateSchemas(config);
@@ -125,7 +125,7 @@ export default class Seed extends Command {
         }
 
         const record = generateFromSchema(schemas.createSchema as any, {
-          ...genOpts,
+          faker: fakerInstance,
           overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
         });
         records.push(record);

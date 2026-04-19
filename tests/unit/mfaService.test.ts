@@ -20,7 +20,7 @@ import { createTestApp } from '../setup';
 let app: any;
 let adapter: ReturnType<typeof getAuthRuntimeContext>['adapter'];
 const emailOtpCodes: { email: string; code: string }[] = [];
-const getRuntime = () => getAuthRuntimeContext(getContext(app));
+const getRuntime = () => getAuthRuntimeContext(getContext(app).pluginState);
 
 const emailOtpHandler = (payload: { email: string; code: string }) => {
   emailOtpCodes.push({ email: payload.email, code: payload.code });

@@ -54,7 +54,6 @@ function createDispatchDeps(overrides?: {
 
   return {
     deps: {
-      ctx: {} as any,
       handlers: {
         byPrefix: {},
         sortedKeys: ['test:'],

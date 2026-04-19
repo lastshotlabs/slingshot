@@ -115,6 +115,8 @@ See [Reflect Symbol DI](/slingshot/internals/reflect-di/) for the full pattern, 
 When state is too plugin-specific for the registrar, use `ctx.pluginState`:
 
 ```typescript
+import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
+
 // slingshot-auth stores its runtime state
 ctx.pluginState.set('slingshot-auth', {
   sessionStore,
@@ -122,8 +124,8 @@ ctx.pluginState.set('slingshot-auth', {
   rateLimiter,
 });
 
-// Another plugin reads it
-const authState = ctx.pluginState.get('slingshot-auth') as AuthPluginState;
+// Another plugin reads it through the package-owned accessor
+const authState = getAuthRuntimeContext(ctx.pluginState);
 ```
 
 ## See also

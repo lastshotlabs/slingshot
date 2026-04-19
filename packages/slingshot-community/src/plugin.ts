@@ -11,6 +11,7 @@ import {
   PERMISSIONS_STATE_KEY,
   deepFreeze,
   getContextOrNull,
+  getPluginStateOrNull,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -27,6 +28,7 @@ import { createMemberJoinGuardMiddleware } from './middleware/memberJoinGuard';
 import { buildAttachmentRequiredGuard, buildPollRequiredGuard } from './middleware/peerGuards';
 import { createReplyPostCreateMiddleware } from './middleware/replyPostCreate';
 import { createThreadPostCreateMiddleware } from './middleware/threadPostCreate';
+import { probePushFormatterRegistrar } from './peers/push';
 import { DEFAULT_SCORING_CONFIG } from './types/config';
 import type { CommunityPluginConfig } from './types/config';
 import { communityPluginConfigSchema } from './types/config';
@@ -265,9 +267,9 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         });
       }
 
-      const appCtx = getContextOrNull(app);
+      const pluginState = getPluginStateOrNull(app);
       const permissions: PermissionsState =
-        (appCtx?.pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined) ??
+        (pluginState?.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined) ??
         (() => {
           throw new Error(
             '[slingshot-community] No permissions available. Register createPermissionsPlugin() before this plugin.',
@@ -277,11 +279,11 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       // Retain for setupPost WS self-wiring (buildSubscribeGuard needs permissions).
       permissionsRef = permissions;
 
-      if (appCtx?.pluginState) {
-        if (!appCtx.pluginState.has(PERMISSIONS_STATE_KEY)) {
-          appCtx.pluginState.set(PERMISSIONS_STATE_KEY, permissions);
+      if (pluginState) {
+        if (!pluginState.has(PERMISSIONS_STATE_KEY)) {
+          pluginState.set(PERMISSIONS_STATE_KEY, permissions);
         }
-        appCtx.pluginState.set(COMMUNITY_PLUGIN_STATE_KEY, {
+        pluginState.set(COMMUNITY_PLUGIN_STATE_KEY, {
           config,
           evaluator: permissions.evaluator,
           interactionsPeer,
@@ -442,14 +444,14 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
     },
 
     async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      const appCtx = getContextOrNull(app);
+      const pluginState = getPluginStateOrNull(app);
       await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus });
 
-      if (permissionsRef && appCtx?.pluginState) {
-        if (!appCtx.pluginState.has(PERMISSIONS_STATE_KEY)) {
-          appCtx.pluginState.set(PERMISSIONS_STATE_KEY, permissionsRef);
+      if (permissionsRef && pluginState) {
+        if (!pluginState.has(PERMISSIONS_STATE_KEY)) {
+          pluginState.set(PERMISSIONS_STATE_KEY, permissionsRef);
         }
-        appCtx.pluginState.set(COMMUNITY_PLUGIN_STATE_KEY, {
+        pluginState.set(COMMUNITY_PLUGIN_STATE_KEY, {
           config,
           evaluator: permissionsRef.evaluator,
           interactionsPeer,
@@ -459,7 +461,8 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
 
     async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
       const appCtx = getContextOrNull(app);
-      notificationsStateRef ??= appCtx?.pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
+      const pluginState = getPluginStateOrNull(app);
+      notificationsStateRef ??= pluginState?.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
         | NotificationsPeerState
         | undefined;
       if (!notificationsStateRef) {
@@ -474,20 +477,9 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       // Duck-typed to avoid a direct dependency on @lastshotlabs/slingshot-push.
       // If slingshot-push is present, community registers formatters for each
       // notification type it emits so push delivery produces meaningful titles/bodies.
-      type PushFormatterFn = (notification: NotificationRecord) => {
-        title: string;
-        body?: string;
-        url?: string;
-        data?: Record<string, unknown>;
-      };
-      type PushFormatterRegistrar = {
-        registerFormatter(type: string, fn: PushFormatterFn): void;
-      };
-      const maybePushState = appCtx?.pluginState.get('slingshot-push') as
-        | PushFormatterRegistrar
-        | undefined;
+      const maybePushState = probePushFormatterRegistrar(pluginState);
 
-      if (maybePushState?.registerFormatter) {
+      if (maybePushState) {
         const truncate = (text: unknown, max = 100): string => {
           const str = typeof text === 'string' ? text : '';
           return str.length <= max ? str : `${str.slice(0, max)}\u2026`;

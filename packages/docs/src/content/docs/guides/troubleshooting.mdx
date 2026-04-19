@@ -783,15 +783,13 @@ router.get('/debug/context', async c => {
 To inspect a specific plugin's runtime state:
 
 ```ts
-// Auth plugin stores its runtime under the AUTH_RUNTIME_KEY symbol
+import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import { getContext } from '@lastshotlabs/slingshot-core';
 
 declare const app: object;
 
 const ctx = getContext(app);
-const authRuntime = ctx.pluginState.get('slingshot-auth') as
-  | { oauth?: { providers?: Record<string, unknown> } }
-  | undefined;
+const authRuntime = getAuthRuntimeContext(ctx.pluginState);
 console.log('OAuth providers:', Object.keys(authRuntime?.oauth?.providers ?? {}));
 ```
 

@@ -4,7 +4,7 @@ import type { Server } from 'bun';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
-import { PERMISSIONS_STATE_KEY, SUPER_ADMIN_ROLE } from '@lastshotlabs/slingshot-core';
+import { SUPER_ADMIN_ROLE, getPermissionsStateOrNull } from '@lastshotlabs/slingshot-core';
 import type { PermissionsAdapter } from '@lastshotlabs/slingshot-core';
 import { createServer, getServerContext } from '../server';
 import { createBuiltinPluginFactory, loadBuiltinPlugin } from './builtinPlugins';
@@ -366,10 +366,10 @@ async function runManifestSeed(
     return;
   }
 
-  const runtime = getAuthRuntimeContext(ctx);
-  const permsState = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as
-    | { adapter: PermissionsAdapter }
-    | undefined;
+  const runtime = getAuthRuntimeContext(ctx.pluginState);
+  const permsState = getPermissionsStateOrNull(ctx.pluginState) as
+    | ({ adapter: PermissionsAdapter } & object)
+    | null;
   const orgService = ctx.pluginState.get(ORG_SERVICE_STATE_KEY) as SeedOrgService | undefined;
 
   // Track seeded user IDs by email for org member wiring.

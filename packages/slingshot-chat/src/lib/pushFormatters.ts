@@ -7,21 +7,8 @@
  *
  * @module
  */
+import type { PushFormatterRegistry } from '../peers/push';
 import { CHAT_NOTIFICATION_TYPES } from './notifications';
-
-/**
- * Minimal interface for the push plugin state needed to register formatters.
- * Avoids a hard import of `@lastshotlabs/slingshot-push` which is an optional peer.
- */
-interface PushFormatterRegistry {
-  registerFormatter(
-    type: string,
-    formatter: (
-      notification: { targetId: string; data?: Readonly<Record<string, unknown>> },
-      defaults?: { icon?: string },
-    ) => { title: string; body: string; data?: Record<string, unknown>; icon?: string },
-  ): void;
-}
 
 /**
  * Register default push formatters for all chat notification types.

@@ -113,7 +113,7 @@ describe('WebAuthn routes', () => {
       },
     );
     const { token, userId } = await registerUser('wa-rt-opts-suspended@example.com');
-    const runtime = getAuthRuntimeContext(getContext(app));
+    const runtime = getAuthRuntimeContext(getContext(app).pluginState);
     await runtime.adapter.setSuspended?.(userId, true, 'admin lock');
 
     const res = await app.request('/auth/mfa/webauthn/register-options', {
@@ -173,7 +173,7 @@ describe('WebAuthn routes', () => {
       headers: authHeader(secondUser.token),
     });
     const { registrationToken: blockedToken } = await secondOptsRes.json();
-    const runtime = getAuthRuntimeContext(getContext(app));
+    const runtime = getAuthRuntimeContext(getContext(app).pluginState);
     await runtime.adapter.setSuspended?.(secondUser.userId, true, 'admin lock');
 
     const blockedRes = await app.request('/auth/mfa/webauthn/register', {
@@ -265,7 +265,7 @@ describe('WebAuthn routes', () => {
     });
     expect(delRes.status).toBe(200);
 
-    const runtime = getAuthRuntimeContext(getContext(app));
+    const runtime = getAuthRuntimeContext(getContext(app).pluginState);
     await runtime.adapter.setSuspended?.(userId, true, 'admin lock');
 
     const blockedRes = await app.request('/auth/mfa/webauthn/credentials/credential-id-123', {
@@ -322,7 +322,7 @@ describe('WebAuthn routes', () => {
     const { credentials } = await credsRes.json();
     expect(credentials).toHaveLength(0);
 
-    const runtime = getAuthRuntimeContext(getContext(app));
+    const runtime = getAuthRuntimeContext(getContext(app).pluginState);
     await runtime.adapter.setSuspended?.(userId, true, 'admin lock');
 
     const blockedRes = await app.request('/auth/mfa/webauthn', {

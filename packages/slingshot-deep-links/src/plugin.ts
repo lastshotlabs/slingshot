@@ -1,5 +1,5 @@
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { getContext } from '@lastshotlabs/slingshot-core';
+import { getPluginState } from '@lastshotlabs/slingshot-core';
 import { serializeAppleAasaBody } from './aasa';
 import { serializeAssetlinksBody } from './assetlinks';
 import { warnOnPathCollisions } from './collisions';
@@ -55,8 +55,7 @@ export function createDeepLinksPlugin(input: DeepLinksConfigInput): SlingshotPlu
     publicPaths: [...DEEP_LINKS_PUBLIC_PATHS],
 
     setupMiddleware({ app }: PluginSetupContext) {
-      const ctx = getContext(app);
-      ctx.pluginState.set(DEEP_LINKS_PLUGIN_STATE_KEY, state);
+      getPluginState(app).set(DEEP_LINKS_PLUGIN_STATE_KEY, state);
     },
 
     setupRoutes({ app }: PluginSetupContext) {

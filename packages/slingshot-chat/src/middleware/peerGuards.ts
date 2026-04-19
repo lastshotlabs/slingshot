@@ -14,7 +14,7 @@
 import type { Context, Next } from 'hono';
 import type { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { getContext } from '@lastshotlabs/slingshot-core';
+import { getPluginState } from '@lastshotlabs/slingshot-core';
 import type { PluginSetupContext } from '@lastshotlabs/slingshot-core';
 
 type ChatPluginApp = PluginSetupContext['app'];
@@ -37,7 +37,7 @@ export function buildPollRequiredGuard(app: ChatPluginApp | Hono) {
     }
 
     if (body.poll) {
-      const hasPolls = getContext(app).pluginState.has('slingshot-polls');
+      const hasPolls = getPluginState(app).has('slingshot-polls');
       if (!hasPolls) {
         throw new HTTPException(503, {
           message:
@@ -69,7 +69,7 @@ export function buildAttachmentRequiredGuard(app: ChatPluginApp | Hono) {
     }
 
     if (Array.isArray(body.attachments) && body.attachments.length > 0) {
-      const hasAssets = getContext(app).pluginState.has('slingshot-assets');
+      const hasAssets = getPluginState(app).has('slingshot-assets');
       if (!hasAssets) {
         throw new HTTPException(503, {
           message:

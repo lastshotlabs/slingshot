@@ -57,8 +57,6 @@ export default class Fire extends Command {
   async run(): Promise<void> {
     const { flags } = await this.parse(Fire);
 
-    const { generateFromSchema } = await import('@lastshotlabs/slingshot-core/faker');
-
     let schema: any;
     let label: string;
 
@@ -124,12 +122,10 @@ export default class Fire extends Command {
       this.error('One of --schema or --manifest is required.');
     }
 
-    // Generate payloads
+    // Generate payloads — use generateMany which correctly seeds once
+    const { generateMany } = await import('@lastshotlabs/slingshot-core/faker');
     const genOpts = flags.seed !== undefined ? { seed: flags.seed } : {};
-    const payloads: unknown[] = [];
-    for (let i = 0; i < flags.count; i++) {
-      payloads.push(generateFromSchema(schema, genOpts));
-    }
+    const payloads = generateMany(schema, flags.count, genOpts);
 
     // Output
     if (flags.post) {

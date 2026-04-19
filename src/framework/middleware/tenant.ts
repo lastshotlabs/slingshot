@@ -1,7 +1,7 @@
 import type { TenancyConfig, TenantConfig } from '@config/types/tenancy';
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getContext } from '@lastshotlabs/slingshot-core';
+import { getPluginState } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
 // Simple LRU cache with TTL
@@ -157,10 +157,11 @@ export const invalidateTenantCache = (
  * @returns The live `TenantResolutionCache`, or `null` if not available.
  */
 export function getTenantCacheFromApp(app: object): TenantResolutionCache | null {
-  const ctx = getContext(app);
   return (
-    (ctx.pluginState.get('tenantResolutionCache') as TenantResolutionCache | null | undefined) ??
-    null
+    (getPluginState(app).get('tenantResolutionCache') as
+      | TenantResolutionCache
+      | null
+      | undefined) ?? null
   );
 }
 

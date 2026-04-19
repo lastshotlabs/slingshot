@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { z } from 'zod';
-import { generateFromSchema, generateMany } from '../../src/faker';
+import { generateFromSchema, generateMany, walkSchema } from '../../src/faker';
 
 // ---------------------------------------------------------------------------
 // Bug regression: double optional roll
@@ -75,6 +75,116 @@ describe('optional field probability (no double-roll)', () => {
       expect(r).not.toHaveProperty('age');
       expect(r).toHaveProperty('name');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug regression: double optional roll with non-standard wrapper ordering
+// ---------------------------------------------------------------------------
+
+describe('optional wrapper ordering', () => {
+  it('.optional().nullable() chain respects optionalRate', () => {
+    // This tests the case where optional is NOT the outermost wrapper.
+    // z.string().optional().nullable() is nullable(optional(string)).
+    // The object handler detects the nested optional and rolls once;
+    // _optionalDecided prevents the optional handler from rolling again.
+    const schema = z.object({
+      name: z.string(),
+      bio: z.string().optional().nullable(),
+    });
+
+    const results = generateMany<{ name: string; bio?: string | null }>(schema, 200, {
+      seed: 88,
+      optionalRate: 1.0,
+    });
+
+    // At rate 1.0, bio should always be present (not skipped).
+    // It may be null (~10% chance from nullable), but the key must exist.
+    for (const r of results) {
+      expect(r).toHaveProperty('name');
+      // With rate 1.0 and _optionalDecided, the field should always be present
+      expect('bio' in r).toBe(true);
+    }
+  });
+
+  it('.nullable().optional() chain respects optionalRate', () => {
+    const schema = z.object({
+      name: z.string(),
+      bio: z.string().nullable().optional(),
+    });
+
+    const results = generateMany<{ name: string; bio?: string | null }>(schema, 200, {
+      seed: 88,
+      optionalRate: 1.0,
+    });
+
+    for (const r of results) {
+      expect('bio' in r).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug regression: nested overrides with optional parent
+// ---------------------------------------------------------------------------
+
+describe('nested overrides with optional parent', () => {
+  it('override on nested field forces optional parent to be present', () => {
+    const schema = z.object({
+      address: z.object({
+        city: z.string(),
+        zip: z.string(),
+      }).optional(),
+    });
+
+    const result = generateFromSchema<{ address?: { city: string; zip: string } }>(schema, {
+      seed: 1,
+      optionalRate: 0, // would normally skip the optional field
+      overrides: { 'address.city': 'Portland' },
+    });
+
+    // The address object must be present because we have a nested override
+    expect(result.address).toBeDefined();
+    expect(result.address!.city).toBe('Portland');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug regression: cuid format
+// ---------------------------------------------------------------------------
+
+describe('cuid format', () => {
+  it('generates a string starting with "c"', () => {
+    const schema = z.string().cuid();
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      expect(r[0]).toBe('c');
+      expect(r.length).toBe(25);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug regression: seeded batches produce distinct records
+// ---------------------------------------------------------------------------
+
+describe('seeded generateMany distinctness', () => {
+  it('seeded batch produces distinct records (not all identical)', () => {
+    const schema = z.object({
+      name: z.string(),
+      email: z.string().email(),
+      score: z.number().int().min(0).max(1000),
+    });
+
+    // With a seed, records should still be distinct — the seed initializes
+    // the PRNG once, and subsequent calls advance the state.
+    const results = generateMany<{ name: string; email: string; score: number }>(
+      schema, 20, { seed: 42 },
+    );
+
+    const emails = new Set(results.map((r) => r.email));
+    // All 20 should be unique (or nearly — at minimum more than half)
+    expect(emails.size).toBeGreaterThan(10);
   });
 });
 
@@ -585,6 +695,257 @@ describe('entity-like schema roundtrip', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Bug regression: z.int() must produce integers
+// ---------------------------------------------------------------------------
+
+describe('z.int() handling', () => {
+  it('z.int() produces integers that pass validation', () => {
+    const schema = z.int();
+    const results = generateMany<number>(schema, 50, { seed: 42 });
+    for (const r of results) {
+      expect(Number.isInteger(r)).toBe(true);
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`z.int() validation failed for: ${r}`);
+      }
+    }
+  });
+
+  it('z.int() in an object produces integers', () => {
+    const schema = z.object({
+      count: z.int(),
+      name: z.string(),
+    });
+
+    const results = generateMany<{ count: number; name: string }>(schema, 50, { seed: 1 });
+    for (const r of results) {
+      expect(Number.isInteger(r.count)).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug regression: array constraints (min/max/length)
+// ---------------------------------------------------------------------------
+
+describe('array constraints', () => {
+  it('z.array().min(5) produces at least 5 elements', () => {
+    const schema = z.array(z.string()).min(5);
+    const results = generateMany<string[]>(schema, 20, { seed: 42 });
+    for (const r of results) {
+      expect(r.length).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it('z.array().max(2) produces at most 2 elements', () => {
+    const schema = z.array(z.string()).max(2);
+    const results = generateMany<string[]>(schema, 20, { seed: 42 });
+    for (const r of results) {
+      expect(r.length).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('z.array().length(3) produces exactly 3 elements', () => {
+    const schema = z.array(z.number()).length(3);
+    const results = generateMany<number[]>(schema, 20, { seed: 42 });
+    for (const r of results) {
+      expect(r.length).toBe(3);
+    }
+  });
+
+  it('z.array().min(3).max(5) produces 3-5 elements', () => {
+    const schema = z.array(z.string()).min(3).max(5);
+    const results = generateMany<string[]>(schema, 50, { seed: 42 });
+    for (const r of results) {
+      expect(r.length).toBeGreaterThanOrEqual(3);
+      expect(r.length).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it('array constraints pass validation roundtrip', () => {
+    const schema = z.array(z.string().min(1)).min(2).max(4);
+    const results = generateMany(schema, 50, { seed: 42 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(
+          `Array validation failed: ${JSON.stringify(parsed.error.issues)}\nInput: ${JSON.stringify(r)}`,
+        );
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug regression: ID format validation roundtrips
+// ---------------------------------------------------------------------------
+
+describe('ID format validation roundtrip', () => {
+  it('cuid validates', () => {
+    const schema = z.string().cuid();
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`cuid validation failed for: "${r}"`);
+      }
+    }
+  });
+
+  it('cuid2 validates', () => {
+    const schema = z.string().cuid2();
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`cuid2 validation failed for: "${r}"`);
+      }
+    }
+  });
+
+  it('ulid validates', () => {
+    const schema = z.string().ulid();
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`ulid validation failed for: "${r}"`);
+      }
+    }
+  });
+
+  it('time validates', () => {
+    const schema = z.string().time();
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`time validation failed for: "${r}"`);
+      }
+    }
+  });
+
+  it('nanoid validates', () => {
+    const schema = z.string().nanoid();
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`nanoid validation failed for: "${r}"`);
+      }
+    }
+  });
+
+  it('xid validates', () => {
+    const schema = z.string().xid();
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`xid validation failed for: "${r}"`);
+      }
+    }
+  });
+
+  it('ksuid validates', () => {
+    const schema = z.string().ksuid();
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`ksuid validation failed for: "${r}"`);
+      }
+    }
+  });
+
+  it('base64 validates', () => {
+    const schema = z.string().base64();
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`base64 validation failed for: "${r}"`);
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug regression: number multipleOf
+// ---------------------------------------------------------------------------
+
+describe('number multipleOf', () => {
+  it('z.number().multipleOf(0.5) produces valid multiples', () => {
+    const schema = z.number().multipleOf(0.5);
+    const results = generateMany<number>(schema, 50, { seed: 42 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`multipleOf(0.5) validation failed for: ${r}`);
+      }
+    }
+  });
+
+  it('z.number().multipleOf(3) produces valid multiples', () => {
+    const schema = z.number().multipleOf(3);
+    const results = generateMany<number>(schema, 50, { seed: 42 });
+    for (const r of results) {
+      expect(r % 3).toBe(0);
+    }
+  });
+
+  it('z.number().multipleOf(0.25).min(0).max(10) stays in range', () => {
+    const schema = z.number().multipleOf(0.25).min(0).max(10);
+    const results = generateMany<number>(schema, 50, { seed: 42 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`multipleOf(0.25) + range validation failed for: ${r}`);
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Bug regression: string startsWith / endsWith / includes
+// ---------------------------------------------------------------------------
+
+describe('string constraint formats', () => {
+  it('z.string().startsWith("pre") produces valid strings', () => {
+    const schema = z.string().startsWith('pre');
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`startsWith validation failed for: "${r}"`);
+      }
+    }
+  });
+
+  it('z.string().endsWith("suf") produces valid strings', () => {
+    const schema = z.string().endsWith('suf');
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`endsWith validation failed for: "${r}"`);
+      }
+    }
+  });
+
+  it('z.string().includes("needle") produces valid strings', () => {
+    const schema = z.string().includes('needle');
+    const results = generateMany<string>(schema, 20, { seed: 1 });
+    for (const r of results) {
+      const parsed = schema.safeParse(r);
+      if (!parsed.success) {
+        throw new Error(`includes validation failed for: "${r}"`);
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Stress: high volume
 // ---------------------------------------------------------------------------
 
@@ -604,6 +965,146 @@ describe('high volume generation', () => {
     // Spot check validation on a sample
     for (let i = 0; i < 100; i++) {
       expect(schema.safeParse(results[i]).success).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Set constraints
+// ---------------------------------------------------------------------------
+
+describe('set constraints', () => {
+  it('respects min size constraint', () => {
+    const schema = z.set(z.string()).min(5);
+    for (let i = 0; i < 20; i++) {
+      const result = walkSchema(schema as any, { seed: i }) as Set<string>;
+      expect(result).toBeInstanceOf(Set);
+      expect(result.size).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it('respects max size constraint', () => {
+    const schema = z.set(z.number()).max(2);
+    for (let i = 0; i < 20; i++) {
+      const result = walkSchema(schema as any, { seed: i }) as Set<number>;
+      expect(result).toBeInstanceOf(Set);
+      expect(result.size).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('respects exact size constraint', () => {
+    const schema = z.set(z.string()).size(4);
+    for (let i = 0; i < 20; i++) {
+      const result = walkSchema(schema as any, { seed: i }) as Set<string>;
+      expect(result).toBeInstanceOf(Set);
+      expect(result.size).toBe(4);
+    }
+  });
+
+  it('respects min + max range constraint', () => {
+    const schema = z.set(z.string()).min(3).max(6);
+    for (let i = 0; i < 20; i++) {
+      const result = walkSchema(schema as any, { seed: i }) as Set<string>;
+      expect(result).toBeInstanceOf(Set);
+      expect(result.size).toBeGreaterThanOrEqual(3);
+      expect(result.size).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('generated set validates against schema', () => {
+    const schema = z.set(z.string().min(1)).min(2).max(5);
+    for (let i = 0; i < 20; i++) {
+      const result = walkSchema(schema as any, { seed: i });
+      expect(schema.safeParse(result).success).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Constraint interactions (multipleOf + int, combined string constraints)
+// ---------------------------------------------------------------------------
+
+describe('number: int + multipleOf interaction', () => {
+  it('z.number().int().multipleOf(3) produces integer multiples of 3', () => {
+    const schema = z.number().int().multipleOf(3);
+    for (let i = 0; i < 50; i++) {
+      const val = generateFromSchema(schema as any, { seed: i }) as number;
+      expect(Number.isInteger(val)).toBe(true);
+      expect(val % 3).toBe(0);
+    }
+  });
+
+  it('z.number().int().multipleOf(7).gt(10).lt(50) passes validation', () => {
+    const schema = z.number().int().multipleOf(7).gt(10).lt(50);
+    for (let i = 0; i < 50; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('z.number().multipleOf(0.5).positive() passes validation', () => {
+    const schema = z.number().multipleOf(0.5).positive();
+    for (let i = 0; i < 50; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+});
+
+describe('string: combined constraint formats', () => {
+  it('startsWith + endsWith combined', () => {
+    const schema = z.string().startsWith('hello').endsWith('.txt');
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('startsWith + includes combined', () => {
+    const schema = z.string().startsWith('PRJ-').includes('-ITEM-');
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('all three: startsWith + includes + endsWith', () => {
+    const schema = z.string().startsWith('BEGIN_').includes('_MID_').endsWith('_END');
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('startsWith + min length constraint', () => {
+    const schema = z.string().startsWith('hello').min(20);
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('endsWith + min length constraint', () => {
+    const schema = z.string().endsWith('.txt').min(15);
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('startsWith + endsWith + min + max length constraints', () => {
+    const schema = z.string().startsWith('hi').endsWith('!').min(10).max(20);
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
+    }
+  });
+
+  it('includes + max length constraint', () => {
+    const schema = z.string().includes('world').max(15);
+    for (let i = 0; i < 30; i++) {
+      const val = generateFromSchema(schema as any, { seed: i });
+      expect(schema.safeParse(val).success).toBe(true);
     }
   });
 });

@@ -1,6 +1,6 @@
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { getContextOrNull } from '@lastshotlabs/slingshot-core';
+import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 import { createM2MRouter } from './routes/m2m';
 
 /**
@@ -35,7 +35,7 @@ export function createM2MPlugin(): SlingshotPlugin {
     dependencies: ['slingshot-auth'],
 
     setupRoutes({ app }: PluginSetupContext) {
-      const runtime = getAuthRuntimeContext(getContextOrNull(app));
+      const runtime = getAuthRuntimeContext(getPluginStateOrNull(app));
       if (!runtime.config.m2m) {
         throw new Error(
           '[slingshot-m2m] M2M is not configured in slingshot-auth. Set auth.m2m in the auth plugin config.',

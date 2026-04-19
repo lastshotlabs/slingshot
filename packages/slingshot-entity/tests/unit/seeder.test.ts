@@ -218,6 +218,40 @@ describe('createEntitySeeder', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Bug regression: seeded batches produce distinct records
+// ---------------------------------------------------------------------------
+
+describe('createEntitySeeder — seeded distinctness', () => {
+  it('seed() with a seed produces distinct records (not identical)', async () => {
+    const Config = defineEntity('Item', {
+      fields: {
+        id: field.string({ primary: true, default: 'uuid' }),
+        name: field.string(),
+        value: field.number(),
+      },
+    });
+
+    const createSchema = z.object({
+      name: z.string(),
+      value: z.number(),
+    });
+
+    const adapter = createMemoryAdapter();
+    const seeder = createEntitySeeder({
+      config: Config,
+      adapter,
+      createSchema,
+      generateOptions: { seed: 42 },
+    });
+
+    const items = await seeder.seed(10);
+    // Records should be distinct — if re-seeding bug exists, all 10 would be identical
+    const names = new Set(items.map((i: any) => i.name));
+    expect(names.size).toBeGreaterThan(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // seedAll (multi-entity orchestration)
 // ---------------------------------------------------------------------------
 
@@ -271,6 +305,37 @@ describe('seedAll', () => {
     for (const post of result.records.get('Post') as Array<Record<string, unknown>>) {
       expect(userIds.has(post.authorId)).toBe(true);
     }
+  });
+
+  it('seeded seedAll produces distinct records (not identical)', async () => {
+    const UserConfig = defineEntity('User', {
+      fields: {
+        id: field.string({ primary: true, default: 'uuid' }),
+        name: field.string(),
+        email: field.string({ format: 'email' }),
+      },
+    });
+
+    const userAdapter = createMemoryAdapter();
+    const userCreateSchema = z.object({
+      name: z.string(),
+      email: z.string().email(),
+    });
+
+    const result = await seedAll(
+      {
+        entities: [
+          { config: UserConfig, adapter: userAdapter, createSchema: userCreateSchema },
+        ],
+        generateOptions: { seed: 42 },
+      },
+      { User: { count: 10 } },
+    );
+
+    const users = result.records.get('User') as Array<Record<string, unknown>>;
+    const names = new Set(users.map((u) => u.name));
+    // All 10 should be distinct — if re-seeding bug exists, all would be identical
+    expect(names.size).toBeGreaterThan(1);
   });
 
   it('clearAll removes records in reverse order', async () => {

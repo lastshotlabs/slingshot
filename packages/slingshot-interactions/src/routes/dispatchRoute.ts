@@ -1,5 +1,5 @@
 import type { Context, Hono } from 'hono';
-import type { AppEnv, SlingshotContext } from '@lastshotlabs/slingshot-core';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { dispatchInteraction } from '../handlers/dispatch';
 import type { InteractionsPluginState } from '../state';
 import { dispatchRequestSchema } from './dispatchRoute.schema';
@@ -15,7 +15,6 @@ function readContextValue(c: Context, key: string): unknown {
 /** Mount the interaction dispatch route at the configured mount path. */
 export function buildDispatchRoute(
   app: Hono<AppEnv>,
-  ctx: SlingshotContext,
   state: InteractionsPluginState,
   mountPath: string,
 ): void {
@@ -43,7 +42,6 @@ export function buildDispatchRoute(
 
     const outcome = await dispatchInteraction(
       {
-        ctx,
         handlers: state.handlers,
         evaluator: state.permissions.evaluator,
         rateLimit: state.rateLimit,

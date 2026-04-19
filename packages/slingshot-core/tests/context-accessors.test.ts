@@ -5,6 +5,12 @@ import { resolveContext } from '../src/context/contextAccess';
 import { attachContext, getContext, getContextOrNull } from '../src/context/contextStore';
 import { createCoreRegistrar } from '../src/coreRegistrar';
 import { getEmailTemplate, getEmailTemplates } from '../src/emailTemplates';
+import { getPermissionsState, getPermissionsStateOrNull } from '../src/permissions';
+import {
+  getPluginState,
+  getPluginStateFromRequest,
+  getPluginStateOrNull,
+} from '../src/pluginState';
 import { getFingerprintBuilder, getRateLimitAdapter } from '../src/rateLimit';
 import { getRouteAuth, getRouteAuthOrNull } from '../src/routeAuth';
 import { getUserResolver, getUserResolverOrNull } from '../src/userResolver';
@@ -184,6 +190,64 @@ describe('slingshot-core context accessors', () => {
 
     expect(() => attachContext(app, ctx as never)).not.toThrow();
     expect(getContext(app)).toBe(ctx);
+  });
+
+  test('pluginState accessors resolve from app, carrier, and request contexts', async () => {
+    const app = new Hono();
+    const permissionsState = {
+      adapter: { createGrant() {} },
+      registry: {
+        register() {},
+        getActionsForRole() {
+          return [];
+        },
+        getDefinition() {
+          return null;
+        },
+        listResourceTypes() {
+          return [];
+        },
+      },
+      evaluator: {
+        can() {
+          return Promise.resolve(true);
+        },
+      },
+    };
+    const pluginState = new Map([
+      ['slingshot-auth', { adapter: {} }],
+      ['slingshot-permissions', permissionsState],
+    ]);
+    const ctx = createContextFixture({ pluginState });
+
+    attachContext(app, ctx as never);
+
+    expect(getPluginState(app)).toBe(pluginState);
+    expect(getPluginStateOrNull(app)).toBe(pluginState);
+    expect(getPluginState(ctx as never)).toBe(pluginState);
+    expect(getPluginStateOrNull({ pluginState })).toBe(pluginState);
+    expect(getPermissionsState(app)).toBe(permissionsState);
+    expect(getPermissionsStateOrNull(app)).toBe(permissionsState);
+
+    app.get('/plugin-state', c => {
+      const requestPluginState = getPluginStateFromRequest(c as never);
+      return c.json({ hasAuth: requestPluginState.has('slingshot-auth') });
+    });
+
+    const response = await app.request('/plugin-state');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ hasAuth: true });
+  });
+
+  test('pluginState accessors fail loudly when no context is attached', () => {
+    const app = new Hono();
+
+    expect(getPluginStateOrNull(app)).toBeNull();
+    expect(getPermissionsStateOrNull(app)).toBeNull();
+    expect(() => getPluginState(app)).toThrow('pluginState is not available for this app');
+    expect(() => getPermissionsState(app)).toThrow(
+      'permissions state is not available in pluginState',
+    );
   });
 
   test('route, user, cache, rate-limit, fingerprint, and email accessors read from context', async () => {

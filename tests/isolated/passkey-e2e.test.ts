@@ -147,7 +147,7 @@ async function setupUserWithPasskey(email = 'passkey@example.com') {
     email,
     password: 'Password123!',
   });
-  const adapter = getAuthRuntimeContext(getContext(app)).adapter;
+  const adapter = getAuthRuntimeContext(getContext(app).pluginState).adapter;
   await adapter.addWebAuthnCredential!(userId, {
     credentialId: CRED_ID,
     publicKey: Buffer.from(new Uint8Array(65)).toString('base64url'),
@@ -249,7 +249,7 @@ describe('passkey login — snapshot ApiClient ↔ slingshot', () => {
       assertionResponse: fakeAssertion(CRED_ID),
     });
 
-    const adapter = getAuthRuntimeContext(getContext(app)).adapter;
+    const adapter = getAuthRuntimeContext(getContext(app).pluginState).adapter;
     const creds = await adapter.getWebAuthnCredentials!(userId);
     const cred = creds.find(c => c.credentialId === CRED_ID);
     expect(cred!.signCount).toBe(1); // mock returns newCounter = 0 + 1
@@ -304,7 +304,7 @@ describe('passkey login — snapshot ApiClient ↔ slingshot', () => {
     });
 
     const { userId } = await setupUserWithPasskey('unverified-passkey@example.com');
-    const adapter = getAuthRuntimeContext(getContext(app)).adapter;
+    const adapter = getAuthRuntimeContext(getContext(app).pluginState).adapter;
     await adapter.setEmailVerified?.(userId, false);
     tokenStore.value = null;
 

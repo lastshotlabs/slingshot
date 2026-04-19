@@ -52,7 +52,13 @@ export type {
   GroupResolver,
   PermissionEvaluator,
 } from './permissions';
-export { validateGrant, SUPER_ADMIN_ROLE, PERMISSIONS_STATE_KEY } from './permissions';
+export {
+  validateGrant,
+  SUPER_ADMIN_ROLE,
+  PERMISSIONS_STATE_KEY,
+  getPermissionsState,
+  getPermissionsStateOrNull,
+} from './permissions';
 export type { PermissionsState } from './permissions';
 export type { RenderResult, MailRenderer } from './mail';
 export { TemplateNotFoundError } from './mail';
@@ -239,6 +245,17 @@ export type {
   ResolvedPreference,
 } from './notificationsPeer';
 export { NOTIFICATIONS_PLUGIN_STATE_KEY } from './notificationsPeer';
+
+// --- pluginState ---
+export type { PluginStateCarrier, PluginStateMap } from './pluginState';
+/** Shared `pluginState` helpers for cross-plugin runtime access without full context coupling. */
+export {
+  getPluginState,
+  getPluginStateOrNull,
+  getPluginStateFromRequest,
+  getPluginStateFromRequestOrNull,
+  resolvePluginState,
+} from './pluginState';
 
 // --- Auth boundary defaults ---
 /** Default in-memory infrastructure adapters used by local and test deployments. */

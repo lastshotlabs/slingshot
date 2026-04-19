@@ -77,7 +77,11 @@ export type { SecurityEventsConfig, SecurityEvent } from './lib/securityEventWir
 
 // Runtime context
 /** Read the auth runtime that the plugin stores in Slingshot context and request state. */
-export { getAuthRuntimeContext, getAuthRuntimeFromRequest } from './runtime';
+export {
+  getAuthRuntimeContext,
+  getAuthRuntimeContextOrNull,
+  getAuthRuntimeFromRequest,
+} from './runtime';
 /** Instance-scoped auth runtime shape published by `createAuthPlugin()`. */
 export type { AuthRuntimeContext } from './runtime';
 

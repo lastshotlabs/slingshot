@@ -6,7 +6,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
-  getContext,
+  getPluginState,
   getRouteAuth,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -246,7 +246,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       if (!runtimeAdapter) {
         throw new Error('[slingshot-webhooks] Manifest adapters were not resolved during setup');
       }
-      getContext(app).pluginState.set('slingshot-webhooks', runtimeAdapter);
+      getPluginState(app).set('slingshot-webhooks', runtimeAdapter);
       unsubscribers = await activate(bus, config, queue, runtimeAdapter);
     },
 

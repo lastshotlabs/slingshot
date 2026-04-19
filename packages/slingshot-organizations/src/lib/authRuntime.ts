@@ -1,4 +1,5 @@
-import type { AuthAdapter, SlingshotContext } from '@lastshotlabs/slingshot-core';
+import type { AuthAdapter, PluginStateCarrier, PluginStateMap } from '@lastshotlabs/slingshot-core';
+import { resolvePluginState } from '@lastshotlabs/slingshot-core';
 
 type OrganizationsAuthAdapter = Pick<AuthAdapter, 'getUser' | 'getEmailVerified'>;
 
@@ -14,12 +15,13 @@ function isOrganizationsAuthRuntime(value: unknown): value is OrganizationsAuthR
 }
 
 export function getOrganizationsAuthRuntime(
-  ctx: SlingshotContext | null | undefined,
+  input: PluginStateMap | PluginStateCarrier | null | undefined,
 ): OrganizationsAuthRuntime {
-  const runtime = ctx?.pluginState.get('slingshot-auth');
+  const pluginState = resolvePluginState(input);
+  const runtime = pluginState?.get('slingshot-auth');
   if (!isOrganizationsAuthRuntime(runtime)) {
     throw new Error(
-      '[slingshot-organizations] auth runtime context is not available on SlingshotContext',
+      '[slingshot-organizations] auth runtime context is not available in pluginState',
     );
   }
   return runtime;

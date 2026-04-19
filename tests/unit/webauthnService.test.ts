@@ -51,7 +51,7 @@ mock.module('@simplewebauthn/server', () => ({
 }));
 
 let app: OpenAPIHono<any>;
-const getRuntime = () => getAuthRuntimeContext(getContext(app));
+const getRuntime = () => getAuthRuntimeContext(getContext(app).pluginState);
 
 beforeEach(async () => {
   mockGenerateRegistrationOptions.mockClear();

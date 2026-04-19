@@ -5,6 +5,13 @@ import { createAuthGroupResolver } from './lib/authGroupResolver';
 import { createPermissionEvaluator } from './lib/evaluator';
 import { createPermissionRegistry } from './lib/registry';
 
+const AUTH_RUNTIME_KEY = 'slingshot-auth' as const;
+
+function getAuthRuntimeLikeOrNull(pluginState: Map<string, unknown>): { adapter?: object } | null {
+  const runtime = pluginState.get(AUTH_RUNTIME_KEY) as { adapter?: object } | null | undefined;
+  return runtime?.adapter ? runtime : null;
+}
+
 /**
  * Creates the slingshot-permissions plugin.
  *
@@ -59,9 +66,7 @@ export function createPermissionsPlugin(): SlingshotPlugin {
       const evaluator = createPermissionEvaluator({
         registry,
         adapter,
-        groupResolver: createAuthGroupResolver(
-          () => ctx.pluginState.get('slingshot-auth') as { adapter?: object } | null | undefined,
-        ),
+        groupResolver: createAuthGroupResolver(() => getAuthRuntimeLikeOrNull(ctx.pluginState)),
       });
 
       ctx.pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));

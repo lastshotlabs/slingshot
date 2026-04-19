@@ -113,8 +113,19 @@ function extractStringConstraints(def: ZodDef): {
   max?: number;
   format?: string;
   patterns?: RegExp[];
+  prefix?: string;
+  suffix?: string;
+  includes?: string;
 } {
-  const result: { min?: number; max?: number; format?: string; patterns?: RegExp[] } = {};
+  const result: {
+    min?: number;
+    max?: number;
+    format?: string;
+    patterns?: RegExp[];
+    prefix?: string;
+    suffix?: string;
+    includes?: string;
+  } = {};
 
   // Format can come from the def itself (dedicated format types like ZodUUID)
   if (def.format) {
@@ -135,9 +146,15 @@ function extractStringConstraints(def: ZodDef): {
         result.min = cd.length;
         result.max = cd.length;
         break;
-      case 'string_format':
-        result.format = cd.format;
+      case 'string_format': {
+        const fmt = cd.format;
+        result.format = fmt;
+        // Extract constraint values for starts_with / ends_with / includes
+        if (fmt === 'starts_with') result.prefix = (cd as Record<string, unknown>).prefix as string;
+        if (fmt === 'ends_with') result.suffix = (cd as Record<string, unknown>).suffix as string;
+        if (fmt === 'includes') result.includes = (cd as Record<string, unknown>).includes as string;
         break;
+      }
       case 'regex':
         if (cd.pattern) {
           result.patterns ??= [];
@@ -153,8 +170,18 @@ function extractNumberConstraints(def: ZodDef): {
   min?: number;
   max?: number;
   isInt: boolean;
+  multipleOf?: number;
 } {
-  const result: { min?: number; max?: number; isInt: boolean } = { isInt: false };
+  const result: { min?: number; max?: number; isInt: boolean; multipleOf?: number } = {
+    isInt: false,
+  };
+
+  // z.int() sets def.format directly (no checks), while z.number().int()
+  // uses a number_format check. Handle both.
+  if (def.format === 'safeint' || def.format === 'int32' || def.format === 'uint32') {
+    result.isInt = true;
+  }
+
   if (!def.checks) return result;
   for (const check of def.checks) {
     const cd = check._zod.def;
@@ -178,12 +205,40 @@ function extractNumberConstraints(def: ZodDef): {
         }
         break;
       }
+      case 'multiple_of': {
+        result.multipleOf = cd.value as number;
+        break;
+      }
     }
   }
   return result;
 }
 
 function extractArrayConstraints(def: ZodDef): {
+  min?: number;
+  max?: number;
+} {
+  const result: { min?: number; max?: number } = {};
+  if (!def.checks) return result;
+  for (const check of def.checks) {
+    const cd = check._zod.def;
+    switch (cd.check) {
+      case 'min_length':
+        result.min = cd.minimum;
+        break;
+      case 'max_length':
+        result.max = cd.maximum;
+        break;
+      case 'length_equals':
+        result.min = cd.length;
+        result.max = cd.length;
+        break;
+    }
+  }
+  return result;
+}
+
+function extractSetConstraints(def: ZodDef): {
   min?: number;
   max?: number;
 } {
@@ -200,7 +255,7 @@ function extractArrayConstraints(def: ZodDef): {
         break;
       case 'size_equals':
         result.min = (cd as Record<string, unknown>).size as number;
-        result.max = result.min;
+        result.max = (cd as Record<string, unknown>).size as number;
         break;
     }
   }
@@ -237,15 +292,15 @@ function fakeStringForFormat(format: string, f: Faker): string {
     case 'duration':
       return `P${f.number.int({ min: 1, max: 30 })}D`;
     case 'cuid':
-      return f.string.alphanumeric(25);
+      return 'c' + f.string.alphanumeric(24);
     case 'cuid2':
-      return f.string.alphanumeric(24);
+      return f.string.alphanumeric(24).toLowerCase();
     case 'ulid':
-      return f.string.alphanumeric(26).toUpperCase();
+      return f.string.fromCharacters('0123456789ABCDEFGHJKMNPQRSTVWXYZ', 26);
     case 'nanoid':
       return f.string.alphanumeric(21);
     case 'xid':
-      return f.string.alphanumeric(20);
+      return f.string.fromCharacters('0123456789abcdefghijklmnopqrstuv', 20);
     case 'ksuid':
       return f.string.alphanumeric(27);
     case 'base64':
@@ -302,7 +357,33 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
 
     case 'string': {
       const c = extractStringConstraints(def);
-      // Format takes priority
+      const hasConstraintFormat = c.prefix !== undefined || c.suffix !== undefined || c.includes !== undefined;
+
+      // String constraint formats (startsWith, endsWith, includes) need
+      // special handling — the generated string must satisfy ALL constraints
+      // while also respecting any min/max length checks.
+      if (hasConstraintFormat) {
+        const prefix = c.prefix ?? '';
+        const suffix = c.suffix ?? '';
+        const middle = c.includes ?? '';
+        // Build: prefix + body_before + middle + body_after + suffix
+        let bodyBefore = middle ? f.lorem.word() : '';
+        let bodyAfter = f.lorem.word();
+        const fixedLen = prefix.length + middle.length + suffix.length;
+        const minLen = c.min ?? 1;
+        const maxLen = c.max ?? Math.max(minLen, 50);
+        const total = fixedLen + bodyBefore.length + bodyAfter.length;
+        if (total < minLen) bodyAfter += f.string.alphanumeric(minLen - total);
+        const currentLen = fixedLen + bodyBefore.length + bodyAfter.length;
+        if (currentLen > maxLen) {
+          const available = Math.max(0, maxLen - fixedLen);
+          const halfAvail = Math.floor(available / 2);
+          bodyBefore = bodyBefore.slice(0, halfAvail);
+          bodyAfter = bodyAfter.slice(0, available - halfAvail);
+        }
+        return prefix + bodyBefore + middle + bodyAfter + suffix;
+      }
+      // Format takes priority (email, uuid, url, etc.)
       if (c.format) return fakeStringForFormat(c.format, f);
       // Length constraints
       const minLen = c.min ?? 1;
@@ -319,6 +400,14 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       // relative to it so the range is always valid.
       const min = c.min ?? (c.max !== undefined && c.max < 0 ? c.max - 10000 : 0);
       const max = c.max ?? (c.min !== undefined && c.min > 10000 ? c.min + 10000 : 10000);
+      // multipleOf must be checked before bare isInt — the step-based generator
+      // already produces integers when the step itself is an integer, and checking
+      // isInt first would shadow the multipleOf constraint entirely.
+      if (c.multipleOf) {
+        const stepMin = Math.ceil(min / c.multipleOf);
+        const stepMax = Math.floor(max / c.multipleOf);
+        return f.number.int({ min: stepMin, max: stepMax }) * c.multipleOf;
+      }
       if (c.isInt) return f.number.int({ min: Math.ceil(min), max: Math.floor(max) });
       return f.number.float({ min, max, multipleOf: 0.01 });
     }
@@ -369,6 +458,9 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
       for (const [key, fieldSchema] of Object.entries(shape)) {
         const fieldPath = path ? `${path}.${key}` : key;
         const hasOverride = opts.overrides && fieldPath in opts.overrides;
+        // Also check for nested overrides (e.g. "address.city" when field is "address")
+        const hasNestedOverride = !hasOverride && opts.overrides &&
+          Object.keys(opts.overrides).some(k => k.startsWith(fieldPath + '.'));
 
         // Detect optional wrapper — the field's def.type is 'optional' or
         // Zod 4 marks it with the optout sentinel on the internals.
@@ -376,7 +468,7 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
         const isMarkedOptional = (fieldSchema._zod as Record<string, unknown>).optout === 'optional';
         const isOptional = isWrappedOptional || isMarkedOptional;
 
-        if (isOptional && !hasOverride) {
+        if (isOptional && !hasOverride && !hasNestedOverride) {
           if (f.number.float({ min: 0, max: 1 }) > optionalRate) continue;
         }
 
@@ -391,6 +483,9 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
           ...opts,
           _path: fieldPath,
           _depth: depth,
+          // Signal to downstream optional/nullable handlers that the object
+          // handler already decided this field should be present.
+          _optionalDecided: isOptional,
         });
       }
       return result;
@@ -453,7 +548,7 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
     }
 
     case 'map': {
-      const keySchema = def.keyType ?? def.valueType;
+      const keySchema = def.keyType;
       const valueSchema = def.valueType;
       if (!keySchema || !valueSchema) return new Map();
       const count = f.number.int({ min: 1, max: 3 });
@@ -470,10 +565,16 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
     case 'set': {
       const valueSchema = def.valueType;
       if (!valueSchema) return new Set();
-      const count = f.number.int({ min: 1, max: 3 });
+      const sc = extractSetConstraints(def);
+      const setMin = sc.min ?? 1;
+      const setMax = sc.max ?? Math.max(setMin, 3);
+      const count = f.number.int({ min: setMin, max: setMax });
       const set = new Set();
-      for (let i = 0; i < count; i++) {
+      // Generate enough attempts to fill the set (values might collide)
+      let attempts = 0;
+      while (set.size < count && attempts < count * 3) {
         set.add(walkSchema(valueSchema, { ...opts, _depth: depth }));
+        attempts++;
       }
       return set;
     }
@@ -507,11 +608,13 @@ export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
     case 'optional': {
       const inner = def.innerType;
       if (!inner) return undefined;
-      // Optional fields: sometimes return undefined
-      if (!(opts.overrides && path && path in opts.overrides)) {
-        if (f.number.float({ min: 0, max: 1 }) > optionalRate) return undefined;
+      // If the object handler already decided to include this field, skip the roll
+      if (!opts._optionalDecided) {
+        if (!(opts.overrides && path && path in opts.overrides)) {
+          if (f.number.float({ min: 0, max: 1 }) > optionalRate) return undefined;
+        }
       }
-      return walkSchema(inner, { ...opts, _depth: depth });
+      return walkSchema(inner, { ...opts, _optionalDecided: false, _depth: depth });
     }
 
     case 'nullable': {

@@ -24,6 +24,7 @@ import type {
 import {
   deepFreeze,
   getContext,
+  getPluginState,
   resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -936,7 +937,7 @@ export function createGameEnginePlugin(
         gameRegistry: gameRegistry as ReadonlyMap<string, GameDefinition>,
         sessionControls: createSessionControls(activeRuntimes),
       });
-      getContext(app).pluginState.set(GAME_ENGINE_PLUGIN_STATE_KEY, state);
+      getPluginState(app).set(GAME_ENGINE_PLUGIN_STATE_KEY, state);
     },
 
     teardown() {

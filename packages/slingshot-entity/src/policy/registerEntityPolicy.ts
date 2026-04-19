@@ -29,7 +29,7 @@ export function registerEntityPolicy<TRecord = unknown, TInput = unknown>(
   resolver: PolicyResolver<TRecord, TInput>,
 ): void {
   const ctx = getContext(app);
-  const registry = getOrCreateEntityPolicyRegistry(ctx);
+  const registry = getOrCreateEntityPolicyRegistry(ctx.pluginState);
   if (registry.frozen) {
     throw new Error(
       `registerEntityPolicy('${key}'): policy registry is frozen. ` +
@@ -58,7 +58,7 @@ export function getEntityPolicyResolver(
 ): PolicyResolver | undefined {
   const ctx = getContextOrNull(app);
   if (!ctx) return undefined;
-  const registry = getOrCreateEntityPolicyRegistry(ctx);
+  const registry = getOrCreateEntityPolicyRegistry(ctx.pluginState);
   return registry.resolvers.get(key);
 }
 
@@ -70,6 +70,6 @@ export function getEntityPolicyResolver(
 export function freezeEntityPolicyRegistry(app: Hono<AppEnv>): void {
   const ctx = getContextOrNull(app);
   if (!ctx) return;
-  const registry = getOrCreateEntityPolicyRegistry(ctx);
+  const registry = getOrCreateEntityPolicyRegistry(ctx.pluginState);
   registry.frozen = true;
 }

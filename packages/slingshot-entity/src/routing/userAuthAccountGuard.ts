@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getSlingshotCtx } from '@lastshotlabs/slingshot-core';
+import { getPluginStateFromRequestOrNull } from '@lastshotlabs/slingshot-core';
 
 type AccountGuardFailure = {
   error: 'Account suspended' | 'Email not verified';
@@ -27,8 +27,8 @@ type AuthRuntimeLike = {
 const AUTH_RUNTIME_KEY = 'slingshot-auth';
 
 function getAuthRuntime(c: Context<AppEnv, string>): AuthRuntimeLike | null {
-  const slingshotCtx = getSlingshotCtx(c as unknown as Parameters<typeof getSlingshotCtx>[0]);
-  const runtime = slingshotCtx.pluginState.get(AUTH_RUNTIME_KEY);
+  const pluginState = getPluginStateFromRequestOrNull(c);
+  const runtime = pluginState?.get(AUTH_RUNTIME_KEY);
   if (!runtime || typeof runtime !== 'object') {
     return null;
   }

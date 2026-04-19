@@ -353,7 +353,7 @@ describe('POST /auth/reset-password', () => {
     getContext(app).bus.off('auth:delivery.password_reset', prHandler);
 
     // Swap out setPassword so the reset-password handler returns 501
-    const runtime = getAuthRuntimeContext(getContext(app));
+    const runtime = getAuthRuntimeContext(getContext(app).pluginState);
     const originalSetPassword = runtime.adapter.setPassword;
     runtime.adapter.setPassword = undefined;
 

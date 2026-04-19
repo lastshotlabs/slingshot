@@ -138,8 +138,9 @@ describe('encryptField / decryptField', () => {
   test('throws on tampered ciphertext', async () => {
     const ciphertext = await encryptField('secret', [KEY1]);
     const parts = ciphertext.split('.');
-    // Flip a character in the ciphertext part
-    parts[2] = parts[2].replace(/[a-z]/, 'Z');
+    // Replace the auth tag with a different valid base64url payload so tampering
+    // is guaranteed regardless of the ciphertext's character set.
+    parts[3] = Buffer.from('0'.repeat(32), 'hex').toString('base64url');
     const tampered = parts.join('.');
     expect(() => decryptField(tampered, [KEY1])).toThrow();
   });

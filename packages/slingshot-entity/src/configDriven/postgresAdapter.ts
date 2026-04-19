@@ -34,6 +34,7 @@ import {
 } from './fieldUtils';
 import { resolveListFilter } from './listFilter';
 import { buildPostgresOperations } from './postgresOperationWiring';
+import { withOptionalPostgresTransaction } from './operationExecutors/postgresTransaction';
 
 /**
  * Minimal `pg` Pool interface required by this adapter.
@@ -47,6 +48,13 @@ interface PgPool {
     sql: string,
     params?: unknown[],
   ): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+  connect?(): Promise<{
+    query(
+      sql: string,
+      params?: unknown[],
+    ): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+    release?(): void;
+  }>;
 }
 
 /**
@@ -86,6 +94,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
   const pkColumn = toSnakeCase(pkField);
   const ttlSeconds = config.ttl?.defaultSeconds;
   let initialized = false;
+  let initializationPromise: Promise<void> | null = null;
 
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
@@ -104,46 +113,60 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
    */
   async function ensureTable(): Promise<void> {
     if (initialized) return;
-
-    const cols: string[] = [];
-    for (const [name, def] of Object.entries(config.fields)) {
-      const col = toSnakeCase(name);
-      const pgType = pgColumnType(def.type);
-      const notNull = !def.optional && !def.primary ? ' NOT NULL' : '';
-      const pk = def.primary ? ' PRIMARY KEY NOT NULL' : '';
-      cols.push(`${col} ${pgType}${pk}${notNull}`);
+    if (initializationPromise) {
+      await initializationPromise;
+      return;
     }
 
-    if (ttlSeconds) {
-      cols.push('_expires_at BIGINT NOT NULL');
+    initializationPromise = (async () => {
+      await withOptionalPostgresTransaction(pool, async queryable => {
+        const cols: string[] = [];
+        for (const [name, def] of Object.entries(config.fields)) {
+          const col = toSnakeCase(name);
+          const pgType = pgColumnType(def.type);
+          const notNull = !def.optional && !def.primary ? ' NOT NULL' : '';
+          const pk = def.primary ? ' PRIMARY KEY NOT NULL' : '';
+          cols.push(`${col} ${pgType}${pk}${notNull}`);
+        }
+
+        if (ttlSeconds) {
+          cols.push('_expires_at BIGINT NOT NULL');
+        }
+
+        await queryable.query(`CREATE TABLE IF NOT EXISTS ${table} (\n  ${cols.join(',\n  ')}\n)`);
+
+        // Compound indexes
+        if (config.indexes) {
+          for (let i = 0; i < config.indexes.length; i++) {
+            const idx = config.indexes[i];
+            const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
+            const unique = idx.unique ? 'UNIQUE ' : '';
+            await queryable.query(
+              `CREATE ${unique}INDEX IF NOT EXISTS idx_${table}_${i} ON ${table} (${colList})`,
+            );
+          }
+        }
+
+        // Unique constraints
+        if (config.uniques) {
+          for (let i = 0; i < config.uniques.length; i++) {
+            const uq = config.uniques[i];
+            const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
+            await queryable.query(
+              `CREATE UNIQUE INDEX IF NOT EXISTS uidx_${table}_${i} ON ${table} (${colList})`,
+            );
+          }
+        }
+      });
+
+      initialized = true;
+    })();
+
+    try {
+      await initializationPromise;
+    } finally {
+      initializationPromise = null;
     }
-
-    await pool.query(`CREATE TABLE IF NOT EXISTS ${table} (\n  ${cols.join(',\n  ')}\n)`);
-
-    // Compound indexes
-    if (config.indexes) {
-      for (let i = 0; i < config.indexes.length; i++) {
-        const idx = config.indexes[i];
-        const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
-        const unique = idx.unique ? 'UNIQUE ' : '';
-        await pool.query(
-          `CREATE ${unique}INDEX IF NOT EXISTS idx_${table}_${i} ON ${table} (${colList})`,
-        );
-      }
-    }
-
-    // Unique constraints
-    if (config.uniques) {
-      for (let i = 0; i < config.uniques.length; i++) {
-        const uq = config.uniques[i];
-        const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
-        await pool.query(
-          `CREATE UNIQUE INDEX IF NOT EXISTS uidx_${table}_${i} ON ${table} (${colList})`,
-        );
-      }
-    }
-
-    initialized = true;
   }
 
   /**

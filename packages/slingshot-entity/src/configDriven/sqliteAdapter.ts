@@ -26,6 +26,27 @@ import { resolveListFilter } from './listFilter';
 import type { SqliteDb } from './operationExecutors/dbInterfaces';
 import { buildSqliteOperations } from './sqliteOperationWiring';
 
+function runSqliteImmediateTransaction(db: SqliteDb, fn: () => void): void {
+  let inTransaction = false;
+  try {
+    db.run('PRAGMA busy_timeout = 5000');
+    db.run('BEGIN IMMEDIATE');
+    inTransaction = true;
+    fn();
+    db.run('COMMIT');
+    inTransaction = false;
+  } catch (error) {
+    if (inTransaction) {
+      try {
+        db.run('ROLLBACK');
+      } catch {
+        // Preserve the original bootstrap failure.
+      }
+    }
+    throw error;
+  }
+}
+
 export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
   db: SqliteDb,
   config: ResolvedEntityConfig,
@@ -44,40 +65,45 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
 
   function ensureTable(): void {
     if (initialized) return;
-
-    const cols: string[] = [];
-    for (const [name, def] of Object.entries(config.fields)) {
-      const col = toSnakeCase(name);
-      const sqlType = sqliteColumnType(def.type);
-      const notNull = !def.optional && !def.primary ? ' NOT NULL' : '';
-      const pk = def.primary ? ' PRIMARY KEY NOT NULL' : '';
-      cols.push(`${col} ${sqlType}${pk}${notNull}`);
-    }
-
-    if (ttlSeconds) {
-      cols.push('_expires_at INTEGER NOT NULL');
-    }
-
-    db.run(`CREATE TABLE IF NOT EXISTS ${table} (\n  ${cols.join(',\n  ')}\n)`);
-
-    // Compound indexes
-    if (config.indexes) {
-      for (let i = 0; i < config.indexes.length; i++) {
-        const idx = config.indexes[i];
-        const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
-        const unique = idx.unique ? 'UNIQUE ' : '';
-        db.run(`CREATE ${unique}INDEX IF NOT EXISTS idx_${table}_${i} ON ${table} (${colList})`);
+    runSqliteImmediateTransaction(db, () => {
+      const cols: string[] = [];
+      for (const [name, def] of Object.entries(config.fields)) {
+        const col = toSnakeCase(name);
+        const sqlType = sqliteColumnType(def.type);
+        const notNull = !def.optional && !def.primary ? ' NOT NULL' : '';
+        const pk = def.primary ? ' PRIMARY KEY NOT NULL' : '';
+        cols.push(`${col} ${sqlType}${pk}${notNull}`);
       }
-    }
 
-    // Unique constraints
-    if (config.uniques) {
-      for (let i = 0; i < config.uniques.length; i++) {
-        const uq = config.uniques[i];
-        const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
-        db.run(`CREATE UNIQUE INDEX IF NOT EXISTS uidx_${table}_${i} ON ${table} (${colList})`);
+      if (ttlSeconds) {
+        cols.push('_expires_at INTEGER NOT NULL');
       }
-    }
+
+      db.run(`CREATE TABLE IF NOT EXISTS ${table} (\n  ${cols.join(',\n  ')}\n)`);
+
+      // Compound indexes
+      if (config.indexes) {
+        for (let i = 0; i < config.indexes.length; i++) {
+          const idx = config.indexes[i];
+          const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
+          const unique = idx.unique ? 'UNIQUE ' : '';
+          db.run(
+            `CREATE ${unique}INDEX IF NOT EXISTS idx_${table}_${i} ON ${table} (${colList})`,
+          );
+        }
+      }
+
+      // Unique constraints
+      if (config.uniques) {
+        for (let i = 0; i < config.uniques.length; i++) {
+          const uq = config.uniques[i];
+          const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
+          db.run(
+            `CREATE UNIQUE INDEX IF NOT EXISTS uidx_${table}_${i} ON ${table} (${colList})`,
+          );
+        }
+      }
+    });
 
     initialized = true;
   }

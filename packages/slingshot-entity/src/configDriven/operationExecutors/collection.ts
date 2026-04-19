@@ -30,6 +30,27 @@ import { toSnakeCase } from '../fieldUtils';
 import type { MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
 import { withOptionalPostgresTransaction } from './postgresTransaction';
 
+function runSqliteImmediateTransaction(db: SqliteDb, fn: () => void): void {
+  let inTransaction = false;
+  try {
+    db.run('PRAGMA busy_timeout = 5000');
+    db.run('BEGIN IMMEDIATE');
+    inTransaction = true;
+    fn();
+    db.run('COMMIT');
+    inTransaction = false;
+  } catch (error) {
+    if (inTransaction) {
+      try {
+        db.run('ROLLBACK');
+      } catch {
+        // Preserve the original transactional failure.
+      }
+    }
+    throw error;
+  }
+}
+
 /**
  * The per-operation method bag returned by each `collection*` factory.
  *
@@ -189,21 +210,23 @@ export function collectionSqlite(
 
   function ensureTable(): void {
     if (initialized) return;
-    ensureParentTable();
-    const cols: string[] = [`${parentKeyCol} TEXT NOT NULL`];
-    for (const [name, def] of Object.entries(op.itemFields)) {
-      const col = toSnakeCase(name);
-      const sqlType =
-        def.type === 'integer'
-          ? 'INTEGER'
-          : def.type === 'number'
-            ? 'REAL'
-            : def.type === 'boolean'
-              ? 'INTEGER'
-              : 'TEXT';
-      cols.push(`${col} ${sqlType}`);
-    }
-    db.run(`CREATE TABLE IF NOT EXISTS ${table} (${cols.join(', ')})`);
+    runSqliteImmediateTransaction(db, () => {
+      ensureParentTable();
+      const cols: string[] = [`${parentKeyCol} TEXT NOT NULL`];
+      for (const [name, def] of Object.entries(op.itemFields)) {
+        const col = toSnakeCase(name);
+        const sqlType =
+          def.type === 'integer'
+            ? 'INTEGER'
+            : def.type === 'number'
+              ? 'REAL'
+              : def.type === 'boolean'
+                ? 'INTEGER'
+                : 'TEXT';
+        cols.push(`${col} ${sqlType}`);
+      }
+      db.run(`CREATE TABLE IF NOT EXISTS ${table} (${cols.join(', ')})`);
+    });
     initialized = true;
   }
 
@@ -289,15 +312,17 @@ export function collectionSqlite(
   if (op.operations.includes('set')) {
     result.set = (parentId, items) => {
       ensureTable();
-      db.run(`DELETE FROM ${table} WHERE ${parentKeyCol} = ?`, [parentId]);
-      for (const item of items) {
-        const cols = [parentKeyCol, ...Object.keys(op.itemFields).map(n => toSnakeCase(n))];
-        const vals = [parentId, ...Object.keys(op.itemFields).map(n => item[n])];
-        db.run(
-          `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
-          vals,
-        );
-      }
+      runSqliteImmediateTransaction(db, () => {
+        db.run(`DELETE FROM ${table} WHERE ${parentKeyCol} = ?`, [parentId]);
+        for (const item of items) {
+          const cols = [parentKeyCol, ...Object.keys(op.itemFields).map(n => toSnakeCase(n))];
+          const vals = [parentId, ...Object.keys(op.itemFields).map(n => item[n])];
+          db.run(
+            `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+            vals,
+          );
+        }
+      });
       return Promise.resolve();
     };
   }
@@ -339,27 +364,44 @@ export function collectionPostgres(
   const idCol = toSnakeCase(idField);
   const table = `${parentTable}_${opName}`;
   let initialized = false;
+  let initializationPromise: Promise<void> | null = null;
 
   async function ensureTable(): Promise<void> {
     if (initialized) return;
-    await ensureParentTable();
-    const cols: string[] = [`${parentKeyCol} TEXT NOT NULL`];
-    for (const [name, def] of Object.entries(op.itemFields)) {
-      const col = toSnakeCase(name);
-      const pgType =
-        def.type === 'integer'
-          ? 'INTEGER'
-          : def.type === 'number'
-            ? 'NUMERIC'
-            : def.type === 'boolean'
-              ? 'BOOLEAN'
-              : def.type === 'date'
-                ? 'TIMESTAMPTZ'
-                : 'TEXT';
-      cols.push(`${col} ${pgType}`);
+    if (initializationPromise) {
+      await initializationPromise;
+      return;
     }
-    await pool.query(`CREATE TABLE IF NOT EXISTS ${table} (${cols.join(', ')})`);
-    initialized = true;
+
+    initializationPromise = (async () => {
+      await withOptionalPostgresTransaction(pool, async queryable => {
+        await ensureParentTable();
+        const cols: string[] = [`${parentKeyCol} TEXT NOT NULL`];
+        for (const [name, def] of Object.entries(op.itemFields)) {
+          const col = toSnakeCase(name);
+          const pgType =
+            def.type === 'integer'
+              ? 'INTEGER'
+              : def.type === 'number'
+                ? 'NUMERIC'
+                : def.type === 'boolean'
+                  ? 'BOOLEAN'
+                  : def.type === 'date'
+                    ? 'TIMESTAMPTZ'
+                    : 'TEXT';
+          cols.push(`${col} ${pgType}`);
+        }
+        await queryable.query(`CREATE TABLE IF NOT EXISTS ${table} (${cols.join(', ')})`);
+      });
+
+      initialized = true;
+    })();
+
+    try {
+      await initializationPromise;
+    } finally {
+      initializationPromise = null;
+    }
   }
 
   function rowToItem(row: Record<string, unknown>): Record<string, unknown> {

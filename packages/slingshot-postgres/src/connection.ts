@@ -1,6 +1,13 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
+import {
+  attachPostgresPoolRuntime,
+  createPostgresPoolRuntime,
+  type PostgresHealthCheckResult,
+  type PostgresMigrationMode,
+  type PostgresPoolStatsSnapshot,
+} from '@lastshotlabs/slingshot-core';
 
 /**
  * A connected Postgres handle bundling a raw `pg.Pool` and a Drizzle ORM client.
@@ -13,6 +20,102 @@ export interface DrizzlePostgresDb {
   readonly pool: Pool;
   /** Drizzle ORM client wrapping the same pool, used by `createPostgresAdapter`. */
   readonly db: NodePgDatabase;
+  /** Active Postgres readiness probe. */
+  readonly healthCheck: (timeoutMs?: number) => Promise<PostgresHealthCheckResult>;
+  /** Runtime pool and query statistics for observability endpoints. */
+  readonly getStats: () => PostgresPoolStatsSnapshot;
+}
+
+export interface PostgresPoolConfig {
+  readonly max?: number;
+  readonly min?: number;
+  readonly idleTimeoutMs?: number;
+  readonly connectionTimeoutMs?: number;
+  readonly queryTimeoutMs?: number;
+  readonly statementTimeoutMs?: number;
+  readonly maxUses?: number;
+  readonly allowExitOnIdle?: boolean;
+  readonly keepAlive?: boolean;
+  readonly keepAliveInitialDelayMillis?: number;
+}
+
+export interface PostgresConnectionOptions {
+  readonly pool?: PostgresPoolConfig;
+  readonly migrations?: PostgresMigrationMode;
+  readonly healthcheckTimeoutMs?: number;
+}
+
+type Queryable = {
+  query: (...args: unknown[]) => Promise<unknown>;
+};
+
+function wrapQueryableQueries(target: Queryable, recordQuery: (durationMs: number, failed: boolean) => void): void {
+  const originalQuery = target.query.bind(target);
+  target.query = (async (...args: unknown[]) => {
+    const startedAt = performance.now();
+    try {
+      const result = await originalQuery(...args);
+      recordQuery(performance.now() - startedAt, false);
+      return result;
+    } catch (error) {
+      recordQuery(performance.now() - startedAt, true);
+      throw error;
+    }
+  }) as Queryable['query'];
+}
+
+function instrumentPool(pool: Pool, recordQuery: (durationMs: number, failed: boolean) => void): void {
+  wrapQueryableQueries(pool as unknown as Queryable, recordQuery);
+
+  const originalConnect = pool.connect.bind(pool);
+  pool.connect = (async (...args: Parameters<typeof originalConnect>) => {
+    const client = await originalConnect(...args);
+    const instrumented = client as typeof client & { __slingshotInstrumented?: boolean };
+    if (!instrumented.__slingshotInstrumented) {
+      wrapQueryableQueries(client as unknown as Queryable, recordQuery);
+      instrumented.__slingshotInstrumented = true;
+    }
+    return client;
+  }) as typeof pool.connect;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  }) as Promise<T>;
+}
+
+async function checkPostgresHealth(
+  pool: Pool,
+  defaultTimeoutMs: number,
+  timeoutMs?: number,
+): Promise<PostgresHealthCheckResult> {
+  const effectiveTimeoutMs = Math.max(1, timeoutMs ?? defaultTimeoutMs);
+  const startedAt = performance.now();
+  const checkedAt = new Date().toISOString();
+  try {
+    await withTimeout(
+      pool.query('SELECT 1'),
+      effectiveTimeoutMs,
+      `[slingshot-postgres] readiness check exceeded ${effectiveTimeoutMs}ms`,
+    );
+    return {
+      ok: true,
+      latencyMs: performance.now() - startedAt,
+      checkedAt,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      latencyMs: performance.now() - startedAt,
+      checkedAt,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 /**
@@ -35,9 +138,35 @@ export interface DrizzlePostgresDb {
  * // Pass db to createPostgresAdapter for auth.
  * ```
  */
-export async function connectPostgres(connectionString: string): Promise<DrizzlePostgresDb> {
-  const pool = new Pool({ connectionString });
+export async function connectPostgres(
+  connectionString: string,
+  options: PostgresConnectionOptions = {},
+): Promise<DrizzlePostgresDb> {
+  const pool = new Pool({
+    connectionString,
+    max: options.pool?.max,
+    min: options.pool?.min,
+    idleTimeoutMillis: options.pool?.idleTimeoutMs,
+    connectionTimeoutMillis: options.pool?.connectionTimeoutMs,
+    query_timeout: options.pool?.queryTimeoutMs,
+    statement_timeout: options.pool?.statementTimeoutMs,
+    maxUses: options.pool?.maxUses,
+    allowExitOnIdle: options.pool?.allowExitOnIdle,
+    keepAlive: options.pool?.keepAlive,
+    keepAliveInitialDelayMillis: options.pool?.keepAliveInitialDelayMillis,
+  });
+  const runtime = createPostgresPoolRuntime({
+    migrationMode: options.migrations,
+    healthcheckTimeoutMs: options.healthcheckTimeoutMs ?? options.pool?.queryTimeoutMs,
+  });
+  attachPostgresPoolRuntime(pool, runtime);
+  instrumentPool(pool, (durationMs, failed) => runtime.recordQuery(durationMs, failed));
   await pool.query('SELECT 1'); // verify connectivity eagerly
   const db = drizzle(pool);
-  return { pool, db };
+  return {
+    pool,
+    db,
+    healthCheck: timeoutMs => checkPostgresHealth(pool, runtime.healthcheckTimeoutMs, timeoutMs),
+    getStats: () => runtime.snapshot(pool),
+  };
 }

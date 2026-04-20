@@ -177,7 +177,7 @@ export function defineHandler<TInput extends ZodTypeAny, TOutput extends ZodType
     guards: frozenGuards,
     after: frozenAfter,
 
-    async invoke(raw, opts) {
+    async invoke(raw: z.input<TInput>, opts: InvokeOpts) {
       const parsed = config.input.safeParse(raw);
       if (!parsed.success) {
         throw new ValidationError(parsed.error.issues);

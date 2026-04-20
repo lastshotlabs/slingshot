@@ -60,7 +60,7 @@ bun add @lastshotlabs/slingshot
 - `release:minor`: `bun run --filter '*' version minor && npm version minor && bun run release`
 - `release:patch`: `bun run --filter '*' version patch && npm version patch && bun run release`
 - `start`: `bun src/index.ts`
-- `test`: `bun run test:root && bun run test:isolated && bun scripts/run-package-tests.ts`
+- `test`: `bun run test:root && bun run test:isolated && bun scripts/run-package-tests.ts && bun run test:node`
 - `test:all`: `bun run test && bun run test:docker && bun run test:e2e`
 - `test:coverage`: `bun scripts/run-coverage.ts`
 - `test:coverage:check`: `bun run test:coverage && bun scripts/check-coverage.ts`

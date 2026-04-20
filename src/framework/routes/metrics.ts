@@ -133,9 +133,10 @@ export const createMetricsRouter = (
     });
   }
 
-  if (postgres?.getStats) {
+  const getPostgresStats = postgres?.getStats;
+  if (getPostgresStats) {
     registerGaugeCallback(state, 'slingshot_postgres_pool_clients', async () => {
-      const stats = postgres.getStats!();
+      const stats = getPostgresStats();
       return [
         { labels: { state: 'total' }, value: stats.totalCount },
         { labels: { state: 'idle' }, value: stats.idleCount },
@@ -144,7 +145,7 @@ export const createMetricsRouter = (
     });
 
     registerGaugeCallback(state, 'slingshot_postgres_query_count', async () => {
-      const stats = postgres.getStats!();
+      const stats = getPostgresStats();
       return [
         { labels: { state: 'total' }, value: stats.queryCount },
         { labels: { state: 'failed' }, value: stats.errorCount },
@@ -152,7 +153,7 @@ export const createMetricsRouter = (
     });
 
     registerGaugeCallback(state, 'slingshot_postgres_query_latency_ms', async () => {
-      const stats = postgres.getStats!();
+      const stats = getPostgresStats();
       return [
         { labels: { stat: 'average' }, value: stats.averageQueryDurationMs },
         { labels: { stat: 'max' }, value: stats.maxQueryDurationMs },
@@ -160,7 +161,7 @@ export const createMetricsRouter = (
     });
 
     registerGaugeCallback(state, 'slingshot_postgres_migration_mode', async () => {
-      const stats = postgres.getStats!();
+      const stats = getPostgresStats();
       return [{ labels: { mode: stats.migrationMode }, value: 1 }];
     });
   }

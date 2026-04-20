@@ -49,8 +49,16 @@ function resolvePolicyAction(action: string): PolicyAction {
     return { kind: 'operation', name: action.slice('operation:'.length) };
   }
 
-  const routeAction: Exclude<PolicyAction, { kind: 'operation'; name: string }>['kind'] = action;
-  return { kind: routeAction };
+  switch (action) {
+    case 'create':
+    case 'list':
+    case 'get':
+    case 'update':
+    case 'delete':
+      return { kind: action };
+    default:
+      return { kind: 'operation', name: action };
+  }
 }
 
 function resolveDotPath(value: unknown, path: string): unknown {
@@ -98,20 +106,6 @@ function resolveScopedValue(
 
 function normalizeRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
-}
-
-function resolveEntityName(handlerName: string): string | null {
-  const separator = handlerName.indexOf('.');
-  return separator === -1 ? null : handlerName.slice(0, separator);
-}
-
-function resolveEntityAdapter(
-  handlerName: string,
-  ctxAdapters: Readonly<Record<string, EntityRuntimeAdapter>>,
-): Pick<EntityRuntimeAdapter, 'getById'> | null {
-  const entityName = resolveEntityName(handlerName);
-  if (!entityName) return null;
-  return ctxAdapters[entityName] ?? null;
 }
 
 function stableStringify(value: unknown): string {
@@ -234,7 +228,7 @@ export function requireTenant(): Guard {
  * Enforce a permission check using the registered evaluator.
  */
 export function requirePermission(action: string, opts: PermissionGuardOptions = {}): Guard {
-  return async ({ ctx, meta, input, handlerName }) => {
+  return async ({ ctx, meta, input }) => {
     const permissions = getPermissionsStateOrNull(ctx.pluginState);
     if (!permissions) {
       throw new HandlerError('Permission evaluator not configured', { status: 500 });
@@ -248,10 +242,7 @@ export function requirePermission(action: string, opts: PermissionGuardOptions =
     const inputRecord =
       input && typeof input === 'object' ? (input as Record<string, unknown>) : Object.create(null);
     const scopeFilter = normalizeRecord((inputRecord as { _scopeFilter?: unknown })._scopeFilter);
-    const adapter =
-      opts.adapter ??
-      resolveEntityAdapter(handlerName, ctx.adapters) ??
-      null;
+    const adapter = opts.adapter ?? null;
 
     if (opts.parentAuth && opts.parentAdapter) {
       const parentId = resolveDotPath(inputRecord, opts.parentAuth.idParam);

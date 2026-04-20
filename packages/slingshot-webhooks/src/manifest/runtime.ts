@@ -194,11 +194,7 @@ function isDeliveryRuntimeAdapter(value: unknown): value is DeliveryRuntimeAdapt
 }
 
 function normalizeStatuses(
-  value: WebhookRuntimeAdapter['listDeliveries'] extends (input?: infer T) => Promise<unknown>
-    ? T extends { status?: infer Status }
-      ? Status
-      : never
-    : never,
+  value: WebhookDelivery['status'] | WebhookDelivery['status'][] | undefined,
 ): DeliveryTransitionStatus[] | null {
   if (!value) return null;
   return Array.isArray(value) ? [...value] : [value];

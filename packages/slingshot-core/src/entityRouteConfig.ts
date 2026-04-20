@@ -95,8 +95,8 @@ export interface PolicyInput<TRecord = unknown, TInput = unknown> {
    * read-only ops.
    */
   input: TInput | null;
-  /** Raw Hono context. Read-only from the resolver's perspective. */
-  c: import('hono').Context;
+  /** Raw Hono context when policy evaluation runs inside an HTTP route. */
+  c?: import('hono').Context;
 }
 
 /**

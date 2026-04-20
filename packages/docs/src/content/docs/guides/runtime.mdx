@@ -5,8 +5,8 @@ description: Run Slingshot on Bun, Node.js, or worker-style edge hosts - what ea
 
 import { Aside } from '@astrojs/starlight/components';
 
-Slingshot runs on Bun, Node.js, and worker-style edge hosts. Swap the runtime package and everything
-else stays the same.
+Slingshot runs on Bun, Node.js, worker-style edge hosts, and AWS Lambda. Swap the runtime package
+or host wrapper and the application logic stays the same.
 
 ## What the runtime provides
 
@@ -21,6 +21,9 @@ The `SlingshotRuntime` interface abstracts the runtime-specific capabilities Sli
 | **Glob**             | `Bun.Glob`                         | `fast-glob` package                        | Not supported                              |
 
 Everything else - routing, plugins, database adapters, event bus, auth - is runtime-agnostic.
+
+For AWS Lambda, Slingshot uses a functions runtime instead of `createServer()` host listening. See
+[Lambda](/slingshot/guides/lambda/) for the trigger-wrapper path.
 
 ## Bun runtime
 
@@ -86,6 +89,27 @@ The edge runtime intentionally omits several host features:
 
 If you need bundled file reads, pass `fileStore`. If you need ISR in a multi-instance worker
 deployment, pair `slingshot-ssr` with `createKvIsrCache()` from `@lastshotlabs/slingshot-runtime-edge/kv`.
+
+## AWS Lambda runtime
+
+```bash
+bun add @lastshotlabs/slingshot-runtime-lambda
+```
+
+Use `@lastshotlabs/slingshot-runtime-lambda` when the host is AWS Lambda and the entrypoint is a
+trigger wrapper rather than a listening HTTP server.
+
+```typescript
+import { createLambdaRuntime } from '@lastshotlabs/slingshot-runtime-lambda';
+
+const lambda = createLambdaRuntime({
+  manifest: './app.manifest.json',
+});
+```
+
+This runtime supports API Gateway, Function URLs, ALB, SQS, MSK, Kinesis, DynamoDB Streams, S3,
+SNS, EventBridge, and Schedule triggers. The underlying handler contract stays the same. Only the
+transport adapter changes.
 
 ## Choosing a runtime
 

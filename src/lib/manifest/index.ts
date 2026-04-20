@@ -27,6 +27,59 @@ import { navigationSectionSchema, pagesSectionSchema, ssrSectionSchema } from '.
 import { uploadSectionSchema } from './upload';
 import { validateManifestCrossFields } from './validation';
 
+const lambdaTriggerSchema = z
+  .enum([
+    'apigw',
+    'apigw-v2',
+    'alb',
+    'function-url',
+    'sqs',
+    'msk',
+    'kinesis',
+    'dynamodb-streams',
+    's3',
+    'sns',
+    'eventbridge',
+    'schedule',
+  ])
+  .describe('Lambda trigger kind consumed by slingshot-runtime-lambda.');
+
+const lambdaIdempotencySchema = z
+  .union([
+    z.boolean(),
+    z
+      .object({
+        ttl: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('TTL in seconds for persisted idempotency entries.'),
+        scope: z
+          .enum(['global', 'tenant', 'user'])
+          .optional()
+          .describe('Identity scope used when deriving the idempotency storage key.'),
+        fingerprint: z
+          .boolean()
+          .optional()
+          .describe('Whether request fingerprint mismatches should fail with a conflict.'),
+      })
+      .strict(),
+  ])
+  .optional()
+  .describe('Optional Lambda idempotency configuration for the handler binding.');
+
+const lambdaBindingSchema = z
+  .object({
+    handler: z
+      .string()
+      .min(1)
+      .describe('Named SlingshotHandler export resolved from the manifest handler registry.'),
+    trigger: lambdaTriggerSchema,
+    idempotency: lambdaIdempotencySchema,
+  })
+  .strict();
+
 // Re-export public API from helpers
 export { appManifestHandlerRefSchema, pluginRefSchema, storageRefSchema } from './helpers';
 export type { AppManifestHandlerRef, PluginRef, StorageRef } from './helpers';
@@ -301,6 +354,19 @@ export const appManifestSchema = z
       .optional()
       .describe(
         'Entity lifecycle hooks for manifest-driven apps. Omit when no cross-entity adapter access is needed.',
+      ),
+
+    /**
+     * Declarative Lambda function bindings consumed by
+     * `@lastshotlabs/slingshot-runtime-lambda`.
+     *
+     * The server bootstrap path validates this section but otherwise ignores it.
+     */
+    lambdas: z
+      .record(z.string(), lambdaBindingSchema)
+      .optional()
+      .describe(
+        'Lambda function bindings keyed by export name. Consumed by slingshot-runtime-lambda, ignored by the HTTP server bootstrap path.',
       ),
 
     /**

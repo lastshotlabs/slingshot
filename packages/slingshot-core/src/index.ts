@@ -120,6 +120,35 @@ export type { CsrfConfig } from './csrf';
 /** Framework error types used for HTTP, validation, and adapter capability failures. */
 export { HttpError, ValidationError, UnsupportedAdapterFeatureError } from './errors';
 export { errorResponse } from './errorResponse';
+/** Transport-agnostic handler contracts shared across HTTP and functions runtimes. */
+export type {
+  HandlerMeta,
+  HandlerArgs,
+  HandlerConfig,
+  InvokeOpts,
+  SlingshotHandler,
+  Guard,
+  AfterHook,
+} from './handler';
+export { defineHandler, HandlerError, IdempotencyCacheHit } from './handler';
+/** Trigger adapters and lifecycle hooks for non-HTTP runtimes such as Lambda. */
+export type {
+  TriggerRecord,
+  RecordOutcome,
+  TriggerAdapter,
+  FunctionsHooks,
+  BeforeInvokeArgs,
+  AfterInvokeArgs,
+  ErrorKind,
+  OnErrorArgs,
+  ErrorDisposition,
+  RecordErrorArgs,
+  InvokeAbort,
+  FunctionsRuntimeConfig,
+  FunctionsRuntime,
+  TriggerOpts,
+  IdempotencyOpts,
+} from './functions';
 
 // --- utilities ---
 export { deepFreeze } from './deepFreeze';

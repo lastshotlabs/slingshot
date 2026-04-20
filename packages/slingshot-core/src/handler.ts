@@ -11,11 +11,16 @@ export interface HandlerMeta {
   requestId: string;
   tenantId: string | null;
   authUserId: string | null;
+  roles?: string[] | null;
   correlationId: string;
   ip: string | null;
   idempotencyKey?: string;
   authClientId?: string | null;
   bearerClientId?: string | null;
+  bearerAuthenticated?: boolean;
+  method?: string;
+  path?: string;
+  userAgent?: string | null;
 }
 
 /**
@@ -131,11 +136,16 @@ function defaultMeta(meta: Partial<HandlerMeta> | undefined): HandlerMeta {
     requestId,
     tenantId: meta?.tenantId ?? null,
     authUserId: meta?.authUserId ?? null,
+    roles: meta?.roles ?? null,
     correlationId: meta?.correlationId ?? requestId,
     ip: meta?.ip ?? null,
     ...(meta?.idempotencyKey ? { idempotencyKey: meta.idempotencyKey } : {}),
     authClientId: meta?.authClientId ?? null,
     bearerClientId: meta?.bearerClientId ?? null,
+    bearerAuthenticated: meta?.bearerAuthenticated ?? false,
+    method: meta?.method,
+    path: meta?.path,
+    userAgent: meta?.userAgent ?? null,
   };
 }
 

@@ -61,6 +61,12 @@ Control handler auto-loading with the top-level `handlers` field:
 - **`false`** — disable handler auto-loading entirely.
 - **Omitted** — defaults to `slingshot.handlers.ts` in the manifest's directory (loaded if it exists, silently skipped if not).
 
+Handler files can export either plain functions or `SlingshotHandler` objects created with
+`defineHandler()`. Plain functions remain valid for existing manifest features such as hooks,
+middleware refs, secret providers, and custom plugin factories. `SlingshotHandler` exports add a
+typed runtime contract that can be mounted on HTTP routes, consumed by entity route overrides, or
+wrapped by functions runtimes such as AWS Lambda.
+
 ```typescript title="slingshot.handlers.ts"
 declare const db: { tenants: { findById(id: string): Promise<unknown> } };
 interface RequestLogEntry {
@@ -290,6 +296,29 @@ Runs `validateAppManifest()` and `manifestToAppConfig()`, logs the resolved conf
 Manifest startup includes more than shape validation. Slingshot also performs cross-field checks for higher-level admin page config, including bad page references, invalid lookup operation names, and template placeholders that do not map to real entity fields.
 
 Built-in plugin config is normalized before the factory runs. Strategy strings and handler refs are resolved into runtime objects first, so first-party plugins receive the same kinds of values in manifest mode that they would receive in code-first composition.
+
+## Shared manifest resolution
+
+The root package also exports `resolveManifestConfig()` from `@lastshotlabs/slingshot/manifest`.
+It runs the exact same manifest pipeline as `createServerFromManifest()` but stops before creating a
+server or binding a port.
+
+That shared path exists for:
+
+- dry-run tooling
+- manifest inspection
+- functions runtimes that need the same validated app config without starting an HTTP listener
+
+## The `lambdas` section
+
+`app.manifest.json` can declare a top-level `lambdas` section for AWS Lambda bindings.
+
+- The root manifest schema validates it.
+- `createServerFromManifest()` ignores it.
+- `createFunctionsFromManifest()` from `@lastshotlabs/slingshot-runtime-lambda` consumes it.
+
+This keeps the manifest declarative for both server and Lambda deployments without coupling the HTTP
+bootstrap path to cloud-trigger wiring.
 
 ## See also
 

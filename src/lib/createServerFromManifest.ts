@@ -7,7 +7,7 @@ import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import { SUPER_ADMIN_ROLE, getPermissionsStateOrNull } from '@lastshotlabs/slingshot-core';
 import type { PermissionsAdapter } from '@lastshotlabs/slingshot-core';
 import { getOrganizationsOrgServiceOrNull } from '@lastshotlabs/slingshot-organizations';
-import { createServer, getServerContext } from '../server';
+import { createServer, getServerContext, type CreateServerConfig } from '../server';
 import { createBuiltinPluginFactory, loadBuiltinPlugin } from './builtinPlugins';
 import { validateAppManifest } from './manifest';
 import type { AppManifest } from './manifest';
@@ -34,6 +34,12 @@ export interface CreateServerFromManifestOptions extends ManifestToConfigOptions
    * - `undefined` — use the manifest's `handlers` field (default behavior)
    */
   handlersPath?: string | { dir: string } | false;
+}
+
+export interface ResolvedManifestConfig {
+  config: CreateServerConfig;
+  manifest: AppManifest;
+  registry: ManifestHandlerRegistry;
 }
 
 /**
@@ -437,23 +443,28 @@ async function runManifestSeed(
   }
 }
 
-export async function createServerFromManifest(
-  manifestPath: string,
+export async function resolveManifestConfig(
+  manifestPathOrObject: string | Record<string, unknown>,
   registry?: ManifestHandlerRegistry,
   options?: CreateServerFromManifestOptions,
-): Promise<Server<object>> {
-  const absPath = resolve(manifestPath);
-  const baseDir = typeof options?.baseDir === 'string' ? options.baseDir : dirname(absPath);
+): Promise<ResolvedManifestConfig> {
+  const absPath = typeof manifestPathOrObject === 'string' ? resolve(manifestPathOrObject) : null;
+  const baseDir =
+    typeof options?.baseDir === 'string' ? options.baseDir : absPath ? dirname(absPath) : process.cwd();
 
   let raw: unknown;
-  try {
-    raw = JSON.parse(readFileSync(absPath, 'utf-8'));
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `[createServerFromManifest] Failed to read manifest at '${absPath}': ${message}`,
-      { cause: err },
-    );
+  if (absPath) {
+    try {
+      raw = JSON.parse(readFileSync(absPath, 'utf-8'));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `[createServerFromManifest] Failed to read manifest at '${absPath}': ${message}`,
+        { cause: err },
+      );
+    }
+  } else {
+    raw = manifestPathOrObject;
   }
 
   // Substitute ${UPPER_CASE_VAR} placeholders before validation.
@@ -461,8 +472,10 @@ export async function createServerFromManifest(
 
   const result = validateAppManifest(raw);
   if (!result.success) {
+    const manifestLabel = absPath ?? '<inline manifest>';
     throw new Error(
-      `[createServerFromManifest] Invalid manifest at '${absPath}':\n` + result.errors.join('\n'),
+      `[createServerFromManifest] Invalid manifest at '${manifestLabel}':\n` +
+        result.errors.join('\n'),
     );
   }
 
@@ -572,11 +585,25 @@ export async function createServerFromManifest(
     baseDir,
   });
 
+  return {
+    config,
+    manifest: result.manifest,
+    registry: effectiveRegistry,
+  };
+}
+
+export async function createServerFromManifest(
+  manifestPath: string,
+  registry?: ManifestHandlerRegistry,
+  options?: CreateServerFromManifestOptions,
+): Promise<Server<object>> {
+  const resolved = await resolveManifestConfig(manifestPath, registry, options);
+
   if (options?.dryRun) return { stop: async () => {} } as unknown as Server<object>;
 
-  const server = (await createServer(config)) as unknown as Server<object>;
+  const server = (await createServer(resolved.config)) as unknown as Server<object>;
 
-  const seed = result.manifest.seed;
+  const seed = resolved.manifest.seed;
   if (seed && (seed.users?.length || seed.orgs?.length)) {
     await runManifestSeed(server, seed);
   }

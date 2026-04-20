@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "outDir": "dist",
+    "tsBuildInfoFile": ".tmp/tsconfig.build.tsbuildinfo",
+    "skipLibCheck": true,
+    "composite": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../slingshot-core/tsconfig.build.json" },
+    { "path": "../runtime-node/tsconfig.build.json" }
+  ]
+}

@@ -130,7 +130,7 @@ export type {
   Guard,
   AfterHook,
 } from './handler';
-export { defineHandler, HandlerError, IdempotencyCacheHit } from './handler';
+export { defineHandler, HandlerError, IdempotencyCacheHit, resolveActor } from './handler';
 /** Trigger adapters and lifecycle hooks for non-HTTP runtimes such as Lambda. */
 export type {
   TriggerRecord,
@@ -215,6 +215,11 @@ export {
   setStandaloneClientIp,
   setStandaloneTrustProxy,
 } from './clientIp';
+
+// --- identity ---
+/** Actor-based identity abstraction for decoupling plugins from auth field names. */
+export type { Actor, ActorKind, IdentityResolver, IdentityResolverInput } from './identity';
+export { ANONYMOUS_ACTOR, createDefaultIdentityResolver } from './identity';
 
 // --- authVariables ---
 /** Request-context variable typing for auth-aware Hono handlers. */

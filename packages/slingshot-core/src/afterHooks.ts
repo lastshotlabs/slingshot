@@ -1,5 +1,6 @@
 import type { AuditLogEntry } from './auditLog';
 import type { AfterHook, HandlerMeta } from './handler';
+import { resolveActor } from './handler';
 
 function pickPayload(
   output: Record<string, unknown>,
@@ -23,8 +24,9 @@ function includeMeta(
 ): Record<string, unknown> {
   if (!include) return payload;
 
-  if (include.includes('tenantId')) payload.tenantId = meta.tenantId;
-  if (include.includes('actorId')) payload.actorId = meta.authUserId;
+  const actor = resolveActor(meta);
+  if (include.includes('tenantId')) payload.tenantId = actor.tenantId;
+  if (include.includes('actorId')) payload.actorId = actor.id;
   if (include.includes('requestId')) payload.requestId = meta.requestId;
   if (include.includes('ip')) payload.ip = meta.ip;
   return payload;
@@ -73,11 +75,12 @@ export function emitEventDynamic(
  */
 export function auditLog(action: string): AfterHook {
   return async ({ ctx, meta, handlerName, input, output }) => {
+    const actor = resolveActor(meta);
     const entry: AuditLogEntry = {
       id: crypto.randomUUID(),
-      userId: meta.authUserId,
-      sessionId: null,
-      tenantId: meta.tenantId,
+      userId: actor.id,
+      sessionId: actor.sessionId,
+      tenantId: actor.tenantId,
       method: 'HANDLER',
       path: handlerName,
       status: 200,

@@ -56,6 +56,7 @@ function createTestFrameworkConfig(options: WebhooksTestFrameworkOptions = {}) {
   };
 
   const registrar: CoreRegistrar = {
+    setIdentityResolver() {},
     setRouteAuth() {},
     setUserResolver() {},
     setRateLimitAdapter() {},

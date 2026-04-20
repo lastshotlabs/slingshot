@@ -16,6 +16,7 @@ import {
   requireAuth,
   requireUserAuth,
 } from '../../src/guards';
+import { createDefaultIdentityResolver } from '../../src/identity';
 import { mount, toRoute, toRouteHandler } from '../../src/mount';
 import { z } from 'zod';
 
@@ -30,6 +31,7 @@ function createContextFixture(overrides: Record<string, unknown> = {}) {
     app,
     config: {},
     persistence: { idempotency },
+    identityResolver: createDefaultIdentityResolver(),
     routeAuth: null,
     userResolver: null,
     rateLimitAdapter: null,

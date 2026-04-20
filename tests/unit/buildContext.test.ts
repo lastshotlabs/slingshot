@@ -470,6 +470,7 @@ describe('buildContext lifecycle', () => {
     };
 
     finalizeContext(ctx, {
+      identityResolver: null,
       routeAuth: null,
       userResolver: null,
       rateLimitAdapter: null,
@@ -688,6 +689,7 @@ describe('buildContext lifecycle', () => {
     };
 
     finalizeContext(ctx, {
+      identityResolver: null,
       routeAuth: null,
       userResolver: null,
       rateLimitAdapter: null,
@@ -776,6 +778,7 @@ describe('buildContext lifecycle', () => {
   test('ReadonlyMap forEach passes thisArg correctly (lines 178-181)', async () => {
     const { ctx } = await createDirectContext();
     finalizeContext(ctx, {
+      identityResolver: null,
       routeAuth: null,
       userResolver: null,
       rateLimitAdapter: null,

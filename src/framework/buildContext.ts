@@ -25,7 +25,12 @@ import type {
   SlingshotEventBus,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
-import { PERMISSIONS_STATE_KEY, deepFreeze, resolveRepoAsync } from '@lastshotlabs/slingshot-core';
+import {
+  PERMISSIONS_STATE_KEY,
+  createDefaultIdentityResolver,
+  deepFreeze,
+  resolveRepoAsync,
+} from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
@@ -232,6 +237,7 @@ export interface BuildContextParams {
  */
 export function finalizeContext(ctx: SlingshotContext, snapshot: CoreRegistrarSnapshot): void {
   const mutable = ctx as unknown as {
+    identityResolver: CoreRegistrarSnapshot['identityResolver'];
     routeAuth: CoreRegistrarSnapshot['routeAuth'];
     userResolver: CoreRegistrarSnapshot['userResolver'];
     rateLimitAdapter: CoreRegistrarSnapshot['rateLimitAdapter'];
@@ -241,6 +247,9 @@ export function finalizeContext(ctx: SlingshotContext, snapshot: CoreRegistrarSn
     cacheAdapters: Map<unknown, unknown>;
     emailTemplates: Map<string, unknown>;
   };
+  if (snapshot.identityResolver) {
+    mutable.identityResolver = freezePublishedContract(snapshot.identityResolver);
+  }
   mutable.routeAuth = snapshot.routeAuth ? freezePublishedContract(snapshot.routeAuth) : null;
   mutable.userResolver = snapshot.userResolver
     ? freezePublishedContract(snapshot.userResolver)
@@ -406,6 +415,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     plugins: Object.freeze([...plugins]),
     bus,
     kafkaConnectors: kafkaConnectors ?? null,
+    identityResolver: createDefaultIdentityResolver(),
     routeAuth: null,
     userResolver: null,
     rateLimitAdapter: null,

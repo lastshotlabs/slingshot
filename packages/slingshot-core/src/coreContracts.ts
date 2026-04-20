@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import type { IdentityResolver } from './identity';
 
 /**
  * Auth middleware registry provided by the auth plugin to the framework.
@@ -255,6 +256,7 @@ export interface EmailTemplate {
  * Written immutably into `SlingshotContext` by `createApp()`.
  */
 export interface CoreRegistrarSnapshot {
+  readonly identityResolver: IdentityResolver | null;
   readonly routeAuth: RouteAuthRegistry | null;
   readonly userResolver: UserResolver | null;
   readonly rateLimitAdapter: RateLimitAdapter | null;
@@ -277,6 +279,20 @@ export interface CoreRegistrarSnapshot {
  * values rather than replacing them.
  */
 export interface CoreRegistrar {
+  /**
+   * Register a custom identity resolver that maps raw auth context into a canonical `Actor`.
+   *
+   * @param resolver - An `IdentityResolver` whose `resolve` method produces an `Actor`
+   *   from the raw auth context variables set by middleware.
+   * @remarks
+   * Called by auth plugins during `setupPost`. When no resolver is registered the
+   * framework falls back to `createDefaultIdentityResolver()` which preserves
+   * existing `authUserId`/`tenantId` behavior. Custom auth integrations (gateway
+   * auth, external IdP, Lambda authorizer bridges) register their own resolver so
+   * framework consumers get a consistent identity shape without conforming to
+   * hardcoded field names. Calling this a second time replaces the previous resolver.
+   */
+  setIdentityResolver(resolver: IdentityResolver): void;
   /**
    * Register the route auth middleware registry provided by the auth plugin.
    *

@@ -1,6 +1,16 @@
 import { z, type ZodTypeAny } from 'zod';
 import { ValidationError } from './errors';
 import type { SlingshotContext } from './context/slingshotContext';
+import { ANONYMOUS_ACTOR, type Actor } from './identity';
+
+/**
+ * Safely resolve the actor from HandlerMeta, falling back to legacy fields
+ * when actor is not present (e.g., externally constructed meta objects).
+ */
+export function resolveActor(meta: HandlerMeta): Actor {
+  if (meta.actor) return meta.actor;
+  return buildActorFromLegacy(meta);
+}
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -9,13 +19,24 @@ type MaybePromise<T> = T | Promise<T>;
  */
 export interface HandlerMeta {
   requestId: string;
+
+  /** The resolved actor for this request. */
+  actor: Actor;
+
+  /** @deprecated Use `meta.actor.tenantId`. */
   tenantId: string | null;
+  /** @deprecated Use `meta.actor.id`. */
   authUserId: string | null;
+  /** @deprecated Use `meta.actor.roles`. */
   roles?: string[] | null;
+
   correlationId: string;
   ip: string | null;
   idempotencyKey?: string;
+
+  /** @deprecated Use `meta.actor.kind === 'service-account'` and `meta.actor.id`. */
   authClientId?: string | null;
+  /** @deprecated Use `meta.actor.kind === 'api-key'` and `meta.actor.id`. */
   bearerClientId?: string | null;
   bearerAuthenticated?: boolean;
   method?: string;
@@ -132,21 +153,70 @@ export interface SlingshotHandler<
 
 function defaultMeta(meta: Partial<HandlerMeta> | undefined): HandlerMeta {
   const requestId = meta?.requestId ?? crypto.randomUUID();
+
+  // Prefer an explicitly supplied actor; otherwise construct one from legacy fields.
+  const actor: Actor = meta?.actor ?? buildActorFromLegacy(meta);
+
   return {
     requestId,
-    tenantId: meta?.tenantId ?? null,
-    authUserId: meta?.authUserId ?? null,
-    roles: meta?.roles ?? null,
+    actor,
+    // Legacy aliases — projected from actor so both views stay in sync.
+    tenantId: actor.tenantId,
+    authUserId: actor.kind === 'user' ? actor.id : null,
+    roles: actor.roles,
     correlationId: meta?.correlationId ?? requestId,
     ip: meta?.ip ?? null,
     ...(meta?.idempotencyKey ? { idempotencyKey: meta.idempotencyKey } : {}),
-    authClientId: meta?.authClientId ?? null,
-    bearerClientId: meta?.bearerClientId ?? null,
+    authClientId: actor.kind === 'service-account' ? actor.id : (meta?.authClientId ?? null),
+    bearerClientId: actor.kind === 'api-key' ? actor.id : (meta?.bearerClientId ?? null),
     bearerAuthenticated: meta?.bearerAuthenticated ?? false,
     method: meta?.method,
     path: meta?.path,
     userAgent: meta?.userAgent ?? null,
   };
+}
+
+/**
+ * Build an Actor from the legacy HandlerMeta fields when no explicit actor is provided.
+ * This preserves backward compatibility for callers that construct HandlerMeta without actor.
+ */
+function buildActorFromLegacy(meta: Partial<HandlerMeta> | undefined): Actor {
+  if (!meta) return ANONYMOUS_ACTOR;
+
+  const tenantId = meta.tenantId ?? null;
+  const roles = meta.roles ?? null;
+
+  if (meta.authUserId) {
+    return {
+      id: meta.authUserId,
+      kind: 'user',
+      tenantId,
+      sessionId: null,
+      roles,
+      claims: {},
+    };
+  }
+  if (meta.bearerClientId) {
+    return {
+      id: meta.bearerClientId,
+      kind: 'api-key',
+      tenantId,
+      sessionId: null,
+      roles,
+      claims: {},
+    };
+  }
+  if (meta.authClientId) {
+    return {
+      id: meta.authClientId,
+      kind: 'service-account',
+      tenantId,
+      sessionId: null,
+      roles,
+      claims: {},
+    };
+  }
+  return { ...ANONYMOUS_ACTOR, tenantId };
 }
 
 function collectAfterHooks<TInput extends ZodTypeAny, TOutput>(

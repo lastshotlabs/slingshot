@@ -9,6 +9,7 @@ import type {
   RouteAuthRegistry,
   UserResolver,
 } from './coreContracts';
+import type { IdentityResolver } from './identity';
 
 export type { CoreRegistrar, CoreRegistrarSnapshot };
 
@@ -82,6 +83,7 @@ export function createCoreRegistrar(): {
   drain(): CoreRegistrarSnapshot;
 } {
   let sealed = false;
+  let identityResolver: IdentityResolver | null = null;
   let routeAuth: RouteAuthRegistry | null = null;
   let userResolver: UserResolver | null = null;
   let rateLimitAdapter: RateLimitAdapter | null = null;
@@ -98,6 +100,10 @@ export function createCoreRegistrar(): {
   }
 
   const registrar: CoreRegistrar = {
+    setIdentityResolver(resolver) {
+      assertWritable('setIdentityResolver');
+      identityResolver = resolver;
+    },
     setRouteAuth(registry) {
       assertWritable('setRouteAuth');
       routeAuth = registry;
@@ -131,6 +137,7 @@ export function createCoreRegistrar(): {
     drain() {
       sealed = true;
       return {
+        identityResolver,
         routeAuth,
         userResolver,
         rateLimitAdapter,

@@ -76,6 +76,7 @@ function createFrameworkConfig(): SlingshotFrameworkConfig & {
     captcha: null,
     trustProxy: false,
     registrar: {
+      setIdentityResolver() {},
       setRouteAuth() {},
       setUserResolver() {},
       setRateLimitAdapter() {},

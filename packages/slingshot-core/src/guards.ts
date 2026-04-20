@@ -8,7 +8,7 @@ import type {
   PolicyDecision,
   PolicyResolver,
 } from './entityRouteConfig';
-import { type AfterHook, type Guard, HandlerError, IdempotencyCacheHit } from './handler';
+import { type AfterHook, type Guard, HandlerError, IdempotencyCacheHit, resolveActor } from './handler';
 import { getPermissionsStateOrNull } from './permissions';
 import { getRateLimitAdapter } from './rateLimit';
 
@@ -60,12 +60,24 @@ function resolveScopedValue(
   meta: {
     tenantId: string | null;
     authUserId: string | null;
+    actor?: import('./identity').Actor;
   },
 ): string | undefined {
   if (binding.startsWith('ctx:')) {
     const field = binding.slice(4);
-    if (field === 'tenantId') return meta.tenantId ?? undefined;
-    if (field === 'authUserId') return meta.authUserId ?? undefined;
+    // Legacy aliases — still work as before.
+    if (field === 'tenantId') return (meta.actor?.tenantId ?? meta.tenantId) ?? undefined;
+    if (field === 'authUserId') return (meta.actor?.id ?? meta.authUserId) ?? undefined;
+    // New actor-aware bindings.
+    if (field === 'actor.id') return meta.actor?.id ?? undefined;
+    if (field === 'actor.tenantId') return meta.actor?.tenantId ?? undefined;
+    if (field === 'actor.kind') return meta.actor?.kind;
+    if (field === 'actor.sessionId') return meta.actor?.sessionId ?? undefined;
+    if (field.startsWith('actor.claims.')) {
+      const claimKey = field.slice('actor.claims.'.length);
+      const value = meta.actor?.claims[claimKey];
+      return value === undefined || value === null ? undefined : String(value);
+    }
     return undefined;
   }
   if (binding.startsWith('param:')) {
@@ -106,11 +118,19 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function derivePermissionSubject(meta: {
-  authUserId: string | null;
-  bearerClientId?: string | null;
-  authClientId?: string | null;
-}): { subjectId: string; subjectType: 'user' | 'service-account' } | null {
+function derivePermissionSubject(
+  meta: import('./handler').HandlerMeta,
+): { subjectId: string; subjectType: 'user' | 'service-account' } | null {
+  const actor = resolveActor(meta);
+  if (actor.id) {
+    if (actor.kind === 'user') {
+      return { subjectId: actor.id, subjectType: 'user' };
+    }
+    if (actor.kind === 'service-account' || actor.kind === 'api-key') {
+      return { subjectId: actor.id, subjectType: 'service-account' };
+    }
+  }
+  // Legacy fallback for externally constructed meta without actor.
   if (meta.authUserId) {
     return { subjectId: meta.authUserId, subjectType: 'user' };
   }
@@ -132,11 +152,11 @@ function attachAuthMarker(guard: Guard, kind: 'userAuth' | 'bearer'): Guard {
 }
 
 /**
- * Require an authenticated user identity.
+ * Require an authenticated identity (any actor kind except anonymous).
  */
 export function requireAuth(): Guard {
   return async ({ meta }) => {
-    if (!meta.authUserId) {
+    if (!resolveActor(meta).id) {
       throw new HandlerError('Unauthorized', { status: 401 });
     }
   };
@@ -147,21 +167,19 @@ export function requireAuth(): Guard {
  */
 export function requireUserAuth(): Guard {
   const guard: Guard = async args => {
-    await requireAuth()(args);
+    const actor = resolveActor(args.meta);
+    if (!actor.id) {
+      throw new HandlerError('Unauthorized', { status: 401 });
+    }
 
     const runtime = getAuthRuntimePeerOrNull(args.ctx.pluginState);
     if (!runtime?.adapter) {
       return;
     }
 
-    const userId = args.meta.authUserId;
-    if (!userId) {
-      throw new HandlerError('Unauthorized', { status: 401 });
-    }
-
     const decision = await evaluateAuthUserAccess(runtime, {
-      userId,
-      tenantId: args.meta.tenantId,
+      userId: actor.id,
+      tenantId: actor.tenantId,
       requestId: args.meta.requestId,
       correlationId: args.meta.correlationId,
       ip: args.meta.ip,
@@ -185,8 +203,11 @@ export function requireUserAuth(): Guard {
  */
 export function requireBearer(): Guard {
   const guard: Guard = async ({ meta }) => {
-    if (!meta.bearerClientId && !meta.authClientId) {
-      throw new HandlerError('Unauthorized', { status: 401 });
+    const actor = resolveActor(meta);
+    if (actor.kind !== 'api-key' && actor.kind !== 'service-account') {
+      if (!meta.bearerClientId && !meta.authClientId) {
+        throw new HandlerError('Unauthorized', { status: 401 });
+      }
     }
   };
 
@@ -198,7 +219,7 @@ export function requireBearer(): Guard {
  */
 export function requireTenant(): Guard {
   return async ({ meta }) => {
-    if (!meta.tenantId) {
+    if (!resolveActor(meta).tenantId) {
       throw new HandlerError('Tenant required', { status: 400 });
     }
   };
@@ -231,7 +252,7 @@ export function requirePermission(action: string, opts: PermissionGuardOptions =
       }
 
       const parent = normalizeRecord(await opts.parentAdapter.getById(parentId));
-      if (!parent || parent[opts.parentAuth.tenantField] !== meta.tenantId) {
+      if (!parent || parent[opts.parentAuth.tenantField] !== resolveActor(meta).tenantId) {
         throw new HandlerError('Not found', { status: 404 });
       }
     }
@@ -259,7 +280,7 @@ export function requirePermission(action: string, opts: PermissionGuardOptions =
       return;
     }
 
-    const scope: Record<string, string | undefined> = { tenantId: meta.tenantId ?? undefined };
+    const scope: Record<string, string | undefined> = { tenantId: resolveActor(meta).tenantId ?? undefined };
     for (const [key, binding] of Object.entries(opts.scope ?? {})) {
       scope[key] = resolveScopedValue(binding, inputRecord, record, meta);
     }
@@ -281,8 +302,9 @@ export function requirePermission(action: string, opts: PermissionGuardOptions =
 export function rateLimit(config: { windowMs: number; max: number }): Guard {
   return async ({ ctx, meta, handlerName }) => {
     const adapter = getRateLimitAdapter(ctx);
-    const key = meta.authUserId
-      ? `handler:${handlerName}:user:${meta.authUserId}`
+    const actor = resolveActor(meta);
+    const key = actor.id
+      ? `handler:${handlerName}:user:${actor.id}`
       : `handler:${handlerName}:ip:${meta.ip ?? 'unknown'}`;
     const exceeded = await adapter.trackAttempt(key, config);
     if (exceeded) {
@@ -373,14 +395,15 @@ export function idempotent(config?: { ttl?: number; scope?: 'user' | 'tenant' | 
     const token = signingSecret ? hmacSign(rawKey, signingSecret) : rawKey;
     const parts = ['idempotency', handlerName];
 
+    const actor = resolveActor(meta);
     if (scope === 'user') {
-      if (!meta.authUserId) {
+      if (!actor.id) {
         throw new HandlerError('Unauthorized', { status: 401 });
       }
-      if (meta.tenantId) parts.push(`tenant:${meta.tenantId}`);
-      parts.push(`user:${meta.authUserId}`);
+      if (actor.tenantId) parts.push(`tenant:${actor.tenantId}`);
+      parts.push(`user:${actor.id}`);
     } else if (scope === 'tenant') {
-      parts.push(`tenant:${meta.tenantId ?? 'none'}`);
+      parts.push(`tenant:${actor.tenantId ?? 'none'}`);
     }
 
     parts.push(token);
@@ -448,8 +471,9 @@ export function enforcePolicy(config: {
     if (!resolver) {
       throw new HandlerError(`Unknown policy resolver '${config.resolver}'`, { status: 500 });
     }
-    if (!meta.authUserId) {
-      throw new HandlerError('policy: authUserId missing at enforcement time (bad config)', {
+    const actor = resolveActor(meta);
+    if (!actor.id) {
+      throw new HandlerError('policy: actor identity missing at enforcement time (bad config)', {
         status: 500,
       });
     }
@@ -457,8 +481,8 @@ export function enforcePolicy(config: {
     const decision = coercePolicyDecision(
       await resolver({
         action: resolvePolicyAction(config.action),
-        userId: meta.authUserId,
-        tenantId: meta.tenantId,
+        userId: actor.id,
+        tenantId: actor.tenantId,
         record: null,
         input:
           input && typeof input === 'object' ? (input as Record<string, unknown>) : (null as null),
@@ -473,7 +497,7 @@ export function enforcePolicy(config: {
       {
         resolverKey: config.resolver,
         action: config.action,
-        userId: meta.authUserId,
+        userId: actor.id,
         reason: decision.reason,
       },
     );
@@ -504,8 +528,9 @@ export async function checkPolicy(
   if (!resolver) {
     throw new HandlerError(`Unknown policy resolver '${config.resolver}'`, { status: 500 });
   }
-  if (!meta.authUserId) {
-    throw new HandlerError('policy: authUserId missing at enforcement time (bad config)', {
+  const actor = resolveActor(meta);
+  if (!actor.id) {
+    throw new HandlerError('policy: actor identity missing at enforcement time (bad config)', {
       status: 500,
     });
   }
@@ -513,8 +538,8 @@ export async function checkPolicy(
   const decision = coercePolicyDecision(
     await resolver({
       action: resolvePolicyAction(config.action),
-      userId: meta.authUserId,
-      tenantId: meta.tenantId,
+      userId: actor.id,
+      tenantId: actor.tenantId,
       record: config.record,
       input: config.input ?? null,
     }),
@@ -528,7 +553,7 @@ export async function checkPolicy(
     {
       resolverKey: config.resolver,
       action: config.action,
-      userId: meta.authUserId,
+      userId: actor.id,
       reason: decision.reason,
     },
   );

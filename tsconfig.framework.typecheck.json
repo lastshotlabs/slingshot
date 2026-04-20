@@ -27,6 +27,9 @@
       "path": "./packages/slingshot-bullmq/tsconfig.typecheck.json"
     },
     {
+      "path": "./packages/slingshot-kafka/tsconfig.typecheck.json"
+    },
+    {
       "path": "./packages/slingshot-chat/tsconfig.typecheck.json"
     },
     {

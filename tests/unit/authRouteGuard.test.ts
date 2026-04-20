@@ -4,20 +4,31 @@
  * Targets the uncovered lines:
  * - lines 19-21: throws when authUserId is not a non-empty string
  */
-import { describe, expect, test } from 'bun:test';
 import { AUTH_RUNTIME_KEY } from '@auth/runtime';
 import type { AuthRuntimeContext } from '@auth/runtime';
+import { describe, expect, test } from 'bun:test';
 import { getAuthenticatedAccountGuardFailure } from '../../src/framework/lib/authRouteGuard';
 
 function makeAuthRuntime(overrides?: {
   suspended?: boolean;
   emailVerified?: boolean;
+  evaluateUserAccess?: () => Promise<
+    | {
+        allow: boolean;
+        message?: string;
+        code?: string;
+        reason?: string;
+      }
+    | boolean
+    | void
+  >;
 }): AuthRuntimeContext {
   return {
     adapter: {
       getSuspended: async () => ({ suspended: overrides?.suspended ?? false }),
       getEmailVerified: async () => overrides?.emailVerified ?? true,
     },
+    evaluateUserAccess: overrides?.evaluateUserAccess ?? (async () => undefined),
     config: {
       emailVerification: undefined,
       primaryField: 'email',
@@ -118,7 +129,9 @@ describe('getAuthenticatedAccountGuardFailure', () => {
     const runtime = {
       adapter: {
         getSuspended: async () => ({ suspended: false }),
-        getEmailVerified: async () => { throw new Error('DB connection lost'); },
+        getEmailVerified: async () => {
+          throw new Error('DB connection lost');
+        },
       },
       config: {
         emailVerification: { required: true },
@@ -137,5 +150,29 @@ describe('getAuthenticatedAccountGuardFailure', () => {
     await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
       'DB connection lost',
     );
+  });
+
+  test('returns custom account-access hook denial when runtime denies continued access', async () => {
+    const pluginState = new Map([
+      [
+        AUTH_RUNTIME_KEY,
+        makeAuthRuntime({
+          evaluateUserAccess: async () => ({
+            allow: false,
+            message: 'Account disabled',
+            code: 'account_disabled',
+          }),
+        }),
+      ],
+    ]);
+    const slingshotCtx = { pluginState };
+    const store = new Map<string, unknown>([
+      ['authUserId', 'user-999'],
+      ['slingshotCtx', slingshotCtx],
+    ]);
+    const ctx = { get: (key: string) => store.get(key) };
+
+    const result = await getAuthenticatedAccountGuardFailure(ctx as any);
+    expect(result).toMatchObject({ error: 'Account disabled', status: 403 });
   });
 });

@@ -1,6 +1,8 @@
 import type {
   AuthAdapter,
   AuthRuntimePeer,
+  AuthUserAccessDecision,
+  AuthUserAccessInput,
   DataEncryptionKey,
   PluginStateCarrier,
   PluginStateMap,
@@ -50,6 +52,10 @@ import type { SessionRepository } from './lib/session/index.js';
  */
 export interface AuthRuntimeContext {
   readonly adapter: AuthAdapter;
+  /** Optional app-owned continuation check layered on top of auth built-ins. */
+  readonly evaluateUserAccess: (
+    input: AuthUserAccessInput,
+  ) => Promise<AuthUserAccessDecision | boolean | void>;
   readonly eventBus: SlingshotEventBus;
   readonly config: AuthResolvedConfig;
   readonly stores: Readonly<ResolvedStores>;

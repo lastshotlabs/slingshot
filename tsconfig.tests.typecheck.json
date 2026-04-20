@@ -20,6 +20,9 @@
       "path": "./packages/slingshot-community/tsconfig.tests.typecheck.json"
     },
     {
+      "path": "./packages/slingshot-kafka/tsconfig.tests.typecheck.json"
+    },
+    {
       "path": "./packages/slingshot-core/tsconfig.tests.typecheck.json"
     },
     {

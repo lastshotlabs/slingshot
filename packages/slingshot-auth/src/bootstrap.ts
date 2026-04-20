@@ -669,6 +669,23 @@ export async function bootstrapAuth(
     adapter: authAdapter,
     runtime: {
       adapter: authAdapter,
+      evaluateUserAccess: async input => {
+        const decision = await resolvedConfig.hooks.checkUserAccess?.({
+          ...input,
+          adapter: authAdapter,
+          config: resolvedConfig,
+        });
+        if (decision === false) {
+          return {
+            allow: false,
+            status: 403,
+            message: 'Account access denied',
+            code: 'account_access_denied',
+            reason: 'account_access_denied',
+          };
+        }
+        return decision;
+      },
       eventBus: bus,
       config: resolvedConfig,
       stores,

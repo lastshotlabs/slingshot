@@ -1,12 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import {
-  Kafka,
-  type Admin,
-  type Consumer,
-  type KafkaMessage,
-  type Producer,
-} from 'kafkajs';
-import { z, type ZodType } from 'zod';
+import { type Admin, type Consumer, Kafka, type KafkaMessage, type Producer } from 'kafkajs';
+import { type ZodType, z } from 'zod';
 import type {
   EventSchemaRegistry,
   EventSerializer,
@@ -18,50 +12,86 @@ import type {
   ValidationMode,
 } from '@lastshotlabs/slingshot-core';
 import { JSON_SERIALIZER, validatePluginConfig } from '@lastshotlabs/slingshot-core';
-import { backoffMs, COMPRESSION_CODEC, compressionSchema, saslSchema, sslSchema } from './kafkaShared';
 import { getKafkaAdapterIntrospectionOrNull } from './kafkaAdapter';
+import {
+  COMPRESSION_CODEC,
+  backoffMs,
+  compressionSchema,
+  saslSchema,
+  sslSchema,
+} from './kafkaShared';
 
+/**
+ * Broker metadata attached to one inbound Kafka message after normalization.
+ */
 export interface InboundMessageMetadata {
+  /** Topic the message was consumed from. */
   topic: string;
+  /** Consumer group processing the message. */
   groupId: string;
+  /** Kafka partition number. */
   partition: number;
+  /** Kafka offset of the consumed record. */
   offset: string;
+  /** Record key converted to a string when present. */
   key: string | null;
+  /** Message headers converted to string values. */
   headers: Record<string, string>;
+  /** Message payload size in bytes. */
   sizeBytes: number;
 }
 
+/**
+ * Callback invoked for a normalized inbound Kafka message.
+ */
 export type InboundMessageHandler = (
   payload: unknown,
   metadata: InboundMessageMetadata,
 ) => void | Promise<void>;
 
+/**
+ * Optional transform applied before an inbound message reaches its handler.
+ */
 export type InboundTransform = (
   payload: unknown,
   metadata: InboundMessageMetadata,
 ) => unknown | Promise<unknown>;
 
+/** Predicate that decides whether an outbound event should be published. */
 export type OutboundFilter = (payload: unknown, event: string) => boolean | Promise<boolean>;
+/** Transform applied to an outbound event payload before serialization. */
 export type OutboundTransform = (payload: unknown, event: string) => unknown | Promise<unknown>;
+/** Hook that can add or replace Kafka headers for outbound publishes. */
 export type OutboundHeaderEnricher = (
   defaults: Record<string, string>,
   payload: unknown,
   event: string,
 ) => Record<string, string>;
+/** Resolve a stable message identifier for dedupe or trace correlation. */
 export type OutboundMessageIdExtractor = (event: string, payload: unknown) => string | null;
+/** Resolve the Kafka partition key for an outbound publish. */
 export type OutboundPartitionKeyExtractor = (event: string, payload: unknown) => string | null;
 
+/**
+ * Optional observability hooks for the connector bridge.
+ */
 export interface ConnectorObservabilityHooks {
+  /** Called after an inbound handler succeeds. */
   onInboundSuccess?(
     topic: string,
     groupId: string,
     durationMs: number,
     metadata: InboundMessageMetadata,
   ): void;
+  /** Called when inbound decode, validation, or handler processing fails. */
   onInboundError?(topic: string, groupId: string, error: unknown): void;
+  /** Called after a failed inbound message is published to a DLQ. */
   onInboundDLQ?(topic: string, dlqTopic: string, metadata: InboundMessageMetadata): void;
+  /** Called after an outbound event is published successfully. */
   onOutboundSuccess?(event: string, topic: string, durationMs: number): void;
+  /** Called when outbound publication fails. */
   onOutboundError?(event: string, topic: string, error: unknown): void;
+  /** Called when an outbound event is intentionally suppressed. */
   onOutboundSuppressed?(
     event: string,
     topic: string,
@@ -118,7 +148,10 @@ const outboundConnectorSchema = z.object({
   schema: z.custom<ZodType>(value => !!value && typeof value === 'object').optional(),
   validationMode: z.enum(['strict', 'warn', 'off']).optional(),
   partitionKey: z
-    .union([z.string(), z.custom<OutboundPartitionKeyExtractor>(value => typeof value === 'function')])
+    .union([
+      z.string(),
+      z.custom<OutboundPartitionKeyExtractor>(value => typeof value === 'function'),
+    ])
     .optional(),
   messageId: z
     .union([z.string(), z.custom<OutboundMessageIdExtractor>(value => typeof value === 'function')])
@@ -129,6 +162,9 @@ const outboundConnectorSchema = z.object({
   replicationFactor: z.number().int().min(1).optional(),
 });
 
+/**
+ * Zod schema for the programmatic Kafka connector bridge configuration.
+ */
 export const kafkaConnectorsSchema = z.object({
   brokers: z.array(z.string()).min(1),
   clientId: z.string().optional(),
@@ -149,7 +185,9 @@ export const kafkaConnectorsSchema = z.object({
   duplicatePublishPolicy: z.enum(['off', 'warn', 'error']).optional(),
   inbound: z.array(inboundConnectorSchema).optional(),
   outbound: z.array(outboundConnectorSchema).optional(),
-  hooks: z.custom<ConnectorObservabilityHooks>(value => !!value && typeof value === 'object').optional(),
+  hooks: z
+    .custom<ConnectorObservabilityHooks>(value => !!value && typeof value === 'object')
+    .optional(),
   schemaRegistry: z
     .custom<EventSchemaRegistry>(
       value => !!value && typeof value === 'object' && 'validate' in value,
@@ -160,9 +198,21 @@ export const kafkaConnectorsSchema = z.object({
   drainIntervalMs: z.number().int().min(500).optional(),
 });
 
+/**
+ * Top-level configuration accepted by {@link createKafkaConnectors}.
+ */
 export type KafkaConnectorsConfig = z.infer<typeof kafkaConnectorsSchema>;
+/**
+ * One inbound Kafka topic or topic-pattern consumer definition.
+ */
 export type InboundConnectorConfig = z.infer<typeof inboundConnectorSchema>;
+/**
+ * One outbound Slingshot-event to Kafka-topic publish definition.
+ */
 export type OutboundConnectorConfig = z.infer<typeof outboundConnectorSchema>;
+/**
+ * Policy applied when an outbound connector duplicates the Kafka adapter topic mapping.
+ */
 export type DuplicatePublishPolicy = NonNullable<KafkaConnectorsConfig['duplicatePublishPolicy']>;
 
 interface PendingProduceEntry {
@@ -243,10 +293,7 @@ function validatePayload(
   return payload;
 }
 
-function resolvePartitionKey(
-  config: OutboundConnectorConfig,
-  payload: unknown,
-): string | null {
+function resolvePartitionKey(config: OutboundConnectorConfig, payload: unknown): string | null {
   if (!config.partitionKey) return null;
   if (typeof config.partitionKey === 'function') {
     return config.partitionKey(config.event, payload);
@@ -256,10 +303,7 @@ function resolvePartitionKey(
   return value == null ? null : String(value);
 }
 
-function resolveMessageId(
-  config: OutboundConnectorConfig,
-  payload: unknown,
-): string {
+function resolveMessageId(config: OutboundConnectorConfig, payload: unknown): string {
   if (typeof config.messageId === 'function') {
     const resolved = config.messageId(config.event, payload);
     if (resolved) return String(resolved);
@@ -272,10 +316,7 @@ function resolveMessageId(
   return randomUUID();
 }
 
-async function waitWithHeartbeat(
-  heartbeat: () => Promise<void>,
-  delayMs: number,
-): Promise<void> {
+async function waitWithHeartbeat(heartbeat: () => Promise<void>, delayMs: number): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < delayMs) {
     const remaining = delayMs - (Date.now() - started);
@@ -284,9 +325,14 @@ async function waitWithHeartbeat(
   }
 }
 
-export function createKafkaConnectors(
-  rawOpts: KafkaConnectorsConfig,
-): KafkaConnectorHandle {
+/**
+ * Create a programmatic bridge between the Slingshot event bus and Kafka topics.
+ *
+ * Inbound connectors consume Kafka messages into handlers. Outbound connectors
+ * subscribe to Slingshot events and publish them to Kafka with buffering and
+ * duplicate-produce safeguards.
+ */
+export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConnectorHandle {
   const opts = validatePluginConfig('slingshot-kafka-connectors', rawOpts, kafkaConnectorsSchema);
 
   opts.inbound?.forEach((conn, i) => {
@@ -371,7 +417,9 @@ export function createKafkaConnectors(
   const pendingCountByTopic = new Map<string, number>();
 
   if (opts.sasl && !opts.ssl) {
-    console.warn('[KafkaConnectors] SASL configured without SSL. Credentials will travel in plaintext.');
+    console.warn(
+      '[KafkaConnectors] SASL configured without SSL. Credentials will travel in plaintext.',
+    );
   }
   if (opts.ssl && opts.ssl !== true && opts.ssl.rejectUnauthorized === false) {
     console.warn(
@@ -754,7 +802,10 @@ export function createKafkaConnectors(
                           await produceToDlq(config, metadata, message, err);
                           runtime.health.messagesDLQ += 1;
                         } catch (dlqErr) {
-                          console.error('[KafkaConnectors] failed to publish inbound DLQ message:', dlqErr);
+                          console.error(
+                            '[KafkaConnectors] failed to publish inbound DLQ message:',
+                            dlqErr,
+                          );
                         }
                       }
                       await consumer.commitOffsets([

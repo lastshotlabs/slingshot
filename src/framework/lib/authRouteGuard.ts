@@ -1,11 +1,31 @@
 import { getAuthRuntimeFromRequest } from '@lastshotlabs/slingshot-auth';
-import { assertLoginEmailVerified, getSuspended } from '@lastshotlabs/slingshot-auth/plugin';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { evaluateAuthUserAccess } from '@lastshotlabs/slingshot-core';
+
+function readString(c: { get(key: string): unknown }, key: string): string | null {
+  const value = c.get(key);
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function readRequestInfo(c: {
+  req?: {
+    method?: string;
+    path?: string;
+    header?(name: string): string | undefined;
+  };
+}) {
+  const request = c.req;
+  return {
+    method: typeof request?.method === 'string' ? request.method : undefined,
+    path: typeof request?.path === 'string' ? request.path : undefined,
+    userAgent: request?.header?.('user-agent') ?? null,
+  };
+}
 
 /**
  * Resolve whether a request authenticated via `userAuth` should be blocked
- * because the account became suspended or fell out of a required
- * email-verification policy after the session was issued.
+ * because the account became suspended, fell out of a required
+ * email-verification policy, or is denied by the auth account-access hook
+ * after the session was issued.
  *
  * Framework-owned routes that expose sensitive read or write capability should
  * call this after `userAuth` so stale sessions fail closed even when
@@ -13,7 +33,12 @@ import { HttpError } from '@lastshotlabs/slingshot-core';
  */
 export async function getAuthenticatedAccountGuardFailure(c: {
   get(key: string): unknown;
-}): Promise<{ error: 'Account suspended' | 'Email not verified'; status: 403 } | null> {
+  req?: {
+    method?: string;
+    path?: string;
+    header?(name: string): string | undefined;
+  };
+}): Promise<{ error: string; status: 403 } | null> {
   const userId = c.get('authUserId');
   if (typeof userId !== 'string' || userId.length === 0) {
     throw new Error(
@@ -22,18 +47,19 @@ export async function getAuthenticatedAccountGuardFailure(c: {
   }
 
   const runtime = getAuthRuntimeFromRequest(c);
-  const suspensionStatus = await getSuspended(runtime.adapter, userId);
-  if (suspensionStatus.suspended) {
-    return { error: 'Account suspended', status: 403 };
-  }
-
-  try {
-    await assertLoginEmailVerified(userId, runtime);
-  } catch (err) {
-    if (err instanceof HttpError && err.status === 403) {
-      return { error: 'Email not verified', status: 403 };
-    }
-    throw err;
+  const requestInfo = readRequestInfo(c);
+  const decision = await evaluateAuthUserAccess(runtime, {
+    userId,
+    tenantId: readString(c, 'tenantId'),
+    requestId: readString(c, 'requestId') ?? undefined,
+    correlationId: readString(c, 'correlationId') ?? undefined,
+    ip: readString(c, 'clientIp'),
+    method: requestInfo.method,
+    path: requestInfo.path,
+    userAgent: requestInfo.userAgent,
+  });
+  if (!decision.allow) {
+    return { error: decision.message ?? 'Account access denied', status: 403 };
   }
 
   return null;

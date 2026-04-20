@@ -104,6 +104,7 @@ bun add @lastshotlabs/slingshot
 - `@lastshotlabs/slingshot-admin`: `workspace:*`
 - `@lastshotlabs/slingshot-bullmq`: `workspace:*`
 - `@lastshotlabs/slingshot-community`: `workspace:*`
+- `@lastshotlabs/slingshot-kafka`: `workspace:*`
 - `@lastshotlabs/slingshot-deep-links`: `workspace:*`
 - `@lastshotlabs/slingshot-interactions`: `workspace:*`
 - `@lastshotlabs/slingshot-mail`: `workspace:*`

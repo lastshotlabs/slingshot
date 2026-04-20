@@ -1,6 +1,11 @@
 // Auth-specific runtime configuration — single resolved config object.
 // This is the auth package's own copy — no @lib/* or @shared/* imports.
-import type { CaptchaConfig } from '@lastshotlabs/slingshot-core';
+import type {
+  AuthAdapter,
+  AuthUserAccessDecision,
+  AuthUserAccessInput,
+  CaptchaConfig,
+} from '@lastshotlabs/slingshot-core';
 import { deepFreeze } from '@lastshotlabs/slingshot-core';
 import type { EmailTemplate } from '../lib/emailTemplates';
 import type { SamlProfile } from '../types/saml';
@@ -652,6 +657,18 @@ export interface PostLoginResult {
 }
 
 /**
+ * Input passed to `hooks.checkUserAccess`.
+ *
+ * Extends the cross-package access input with the resolved auth adapter and the
+ * deep-frozen resolved auth config so applications can inspect additional
+ * adapter-backed account state without relying on module-level globals.
+ */
+export interface UserAccessHookInput extends AuthUserAccessInput {
+  adapter: AuthAdapter;
+  config: AuthResolvedConfig;
+}
+
+/**
  * Lifecycle hooks for auth events.
  *
  * Each hook receives the relevant identifiers and a `HookContext` with request metadata.
@@ -686,6 +703,13 @@ export interface AuthHooksConfig {
   preDeleteAccount?: (data: { userId: string } & HookContext) => Promise<void>;
   /** Runs after auth data is actually deleted, including queued worker execution. */
   postDeleteAccount?: (data: { userId: string } & HookContext) => Promise<void>;
+  /**
+   * Runs when framework-owned guards need to decide whether an authenticated
+   * user may continue. Use this to layer application-specific account-state
+   * checks on top of the built-in suspension and required-email-verification
+   * rules without teaching slingshot-core about custom user fields.
+   */
+  checkUserAccess?: (data: UserAccessHookInput) => Promise<AuthUserAccessDecision | boolean | void>;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
 import {
-  Kafka,
   type Admin,
   type Consumer,
   type EachMessagePayload,
+  Kafka,
   type KafkaMessage,
   type Producer,
 } from 'kafkajs';
@@ -21,9 +21,18 @@ import {
   validateEventPayload,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { backoffMs, COMPRESSION_CODEC, compressionSchema, saslSchema, sslSchema } from './kafkaShared';
+import {
+  COMPRESSION_CODEC,
+  backoffMs,
+  compressionSchema,
+  saslSchema,
+  sslSchema,
+} from './kafkaShared';
 import { toGroupId, toTopicName } from './kafkaTopicNaming';
 
+/**
+ * Zod schema for the programmatic Kafka event-bus adapter configuration.
+ */
 export const kafkaAdapterOptionsSchema = z.object({
   brokers: z.array(z.string()).min(1, 'At least one broker address is required'),
   clientId: z.string().optional(),
@@ -53,6 +62,9 @@ export const kafkaAdapterOptionsSchema = z.object({
   validation: z.enum(['strict', 'warn', 'off']).optional(),
 });
 
+/**
+ * Runtime options accepted by {@link createKafkaAdapter}.
+ */
 export type KafkaAdapterOptions = z.infer<typeof kafkaAdapterOptionsSchema>;
 
 interface ResolvedKafkaConfig {
@@ -110,24 +122,43 @@ interface DurableConsumerEntry {
 }
 
 export interface KafkaAdapterHealthConsumer {
+  /** Event name registered on the Slingshot bus. */
   readonly event: string;
+  /** Kafka topic bound to the event. */
   readonly topic: string;
+  /** Durable subscriber name supplied through `SubscriptionOpts.name`. */
   readonly name: string;
+  /** Kafka consumer group used for the durable subscription. */
   readonly groupId: string;
+  /** Whether the consumer is currently connected to the broker. */
   readonly connected: boolean;
 }
 
+/**
+ * Health snapshot for the Kafka event-bus adapter.
+ */
 export interface KafkaAdapterHealth {
+  /** Whether the producer has an active Kafka connection. */
   readonly producerConnected: boolean;
+  /** Whether the admin client has an active Kafka connection. */
   readonly adminConnected: boolean;
+  /** Whether `shutdown()` has already been called. */
   readonly isShutdown: boolean;
+  /** Number of buffered outbound messages waiting for a reconnect. */
   readonly pendingBufferSize: number;
+  /** Durable consumer status keyed by event subscription. */
   readonly consumers: readonly KafkaAdapterHealthConsumer[];
 }
 
+/**
+ * Introspection handle attached to Kafka-backed event buses.
+ */
 export interface KafkaAdapterIntrospection {
+  /** Stable marker used to detect the Kafka adapter at runtime. */
   readonly kind: 'slingshot-kafka-adapter';
+  /** Topic prefix applied before Slingshot event keys. */
   readonly topicPrefix: string;
+  /** Resolve the Kafka topic that the adapter uses for an event key. */
   topicNameForEvent(event: string): string;
 }
 
@@ -154,10 +185,7 @@ function nextOffset(offset: string): string {
   return (BigInt(offset) + 1n).toString();
 }
 
-async function waitWithHeartbeat(
-  heartbeat: () => Promise<void>,
-  delayMs: number,
-): Promise<void> {
+async function waitWithHeartbeat(heartbeat: () => Promise<void>, delayMs: number): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < delayMs) {
     const remaining = delayMs - (Date.now() - started);
@@ -166,6 +194,9 @@ async function waitWithHeartbeat(
   }
 }
 
+/**
+ * Read Kafka adapter introspection metadata from a bus when available.
+ */
 export function getKafkaAdapterIntrospectionOrNull(
   bus: SlingshotEventBus,
 ): KafkaAdapterIntrospection | null {
@@ -175,6 +206,13 @@ export function getKafkaAdapterIntrospectionOrNull(
   return value as KafkaAdapterIntrospection;
 }
 
+/**
+ * Create a Slingshot event bus backed by Kafka durable topics.
+ *
+ * Non-durable listeners still execute in-process. Durable listeners are bridged
+ * through Kafka topics, consumer groups, and a reconnect buffer for transient
+ * producer failures.
+ */
 export function createKafkaAdapter(
   rawOpts: KafkaAdapterOptions & EventBusSerializationOptions,
 ): SlingshotEventBus & {
@@ -212,7 +250,9 @@ export function createKafkaAdapter(
     );
   }
   if (config.sasl && !config.ssl) {
-    console.warn('[KafkaAdapter] SASL configured without SSL. Credentials will travel in plaintext.');
+    console.warn(
+      '[KafkaAdapter] SASL configured without SSL. Credentials will travel in plaintext.',
+    );
   }
   if (config.ssl && config.ssl !== true && config.ssl.rejectUnauthorized === false) {
     console.warn(
@@ -695,9 +735,9 @@ export function createKafkaAdapter(
       listener: (payload: SlingshotEventMap[K]) => void,
     ): void {
       if (
-        durableListeners.get(event as string)?.has(
-          listener as (payload: unknown) => void | Promise<void>,
-        )
+        durableListeners
+          .get(event as string)
+          ?.has(listener as (payload: unknown) => void | Promise<void>)
       ) {
         throw new Error(
           '[KafkaAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all consumers.',

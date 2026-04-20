@@ -1,3 +1,6 @@
+import { validateEventPayload } from './eventSchemaRegistry';
+import type { EventBusSerializationOptions, ValidationMode } from './eventSerializer';
+
 /**
  * Central event map for all built-in Slingshot events.
  *
@@ -585,14 +588,21 @@ export class InProcessAdapter implements SlingshotEventBus {
   private _clientSafeKeys: Set<string>;
   private readonly clientSafeKeysView: ReadonlySet<string>;
   private pendingHandlers = new Set<Promise<void>>();
+  private readonly registry?: EventBusSerializationOptions['schemaRegistry'];
+  private readonly validation: ValidationMode;
 
   /**
    * @param initialClientSafeKeys - Additional event keys to seed as client-safe.
    *   Defaults to `BUILTIN_CLIENT_SAFE_KEYS`. Pass a custom set to override.
    */
-  constructor(initialClientSafeKeys?: Iterable<string>) {
+  constructor(
+    initialClientSafeKeys?: Iterable<string>,
+    serializationOpts?: EventBusSerializationOptions,
+  ) {
     this._clientSafeKeys = new Set(initialClientSafeKeys ?? BUILTIN_CLIENT_SAFE_KEYS);
     this.clientSafeKeysView = createReadonlySetView(this._clientSafeKeys);
+    this.registry = serializationOpts?.schemaRegistry;
+    this.validation = serializationOpts?.validation ?? 'off';
   }
 
   get clientSafeKeys(): ReadonlySet<string> {
@@ -623,12 +633,18 @@ export class InProcessAdapter implements SlingshotEventBus {
   }
 
   emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
+    const validatedPayload = validateEventPayload(
+      event as string,
+      payload,
+      this.registry,
+      this.validation,
+    );
     const fns = this.listeners.get(event as string);
     if (!fns) return;
     for (const fn of Array.from(fns)) {
       let result: void | Promise<void>;
       try {
-        result = fn(payload);
+        result = fn(validatedPayload);
       } catch (err) {
         console.error(`[SlingshotEventBus] listener error on event "${event}":`, err);
         continue;
@@ -726,6 +742,7 @@ export class InProcessAdapter implements SlingshotEventBus {
  */
 export function createInProcessAdapter(
   initialClientSafeKeys?: Iterable<string>,
+  serializationOpts?: EventBusSerializationOptions,
 ): SlingshotEventBus {
-  return new InProcessAdapter(initialClientSafeKeys);
+  return new InProcessAdapter(initialClientSafeKeys, serializationOpts);
 }

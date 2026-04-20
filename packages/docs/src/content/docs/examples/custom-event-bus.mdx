@@ -83,6 +83,100 @@ Registry event-bus names are unique. Use `'bullmq'` here only when you want to
 own that built-in slot explicitly; duplicate registrations fail instead of
 quietly overriding an earlier factory.
 
+## Kafka event bus and connectors
+
+Use `@lastshotlabs/slingshot-kafka` when Slingshot events need to cross process
+boundaries through Kafka, or when you need to bridge the internal event bus to
+external Kafka topics.
+
+```bash
+bun add @lastshotlabs/slingshot-kafka kafkajs
+```
+
+### Via manifest
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "handlers": "slingshot.handlers.ts",
+  "eventBus": {
+    "type": "kafka",
+    "config": {
+      "brokers": ["127.0.0.1:9092"],
+      "clientId": "my-app"
+    }
+  },
+  "kafkaConnectors": {
+    "brokers": ["127.0.0.1:9092"],
+    "inbound": [
+      {
+        "topic": "orders.created",
+        "groupId": "billing-sync",
+        "handler": "captureKafkaInbound"
+      }
+    ],
+    "outbound": [
+      {
+        "event": "billing:invoice.created",
+        "topic": "billing.invoice.created"
+      }
+    ]
+  },
+  "secrets": { "provider": "env" }
+}
+```
+
+```typescript title="slingshot.handlers.ts"
+export async function captureKafkaInbound(payload: unknown) {
+  console.log(payload);
+}
+```
+
+The built-in manifest path resolves `@lastshotlabs/slingshot-kafka` only when
+the manifest selects Kafka. Broker addresses can come from
+`eventBus.config.brokers`, `kafkaConnectors.brokers`, or `KAFKA_BROKERS`.
+
+### Via code
+
+```typescript title="src/index.ts"
+import { createApp } from '@lastshotlabs/slingshot';
+import { createKafkaAdapter, createKafkaConnectors } from '@lastshotlabs/slingshot-kafka';
+
+const eventBus = createKafkaAdapter({
+  brokers: ['127.0.0.1:9092'],
+  clientId: 'my-app',
+});
+
+const kafkaConnectors = createKafkaConnectors({
+  brokers: ['127.0.0.1:9092'],
+  inbound: [
+    {
+      topic: 'orders.created',
+      groupId: 'billing-sync',
+      handler: async (payload, metadata) => {
+        console.log(metadata.topic, payload);
+      },
+    },
+  ],
+  outbound: [
+    {
+      event: 'billing:invoice.created',
+      topic: 'billing.invoice.created',
+    },
+  ],
+});
+
+await createApp({
+  eventBus,
+  kafkaConnectors,
+});
+```
+
+Kafka is the right fit when another system already standardizes on Kafka, when
+you need durable replayable topics, or when platform teams own the broker and
+want applications to integrate at the transport boundary instead of inventing a
+custom bus.
+
 ## Redis event bus
 
 ```bash

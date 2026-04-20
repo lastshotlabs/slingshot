@@ -1,14 +1,14 @@
+import { evaluateAuthUserAccess, getAuthRuntimePeerOrNull } from './authPeer';
+import { hmacSign, sha256 } from './crypto';
+import type { EntityRuntimeAdapter } from './entityAdapter';
+import { getEntityPolicyResolver } from './entityPolicy';
 import type {
   EntityRouteDataScopeConfig,
   PolicyAction,
   PolicyDecision,
   PolicyResolver,
 } from './entityRouteConfig';
-import { getAuthRuntimePeerOrNull } from './authPeer';
-import { getEntityPolicyResolver } from './entityPolicy';
-import type { EntityRuntimeAdapter } from './entityAdapter';
-import { HandlerError, type AfterHook, IdempotencyCacheHit, type Guard } from './handler';
-import { hmacSign, sha256 } from './crypto';
+import { type AfterHook, type Guard, HandlerError, IdempotencyCacheHit } from './handler';
 import { getPermissionsStateOrNull } from './permissions';
 import { getRateLimitAdapter } from './rateLimit';
 
@@ -26,23 +26,6 @@ interface IdempotencyState {
   fingerprint: string | null;
   ttl: number;
 }
-
-type AuthAdapterLike = {
-  getSuspended?: (
-    userId: string,
-  ) => Promise<{ suspended: boolean; suspendedReason?: string } | null>;
-  getEmailVerified?: (userId: string) => Promise<boolean | null | undefined>;
-};
-
-type AuthRuntimeLike = {
-  adapter: AuthAdapterLike;
-  config?: {
-    primaryField?: string;
-    emailVerification?: {
-      required?: boolean;
-    } | null;
-  } | null;
-};
 
 function resolvePolicyAction(action: string): PolicyAction {
   if (action.startsWith('operation:')) {
@@ -127,9 +110,7 @@ function derivePermissionSubject(meta: {
   authUserId: string | null;
   bearerClientId?: string | null;
   authClientId?: string | null;
-}):
-  | { subjectId: string; subjectType: 'user' | 'service-account' }
-  | null {
+}): { subjectId: string; subjectType: 'user' | 'service-account' } | null {
   if (meta.authUserId) {
     return { subjectId: meta.authUserId, subjectType: 'user' };
   }
@@ -168,7 +149,7 @@ export function requireUserAuth(): Guard {
   const guard: Guard = async args => {
     await requireAuth()(args);
 
-    const runtime = getAuthRuntimePeerOrNull(args.ctx.pluginState) as AuthRuntimeLike | null;
+    const runtime = getAuthRuntimePeerOrNull(args.ctx.pluginState);
     if (!runtime?.adapter) {
       return;
     }
@@ -178,22 +159,21 @@ export function requireUserAuth(): Guard {
       throw new HandlerError('Unauthorized', { status: 401 });
     }
 
-    const suspension = runtime.adapter.getSuspended
-      ? ((await runtime.adapter.getSuspended(userId)) ?? { suspended: false })
-      : { suspended: false };
-    if (suspension.suspended) {
-      throw new HandlerError('Account suspended', { status: 403 });
-    }
-
-    const requiresVerifiedEmail =
-      runtime.config?.primaryField === 'email' && runtime.config.emailVerification?.required === true;
-    if (!requiresVerifiedEmail || !runtime.adapter.getEmailVerified) {
-      return;
-    }
-
-    const verified = await runtime.adapter.getEmailVerified(userId);
-    if (!verified) {
-      throw new HandlerError('Email not verified', { status: 403 });
+    const decision = await evaluateAuthUserAccess(runtime, {
+      userId,
+      tenantId: args.meta.tenantId,
+      requestId: args.meta.requestId,
+      correlationId: args.meta.correlationId,
+      ip: args.meta.ip,
+      method: args.meta.method,
+      path: args.meta.path,
+      userAgent: args.meta.userAgent,
+    });
+    if (!decision.allow) {
+      throw new HandlerError(decision.message ?? 'Forbidden', {
+        status: decision.status ?? 403,
+        code: decision.code,
+      });
     }
   };
 
@@ -373,10 +353,7 @@ export function rejectScopedFields(fields: readonly string[]): Guard {
 /**
  * Idempotency guard with an auto-paired cache after hook.
  */
-export function idempotent(config?: {
-  ttl?: number;
-  scope?: 'user' | 'tenant' | 'global';
-}): Guard {
+export function idempotent(config?: { ttl?: number; scope?: 'user' | 'tenant' | 'global' }): Guard {
   const state: IdempotencyState = {
     cacheKey: null,
     fingerprint: null,
@@ -427,13 +404,9 @@ export function idempotent(config?: {
     if (!state.cacheKey || !state.fingerprint) {
       return;
     }
-    await ctx.persistence.idempotency.set(
-      state.cacheKey,
-      JSON.stringify(output),
-      200,
-      state.ttl,
-      { requestFingerprint: state.fingerprint },
-    );
+    await ctx.persistence.idempotency.set(state.cacheKey, JSON.stringify(output), 200, state.ttl, {
+      requestFingerprint: state.fingerprint,
+    });
   };
 
   Object.defineProperty(guard, '_afterHook', {
@@ -550,12 +523,15 @@ export async function checkPolicy(
 
   if (decision.allow) return;
 
-  (ctx.bus as unknown as { emit(key: string, payload: unknown): void }).emit('entity:policy.denied', {
-    resolverKey: config.resolver,
-    action: config.action,
-    userId: meta.authUserId,
-    reason: decision.reason,
-  });
+  (ctx.bus as unknown as { emit(key: string, payload: unknown): void }).emit(
+    'entity:policy.denied',
+    {
+      resolverKey: config.resolver,
+      action: config.action,
+      userId: meta.authUserId,
+      reason: decision.reason,
+    },
+  );
   throw new HandlerError(decision.status === 404 ? 'Not found' : 'Forbidden', {
     status: decision.status,
   });

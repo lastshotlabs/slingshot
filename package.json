@@ -142,6 +142,7 @@
     "@lastshotlabs/slingshot-admin": "workspace:*",
     "@lastshotlabs/slingshot-bullmq": "workspace:*",
     "@lastshotlabs/slingshot-community": "workspace:*",
+    "@lastshotlabs/slingshot-kafka": "workspace:*",
     "@lastshotlabs/slingshot-deep-links": "workspace:*",
     "@lastshotlabs/slingshot-interactions": "workspace:*",
     "@lastshotlabs/slingshot-mail": "workspace:*",
@@ -195,6 +196,9 @@
       "optional": true
     },
     "@lastshotlabs/slingshot-community": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-kafka": {
       "optional": true
     },
     "@lastshotlabs/slingshot-deep-links": {

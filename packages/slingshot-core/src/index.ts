@@ -219,8 +219,13 @@ export {
 // --- authVariables ---
 /** Request-context variable typing for auth-aware Hono handlers. */
 export type { AuthVariables } from './authVariables';
-export type { AuthRuntimePeer } from './authPeer';
-export { AUTH_PLUGIN_STATE_KEY, getAuthRuntimePeer, getAuthRuntimePeerOrNull } from './authPeer';
+export type { AuthRuntimePeer, AuthUserAccessDecision, AuthUserAccessInput } from './authPeer';
+export {
+  AUTH_PLUGIN_STATE_KEY,
+  evaluateAuthUserAccess,
+  getAuthRuntimePeer,
+  getAuthRuntimePeerOrNull,
+} from './authPeer';
 export {
   ASSETS_PLUGIN_STATE_KEY,
   CHAT_PLUGIN_STATE_KEY,

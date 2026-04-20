@@ -2,8 +2,8 @@ import { describe, expect, mock, test } from 'bun:test';
 import type { WsState } from '@lastshotlabs/slingshot-core';
 import {
   cleanupSocket,
-  getRooms,
   getRoomSubscribers,
+  getRooms,
   getSubscriptions,
   handleRoomActions,
   publish,
@@ -402,10 +402,16 @@ describe('publish — per-socket path', () => {
     const sentBy1: string[] = [];
     const sentBy2: string[] = [];
     state.socketRegistry.set('sock-1', {
-      sendText(msg: string) { sentBy1.push(msg); return 1; },
+      sendText(msg: string) {
+        sentBy1.push(msg);
+        return 1;
+      },
     } as any);
     state.socketRegistry.set('sock-2', {
-      sendText(msg: string) { sentBy2.push(msg); return 1; },
+      sendText(msg: string) {
+        sentBy2.push(msg);
+        return 1;
+      },
     } as any);
 
     publish(state, '/ws', 'room-1', { msg: 'test' }, { exclude: new Set(['sock-1']) });
@@ -478,7 +484,9 @@ describe('publish — transport fan-out', () => {
     console.error = (...args: unknown[]) => errorCalls.push(args);
 
     state.transport = {
-      publish: async () => { throw new Error('transport down'); },
+      publish: async () => {
+        throw new Error('transport down');
+      },
       connect: async () => {},
       disconnect: async () => {},
     };
@@ -502,7 +510,10 @@ describe('publish — tryAttachMessageId edge cases', () => {
 
     const sentTexts: string[] = [];
     state.socketRegistry.set('sock-1', {
-      sendText(msg: string) { sentTexts.push(msg); return 1; },
+      sendText(msg: string) {
+        sentTexts.push(msg);
+        return 1;
+      },
     } as any);
 
     // Publish a plain string — tryAttachMessageId sees a non-object JSON
@@ -520,7 +531,10 @@ describe('publish — tryAttachMessageId edge cases', () => {
 
     const sentTexts: string[] = [];
     state.socketRegistry.set('sock-1', {
-      sendText(msg: string) { sentTexts.push(msg); return 1; },
+      sendText(msg: string) {
+        sentTexts.push(msg);
+        return 1;
+      },
     } as any);
 
     // Publish an array — tryAttachMessageId sees isJsonObject return false for arrays
@@ -595,7 +609,14 @@ describe('handleRoomActions — recover action with endpoint recovery config', (
       lastEventId: 'evt-1',
     });
 
-    const result = await handleRoomActions(state, ws, msg, undefined, endpointConfig as any, {} as any);
+    const result = await handleRoomActions(
+      state,
+      ws,
+      msg,
+      undefined,
+      endpointConfig as any,
+      {} as any,
+    );
     expect(result).toBe(true);
     // Should have sent a recovered or recover_failed response
     expect(ws.sent.length).toBeGreaterThan(0);
@@ -639,7 +660,10 @@ describe('subscribe / unsubscribe with presence and trackDelivery', () => {
     // Register both sockets to capture sendText calls
     const sentTexts: string[] = [];
     state.socketRegistry.set('sock-2', {
-      sendText(msg: string) { sentTexts.push(msg); return 1; },
+      sendText(msg: string) {
+        sentTexts.push(msg);
+        return 1;
+      },
     } as any);
 
     subscribe(state, ws1, 'room-1');
@@ -652,7 +676,11 @@ describe('subscribe / unsubscribe with presence and trackDelivery', () => {
 
     // presence_leave should be published via per-socket path (trackDelivery)
     const leaveMsg = sentTexts.find(p => {
-      try { return JSON.parse(p).event === 'presence_leave'; } catch { return false; }
+      try {
+        return JSON.parse(p).event === 'presence_leave';
+      } catch {
+        return false;
+      }
     });
     expect(leaveMsg).toBeDefined();
     // lastEventIds should be tracked for sock-2 (the receiver)
@@ -679,7 +707,10 @@ describe('cleanupSocket with presence and trackDelivery', () => {
     // Register sock-2 in socketRegistry to capture per-socket sends
     const sentTexts: string[] = [];
     state.socketRegistry.set('sock-2', {
-      sendText(msg: string) { sentTexts.push(msg); return 1; },
+      sendText(msg: string) {
+        sentTexts.push(msg);
+        return 1;
+      },
     } as any);
 
     subscribe(state, ws1, 'room-a');
@@ -689,7 +720,11 @@ describe('cleanupSocket with presence and trackDelivery', () => {
     cleanupSocket(state, ws1, { trackDelivery: true });
 
     const leaveEvents = sentTexts.filter(p => {
-      try { return JSON.parse(p).event === 'presence_leave'; } catch { return false; }
+      try {
+        return JSON.parse(p).event === 'presence_leave';
+      } catch {
+        return false;
+      }
     });
     expect(leaveEvents.length).toBeGreaterThanOrEqual(1);
   });

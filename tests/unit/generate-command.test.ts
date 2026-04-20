@@ -195,12 +195,7 @@ describe('slingshot generate CLI', () => {
     const manifestPath = join(TMP_ROOT, 'bad.json');
     writeFileSync(manifestPath, '{ not valid json }', 'utf-8');
 
-    const cmd = makeCommand([
-      '--manifest',
-      manifestPath,
-      '--outdir',
-      OUT_DIR,
-    ]);
+    const cmd = makeCommand(['--manifest', manifestPath, '--outdir', OUT_DIR]);
 
     spyOn(cmd, 'log').mockImplementation(() => {});
     spyOn(cmd, 'error').mockImplementation((msg: string) => {
@@ -214,12 +209,7 @@ describe('slingshot generate CLI', () => {
     const manifestPath = join(TMP_ROOT, 'bad-schema.json');
     writeFileSync(manifestPath, JSON.stringify({ wrong: 'data' }), 'utf-8');
 
-    const cmd = makeCommand([
-      '--manifest',
-      manifestPath,
-      '--outdir',
-      OUT_DIR,
-    ]);
+    const cmd = makeCommand(['--manifest', manifestPath, '--outdir', OUT_DIR]);
 
     spyOn(cmd, 'log').mockImplementation(() => {});
     spyOn(cmd, 'error').mockImplementation((msg: string) => {

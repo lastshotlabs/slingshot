@@ -1,5 +1,5 @@
-import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { OpenAPIHono } from '@hono/zod-openapi';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { defineEntity, field } from '@lastshotlabs/slingshot-core';
 import type { AppEnv, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
@@ -275,12 +275,16 @@ describe('runPlugin* functions — no tracer branch', () => {
   test('runPluginTeardown collects all errors into AggregateError (line 328+)', async () => {
     const p1: SlingshotPlugin = {
       name: 'a',
-      teardown: async () => { throw new Error('a failed'); },
+      teardown: async () => {
+        throw new Error('a failed');
+      },
       setupPost: async () => {},
     };
     const p2: SlingshotPlugin = {
       name: 'b',
-      teardown: async () => { throw new Error('b failed'); },
+      teardown: async () => {
+        throw new Error('b failed');
+      },
       setupPost: async () => {},
     };
     await expect(runPluginTeardown([p1, p2])).rejects.toThrow(AggregateError);
@@ -289,7 +293,9 @@ describe('runPlugin* functions — no tracer branch', () => {
   test('runPluginTeardown wraps non-Error throws', async () => {
     const plugin: SlingshotPlugin = {
       name: 'non-error',
-      teardown: async () => { throw 'string-error'; },
+      teardown: async () => {
+        throw 'string-error';
+      },
       setupPost: async () => {},
     };
     try {

@@ -299,10 +299,7 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
       findById: (id: string) => ({
         lean: () => Promise.resolve(store.get(id) ?? null),
       }),
-      findByIdAndUpdate: async (
-        id: string,
-        update: { $set: { names: string[] } },
-      ) => {
+      findByIdAndUpdate: async (id: string, update: { $set: { names: string[] } }) => {
         store.set(id, { names: update.$set.names });
         return null;
       },
@@ -326,9 +323,8 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
 
   test('getAll returns empty set when no document exists', async () => {
     const { conn, mg } = makeMockMongoose();
-    const { createMongoCronRegistry } = await import(
-      '../../src/framework/persistence/cronRegistry'
-    );
+    const { createMongoCronRegistry } =
+      await import('../../src/framework/persistence/cronRegistry');
     const repo = createMongoCronRegistry(
       () => conn as any,
       () => mg as any,
@@ -340,9 +336,8 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
 
   test('save and getAll round-trip', async () => {
     const { conn, mg } = makeMockMongoose();
-    const { createMongoCronRegistry } = await import(
-      '../../src/framework/persistence/cronRegistry'
-    );
+    const { createMongoCronRegistry } =
+      await import('../../src/framework/persistence/cronRegistry');
     const repo = createMongoCronRegistry(
       () => conn as any,
       () => mg as any,
@@ -359,9 +354,8 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
     // Pre-populate models to simulate second call
     conn.models['CronSchedulerRegistry'] = model;
 
-    const { createMongoCronRegistry } = await import(
-      '../../src/framework/persistence/cronRegistry'
-    );
+    const { createMongoCronRegistry } =
+      await import('../../src/framework/persistence/cronRegistry');
     const repo = createMongoCronRegistry(
       () => conn as any,
       () => mg as any,
@@ -387,9 +381,8 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
       // eslint-disable-next-line @typescript-eslint/no-extraneous-class
       Schema: class {},
     };
-    const { createMongoCronRegistry } = await import(
-      '../../src/framework/persistence/cronRegistry'
-    );
+    const { createMongoCronRegistry } =
+      await import('../../src/framework/persistence/cronRegistry');
     const repo = createMongoCronRegistry(
       () => conn as any,
       () => mg as any,
@@ -403,10 +396,7 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
     const store = new Map<string, { names: string[] }>();
     const model = {
       findById: (id: string) => ({ lean: () => Promise.resolve(store.get(id) ?? null) }),
-      findByIdAndUpdate: async (
-        id: string,
-        update: { $set: { names: string[] } },
-      ) => {
+      findByIdAndUpdate: async (id: string, update: { $set: { names: string[] } }) => {
         store.set(id, { names: update.$set.names });
         return null;
       },
@@ -420,9 +410,8 @@ describe('createMongoCronRegistry — mongodb adapter', () => {
       // eslint-disable-next-line @typescript-eslint/no-extraneous-class
       Schema: class {},
     };
-    const { createMongoCronRegistry } = await import(
-      '../../src/framework/persistence/cronRegistry'
-    );
+    const { createMongoCronRegistry } =
+      await import('../../src/framework/persistence/cronRegistry');
     const repo = createMongoCronRegistry(
       () => conn as any,
       () => mg as any,
@@ -449,7 +438,9 @@ describe('cronRegistryFactories', () => {
     const store = new Map<string, string>();
     const redis = {
       get: async (key: string) => store.get(key) ?? null,
-      set: async (key: string, value: string) => { store.set(key, value); },
+      set: async (key: string, value: string) => {
+        store.set(key, value);
+      },
     };
     const infra = {
       getRedis: () => redis,
@@ -465,8 +456,13 @@ describe('cronRegistryFactories', () => {
     const table: string[] = [];
     const db = {
       run: (sql: string, params?: unknown[]) => {
-        if (sql.includes('DELETE FROM')) { table.length = 0; return; }
-        if (sql.includes('INSERT INTO') && params) { table.push(params[0] as string); }
+        if (sql.includes('DELETE FROM')) {
+          table.length = 0;
+          return;
+        }
+        if (sql.includes('INSERT INTO') && params) {
+          table.push(params[0] as string);
+        }
       },
       query: <T>() => ({
         all: () => table.map(name => ({ name }) as unknown as T),

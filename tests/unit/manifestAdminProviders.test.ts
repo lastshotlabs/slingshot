@@ -33,7 +33,10 @@ function mockAuthRuntime(adapterOverrides: Record<string, unknown> = {}) {
 function mockPermissionsState() {
   const grants: unknown[] = [];
   const adapter = {
-    createGrant: (grant: unknown) => { grants.push(grant); return Promise.resolve(grant as never); },
+    createGrant: (grant: unknown) => {
+      grants.push(grant);
+      return Promise.resolve(grant as never);
+    },
     revokeGrant: () => Promise.resolve(),
     getGrantsForSubject: () => Promise.resolve([]),
     getEffectiveGrantsForSubject: () => Promise.resolve([]),
@@ -253,10 +256,7 @@ describe('createDeferredAdminProviders', () => {
   it('managedUserProvider.getUser returns null when user not found (line 150)', async () => {
     const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
     const pluginState = new Map<string, unknown>();
-    pluginState.set(
-      'slingshot-auth',
-      mockAuthRuntime({ getUser: async () => null }),
-    );
+    pluginState.set('slingshot-auth', mockAuthRuntime({ getUser: async () => null }));
     result.bind(pluginState);
     const user = await result.managedUserProvider!.getUser('u1');
     expect(user).toBeNull();
@@ -327,7 +327,11 @@ describe('createDeferredAdminProviders', () => {
     let deleted: string | undefined;
     pluginState.set(
       'slingshot-auth',
-      mockAuthRuntime({ deleteUser: async (id: string) => { deleted = id; } }),
+      mockAuthRuntime({
+        deleteUser: async (id: string) => {
+          deleted = id;
+        },
+      }),
     );
     result.bind(pluginState);
     await result.managedUserProvider!.deleteUser('u1');
@@ -353,7 +357,9 @@ describe('createDeferredAdminProviders', () => {
       await result.permissions!.evaluator.can(subject, 'read');
     } catch (err) {
       threw = true;
-      expect((err as Error).message).toContain('[manifestAdminProviders] Permissions state not bound.');
+      expect((err as Error).message).toContain(
+        '[manifestAdminProviders] Permissions state not bound.',
+      );
     }
     expect(threw).toBe(true);
   });

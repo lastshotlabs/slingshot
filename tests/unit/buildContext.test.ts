@@ -243,7 +243,7 @@ describe('ReadonlySet view — full method coverage', () => {
 
     // forEach with thisArg
     const collector = { items: [] as string[] };
-    paths.forEach(function(this: typeof collector, value) {
+    paths.forEach(function (this: typeof collector, value) {
       this.items.push(value);
     }, collector);
     expect(collector.items).toEqual(['/x', '/y', '/z']);
@@ -263,7 +263,6 @@ describe('ReadonlySet view — full method coverage', () => {
     expect(iterItems).toEqual(['/x', '/y', '/z']);
   });
 });
-
 
 describe('finalizeContext', () => {
   test('replaces registrar-owned fields and refreshes mutable maps from the snapshot', () => {
@@ -694,8 +693,14 @@ describe('buildContext lifecycle', () => {
       userResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
-      cacheAdapters: new Map([['memory', cacheAdapter1], ['redis', cacheAdapter2]]),
-      emailTemplates: new Map([['welcome', { subject: 'Hi' }], ['reset', { subject: 'Reset' }]]),
+      cacheAdapters: new Map([
+        ['memory', cacheAdapter1],
+        ['redis', cacheAdapter2],
+      ]),
+      emailTemplates: new Map([
+        ['welcome', { subject: 'Hi' }],
+        ['reset', { subject: 'Reset' }],
+      ]),
     });
 
     // size
@@ -728,7 +733,9 @@ describe('buildContext lifecycle', () => {
     expect([...ctx.emailTemplates.keys()]).toContain('welcome');
     expect([...ctx.emailTemplates.values()].length).toBe(2);
     const emailForEach: string[] = [];
-    ctx.emailTemplates.forEach((_v, k) => { emailForEach.push(k); });
+    ctx.emailTemplates.forEach((_v, k) => {
+      emailForEach.push(k);
+    });
     expect(emailForEach).toEqual(['welcome', 'reset']);
     expect([...ctx.emailTemplates].length).toBe(2);
   });
@@ -747,10 +754,18 @@ describe('buildContext lifecycle', () => {
           },
           storeInfra: {
             appName: 'ws-app',
-            getRedis: () => { throw new Error('not configured'); },
-            getMongo: () => { throw new Error('not configured'); },
-            getSqliteDb: () => { throw new Error('not configured'); },
-            getPostgres: () => { throw new Error('not configured'); },
+            getRedis: () => {
+              throw new Error('not configured');
+            },
+            getMongo: () => {
+              throw new Error('not configured');
+            },
+            getSqliteDb: () => {
+              throw new Error('not configured');
+            },
+            getPostgres: () => {
+              throw new Error('not configured');
+            },
           },
         },
       } as any,
@@ -783,19 +798,22 @@ describe('buildContext lifecycle', () => {
       userResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
-      cacheAdapters: new Map([['a', 'adapter-a'], ['b', 'adapter-b']]),
+      cacheAdapters: new Map([
+        ['a', 'adapter-a'],
+        ['b', 'adapter-b'],
+      ]),
       emailTemplates: new Map([['t1', { subject: 'S1' }]]),
     });
 
     // Exercise the forEach thisArg path on ReadonlyMap (line 178-181)
     const collector = { keys: [] as string[] };
-    ctx.cacheAdapters.forEach(function(this: typeof collector, _v: unknown, k: unknown) {
+    ctx.cacheAdapters.forEach(function (this: typeof collector, _v: unknown, k: unknown) {
       this.keys.push(k as string);
     }, collector);
     expect(collector.keys).toEqual(['a', 'b']);
 
     const emailCollector = { names: [] as string[] };
-    ctx.emailTemplates.forEach(function(this: typeof emailCollector, _v: unknown, k: string) {
+    ctx.emailTemplates.forEach(function (this: typeof emailCollector, _v: unknown, k: string) {
       this.names.push(k);
     }, emailCollector);
     expect(emailCollector.names).toEqual(['t1']);
@@ -896,13 +914,15 @@ describe('buildContext lifecycle', () => {
     const { ctx } = await createDirectContext({
       infra: {
         persistence: {
-          idempotency: null,       // null — clearIfPresent sees null
-          uploadRegistry: {},      // no clear method
-          wsMessages: undefined,   // undefined
+          idempotency: null, // null — clearIfPresent sees null
+          uploadRegistry: {}, // no clear method
+          wsMessages: undefined, // undefined
           auditLog: {},
           cronRegistry: {},
           configureRoom() {},
-          getRoomConfig() { return null; },
+          getRoomConfig() {
+            return null;
+          },
           setDefaults() {},
         },
       } as any,

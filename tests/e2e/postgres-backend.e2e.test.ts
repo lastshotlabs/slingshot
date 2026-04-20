@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { resolveTestDbConfig } from './helpers/backend-factory';
 import { type E2EServerHandle, createTestHttpServer } from '../setup-e2e';
+import { resolveTestDbConfig } from './helpers/backend-factory';
 
 const isPostgresE2e =
   resolveTestDbConfig().auth === 'postgres' && resolveTestDbConfig().sessions === 'postgres';
@@ -15,11 +15,9 @@ describe.skipIf(!isPostgresE2e)('Postgres backend E2E', () => {
   let handle: E2EServerHandle;
 
   beforeAll(async () => {
-    handle = await createTestHttpServer(
-      { metrics: { enabled: true } },
-      undefined,
-      { resetBackend: true },
-    );
+    handle = await createTestHttpServer({ metrics: { enabled: true } }, undefined, {
+      resetBackend: true,
+    });
   });
 
   afterAll(async () => {

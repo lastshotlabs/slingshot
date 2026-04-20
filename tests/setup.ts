@@ -53,7 +53,8 @@ export function adminPlugin(overrides: Partial<SlingshotAdminPluginConfig> = {})
 export function authPlugin(overrides: Partial<AuthPluginConfig> = {}): SlingshotPlugin {
   const { auth, db, security, ...restOverrides } = overrides;
   const adapter =
-    auth?.adapter ?? (db?.auth === undefined || db.auth === 'memory' ? createMemoryAuthAdapter() : undefined);
+    auth?.adapter ??
+    (db?.auth === undefined || db.auth === 'memory' ? createMemoryAuthAdapter() : undefined);
   const authConfig: NonNullable<AuthPluginConfig['auth']> = {
     roles: ['admin', 'user'],
     defaultRole: 'user',

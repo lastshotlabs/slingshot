@@ -139,11 +139,19 @@ describe('loadWorkers', () => {
       throw new Error('Redis unavailable');
     });
     spyOn(queueModule, 'createQueueFactory').mockReturnValue({
-      createQueue: mock(() => { throw new Error('not used'); }),
-      createWorker: mock(() => { throw new Error('not used'); }),
-      createCronWorker: mock(() => { throw new Error('not used'); }),
+      createQueue: mock(() => {
+        throw new Error('not used');
+      }),
+      createWorker: mock(() => {
+        throw new Error('not used');
+      }),
+      createCronWorker: mock(() => {
+        throw new Error('not used');
+      }),
       cleanupStaleSchedulers,
-      createDLQHandler: mock(() => { throw new Error('not used'); }),
+      createDLQHandler: mock(() => {
+        throw new Error('not used');
+      }),
     } as unknown as never);
 
     const save = mock(async () => {});

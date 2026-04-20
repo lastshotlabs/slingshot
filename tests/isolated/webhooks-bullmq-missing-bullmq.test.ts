@@ -15,9 +15,8 @@ mock.module('ioredis', () => ({
 let createBullMQWebhookQueue: typeof import('../../packages/slingshot-webhooks/src/queues/bullmq').createBullMQWebhookQueue;
 
 beforeAll(async () => {
-  ({ createBullMQWebhookQueue } = await import(
-    '../../packages/slingshot-webhooks/src/queues/bullmq'
-  ));
+  ({ createBullMQWebhookQueue } =
+    await import('../../packages/slingshot-webhooks/src/queues/bullmq'));
 });
 
 describe('webhook BullMQ queue missing bullmq dependency', () => {

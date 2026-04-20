@@ -377,13 +377,19 @@ describe('Manifest → Runtime Integration', () => {
     expect(m1.id).toBeDefined();
 
     // Operations work
-    const byRoom = await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({ roomId: 'r1' });
+    const byRoom = await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({
+      roomId: 'r1',
+    });
     expect(byRoom.items.length).toBe(1);
 
-    const delivered = await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({ id: m1.id });
+    const delivered = await (
+      adapter as Record<string, (...args: unknown[]) => unknown>
+    ).markDelivered({ id: m1.id });
     expect(delivered.status).toBe('delivered');
 
-    const searchResults = await (adapter as Record<string, (...args: unknown[]) => unknown>).searchContent('hello');
+    const searchResults = await (
+      adapter as Record<string, (...args: unknown[]) => unknown>
+    ).searchContent('hello');
     expect(searchResults.length).toBe(1);
   });
 
@@ -397,13 +403,10 @@ describe('Manifest → Runtime Integration', () => {
   it('custom ops execute on runtime adapter', async () => {
     const registry = createEntityHandlerRegistry();
     // HandlerFactory: (params?) => (backendDriver) => handler
-    registry.register(
-      'double-score',
-      () => () => async (record: Record<string, unknown>) => ({
-        ...record,
-        score: (record.score as number) * 2,
-      }),
-    );
+    registry.register('double-score', () => () => async (record: Record<string, unknown>) => ({
+      ...record,
+      score: (record.score as number) * 2,
+    }));
 
     const manifest = {
       name: 'Item',

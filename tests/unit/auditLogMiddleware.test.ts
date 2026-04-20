@@ -72,7 +72,11 @@ describe('auditLog middleware', () => {
 
   test('skips logging for excluded methods', async () => {
     const provider = makeMockProvider();
-    const middleware = auditLog({ store: 'memory', provider, exclude: { methods: ['GET', 'HEAD'] } });
+    const middleware = auditLog({
+      store: 'memory',
+      provider,
+      exclude: { methods: ['GET', 'HEAD'] },
+    });
 
     const ctx = makeContext({ method: 'GET', path: '/api/data', status: 200 });
     await middleware(ctx, async () => {});
@@ -94,7 +98,11 @@ describe('auditLog middleware', () => {
 
   test('skips logging for excluded string paths', async () => {
     const provider = makeMockProvider();
-    const middleware = auditLog({ store: 'memory', provider, exclude: { paths: ['/health', '/metrics'] } });
+    const middleware = auditLog({
+      store: 'memory',
+      provider,
+      exclude: { paths: ['/health', '/metrics'] },
+    });
 
     const ctx = makeContext({ method: 'GET', path: '/health', status: 200 });
     await middleware(ctx, async () => {});
@@ -168,7 +176,7 @@ describe('auditLog middleware', () => {
     const middleware = auditLog({
       store: 'memory',
       provider,
-      onEntry: (entry) => ({
+      onEntry: entry => ({
         ...entry,
         action: 'custom.action',
         resource: 'MyResource',
@@ -213,7 +221,7 @@ describe('auditLog middleware', () => {
     const middleware = auditLog({
       store: 'memory',
       provider,
-      onEntry: async (entry) => {
+      onEntry: async entry => {
         await new Promise(r => setTimeout(r, 0));
         return { ...entry, resourceId: 'async-resource-id' };
       },

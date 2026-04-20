@@ -1766,3 +1766,115 @@ tests\integration\sqlite-mfa.test.ts:
 tests\integration\sqlite-passwordreset.test.ts:
 (pass) SQLite password reset > forgot password sends reset email [328.00ms]
 (pass) SQLite password reset > reset password with valid token works [516.00ms]
+(pass) SQLite password reset > login with new password succeeds [718.00ms]
+(pass) SQLite password reset > reset with already-used token fails [469.00ms]
+
+tests\integration\sqlite-refresh.test.ts:
+(pass) SQLite refresh tokens > register returns refreshToken [156.00ms]
+(pass) SQLite refresh tokens > POST /auth/refresh rotates tokens [188.00ms]
+(pass) SQLite refresh tokens > grace window: old refresh token still works within window [140.00ms]
+(pass) SQLite refresh tokens > theft detection: old token after grace window invalidates session [2281.00ms]
+(pass) SQLite refresh tokens > invalid refresh token returns 401 [16.00ms]
+
+tests\integration\sqlite.test.ts:
+(pass) SQLite adapter > register creates user and returns token [156.00ms]
+(pass) SQLite adapter > login with valid credentials [266.00ms]
+(pass) SQLite adapter > login rejects invalid password [234.00ms]
+(pass) SQLite adapter > session listing works [125.00ms]
+(pass) SQLite adapter > logout invalidates session [125.00ms]
+(pass) SQLite adapter > multiple logins create separate sessions [391.00ms]
+(pass) SQLite adapter > delete session by sessionId [281.00ms]
+(pass) SQLite adapter > GET /auth/me returns user info [125.00ms]
+(pass) SQLite adapter > duplicate email registration returns 409 [203.00ms]
+(pass) SQLite adapter > set-password changes password [484.00ms]
+(pass) SQLite adapter > DELETE /auth/me with password deletes account [438.00ms]
+(pass) SQLite adapter > DELETE /auth/me without password returns 400 [125.00ms]
+(pass) SQLite cache (default store) > first request returns cache MISS
+(pass) SQLite cache (default store) > second request returns cache HIT [15.00ms]
+
+tests\integration\startup-safety.test.ts:
+(pass) startup safety — emailVerification > throws when emailVerification is set and primaryField is 'username' [16.00ms]
+(pass) startup safety — emailVerification > throws when emailVerification is set and primaryField is 'phone'
+(pass) startup safety — passwordReset > throws when passwordReset is set and primaryField is 'username'
+(pass) startup safety — passwordReset > throws when passwordReset is set and primaryField is 'phone'
+(pass) startup safety — defaultRole > throws when defaultRole is set on an adapter that does not implement setRoles
+(pass) startup safety — OAuth allowedRedirectUrls > does not throw when postRedirect is in allowedRedirectUrls
+(pass) startup safety — OAuth allowedRedirectUrls > does not throw for relative postRedirect (always allowed)
+[security] CORS is set to wildcard (*) in production. Configure security.cors with specific origins to restrict cross-origin access.
+(pass) startup safety — tenancy in production > throws in production when tenancy is configured without onResolve [16.00ms]
+[security] Tenancy is configured without an onResolve callback — tenant IDs will be trusted without validation. This is unsafe in production.
+(pass) startup safety — tenancy in production > does not throw in development when tenancy has no onResolve (warns only)
+[security] CORS is set to wildcard (*) in production. Configure security.cors with specific origins to restrict cross-origin access.
+[slingshot] csrfProtection: checkOrigin is enabled but no specific allowed origins are configured (CORS is "*" or allowedOrigins is unset). Origin validation is disabled — only the HMAC double-submit cookie check is active. Set security.cors to specific origins to enable origin validation.
+(pass) startup safety — CORS + CSRF > does not throw in production when csrf.enabled and cors is wildcard (warns only)
+[slingshot] csrfProtection: checkOrigin is enabled but no specific allowed origins are configured (CORS is "*" or allowedOrigins is unset). Origin validation is disabled — only the HMAC double-submit cookie check is active. Set security.cors to specific origins to enable origin validation.
+(pass) startup safety — CORS + CSRF > does not throw in development when csrf.enabled and cors is wildcard [15.00ms]
+(pass) startup safety — CORS + CSRF > does not throw when csrf.enabled and cors is specific origin
+[security] CORS is set to wildcard (*) in production. Configure security.cors with specific origins to restrict cross-origin access.
+(pass) startup safety — jobs endpoint > throws in production when jobs.statusEndpoint and no auth
+[security] CORS is set to wildcard (*) in production. Configure security.cors with specific origins to restrict cross-origin access.
+(pass) startup safety — jobs endpoint > does not throw when jobs.statusEndpoint with auth: none and unsafePublic: true [16.00ms]
+[security] CORS is set to wildcard (*) in production. Configure security.cors with specific origins to restrict cross-origin access.
+(pass) startup safety — metrics endpoint > throws in production when metrics.enabled and no auth
+[security] CORS is set to wildcard (*) in production. Configure security.cors with specific origins to restrict cross-origin access.
+(pass) startup safety — metrics endpoint > does not throw when metrics.enabled with auth: none and unsafePublic: true [16.00ms]
+
+tests\integration\step-up.test.ts:
+73 |     const token = await makeSessionToken('user1', 'sess1');
+74 |     const app = buildApp();
+75 |     const res = await app.request('/sensitive', {
+76 |       headers: { 'x-user-token': token },
+77 |     });
+78 |     expect(res.status).toBe(403);
+                            ^
+error: expect(received).toBe(expected)
+
+Expected: 403
+Received: 500
+
+      at <anonymous> (C:\Users\email\projects\slingshot\tests\integration\step-up.test.ts:78:24)
+(fail) requireStepUp > blocks when mfaVerifiedAt is not set [15.00ms]
+85 |     await setMfaVerifiedAt(sessionRepo, 'sess1');
+86 |     const app = buildApp(300);
+87 |     const res = await app.request('/sensitive', {
+88 |       headers: { 'x-user-token': token },
+89 |     });
+90 |     expect(res.status).toBe(200);
+                            ^
+error: expect(received).toBe(expected)
+
+Expected: 200
+Received: 500
+
+      at <anonymous> (C:\Users\email\projects\slingshot\tests\integration\step-up.test.ts:90:24)
+(fail) requireStepUp > allows when mfaVerifiedAt is recent
+91 |   });
+92 | 
+93 |   test('blocks unauthenticated requests', async () => {
+94 |     const app = buildApp();
+95 |     const res = await app.request('/sensitive');
+96 |     expect(res.status).toBe(401);
+                            ^
+error: expect(received).toBe(expected)
+
+Expected: 401
+Received: 500
+
+      at <anonymous> (C:\Users\email\projects\slingshot\tests\integration\step-up.test.ts:96:24)
+(fail) requireStepUp > blocks unauthenticated requests
+(pass) setMfaVerifiedAt / getMfaVerifiedAt > returns null before setting
+(pass) setMfaVerifiedAt / getMfaVerifiedAt > returns timestamp after setting
+
+tests\integration\storage-combinations.test.ts:
+(pass) storage: all memory > starts and runs auth flow [141.00ms]
+(pass) storage: all sqlite > starts and runs auth flow [156.00ms]
+(pass) storage: sqlite sessions, memory auth, memory cache > starts and runs auth flow [141.00ms]
+(pass) storage: memory sessions, sqlite auth, memory cache > starts and runs auth flow [109.00ms]
+(pass) storage: memory sessions, memory auth, sqlite cache > starts and runs auth flow with cached route [141.00ms]
+(pass) storage: sqlite sessions, sqlite auth, memory cache > starts and runs auth flow [125.00ms]
+(pass) storage: sqlite sessions, memory auth, sqlite cache > starts and runs auth flow [156.00ms]
+(pass) storage: memory sessions, sqlite auth, sqlite cache > starts and runs auth flow [140.00ms]
+(pass) storage: smart defaults with sqlite path only > defaults all stores to sqlite when only sqlite path is given [141.00ms]
+(pass) storage: smart defaults with everything disabled > defaults to memory when mongo and redis are disabled [125.00ms]
+(pass) storage: oauthState on different store than sessions > sqlite sessions + memory oauthState [125.00ms]
+(pass) storage: oauthState on different store than sessions > memory sessions + sqlite oauthState [125.00ms]

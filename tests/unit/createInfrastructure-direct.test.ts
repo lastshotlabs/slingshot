@@ -529,11 +529,14 @@ describe('createInfrastructure direct', () => {
       },
     });
 
-    expect(connectPostgresMock).toHaveBeenCalledWith('postgres://slingshot:test@localhost:5432/app', {
-      pool: undefined,
-      migrations: undefined,
-      healthcheckTimeoutMs: undefined,
-    });
+    expect(connectPostgresMock).toHaveBeenCalledWith(
+      'postgres://slingshot:test@localhost:5432/app',
+      {
+        pool: undefined,
+        migrations: undefined,
+        healthcheckTimeoutMs: undefined,
+      },
+    );
     expect(infra.postgres).toMatchObject({
       connectionString: 'postgres://slingshot:test@localhost:5432/app',
     });
@@ -686,7 +689,9 @@ describe('createInfrastructure direct', () => {
     // When postgres connects but a later step fails (bad data encryption key),
     // cleanupOpenInfrastructure calls postgresDb.pool.end(). If that throws,
     // the error is swallowed (best-effort).
-    const poolEndMock = mock(async () => { throw new Error('pg pool.end failed'); });
+    const poolEndMock = mock(async () => {
+      throw new Error('pg pool.end failed');
+    });
     connectPostgresMock.mockResolvedValueOnce({
       pool: {
         end: poolEndMock,
@@ -724,7 +729,9 @@ describe('createInfrastructure direct', () => {
   });
 
   test('cleanup swallows postgres pool.end() error during rollback (lines 229-231)', async () => {
-    const poolEndMock = mock(async () => { throw new Error('pg pool end failed'); });
+    const poolEndMock = mock(async () => {
+      throw new Error('pg pool end failed');
+    });
     connectPostgresMock.mockResolvedValueOnce({
       pool: {
         end: poolEndMock,

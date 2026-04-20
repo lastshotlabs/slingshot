@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  RESOLVE_COMPOSITE_FACTORIES,
+  RESOLVE_ENTITY_FACTORIES,
+  RESOLVE_REINDEX_SOURCE,
   createEntityRegistry,
   createInProcessAdapter,
   defineEntity,
   field,
-  RESOLVE_COMPOSITE_FACTORIES,
-  RESOLVE_ENTITY_FACTORIES,
-  RESOLVE_REINDEX_SOURCE,
 } from '@lastshotlabs/slingshot-core';
 import { createContextStoreInfra } from '../../src/framework/persistence/createContextStoreInfra';
 import {
@@ -386,7 +386,9 @@ describe('resolveSearchSync helper (via RESOLVE_SEARCH_SYNC)', () => {
     const pluginState = new Map<string, unknown>();
     const indexedDocs: unknown[] = [];
     const mockSearchClient = {
-      indexDocument: async (doc: unknown) => { indexedDocs.push(doc); },
+      indexDocument: async (doc: unknown) => {
+        indexedDocs.push(doc);
+      },
       removeDocument: async () => {},
       search: async () => ({ hits: [], total: 0 }),
     };
@@ -415,7 +417,9 @@ describe('resolveSearchSync helper (via RESOLVE_SEARCH_SYNC)', () => {
     const removedIds: string[] = [];
     const mockSearchClient = {
       indexDocument: async () => {},
-      removeDocument: async (id: string) => { removedIds.push(id); },
+      removeDocument: async (id: string) => {
+        removedIds.push(id);
+      },
       search: async () => ({ hits: [], total: 0 }),
     };
     pluginState.set('slingshot-search', {
@@ -507,7 +511,9 @@ describe('search integration (via symbols)', () => {
     const pluginState = new Map<string, unknown>();
     let ensureCalled = false;
     pluginState.set('slingshot-search', {
-      ensureConfigEntity: async () => { ensureCalled = true; },
+      ensureConfigEntity: async () => {
+        ensureCalled = true;
+      },
       getSearchClient: () => null,
     });
 
@@ -531,7 +537,9 @@ describe('search integration (via symbols)', () => {
     const entityRegistry = createEntityRegistry();
     const pluginState = new Map<string, unknown>();
     pluginState.set('slingshot-search', {
-      ensureConfigEntity: async () => { throw new Error('search init failed'); },
+      ensureConfigEntity: async () => {
+        throw new Error('search init failed');
+      },
       getSearchClient: () => null,
     });
 
@@ -551,7 +559,9 @@ describe('search integration (via symbols)', () => {
     await new Promise(r => setTimeout(r, 10));
     // Entity should still be registered
     const allEntities = entityRegistry.getAll();
-    expect(allEntities.some((e: any) => e._storageName === SearchableEntity._storageName)).toBe(true);
+    expect(allEntities.some((e: any) => e._storageName === SearchableEntity._storageName)).toBe(
+      true,
+    );
   });
 
   test('RESOLVE_REINDEX_SOURCE default returns null', () => {
@@ -672,7 +682,9 @@ describe('search integration (via symbols)', () => {
     const pluginState = new Map<string, unknown>();
     let ensureCalled = false;
     pluginState.set('slingshot-search', {
-      ensureConfigEntity: async () => { ensureCalled = true; },
+      ensureConfigEntity: async () => {
+        ensureCalled = true;
+      },
       getSearchClient: () => null,
     });
 
@@ -765,7 +777,9 @@ describe('search integration (via symbols)', () => {
     const pluginState = new Map<string, unknown>();
     let ensureCalled = false;
     pluginState.set('slingshot-search', {
-      ensureConfigEntity: async () => { ensureCalled = true; },
+      ensureConfigEntity: async () => {
+        ensureCalled = true;
+      },
       getSearchClient: () => ({
         indexDocument: async () => {},
         removeDocument: async () => {},

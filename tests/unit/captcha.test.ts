@@ -176,7 +176,7 @@ describe('verifyCaptcha', () => {
 
   test('calls recaptcha verify URL', async () => {
     let calledUrl: string | null = null;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async (url) => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async url => {
       calledUrl = url as string;
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     });
@@ -189,7 +189,7 @@ describe('verifyCaptcha', () => {
 
   test('calls hcaptcha verify URL', async () => {
     let calledUrl: string | null = null;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async (url) => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async url => {
       calledUrl = url as string;
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     });
@@ -202,7 +202,7 @@ describe('verifyCaptcha', () => {
 
   test('calls turnstile verify URL', async () => {
     let calledUrl: string | null = null;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async (url) => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async url => {
       calledUrl = url as string;
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     });
@@ -218,16 +218,14 @@ describe('verifyCaptcha', () => {
 // requireCaptcha middleware tests
 // ---------------------------------------------------------------------------
 
-function makeMiddlewareContext(overrides: {
-  body?: Record<string, unknown>;
-  slingshotCtx?: object | null;
-  method?: string;
-} = {}) {
-  const {
-    body = {},
-    slingshotCtx = null,
-    method = 'POST',
-  } = overrides;
+function makeMiddlewareContext(
+  overrides: {
+    body?: Record<string, unknown>;
+    slingshotCtx?: object | null;
+    method?: string;
+  } = {},
+) {
+  const { body = {}, slingshotCtx = null, method = 'POST' } = overrides;
 
   const store = new Map<string, unknown>();
   if (slingshotCtx !== null) {
@@ -281,9 +279,10 @@ describe('requireCaptcha middleware', () => {
     const middleware = requireCaptcha({ provider: 'hcaptcha', secretKey: 'secret' });
     const ctx = makeMiddlewareContext({ body: {} }); // no token field
 
-    await expect(
-      middleware(ctx, async () => {}),
-    ).rejects.toMatchObject({ status: 400, code: 'CAPTCHA_MISSING' });
+    await expect(middleware(ctx, async () => {})).rejects.toMatchObject({
+      status: 400,
+      code: 'CAPTCHA_MISSING',
+    });
   });
 
   test('throws 400 CAPTCHA_MISSING when custom tokenField is absent', async () => {
@@ -294,9 +293,10 @@ describe('requireCaptcha middleware', () => {
     });
     const ctx = makeMiddlewareContext({ body: { 'captcha-token': 'wrong-field' } });
 
-    await expect(
-      middleware(ctx, async () => {}),
-    ).rejects.toMatchObject({ status: 400, code: 'CAPTCHA_MISSING' });
+    await expect(middleware(ctx, async () => {})).rejects.toMatchObject({
+      status: 400,
+      code: 'CAPTCHA_MISSING',
+    });
   });
 
   test('throws 400 CAPTCHA_FAILED when verification fails', async () => {
@@ -309,9 +309,10 @@ describe('requireCaptcha middleware', () => {
     const middleware = requireCaptcha({ provider: 'hcaptcha', secretKey: 'secret' });
     const ctx = makeMiddlewareContext({ body: { 'captcha-token': 'bad-token' } });
 
-    await expect(
-      middleware(ctx, async () => {}),
-    ).rejects.toMatchObject({ status: 400, code: 'CAPTCHA_FAILED' });
+    await expect(middleware(ctx, async () => {})).rejects.toMatchObject({
+      status: 400,
+      code: 'CAPTCHA_FAILED',
+    });
 
     fetchSpy.mockRestore();
   });
@@ -366,8 +367,9 @@ describe('requireCaptcha middleware', () => {
     };
 
     // With empty body (parse error), body={}, so token is missing → 400 CAPTCHA_MISSING
-    await expect(
-      middleware(ctx, async () => {}),
-    ).rejects.toMatchObject({ status: 400, code: 'CAPTCHA_MISSING' });
+    await expect(middleware(ctx, async () => {})).rejects.toMatchObject({
+      status: 400,
+      code: 'CAPTCHA_MISSING',
+    });
   });
 });

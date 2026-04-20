@@ -1,6 +1,11 @@
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { COOKIE_TOKEN, HttpError, ValidationError, createRouter } from '@lastshotlabs/slingshot-core';
+import {
+  COOKIE_TOKEN,
+  HttpError,
+  ValidationError,
+  createRouter,
+} from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
 import { createTestApp } from '../setup';
 

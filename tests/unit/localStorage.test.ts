@@ -160,7 +160,10 @@ describe('localStorage — defaultFs paths (lines 14-16)', () => {
   it('defaultFs.write writes data correctly', async () => {
     // Direct write+read cycle using only defaultFs
     const adapter = localStorage({ directory: dir });
-    await adapter.put('write-test.txt', new Uint8Array([72, 73]), { mimeType: 'text/plain', size: 2 });
+    await adapter.put('write-test.txt', new Uint8Array([72, 73]), {
+      mimeType: 'text/plain',
+      size: 2,
+    });
     const f = Bun.file(join(dir, 'write-test.txt'));
     expect(await f.exists()).toBe(true);
     expect(await f.text()).toBe('HI');

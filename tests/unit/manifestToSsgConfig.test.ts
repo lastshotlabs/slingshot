@@ -89,7 +89,9 @@ describe('manifestToSsgConfig', () => {
       } as any,
     };
 
-    expect(() => manifestToSsgConfig(manifest)).toThrow('[manifestToSsgConfig] Missing required handler ref');
+    expect(() => manifestToSsgConfig(manifest)).toThrow(
+      '[manifestToSsgConfig] Missing required handler ref',
+    );
   });
 
   it('throws when assetsManifest string is missing (requireString — line 52)', () => {
@@ -110,7 +112,9 @@ describe('manifestToSsgConfig', () => {
       } as any,
     };
 
-    expect(() => manifestToSsgConfig(manifest, registry)).toThrow('[manifestToSsgConfig] Missing required string value');
+    expect(() => manifestToSsgConfig(manifest, registry)).toThrow(
+      '[manifestToSsgConfig] Missing required string value',
+    );
   });
 
   it('rejects inline JSON assets manifest (lines 92-93)', () => {

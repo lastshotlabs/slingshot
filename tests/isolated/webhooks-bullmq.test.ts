@@ -198,9 +198,8 @@ function makeJobInput(overrides: Partial<JobInput> = {}): JobInput {
 
 beforeAll(async () => {
   resetModuleExports();
-  ({ createBullMQWebhookQueue } = await import(
-    '../../packages/slingshot-webhooks/src/queues/bullmq'
-  ));
+  ({ createBullMQWebhookQueue } =
+    await import('../../packages/slingshot-webhooks/src/queues/bullmq'));
 });
 
 beforeEach(() => {

@@ -4,7 +4,12 @@ import type {
   SlingshotEventBus,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
-import { deepFreeze, getPluginState, validatePluginConfig } from '@lastshotlabs/slingshot-core';
+import {
+  deepFreeze,
+  getPluginState,
+  getRouteAuthOrNull,
+  validatePluginConfig,
+} from '@lastshotlabs/slingshot-core';
 import { deliverWebhook } from './lib/dispatcher';
 import { wireEventSubscriptions } from './lib/eventWiring';
 import { createWebhookMemoryQueue } from './queues/memory';
@@ -18,8 +23,43 @@ import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
 
+/**
+ * Runs a Hono middleware and returns its response if it blocked (did not call
+ * `next()`), or `null` if it passed through.
+ */
+async function runGuardMiddleware(
+  middleware: MiddlewareHandler,
+  c: Parameters<MiddlewareHandler>[0],
+): Promise<Response | null> {
+  let nextCalled = false;
+  const result = await middleware(c, async () => {
+    nextCalled = true;
+  });
+  if (nextCalled) return null;
+  return result instanceof Response ? result : c.res;
+}
+
+/**
+ * Builds an admin guard middleware that resolves and checks the required role.
+ *
+ * When the full framework context is available (auth plugin registered), it
+ * delegates to `routeAuth.requireRole()` which resolves effective roles from the
+ * adapter (respecting tenant scoping). When running standalone (no auth plugin),
+ * it falls back to reading `c.get('roles')` directly — the host app is
+ * responsible for populating roles on the context.
+ */
 function buildRoleGuard(role: string): MiddlewareHandler {
   return async (c, next) => {
+    const slingshotCtx = c.get('slingshotCtx') as Parameters<typeof getRouteAuthOrNull>[0] | undefined;
+    if (slingshotCtx) {
+      const routeAuth = getRouteAuthOrNull(slingshotCtx);
+      if (routeAuth) {
+        const blocked = await runGuardMiddleware(routeAuth.requireRole(role), c);
+        if (blocked) return blocked;
+        return next();
+      }
+    }
+    // Standalone: roles already on context from host app middleware
     const roles = c.get('roles') as string[] | null | undefined;
     if (!roles || !roles.includes(role)) {
       return c.json({ error: 'Forbidden' }, 403);

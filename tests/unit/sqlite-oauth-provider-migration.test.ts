@@ -4,9 +4,10 @@ import { createSqliteAuthAdapter } from '@lastshotlabs/slingshot-auth';
 
 function tableExists(db: Database, tableName: string): boolean {
   const row = db
-    .query<{ name: string }, [string]>(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
-    )
+    .query<
+      { name: string },
+      [string]
+    >("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
     .get(tableName);
   return row !== null;
 }
@@ -41,9 +42,10 @@ describe('SQLite auth migration v4 — oauth_provider_links backfill', () => {
     );
 
     const versionRow = db
-      .query<{ version: number }, [string]>(
-        'SELECT version FROM _slingshot_migrations WHERE subsystem = ?',
-      )
+      .query<
+        { version: number },
+        [string]
+      >('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
       .get('auth');
     expect(versionRow?.version).toBe(3);
     expect(tableExists(db, 'oauth_provider_links')).toBe(false);
@@ -72,17 +74,19 @@ describe('SQLite auth migration v4 — oauth_provider_links backfill', () => {
     createSqliteAuthAdapter(db);
 
     const versionRow = db
-      .query<{ version: number }, [string]>(
-        'SELECT version FROM _slingshot_migrations WHERE subsystem = ?',
-      )
+      .query<
+        { version: number },
+        [string]
+      >('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
       .get('auth');
     const users = db
-      .query<{ providerIds: string }, []>('SELECT providerIds FROM users WHERE id = \'user-a\'')
+      .query<{ providerIds: string }, []>("SELECT providerIds FROM users WHERE id = 'user-a'")
       .get();
     const links = db
-      .query<{ provider: string; providerUserId: string; userId: string }, []>(
-        'SELECT provider, providerUserId, userId FROM oauth_provider_links ORDER BY provider, providerUserId',
-      )
+      .query<
+        { provider: string; providerUserId: string; userId: string },
+        []
+      >('SELECT provider, providerUserId, userId FROM oauth_provider_links ORDER BY provider, providerUserId')
       .all();
 
     expect(versionRow?.version).toBe(4);

@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test';
 import { createSqliteInitializer } from '@auth/lib/sqliteInit';
+import { describe, expect, test } from 'bun:test';
 import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 
 function createMockDb(options?: {

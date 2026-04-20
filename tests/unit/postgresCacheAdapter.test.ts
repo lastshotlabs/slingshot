@@ -92,9 +92,8 @@ describe('postgresCacheAdapter', () => {
     fresh.failOn(
       'CREATE TABLE IF NOT EXISTS cache_entries ( key TEXT PRIMARY KEY, value TEXT NOT NULL, expires_at TIMESTAMPTZ )',
     );
-    const { createPostgresCacheAdapter } = await import(
-      '../../src/framework/boundaryAdapters/postgresCacheAdapter'
-    );
+    const { createPostgresCacheAdapter } =
+      await import('../../src/framework/boundaryAdapters/postgresCacheAdapter');
 
     await expect(createPostgresCacheAdapter(fresh.pool)).rejects.toThrow('forced failure');
     expect(fresh.calls.map(c => c.sql)).toContain('ROLLBACK');
@@ -216,9 +215,8 @@ describe('postgresCacheAdapter', () => {
     };
 
     const fresh = createMockPool();
-    const { createPostgresCacheAdapter } = await import(
-      '../../src/framework/boundaryAdapters/postgresCacheAdapter'
-    );
+    const { createPostgresCacheAdapter } =
+      await import('../../src/framework/boundaryAdapters/postgresCacheAdapter');
     await createPostgresCacheAdapter(fresh.pool);
 
     globalThis.setInterval = originalSetInterval;
@@ -259,9 +257,8 @@ describe('postgresCacheAdapter', () => {
       return originalQuery(sql, params);
     };
 
-    const { createPostgresCacheAdapter } = await import(
-      '../../src/framework/boundaryAdapters/postgresCacheAdapter'
-    );
+    const { createPostgresCacheAdapter } =
+      await import('../../src/framework/boundaryAdapters/postgresCacheAdapter');
     await createPostgresCacheAdapter(fresh.pool);
 
     globalThis.setInterval = originalSetInterval;

@@ -8,6 +8,7 @@
  *   - cursorResponse (lines 77-85)
  */
 import { describe, expect, test } from 'bun:test';
+import { z } from 'zod';
 import {
   cursorParams,
   cursorResponse,
@@ -15,7 +16,6 @@ import {
   parseCursorParams,
 } from '../../src/framework/lib/pagination';
 import { signCursor, verifyCursor } from '../../src/lib/signing';
-import { z } from 'zod';
 
 // ---------------------------------------------------------------------------
 // cursorParams — schema shape and default descriptions
@@ -86,42 +86,38 @@ describe('parseCursorParams coverage', () => {
   });
 
   test('returns cursor as-is when signing config cursors is false', () => {
-    const result = parseCursorParams(
-      { cursor: 'my-cursor' },
-      undefined,
-      { config: { cursors: false } as any, secret: 'secret' },
-    );
+    const result = parseCursorParams({ cursor: 'my-cursor' }, undefined, {
+      config: { cursors: false } as any,
+      secret: 'secret',
+    });
     expect(result.cursor).toBe('my-cursor');
   });
 
   test('returns cursor as-is when signing secret is null', () => {
-    const result = parseCursorParams(
-      { cursor: 'my-cursor' },
-      undefined,
-      { config: { cursors: true } as any, secret: null },
-    );
+    const result = parseCursorParams({ cursor: 'my-cursor' }, undefined, {
+      config: { cursors: true } as any,
+      secret: null,
+    });
     expect(result.cursor).toBe('my-cursor');
   });
 
   test('verifies and returns decoded cursor when signing is active', () => {
     const secret = 'test-secret-for-pagination-coverage';
     const signed = signCursor('page-5', secret);
-    const result = parseCursorParams(
-      { cursor: signed },
-      undefined,
-      { config: { cursors: true } as any, secret },
-    );
+    const result = parseCursorParams({ cursor: signed }, undefined, {
+      config: { cursors: true } as any,
+      secret,
+    });
     expect(result.cursor).toBe('page-5');
     expect(result.invalidCursor).toBeUndefined();
   });
 
   test('returns invalidCursor when signed cursor is tampered', () => {
     const secret = 'test-secret-for-pagination-coverage';
-    const result = parseCursorParams(
-      { cursor: 'tampered.value' },
-      undefined,
-      { config: { cursors: true } as any, secret },
-    );
+    const result = parseCursorParams({ cursor: 'tampered.value' }, undefined, {
+      config: { cursors: true } as any,
+      secret,
+    });
     expect(result.cursor).toBeUndefined();
     expect(result.invalidCursor).toBe(true);
   });
@@ -192,6 +188,8 @@ describe('cursorResponse coverage', () => {
   test('items must match the provided item schema', () => {
     const itemSchema = z.object({ required: z.string() });
     const schema = cursorResponse(itemSchema, 'PaginationCoverageTest_Validate');
-    expect(() => schema.parse({ items: [{ wrong: 1 }], nextCursor: null, hasMore: false })).toThrow();
+    expect(() =>
+      schema.parse({ items: [{ wrong: 1 }], nextCursor: null, hasMore: false }),
+    ).toThrow();
   });
 });

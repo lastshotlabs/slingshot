@@ -58,7 +58,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 async function closeSocket(ws: WebSocket): Promise<void> {
   if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
     await Promise.race([
-      new Promise<void>(r => { ws.addEventListener('close', () => r(), { once: true }); ws.close(); }),
+      new Promise<void>(r => {
+        ws.addEventListener('close', () => r(), { once: true });
+        ws.close();
+      }),
       new Promise<void>(r => setTimeout(r, 500)),
     ]);
   }
@@ -158,7 +161,9 @@ describe('WS handler on.close callback', () => {
         endpoints: {
           '/ws-close': {
             on: {
-              close: async () => { closeFired = true; },
+              close: async () => {
+                closeFired = true;
+              },
             },
           },
         },
@@ -186,7 +191,11 @@ describe('WS handler error catching', () => {
       ws: {
         endpoints: {
           '/ws-open-err': {
-            on: { open: async () => { throw new Error('open hook error'); } },
+            on: {
+              open: async () => {
+                throw new Error('open hook error');
+              },
+            },
           },
         },
       },
@@ -196,9 +205,11 @@ describe('WS handler error catching', () => {
     await withTimeout(waitForOpen(ws), 2_000, 'open');
     await withTimeout(waitForMessage(ws), 2_000, 'connected');
     await new Promise(r => setTimeout(r, 150));
-    expect(errorSpy.mock.calls.some((c: unknown[]) =>
-      typeof c[0] === 'string' && c[0].includes('open error'),
-    )).toBe(true);
+    expect(
+      errorSpy.mock.calls.some(
+        (c: unknown[]) => typeof c[0] === 'string' && c[0].includes('open error'),
+      ),
+    ).toBe(true);
     errorSpy.mockRestore();
   });
 
@@ -211,7 +222,11 @@ describe('WS handler error catching', () => {
       ws: {
         endpoints: {
           '/ws-msg-err': {
-            on: { message: async () => { throw new Error('message hook error'); } },
+            on: {
+              message: async () => {
+                throw new Error('message hook error');
+              },
+            },
           },
         },
       },
@@ -222,9 +237,11 @@ describe('WS handler error catching', () => {
     await withTimeout(waitForMessage(ws), 2_000, 'connected');
     ws.send('trigger');
     await new Promise(r => setTimeout(r, 150));
-    expect(errorSpy.mock.calls.some((c: unknown[]) =>
-      typeof c[0] === 'string' && c[0].includes('message error'),
-    )).toBe(true);
+    expect(
+      errorSpy.mock.calls.some(
+        (c: unknown[]) => typeof c[0] === 'string' && c[0].includes('message error'),
+      ),
+    ).toBe(true);
     errorSpy.mockRestore();
   });
 
@@ -237,7 +254,11 @@ describe('WS handler error catching', () => {
       ws: {
         endpoints: {
           '/ws-close-err': {
-            on: { close: async () => { throw new Error('close hook error'); } },
+            on: {
+              close: async () => {
+                throw new Error('close hook error');
+              },
+            },
           },
         },
       },
@@ -249,9 +270,11 @@ describe('WS handler error catching', () => {
     ws.close();
     await withTimeout(waitForClose(ws), 2_000, 'close');
     await new Promise(r => setTimeout(r, 150));
-    expect(errorSpy.mock.calls.some((c: unknown[]) =>
-      typeof c[0] === 'string' && c[0].includes('close error'),
-    )).toBe(true);
+    expect(
+      errorSpy.mock.calls.some(
+        (c: unknown[]) => typeof c[0] === 'string' && c[0].includes('close error'),
+      ),
+    ).toBe(true);
     errorSpy.mockRestore();
   });
 });

@@ -241,7 +241,13 @@ describe('requestLogger middleware', () => {
     const logs: RequestLogEntry[] = [];
     const app = new Hono<AppEnv>();
     app.use(requestId);
-    app.use(requestLogger({ onLog: entry => { logs.push(entry); } }));
+    app.use(
+      requestLogger({
+        onLog: entry => {
+          logs.push(entry);
+        },
+      }),
+    );
     app.use(async () => {
       throw 'string-error';
     });
@@ -257,7 +263,13 @@ describe('requestLogger middleware', () => {
     const logs: RequestLogEntry[] = [];
     const app = new Hono<AppEnv>();
     app.use(requestId);
-    app.use(requestLogger({ onLog: entry => { logs.push(entry); } }));
+    app.use(
+      requestLogger({
+        onLog: entry => {
+          logs.push(entry);
+        },
+      }),
+    );
     app.use(async () => {
       throw 42;
     });
@@ -273,10 +285,14 @@ describe('requestLogger middleware', () => {
     const logs: RequestLogEntry[] = [];
     const app = new Hono<AppEnv>();
     app.use(requestId);
-    app.use(requestLogger({
-      level: 'error',
-      onLog: entry => { logs.push(entry); },
-    }));
+    app.use(
+      requestLogger({
+        level: 'error',
+        onLog: entry => {
+          logs.push(entry);
+        },
+      }),
+    );
     app.get('/ok', c => c.json({ ok: true }, 200));
 
     await app.request('/ok');
@@ -289,10 +305,15 @@ describe('requestLogger middleware', () => {
     const logs: RequestLogEntry[] = [];
     const app = new Hono<AppEnv>();
     app.use(requestId);
-    app.use(requestLogger({ onLog: entry => { logs.push(entry); } }));
+    app.use(
+      requestLogger({
+        onLog: entry => {
+          logs.push(entry);
+        },
+      }),
+    );
     // Throw a plain object — not an Error instance
     app.use(async () => {
-       
       throw { code: 'CUSTOM', detail: 'custom error' };
     });
 

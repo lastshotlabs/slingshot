@@ -1,14 +1,7 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 type SpawnCalls = Array<{ cmd: string[]; env?: Record<string, string | undefined> }>;
 
@@ -118,33 +111,37 @@ describe('script entrypoints', () => {
 
     const writes: string[] = [];
     const destroyed: string[] = [];
-    await smokeModule.runExamplesSmoke(registry as never, { error() {}, log: message => writes.push(message) }, {
-      root: tempDir,
-      stdout: { write: message => writes.push(String(message)) },
-      importModuleFn: async (entrypoint: string) => {
-        if (entrypoint.endsWith('index.ts')) {
-          return {
-            buildAppConfig: () => ({ plugins: [{ name: 'auth' }] }),
-          };
-        }
-        if (entrypoint.endsWith('module.ts')) {
-          return {
-            buildAppConfig: () => ({ plugins: [{ name: 'auth' }] }),
-          };
-        }
-        return { handle() {} };
-      },
-      createAppFn: async () =>
-        ({
-          app: {},
-          ctx: {
-            destroy: async () => {
-              destroyed.push('destroyed');
+    await smokeModule.runExamplesSmoke(
+      registry as never,
+      { error() {}, log: message => writes.push(message) },
+      {
+        root: tempDir,
+        stdout: { write: message => writes.push(String(message)) },
+        importModuleFn: async (entrypoint: string) => {
+          if (entrypoint.endsWith('index.ts')) {
+            return {
+              buildAppConfig: () => ({ plugins: [{ name: 'auth' }] }),
+            };
+          }
+          if (entrypoint.endsWith('module.ts')) {
+            return {
+              buildAppConfig: () => ({ plugins: [{ name: 'auth' }] }),
+            };
+          }
+          return { handle() {} };
+        },
+        createAppFn: async () =>
+          ({
+            app: {},
+            ctx: {
+              destroy: async () => {
+                destroyed.push('destroyed');
+              },
             },
-          },
-        }) as never,
-      validateAppManifestFn: () => ({ success: true, errors: [] }) as never,
-    });
+          }) as never,
+        validateAppManifestFn: () => ({ success: true, errors: [] }) as never,
+      },
+    );
 
     expect(writes.join('\n')).toContain('examples:smoke alpha:code-app');
     expect(writes.filter(line => line === 'ok')).toHaveLength(3);
@@ -192,9 +189,15 @@ describe('script entrypoints', () => {
       >;
     }) as typeof Bun.spawn;
 
-    expect(runCoverageFilesModule.parseArgs(['--coverage-dir', coverageDir, '--label', 'demo', 'a.test.ts']).label).toBe(
-      'demo',
-    );
+    expect(
+      runCoverageFilesModule.parseArgs([
+        '--coverage-dir',
+        coverageDir,
+        '--label',
+        'demo',
+        'a.test.ts',
+      ]).label,
+    ).toBe('demo');
     expect(
       await runCoverageFilesModule.runCoverageFiles(
         [
@@ -273,10 +276,9 @@ describe('script entrypoints', () => {
     expect(
       await runRuntimeNodeCoverageModule.runRuntimeNodeCoverage(
         createSpawnStub(cmd => {
-          const coverageDir =
-            cmd.includes('vitest')
-              ? join('coverage', 'runtime-node', '.runs', 'vitest')
-              : join('coverage', 'runtime-node', '.runs', 'bun');
+          const coverageDir = cmd.includes('vitest')
+            ? join('coverage', 'runtime-node', '.runs', 'vitest')
+            : join('coverage', 'runtime-node', '.runs', 'bun');
           mkdirSync(coverageDir, { recursive: true });
           writeFileSync(
             join(coverageDir, 'lcov.info'),
@@ -348,7 +350,7 @@ describe('script entrypoints', () => {
                 ? 'SF:scripts/ensure-pagefind-link.ts'
                 : cmd[1] === 'scripts/run-runtime-node-coverage.ts'
                   ? 'SF:packages/runtime-node/src/index.ts'
-                : 'SF:scripts/examples-coverage.ts',
+                  : 'SF:scripts/examples-coverage.ts',
               'LF:1',
               'LH:1',
               'end_of_record',
@@ -363,7 +365,9 @@ describe('script entrypoints', () => {
         }),
       ),
     ).toBe(0);
-    expect(readFileSync(join(suiteRoot, 'root', 'lcov.info'), 'utf8')).not.toContain('SF:src/index.ts');
+    expect(readFileSync(join(suiteRoot, 'root', 'lcov.info'), 'utf8')).not.toContain(
+      'SF:src/index.ts',
+    );
     expect(readFileSync(join(suiteRoot, 'pkg', 'lcov.info'), 'utf8')).toContain(
       'SF:scripts/examples-coverage.ts',
     );
@@ -447,11 +451,15 @@ describe('script entrypoints', () => {
         log: message => logs.push(message),
         stdout: {
           write: chunk =>
-            stdoutChunks.push(typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true })),
+            stdoutChunks.push(
+              typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true }),
+            ),
         },
         stderr: {
           write: chunk =>
-            stderrChunks.push(typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true })),
+            stderrChunks.push(
+              typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true }),
+            ),
         },
       }),
     ).toBe(1);

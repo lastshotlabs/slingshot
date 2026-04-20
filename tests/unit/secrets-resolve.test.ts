@@ -1,7 +1,7 @@
 import {
   resolveSecretBundle,
-  resolveSecretRepoFromInput,
   resolveSecretRepo,
+  resolveSecretRepoFromInput,
   secretRepositoryFactories,
 } from '@framework/secrets';
 import { resolveSecrets } from '@framework/secrets/resolveSecrets';

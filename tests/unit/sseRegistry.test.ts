@@ -7,7 +7,6 @@ function makeClient(id = 'client-1') {
   return { id, userId: null, endpoint };
 }
 
-
 describe('createSseRegistry', () => {
   test('createClientStream returns a ReadableStream', () => {
     const registry = createSseRegistry();
@@ -187,7 +186,9 @@ describe('createSseRegistry', () => {
     // When the filter resolves true, enqueue will throw because the
     // controller is already closed, triggering the catch block.
     let resolveFilter!: (val: boolean) => void;
-    const filterPromise = new Promise<boolean>(r => { resolveFilter = r; });
+    const filterPromise = new Promise<boolean>(r => {
+      resolveFilter = r;
+    });
     const slowFilter = () => filterPromise;
 
     // Start fanout with the slow filter — it won't enqueue until the filter resolves
@@ -219,7 +220,12 @@ describe('createSseRegistry', () => {
     console.error = errorSpy;
 
     const rejectingFilter = () => Promise.reject(new Error('filter boom'));
-    registry.fanout(endpoint, 'community:thread.created' as any, { id: '1' }, rejectingFilter as any);
+    registry.fanout(
+      endpoint,
+      'community:thread.created' as any,
+      { id: '1' },
+      rejectingFilter as any,
+    );
 
     // Allow the async filter promise to reject and trigger the catch
     await new Promise(r => setTimeout(r, 20));

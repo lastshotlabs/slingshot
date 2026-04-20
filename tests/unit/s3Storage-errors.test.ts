@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test';
 import { resolve } from 'node:path';
+import { describe, expect, test } from 'bun:test';
 
 // ---------------------------------------------------------------------------
 // s3Storage — error paths for missing AWS SDK packages
@@ -14,7 +14,9 @@ import { resolve } from 'node:path';
 
 const srcRoot = resolve(import.meta.dir, '..', '..').replace(/\\/g, '/');
 
-async function runScript(script: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+async function runScript(
+  script: string,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const proc = Bun.spawn(['bun', '--eval', script], {
     cwd: resolve(import.meta.dir, '..', '..'),
     stdin: 'pipe',

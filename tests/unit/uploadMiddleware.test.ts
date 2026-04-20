@@ -9,8 +9,8 @@ import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import { attachContext } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { handleUpload } from '../../src/framework/middleware/upload';
 import { memoryStorage } from '../../src/framework/adapters/memoryStorage';
+import { handleUpload } from '../../src/framework/middleware/upload';
 
 function makeSlingshotCtx(
   app: object,

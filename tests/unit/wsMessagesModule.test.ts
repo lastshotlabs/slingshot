@@ -7,9 +7,8 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import { attachContext } from '@lastshotlabs/slingshot-core';
 import type { RoomPersistenceConfig, WsMessageRepository } from '@lastshotlabs/slingshot-core';
-import { persistMessage, getMessageHistory, configureRoom } from '../../src/framework/ws/messages';
 import { createMemoryWsMessageRepository } from '../../src/framework/persistence/wsMessages';
-
+import { configureRoom, getMessageHistory, persistMessage } from '../../src/framework/ws/messages';
 
 function buildAppWithPersistence(opts: {
   wsMessages?: WsMessageRepository;
@@ -17,7 +16,8 @@ function buildAppWithPersistence(opts: {
 }) {
   const app = new Hono();
   const wsMessages = opts.wsMessages ?? createMemoryWsMessageRepository();
-  const roomConfigs = opts.configuredRooms ?? new Map<string, { maxCount: number; ttlSeconds: number }>();
+  const roomConfigs =
+    opts.configuredRooms ?? new Map<string, { maxCount: number; ttlSeconds: number }>();
 
   const ctx = {
     app,
@@ -121,9 +121,7 @@ describe('persistMessage', () => {
 
     const result = await persistMessage('/ws', 'room1', { payload: 'test' }, app);
 
-    expect(result?.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-    );
+    expect(result?.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
   test('message createdAt is a recent timestamp', async () => {
@@ -172,10 +170,19 @@ describe('getMessageHistory', () => {
 
   test('delegates to persistence.wsMessages.getHistory', async () => {
     const mockRepo: WsMessageRepository = {
-      async persist(msg) { return msg; },
+      async persist(msg) {
+        return msg;
+      },
       async getHistory(endpoint, room) {
         return [
-          { id: 'test-id', endpoint, room, senderId: null, payload: 'from-mock', createdAt: Date.now() },
+          {
+            id: 'test-id',
+            endpoint,
+            room,
+            senderId: null,
+            payload: 'from-mock',
+            createdAt: Date.now(),
+          },
         ];
       },
       async clear() {},

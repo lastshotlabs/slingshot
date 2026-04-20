@@ -7,6 +7,7 @@
  * on a function), so isRedisConstructor is checked next (line 36).
  */
 import { describe, expect, mock, test } from 'bun:test';
+import { createRedisTransport } from '../../src/framework/ws/redisTransport';
 
 function createMockRedisInstance() {
   return {
@@ -39,8 +40,6 @@ mock.module('ioredis', () => {
   MockRedis.prototype = {};
   return { default: MockRedis, __esModule: true };
 });
-
-import { createRedisTransport } from '../../src/framework/ws/redisTransport';
 
 describe('requireIoredis — direct constructor path (line 36)', () => {
   test('connect succeeds when require returns a direct constructor function', async () => {

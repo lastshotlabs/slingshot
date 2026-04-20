@@ -1878,3 +1878,197 @@ tests\integration\storage-combinations.test.ts:
 (pass) storage: smart defaults with everything disabled > defaults to memory when mongo and redis are disabled [125.00ms]
 (pass) storage: oauthState on different store than sessions > sqlite sessions + memory oauthState [125.00ms]
 (pass) storage: oauthState on different store than sessions > memory sessions + sqlite oauthState [125.00ms]
+(pass) storage: features with mixed stores > email verification with sqlite sessions + memory auth [141.00ms]
+(pass) storage: features with mixed stores > password reset with sqlite sessions + memory auth [15.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) storage: features with mixed stores > MFA with all-sqlite stores [16.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) storage: features with mixed stores > MFA with memory sessions + sqlite auth
+(pass) storage: features with mixed stores > refresh tokens with sqlite sessions + memory auth [156.00ms]
+(pass) storage: features with mixed stores > refresh tokens with all-memory stores [188.00ms]
+(pass) storage: auth disabled with different stores > sqlite cache + auth disabled [15.00ms]
+(pass) storage: auth disabled with different stores > all memory + auth disabled [16.00ms]
+
+tests\integration\suspension.test.ts:
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) suspension — login enforcement > suspended user cannot login [343.00ms]
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) suspension — login enforcement > unsuspended user can login again [328.00ms]
+(pass) suspension — login enforcement > non-suspended user login succeeds [360.00ms]
+(pass) suspension — getSuspended / setSuspended helpers > default suspension status is false
+(pass) suspension — getSuspended / setSuspended helpers > setSuspended with reason
+
+tests\integration\tenancy-middleware.test.ts:
+(pass) tenancy middleware — header resolution > resolves tenant from x-tenant-id header [32.00ms]
+(pass) tenancy middleware — header resolution > returns 400 when no tenant header is present
+(pass) tenancy middleware — header resolution > rejects unknown tenant (onResolve returns null) with 403 [46.00ms]
+(pass) tenancy middleware — header resolution > skips resolution for /health (exempt path) [32.00ms]
+(pass) tenancy middleware — header resolution > skips resolution for /auth/* paths [15.00ms]
+(pass) tenancy middleware — subdomain resolution > resolves tenant from subdomain [32.00ms]
+(pass) tenancy middleware — subdomain resolution > returns 400 when host has no subdomain (fewer than 3 parts) [31.00ms]
+(pass) tenancy middleware — subdomain resolution > rejects unknown subdomain tenant [31.00ms]
+(pass) tenancy middleware — path resolution > resolves tenant from first path segment [31.00ms]
+(pass) tenancy middleware — path resolution > rejects unknown first path segment tenant [32.00ms]
+(pass) tenancy middleware — LRU cache > calls onResolve only once for repeated requests with same tenantId [15.00ms]
+(pass) tenancy middleware — LRU cache > calls onResolve again after cache invalidation [16.00ms]
+(pass) tenancy middleware — custom rejectionStatus > uses custom rejectionStatus when onResolve returns null [15.00ms]
+[security] Tenancy is configured without an onResolve callback — tenant IDs will be trusted without validation. This is unsafe in production.
+(pass) tenancy middleware — no onResolve (dev mode) > trusts the tenant header without validation [32.00ms]
+[security] Tenancy is configured without an onResolve callback — tenant IDs will be trusted without validation. This is unsafe in production.
+(pass) tenancy middleware — no onResolve (dev mode) > still returns 400 when no tenant header is provided [31.00ms]
+
+tests\integration\token-extensibility.test.ts:
+(pass) signToken — object form > signs with sub + sid [46.00ms]
+(pass) signToken — object form > signs M2M token (scope, no sid)
+(pass) iss/aud/iat claims > iat is always included [79.00ms]
+(pass) iss/aud/iat claims > iss and aud included when configured [15.00ms]
+(pass) iss/aud/iat claims > wrong issuer fails verification [47.00ms]
+(pass) iss/aud/iat claims > wrong audience fails verification [16.00ms]
+
+tests\integration\upload.test.ts:
+(pass) handleUpload middleware > sets uploadResults on context for a single file upload
+(pass) handleUpload middleware > returns 400 when MIME type is disallowed
+(pass) handleUpload middleware > returns 400 when max file count is exceeded
+(pass) handleUpload middleware > returns 413 from Content-Length pre-check before parsing body
+(pass) handleUpload middleware > passes meta.bucket when uploadBucket is set on context
+(pass) handleUpload middleware > passes meta.bucket as undefined when uploadBucket is not set
+(pass) parseUpload > returns results directly without setting context variable
+(pass) presigned URL route > returns 501 when adapter does not support presignPut (memory adapter) [15.00ms]
+(pass) presigned URL route > enforces upload.allowedMimeTypes for presigned uploads
+(pass) presigned URL route > rejects requested presigned upload sizes above upload.maxFileSize
+(pass) presigned URL route account-state hardening > blocks stale suspended sessions from minting upload URLs [250.00ms]
+(pass) presigned URL route account-state hardening > blocks stale unverified sessions from presigning downloads [438.00ms]
+(pass) s3Storage bucket selection > uses meta.bucket over config.bucket when present
+(pass) s3Storage bucket selection > falls back to config.bucket when meta.bucket is undefined
+
+tests\integration\user-metadata.test.ts:
+(pass) GET /auth/me — userMetadata > includes userMetadata as empty object for new user [172.00ms]
+(pass) GET /auth/me — userMetadata > does NOT include appMetadata in response [203.00ms]
+(pass) GET /auth/me — userMetadata > reflects userMetadata after it has been set [188.00ms]
+(pass) PATCH /auth/me — userMetadata update > updates userMetadata via PATCH [203.00ms]
+(pass) PATCH /auth/me — userMetadata update > replaces existing userMetadata on subsequent PATCH [187.00ms]
+(pass) PATCH /auth/me — userMetadata update > returns 401 without auth [16.00ms]
+(pass) memoryAuthAdapter — metadata methods > getUserMetadata returns empty for new user [31.00ms]
+(pass) memoryAuthAdapter — metadata methods > setUserMetadata stores and retrieves user metadata [16.00ms]
+(pass) memoryAuthAdapter — metadata methods > setAppMetadata stores and retrieves app metadata [15.00ms]
+(pass) memoryAuthAdapter — metadata methods > setUserMetadata does NOT affect appMetadata [16.00ms]
+(pass) memoryAuthAdapter — metadata methods > setAppMetadata does NOT affect userMetadata [16.00ms]
+(pass) memoryAuthAdapter — metadata methods > getUser includes userMetadata and appMetadata [15.00ms]
+(pass) memoryAuthAdapter — metadata methods > setUserMetadata replaces existing data [32.00ms]
+(pass) memoryAuthAdapter — metadata methods > appMetadata is NOT updated via updateProfile [187.00ms]
+
+tests\integration\userResolver-security.test.ts:
+(pass) auth userResolver upgrade security > rejects stale suspended sessions during upgrade auth [281.00ms]
+(pass) auth userResolver upgrade security > rejects stale unverified sessions during upgrade auth [344.00ms]
+(pass) auth userResolver upgrade security > enforces session binding during upgrade auth [172.00ms]
+
+tests\integration\validationErrors.test.ts:
+(pass) defaultHook path — default formatter > returns structured { error, details, requestId } on validation failure [16.00ms]
+(pass) defaultHook path — default formatter > details contain field path
+(pass) validate() onError path — default formatter > returns structured { error, details, requestId } on validation failure
+(pass) validate() onError path — default formatter > requestId in validate() error matches X-Request-Id response header [15.00ms]
+(pass) custom validation.formatError > defaultHook uses custom formatter
+(pass) custom validation.formatError > validate() onError uses custom formatter [16.00ms]
+(pass) throwing formatError falls back to default formatter > defaultHook falls back to default formatter (not 500)
+(pass) throwing formatError falls back to default formatter > validate() onError falls back to default formatter (not 500)
+
+tests\integration\versioning.test.ts:
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — route isolation > GET /v1/users returns v1 response
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — route isolation > GET /v2/users returns v2 response [16.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — route isolation > v1-only endpoint returns 404 when accessed via /v2
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — route isolation > shared health route available in both versions
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — OpenAPI specs > GET /v1/openapi.json returns 200 JSON
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — OpenAPI specs > GET /v2/openapi.json returns 200 JSON [16.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — OpenAPI specs > v1 spec contains /users path
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — OpenAPI specs > v2 spec contains /users path
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — OpenAPI specs > no cross-version schema leakage — V2 schemas absent from v1 spec [15.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — OpenAPI specs > v1 spec schema names are prefixed with V1
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — docs and redirects > GET /v1/docs returns Scalar HTML
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — docs and redirects > GET /docs returns version selector HTML [16.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — docs and redirects > GET /openapi.json redirects to default version (last in array)
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — docs and redirects > GET /openapi.json redirects to explicit defaultVersion
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — non-versioned behavior unchanged > without versioning config, routes work at root [16.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[identify] token=absent
+[identify] no token — unauthenticated
+(pass) versioning — non-versioned behavior unchanged > without versioning config, /openapi.json serves spec directly [15.00ms]
+
+tests\unit\account-lockout.test.ts:
+(pass) recordFailedAttempt > increments counter and returns new count
+(pass) recordFailedAttempt > tracks separate counters per user
+(pass) isAccountLocked > returns false for a user with no lockout
+(pass) isAccountLocked > returns false after recordFailedAttempt below maxAttempts
+(pass) isAccountLocked > returns true after lockAccount is called
+(pass) lockAccount + unlockAccount > lockAccount sets the lock
+(pass) lockAccount + unlockAccount > unlockAccount clears the lock
+(pass) lockAccount + unlockAccount > unlockAccount also resets the failure counter
+(pass) resetFailureCount > resets the counter so subsequent attempts start fresh
+(pass) resetFailureCount > does not remove an active lock (separate from failure count)
+(pass) resetFailureCount > is safe to call on a user with no recorded failures
+(pass) lockout after maxAttempts via recordFailedAttempt > isAccountLocked is true after explicit lockAccount triggered at maxAttempts
+
+tests\unit\admin-providers\bunshotAccess.test.ts:
+(pass) createSlingshotAuthAccessProvider — verifyRequest > returns null when authUserId is absent from context
+(pass) createSlingshotAuthAccessProvider — verifyRequest > returns null when adapter.getUser returns null/undefined
+(pass) createSlingshotAuthAccessProvider — verifyRequest > returns AdminPrincipal with roles when user is found
+(pass) createSlingshotAuthAccessProvider — verifyRequest > returns empty roles array when adapter.getRoles is not implemented
+
+packages\slingshot-auth\tests\integration\passwordReset.test.ts:
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) POST /auth/forgot-password > returns 200 for registered email [282.00ms]
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) POST /auth/forgot-password > returns 200 for unregistered email (enumeration-safe) [156.00ms]
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) POST /auth/forgot-password > same response shape for registered and unregistered emails [437.00ms]
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) POST /auth/forgot-password > emits delivery event for registered email [500.00ms]
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) POST /auth/forgot-password > does NOT emit delivery event for unregistered email [360.00ms]
+[slingshot] Memory adapter for auth has no eviction — for development/testing only

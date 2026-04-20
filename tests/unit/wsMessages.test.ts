@@ -210,7 +210,7 @@ describe('wsMessages (mongo backend)', () => {
             filtered = filtered.sort((a, b) => {
               const va = key === 'createdAt' ? a.createdAt : a._id;
               const vb = key === 'createdAt' ? b.createdAt : b._id;
-              return dir === 1 ? (va < vb ? -1 : 1) : (va > vb ? -1 : 1);
+              return dir === 1 ? (va < vb ? -1 : 1) : va > vb ? -1 : 1;
             });
             return {
               limit: (n: number) => ({
@@ -361,13 +361,17 @@ describe('wsMessages (mongo backend)', () => {
 
   test('clear swallows errors (best-effort)', async () => {
     const failingModel = {
-      deleteMany: async () => { throw new Error('db error'); },
+      deleteMany: async () => {
+        throw new Error('db error');
+      },
     };
     // Need to also provide findById, find, etc for getModel
     const connModels = {};
     const conn = {
       models: connModels as Record<string, unknown>,
-      model() { return failingModel; },
+      model() {
+        return failingModel;
+      },
     };
     const mg = makeMockMongoose();
     const repo = createMongoWsMessageRepository(conn as any, mg);

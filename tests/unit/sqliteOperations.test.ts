@@ -168,20 +168,26 @@ describe('SQLite Operations Integration', () => {
   describe('op.lookup', () => {
     it('returns many by field match', async () => {
       await seed();
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({ roomId: 'r1' }) as { items: Record<string, unknown>[] };
+      const result = (await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({
+        roomId: 'r1',
+      })) as { items: Record<string, unknown>[] };
       expect(result.items.length).toBe(2);
     });
 
     it('returns one by field match', async () => {
       await seed();
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).getOneByRoom({ roomId: 'r1' }) as Record<string, unknown>;
+      const result = (await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).getOneByRoom({ roomId: 'r1' })) as Record<string, unknown>;
       expect(result).not.toBeNull();
       expect(result.roomId).toBe('r1');
     });
 
     it('returns null for no match (one)', async () => {
       await seed();
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).getOneByRoom({
+      const result = await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).getOneByRoom({
         roomId: 'nonexistent',
       });
       expect(result).toBeNull();
@@ -195,21 +201,33 @@ describe('SQLite Operations Integration', () => {
   describe('op.exists', () => {
     it('returns true when exists with check', async () => {
       const { m1 } = await seed();
-      expect(await (adapter as Record<string, (...args: unknown[]) => unknown>).isSent({ id: m1.id })).toBe(true);
+      expect(
+        await (adapter as Record<string, (...args: unknown[]) => unknown>).isSent({ id: m1.id }),
+      ).toBe(true);
     });
 
     it('returns false after transition', async () => {
       const { m1 } = await seed();
-      await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({ id: m1.id });
-      expect(await (adapter as Record<string, (...args: unknown[]) => unknown>).isSent({ id: m1.id })).toBe(false);
+      await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({
+        id: m1.id,
+      });
+      expect(
+        await (adapter as Record<string, (...args: unknown[]) => unknown>).isSent({ id: m1.id }),
+      ).toBe(false);
     });
 
     it('checks existence without check field', async () => {
       await seed();
-      expect(await (adapter as Record<string, (...args: unknown[]) => unknown>).hasMessages({ roomId: 'r1' })).toBe(true);
-      expect(await (adapter as Record<string, (...args: unknown[]) => unknown>).hasMessages({ roomId: 'nope' })).toBe(
-        false,
-      );
+      expect(
+        await (adapter as Record<string, (...args: unknown[]) => unknown>).hasMessages({
+          roomId: 'r1',
+        }),
+      ).toBe(true);
+      expect(
+        await (adapter as Record<string, (...args: unknown[]) => unknown>).hasMessages({
+          roomId: 'nope',
+        }),
+      ).toBe(false);
     });
   });
 
@@ -220,7 +238,9 @@ describe('SQLite Operations Integration', () => {
   describe('op.transition', () => {
     it('transitions and returns updated record', async () => {
       const { m1 } = await seed();
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({ id: m1.id }) as Record<string, unknown>;
+      const result = (await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).markDelivered({ id: m1.id })) as Record<string, unknown>;
       expect(result).not.toBeNull();
       expect(result.status).toBe('delivered');
 
@@ -231,8 +251,12 @@ describe('SQLite Operations Integration', () => {
 
     it('returns null when precondition fails', async () => {
       const { m1 } = await seed();
-      await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({ id: m1.id });
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({ id: m1.id });
+      await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({
+        id: m1.id,
+      });
+      const result = await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).markDelivered({ id: m1.id });
       expect(result).toBeNull();
     });
   });
@@ -244,10 +268,9 @@ describe('SQLite Operations Integration', () => {
   describe('op.fieldUpdate', () => {
     it('updates specified fields and persists', async () => {
       const { m1 } = await seed();
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).updateContent(
-        { id: m1.id },
-        { content: 'updated' },
-      ) as Record<string, unknown>;
+      const result = (await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).updateContent({ id: m1.id }, { content: 'updated' })) as Record<string, unknown>;
       expect(result.content).toBe('updated');
 
       const fetched = await adapter.getById(m1.id);
@@ -262,7 +285,9 @@ describe('SQLite Operations Integration', () => {
   describe('op.batch', () => {
     it('deletes matching records', async () => {
       await seed();
-      const count = await (adapter as Record<string, (...args: unknown[]) => unknown>).deleteByRoom({ roomId: 'r1' });
+      const count = await (adapter as Record<string, (...args: unknown[]) => unknown>).deleteByRoom(
+        { roomId: 'r1' },
+      );
       expect(count).toBe(2);
 
       const remaining = await adapter.list();
@@ -271,10 +296,14 @@ describe('SQLite Operations Integration', () => {
 
     it('updates matching records', async () => {
       await seed();
-      const count = await (adapter as Record<string, (...args: unknown[]) => unknown>).markAllDelivered({ roomId: 'r1' });
+      const count = await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).markAllDelivered({ roomId: 'r1' });
       expect(count).toBe(2);
 
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({ roomId: 'r1' }) as { items: Record<string, unknown>[] };
+      const result = (await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({
+        roomId: 'r1',
+      })) as { items: Record<string, unknown>[] };
       expect(result.items.every((m: Record<string, unknown>) => m.status === 'delivered')).toBe(
         true,
       );
@@ -288,13 +317,17 @@ describe('SQLite Operations Integration', () => {
   describe('op.search', () => {
     it('finds by substring', async () => {
       await seed();
-      const results = await (adapter as Record<string, (...args: unknown[]) => unknown>).searchContent('hello') as unknown[];
+      const results = (await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).searchContent('hello')) as unknown[];
       expect(results.length).toBe(2); // 'hello' and 'hello there'
     });
 
     it('returns empty for no match', async () => {
       await seed();
-      const results = await (adapter as Record<string, (...args: unknown[]) => unknown>).searchContent('xyz') as unknown[];
+      const results = (await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).searchContent('xyz')) as unknown[];
       expect(results.length).toBe(0);
     });
   });
@@ -306,7 +339,9 @@ describe('SQLite Operations Integration', () => {
   describe('op.aggregate', () => {
     it('groups and counts', async () => {
       await seed();
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).countByRoom({}) as Record<string, unknown>[];
+      const result = (await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).countByRoom({})) as Record<string, unknown>[];
       expect(Array.isArray(result)).toBe(true);
       const r1 = result.find((r: Record<string, unknown>) => r.roomId === 'r1')!;
       const r2 = result.find((r: Record<string, unknown>) => r.roomId === 'r2')!;
@@ -317,20 +352,26 @@ describe('SQLite Operations Integration', () => {
     it('respects filter (excludes soft-deleted)', async () => {
       const { m1 } = await seed();
       await adapter.delete(m1.id); // soft-delete
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).countByRoom({}) as Record<string, unknown>[];
+      const result = (await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).countByRoom({})) as Record<string, unknown>[];
       const r1 = result.find((r: Record<string, unknown>) => r.roomId === 'r1')!;
       expect(Number(r1.count)).toBe(1);
     });
 
     it('computes total', async () => {
       await seed();
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).totalCount({}) as Record<string, unknown>;
+      const result = (await (adapter as Record<string, (...args: unknown[]) => unknown>).totalCount(
+        {},
+      )) as Record<string, unknown>;
       expect(Number(result.count)).toBe(3);
     });
 
     it('respects filter operators and computes sum by group', async () => {
       await seed();
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).filteredCountByRoom({});
+      const result = await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).filteredCountByRoom({});
       expect(Array.isArray(result)).toBe(true);
       expect(result).toHaveLength(1);
       expect((result[0] as Record<string, unknown>).roomId).toBe('r1');
@@ -365,7 +406,9 @@ describe('SQLite Operations Integration', () => {
 
   describe('op.upsert', () => {
     it('creates when no match exists', async () => {
-      const result = await (adapter as Record<string, (...args: unknown[]) => unknown>).upsertByRoomAuthor({
+      const result = await (
+        adapter as Record<string, (...args: unknown[]) => unknown>
+      ).upsertByRoomAuthor({
         roomId: 'r1',
         authorId: 'u1',
         content: 'first',
@@ -411,7 +454,9 @@ describe('SQLite Operations Integration', () => {
       const m1 = await adapter.create({ roomId: 'r1', authorId: 'u1', content: 'hello' });
 
       // Transition via operation
-      await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({ id: m1.id });
+      await (adapter as Record<string, (...args: unknown[]) => unknown>).markDelivered({
+        id: m1.id,
+      });
 
       // Verify via raw SQL
       const row = db.query('SELECT * FROM test_messages WHERE id = ?').get(m1.id) as Record<
@@ -426,7 +471,9 @@ describe('SQLite Operations Integration', () => {
       expect(fetched!.status).toBe('delivered');
 
       // Verify via lookup operation
-      const byRoom = await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({ roomId: 'r1' });
+      const byRoom = await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({
+        roomId: 'r1',
+      });
       expect(byRoom.items.length).toBe(1);
       expect(byRoom.items[0].status).toBe('delivered');
     });

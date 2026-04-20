@@ -39,11 +39,9 @@ function waitForMessage(ws: WebSocket): Promise<Record<string, unknown>> {
 
 function waitForClose(ws: WebSocket): Promise<{ code: number; reason: string }> {
   return new Promise(resolve => {
-    ws.addEventListener(
-      'close',
-      event => resolve({ code: event.code, reason: event.reason }),
-      { once: true },
-    );
+    ws.addEventListener('close', event => resolve({ code: event.code, reason: event.reason }), {
+      once: true,
+    });
   });
 }
 
@@ -152,9 +150,9 @@ describe('port validation', () => {
     const saved = process.env.PORT;
     delete process.env.PORT;
     try {
-      await expect(
-        createServer({ ...baseConfig, port: 99999 }),
-      ).rejects.toThrow('[slingshot] Invalid port: 99999');
+      await expect(createServer({ ...baseConfig, port: 99999 })).rejects.toThrow(
+        '[slingshot] Invalid port: 99999',
+      );
     } finally {
       if (saved !== undefined) process.env.PORT = saved;
     }
@@ -221,11 +219,14 @@ describe('SSE validation errors', () => {
   test('rejects :param in SSE path', async () => {
     const plugin: SlingshotPlugin = {
       name: 'sse-p1',
-      setupPost({ app }) { getContext(app).bus.registerClientSafeEvents(['test:x']); },
+      setupPost({ app }) {
+        getContext(app).bus.registerClientSafeEvents(['test:x']);
+      },
     };
     await expect(
       createServer({
-        ...baseConfig, plugins: [plugin],
+        ...baseConfig,
+        plugins: [plugin],
         sse: { endpoints: { '/__sse/:room': { events: ['test:x'] } } },
       }),
     ).rejects.toThrow('must be a literal path');
@@ -234,11 +235,14 @@ describe('SSE validation errors', () => {
   test('rejects path not under /__sse/', async () => {
     const plugin: SlingshotPlugin = {
       name: 'sse-p2',
-      setupPost({ app }) { getContext(app).bus.registerClientSafeEvents(['test:x']); },
+      setupPost({ app }) {
+        getContext(app).bus.registerClientSafeEvents(['test:x']);
+      },
     };
     await expect(
       createServer({
-        ...baseConfig, plugins: [plugin],
+        ...baseConfig,
+        plugins: [plugin],
         sse: { endpoints: { '/events/stream': { events: ['test:x'] } } },
       }),
     ).rejects.toThrow('must be under the /__sse/ prefix');
@@ -247,11 +251,14 @@ describe('SSE validation errors', () => {
   test('rejects collision with WS endpoint', async () => {
     const plugin: SlingshotPlugin = {
       name: 'sse-p3',
-      setupPost({ app }) { getContext(app).bus.registerClientSafeEvents(['test:x']); },
+      setupPost({ app }) {
+        getContext(app).bus.registerClientSafeEvents(['test:x']);
+      },
     };
     await expect(
       createServer({
-        ...baseConfig, plugins: [plugin],
+        ...baseConfig,
+        plugins: [plugin],
         ws: { endpoints: { '/__sse/chat': {} } },
         sse: { endpoints: { '/__sse/chat': { events: ['test:x'] } } },
       }),
@@ -261,12 +268,17 @@ describe('SSE validation errors', () => {
   test('rejects collision with Hono GET route', async () => {
     const plugin: SlingshotPlugin = {
       name: 'sse-p4',
-      setupRoutes({ app }) { app.get('/__sse/items', c => c.text('x')); },
-      setupPost({ app }) { getContext(app).bus.registerClientSafeEvents(['test:x']); },
+      setupRoutes({ app }) {
+        app.get('/__sse/items', c => c.text('x'));
+      },
+      setupPost({ app }) {
+        getContext(app).bus.registerClientSafeEvents(['test:x']);
+      },
     };
     await expect(
       createServer({
-        ...baseConfig, plugins: [plugin],
+        ...baseConfig,
+        plugins: [plugin],
         sse: { endpoints: { '/__sse/items': { events: ['test:x'] } } },
       }),
     ).rejects.toThrow('collides with Hono GET route');
@@ -281,7 +293,8 @@ describe('maxRequestBodySize from upload', () => {
   test('HTTP path: derives from upload config', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       upload: { maxFileSize: 1024, maxFiles: 5 },
     });
     expect(server.port).toBeGreaterThan(0);
@@ -290,7 +303,8 @@ describe('maxRequestBodySize from upload', () => {
   test('WS path: derives from upload config', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       upload: { maxFileSize: 2048, maxFiles: 3 },
       ws: { endpoints: { '/ws': {} } },
     });
@@ -321,7 +335,8 @@ describe('graceful shutdown', () => {
   test('WS server shutdown runs full teardown', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: { endpoints: { '/ws-sd': {} } },
     });
 
@@ -338,7 +353,8 @@ describe('graceful shutdown', () => {
   test('HTTP server shutdown runs full teardown', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
     });
 
     const shutdownCb = getLastShutdownCallback();
@@ -350,7 +366,8 @@ describe('graceful shutdown', () => {
   test('duplicate shutdown returns same promise', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
     });
 
     const shutdownCb = getLastShutdownCallback();
@@ -364,7 +381,8 @@ describe('graceful shutdown', () => {
   test('shutdown with heartbeat stops timer', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: {
         endpoints: { '/ws-hb': { heartbeat: { intervalMs: 30_000, timeoutMs: 10_000 } } },
       },
@@ -380,13 +398,16 @@ describe('graceful shutdown', () => {
     let disconnected = false;
     const transport = {
       connect: async () => {},
-      disconnect: async () => { disconnected = true; },
+      disconnect: async () => {
+        disconnected = true;
+      },
       publish: async () => {},
     };
 
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: { endpoints: { '/ws-t': {} }, transport: transport as any },
     });
 
@@ -399,12 +420,15 @@ describe('graceful shutdown', () => {
   test('shutdown closes SSE streams', async () => {
     const plugin: SlingshotPlugin = {
       name: 'sse-sd',
-      setupPost({ app }) { getContext(app).bus.registerClientSafeEvents(['test:sd']); },
+      setupPost({ app }) {
+        getContext(app).bus.registerClientSafeEvents(['test:sd']);
+      },
     };
 
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       plugins: [plugin],
       sse: { endpoints: { '/__sse/sd': { events: ['test:sd'], heartbeat: false } } },
     });
@@ -417,7 +441,11 @@ describe('graceful shutdown', () => {
     const shutdownCb = getLastShutdownCallback();
     await withTimeout(shutdownCb('SIGTERM'), 5_000, 'shutdown');
 
-    try { await reader.cancel(); } catch { /* already closed */ }
+    try {
+      await reader.cancel();
+    } catch {
+      /* already closed */
+    }
     server = null;
   });
 });
@@ -431,8 +459,19 @@ describe('WS hooks', () => {
     let openCalled = false;
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
-      ws: { endpoints: { '/ws-o': { on: { open: () => { openCalled = true; } } } } },
+      hostname: '127.0.0.1',
+      port: 0,
+      ws: {
+        endpoints: {
+          '/ws-o': {
+            on: {
+              open: () => {
+                openCalled = true;
+              },
+            },
+          },
+        },
+      },
     });
 
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}/ws-o`);
@@ -446,8 +485,19 @@ describe('WS hooks', () => {
   test('on.open error is caught gracefully', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
-      ws: { endpoints: { '/ws-oe': { on: { open: () => { throw new Error('open err'); } } } } },
+      hostname: '127.0.0.1',
+      port: 0,
+      ws: {
+        endpoints: {
+          '/ws-oe': {
+            on: {
+              open: () => {
+                throw new Error('open err');
+              },
+            },
+          },
+        },
+      },
     });
 
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}/ws-oe`);
@@ -461,11 +511,18 @@ describe('WS hooks', () => {
     let received: string | null = null;
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: {
-        endpoints: { '/ws-m': { on: { message: (_ws, msg) => {
-          received = typeof msg === 'string' ? msg : msg.toString();
-        } } } },
+        endpoints: {
+          '/ws-m': {
+            on: {
+              message: (_ws, msg) => {
+                received = typeof msg === 'string' ? msg : msg.toString();
+              },
+            },
+          },
+        },
       },
     });
 
@@ -481,8 +538,19 @@ describe('WS hooks', () => {
   test('on.message error is caught gracefully', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
-      ws: { endpoints: { '/ws-me': { on: { message: () => { throw new Error('msg err'); } } } } },
+      hostname: '127.0.0.1',
+      port: 0,
+      ws: {
+        endpoints: {
+          '/ws-me': {
+            on: {
+              message: () => {
+                throw new Error('msg err');
+              },
+            },
+          },
+        },
+      },
     });
 
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}/ws-me`);
@@ -498,8 +566,19 @@ describe('WS hooks', () => {
     let closeCode = 0;
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
-      ws: { endpoints: { '/ws-c': { on: { close: (_ws, code) => { closeCode = code; } } } } },
+      hostname: '127.0.0.1',
+      port: 0,
+      ws: {
+        endpoints: {
+          '/ws-c': {
+            on: {
+              close: (_ws, code) => {
+                closeCode = code;
+              },
+            },
+          },
+        },
+      },
     });
 
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}/ws-c`);
@@ -515,8 +594,19 @@ describe('WS hooks', () => {
   test('on.close error is caught gracefully', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
-      ws: { endpoints: { '/ws-ce': { on: { close: () => { throw new Error('close err'); } } } } },
+      hostname: '127.0.0.1',
+      port: 0,
+      ws: {
+        endpoints: {
+          '/ws-ce': {
+            on: {
+              close: () => {
+                throw new Error('close err');
+              },
+            },
+          },
+        },
+      },
     });
 
     const ws = new WebSocket(`ws://127.0.0.1:${server.port}/ws-ce`);
@@ -537,16 +627,24 @@ describe('WS message size limit', () => {
   test('closes on oversized message', async () => {
     let closeCode = 0;
     let closeResolve: () => void;
-    const closed = new Promise<void>(r => { closeResolve = r!; });
+    const closed = new Promise<void>(r => {
+      closeResolve = r!;
+    });
 
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: {
         endpoints: {
           '/ws-sz': {
             maxMessageSize: 10,
-            on: { close: (_ws, code) => { closeCode = code; closeResolve(); } },
+            on: {
+              close: (_ws, code) => {
+                closeCode = code;
+                closeResolve();
+              },
+            },
           },
         },
       },
@@ -570,16 +668,24 @@ describe('WS rate limiting', () => {
   test('close policy on rate limit exceed', async () => {
     let closeCode = 0;
     let closeResolve: () => void;
-    const closed = new Promise<void>(r => { closeResolve = r!; });
+    const closed = new Promise<void>(r => {
+      closeResolve = r!;
+    });
 
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: {
         endpoints: {
           '/ws-rl': {
             rateLimit: { windowMs: 60_000, maxMessages: 2, onExceeded: 'close' },
-            on: { close: (_ws, code) => { closeCode = code; closeResolve(); } },
+            on: {
+              close: (_ws, code) => {
+                closeCode = code;
+                closeResolve();
+              },
+            },
           },
         },
       },
@@ -589,7 +695,9 @@ describe('WS rate limiting', () => {
     sockets.push(ws);
     await withTimeout(waitForOpen(ws), 2_000, 'ws open');
     await withTimeout(waitForMessage(ws), 2_000, 'connected');
-    ws.send('a'); ws.send('b'); ws.send('c');
+    ws.send('a');
+    ws.send('b');
+    ws.send('c');
     await withTimeout(closed, 2_000, 'rate limit close');
     expect(closeCode).toBe(1008);
   });
@@ -598,12 +706,17 @@ describe('WS rate limiting', () => {
     let count = 0;
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: {
         endpoints: {
           '/ws-rd': {
             rateLimit: { windowMs: 60_000, maxMessages: 2, onExceeded: 'drop' },
-            on: { message: () => { count++; } },
+            on: {
+              message: () => {
+                count++;
+              },
+            },
           },
         },
       },
@@ -628,9 +741,12 @@ describe('WS recovery', () => {
   test('assigns sessionId on open, writes session on close', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: {
-        endpoints: { '/ws-rc': { persistence: { store: 'memory' }, recovery: { windowMs: 120_000 } } },
+        endpoints: {
+          '/ws-rc': { persistence: { store: 'memory' }, recovery: { windowMs: 120_000 } },
+        },
       },
     });
 
@@ -653,9 +769,14 @@ describe('WS persistence defaults', () => {
   test('sets defaults via endpoint config', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: {
-        endpoints: { '/ws-pd': { persistence: { store: 'memory', defaults: { maxMessages: 100, ttlMs: 60_000 } } } },
+        endpoints: {
+          '/ws-pd': {
+            persistence: { store: 'memory', defaults: { maxMessages: 100, ttlMs: 60_000 } },
+          },
+        },
       },
     });
     expect(server.port).toBeGreaterThan(0);
@@ -670,14 +791,17 @@ describe('WS transport connect', () => {
   test('connect callback handles origin filtering', async () => {
     let cb: ((ep: string, room: string, msg: string, origin: string) => void) | null = null;
     const transport = {
-      connect: async (fn: typeof cb) => { cb = fn; },
+      connect: async (fn: typeof cb) => {
+        cb = fn;
+      },
       disconnect: async () => {},
       publish: async () => {},
     };
 
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: { endpoints: { '/ws-tr': {} }, transport: transport as any },
     });
 
@@ -698,7 +822,8 @@ describe('WS heartbeat', () => {
   test('starts when configured', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: { endpoints: { '/ws-hb': { heartbeat: { intervalMs: 30_000, timeoutMs: 10_000 } } } },
     });
     expect(getServerContext(server)!.ws!.heartbeatTimer).not.toBeNull();
@@ -707,7 +832,8 @@ describe('WS heartbeat', () => {
   test('not started when not configured', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: { endpoints: { '/ws-nhb': {} } },
     });
     expect(getServerContext(server)!.ws!.heartbeatTimer).toBeNull();
@@ -726,20 +852,26 @@ describe('workers loading', () => {
     try {
       server = await createServer({
         ...baseConfig,
-        hostname: '127.0.0.1', port: 0,
+        hostname: '127.0.0.1',
+        port: 0,
         workersDir: tmpDir,
         enableWorkers: true,
       });
       expect(server.port).toBeGreaterThan(0);
     } finally {
-      try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* */ }
+      try {
+        rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        /* */
+      }
     }
   });
 
   test('skips when enableWorkers is false', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       workersDir: '/nonexistent',
       enableWorkers: false,
     });
@@ -755,7 +887,8 @@ describe('process shutdown listeners', () => {
   test('registry is populated after createServer', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
     });
     const registry = getRegistry()!;
     expect(registry.callbacks.size).toBeGreaterThan(0);
@@ -765,7 +898,8 @@ describe('process shutdown listeners', () => {
   test('server.stop() releases shutdown ownership', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
     });
     const registry = getRegistry()!;
     const before = registry.callbacks.size;
@@ -785,11 +919,16 @@ describe('Bun.serve error handler (WS path)', () => {
   test('error route returns error response', async () => {
     const plugin: SlingshotPlugin = {
       name: 'err-plugin',
-      setupRoutes({ app }) { app.get('/boom', () => { throw new Error('boom'); }); },
+      setupRoutes({ app }) {
+        app.get('/boom', () => {
+          throw new Error('boom');
+        });
+      },
     };
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       plugins: [plugin],
       ws: { endpoints: { '/ws-e': {} } },
     });
@@ -806,7 +945,8 @@ describe('WS drain and pong', () => {
   test('drain hook is wired', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: { endpoints: { '/ws-d': { on: { drain: () => {} } } } },
     });
     expect(server.port).toBeGreaterThan(0);
@@ -821,7 +961,8 @@ describe('WS pong handler', () => {
   test('pong is handled when heartbeat ping is sent', async () => {
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: {
         endpoints: {
           '/ws-pong': {
@@ -851,13 +992,18 @@ describe('shutdown error paths', () => {
   test('plugin teardown error sets exit code 1', async () => {
     const plugin: SlingshotPlugin = {
       name: 'teardown-err-plugin',
-      setupPost() { /* no-op, required for plugin validation */ },
-      teardown: async () => { throw new Error('teardown boom'); },
+      setupPost() {
+        /* no-op, required for plugin validation */
+      },
+      teardown: async () => {
+        throw new Error('teardown boom');
+      },
     };
 
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       plugins: [plugin],
     });
 
@@ -872,13 +1018,16 @@ describe('shutdown error paths', () => {
       name: 'bus-err-plugin',
       setupPost({ app }) {
         const ctx = getContext(app);
-        (ctx.bus as any).shutdown = async () => { throw new Error('bus shutdown boom'); };
+        (ctx.bus as any).shutdown = async () => {
+          throw new Error('bus shutdown boom');
+        };
       },
     };
 
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       plugins: [plugin],
     });
 
@@ -891,13 +1040,16 @@ describe('shutdown error paths', () => {
   test('transport disconnect error sets exit code 1', async () => {
     const transport = {
       connect: async () => {},
-      disconnect: async () => { throw new Error('disconnect boom'); },
+      disconnect: async () => {
+        throw new Error('disconnect boom');
+      },
       publish: async () => {},
     };
 
     server = await createServer({
       ...baseConfig,
-      hostname: '127.0.0.1', port: 0,
+      hostname: '127.0.0.1',
+      port: 0,
       ws: { endpoints: { '/ws-td': {} }, transport: transport as any },
     });
 

@@ -7,6 +7,9 @@
  * can capture created instances and trigger synthetic events.
  */
 import { describe, expect, mock, test } from 'bun:test';
+import { wsEndpointKey } from '../../src/framework/ws/namespace';
+// Import AFTER mock is set up
+import { createRedisTransport } from '../../src/framework/ws/redisTransport';
 
 // ---------------------------------------------------------------------------
 // Inline mock Redis class that we can control per-test
@@ -65,10 +68,6 @@ mock.module('ioredis', () => {
   MockRedis.prototype = {};
   return { default: MockRedis };
 });
-
-// Import AFTER mock is set up
-import { createRedisTransport } from '../../src/framework/ws/redisTransport';
-import { wsEndpointKey } from '../../src/framework/ws/namespace';
 
 function clearInstances() {
   createdInstances.length = 0;

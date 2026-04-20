@@ -18,17 +18,17 @@ function createMockPool() {
   let failTimes = 0;
 
   const runQuery = async (sql: string, params?: unknown[]) => {
-      const normalized = sql.replace(/\s+/g, ' ').trim();
-      calls.push({ sql: normalized, params });
-      if (failSql === normalized && failTimes > 0) {
-        failTimes--;
-        throw new Error(`forced failure: ${normalized}`);
-      }
-      if (resultQueue.length > 0) {
-        return resultQueue.shift()!;
-      }
-      return defaultResult;
-    };
+    const normalized = sql.replace(/\s+/g, ' ').trim();
+    calls.push({ sql: normalized, params });
+    if (failSql === normalized && failTimes > 0) {
+      failTimes--;
+      throw new Error(`forced failure: ${normalized}`);
+    }
+    if (resultQueue.length > 0) {
+      return resultQueue.shift()!;
+    }
+    return defaultResult;
+  };
 
   const pool = {
     query: runQuery,
@@ -113,9 +113,8 @@ describe('postgresWsMessages', () => {
     fresh.failOn(
       'CREATE TABLE IF NOT EXISTS ws_messages ( id TEXT PRIMARY KEY, endpoint TEXT NOT NULL, room TEXT NOT NULL, sender_id TEXT, payload JSONB, created_at BIGINT NOT NULL )',
     );
-    const { createPostgresWsMessageRepository } = await import(
-      '../../src/framework/persistence/postgresWsMessages'
-    );
+    const { createPostgresWsMessageRepository } =
+      await import('../../src/framework/persistence/postgresWsMessages');
 
     await expect(createPostgresWsMessageRepository(fresh.pool)).rejects.toThrow('forced failure');
     expect(fresh.calls.map(c => c.sql)).toContain('ROLLBACK');

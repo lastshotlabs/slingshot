@@ -2,13 +2,13 @@
  * Tests for src/framework/persistence/wsMessages.ts
  * Covers: Redis, Mongo, SQLite backends and the factory map
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import type { StoredMessage, WsMessageRepository } from '@lastshotlabs/slingshot-core';
 import {
+  createMongoWsMessageRepository,
   createRedisWsMessageRepository,
   createSqliteWsMessageRepository,
-  createMongoWsMessageRepository,
   wsMessageFactories,
 } from '../../src/framework/persistence/wsMessages';
 
@@ -226,7 +226,13 @@ describe('createSqliteWsMessageRepository', () => {
     const msg = makeMessage('chat', { text: 'hi' }, 'user-1');
     await repo.persist(msg, { maxCount: 100, ttlSeconds: 86400 });
 
-    interface Row { id: string; endpoint: string; room: string; sender_id: string | null; payload: string }
+    interface Row {
+      id: string;
+      endpoint: string;
+      room: string;
+      sender_id: string | null;
+      payload: string;
+    }
     const row = db.query<Row>('SELECT * FROM ws_messages WHERE id = ?').get(msg.id);
     expect(row).not.toBeNull();
     expect(row?.endpoint).toBe(ENDPOINT);
@@ -244,18 +250,18 @@ describe('createSqliteWsMessageRepository', () => {
       await repo.persist(makeMessage('room', i), config);
     }
 
-    const rowAfter12 = db.query('SELECT COUNT(*) as n FROM ws_messages WHERE room = ?').get(
-      'room',
-    ) as { n: number };
+    const rowAfter12 = db
+      .query('SELECT COUNT(*) as n FROM ws_messages WHERE room = ?')
+      .get('room') as { n: number };
     expect(rowAfter12.n).toBe(5);
 
     for (let i = 12; i < 20; i++) {
       await repo.persist(makeMessage('room', i), config);
     }
 
-    const rowAfter20 = db.query('SELECT COUNT(*) as n FROM ws_messages WHERE room = ?').get(
-      'room',
-    ) as { n: number };
+    const rowAfter20 = db
+      .query('SELECT COUNT(*) as n FROM ws_messages WHERE room = ?')
+      .get('room') as { n: number };
     expect(rowAfter20.n).toBeLessThanOrEqual(3);
   });
 
@@ -394,8 +400,7 @@ describe('createMongoWsMessageRepository', () => {
     const chainBuilder = (filteredDocs: MockDoc[]) => ({
       sort: () => chainBuilder(filteredDocs),
       limit: (n: number) => ({
-        select: () =>
-          Promise.resolve(filteredDocs.slice(0, n).map(d => ({ _id: d._id }))),
+        select: () => Promise.resolve(filteredDocs.slice(0, n).map(d => ({ _id: d._id }))),
         lean: () => Promise.resolve(filteredDocs.slice(0, n)),
       }),
     });
@@ -450,8 +455,22 @@ describe('createMongoWsMessageRepository', () => {
 
   test('getHistory returns messages mapped to StoredMessage', async () => {
     const fakeDocs: MockDoc[] = [
-      { _id: 'id-1', endpoint: ENDPOINT, room: 'chat', senderId: 'u1', payload: 'msg1', createdAt: 1000 },
-      { _id: 'id-2', endpoint: ENDPOINT, room: 'chat', senderId: null, payload: 'msg2', createdAt: 2000 },
+      {
+        _id: 'id-1',
+        endpoint: ENDPOINT,
+        room: 'chat',
+        senderId: 'u1',
+        payload: 'msg1',
+        createdAt: 1000,
+      },
+      {
+        _id: 'id-2',
+        endpoint: ENDPOINT,
+        room: 'chat',
+        senderId: null,
+        payload: 'msg2',
+        createdAt: 2000,
+      },
     ];
     const { conn } = makeMockConn(fakeDocs);
     const repo = createMongoWsMessageRepository(conn, makeMockMongoose());

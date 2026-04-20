@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'bun:test';
+import { Hono } from 'hono';
 import {
   createTenantMiddleware,
   getTenantCacheFromApp,
   invalidateTenantCache,
 } from '../../src/framework/middleware/tenant';
-import type { TenantCacheCarrier, TenantResolutionCache } from '../../src/framework/middleware/tenant';
-import { Hono } from 'hono';
+import type {
+  TenantCacheCarrier,
+  TenantResolutionCache,
+} from '../../src/framework/middleware/tenant';
 
 // ---------------------------------------------------------------------------
 // Minimal Hono context helper

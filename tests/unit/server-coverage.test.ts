@@ -273,7 +273,7 @@ describe('createServer with WS config', () => {
           },
         },
       }),
-    ).rejects.toThrow("recovery requires persistence to be configured");
+    ).rejects.toThrow('recovery requires persistence to be configured');
   });
 
   test('WS config with heartbeat enables heartbeat', async () => {

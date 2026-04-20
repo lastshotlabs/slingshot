@@ -7,7 +7,6 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type {
   CacheAdapter,
-
   CoreRegistrar,
   FingerprintBuilder,
   RateLimitAdapter,

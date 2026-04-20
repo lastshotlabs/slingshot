@@ -5,7 +5,11 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { attachContext, createRouter } from '@lastshotlabs/slingshot-core';
-import { deleteUploadRecord, registerUpload, getUploadRecord } from '../../src/framework/upload/registry';
+import {
+  deleteUploadRecord,
+  getUploadRecord,
+  registerUpload,
+} from '../../src/framework/upload/registry';
 
 function makeApp(records?: Map<string, unknown>) {
   const store = records ?? new Map<string, unknown>();

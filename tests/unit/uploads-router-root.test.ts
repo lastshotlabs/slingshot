@@ -54,11 +54,9 @@ function makeUploadApp(options?: {
       c.set('tenantId', c.req.header('x-tenant-id') ?? 'tenant-1');
       await next();
     },
-    requireRole:
-      () =>
-      async (_c: any, next: () => Promise<void>) => {
-        await next();
-      },
+    requireRole: () => async (_c: any, next: () => Promise<void>) => {
+      await next();
+    },
   };
 
   const slingshotCtx = {
@@ -505,19 +503,13 @@ describe('createUploadsRouter (root coverage)', () => {
     });
 
     // Request without maxBytes — configuredMaxFileSize should be used
-    const response = await app.request(
-      '/uploads/presign',
-      json({ filename: 'doc.pdf' }),
-    );
+    const response = await app.request('/uploads/presign', json({ filename: 'doc.pdf' }));
 
     expect(response.status).toBe(200);
     const body = await response.json();
     // effectiveMaxBytes should come from configuredMaxFileSize
     expect(body.maxBytes).toBe(2048);
-    expect(presignPut).toHaveBeenCalledWith(
-      body.key,
-      expect.objectContaining({ maxSize: 2048 }),
-    );
+    expect(presignPut).toHaveBeenCalledWith(body.key, expect.objectContaining({ maxSize: 2048 }));
   });
 
   test('effectiveMaxBytes is undefined when neither maxBytes nor maxFileSize is set (lines 307-312)', async () => {

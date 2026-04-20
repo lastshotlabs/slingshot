@@ -5,13 +5,12 @@
  * This mock returns an invalid shape to exercise the error path.
  */
 import { describe, expect, mock, test } from 'bun:test';
+import { createRedisTransport } from '../../src/framework/ws/redisTransport';
 
 // Mock ioredis with an invalid shape (not a constructor, no default)
 mock.module('ioredis', () => {
   return { notAConstructor: 'invalid' };
 });
-
-import { createRedisTransport } from '../../src/framework/ws/redisTransport';
 
 describe('requireIoredis — error paths', () => {
   test('throws when ioredis module has invalid shape (not a constructor)', async () => {

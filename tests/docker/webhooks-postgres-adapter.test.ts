@@ -65,6 +65,7 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
           url: 'https://example.com/hooks/postgres',
           secret: 'super-secret-token',
           events: [eventName],
+          bindingKeys: ['tenant'],
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -123,6 +124,7 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
           url: 'https://example.com/hooks/matching',
           secret: 'matching-secret',
           events: [event],
+          bindingKeys: ['tenant'],
         }),
       });
       const matching = (await matchingResponse.json()) as { id: string; url: string };
@@ -134,6 +136,7 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
           url: 'https://example.com/hooks/disabled',
           secret: 'disabled-secret',
           events: [event],
+          bindingKeys: ['tenant'],
         }),
       });
       const disabled = (await disabledResponse.json()) as { id: string };

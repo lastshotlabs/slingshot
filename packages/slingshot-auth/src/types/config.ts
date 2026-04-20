@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type {
   AuthAdapter,
   CsrfConfig,
+  PostgresMigrationMode,
   RuntimePassword,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
@@ -92,12 +93,33 @@ export interface AuthDbConfig {
   redis?: boolean;
   /** Postgres connection string. Required when auth store is 'postgres'. */
   postgres?: string;
+  /** Postgres pool sizing and timeout options passed through to `pg.Pool`. */
+  postgresPool?: AuthPostgresPoolConfig;
+  /**
+   * Postgres schema bootstrap strategy.
+   * - "apply": runtime-owned schema initialization and migrations
+   * - "assume-ready": skip startup DDL because migrations are managed externally
+   */
+  postgresMigrations?: PostgresMigrationMode;
   /** Where to store JWT sessions. Default: 'memory' in standalone mode. */
   sessions?: StoreType;
   /** Where to store OAuth state. Default: follows sessions. */
   oauthState?: StoreType;
   /** Which built-in auth adapter to use. Default: 'memory' in standalone mode. */
   auth?: 'mongo' | 'sqlite' | 'memory' | 'postgres';
+}
+
+export interface AuthPostgresPoolConfig {
+  max?: number;
+  min?: number;
+  idleTimeoutMs?: number;
+  connectionTimeoutMs?: number;
+  queryTimeoutMs?: number;
+  statementTimeoutMs?: number;
+  maxUses?: number;
+  allowExitOnIdle?: boolean;
+  keepAlive?: boolean;
+  keepAliveInitialDelayMillis?: number;
 }
 
 /**
@@ -232,6 +254,27 @@ const authDbConfigSchema = z
       .optional()
       .describe(
         "Postgres connection string for auth persistence. Omit unless a store uses 'postgres'.",
+      ),
+    postgresPool: z
+      .object({
+        max: z.number().optional(),
+        min: z.number().optional(),
+        idleTimeoutMs: z.number().optional(),
+        connectionTimeoutMs: z.number().optional(),
+        queryTimeoutMs: z.number().optional(),
+        statementTimeoutMs: z.number().optional(),
+        maxUses: z.number().optional(),
+        allowExitOnIdle: z.boolean().optional(),
+        keepAlive: z.boolean().optional(),
+        keepAliveInitialDelayMillis: z.number().optional(),
+      })
+      .optional()
+      .describe('Postgres pool sizing and timeout options passed through to pg.Pool.'),
+    postgresMigrations: z
+      .enum(['apply', 'assume-ready'])
+      .optional()
+      .describe(
+        'Postgres schema bootstrap strategy. Use "assume-ready" when migrations are managed externally.',
       ),
     sessions: z
       .enum(['redis', 'mongo', 'sqlite', 'memory', 'postgres'])

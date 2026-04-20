@@ -416,6 +416,20 @@
         "hono": ">=4.12.12 <5",
       },
     },
+    "packages/slingshot-kafka": {
+      "name": "@lastshotlabs/slingshot-kafka",
+      "version": "0.0.2",
+      "dependencies": {
+        "@lastshotlabs/slingshot-core": "workspace:*",
+      },
+      "devDependencies": {
+        "kafkajs": "^2.2.4",
+      },
+      "peerDependencies": {
+        "kafkajs": "^2.2.4",
+        "zod": ">=4.0 <5",
+      },
+    },
     "packages/slingshot-m2m": {
       "name": "@lastshotlabs/slingshot-m2m",
       "version": "0.0.2",
@@ -1017,6 +1031,8 @@
     "@lastshotlabs/slingshot-infra": ["@lastshotlabs/slingshot-infra@workspace:packages/slingshot-infra"],
 
     "@lastshotlabs/slingshot-interactions": ["@lastshotlabs/slingshot-interactions@workspace:packages/slingshot-interactions"],
+
+    "@lastshotlabs/slingshot-kafka": ["@lastshotlabs/slingshot-kafka@workspace:packages/slingshot-kafka"],
 
     "@lastshotlabs/slingshot-m2m": ["@lastshotlabs/slingshot-m2m@workspace:packages/slingshot-m2m"],
 
@@ -2045,6 +2061,8 @@
     "jwa": ["jwa@2.0.1", "", { "dependencies": { "buffer-equal-constant-time": "^1.0.1", "ecdsa-sig-formatter": "1.0.11", "safe-buffer": "^5.0.1" } }, "sha512-hRF04fqJIP8Abbkq5NKGN0Bbr3JxlQ+qhZufXVr0DvujKy93ZCbXZMHDL4EOtodSbCWxOqR8MS1tXA5hwqCXDg=="],
 
     "jws": ["jws@4.0.1", "", { "dependencies": { "jwa": "^2.0.1", "safe-buffer": "^5.0.1" } }, "sha512-EKI/M/yqPncGUUh44xz0PxSidXFr/+r0pA70+gIYhjv+et7yxM+s29Y+VGDkovRofQem0fs7Uvf4+YmAdyRduA=="],
+
+    "kafkajs": ["kafkajs@2.2.4", "", {}, "sha512-j/YeapB1vfPT2iOIUn/vxdyKEuhuY2PxMBvf5JWux6iSaukAccrMtXEY/Lb7OvavDhOWME589bpLrEdnVHjfjA=="],
 
     "kareem": ["kareem@3.2.0", "", {}, "sha512-VS8MWZz/cT+SqBCpVfNN4zoVz5VskR3N4+sTmUXme55e9avQHntpwpNq0yjnosISXqwJ3AQVjlbI4Dyzv//JtA=="],
 

@@ -25,6 +25,20 @@ export type {
   SubscriptionOpts,
   ClientSafeEventKey,
 } from './eventBus';
+export type {
+  EventSerializer,
+  EventBusSerializationOptions,
+  ValidationMode,
+} from './eventSerializer';
+export { JsonEventSerializer, JSON_SERIALIZER } from './eventSerializer';
+export type { EventSchemaRegistry, EventValidationResult } from './eventSchemaRegistry';
+export { createEventSchemaRegistry, validateEventPayload } from './eventSchemaRegistry';
+export type {
+  KafkaConnectorHandle,
+  KafkaConnectorHealth,
+  KafkaInboundConnectorHealth,
+  KafkaOutboundConnectorHealth,
+} from './kafkaConnectors';
 /** In-process event bus primitives and the built-in client-safe event allowlist. */
 export {
   InProcessAdapter,

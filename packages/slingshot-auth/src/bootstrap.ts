@@ -11,6 +11,7 @@ import type { Connection } from 'mongoose';
 import type {
   AuthAdapter,
   DataEncryptionKey,
+  PostgresBundle,
   ResolvedStores,
   RuntimePassword,
   SigningConfig,
@@ -175,7 +176,7 @@ export async function bootstrapAuth(
   }
 
   // Postgres pool — set during adapter resolution, used by storeInfra
-  let postgresPool: import('pg').Pool | null = null;
+  let postgres: PostgresBundle | null = null;
 
   // Section C: SQLite init
   let sqliteAdapter: Awaited<
@@ -212,17 +213,40 @@ export async function bootstrapAuth(
     const { createPostgresAdapter } = (await import(postgresPkg)) as {
       createPostgresAdapter: (opts: { pool: unknown }) => Promise<AuthAdapter>;
     };
+    const { connectPostgres } = (await import(postgresPkg)) as {
+      connectPostgres: (
+        connectionString: string,
+        options?: {
+          pool?: {
+            max?: number;
+            min?: number;
+            idleTimeoutMs?: number;
+            connectionTimeoutMs?: number;
+            queryTimeoutMs?: number;
+            statementTimeoutMs?: number;
+            maxUses?: number;
+            allowExitOnIdle?: boolean;
+            keepAlive?: boolean;
+            keepAliveInitialDelayMillis?: number;
+          };
+          migrations?: import('@lastshotlabs/slingshot-core').PostgresMigrationMode;
+          healthcheckTimeoutMs?: number;
+        },
+      ) => Promise<PostgresBundle>;
+    };
     const connectionString = config.db?.postgres;
     if (!connectionString) {
       throw new Error(
         '[slingshot-auth] Postgres auth adapter requires config.db.postgres connection string',
       );
     }
-    const { Pool } = await import('pg');
-    const pool = new Pool({ connectionString });
-    authAdapter = await createPostgresAdapter({ pool });
-    postgresPool = pool;
-    teardownFns.push(() => pool.end());
+    postgres = await connectPostgres(connectionString, {
+      pool: config.db?.postgresPool,
+      migrations: config.db?.postgresMigrations,
+      healthcheckTimeoutMs: config.db?.postgresPool?.queryTimeoutMs,
+    });
+    authAdapter = await createPostgresAdapter({ pool: postgres.pool });
+    teardownFns.push(() => postgres?.pool.end());
   } else {
     const { createMongoAuthAdapter } = await import('./adapters/mongoAuth');
     const { resolveMongoose: resolveMg } = await import('./infra/mongo');
@@ -530,7 +554,7 @@ export async function bootstrapAuth(
       // Prefer framework-provided postgres (wired via runtimeInfra.getPostgres),
       // fall back to the pool created by the postgres auth adapter above.
       if (runtimeInfra.getPostgres) return runtimeInfra.getPostgres();
-      if (postgresPool) return { pool: postgresPool, db: undefined };
+      if (postgres) return postgres;
       throw new Error('[slingshot-auth] Postgres is not configured');
     },
   };

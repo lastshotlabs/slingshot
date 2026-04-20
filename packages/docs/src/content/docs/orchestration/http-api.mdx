@@ -1,0 +1,96 @@
+---
+title: Orchestration HTTP API
+description: Routes exposed by the Slingshot orchestration plugin
+---
+
+`@lastshotlabs/slingshot-orchestration-plugin` can mount a Hono router that exposes task and
+workflow execution over HTTP.
+
+## Enabling routes
+
+```typescript
+createOrchestrationPlugin({
+  adapter,
+  tasks,
+  workflows,
+  routes: true,
+  routePrefix: '/orchestration',
+  routeMiddleware: [requireAdmin],
+});
+```
+
+Typical middleware looks exactly like any other Hono middleware:
+
+```typescript
+import type { MiddlewareHandler } from 'hono';
+
+export const requireAdmin: MiddlewareHandler = async (c, next) => {
+  const user = c.get('user');
+  if (!user || !user.roles?.includes('admin')) {
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  await next();
+};
+```
+
+When routes are enabled, `routeMiddleware` must be non-empty. That is enforced as a hard setup
+error so orchestration endpoints are never accidentally exposed without a guard.
+
+## Handlers note
+
+Current orchestration route setup is code-first: import middleware and pass it directly.
+
+The future manifest path will resolve route middleware by export name from `slingshot.handlers.ts`,
+but that bootstrap path is not implemented in this worktree yet.
+
+## Routes
+
+### Start a task
+
+`POST /orchestration/tasks/:name/runs`
+
+```json
+{
+  "input": { "email": "user@example.com" },
+  "idempotencyKey": "signup-123",
+  "priority": 10,
+  "tags": { "domain": "signup" },
+  "metadata": { "source": "admin-ui" }
+}
+```
+
+### Start a workflow
+
+`POST /orchestration/workflows/:name/runs`
+
+### Fetch a run
+
+`GET /orchestration/runs/:id`
+
+### Cancel a run
+
+`DELETE /orchestration/runs/:id`
+
+### List runs
+
+`GET /orchestration/runs`
+
+Supported query filters currently include:
+
+- `type`
+- `name`
+- `status`
+- `limit`
+- `offset`
+
+### Send a signal
+
+`POST /orchestration/runs/:id/signal/:signalName`
+
+Adapters without signal support return `501 Not Implemented`.
+
+## Tenant propagation
+
+If the request context already carries `tenantId`, the route layer forwards that into the
+orchestration run options automatically. That keeps runs scoped consistently with the rest of the
+app surface.

@@ -1,0 +1,131 @@
+---
+title: Tasks and Workflows
+description: How to author orchestration definitions and compose workflow steps
+---
+
+## Tasks
+
+A task is a named unit of work with:
+
+- Zod input validation
+- Zod output validation
+- retry policy
+- timeout
+- optional queue affinity
+- optional per-task concurrency limit
+
+```typescript
+import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { z } from 'zod';
+
+export const sendWelcomeEmail = defineTask({
+  name: 'send-welcome-email',
+  input: z.object({ userId: z.string(), email: z.string().email() }),
+  output: z.object({ sent: z.boolean() }),
+  retry: { maxAttempts: 3, backoff: 'exponential', delayMs: 1000 },
+  timeout: 10_000,
+  async handler(input, ctx) {
+    ctx.reportProgress({ percent: 25, message: 'queued email delivery' });
+    return { sent: true };
+  },
+});
+```
+
+## Workflows
+
+A workflow is an ordered array of entries:
+
+- `step(...)`
+- `parallel([...])`
+- `sleep(...)`
+
+Workflows execute in array order. Parallelism is explicit. There is no DAG authoring API.
+
+```typescript
+import {
+  defineWorkflow,
+  parallel,
+  step,
+} from '@lastshotlabs/slingshot-orchestration';
+import { z } from 'zod';
+
+export const onboardUser = defineWorkflow({
+  name: 'onboard-user',
+  input: z.object({ email: z.string().email(), plan: z.string() }),
+  steps: [
+    step('create-account', 'create-account'),
+    parallel([
+      step('send-email', 'send-welcome-email'),
+      step('provision-plan', 'provision-plan', {
+        condition: ({ workflowInput }: { workflowInput: { email: string; plan: string } }) =>
+          workflowInput.plan === 'pro',
+      }),
+    ]),
+  ],
+});
+```
+
+## Step references
+
+`step()` accepts either:
+
+- a `ResolvedTask` reference
+- a task name string
+
+Prefer passing the task object when authoring in the same module or package. It keeps step
+composition refactor-safe and lets workflow definitions carry the task reference directly.
+
+## Step registration
+
+Steps are not registered independently.
+
+- tasks are registered
+- workflows are registered
+- steps live inside workflow definitions
+
+If another plugin wants to participate, it should contribute tasks or entire workflows, not free
+standing step objects.
+
+## Pure mapper rule
+
+Step `input` mappers and `condition` functions should stay pure:
+
+- no network calls
+- no database reads
+- no side effects
+
+They should only transform `workflowInput` and prior `results`. This keeps workflow behavior
+portable across future providers like Temporal.
+
+## Runtime execution
+
+After definitions exist, register them with a runtime:
+
+```typescript
+import {
+  createMemoryAdapter,
+  createOrchestrationRuntime,
+} from '@lastshotlabs/slingshot-orchestration';
+
+declare const createAccountTask: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask;
+declare const sendWelcomeEmail: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask;
+declare const provisionPlanTask: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask;
+declare const onboardUser: import('@lastshotlabs/slingshot-orchestration').AnyResolvedWorkflow;
+
+const runtime = createOrchestrationRuntime({
+  adapter: createMemoryAdapter({ concurrency: 10 }),
+  tasks: [createAccountTask, sendWelcomeEmail, provisionPlanTask],
+  workflows: [onboardUser],
+});
+```
+
+Then start runs:
+
+```typescript
+const handle = await runtime.runWorkflow('onboard-user', {
+  email: 'new@company.com',
+  plan: 'pro',
+});
+
+const output = await handle.result();
+```

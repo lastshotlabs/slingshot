@@ -12,6 +12,7 @@ keeps them aligned with the repo during development and lets the repo typecheck 
 - `config-driven-domain/` - entity-first authoring pattern
 - `collaboration-workspace/` - chat, community, media, polls, and interactions
 - `content-platform/` - search, assets, SSR, SSG, and edge-oriented delivery
+- `orchestration/` - code-first tasks, workflows, protected routes, and runtime access
 
 ## Validation
 

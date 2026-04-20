@@ -1,0 +1,93 @@
+---
+title: Orchestration Adapters
+description: Choosing between memory, SQLite, and BullMQ for Slingshot orchestration
+---
+
+Adapters decide where orchestration runs execute and how durable they are. Task and workflow
+definitions do not change when you switch adapters.
+
+## Memory
+
+Use `createMemoryAdapter()` when you want:
+
+- no external infrastructure
+- fast local development
+- lightweight tests
+
+Tradeoffs:
+
+- no durability across process restarts
+- no cross-process coordination
+
+```typescript
+const adapter = createMemoryAdapter({ concurrency: 10 });
+```
+
+## SQLite
+
+Use `createSqliteAdapter()` when you want:
+
+- durable local or single-node execution
+- restart recovery without Redis
+- persistent run and step state
+
+Tradeoffs:
+
+- still a single-process or single-node shape
+- not the right fit for distributed worker fleets
+
+```typescript
+const adapter = createSqliteAdapter({
+  path: './data/orchestration.db',
+  concurrency: 10,
+});
+```
+
+## BullMQ
+
+Use `createBullMQOrchestrationAdapter()` when you want:
+
+- Redis-backed durability
+- repeatable schedules
+- BullMQ workers and queues
+- progress updates through `QueueEvents`
+
+Tradeoffs:
+
+- requires Redis
+- signals are not supported
+- you now operate queue infrastructure
+
+```typescript
+import { createBullMQOrchestrationAdapter } from '@lastshotlabs/slingshot-orchestration-bullmq';
+
+const adapter = createBullMQOrchestrationAdapter({
+  connection: { host: '127.0.0.1', port: 6379 },
+  prefix: 'orch',
+  concurrency: 10,
+});
+```
+
+When used through `createOrchestrationPlugin()`, the plugin starts and shuts down the adapter for
+you. When used directly through `createOrchestrationRuntime()`, the adapter now lazily starts on
+first use, so `runTask()` / `runWorkflow()` do not require a separate manual `start()` call.
+
+## Capability matrix
+
+| Capability | Memory | SQLite | BullMQ |
+| ---------- | ------ | ------ | ------ |
+| Core execution | Yes | Yes | Yes |
+| Scheduling | No | No | Yes |
+| Run listing | Yes | Yes | Yes |
+| Progress subscriptions | Yes | Yes | Yes |
+| Signals | No | No | No |
+
+## Not available yet
+
+These providers are planned but not shipped in the current worktree:
+
+- Trigger.dev
+- Temporal
+- Step Functions
+
+If you need those today, the answer is still "not implemented", not "hidden behind a flag".

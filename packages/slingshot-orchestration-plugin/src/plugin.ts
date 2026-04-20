@@ -1,0 +1,69 @@
+import { getContext } from '@lastshotlabs/slingshot-core';
+import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import {
+  OrchestrationError,
+  createOrchestrationRuntime,
+  type OrchestrationRuntime,
+} from '@lastshotlabs/slingshot-orchestration';
+import { createSlingshotEventSink } from './eventSink';
+import { ORCHESTRATION_PLUGIN_KEY } from './context';
+import { createOrchestrationRouter } from './routes';
+import type { OrchestrationPluginOptions } from './types';
+
+/**
+ * Create the Slingshot integration layer for the portable orchestration runtime.
+ *
+ * The plugin publishes the runtime through `ctx.pluginState`, bridges lifecycle events
+ * onto `ctx.bus`, optionally mounts HTTP routes, and manages adapter startup/shutdown
+ * when an adapter instance is provided instead of a pre-built runtime.
+ */
+export function createOrchestrationPlugin(options: OrchestrationPluginOptions): SlingshotPlugin {
+  const workflows = options.workflows ?? [];
+  const routes = options.routes ?? true;
+  const routePrefix = options.routePrefix ?? '/orchestration';
+  const routeMiddleware = options.routeMiddleware ?? [];
+  const providedRuntime = 'runtime' in options ? options.runtime : undefined;
+  const providedAdapter = 'adapter' in options ? options.adapter : undefined;
+  let runtime: OrchestrationRuntime | null = providedRuntime ?? null;
+
+  return {
+    name: ORCHESTRATION_PLUGIN_KEY,
+    dependencies: [],
+    setupRoutes({ app, bus }: PluginSetupContext) {
+      runtime ??= createOrchestrationRuntime({
+        adapter: providedAdapter!,
+        tasks: options.tasks,
+        workflows,
+        eventSink: createSlingshotEventSink(bus),
+      });
+
+      getContext(app).pluginState.set(ORCHESTRATION_PLUGIN_KEY, runtime);
+
+      if (!routes) return;
+      if (routeMiddleware.length === 0) {
+        throw new OrchestrationError(
+          'INVALID_CONFIG',
+          'Orchestration routes require at least one routeMiddleware guard. Provide routeMiddleware or set routes: false.',
+        );
+      }
+
+      const router = createOrchestrationRouter({
+        runtime,
+        routeMiddleware,
+        tasks: options.tasks,
+        workflows,
+      });
+      app.route(routePrefix, router);
+    },
+    async setupPost() {
+      if (providedAdapter) {
+        await providedAdapter.start();
+      }
+    },
+    async teardown() {
+      if (providedAdapter) {
+        await providedAdapter.shutdown();
+      }
+    },
+  };
+}

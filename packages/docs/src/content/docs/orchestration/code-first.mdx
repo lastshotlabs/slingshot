@@ -1,0 +1,250 @@
+---
+title: Orchestration Code-First Guide
+description: End-to-end code-first orchestration with tasks, workflows, adapters, plugin wiring, and runtime lookup
+---
+
+The current orchestration surface is code-first. You define tasks and workflows in TypeScript, pick
+an adapter, and then use the runtime either directly or through the Slingshot plugin wrapper.
+
+Manifest-driven orchestration is not shipped in this worktree yet. Treat manifest support as the
+next phase, not a hidden feature flag.
+
+## The shortest working path
+
+1. Define tasks with Zod input and output schemas.
+2. Compose them into a workflow with `step()`, `parallel()`, and `sleep()`.
+3. Pick an adapter.
+4. Use `createOrchestrationRuntime()` directly or `createOrchestrationPlugin()` inside a Slingshot app.
+5. Trigger work from app code with `runtime.runTask()` / `runtime.runWorkflow()`.
+6. Add protected HTTP routes only if you actually want remote orchestration control.
+
+## Define tasks
+
+```typescript
+import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { z } from 'zod';
+
+export const capturePayment = defineTask({
+  name: 'capture-payment',
+  input: z.object({
+    invoiceId: z.string(),
+    amountCents: z.number().int().positive(),
+  }),
+  output: z.object({
+    captured: z.boolean(),
+    paymentId: z.string(),
+  }),
+  retry: { maxAttempts: 3, backoff: 'exponential', delayMs: 250, maxDelayMs: 2_000 },
+  timeout: 5_000,
+  async handler(input, ctx) {
+    ctx.reportProgress({ percent: 25, message: 'authorizing payment' });
+    return {
+      captured: true,
+      paymentId: `pay_${input.invoiceId}_${ctx.runId}`,
+    };
+  },
+});
+```
+
+## Compose a workflow
+
+```typescript
+import {
+  type AnyResolvedTask,
+  defineWorkflow,
+  parallel,
+  step,
+  stepResult,
+} from '@lastshotlabs/slingshot-orchestration';
+import { z } from 'zod';
+
+declare const capturePayment: AnyResolvedTask;
+declare const generateInvoice: AnyResolvedTask;
+declare const recordLedgerEntry: AnyResolvedTask;
+declare const sendReceipt: AnyResolvedTask;
+
+export const processInvoiceWorkflow = defineWorkflow({
+  name: 'process-invoice',
+  input: z.object({
+    invoiceId: z.string(),
+    customerEmail: z.string().email(),
+    amountCents: z.number().int().positive(),
+  }),
+  output: z.object({
+    payment: z.object({ captured: z.boolean(), paymentId: z.string() }),
+    invoice: z.object({ invoiceUrl: z.string().url() }),
+    ledger: z.object({ recorded: z.boolean() }),
+    receipt: z.object({ delivered: z.boolean() }),
+  }),
+  outputMapper(results) {
+    return {
+      payment: stepResult(results, 'capture-payment', capturePayment)!,
+      invoice: stepResult(results, 'generate-invoice', generateInvoice)!,
+      ledger: stepResult(results, 'record-ledger-entry', recordLedgerEntry)!,
+      receipt: stepResult(results, 'send-receipt', sendReceipt)!,
+    };
+  },
+  steps: [
+    step('capture-payment', capturePayment),
+    parallel([
+      step('generate-invoice', generateInvoice),
+      step('record-ledger-entry', recordLedgerEntry),
+    ]),
+    step('send-receipt', sendReceipt),
+  ],
+});
+```
+
+## Direct runtime composition
+
+Use the runtime directly in workers, scripts, tests, or plain services:
+
+```typescript
+import {
+  type AnyResolvedTask,
+  type AnyResolvedWorkflow,
+  createMemoryAdapter,
+  createOrchestrationRuntime,
+} from '@lastshotlabs/slingshot-orchestration';
+
+declare const capturePayment: AnyResolvedTask;
+declare const generateInvoice: AnyResolvedTask;
+declare const recordLedgerEntry: AnyResolvedTask;
+declare const sendReceipt: AnyResolvedTask;
+declare const processInvoiceWorkflow: AnyResolvedWorkflow;
+
+const runtime = createOrchestrationRuntime({
+  adapter: createMemoryAdapter({ concurrency: 10 }),
+  tasks: [capturePayment, generateInvoice, recordLedgerEntry, sendReceipt],
+  workflows: [processInvoiceWorkflow],
+});
+
+const handle = await runtime.runWorkflow(processInvoiceWorkflow, {
+  invoiceId: 'inv_123',
+  customerEmail: 'customer@example.com',
+  amountCents: 4_200,
+});
+
+const result = await handle.result();
+```
+
+If you swap to BullMQ later, direct runtime composition stays the same. The BullMQ adapter now
+lazily starts on first use, so you do not need a separate manual `start()` call before
+`runTask()` / `runWorkflow()`.
+
+## Slingshot plugin composition
+
+Use the plugin wrapper when you want the orchestration runtime published into app context and,
+optionally, exposed over protected HTTP routes.
+
+```typescript
+import type { MiddlewareHandler } from 'hono';
+import type {
+  AnyResolvedTask,
+  AnyResolvedWorkflow,
+} from '@lastshotlabs/slingshot-orchestration';
+import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration';
+import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+
+declare const capturePayment: AnyResolvedTask;
+declare const generateInvoice: AnyResolvedTask;
+declare const recordLedgerEntry: AnyResolvedTask;
+declare const sendReceipt: AnyResolvedTask;
+declare const processInvoiceWorkflow: AnyResolvedWorkflow;
+
+const requireOperationsKey: MiddlewareHandler = async (c, next) => {
+  if (c.req.header('x-ops-key') !== 'dev-ops-key') {
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  c.set('tenantId', 'tenant-demo');
+  await next();
+};
+
+const orchestrationPlugin = createOrchestrationPlugin({
+  adapter: createMemoryAdapter({ concurrency: 10 }),
+  tasks: [capturePayment, generateInvoice, recordLedgerEntry, sendReceipt],
+  workflows: [processInvoiceWorkflow],
+  routes: true,
+  routePrefix: '/orchestration',
+  routeMiddleware: [requireOperationsKey],
+});
+```
+
+## Trigger work from app code
+
+Other plugins can read the runtime from `pluginState` through `getOrchestration()` and start work
+without going through the HTTP API:
+
+```typescript
+import { getContext, type SlingshotPlugin } from '@lastshotlabs/slingshot';
+import {
+  ORCHESTRATION_PLUGIN_KEY,
+  getOrchestration,
+} from '@lastshotlabs/slingshot-orchestration-plugin';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
+
+declare const processInvoiceWorkflow: AnyResolvedWorkflow;
+
+export function createBillingApiPlugin(): SlingshotPlugin {
+  return {
+    name: 'billing-api',
+    dependencies: [ORCHESTRATION_PLUGIN_KEY],
+    setupRoutes({ app }) {
+      app.post('/billing/invoices/:invoiceId/process', async c => {
+        const runtime = getOrchestration(getContext(app));
+        const invoiceId = c.req.param('invoiceId');
+
+        const handle = await runtime.runWorkflow(processInvoiceWorkflow, {
+          invoiceId,
+          customerEmail: 'customer@example.com',
+          amountCents: 4_200,
+        });
+
+        return c.json({ runId: handle.id }, 202);
+      });
+    },
+  };
+}
+```
+
+That pattern is the cleanest way to keep orchestration internal to your app while still letting
+feature routes trigger background work.
+
+## HTTP routes are optional
+
+Enable orchestration HTTP routes only when you want external systems or admin tools to trigger runs.
+When routes are enabled, `routeMiddleware` must be non-empty.
+
+Current route surface:
+
+- `POST /orchestration/tasks/:name/runs`
+- `POST /orchestration/workflows/:name/runs`
+- `GET /orchestration/runs/:id`
+- `DELETE /orchestration/runs/:id`
+- `GET /orchestration/runs`
+- `POST /orchestration/runs/:id/signal/:signalName`
+
+## Adapter choice
+
+- `createMemoryAdapter()` for local development and tests
+- `createSqliteAdapter()` for durable single-node execution
+- `createBullMQOrchestrationAdapter()` for Redis-backed queues, scheduling, and worker fleets
+
+## Manifest next
+
+The current answer for orchestration is still "code first". The next manifest phase will need to
+cover:
+
+- task and workflow registration
+- handler export resolution
+- route middleware export resolution
+- adapter/provider selection
+
+Until that lands, the supported usage path is direct TypeScript composition.
+
+## Source-backed reference
+
+The repo includes a runnable example app at `examples/orchestration/`.
+
+See [Orchestration Example](/slingshot/examples/orchestration/) for the exact source-backed app
+composition.

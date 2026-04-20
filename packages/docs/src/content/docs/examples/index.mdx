@@ -13,7 +13,8 @@ All examples use in-memory adapters by default. Swapping to SQLite, Postgres, Mo
 a one-line change. See [Production Databases](/slingshot/examples/production-databases/).
 
 Source-backed example apps live in the repo under `examples/`. The current source-backed set is
-`with-auth`, `config-driven-domain`, `collaboration-workspace`, and `content-platform`.
+`with-auth`, `config-driven-domain`, `collaboration-workspace`, `content-platform`, and
+`orchestration`.
 
 ## App compositions
 
@@ -48,6 +49,11 @@ Source-backed example apps live in the repo under `examples/`. The current sourc
     href="/slingshot/examples/config-driven-domain/"
     description="Define an entity, add operations, wrap it in a plugin. The core authoring pattern."
   />
+  <LinkCard
+    title="Orchestration"
+    href="/slingshot/examples/orchestration/"
+    description="Code-first tasks, workflows, protected routes, and runtime access from app code."
+  />
 </CardGrid>
 
 ## Capability map
@@ -60,6 +66,7 @@ Source-backed example apps live in the repo under `examples/`. The current sourc
 | [Collaboration Workspace](/slingshot/examples/collaboration-workspace/) | x    | x         | x    | x     |          |         | x             |
 | [Content Platform](/slingshot/examples/content-platform/)               | x    | x         |      | x     | x        | x       |               |
 | [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       | x    |           |      |       | optional |         | x             |
+| [Orchestration](/slingshot/examples/orchestration/)                     | x    |           |      |       |          |         |               |
 
 ## How-tos
 
@@ -99,6 +106,7 @@ Source-backed example apps live in the repo under `examples/`. The current sourc
 | Collaboration product surface      | [Collaboration Workspace](/slingshot/examples/collaboration-workspace/) |
 | Publishing or docs platform        | [Content Platform](/slingshot/examples/content-platform/)               |
 | Your own entity-driven package     | [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       |
+| Background jobs and workflows      | [Orchestration](/slingshot/examples/orchestration/)                     |
 | Custom routes and event handling   | [Custom Plugin](/slingshot/examples/custom-plugin/)                     |
 | Full-text search                   | [Adding Search](/slingshot/examples/adding-search/)                     |
 | Live updates in the browser        | [Realtime with SSE](/slingshot/examples/realtime-sse/)                  |

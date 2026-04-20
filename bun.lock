@@ -65,6 +65,7 @@
         "@lastshotlabs/slingshot-community": "workspace:*",
         "@lastshotlabs/slingshot-deep-links": "workspace:*",
         "@lastshotlabs/slingshot-interactions": "workspace:*",
+        "@lastshotlabs/slingshot-kafka": "workspace:*",
         "@lastshotlabs/slingshot-mail": "workspace:*",
         "@lastshotlabs/slingshot-notifications": "workspace:*",
         "@lastshotlabs/slingshot-permissions": "workspace:*",
@@ -92,6 +93,7 @@
         "@lastshotlabs/slingshot-community",
         "@lastshotlabs/slingshot-deep-links",
         "@lastshotlabs/slingshot-interactions",
+        "@lastshotlabs/slingshot-kafka",
         "@lastshotlabs/slingshot-mail",
         "@lastshotlabs/slingshot-notifications",
         "@lastshotlabs/slingshot-permissions",
@@ -495,6 +497,40 @@
         "zod": ">=4.0 <5",
       },
     },
+    "packages/slingshot-orchestration": {
+      "name": "@lastshotlabs/slingshot-orchestration",
+      "version": "0.0.2",
+      "dependencies": {
+        "better-sqlite3": "^12.8.0",
+      },
+      "peerDependencies": {
+        "zod": ">=4.0 <5",
+      },
+    },
+    "packages/slingshot-orchestration-bullmq": {
+      "name": "@lastshotlabs/slingshot-orchestration-bullmq",
+      "version": "0.0.2",
+      "dependencies": {
+        "@lastshotlabs/slingshot-orchestration": "workspace:*",
+      },
+      "peerDependencies": {
+        "bullmq": ">=5 <6",
+        "ioredis": ">=5 <6",
+        "zod": ">=4.0 <5",
+      },
+    },
+    "packages/slingshot-orchestration-plugin": {
+      "name": "@lastshotlabs/slingshot-orchestration-plugin",
+      "version": "0.0.2",
+      "dependencies": {
+        "@lastshotlabs/slingshot-core": "workspace:*",
+        "@lastshotlabs/slingshot-orchestration": "workspace:*",
+      },
+      "peerDependencies": {
+        "hono": ">=4.12.12 <5",
+        "zod": ">=4.0 <5",
+      },
+    },
     "packages/slingshot-organizations": {
       "name": "@lastshotlabs/slingshot-organizations",
       "version": "0.0.2",
@@ -578,6 +614,18 @@
         "mongoose",
         "pg",
       ],
+    },
+    "packages/slingshot-runtime-lambda": {
+      "name": "@lastshotlabs/slingshot-runtime-lambda",
+      "version": "0.0.2",
+      "dependencies": {
+        "@lastshotlabs/slingshot": "file:../..",
+        "@lastshotlabs/slingshot-core": "workspace:*",
+        "@lastshotlabs/slingshot-runtime-node": "workspace:*",
+      },
+      "peerDependencies": {
+        "zod": ">=4.0 <5",
+      },
     },
     "packages/slingshot-scim": {
       "name": "@lastshotlabs/slingshot-scim",
@@ -998,6 +1046,8 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
+    "@lastshotlabs/slingshot": ["project@root:", {}],
+
     "@lastshotlabs/slingshot-admin": ["@lastshotlabs/slingshot-admin@workspace:packages/slingshot-admin"],
 
     "@lastshotlabs/slingshot-assets": ["@lastshotlabs/slingshot-assets@workspace:packages/slingshot-assets"],
@@ -1044,6 +1094,12 @@
 
     "@lastshotlabs/slingshot-oidc": ["@lastshotlabs/slingshot-oidc@workspace:packages/slingshot-oidc"],
 
+    "@lastshotlabs/slingshot-orchestration": ["@lastshotlabs/slingshot-orchestration@workspace:packages/slingshot-orchestration"],
+
+    "@lastshotlabs/slingshot-orchestration-bullmq": ["@lastshotlabs/slingshot-orchestration-bullmq@workspace:packages/slingshot-orchestration-bullmq"],
+
+    "@lastshotlabs/slingshot-orchestration-plugin": ["@lastshotlabs/slingshot-orchestration-plugin@workspace:packages/slingshot-orchestration-plugin"],
+
     "@lastshotlabs/slingshot-organizations": ["@lastshotlabs/slingshot-organizations@workspace:packages/slingshot-organizations"],
 
     "@lastshotlabs/slingshot-permissions": ["@lastshotlabs/slingshot-permissions@workspace:packages/slingshot-permissions"],
@@ -1057,6 +1113,8 @@
     "@lastshotlabs/slingshot-runtime-bun": ["@lastshotlabs/slingshot-runtime-bun@workspace:packages/runtime-bun"],
 
     "@lastshotlabs/slingshot-runtime-edge": ["@lastshotlabs/slingshot-runtime-edge@workspace:packages/runtime-edge"],
+
+    "@lastshotlabs/slingshot-runtime-lambda": ["@lastshotlabs/slingshot-runtime-lambda@workspace:packages/slingshot-runtime-lambda"],
 
     "@lastshotlabs/slingshot-runtime-node": ["@lastshotlabs/slingshot-runtime-node@workspace:packages/runtime-node"],
 

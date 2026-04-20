@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "target": "ESNext",
+    "types": ["bun"],
+    "paths": {
+      "@lastshotlabs/slingshot-orchestration": ["../slingshot-orchestration/src/index.ts"]
+    },
+    "skipLibCheck": true
+  },
+  "exclude": ["dist", "node_modules"]
+}

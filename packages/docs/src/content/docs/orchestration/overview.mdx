@@ -1,0 +1,137 @@
+---
+title: Orchestration Overview
+description: Tasks, workflows, adapters, and the current provider matrix for Slingshot orchestration
+---
+
+Slingshot orchestration is a portable runtime for two related concepts:
+
+- **Tasks**: named, retryable units of work
+- **Workflows**: ordered sequences of tasks with optional parallel branches and durable sleeps
+
+The point of the abstraction is that application code should not care whether runs execute in
+memory, SQLite, or BullMQ. You define the work once, then swap adapters as infrastructure changes.
+
+## Packages
+
+| Package | Role |
+| ------- | ---- |
+| `@lastshotlabs/slingshot-orchestration` | Portable task/workflow definitions, runtime, memory adapter, SQLite adapter |
+| `@lastshotlabs/slingshot-orchestration-plugin` | Slingshot plugin integration, runtime lookup helpers, HTTP routes |
+| `@lastshotlabs/slingshot-orchestration-bullmq` | BullMQ-backed adapter for Redis deployments |
+
+## Current support
+
+| Adapter / Provider | Status | Notes |
+| ------------------ | ------ | ----- |
+| Memory | Supported | In-process, non-durable |
+| SQLite | Supported | Durable single-node execution |
+| BullMQ | Supported | Redis-backed queues, scheduling, progress |
+| Manifest mode | Not shipped yet | Planned as Phase 4 |
+| Trigger.dev | Not shipped yet | Planned follow-up provider |
+| Temporal | Not shipped yet | Planned follow-up provider |
+
+So, no: Temporal and the other cloud-provider adapters are not available in this worktree yet.
+Current provider support stops at memory, SQLite, and BullMQ.
+
+## Code-first today
+
+The current implementation is code-first. Define tasks and workflows in TypeScript, then compose
+them into a runtime or Slingshot plugin.
+
+```typescript
+import {
+  createMemoryAdapter,
+  createOrchestrationRuntime,
+  defineTask,
+} from '@lastshotlabs/slingshot-orchestration';
+import { z } from 'zod';
+
+const resizeImage = defineTask({
+  name: 'resize-image',
+  input: z.object({ assetId: z.string() }),
+  output: z.object({ ok: z.boolean() }),
+  async handler(input) {
+    return { ok: true };
+  },
+});
+
+const runtime = createOrchestrationRuntime({
+  adapter: createMemoryAdapter({ concurrency: 10 }),
+  tasks: [resizeImage],
+});
+```
+
+For Slingshot integration:
+
+```typescript
+import type { MiddlewareHandler } from 'hono';
+import {
+  createMemoryAdapter,
+  defineTask,
+} from '@lastshotlabs/slingshot-orchestration';
+import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+import { z } from 'zod';
+
+const resizeImage = defineTask({
+  name: 'resize-image',
+  input: z.object({ assetId: z.string() }),
+  output: z.object({ ok: z.boolean() }),
+  async handler() {
+    return { ok: true };
+  },
+});
+
+const requireAdmin: MiddlewareHandler = async (_c, next) => {
+  await next();
+};
+
+const orchestrationPlugin = createOrchestrationPlugin({
+  adapter: createMemoryAdapter({ concurrency: 10 }),
+  tasks: [resizeImage],
+  workflows: [],
+  routes: true,
+  routeMiddleware: [requireAdmin],
+});
+```
+
+When the adapter is passed directly into `createOrchestrationRuntime()`, the built-in adapters are
+ready to use immediately. Memory and SQLite still manage their own lifecycle as before, and the
+BullMQ adapter now lazily starts itself on first use so direct code-first runtime composition is
+safe.
+
+## Handlers and manifest status
+
+The current orchestration implementation is code-first only.
+
+- You define tasks and workflows in TypeScript.
+- You pass those definitions directly into the runtime or plugin.
+- You pass route middleware directly as functions.
+
+Manifest-driven orchestration and handlers-file export resolution are planned for Phase 4, but they
+are not shipped in this worktree yet.
+
+## Design boundary
+
+The orchestration domain owns:
+
+- task and workflow definitions
+- retries, timeouts, cancellation, progress, and run state
+- provider adapter contracts
+
+Outer integration layers own:
+
+- Slingshot plugin lifecycle
+- HTTP routes
+- manifest bootstrap
+- provider SDK wiring
+
+That split is deliberate. It keeps the runtime transport-neutral and makes future providers
+possible without rewriting application code.
+
+## Where to go next
+
+- [Code-First Guide](/slingshot/orchestration/code-first/)
+- [Tasks and Workflows](/slingshot/orchestration/tasks-and-workflows/)
+- [Adapters](/slingshot/orchestration/adapters/)
+- [HTTP API](/slingshot/orchestration/http-api/)
+- [Events](/slingshot/orchestration/events/)

@@ -63,6 +63,17 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Orchestration',
+          items: [
+            { label: 'Overview', slug: 'orchestration/overview' },
+            { label: 'Code-First Guide', slug: 'orchestration/code-first' },
+            { label: 'Tasks and Workflows', slug: 'orchestration/tasks-and-workflows' },
+            { label: 'Adapters', slug: 'orchestration/adapters' },
+            { label: 'HTTP API', slug: 'orchestration/http-api' },
+            { label: 'Events', slug: 'orchestration/events' },
+          ],
+        },
+        {
           label: 'Examples',
           items: [
             { label: 'Overview', slug: 'examples' },
@@ -72,6 +83,7 @@ export default defineConfig({
             { label: 'Collaboration Workspace', slug: 'examples/collaboration-workspace' },
             { label: 'Content Platform', slug: 'examples/content-platform' },
             { label: 'Config-Driven Domain', slug: 'examples/config-driven-domain' },
+            { label: 'Orchestration', slug: 'examples/orchestration' },
             { label: 'Custom Plugin', slug: 'examples/custom-plugin' },
             { label: 'Adding Search', slug: 'examples/adding-search' },
             { label: 'Production Databases', slug: 'examples/production-databases' },

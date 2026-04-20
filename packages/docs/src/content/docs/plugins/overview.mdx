@@ -40,6 +40,7 @@ Self-contained product domains:
 | `slingshot-organizations` | Teams, membership, roles, invite flows              |
 | `slingshot-permissions`   | RBAC/ABAC — required by community and organizations |
 | `slingshot-search`        | Full-text entity search                             |
+| `slingshot-orchestration` | Tasks, workflows, retries, scheduling adapters      |
 | `slingshot-game-engine`   | Multiplayer game state, phases, turns, and scoring  |
 | `slingshot-mail`          | Transactional email delivery                        |
 | `slingshot-push`          | Push notification delivery                          |
@@ -50,6 +51,12 @@ Self-contained product domains:
 | `slingshot-oidc`          | OpenID Connect provider                             |
 
 Each of these is a plugin that mounts routes, registers capabilities, and participates in the boot lifecycle.
+
+For orchestration specifically, the stack is split across three packages:
+
+- `@lastshotlabs/slingshot-orchestration` - portable task/workflow runtime
+- `@lastshotlabs/slingshot-orchestration-plugin` - Slingshot plugin and HTTP integration
+- `@lastshotlabs/slingshot-orchestration-bullmq` - BullMQ provider adapter
 
 ## What counts as a plugin
 

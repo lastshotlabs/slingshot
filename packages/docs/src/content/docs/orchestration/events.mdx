@@ -1,0 +1,73 @@
+---
+title: Orchestration Events
+description: Event names, payloads, and subscription examples for orchestration lifecycle events
+---
+
+`@lastshotlabs/slingshot-orchestration-plugin` augments `SlingshotEventMap` with orchestration
+events. Once the plugin is registered, other plugins can subscribe to orchestration lifecycle
+changes through the normal Slingshot event bus.
+
+## Event names
+
+Current event surface:
+
+- `orchestration.task.started`
+- `orchestration.task.completed`
+- `orchestration.task.failed`
+- `orchestration.task.progress`
+- `orchestration.workflow.started`
+- `orchestration.workflow.completed`
+- `orchestration.workflow.failed`
+- `orchestration.step.completed`
+- `orchestration.step.failed`
+- `orchestration.step.skipped`
+
+## Basic subscription
+
+Subscribe in `setupPost` or another place that already has access to the app bus:
+
+```typescript
+bus.on('orchestration.workflow.completed', async ({ runId, workflow, durationMs }) => {
+  console.log('workflow completed', { runId, workflow, durationMs });
+});
+
+bus.on('orchestration.task.failed', async ({ runId, task, error }) => {
+  console.error('task failed', runId, task, error.message);
+});
+```
+
+## Common uses
+
+- write audit entries for workflow completion or failure
+- trigger follow-up notifications
+- emit domain analytics
+- bridge orchestration state into admin dashboards
+
+## Progress events
+
+Task handlers can publish progress:
+
+```typescript
+const task = defineTask({
+  name: 'import-file',
+  input: z.object({ fileId: z.string() }),
+  output: z.object({ ok: z.boolean() }),
+  async handler(input, ctx) {
+    ctx.reportProgress({ percent: 10, message: 'starting import' });
+    ctx.reportProgress({ percent: 50, message: 'parsing rows' });
+    ctx.reportProgress({ percent: 100, message: 'done' });
+    return { ok: true };
+  },
+});
+```
+
+Consumers can observe that through either:
+
+- `runtime.onProgress(runId, callback)`
+- `bus.on('orchestration.task.progress', listener)`
+
+## Boundary rule
+
+The orchestration core emits through `OrchestrationEventSink`, not directly through
+`SlingshotEventBus`. The Slingshot adapter is the boundary layer that bridges those events onto
+`ctx.bus`.

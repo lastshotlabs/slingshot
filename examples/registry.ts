@@ -84,4 +84,10 @@ export const exampleRegistry: ExampleDefinition[] = [
     docsPath: 'packages/docs/src/content/docs/examples/game-engine.mdx',
     checks: [{ kind: 'code-app', entrypoint: 'examples/game-engine/src/index.ts' }],
   },
+  {
+    name: 'orchestration',
+    directory: 'examples/orchestration',
+    docsPath: 'packages/docs/src/content/docs/examples/orchestration.mdx',
+    checks: [{ kind: 'code-app', entrypoint: 'examples/orchestration/src/index.ts' }],
+  },
 ];

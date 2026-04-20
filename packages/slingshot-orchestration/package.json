@@ -1,7 +1,7 @@
 {
-  "name": "@lastshotlabs/slingshot-runtime-lambda",
+  "name": "@lastshotlabs/slingshot-orchestration",
   "version": "0.0.2",
-  "description": "AWS Lambda runtime for Slingshot handlers",
+  "description": "Portable orchestration runtime, task/workflow DSL, and built-in memory/SQLite adapters for Slingshot",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -14,7 +14,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/lastshotlabs/slingshot.git",
-    "directory": "packages/slingshot-runtime-lambda"
+    "directory": "packages/slingshot-orchestration"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
@@ -29,9 +29,7 @@
     "lint": "eslint src/ --cache"
   },
   "dependencies": {
-    "@lastshotlabs/slingshot": "file:../..",
-    "@lastshotlabs/slingshot-core": "workspace:*",
-    "@lastshotlabs/slingshot-runtime-node": "workspace:*"
+    "better-sqlite3": "^12.8.0"
   },
   "peerDependencies": {
     "zod": ">=4.0 <5"

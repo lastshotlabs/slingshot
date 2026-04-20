@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "noCheck": true,
+    "declaration": true,
+    "outDir": "dist",
+    "tsBuildInfoFile": ".tmp/tsconfig.build.tsbuildinfo",
+    "rootDir": ".",
+    "composite": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

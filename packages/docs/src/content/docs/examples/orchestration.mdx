@@ -1,0 +1,201 @@
+---
+title: Orchestration
+description: Code-first orchestration with tasks, workflows, protected routes, and runtime access from app code
+---
+
+Source-backed example app: `examples/orchestration/`
+
+This example shows the current supported orchestration path in the worktree:
+
+- define tasks in TypeScript
+- compose them into a workflow
+- mount the orchestration plugin with protected routes
+- start workflows from app-owned routes through `getOrchestration()`
+
+## What this demonstrates
+
+- `defineTask()` and `defineWorkflow()` as the authoring surface
+- `createOrchestrationPlugin()` with non-empty `routeMiddleware`
+- a second plugin depending on orchestration and triggering workflows directly
+- a minimal in-memory adapter setup that can later be swapped to SQLite or BullMQ
+
+## Define the orchestration work
+
+```typescript title="src/orchestration.ts"
+import {
+  type AnyResolvedTask,
+  defineTask,
+  defineWorkflow,
+  parallel,
+  step,
+  stepResult,
+} from '@lastshotlabs/slingshot-orchestration';
+import { z } from 'zod';
+
+declare const generateInvoice: AnyResolvedTask;
+declare const recordLedgerEntry: AnyResolvedTask;
+declare const sendReceipt: AnyResolvedTask;
+
+export const capturePayment = defineTask({
+  name: 'capture-payment',
+  input: z.object({
+    invoiceId: z.string(),
+    amountCents: z.number().int().positive(),
+  }),
+  output: z.object({
+    captured: z.boolean(),
+    paymentId: z.string(),
+  }),
+  retry: { maxAttempts: 3, backoff: 'exponential', delayMs: 250, maxDelayMs: 2_000 },
+  timeout: 5_000,
+  async handler(input, ctx) {
+    ctx.reportProgress({ percent: 25, message: 'authorizing payment' });
+    return {
+      captured: true,
+      paymentId: `pay_${input.invoiceId}_${ctx.runId}`,
+    };
+  },
+});
+
+export const processInvoiceWorkflow = defineWorkflow({
+  name: 'process-invoice',
+  input: z.object({
+    invoiceId: z.string(),
+    customerEmail: z.string().email(),
+    amountCents: z.number().int().positive(),
+  }),
+  outputMapper(results) {
+    return {
+      payment: stepResult(results, 'capture-payment', capturePayment)!,
+      invoice: stepResult(results, 'generate-invoice', generateInvoice)!,
+      ledger: stepResult(results, 'record-ledger-entry', recordLedgerEntry)!,
+      receipt: stepResult(results, 'send-receipt', sendReceipt)!,
+    };
+  },
+  steps: [
+    step('capture-payment', capturePayment),
+    parallel([
+      step('generate-invoice', generateInvoice),
+      step('record-ledger-entry', recordLedgerEntry),
+    ]),
+    step('send-receipt', sendReceipt),
+  ],
+});
+```
+
+## Protect the orchestration routes
+
+```typescript title="src/orchestration.ts"
+import type { MiddlewareHandler } from 'hono';
+
+export const requireOperationsKey: MiddlewareHandler = async (c, next) => {
+  if (c.req.header('x-ops-key') !== 'dev-ops-key') {
+    return c.json({ error: 'forbidden' }, 403);
+  }
+
+  c.set('tenantId', 'tenant-demo');
+  await next();
+};
+```
+
+The important rule is not the specific guard, it is that the guard exists. The plugin refuses to
+mount orchestration routes without at least one `routeMiddleware` entry.
+
+## Mount the orchestration plugin
+
+```typescript title="src/index.ts"
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import {
+  createMemoryAdapter,
+  type AnyResolvedTask,
+  type AnyResolvedWorkflow,
+} from '@lastshotlabs/slingshot-orchestration';
+import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+
+declare const orchestrationTasks: AnyResolvedTask[];
+declare const orchestrationWorkflows: AnyResolvedWorkflow[];
+declare const requireOperationsKey: import('hono').MiddlewareHandler;
+declare function createBillingApiPlugin(): import('@lastshotlabs/slingshot').SlingshotPlugin;
+
+export function buildAppConfig() {
+  return {
+    db: { mongo: false, redis: false },
+    security: {
+      signing: {
+        secret: process.env.JWT_SECRET ?? 'dev-secret-change-me-dev-secret-change-me',
+      },
+    },
+    plugins: [
+      createAuthPlugin({
+        auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+        db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+      }),
+      createOrchestrationPlugin({
+        adapter: createMemoryAdapter({ concurrency: 10 }),
+        tasks: orchestrationTasks,
+        workflows: orchestrationWorkflows,
+        routes: true,
+        routePrefix: '/orchestration',
+        routeMiddleware: [requireOperationsKey],
+      }),
+      createBillingApiPlugin(),
+    ],
+  };
+}
+```
+
+## Start workflows from your own route handlers
+
+```typescript title="src/billingPlugin.ts"
+import { getContext, type SlingshotPlugin } from '@lastshotlabs/slingshot';
+import {
+  ORCHESTRATION_PLUGIN_KEY,
+  getOrchestration,
+} from '@lastshotlabs/slingshot-orchestration-plugin';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
+
+declare const processInvoiceWorkflow: AnyResolvedWorkflow;
+
+export function createBillingApiPlugin(): SlingshotPlugin {
+  return {
+    name: 'billing-api',
+    dependencies: [ORCHESTRATION_PLUGIN_KEY],
+    setupRoutes({ app }) {
+      app.post('/billing/invoices/:invoiceId/process', async c => {
+        const runtime = getOrchestration(getContext(app));
+        const invoiceId = c.req.param('invoiceId');
+        const handle = await runtime.runWorkflow(processInvoiceWorkflow, {
+          invoiceId,
+          customerEmail: 'customer@example.com',
+          amountCents: 4_200,
+        });
+
+        return c.json({ runId: handle.id }, 202);
+      });
+    },
+  };
+}
+```
+
+That is the highest-signal app pattern today: orchestration stays internal to the app and business
+routes call the runtime directly.
+
+## Why this shape matters
+
+It keeps the responsibilities clear:
+
+- tasks and workflows own the durable work contract
+- the orchestration plugin owns runtime publication and optional orchestration HTTP routes
+- the app owns its product routes and decides when to start work
+
+## Manifest status
+
+This example is intentionally code-first. Manifest-driven orchestration is not available in this
+worktree yet, so there is no hidden manifest shortcut to replace these TypeScript definitions.
+
+## Where to go next
+
+- [Orchestration Overview](/slingshot/orchestration/overview/)
+- [Orchestration Code-First Guide](/slingshot/orchestration/code-first/)
+- [Tasks and Workflows](/slingshot/orchestration/tasks-and-workflows/)
+- [Adapters](/slingshot/orchestration/adapters/)

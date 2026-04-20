@@ -145,6 +145,7 @@ export const appConfigSchema = z
     versioning: z.union([versioningObjectSchema.loose(), z.array(z.string())]).optional(),
     plugins: z.array(z.unknown()).optional(),
     eventBus: z.unknown().optional(),
+    kafkaConnectors: z.unknown().optional(),
     secrets: z.unknown().optional(),
     runtime: z.unknown().optional(),
     permissions: z
@@ -287,7 +288,9 @@ const SERVER_CONFIG_KEYS = keysOf(serverConfigSchema);
  * these at the top level (`parentPath === ""`); they are still validated by the
  * Zod schema at the type level.
  */
-const SKIP_NESTED_CHECK = Object.freeze(new Set(['middleware', 'plugins', 'eventBus']));
+const SKIP_NESTED_CHECK = Object.freeze(
+  new Set(['middleware', 'plugins', 'eventBus', 'kafkaConnectors']),
+);
 
 /**
  * Result returned by {@link validateAppConfig} and {@link validateServerConfig}.

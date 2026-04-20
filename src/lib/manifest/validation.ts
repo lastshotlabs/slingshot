@@ -76,6 +76,90 @@ export function validateManifestCrossFields(
   manifest: Record<string, unknown>,
   ctx: z.RefinementCtx,
 ): void {
+  const kafkaConnectors = manifest.kafkaConnectors as
+    | {
+        inbound?: Array<{
+          topic?: string;
+          topicPattern?: string;
+          errorStrategy?: 'dlq' | 'skip' | 'pause';
+          dlqTopic?: string;
+          autoCreateDLQ?: boolean;
+          sessionTimeout?: number;
+          heartbeatInterval?: number;
+        }>;
+        outbound?: Array<{
+          durable?: boolean;
+          name?: string;
+        }>;
+      }
+    | undefined;
+
+  if (kafkaConnectors) {
+    for (const [index, inbound] of (kafkaConnectors.inbound ?? []).entries()) {
+      const hasTopic = typeof inbound.topic === 'string' && inbound.topic.length > 0;
+      const hasTopicPattern =
+        typeof inbound.topicPattern === 'string' && inbound.topicPattern.length > 0;
+
+      if (hasTopic === hasTopicPattern) {
+        addManifestIssue(
+          ctx,
+          ['kafkaConnectors', 'inbound', index],
+          'Exactly one of "topic" or "topicPattern" is required.',
+        );
+      }
+
+      if (inbound.dlqTopic && (inbound.errorStrategy ?? 'dlq') !== 'dlq') {
+        addManifestIssue(
+          ctx,
+          ['kafkaConnectors', 'inbound', index, 'dlqTopic'],
+          '"dlqTopic" requires errorStrategy "dlq".',
+        );
+      }
+
+      if (
+        typeof inbound.sessionTimeout === 'number' &&
+        typeof inbound.heartbeatInterval === 'number' &&
+        inbound.heartbeatInterval >= inbound.sessionTimeout
+      ) {
+        addManifestIssue(
+          ctx,
+          ['kafkaConnectors', 'inbound', index, 'heartbeatInterval'],
+          '"heartbeatInterval" must be less than "sessionTimeout".',
+        );
+      }
+
+      if (typeof inbound.topicPattern === 'string') {
+        try {
+          new RegExp(inbound.topicPattern);
+        } catch {
+          addManifestIssue(
+            ctx,
+            ['kafkaConnectors', 'inbound', index, 'topicPattern'],
+            'Invalid regular expression.',
+          );
+        }
+      }
+
+      if (inbound.autoCreateDLQ && (inbound.errorStrategy ?? 'dlq') !== 'dlq') {
+        addManifestIssue(
+          ctx,
+          ['kafkaConnectors', 'inbound', index, 'autoCreateDLQ'],
+          '"autoCreateDLQ" is only meaningful when errorStrategy is "dlq".',
+        );
+      }
+    }
+
+    for (const [index, outbound] of (kafkaConnectors.outbound ?? []).entries()) {
+      if (outbound.durable && !outbound.name) {
+        addManifestIssue(
+          ctx,
+          ['kafkaConnectors', 'outbound', index, 'name'],
+          '"name" is required when outbound connector "durable" is true.',
+        );
+      }
+    }
+  }
+
   if (!manifest.pages) return;
 
   const pages = manifest.pages as Record<string, Record<string, unknown>>;

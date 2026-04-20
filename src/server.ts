@@ -592,6 +592,13 @@ export const createServer = async <T extends object = object>(
 
         // SSE teardown — streams are already closed above to unblock listener
         // shutdown; remove bus listeners here before bus shutdown.
+        try {
+          await ctx.kafkaConnectors?.stop();
+        } catch (e) {
+          console.error('[shutdown] Kafka connector shutdown error:', e);
+          exitCode = 1;
+        }
+
         for (const { key, listener } of sseBusListeners)
           slingshotBus.off(key as keyof SlingshotEventMap, listener as (payload: unknown) => void);
 

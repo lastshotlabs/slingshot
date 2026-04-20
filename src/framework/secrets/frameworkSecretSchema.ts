@@ -20,6 +20,14 @@ export const frameworkSecretSchema = {
   redisUser: { path: 'REDIS_USER', required: false },
   redisPassword: { path: 'REDIS_PASSWORD', required: false },
 
+  // Kafka
+  kafkaBrokers: { path: 'KAFKA_BROKERS', required: false },
+  kafkaClientId: { path: 'KAFKA_CLIENT_ID', required: false },
+  kafkaSaslUser: { path: 'KAFKA_SASL_USERNAME', required: false },
+  kafkaSaslPass: { path: 'KAFKA_SASL_PASSWORD', required: false },
+  kafkaSaslMech: { path: 'KAFKA_SASL_MECHANISM', required: false },
+  kafkaSsl: { path: 'KAFKA_SSL', required: false },
+
   // Mongo (primary / single mode)
   mongoUser: { path: 'MONGO_USER', required: false },
   mongoPassword: { path: 'MONGO_PASSWORD', required: false },

@@ -20,6 +20,7 @@ import { getAuthRuntimeContextOrNull } from '@lastshotlabs/slingshot-auth';
 import type {
   CaptchaConfig,
   CoreRegistrarSnapshot,
+  KafkaConnectorHandle,
   SlingshotContext,
   SlingshotEventBus,
   SlingshotPlugin,
@@ -209,6 +210,7 @@ export interface BuildContextParams {
   metricsState: MetricsState;
   plugins: readonly SlingshotPlugin[];
   bus: SlingshotEventBus;
+  kafkaConnectors?: KafkaConnectorHandle;
   secretBundle: ResolvedSecretBundle;
   /** Server-level permissions config. When set, bootstrap runs before plugin setup. */
   permissions?: PermissionsConfig;
@@ -292,6 +294,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     metricsState,
     plugins,
     bus,
+    kafkaConnectors,
     secretBundle,
   } = params;
 
@@ -402,6 +405,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     publicPaths,
     plugins: Object.freeze([...plugins]),
     bus,
+    kafkaConnectors: kafkaConnectors ?? null,
     routeAuth: null,
     userResolver: null,
     rateLimitAdapter: null,
@@ -467,6 +471,12 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
             /* best-effort */
           }
           this.ws.transport = null;
+        }
+
+        try {
+          await this.kafkaConnectors?.stop();
+        } catch {
+          /* best-effort */
         }
 
         try {

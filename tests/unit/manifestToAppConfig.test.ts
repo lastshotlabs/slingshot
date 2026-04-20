@@ -293,6 +293,23 @@ describe('manifestToAppConfig', () => {
       expect(config.eventBus).toBe(fakeBus);
     });
 
+    it('"kafka" eventBus uses registry resolution', () => {
+      const reg = createManifestHandlerRegistry();
+      const fakeBus = createInProcessAdapter();
+      reg.registerEventBus('kafka', () => fakeBus);
+
+      const manifest: AppManifest = { ...minimalManifest, eventBus: 'kafka' };
+      const config = manifestToAppConfig(manifest, reg);
+      expect(config.eventBus).toBe(fakeBus);
+    });
+
+    it('"kafka" eventBus without registry throws a built-in hint', () => {
+      const manifest: AppManifest = { ...minimalManifest, eventBus: 'kafka' };
+      expect(() => manifestToAppConfig(manifest)).toThrow(
+        'Use createServerFromManifest() for built-in Kafka auto-registration',
+      );
+    });
+
     it('"bullmq" eventBus without registry throws a built-in hint', () => {
       const manifest: AppManifest = { ...minimalManifest, eventBus: 'bullmq' };
       expect(() => manifestToAppConfig(manifest)).toThrow(

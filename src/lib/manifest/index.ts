@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { manifestEntitiesSchema } from '@lastshotlabs/slingshot-entity';
 import { appManifestHandlerRefSchema, pluginRefSchema } from './helpers';
 import { dbSectionSchema, jobsSectionSchema, tenancySectionSchema } from './infrastructure';
+import { manifestKafkaConnectorsSchema } from './kafka';
 import { metaSectionSchema } from './meta';
 import {
   loggingSectionSchema,
@@ -264,6 +265,12 @@ export const appManifestSchema = z
     eventBus: eventBusSchema
       .optional()
       .describe('Event-bus backend configuration. Omit to use the in-process default event bus.'),
+
+    kafkaConnectors: manifestKafkaConnectorsSchema
+      .optional()
+      .describe(
+        'Kafka connectors for consuming external topics and forwarding internal events to Kafka. Omit to disable Kafka connector wiring.',
+      ),
 
     /** Secret provider configuration. */
     secrets: secretsSchema

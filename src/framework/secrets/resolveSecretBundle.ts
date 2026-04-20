@@ -89,6 +89,18 @@ export interface FrameworkSecretsLiteral {
   REDIS_USER?: string;
   /** Redis password. Optional. */
   REDIS_PASSWORD?: string;
+  /** Comma-separated Kafka broker list. Optional. */
+  KAFKA_BROKERS?: string;
+  /** Kafka client identifier. Optional. */
+  KAFKA_CLIENT_ID?: string;
+  /** Kafka SASL username. Optional. */
+  KAFKA_SASL_USERNAME?: string;
+  /** Kafka SASL password. Optional. */
+  KAFKA_SASL_PASSWORD?: string;
+  /** Kafka SASL mechanism. Optional. */
+  KAFKA_SASL_MECHANISM?: string;
+  /** Whether default Kafka TLS is enabled. Optional. */
+  KAFKA_SSL?: string;
   /** MongoDB username. Required when `db.mongo !== false` (default). */
   MONGO_USER?: string;
   /** MongoDB password. Required when `db.mongo !== false` (default). */

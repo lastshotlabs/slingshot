@@ -270,10 +270,10 @@ describe('coverage tooling', () => {
     });
 
     expect(spawnCalls.length).toBe(5);
-    for (const call of spawnCalls) {
+    for (const [index, call] of spawnCalls.entries()) {
       expect(call.opts.stdin).toBe('ignore');
-      expect(call.opts.stdout).toBe('inherit');
-      expect(call.opts.stderr).toBe('inherit');
+      expect(call.opts.stdout).toBe(index === 3 ? 'pipe' : 'inherit');
+      expect(call.opts.stderr).toBe(index === 3 ? 'pipe' : 'inherit');
     }
   });
 });

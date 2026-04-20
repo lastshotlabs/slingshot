@@ -23,6 +23,16 @@ function createSpawnStub(
   }) as typeof Bun.spawn;
 }
 
+function createTextStream(text: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(text));
+      controller.close();
+    },
+  });
+}
+
 describe('script entrypoints', () => {
   let tempDir = '';
 
@@ -360,6 +370,106 @@ describe('script entrypoints', () => {
 
     rmSync('coverage', { recursive: true, force: true });
     rmSync(join('.tmp', 'run-coverage-script-test'), { recursive: true, force: true });
+  });
+
+  test('prints a consolidated deduplicated failure summary after coverage suites finish', async () => {
+    const runCoverageModule = await import(`../../scripts/run-coverage.ts?summary=${Date.now()}`);
+
+    const suiteRoot = join('.tmp', 'run-coverage-summary-test');
+    const coverageSuites = [
+      {
+        name: 'root',
+        testsPath: 'tests',
+        coverageDir: join(suiteRoot, 'root'),
+        command: ['scripts/run-root-coverage.ts'],
+        ownedGlobs: ['scripts/ensure-pagefind-link.ts'],
+        ignoredGlobs: [],
+      },
+      {
+        name: 'slingshot-core',
+        testsPath: 'packages/slingshot-core/tests',
+        coverageDir: join(suiteRoot, 'slingshot-core'),
+        command: ['scripts/run-coverage-files.ts'],
+        ownedGlobs: ['scripts/examples-coverage.ts'],
+        ignoredGlobs: [],
+      },
+    ];
+
+    const logs: string[] = [];
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    const decoder = new TextDecoder();
+
+    const spawnFn = ((cmd: string[]) => {
+      const coveragePath =
+        cmd[1] === 'scripts/run-root-coverage.ts'
+          ? join(suiteRoot, 'root', 'lcov.info')
+          : join(suiteRoot, 'slingshot-core', 'lcov.info');
+
+      mkdirSync(dirname(coveragePath), { recursive: true });
+      writeFileSync(
+        coveragePath,
+        'SF:scripts/ensure-pagefind-link.ts\nLF:1\nLH:1\nend_of_record\n',
+        'utf8',
+      );
+
+      if (cmd[1] === 'scripts/run-root-coverage.ts') {
+        return {
+          exited: Promise.resolve(1),
+          stdout: createTextStream(
+            [
+              'test:coverage:root -> bulk 5',
+              '(fail) kafka connector lifecycle plumbing > createApp starts the handle and ctx.destroy stops it [15.00ms]',
+              '2 tests failed:',
+              '(fail) kafka connector lifecycle plumbing > createApp starts the handle and ctx.destroy stops it [15.00ms]',
+              '',
+            ].join('\n'),
+          ),
+          stderr: createTextStream(''),
+        } as ReturnType<typeof Bun.spawn>;
+      }
+
+      return {
+        exited: Promise.resolve(0),
+        stdout: createTextStream(
+          [
+            'test:coverage:slingshot-core:bulk:1 -> 40 file(s)',
+            '(fail) InProcessAdapter schema validation > strict mode throws before dispatching invalid payloads',
+            '',
+          ].join('\n'),
+        ),
+        stderr: createTextStream(''),
+      } as ReturnType<typeof Bun.spawn>;
+    }) as typeof Bun.spawn;
+
+    expect(
+      await runCoverageModule.runCoverage(coverageSuites as never, spawnFn, {
+        log: message => logs.push(message),
+        stdout: {
+          write: chunk =>
+            stdoutChunks.push(typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true })),
+        },
+        stderr: {
+          write: chunk =>
+            stderrChunks.push(typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true })),
+        },
+      }),
+    ).toBe(1);
+
+    expect(stdoutChunks.join('')).toContain(
+      '(fail) kafka connector lifecycle plumbing > createApp starts the handle and ctx.destroy stops it',
+    );
+    expect(stderrChunks.join('')).toBe('');
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        'coverage failure summary: 2 tests',
+        '- [root -> bulk 5] kafka connector lifecycle plumbing > createApp starts the handle and ctx.destroy stops it',
+        '- [slingshot-core -> bulk 1] InProcessAdapter schema validation > strict mode throws before dispatching invalid payloads',
+      ]),
+    );
+
+    rmSync('coverage', { recursive: true, force: true });
+    rmSync(join('.tmp', 'run-coverage-summary-test'), { recursive: true, force: true });
   });
 
   test('checks coverage summaries and docker env wiring', async () => {

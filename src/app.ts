@@ -64,6 +64,7 @@ import type {
   CoreRegistrar,
   CoreRegistrarSnapshot,
   CsrfConfig,
+  KafkaConnectorHandle,
   SlingshotContext,
   SlingshotEventBus,
   SlingshotPlugin,
@@ -182,6 +183,11 @@ export interface CreateAppConfig<T extends object = object> {
    * Event bus for cross-plugin communication. Defaults to an in-process EventEmitter adapter.
    */
   eventBus?: SlingshotEventBus;
+  /**
+   * Optional Kafka connector bridge started during app finalization and
+   * stopped during app/server teardown.
+   */
+  kafkaConnectors?: KafkaConnectorHandle;
   /**
    * Optional WebSocket bootstrap configuration forwarded into app assembly so plugins can
    * self-wire endpoint handlers before `createServer()` starts the transport.
@@ -316,6 +322,7 @@ function freezeFrameworkSecurity(
 
 interface AppBootstrap {
   bus: SlingshotEventBus;
+  kafkaConnectors?: KafkaConnectorHandle;
   registrar: CoreRegistrar;
   drain: () => CoreRegistrarSnapshot;
   sortedPlugins: SlingshotPlugin[];
@@ -338,6 +345,12 @@ interface AppAssembly extends AppBootstrap {
 }
 
 async function cleanupBootstrapFailure(bootstrap: AppBootstrap): Promise<void> {
+  try {
+    await bootstrap.kafkaConnectors?.stop();
+  } catch {
+    /* best-effort */
+  }
+
   try {
     await bootstrap.bus.shutdown?.();
   } catch {
@@ -406,6 +419,7 @@ async function prepareBootstrap<T extends object>(
 
   const plugins = config.plugins ?? [];
   const bus = config.eventBus ?? createInProcessAdapter();
+  const kafkaConnectors = config.kafkaConnectors;
   const coreReg = createCoreRegistrar();
   const { registrar } = coreReg;
   const drain = () => coreReg.drain();
@@ -455,6 +469,7 @@ async function prepareBootstrap<T extends object>(
 
   return {
     bus,
+    kafkaConnectors,
     registrar,
     drain,
     sortedPlugins,
@@ -499,6 +514,7 @@ async function assembleApp<T extends object>(
       metricsState,
       plugins: bootstrap.sortedPlugins,
       bus,
+      kafkaConnectors: bootstrap.kafkaConnectors,
       secretBundle,
       permissions: config.permissions,
     });
@@ -637,12 +653,19 @@ async function mountAppRoutes<T extends object>(
 // ---------------------------------------------------------------------------
 
 async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
-  const { app, ctx, sortedPlugins, bus, drain, tenantCacheCarrier, infra } = assembly;
+  const { app, ctx, sortedPlugins, bus, kafkaConnectors, drain, tenantCacheCarrier, infra } =
+    assembly;
   const tracer = getTracer(assembly.tracingConfig);
 
   await withSpan(tracer, 'slingshot.bootstrap.post', async () => {
     await runPluginPost(sortedPlugins, app, infra.frameworkConfig, bus, tracer);
   });
+
+  if (kafkaConnectors) {
+    await withSpan(tracer, 'slingshot.bootstrap.kafka_connectors', async () => {
+      await kafkaConnectors.start(bus);
+    });
+  }
 
   await withSpan(tracer, 'slingshot.bootstrap.finalize', () => {
     finalizeContext(ctx, drain());

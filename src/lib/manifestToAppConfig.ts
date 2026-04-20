@@ -36,7 +36,7 @@ import { createRedisTransport } from '@framework/ws/redisTransport';
 import type { RedisTransportOptions } from '@framework/ws/redisTransport';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type { KafkaConnectorHandle, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import type { CreateServerConfig } from '../server';
 import type { AppManifest, AppManifestHandlerRef } from './manifest';
@@ -57,6 +57,10 @@ export interface ManifestToConfigOptions {
    * Defaults to process.cwd(). createServerFromManifest sets this to the manifest's directory.
    */
   baseDir?: string;
+  /**
+   * Optional Kafka connector handle pre-resolved during manifest bootstrap.
+   */
+  kafkaConnectors?: KafkaConnectorHandle;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,13 +135,33 @@ function resolveEventBus(
       );
     return registry.resolveEventBus('bullmq');
   }
+  if (spec === 'kafka') {
+    if (!registry)
+      throw new Error(
+        '[manifestToAppConfig] eventBus type "kafka" requires a registry. ' +
+          'Use createServerFromManifest() for built-in Kafka auto-registration, ' +
+          'or register it explicitly via registry.registerEventBus("kafka", ...).',
+      );
+    return registry.resolveEventBus('kafka');
+  }
   if (!registry)
     throw new Error(
       `[manifestToAppConfig] eventBus type "${(spec as { type: string }).type}" requires a registry.`,
     );
+
+  const config =
+    typeof spec === 'object'
+      ? {
+          ...((spec as { config?: Record<string, unknown> }).config ?? {}),
+          ...('validation' in spec && spec.validation
+            ? { validation: spec.validation }
+            : {}),
+        }
+      : undefined;
+
   return registry.resolveEventBus(
     (spec as { type: string }).type,
-    (spec as { config?: Record<string, unknown> }).config,
+    config,
   );
 }
 
@@ -518,6 +542,10 @@ export function manifestToAppConfig(
   // -- eventBus --
   const resolvedBus = resolveEventBus(manifest.eventBus, registry);
   if (resolvedBus !== undefined) config.eventBus = resolvedBus;
+
+  if (options?.kafkaConnectors) {
+    config.kafkaConnectors = options.kafkaConnectors;
+  }
 
   // -- secrets --
   const resolvedSecrets = resolveSecrets(manifest.secrets, registry);

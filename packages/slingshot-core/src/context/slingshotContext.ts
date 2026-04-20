@@ -12,6 +12,7 @@ import type { CronRegistryRepository } from '../cronRegistry';
 import type { DataEncryptionKey } from '../crypto';
 import type { SlingshotEventBus } from '../eventBus';
 import type { IdempotencyAdapter } from '../idempotency';
+import type { KafkaConnectorHandle } from '../kafkaConnectors';
 import type { SlingshotPlugin } from '../plugin';
 import type { RuntimeSqliteDatabase } from '../runtime';
 import type { SecretRepository } from '../secrets';
@@ -651,6 +652,13 @@ export interface SlingshotContext {
    * Replaces the appMeta WeakMap — instance-scoped, no module-level state.
    */
   readonly bus: SlingshotEventBus;
+
+  /**
+   * Optional Kafka connector bridge started by `createApp()`.
+   *
+   * `null` when the app does not use Kafka inbound/outbound connectors.
+   */
+  readonly kafkaConnectors: KafkaConnectorHandle | null;
 
   /** Route auth registry for framework-owned routes. */
   readonly routeAuth: RouteAuthRegistry | null;

@@ -591,6 +591,112 @@ describe('createServerFromManifest', () => {
         serverSpy.mockRestore();
       }
     });
+
+    it('auto-registers the built-in Kafka event bus for manifest mode', async () => {
+      const previousKafkaBrokers = process.env.KAFKA_BROKERS;
+      process.env.KAFKA_BROKERS = 'broker-a:9092,broker-b:9092';
+
+      const path = writeTempManifest(
+        JSON.stringify({
+          manifestVersion: 1,
+          eventBus: 'kafka',
+        }),
+      );
+
+      let capturedKafkaConfig: Record<string, unknown> | undefined;
+      const fakeBus = createInProcessAdapter();
+      mock.module('@lastshotlabs/slingshot-kafka', () => ({
+        createKafkaAdapter: (config: Record<string, unknown>) => {
+          capturedKafkaConfig = config;
+          return fakeBus;
+        },
+        createKafkaConnectors: () => ({
+          name: 'slingshot-kafka-connectors' as const,
+          start: () => Promise.resolve(),
+          stop: () => Promise.resolve(),
+          health: () => ({ started: false, inbound: [], outbound: [], pendingBufferSize: 0 }),
+          pendingBufferSize: () => 0,
+        }),
+      }));
+
+      let capturedConfig: Record<string, unknown> | undefined;
+      const serverSpy = spyOn(serverModule, 'createServer').mockImplementation(config => {
+        capturedConfig = config as Record<string, unknown>;
+        return Promise.resolve(makeTestServer());
+      });
+
+      try {
+        await createServerFromManifest(path);
+        expect(capturedConfig?.['eventBus']).toBe(fakeBus);
+        expect(capturedKafkaConfig?.['brokers']).toEqual(['broker-a:9092', 'broker-b:9092']);
+      } finally {
+        serverSpy.mockRestore();
+        if (previousKafkaBrokers !== undefined) process.env.KAFKA_BROKERS = previousKafkaBrokers;
+        else delete process.env.KAFKA_BROKERS;
+      }
+    });
+  });
+
+  describe('manifest Kafka connectors', () => {
+    it('resolves manifest-driven Kafka connectors and passes the handle into app config', async () => {
+      const previousKafkaBrokers = process.env.KAFKA_BROKERS;
+      process.env.KAFKA_BROKERS = 'broker-kafka:9092';
+
+      const path = writeTempManifest(
+        JSON.stringify({
+          manifestVersion: 1,
+          kafkaConnectors: {
+            inbound: [
+              {
+                topic: 'external.users',
+                handler: 'handleKafkaMessage',
+                groupId: 'consumer-group',
+              },
+            ],
+          },
+        }),
+      );
+
+      const registry = createManifestHandlerRegistry();
+      const inboundHandler = () => Promise.resolve();
+      registry.registerHandler('handleKafkaMessage', () => inboundHandler);
+
+      const fakeHandle = {
+        name: 'slingshot-kafka-connectors' as const,
+        start: () => Promise.resolve(),
+        stop: () => Promise.resolve(),
+        health: () => ({ started: false, inbound: [], outbound: [], pendingBufferSize: 0 }),
+        pendingBufferSize: () => 0,
+      };
+
+      let capturedConnectorConfig: Record<string, unknown> | undefined;
+      mock.module('@lastshotlabs/slingshot-kafka', () => ({
+        createKafkaAdapter: () => createInProcessAdapter(),
+        createKafkaConnectors: (config: Record<string, unknown>) => {
+          capturedConnectorConfig = config;
+          return fakeHandle;
+        },
+      }));
+
+      let capturedConfig: Record<string, unknown> | undefined;
+      const serverSpy = spyOn(serverModule, 'createServer').mockImplementation(config => {
+        capturedConfig = config as Record<string, unknown>;
+        return Promise.resolve(makeTestServer());
+      });
+
+      try {
+        await createServerFromManifest(path, registry);
+        expect(capturedConfig?.['kafkaConnectors']).toBe(fakeHandle);
+        expect(capturedConnectorConfig?.['brokers']).toEqual(['broker-kafka:9092']);
+        const inbound = (capturedConnectorConfig?.['inbound'] as Array<Record<string, unknown>>)[0];
+        expect(inbound?.['groupId']).toBe('consumer-group');
+        expect(inbound?.['handler']).toBe(inboundHandler);
+      } finally {
+        serverSpy.mockRestore();
+        if (previousKafkaBrokers !== undefined) process.env.KAFKA_BROKERS = previousKafkaBrokers;
+        else delete process.env.KAFKA_BROKERS;
+      }
+    });
   });
 
   describe('handler loading', () => {

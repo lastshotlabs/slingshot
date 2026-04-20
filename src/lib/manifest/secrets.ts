@@ -15,5 +15,15 @@ export const secretsSchema = z.union([
 export const eventBusSchema = z.union([
   z.literal('in-process'),
   z.literal('bullmq'),
-  z.object({ type: z.string(), config: z.record(z.string(), z.unknown()).optional() }),
+  z.literal('kafka'),
+  z
+    .object({
+      type: z.string(),
+      config: z.record(z.string(), z.unknown()).optional(),
+      validation: z
+        .enum(['strict', 'warn', 'off'])
+        .optional()
+        .describe('Event payload validation mode. Default: "off".'),
+    })
+    .strict(),
 ]);

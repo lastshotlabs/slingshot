@@ -4,8 +4,18 @@ import type { Server } from 'bun';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
-import { SUPER_ADMIN_ROLE, getPermissionsStateOrNull } from '@lastshotlabs/slingshot-core';
-import type { PermissionsAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  SUPER_ADMIN_ROLE,
+  createEventSchemaRegistry,
+  getPermissionsStateOrNull,
+} from '@lastshotlabs/slingshot-core';
+import type {
+  EventSchemaRegistry,
+  KafkaConnectorHandle,
+  PermissionsAdapter,
+  SlingshotEventBus,
+  ValidationMode,
+} from '@lastshotlabs/slingshot-core';
 import { getOrganizationsOrgServiceOrNull } from '@lastshotlabs/slingshot-organizations';
 import { createServer, getServerContext, type CreateServerConfig } from '../server';
 import { createBuiltinPluginFactory, loadBuiltinPlugin } from './builtinPlugins';
@@ -258,6 +268,40 @@ type BuiltinBullMQModule = {
   ): import('@lastshotlabs/slingshot-core').SlingshotEventBus;
 };
 
+type BuiltinKafkaAdapterOptions = {
+  brokers: string[];
+  clientId?: string;
+  sasl?: {
+    mechanism: 'plain' | 'scram-sha-256' | 'scram-sha-512';
+    username: string;
+    password: string;
+  };
+  ssl?:
+    | true
+    | {
+        ca?: string;
+        cert?: string;
+        key?: string;
+        rejectUnauthorized?: boolean;
+      };
+  topicPrefix?: string;
+  groupPrefix?: string;
+  maxRetries?: number;
+  autoCreateTopics?: boolean;
+  partitionKey?: string;
+  compression?: 'gzip' | 'snappy' | 'lz4' | 'zstd';
+  schemaRegistry?: EventSchemaRegistry;
+  validation?: ValidationMode;
+};
+
+type BuiltinKafkaModule = {
+  createKafkaAdapter(options: BuiltinKafkaAdapterOptions): SlingshotEventBus;
+};
+
+type BuiltinKafkaConnectorsModule = {
+  createKafkaConnectors(options: Record<string, unknown>): KafkaConnectorHandle;
+};
+
 function isBuiltinBullMQModule(value: unknown): value is BuiltinBullMQModule {
   return (
     typeof value === 'object' &&
@@ -267,13 +311,77 @@ function isBuiltinBullMQModule(value: unknown): value is BuiltinBullMQModule {
   );
 }
 
+function isBuiltinKafkaModule(value: unknown): value is BuiltinKafkaModule {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'createKafkaAdapter' in value &&
+    typeof (value as Record<string, unknown>).createKafkaAdapter === 'function'
+  );
+}
+
+function isBuiltinKafkaConnectorsModule(value: unknown): value is BuiltinKafkaConnectorsModule {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'createKafkaConnectors' in value &&
+    typeof (value as Record<string, unknown>).createKafkaConnectors === 'function'
+  );
+}
+
+function parseBrokerList(raw: string): string[] {
+  return raw
+    .split(',')
+    .map(broker => broker.trim())
+    .filter(broker => broker.length > 0);
+}
+
+function extractManifestKafkaBrokerList(
+  spec: ReturnType<typeof getBuiltinEventBusSpec>,
+): string[] | undefined {
+  if (!spec?.config) return undefined;
+  const rawBrokers = spec.config['brokers'];
+  if (!Array.isArray(rawBrokers)) return undefined;
+  const brokers = rawBrokers.filter((broker): broker is string => typeof broker === 'string');
+  return brokers.length > 0 ? brokers : undefined;
+}
+
+function manifestNeedsEventSchemas(manifest: AppManifest): boolean {
+  const eventValidation =
+    manifest.eventBus &&
+    typeof manifest.eventBus === 'object' &&
+    'validation' in manifest.eventBus
+      ? (manifest.eventBus.validation ?? 'off')
+      : 'off';
+  if (eventValidation !== 'off') {
+    return true;
+  }
+
+  const connectorValidation =
+    manifest.kafkaConnectors?.validationMode ??
+    manifest.kafkaConnectors?.inbound?.find(conn => (conn.validationMode ?? 'off') !== 'off')
+      ?.validationMode ??
+    manifest.kafkaConnectors?.outbound?.find(conn => (conn.validationMode ?? 'off') !== 'off')
+      ?.validationMode ??
+    'off';
+
+  return connectorValidation !== 'off';
+}
+
 function getBuiltinEventBusSpec(
   spec: AppManifest['eventBus'],
-): { type: 'bullmq'; config?: Record<string, unknown> } | null {
+): { type: 'bullmq' | 'kafka'; config?: Record<string, unknown> } | null {
   if (spec === 'bullmq') return { type: 'bullmq' };
+  if (spec === 'kafka') return { type: 'kafka' };
   if (typeof spec === 'object' && spec.type === 'bullmq') {
     return {
       type: 'bullmq',
+      config: typeof spec.config === 'object' ? spec.config : undefined,
+    };
+  }
+  if (typeof spec === 'object' && spec.type === 'kafka') {
+    return {
+      type: 'kafka',
       config: typeof spec.config === 'object' ? spec.config : undefined,
     };
   }
@@ -283,13 +391,87 @@ function getBuiltinEventBusSpec(
 async function ensureBuiltinEventBusFactories(
   manifest: AppManifest,
   registry: ManifestHandlerRegistry,
+  eventSchemas?: EventSchemaRegistry,
 ): Promise<void> {
   const builtinSpec = getBuiltinEventBusSpec(manifest.eventBus);
   if (!builtinSpec) return;
   if (registry.hasEventBus(builtinSpec.type)) return;
 
   const secretBundle = await resolveSecretBundle(manifest.secrets);
-  const { redisHost, redisUser, redisPassword } = secretBundle.framework;
+  const {
+    redisHost,
+    redisUser,
+    redisPassword,
+    kafkaBrokers,
+    kafkaClientId,
+    kafkaSaslUser,
+    kafkaSaslPass,
+    kafkaSaslMech,
+    kafkaSsl,
+  } = secretBundle.framework;
+
+  if (builtinSpec.type === 'kafka') {
+    const manifestKafkaBrokers = extractManifestKafkaBrokerList(builtinSpec);
+    const resolvedKafkaBrokers =
+      manifestKafkaBrokers ?? (kafkaBrokers ? parseBrokerList(kafkaBrokers) : undefined);
+    if (!resolvedKafkaBrokers?.length) {
+      throw new Error(
+        '[createServerFromManifest] eventBus "kafka" requires broker addresses. ' +
+          'Provide eventBus.config.brokers in the manifest or set KAFKA_BROKERS via the configured secrets provider.',
+      );
+    }
+
+    let createKafkaAdapter: BuiltinKafkaModule['createKafkaAdapter'];
+    try {
+      const kafkaModuleUnknown: unknown = await import('@lastshotlabs/slingshot-kafka');
+      if (!isBuiltinKafkaModule(kafkaModuleUnknown)) {
+        throw new TypeError(
+          '[createServerFromManifest] Invalid "@lastshotlabs/slingshot-kafka" module shape.',
+        );
+      }
+      createKafkaAdapter = options => kafkaModuleUnknown.createKafkaAdapter(options);
+    } catch (err) {
+      throw new Error(
+        '[createServerFromManifest] eventBus "kafka" requires package "@lastshotlabs/slingshot-kafka" plus peer dependency "kafkajs". Run: bun add @lastshotlabs/slingshot-kafka kafkajs',
+        { cause: err },
+      );
+    }
+
+    const adapterOptions: BuiltinKafkaAdapterOptions = {
+      brokers: resolvedKafkaBrokers,
+      ...(kafkaClientId ? { clientId: kafkaClientId } : {}),
+      ...(eventSchemas ? { schemaRegistry: eventSchemas } : {}),
+    };
+
+    if (kafkaSaslUser && kafkaSaslPass) {
+      adapterOptions.sasl = {
+        mechanism:
+          kafkaSaslMech === 'scram-sha-256' || kafkaSaslMech === 'scram-sha-512'
+            ? kafkaSaslMech
+            : 'plain',
+        username: kafkaSaslUser,
+        password: kafkaSaslPass,
+      };
+      if (kafkaSsl !== 'true') {
+        console.warn(
+          '[createServerFromManifest] Kafka SASL credentials configured without SSL. Credentials will be transmitted in plaintext. Set KAFKA_SSL=true for production environments.',
+        );
+      }
+    }
+
+    if (kafkaSsl === 'true') {
+      adapterOptions.ssl = true;
+    }
+
+    registry.registerEventBus('kafka', config => {
+      const rawConfig: Record<string, unknown> = config ?? {};
+      return createKafkaAdapter({
+        ...adapterOptions,
+        ...rawConfig,
+      });
+    });
+    return;
+  }
 
   if (!redisHost) {
     throw new Error(
@@ -334,6 +516,88 @@ async function ensureBuiltinEventBusFactories(
     }
 
     return createBullMQAdapter(adapterOptions);
+  });
+}
+
+async function resolveManifestKafkaConnectors(
+  manifest: AppManifest,
+  registry: ManifestHandlerRegistry,
+  eventSchemas?: EventSchemaRegistry,
+): Promise<KafkaConnectorHandle | undefined> {
+  if (!manifest.kafkaConnectors) return undefined;
+
+  const connectorConfig = manifest.kafkaConnectors;
+  const secretBundle = await resolveSecretBundle(manifest.secrets);
+  const {
+    kafkaBrokers,
+    kafkaClientId,
+    kafkaSaslUser,
+    kafkaSaslPass,
+    kafkaSaslMech,
+    kafkaSsl,
+  } = secretBundle.framework;
+  let brokers = connectorConfig.brokers;
+  if (!brokers || brokers.length === 0) {
+    if (!kafkaBrokers) {
+      throw new Error(
+        '[createServerFromManifest] kafkaConnectors requires broker addresses. Provide "brokers" in the manifest or set KAFKA_BROKERS via the secrets provider.',
+      );
+    }
+    brokers = parseBrokerList(kafkaBrokers);
+  }
+
+  const resolvedInbound = connectorConfig.inbound?.map((connector, index) => {
+    if (!registry.hasHandler(connector.handler)) {
+      throw new Error(
+        `[createServerFromManifest] kafkaConnectors.inbound[${index}].handler "${connector.handler}" is not registered.`,
+      );
+    }
+    const handler = registry.resolveHandler(connector.handler);
+    if (typeof handler !== 'function') {
+      throw new Error(
+        `[createServerFromManifest] kafkaConnectors.inbound[${index}].handler "${connector.handler}" resolved to ${typeof handler}, expected function.`,
+      );
+    }
+    return { ...connector, handler };
+  });
+
+  let createKafkaConnectors: BuiltinKafkaConnectorsModule['createKafkaConnectors'];
+  try {
+    const kafkaModuleUnknown: unknown = await import('@lastshotlabs/slingshot-kafka');
+    if (!isBuiltinKafkaConnectorsModule(kafkaModuleUnknown)) {
+      throw new TypeError(
+        '[createServerFromManifest] Invalid "@lastshotlabs/slingshot-kafka" module shape.',
+      );
+    }
+    createKafkaConnectors = options => kafkaModuleUnknown.createKafkaConnectors(options);
+  } catch (err) {
+    throw new Error(
+      '[createServerFromManifest] kafkaConnectors requires package "@lastshotlabs/slingshot-kafka" plus peer dependency "kafkajs". Run: bun add @lastshotlabs/slingshot-kafka kafkajs',
+      { cause: err },
+    );
+  }
+
+  return createKafkaConnectors({
+    brokers,
+    clientId: connectorConfig.clientId ?? kafkaClientId,
+    sasl:
+      connectorConfig.sasl ??
+      (kafkaSaslUser && kafkaSaslPass
+        ? {
+            mechanism:
+              kafkaSaslMech === 'scram-sha-256' || kafkaSaslMech === 'scram-sha-512'
+                ? kafkaSaslMech
+                : 'plain',
+            username: kafkaSaslUser,
+            password: kafkaSaslPass,
+          }
+        : undefined),
+    ssl: connectorConfig.ssl ?? (kafkaSsl === 'true' ? true : undefined),
+    validationMode: connectorConfig.validationMode,
+    compression: connectorConfig.compression,
+    inbound: resolvedInbound,
+    outbound: connectorConfig.outbound,
+    ...(eventSchemas ? { schemaRegistry: eventSchemas } : {}),
   });
 }
 
@@ -497,7 +761,11 @@ export async function resolveManifestConfig(
     baseDir,
   );
 
-  await ensureBuiltinEventBusFactories(result.manifest, effectiveRegistry);
+  const eventSchemas = manifestNeedsEventSchemas(manifestWithSyntheticPlugins)
+    ? createEventSchemaRegistry()
+    : undefined;
+
+  await ensureBuiltinEventBusFactories(manifestWithSyntheticPlugins, effectiveRegistry, eventSchemas);
 
   // Pre-load builtin plugins for manifest entries not yet in the user registry.
   const pluginRefs = getManifestPluginRefs(manifestWithSyntheticPlugins);
@@ -580,9 +848,16 @@ export async function resolveManifestConfig(
     }
   }
 
+  const kafkaConnectors = await resolveManifestKafkaConnectors(
+    manifestWithSyntheticPlugins,
+    effectiveRegistry,
+    eventSchemas,
+  );
+
   const config = manifestToAppConfig(manifestWithSyntheticPlugins, effectiveRegistry, {
     ...options,
     baseDir,
+    kafkaConnectors,
   });
 
   return {

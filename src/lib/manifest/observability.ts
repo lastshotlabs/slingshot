@@ -4,6 +4,9 @@ import { appManifestHandlerRefSchema } from './helpers';
 // -- Logging --
 export const loggingSectionSchema = z.object({
   enabled: z.boolean().optional(),
+  verbose: z.boolean().optional(),
+  authTrace: z.boolean().optional(),
+  auditWarnings: z.boolean().optional(),
   onLog: z
     .union([
       z

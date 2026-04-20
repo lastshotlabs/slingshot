@@ -76,7 +76,7 @@ export async function createTestFullServer(
     security: {
       rateLimit: { windowMs: 60_000, max: 1000 },
     },
-    logging: { onLog: () => {} },
+    logging: { onLog: () => {}, verbose: false, auditWarnings: false },
     port: 0,
     ...config,
   };

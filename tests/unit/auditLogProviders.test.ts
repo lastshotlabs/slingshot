@@ -760,6 +760,18 @@ describe('createMongoAuditLogProvider', () => {
 // ---------------------------------------------------------------------------
 
 describe('createMemoryAuditLogProvider — logEntry catch block', () => {
+  test('suppresses startup warnings when emitWarnings is false', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const { createMemoryAuditLogProvider } = await import(
+      '../../src/framework/auditLog/memoryProvider'
+    );
+
+    createMemoryAuditLogProvider({ emitWarnings: false });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
   test('logs error and resolves when push throws', async () => {
     const consoleSpy = spyOn(console, 'error').mockImplementation(() => {});
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});

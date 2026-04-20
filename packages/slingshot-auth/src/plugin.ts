@@ -130,6 +130,10 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
         const resolvedPassword = frameworkConfig.password;
         const result = await bootstrapAuth(config, bus, resolved, {
           signing: frameworkConfig.signing ?? config.security?.signing ?? null,
+          logging: {
+            verbose: frameworkConfig.logging.verbose,
+            authTrace: frameworkConfig.logging.authTrace,
+          },
           trustProxy: frameworkConfig.trustProxy,
           dataEncryptionKeys: frameworkConfig.dataEncryptionKeys,
           getRedis: redis ? () => redis : undefined,

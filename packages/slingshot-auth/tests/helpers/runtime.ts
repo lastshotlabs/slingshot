@@ -25,6 +25,7 @@ import { createMemoryOAuthReauthRepository } from '../../src/lib/oauthReauth';
 import { createMemoryResetTokenRepository } from '../../src/lib/resetPassword';
 import { createSecurityGate } from '../../src/lib/securityGate';
 import { createMemorySessionRepository } from '../../src/lib/session';
+import { createAuthLogger } from '../../src/lib/logger';
 import { AUTH_RUNTIME_KEY } from '../../src/runtime';
 import type { AuthRuntimeContext } from '../../src/runtime';
 import { makeDummyHashGetter } from '../../src/services/auth';
@@ -93,6 +94,7 @@ export function makeTestRuntime(
     lockout: null,
     rateLimit: rateLimitService,
     credentialStuffing: null as AuthRuntimeContext['credentialStuffing'],
+    logger: createAuthLogger({ verbose: false, authTrace: false }),
     queueFactory: null,
     repos: {
       oauthCode: createMemoryOAuthCodeRepository(),

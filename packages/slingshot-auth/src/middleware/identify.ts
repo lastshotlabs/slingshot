@@ -1,7 +1,6 @@
 import { getSecureCookieName } from '@auth/lib/cookieOptions';
 import { isProd } from '@auth/lib/env';
 import { verifyToken } from '@auth/lib/jwt';
-import { authTrace, log } from '@auth/lib/logger';
 import { getSuspended } from '@auth/lib/suspension';
 import type { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
@@ -102,6 +101,7 @@ function computeFingerprint(
 export const createIdentifyMiddleware =
   (authRuntime: AuthRuntimeContext): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
+    const { log, authTrace } = authRuntime.logger;
     const slingshotCtx =
       typeof (c as { get?: unknown }).get === 'function'
         ? ((c as { get(name: string): unknown }).get('slingshotCtx') as

@@ -39,6 +39,17 @@ export interface ResolvedStores {
 export interface SlingshotFrameworkConfig {
   /** Which backing store each subsystem is configured to use. */
   resolvedStores: ResolvedStores;
+  /** Resolved framework logging policy shared with plugins. */
+  logging: {
+    /** Whether the HTTP request logger middleware is mounted. */
+    enabled: boolean;
+    /** Whether non-request diagnostic console logging is enabled. */
+    verbose: boolean;
+    /** Whether auth trace logging is enabled. */
+    authTrace: boolean;
+    /** Whether non-fatal audit-log provider warnings are emitted. */
+    auditWarnings: boolean;
+  };
   /** CORS configuration (allowed origins for cross-origin requests). */
   security: {
     cors: string | readonly string[];

@@ -2,13 +2,23 @@ import { DEFAULT_MAX_ENTRIES, evictOldestArray } from '@lastshotlabs/slingshot-c
 import type { AuditLogEntry, AuditLogProvider } from '@lastshotlabs/slingshot-core';
 import { decodeCursorOrThrow, encodeCursor } from './cursor';
 
-export function createMemoryAuditLogProvider(): AuditLogProvider {
+export interface MemoryAuditLogProviderOptions {
+  emitWarnings?: boolean;
+}
+
+export function createMemoryAuditLogProvider(
+  options: MemoryAuditLogProviderOptions = {},
+): AuditLogProvider {
   const memoryLogs: AuditLogEntry[] = [];
   let evictedEntries = 0;
   let hasWarnedAboutTruncation = false;
-  console.warn(
-    `[slingshot] Memory adapter for audit log is capped at ${DEFAULT_MAX_ENTRIES} entries and has no eviction — for development/testing only`,
-  );
+  const emitWarnings = options.emitWarnings !== false;
+
+  if (emitWarnings) {
+    console.warn(
+      `[slingshot] Memory adapter for audit log is capped at ${DEFAULT_MAX_ENTRIES} entries and has no eviction — for development/testing only`,
+    );
+  }
 
   return {
     logEntry(entry) {
@@ -16,9 +26,11 @@ export function createMemoryAuditLogProvider(): AuditLogProvider {
         memoryLogs.push(entry);
         if (memoryLogs.length > DEFAULT_MAX_ENTRIES) {
           evictedEntries += memoryLogs.length - DEFAULT_MAX_ENTRIES;
-          console.warn(
-            `[auditLog] Memory audit log reached ${DEFAULT_MAX_ENTRIES} entries — evicting oldest. Tests relying on audit log completeness may see missing entries.`,
-          );
+          if (emitWarnings) {
+            console.warn(
+              `[auditLog] Memory audit log reached ${DEFAULT_MAX_ENTRIES} entries — evicting oldest. Tests relying on audit log completeness may see missing entries.`,
+            );
+          }
         }
         evictOldestArray(memoryLogs, DEFAULT_MAX_ENTRIES);
       } catch (err) {
@@ -32,7 +44,7 @@ export function createMemoryAuditLogProvider(): AuditLogProvider {
       const after = query.after ? new Date(query.after).toISOString() : undefined;
       const before = query.before ? new Date(query.before).toISOString() : undefined;
 
-      if (evictedEntries > 0 && !hasWarnedAboutTruncation) {
+      if (emitWarnings && evictedEntries > 0 && !hasWarnedAboutTruncation) {
         hasWarnedAboutTruncation = true;
         console.warn(
           `[auditLog] Memory audit log query is reading a truncated store. ${evictedEntries} oldest entr${evictedEntries === 1 ? 'y was' : 'ies were'} evicted after hitting the ${DEFAULT_MAX_ENTRIES}-entry cap.`,

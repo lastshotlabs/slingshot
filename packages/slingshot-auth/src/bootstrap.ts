@@ -26,6 +26,7 @@ import type { AuthRateLimitService } from './lib/authRateLimit';
 import type { CredentialStuffingService } from './lib/credentialStuffing';
 import { isProd } from './lib/env';
 import { validateJwtSecrets } from './lib/jwt';
+import { createAuthLogger } from './lib/logger';
 import { createOAuthProviders, getConfiguredOAuthProviders } from './lib/oauth';
 import { wireSecurityEventConfig } from './lib/securityEventWiring';
 import type { AuthRuntimeContext } from './runtime';
@@ -47,6 +48,10 @@ export interface BootstrapResult {
 export interface AuthRuntimeInfra {
   signing: SigningConfig | null;
   dataEncryptionKeys: readonly DataEncryptionKey[];
+  logging?: {
+    verbose: boolean;
+    authTrace: boolean;
+  };
   trustProxy?: false | number;
   /** Returns the Redis client. Throws if Redis is not configured. */
   getRedis?: () => AuthRedisClient;
@@ -131,6 +136,10 @@ export async function bootstrapAuth(
   const signing = runtimeInfra?.signing ?? config.security?.signing ?? null;
   const trustProxy = runtimeInfra?.trustProxy ?? config.security?.trustProxy;
   const dataEncryptionKeys = runtimeInfra?.dataEncryptionKeys ?? [];
+  const authLogger = createAuthLogger({
+    verbose: runtimeInfra?.logging?.verbose,
+    authTrace: runtimeInfra?.logging?.authTrace,
+  });
   if (!runtimeInfra?.password) {
     throw new Error(
       '[slingshot-auth] RuntimePassword is required. Pass it via runtimeInfra.password.',
@@ -379,7 +388,7 @@ export async function bootstrapAuth(
   let lockoutService: LockoutService | null = null;
 
   if (sessionPolicy.idleTimeout) {
-    console.log(
+    authLogger.log(
       '[slingshot-auth] sessionPolicy.idleTimeout is set — trackLastActive auto-enabled for idle timeout enforcement.',
     );
   }
@@ -701,6 +710,7 @@ export async function bootstrapAuth(
       rateLimit: rateLimitService,
       credentialStuffing: credentialStuffingService,
       securityGate,
+      logger: authLogger,
       queueFactory,
       repos: {
         oauthCode: oauthCodeRepo,

@@ -117,6 +117,8 @@ const baseConfig: CreateAppConfig = {
   },
   logging: {
     onLog: () => {},
+    verbose: false,
+    auditWarnings: false,
   },
 };
 

@@ -457,6 +457,7 @@ async function prepareBootstrap<T extends object>(
       securitySigning: securityConfig.signing,
       cors: securityConfig.cors,
       captcha: securityConfig.captcha,
+      logging: config.logging,
       csrf: securityConfig.csrf,
       trustProxy: securityConfig.trustProxy,
       ws: config.ws,

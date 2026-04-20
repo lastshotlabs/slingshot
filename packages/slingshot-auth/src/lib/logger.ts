@@ -1,46 +1,50 @@
+export interface AuthLoggerConfig {
+  verbose?: boolean;
+  authTrace?: boolean;
+}
+
+export interface AuthLogger {
+  log: (...args: unknown[]) => void;
+  authTrace: (...args: unknown[]) => void;
+}
+
 /**
  * Returns whether verbose (non-production) logging is enabled.
  *
- * Verbose mode is active when `LOGGING_VERBOSE=true` is set, or when
- * `NODE_ENV` is not `"production"`.  Setting `LOGGING_VERBOSE=false`
- * explicitly silences verbose output even in development.
+ * Falls back to `LOGGING_VERBOSE` / non-production mode when no per-app config
+ * is provided.
  */
-function isVerbose(): boolean {
+function isVerbose(config?: AuthLoggerConfig): boolean {
+  if (config?.verbose !== undefined) return config.verbose;
   const v = process.env.LOGGING_VERBOSE;
   return v !== undefined ? v === 'true' : process.env.NODE_ENV !== 'production';
 }
 
 /**
- * Conditionally logs to `console.log` when verbose mode is active.
+ * Returns whether auth trace logging is enabled.
  *
- * Verbose mode is controlled by the `LOGGING_VERBOSE` environment variable.
- * When not set it defaults to `true` in non-production environments and
- * `false` in production, preventing noisy auth logs from reaching prod logs.
- *
- * @param args - Arguments forwarded directly to `console.log`.
- *
- * @example
- * log('[auth] login attempt for', email);
+ * Falls back to `LOGGING_AUTH_TRACE === "true"` when no per-app config is
+ * provided. Trace logs are also suppressed when verbose logging is disabled.
  */
-export const log = (...args: unknown[]) => {
-  if (isVerbose()) console.log(...args);
-};
+function isAuthTrace(config?: AuthLoggerConfig): boolean {
+  if (!isVerbose(config)) return false;
+  if (config?.authTrace !== undefined) return config.authTrace;
+  return process.env.LOGGING_AUTH_TRACE === 'true';
+}
 
 /**
- * Conditionally logs auth trace lines that may include user or session IDs.
+ * Build an instance-scoped auth logger.
  *
- * Like `log()`, but additionally requires `LOGGING_AUTH_TRACE=true` to be set.
- * This provides a second gate so that PII-containing lines (user IDs, session
- * IDs) are never emitted unless explicitly opted in, even in development.
- *
- * `LOGGING_AUTH_TRACE` is read on each call, so toggling it at runtime
- * takes effect immediately.
- *
- * @param args - Arguments forwarded to `log` (and ultimately `console.log`).
- *
- * @example
- * authTrace('[session] created session', sessionId, 'for user', userId);
+ * Plugins pass the resolved framework logging policy here so auth logging
+ * follows app config instead of relying solely on process-wide env vars.
  */
-export const authTrace = (...args: unknown[]) => {
-  if (process.env.LOGGING_AUTH_TRACE === 'true') log(...args);
-};
+export function createAuthLogger(config: AuthLoggerConfig = {}): AuthLogger {
+  return {
+    log(...args: unknown[]) {
+      if (isVerbose(config)) console.log(...args);
+    },
+    authTrace(...args: unknown[]) {
+      if (isAuthTrace(config)) console.log(...args);
+    },
+  };
+}

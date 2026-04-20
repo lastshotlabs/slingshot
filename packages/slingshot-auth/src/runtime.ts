@@ -32,6 +32,7 @@ import type { ResetTokenRepository } from './lib/resetPassword';
 import type { SamlRequestIdRepository } from './lib/samlRequestId';
 import type { SecurityGate } from './lib/securityGate';
 import type { SessionRepository } from './lib/session/index.js';
+import type { AuthLogger } from './lib/logger';
 
 /**
  * Per-app auth runtime state, created by `bootstrapAuth` and stored in
@@ -76,6 +77,7 @@ export interface AuthRuntimeContext {
   readonly rateLimit: AuthRateLimitService;
   readonly credentialStuffing: CredentialStuffingService | null;
   readonly securityGate: SecurityGate;
+  readonly logger: AuthLogger;
   readonly queueFactory: AuthQueueFactory | null;
   readonly repos: {
     readonly oauthCode: OAuthCodeRepository;

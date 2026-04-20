@@ -11,6 +11,9 @@ import { createPostgresAuditLogProvider } from './postgresProvider';
 import { createSqliteAuditLogProvider } from './sqliteProvider';
 
 export type AuditLogStore = Exclude<StoreType, 'redis'>;
+export interface AuditLogProviderFactoryOptions {
+  emitWarnings?: boolean;
+}
 
 export interface AuditLogOptions {
   store: AuditLogStore;
@@ -18,6 +21,8 @@ export interface AuditLogOptions {
   mongoConnection?: Connection | null;
   /** Retention in days. SQLite: prunes on write. MongoDB: sets expiresAt for the TTL index. */
   ttlDays?: number;
+  /** Emit non-fatal provider warnings such as in-memory caveats. Defaults to true. */
+  emitWarnings?: boolean;
 }
 
 export interface AuditLogQuery {
@@ -31,7 +36,7 @@ export interface AuditLogQuery {
 
 export function createAuditLogProvider(options: AuditLogOptions): AuditLogProvider {
   const providers: Record<AuditLogStore, () => AuditLogProvider> = {
-    memory: () => createMemoryAuditLogProvider(),
+    memory: () => createMemoryAuditLogProvider({ emitWarnings: options.emitWarnings }),
     sqlite: () => {
       if (!options.db)
         throw new Error("AuditLog: store is 'sqlite' but no db instance was provided");
@@ -52,11 +57,14 @@ export function createAuditLogProvider(options: AuditLogOptions): AuditLogProvid
   return providers[options.store]();
 }
 
-export function createAuditLogFactories(ttlDays?: number): RepoFactories<AuditLogProvider> {
+export function createAuditLogFactories(
+  ttlDays?: number,
+  options: AuditLogProviderFactoryOptions = {},
+): RepoFactories<AuditLogProvider> {
   return {
-    memory: () => createMemoryAuditLogProvider(),
+    memory: () => createMemoryAuditLogProvider(options),
     sqlite: infra => createSqliteAuditLogProvider(infra.getSqliteDb(), ttlDays),
-    redis: () => createMemoryAuditLogProvider(),
+    redis: () => createMemoryAuditLogProvider(options),
     mongo: infra => createMongoAuditLogProvider(infra.getMongo().conn, ttlDays),
     postgres: infra => createPostgresAuditLogProvider(infra.getPostgres().pool, ttlDays),
   };

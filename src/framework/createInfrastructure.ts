@@ -59,6 +59,8 @@ import {
   resolveRepoAsync,
 } from '@lastshotlabs/slingshot-core';
 import type { DrizzlePostgresDb } from '@lastshotlabs/slingshot-postgres';
+import type { LoggingConfig } from '../config/types/logging';
+import { resolveLoggingConfig } from '../config/types/logging';
 import type { DbConfig as AppDbConfig } from '../config/types/db';
 import { resolveMongoMode } from './dbDefaults';
 
@@ -161,6 +163,8 @@ export interface InfrastructureOptions {
       };
   /** CAPTCHA (e.g. hCaptcha or Turnstile) configuration. Omit to disable CAPTCHA. */
   captcha?: CaptchaConfig;
+  /** Resolved logging configuration shared with plugins and framework repositories. */
+  logging?: LoggingConfig;
   /** Opaque WebSocket config draft forwarded into plugin bootstrap context. */
   ws?: unknown;
   /** CSRF settings forwarded to plugin lifecycle config. */
@@ -298,6 +302,7 @@ export async function createInfrastructure(
     securitySigning,
     cors: corsOpt,
     captcha,
+    logging,
     ws,
     csrf,
     trustProxy,
@@ -323,6 +328,7 @@ export async function createInfrastructure(
   const corsOrigins: string | readonly string[] = Array.isArray(rawCorsOrigins)
     ? freezeArrayCopy(rawCorsOrigins)
     : rawCorsOrigins;
+  const resolvedLogging = resolveLoggingConfig(logging);
 
   // Smart fallback: pick the best available store rather than blindly defaulting to "redis"
   const defaultStore: StoreType = enableRedis
@@ -468,6 +474,7 @@ export async function createInfrastructure(
       appName: '', // set later — not needed for persistence key prefixing at this level
       uploadRegistryTtlSeconds,
       auditLogTtlDays,
+      auditWarnings: resolvedLogging.auditWarnings,
       runtime,
     });
     sqliteDb = resolvedPersistence.sqliteDb;
@@ -476,6 +483,7 @@ export async function createInfrastructure(
     // Constructed after resolveFrameworkPersistence so storeInfra is available.
     const frameworkConfig: FrameworkConfig = {
       resolvedStores: frozenResolvedStores,
+      logging: Object.freeze({ ...resolvedLogging }),
       security: Object.freeze({
         cors: corsOrigins,
         csrf: csrf
@@ -539,6 +547,7 @@ interface PersistenceResolutionOptions {
   appName: string;
   uploadRegistryTtlSeconds?: number;
   auditLogTtlDays?: number;
+  auditWarnings: boolean;
   runtime: SlingshotRuntime;
 }
 
@@ -571,6 +580,7 @@ async function resolveFrameworkPersistence(opts: PersistenceResolutionOptions): 
     appName,
     uploadRegistryTtlSeconds,
     auditLogTtlDays,
+    auditWarnings,
     runtime,
   } = opts;
 
@@ -633,7 +643,7 @@ async function resolveFrameworkPersistence(opts: PersistenceResolutionOptions): 
     };
     const auditLogStore = auditLogStoreMap[defaultStore];
     const auditLog = resolveRepo(
-      createAuditLogFactories(auditLogTtlDays),
+      createAuditLogFactories(auditLogTtlDays, { emitWarnings: auditWarnings }),
       auditLogStore,
       storeInfra,
     );

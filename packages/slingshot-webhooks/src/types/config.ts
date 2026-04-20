@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { disableRoutesSchema } from '@lastshotlabs/slingshot-core';
 import { WEBHOOK_ROUTES } from '../routes/index';
+import type { WebhookAdapter } from './adapter';
 import type { InboundProvider } from './inbound';
 import type { WebhookQueue } from './queue';
 
@@ -120,6 +121,15 @@ export const webhookPluginConfigSchema = z.object({
     .min(1)
     .optional()
     .describe("Role required for webhook management routes. Omit to use 'admin'."),
+  /** Custom persistence adapter. When provided, slingshot-entity is not required. */
+  adapter: z
+    .custom<WebhookAdapter>(value => value != null && typeof value === 'object', {
+      message: 'Expected a WebhookAdapter instance',
+    })
+    .optional()
+    .describe(
+      'Custom persistence adapter for webhook endpoints and deliveries. When provided, slingshot-entity is not required and entity-backed CRUD routes are skipped.',
+    ),
   /** Route groups to skip mounting. */
   disableRoutes: disableRoutesSchema(Object.values(WEBHOOK_ROUTES)).describe(
     'Route groups to skip when mounting webhook routes. Omit to mount all webhook routes.',

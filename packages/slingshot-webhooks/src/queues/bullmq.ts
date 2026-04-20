@@ -162,7 +162,7 @@ async function loadIORedisModule(): Promise<typeof Redis> {
  *
  * @example
  * ```ts
- * import { createBullMQWebhookQueue } from '@lastshotlabs/slingshot-webhooks';
+ * import { createBullMQWebhookQueue } from '@lastshotlabs/slingshot-webhooks/bullmq';
  *
  * const queue = createBullMQWebhookQueue({
  *   redis: { host: 'localhost', port: 6379 },

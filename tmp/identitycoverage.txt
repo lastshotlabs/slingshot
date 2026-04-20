@@ -1,0 +1,371 @@
+$ bun scripts/run-coverage.ts
+test:coverage -> root
+test:coverage:root -> bulk 1
+bun test v1.3.10 (30e609e0)
+
+tests\integration\account-lockout.test.ts:
+(pass) account lockout integration > returns 423 after maxAttempts failed logins [734.00ms]
+(pass) account lockout integration > correct password also returns 423 when account is locked [532.00ms]
+(pass) account lockout integration > resetOnSuccess clears the failure counter on successful login [828.00ms]
+(pass) account lockout integration > lockout does not trigger for unknown email (no user enumeration) [609.00ms]
+(pass) account lockout integration > no lockout when auth.lockout is not configured [1125.00ms]
+
+tests\integration\adapter-parity.test.ts:
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) adapter parity — memory > Tier 1: Core > create + findByEmail round-trip [110.00ms]
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) adapter parity — memory > Tier 1: Core > findByEmail returns null for non-existent user
+(pass) adapter parity — memory > Tier 1: Core > duplicate email throws
+(pass) adapter parity — memory > Tier 1: Core > verifyPassword succeeds with correct password [218.00ms]
+(pass) adapter parity — memory > Tier 1: Core > verifyPassword fails with wrong password [235.00ms]
+(pass) adapter parity — memory > Tier 1: Core > getIdentifier returns email [15.00ms]
+(pass) adapter parity — memory > Tier 1: Core > getUser returns profile fields
+(pass) adapter parity — memory > Tier 1: Core > getUser returns null for non-existent id
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) adapter parity — memory > Tier 1: Core > deleteUser removes the user [16.00ms]
+(pass) adapter parity — memory > Tier 1: Core > setPassword + hasPassword [141.00ms]
+(pass) adapter parity — memory > Tier 1: Core > updateProfile sets displayName
+(pass) adapter parity — memory > Tier 1: Core > emailVerified defaults false, toggles to true [15.00ms]
+(pass) adapter parity — memory > Tier 1: Core > consumeRecoveryCode removes matching code
+(pass) adapter parity — memory > Tier 1: Core > consumeRecoveryCode returns false for non-matching code
+(pass) adapter parity — memory > Tier 2: OAuth > findOrCreateByProvider creates on first call [16.00ms]
+(pass) adapter parity — memory > Tier 2: OAuth > findOrCreateByProvider finds on second call
+(pass) adapter parity — memory > Tier 2: OAuth > findOrCreateByProvider rejects email collision with credential account
+(pass) adapter parity — memory > Tier 2: OAuth > linkProvider + unlinkProvider [15.00ms]
+(pass) adapter parity — memory > Tier 2: OAuth > linkProvider is idempotent
+(pass) adapter parity — memory > Tier 2: OAuth > linkProvider rejects linking a provider account that already belongs to another user
+(pass) adapter parity — memory > Tier 3: MFA > MFA secret defaults null, can be set [16.00ms]
+(pass) adapter parity — memory > Tier 3: MFA > MFA enabled defaults false, can be toggled
+(pass) adapter parity — memory > Tier 3: MFA > recovery codes round-trip [16.00ms]
+(pass) adapter parity — memory > Tier 3: MFA > MFA methods round-trip
+(pass) adapter parity — memory > Tier 4: WebAuthn > add + retrieve credential
+(pass) adapter parity — memory > Tier 4: WebAuthn > updateWebAuthnCredentialSignCount [15.00ms]
+(pass) adapter parity — memory > Tier 4: WebAuthn > removeWebAuthnCredential
+(pass) adapter parity — memory > Tier 4: WebAuthn > findUserByWebAuthnCredentialId
+(pass) adapter parity — memory > Tier 5: Roles > roles default empty, set/add/remove [16.00ms]
+(pass) adapter parity — memory > Tier 5: Roles > addRole is idempotent
+(pass) adapter parity — memory > Tier 5: Roles > tenant-scoped roles
+(pass) adapter parity — memory > Tier 6: Groups > createGroup + getGroup round-trip [16.00ms]
+(pass) adapter parity — memory > Tier 6: Groups > listGroups returns created groups
+(pass) adapter parity — memory > Tier 6: Groups > updateGroup modifies fields
+(pass) adapter parity — memory > Tier 6: Groups > deleteGroup removes group [15.00ms]
+(pass) adapter parity — memory > Tier 6: Groups > group membership CRUD
+(pass) adapter parity — memory > Tier 6: Groups > getUserGroups returns memberships [16.00ms]
+(pass) adapter parity — memory > Tier 6: Groups > getEffectiveRoles merges group + membership roles
+(pass) adapter parity — memory > Tier 7: Suspension > setSuspended + getSuspended round-trip
+(pass) adapter parity — memory > Tier 7: Suspension > unsuspend clears reason [15.00ms]
+(pass) adapter parity — memory > Tier 8: Enterprise (listUsers) > listUsers returns all users
+(pass) adapter parity — memory > Tier 8: Enterprise (listUsers) > listUsers filters by email
+(pass) adapter parity — memory > Tier 8: Enterprise (listUsers) > listUsers pagination [16.00ms]
+(pass) adapter parity — memory > Cross-cutting: metadata > userMetadata round-trip
+(pass) adapter parity — memory > Cross-cutting: metadata > appMetadata round-trip
+(pass) adapter parity — sqlite > Tier 1: Core > create + findByEmail round-trip [172.00ms]
+(pass) adapter parity — sqlite > Tier 1: Core > findByEmail returns null for non-existent user
+(pass) adapter parity — sqlite > Tier 1: Core > duplicate email throws [16.00ms]
+(pass) adapter parity — sqlite > Tier 1: Core > verifyPassword succeeds with correct password [312.00ms]
+(pass) adapter parity — sqlite > Tier 1: Core > verifyPassword fails with wrong password [313.00ms]
+(pass) adapter parity — sqlite > Tier 1: Core > getIdentifier returns email [15.00ms]
+(pass) adapter parity — sqlite > Tier 1: Core > getUser returns profile fields [16.00ms]
+(pass) adapter parity — sqlite > Tier 1: Core > getUser returns null for non-existent id [15.00ms]
+(pass) adapter parity — sqlite > Tier 1: Core > deleteUser removes the user
+(pass) adapter parity — sqlite > Tier 1: Core > setPassword + hasPassword [172.00ms]
+(pass) adapter parity — sqlite > Tier 1: Core > updateProfile sets displayName
+(pass) adapter parity — sqlite > Tier 1: Core > emailVerified defaults false, toggles to true
+(pass) adapter parity — sqlite > Tier 1: Core > consumeRecoveryCode removes matching code
+(pass) adapter parity — sqlite > Tier 1: Core > consumeRecoveryCode returns false for non-matching code [16.00ms]
+(pass) adapter parity — sqlite > Tier 2: OAuth > findOrCreateByProvider creates on first call
+(pass) adapter parity — sqlite > Tier 2: OAuth > findOrCreateByProvider finds on second call
+(pass) adapter parity — sqlite > Tier 2: OAuth > findOrCreateByProvider rejects email collision with credential account [16.00ms]
+(pass) adapter parity — sqlite > Tier 2: OAuth > linkProvider + unlinkProvider
+(pass) adapter parity — sqlite > Tier 2: OAuth > linkProvider is idempotent [15.00ms]
+(pass) adapter parity — sqlite > Tier 2: OAuth > linkProvider rejects linking a provider account that already belongs to another user
+(pass) adapter parity — sqlite > Tier 3: MFA > MFA secret defaults null, can be set
+(pass) adapter parity — sqlite > Tier 3: MFA > MFA enabled defaults false, can be toggled [16.00ms]
+(pass) adapter parity — sqlite > Tier 3: MFA > recovery codes round-trip
+(pass) adapter parity — sqlite > Tier 3: MFA > MFA methods round-trip [15.00ms]
+(pass) adapter parity — sqlite > Tier 4: WebAuthn > add + retrieve credential
+(pass) adapter parity — sqlite > Tier 4: WebAuthn > updateWebAuthnCredentialSignCount
+(pass) adapter parity — sqlite > Tier 4: WebAuthn > removeWebAuthnCredential
+(pass) adapter parity — sqlite > Tier 4: WebAuthn > findUserByWebAuthnCredentialId [16.00ms]
+(pass) adapter parity — sqlite > Tier 5: Roles > roles default empty, set/add/remove
+(pass) adapter parity — sqlite > Tier 5: Roles > addRole is idempotent
+(pass) adapter parity — sqlite > Tier 5: Roles > tenant-scoped roles [16.00ms]
+(pass) adapter parity — sqlite > Tier 6: Groups > createGroup + getGroup round-trip
+(pass) adapter parity — sqlite > Tier 6: Groups > listGroups returns created groups
+(pass) adapter parity — sqlite > Tier 6: Groups > updateGroup modifies fields [15.00ms]
+(pass) adapter parity — sqlite > Tier 6: Groups > deleteGroup removes group
+(pass) adapter parity — sqlite > Tier 6: Groups > group membership CRUD
+(pass) adapter parity — sqlite > Tier 6: Groups > getUserGroups returns memberships [16.00ms]
+(pass) adapter parity — sqlite > Tier 6: Groups > getEffectiveRoles merges group + membership roles
+(pass) adapter parity — sqlite > Tier 7: Suspension > setSuspended + getSuspended round-trip
+(pass) adapter parity — sqlite > Tier 7: Suspension > unsuspend clears reason [16.00ms]
+(pass) adapter parity — sqlite > Tier 8: Enterprise (listUsers) > listUsers returns all users
+(pass) adapter parity — sqlite > Tier 8: Enterprise (listUsers) > listUsers filters by email
+(pass) adapter parity — sqlite > Tier 8: Enterprise (listUsers) > listUsers pagination [15.00ms]
+(pass) adapter parity — sqlite > Cross-cutting: metadata > userMetadata round-trip
+(pass) adapter parity — sqlite > Cross-cutting: metadata > appMetadata round-trip
+
+tests\integration\adapter-profile.test.ts:
+(pass) adapter profile — memoryAuth > updateProfile sets displayName
+(pass) adapter profile — memoryAuth > setSuspended and getSuspended
+(pass) adapter profile — memoryAuth > unsuspend clears reason
+(pass) adapter profile — memoryAuth > listUsers returns all users
+(pass) adapter profile — memoryAuth > listUsers filters by suspended
+(pass) adapter profile — memoryAuth > listUsers filters by email
+(pass) adapter profile — memoryAuth > listUsers pagination
+
+tests\integration\admin-api.test.ts:
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/users — auth guard > returns 401 without auth [16.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/users — auth guard > returns 403 for non-admin user [312.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/users — auth guard > admin can access GET /admin/users [156.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/users — paginated list > returns registered users [469.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/users — paginated list > respects limit and returns cursor [688.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/users/:userId > returns the user record [375.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/users/:userId > returns 404 for unknown user [172.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/users/:userId > response uses status ('active'|'suspended') not suspended (boolean) [343.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) PATCH /admin/users/:userId > updates display name [266.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) PATCH /admin/users/:userId > updates multiple profile fields [281.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) POST /admin/users/:userId/suspend and unsuspend > suspending a user prevents login [344.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) POST /admin/users/:userId/suspend and unsuspend > suspended user record has status 'suspended' [234.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) POST /admin/users/:userId/suspend and unsuspend > unsuspending a user allows login again [391.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) PUT /admin/users/:userId/roles > sets user roles [266.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) PUT /admin/users/:userId/roles > GET /admin/users/:userId/roles returns roles [218.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) DELETE /admin/users/:userId > deletes a user [235.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) Session management > GET /admin/users/:userId/sessions returns session list [218.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) Session management > DELETE /admin/users/:userId/sessions revokes all sessions [235.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) Session management > GET /admin/users/:userId/sessions — session records have id (not sessionId) and ISO date strings [219.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) Session management > DELETE /admin/users/:userId/sessions/:sessionId revokes specific session [203.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/capabilities > returns ManagedUserCapabilities object [125.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/capabilities > returns 403 for non-admin user [125.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/audit-log > returns paginated result (may be empty without configured store) [125.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) GET /admin/users/:userId/audit-log > returns per-user paginated result [203.00ms]
+
+tests\integration\admin-auto-permissions.test.ts:
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin auto-discovery — permissions from community plugin pluginState > createSlingshotAdminPlugin({}) works when community has registered permissions [63.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin auto-discovery — permissions from community plugin pluginState > GET /admin/capabilities is reachable when permissions auto-discovered [62.00ms]
+(pass) admin auto-discovery — clear error when no permissions available > throws with clear message when no permissions in pluginState and none passed explicitly
+(pass) admin auto-discovery — clear error when no permissions available > error message mentions passing permissions explicitly or registering via a plugin [16.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin auto-discovery — explicit permissions take precedence > explicit permissions are used instead of community-registered ones [47.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin auto-discovery — explicit permissions take precedence > adminPlugin helper (explicit) works independently of community plugin [16.00ms]
+
+tests\integration\admin-external-provider.test.ts:
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — external providers > GET /admin/capabilities returns degraded capabilities [15.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — external providers > plugin.dependencies does not include slingshot-auth when both providers are supplied
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — external providers > guard returns 401 when mock access provider verifyRequest returns null [16.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — 501 for unsupported operations > POST /admin/users/:userId/suspend returns 501 when suspendUser not supported
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — 501 for unsupported operations > POST /admin/users/:userId/unsuspend returns 501 when unsuspendUser not supported [15.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — 501 for unsupported operations > PUT /admin/users/:userId/roles returns 501 when setRoles not supported
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — 501 for unsupported operations > DELETE /admin/users/:userId/sessions returns 501 when revokeAllSessions not supported
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — 501 for unsupported operations > DELETE /admin/users/:userId/sessions/:sessionId returns 501 when revokeSession not supported [32.00ms]
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — 501 for unsupported operations > DELETE /admin/users/:userId returns 501 when deleteUser not supported
+[slingshot] Memory permissions adapter is for development/testing only
+(pass) admin plugin — 501 for unsupported operations > PATCH /admin/users/:userId returns 501 when updateUser not supported [31.00ms]
+
+tests\integration\appConfig-advanced.test.ts:
+(pass) createApp config validation > throws when emailVerification is set with non-email primaryField [16.00ms]
+(pass) createApp config validation > throws when passwordReset is set with non-email primaryField
+(pass) createApp config validation > throws when defaultRole is set but adapter lacks setRoles
+(pass) createApp config validation > uses memory store when mongo and redis are disabled
+(pass) createApp config validation > uses sqlite store when sqlite is configured [15.00ms]
+[slingshot] Unknown config key "security.rateLimit.store" — will be ignored. Check for typos.
+(pass) createApp config validation > configures rate limit store from explicit config
+(pass) createApp config validation > configures session policy options [16.00ms]
+(pass) createApp config validation > configures password policy
+(pass) createApp config validation > configures security headers
+(pass) createApp config validation > starts with oauth postRedirect configured (allowedRedirectUrls validation moved to runtime) [15.00ms]
+(pass) createApp config validation > allows relative postRedirect path with allowlist
+(pass) createApp config validation > configures refresh tokens [16.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) createApp config validation > configures MFA with email OTP [16.00ms]
+(pass) createApp config validation > configures account deletion
+
+tests\integration\appConfig.test.ts:
+(pass) bearerAuth enabled > request without bearer token returns 401 on non-exempt path [32.00ms]
+(pass) bearerAuth enabled > request with valid bearer token passes [15.00ms]
+(pass) bearerAuth enabled > exempt paths bypass bearer auth
+(pass) auth disabled > auth routes return 404 when auth is disabled [47.00ms]
+(pass) session metadata > sessions include metadata when persistMetadata is true [141.00ms]
+(pass) error handling > 404 returns JSON error
+
+tests\integration\auditLog.test.ts:
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+(pass) auditLog middleware — basic capture > logs method, path, and status for a GET request [16.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+(pass) auditLog middleware — basic capture > logs POST with 201 status [109.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+(pass) auditLog middleware — basic capture > captures an audit entry for an authenticated request [109.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+(pass) auditLog middleware — basic capture > unauthenticated request logs null userId [16.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+(pass) auditLog middleware — exclusions > exclude.methods skips logging for excluded method
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+(pass) auditLog middleware — exclusions > POST is still logged when only GET is excluded [94.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+(pass) auditLog middleware — exclusions > exclude.paths with string exact match skips logging
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+(pass) auditLog middleware — exclusions > exclude.paths with RegExp matches correctly [94.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+(pass) auditLog middleware — onEntry hook > hook can enrich entry [15.00ms]
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[auditLog] onEntry hook threw: 133 |   });
+134 | 
+135 |   test('error in onEntry hook does not affect response status', async () => {
+136 |     const { app } = await createAuditedApp({
+137 |       onEntry: () => {
+138 |         throw new Error('hook failure');
+                    ^
+error: hook failure
+      at onEntry (C:\Users\email\projects\slingshot\tests\integration\auditLog.test.ts:138:15)
+      at <anonymous> (C:\Users\email\projects\slingshot\src\framework\middleware\auditLog.ts:88:31)
+      at async dispatch (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\compose.js:22:23)
+      at async <anonymous> (C:\Users\email\projects\slingshot\packages\slingshot-auth\src\middleware\identify.ts:242:11)
+      at async dispatch (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\compose.js:22:23)
+      at async <anonymous> (C:\Users\email\projects\slingshot\src\framework\middleware\rateLimit.ts:80:11)
+      at async dispatch (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\compose.js:22:23)
+      at async secureHeaders2 (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\middleware\secure-headers\secure-headers.js:79:11)
+      at async dispatch (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\compose.js:22:23)
+
+(pass) auditLog middleware — onEntry hook > error in onEntry hook does not affect response status
+[slingshot] Memory adapter for audit log is capped at 10000 entries and has no eviction — for development/testing only
+[auditLog] onEntry hook threw: 144 |   });
+145 | 
+146 |   test('entry is still written even when onEntry throws', async () => {
+147 |     const { app, provider } = await createAuditedApp({
+148 |       onEntry: () => {
+149 |         throw new Error('hook failure');
+                    ^
+error: hook failure
+      at onEntry (C:\Users\email\projects\slingshot\tests\integration\auditLog.test.ts:149:15)
+      at <anonymous> (C:\Users\email\projects\slingshot\src\framework\middleware\auditLog.ts:88:31)
+      at async dispatch (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\compose.js:22:23)
+      at async <anonymous> (C:\Users\email\projects\slingshot\packages\slingshot-auth\src\middleware\identify.ts:242:11)
+      at async dispatch (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\compose.js:22:23)
+      at async <anonymous> (C:\Users\email\projects\slingshot\src\framework\middleware\rateLimit.ts:80:11)
+      at async dispatch (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\compose.js:22:23)
+      at async secureHeaders2 (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\middleware\secure-headers\secure-headers.js:79:11)
+      at async dispatch (C:\Users\email\projects\slingshot\node_modules\.bun\hono@4.12.12\node_modules\hono\dist\compose.js:22:23)
+
+(pass) auditLog middleware — onEntry hook > entry is still written even when onEntry throws
+
+tests\integration\auth-bootstrap-hardening.test.ts:
+(pass) auth bootstrap hardening > production boot fails when jwt.issuer is missing
+(pass) auth bootstrap hardening > production boot fails when jwt.audience is missing
+(pass) auth bootstrap hardening > production boot succeeds when jwt.issuer and jwt.audience are configured
+(pass) auth bootstrap hardening > production boot fails when trustProxy is not configured and auth is enabled
+
+tests\integration\auth-edge-cases.test.ts:
+(pass) DELETE /auth/me > returns 501 when adapter has no deleteUser [110.00ms]
+(pass) POST /auth/set-password > returns 501 when adapter has no setPassword [109.00ms]
+(pass) POST /auth/verify-email > returns 429 when rate limit exceeded [109.00ms]
+(pass) POST /auth/resend-verification > returns 501 when adapter has no getEmailVerified [110.00ms]
+(pass) POST /auth/resend-verification > returns 429 when rate limit exceeded [93.00ms]
+(pass) POST /auth/resend-verification > returns 401 with wrong password [407.00ms]
+(pass) POST /auth/forgot-password > returns 429 when rate limit exceeded [156.00ms]
+(pass) POST /auth/reset-password > returns 429 when rate limit exceeded [16.00ms]
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) POST /auth/reset-password > returns 501 when adapter has no setPassword [296.00ms]
+(pass) POST /auth/refresh > returns 401 when no refresh token is provided
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) POST /auth/mfa/setup > returns 429 when the setup bucket reaches the hardcoded max of 5 [204.00ms]
+(pass) POST /auth/refresh — rate limit > returns 429 on the 30th attempt (hardcoded max: 30) [15.00ms]
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) POST /auth/forgot-password — fire-and-forget > returns 200 immediately (fire-and-forget delivery) [297.00ms]
+
+tests\integration\auth-route-hardening.test.ts:
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) POST /auth/reauth/challenge > returns availableMethods with password when user has password (no challenge-based methods) [219.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) POST /auth/reauth/challenge > returns reauthToken and totp in availableMethods when TOTP enabled [203.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) POST /auth/reauth/challenge > returns reauthToken when email OTP is enabled [281.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) POST /auth/reauth/challenge > returns 401 without authentication
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) POST /auth/step-up — verifyAnyFactor > verifies TOTP factor successfully [188.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) POST /auth/step-up — verifyAnyFactor > rejects invalid TOTP code [187.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) POST /auth/step-up — verifyAnyFactor > verifies password factor successfully [359.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) POST /auth/step-up — verifyAnyFactor > rejects wrong password [375.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) Recovery code boundary in verifyAnyFactor > recovery code works when method is explicitly 'recovery' [235.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) Recovery code boundary in verifyAnyFactor > recovery code is NOT tried when method is 'totp' [234.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) Recovery code boundary in verifyAnyFactor > recovery code is single-use [172.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) DELETE /auth/mfa — verifyAnyFactor > disables MFA with valid TOTP code [297.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) DELETE /auth/mfa — verifyAnyFactor > disables MFA with password [312.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) DELETE /auth/mfa — verifyAnyFactor > rejects invalid TOTP code [157.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) DELETE /auth/mfa — verifyAnyFactor > returns 400 when no credentials provided [218.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) DELETE /auth/me — verifyAnyFactor when MFA enabled > deletes account with TOTP when MFA is enabled [141.00ms]
+(pass) DELETE /auth/me — verifyAnyFactor when MFA enabled > deletes account with password [281.00ms]
+(pass) DELETE /auth/me — verifyAnyFactor when MFA enabled > rejects deletion with wrong password when MFA disabled [266.00ms]
+(pass) POST /auth/set-password — session revocation > second session is invalidated after password change (revoke_others) [672.00ms]

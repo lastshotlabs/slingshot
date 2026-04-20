@@ -1,4 +1,6 @@
 import {
+  ANONYMOUS_ACTOR,
+  type Actor,
   type FunctionsHooks,
   HandlerError,
   type HandlerMeta,
@@ -34,14 +36,34 @@ function buildMeta(
 ): HandlerMeta {
   const extracted = adapter.extractMeta(event, record);
   const requestId = extracted.requestId ?? lambdaContext?.awsRequestId ?? crypto.randomUUID();
+
+  const tenantId = extracted.tenantId ?? null;
+  const authUserId = extracted.authUserId ?? null;
+  const authClientId = extracted.authClientId ?? null;
+  const bearerClientId = extracted.bearerClientId ?? null;
+  const roles = extracted.roles ?? null;
+
+  // Build the canonical actor from the extracted fields.
+  let actor: Actor;
+  if (authUserId) {
+    actor = { id: authUserId, kind: 'user', tenantId, sessionId: null, roles, claims: {} };
+  } else if (bearerClientId) {
+    actor = { id: bearerClientId, kind: 'api-key', tenantId, sessionId: null, roles, claims: {} };
+  } else if (authClientId) {
+    actor = { id: authClientId, kind: 'service-account', tenantId, sessionId: null, roles, claims: {} };
+  } else {
+    actor = { ...ANONYMOUS_ACTOR, tenantId };
+  }
+
   return {
     requestId,
-    tenantId: extracted.tenantId ?? null,
-    authUserId: extracted.authUserId ?? null,
+    actor,
+    tenantId,
+    authUserId,
     correlationId: extracted.correlationId ?? requestId,
     ip: extracted.ip ?? null,
-    authClientId: extracted.authClientId ?? null,
-    bearerClientId: extracted.bearerClientId ?? null,
+    authClientId,
+    bearerClientId,
     bearerAuthenticated: extracted.bearerAuthenticated ?? false,
     idempotencyKey: extracted.idempotencyKey,
     method: extracted.method,

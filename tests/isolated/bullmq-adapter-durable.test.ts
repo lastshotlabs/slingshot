@@ -10,6 +10,8 @@
  * No Redis required.
  */
 import { beforeAll, describe, expect, it, mock, spyOn } from 'bun:test';
+import { z } from 'zod';
+import { type EventSerializer, createEventSchemaRegistry } from '../../packages/slingshot-core/src';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Mock bullmq before importing the adapter
@@ -94,7 +96,7 @@ mock.module('bullmq', () => ({
 // ──────────────────────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let createBullMQAdapter: (opts: { connection: any; prefix?: string; attempts?: number }) => any;
+let createBullMQAdapter: (opts: any) => any;
 
 beforeAll(async () => {
   const mod = await import('../../packages/slingshot-bullmq/src/bullmqAdapter');
@@ -252,6 +254,81 @@ describe('BullMQ adapter — durable subscription setup (mocked bullmq)', () => 
     await worker.processor({ data: { userId: 'u99', sessionId: 's99' }, attemptsMade: 0 });
 
     expect(received).toEqual([{ userId: 'u99', sessionId: 's99' }]);
+  });
+
+  it('durable queues serialize payloads with a custom serializer and workers deserialize them', async () => {
+    const beforeQueue = createdQueues.length;
+    const beforeWorker = createdWorkers.length;
+    const serializer: EventSerializer = {
+      contentType: 'application/x-test',
+      serialize(_event, payload) {
+        return new TextEncoder().encode(JSON.stringify({ wrapped: payload }));
+      },
+      deserialize(_event, data) {
+        const parsed = JSON.parse(new TextDecoder().decode(data)) as { wrapped: unknown };
+        return parsed.wrapped;
+      },
+    };
+    const received: Array<{ userId: string; sessionId: string }> = [];
+
+    const bus = createBullMQAdapter({ connection: FAKE_CONNECTION, serializer });
+    bus.on(
+      'auth:login',
+      (payload: { userId: string; sessionId: string }) => {
+        received.push(payload);
+      },
+      { durable: true, name: 'serializer-test' },
+    );
+
+    bus.emit('auth:login', { userId: 'u1', sessionId: 's1' });
+    await new Promise(r => setTimeout(r, 10));
+
+    const queue = createdQueues[beforeQueue] as MockQueue;
+    expect(queue.addedJobs[0]?.data).toEqual({
+      __slingshot_serialized: Buffer.from(
+        JSON.stringify({ wrapped: { userId: 'u1', sessionId: 's1' } }),
+      ).toString('base64'),
+      __slingshot_content_type: 'application/x-test',
+    });
+
+    const worker = createdWorkers[beforeWorker] as MockWorker;
+    await worker.processor({
+      data: queue.addedJobs[0]?.data,
+      attemptsMade: 0,
+    });
+
+    expect(received).toEqual([{ userId: 'u1', sessionId: 's1' }]);
+  });
+
+  it('durable workers validate and transform payloads before invoking listeners', async () => {
+    const beforeWorker = createdWorkers.length;
+    const schemaRegistry = createEventSchemaRegistry();
+    schemaRegistry.register(
+      'auth:login',
+      z.object({
+        userId: z.string().transform(value => value.toUpperCase()),
+        sessionId: z.string(),
+      }),
+    );
+    const received: Array<{ userId: string; sessionId: string }> = [];
+
+    const bus = createBullMQAdapter({
+      connection: FAKE_CONNECTION,
+      schemaRegistry,
+      validation: 'strict',
+    });
+    bus.on(
+      'auth:login',
+      (payload: { userId: string; sessionId: string }) => {
+        received.push(payload);
+      },
+      { durable: true, name: 'validation-test' },
+    );
+
+    const worker = createdWorkers[beforeWorker] as MockWorker;
+    await worker.processor({ data: { userId: 'u2', sessionId: 's2' }, attemptsMade: 0 });
+
+    expect(received).toEqual([{ userId: 'U2', sessionId: 's2' }]);
   });
 
   it('shutdown() closes all workers and queues', async () => {

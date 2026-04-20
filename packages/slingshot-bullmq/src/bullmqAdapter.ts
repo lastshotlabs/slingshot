@@ -3,11 +3,17 @@ import type { ConnectionOptions } from 'bullmq';
 import { z } from 'zod';
 import type {
   ClientSafeEventKey,
+  EventBusSerializationOptions,
   SlingshotEventBus,
   SlingshotEventMap,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
-import { FORBIDDEN_CLIENT_PREFIXES, validatePluginConfig } from '@lastshotlabs/slingshot-core';
+import {
+  FORBIDDEN_CLIENT_PREFIXES,
+  JSON_SERIALIZER,
+  validateEventPayload,
+  validatePluginConfig,
+} from '@lastshotlabs/slingshot-core';
 
 /**
  * Zod schema for `BullMQAdapterOptions`. Validated at adapter-creation time.
@@ -49,6 +55,8 @@ export const bullmqAdapterOptionsSchema = z.object({
    * Default: 3
    */
   attempts: z.number().int().min(1).optional(),
+  /** Event payload validation mode. Default: "off". */
+  validation: z.enum(['strict', 'warn', 'off']).optional(),
 });
 
 /**
@@ -126,6 +134,21 @@ const MAX_ENQUEUE_ATTEMPTS = 5;
  */
 const DRAIN_INTERVAL_MS = 2000;
 
+interface SerializedBullMQEnvelope {
+  __slingshot_serialized: string;
+  __slingshot_content_type: string;
+}
+
+function isSerializedBullMQEnvelope(value: unknown): value is SerializedBullMQEnvelope {
+  if (!value || typeof value !== 'object') return false;
+  return (
+    '__slingshot_serialized' in value &&
+    typeof (value as Record<string, unknown>).__slingshot_serialized === 'string' &&
+    '__slingshot_content_type' in value &&
+    typeof (value as Record<string, unknown>).__slingshot_content_type === 'string'
+  );
+}
+
 /**
  * Creates a `SlingshotEventBus` implementation backed by BullMQ and Redis.
  *
@@ -170,11 +193,14 @@ const DRAIN_INTERVAL_MS = 2000;
  * ```
  */
 export function createBullMQAdapter(
-  rawOpts: BullMQAdapterOptions,
+  rawOpts: BullMQAdapterOptions & EventBusSerializationOptions,
 ): SlingshotEventBus & { _drainPendingBuffer: () => Promise<void> } {
-  const opts = validatePluginConfig('slingshot-bullmq', rawOpts, bullmqAdapterOptionsSchema);
+  const { serializer, schemaRegistry, ...adapterOpts } = rawOpts;
+  const opts = validatePluginConfig('slingshot-bullmq', adapterOpts, bullmqAdapterOptionsSchema);
   const prefix = opts.prefix ?? 'slingshot:events';
   const attempts = opts.attempts ?? 3;
+  const eventSerializer = serializer ?? JSON_SERIALIZER;
+  const validationMode = opts.validation ?? 'off';
   const listeners = new Map<string, Set<(payload: unknown) => void | Promise<void>>>();
 
   // Track durable listeners so off() can detect and reject them
@@ -333,6 +359,13 @@ export function createBullMQAdapter(
     },
 
     emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
+      const validatedPayload = validateEventPayload(
+        event as string,
+        payload,
+        schemaRegistry,
+        validationMode,
+      );
+
       // Fire local (non-durable) listeners synchronously via fire-and-forget.
       // Sync throws are caught separately so subsequent listeners still fire (matches InProcessAdapter).
       const fns = listeners.get(event as string);
@@ -340,7 +373,7 @@ export function createBullMQAdapter(
         for (const fn of Array.from(fns)) {
           let result: void | Promise<void>;
           try {
-            result = fn(payload);
+            result = fn(validatedPayload);
           } catch (err: unknown) {
             console.error(`[BullMQAdapter] listener error on event "${event}":`, err);
             continue;
@@ -355,7 +388,16 @@ export function createBullMQAdapter(
       const queuePrefix = `${prefix}:${event}`;
       for (const [name, queue] of durableQueues.entries()) {
         if (name.startsWith(queuePrefix + ':')) {
-          queue.add(event, payload as object).catch((err: unknown) => {
+          const durablePayload =
+            eventSerializer === JSON_SERIALIZER
+              ? (validatedPayload as object)
+              : ({
+                  __slingshot_serialized: Buffer.from(
+                    eventSerializer.serialize(event as string, validatedPayload),
+                  ).toString('base64'),
+                  __slingshot_content_type: eventSerializer.contentType,
+                } satisfies SerializedBullMQEnvelope);
+          queue.add(event, durablePayload).catch((err: unknown) => {
             if (pendingBuffer.length >= MAX_PENDING_BUFFER) {
               console.error(
                 `[BullMQAdapter] pending buffer full; dropping durable event "${event}" to queue "${name}":`,
@@ -367,7 +409,7 @@ export function createBullMQAdapter(
               name,
               queue,
               event,
-              payload: payload as object,
+              payload: durablePayload,
               attempts: 1,
             });
             scheduleDrain();
@@ -407,7 +449,21 @@ export function createBullMQAdapter(
         const worker = new Worker(
           bullmqQueueName,
           async job => {
-            await Promise.resolve(listener(job.data as SlingshotEventMap[K]));
+            let workerPayload: unknown = job.data;
+            if (isSerializedBullMQEnvelope(job.data)) {
+              workerPayload = eventSerializer.deserialize(
+                event as string,
+                Buffer.from(job.data.__slingshot_serialized, 'base64'),
+              );
+            }
+
+            workerPayload = validateEventPayload(
+              event as string,
+              workerPayload,
+              schemaRegistry,
+              validationMode,
+            );
+            await Promise.resolve(listener(workerPayload as SlingshotEventMap[K]));
           },
           { connection: opts.connection },
         );

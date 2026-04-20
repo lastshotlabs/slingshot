@@ -1,8 +1,10 @@
 // Unit tests for the slingshot-bullmq adapter — non-durable paths and validation.
 // No Redis required. No bullmq mock required (durable constructors are never invoked).
 import { describe, expect, it } from 'bun:test';
+import { z } from 'zod';
 import { createBullMQAdapter as createBullMQAdapterFromIndex } from '../../packages/slingshot-bullmq/src';
 import { createBullMQAdapter } from '../../packages/slingshot-bullmq/src/bullmqAdapter';
+import { createEventSchemaRegistry } from '../../packages/slingshot-core/src';
 
 // Fake connection — never actually connects in these tests (no durable subs)
 const FAKE_CONNECTION = { host: 'localhost', port: 9999 };
@@ -103,6 +105,51 @@ describe('BullMQ adapter — validation', () => {
     expect(() =>
       createBullMQAdapter({ connection: { host: 'localhost', port: '6379' as any } }),
     ).toThrow('connection.port');
+  });
+
+  it('validates and transforms non-durable payloads before invoking listeners', async () => {
+    const schemaRegistry = createEventSchemaRegistry();
+    schemaRegistry.register(
+      'auth:login',
+      z.object({
+        userId: z.string().transform(value => value.toUpperCase()),
+        sessionId: z.string(),
+      }),
+    );
+    const bus = createBullMQAdapter({
+      connection: FAKE_CONNECTION,
+      schemaRegistry,
+      validation: 'strict',
+    });
+    const received: Array<{ userId: string; sessionId: string }> = [];
+
+    bus.on('auth:login', payload => {
+      received.push(payload);
+    });
+    bus.emit('auth:login', { userId: 'u1', sessionId: 's1' });
+
+    await new Promise(r => setTimeout(r, 20));
+    expect(received).toEqual([{ userId: 'U1', sessionId: 's1' }]);
+  });
+
+  it('throws before dispatching invalid payloads when validation is strict', () => {
+    const schemaRegistry = createEventSchemaRegistry();
+    schemaRegistry.register(
+      'auth:login',
+      z.object({
+        userId: z.string(),
+        sessionId: z.string(),
+      }),
+    );
+    const bus = createBullMQAdapter({
+      connection: FAKE_CONNECTION,
+      schemaRegistry,
+      validation: 'strict',
+    });
+
+    expect(() => bus.emit('auth:login' as string, { userId: 123, sessionId: 's1' })).toThrow(
+      'validation failed',
+    );
   });
 });
 

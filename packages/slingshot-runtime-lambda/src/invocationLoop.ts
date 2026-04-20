@@ -1,7 +1,6 @@
 import {
-  HandlerError,
-  ValidationError,
   type FunctionsHooks,
+  HandlerError,
   type HandlerMeta,
   type RecordOutcome,
   type SlingshotContext,
@@ -9,6 +8,7 @@ import {
   type TriggerAdapter,
   type TriggerOpts,
   type TriggerRecord,
+  ValidationError,
 } from '@lastshotlabs/slingshot-core';
 import { invokeWithRecordIdempotency } from './idempotency';
 
@@ -136,7 +136,7 @@ export async function invokeWithAdapter(
       if (disposition?.replaceWith) {
         capturedError = disposition.replaceWith;
       }
-      const error = capturedError;
+      const failure = capturedError ?? new Error('Invocation failed without an error instance');
 
       if (disposition?.suppress) {
         output = disposition.body ?? null;
@@ -161,16 +161,17 @@ export async function invokeWithAdapter(
             meta: {
               ...record.meta,
               http: {
-                status: disposition?.status ?? (error instanceof HandlerError ? error.status : 500),
+                status:
+                  disposition?.status ?? (failure instanceof HandlerError ? failure.status : 500),
                 body:
                   disposition?.body ??
-                  (error instanceof HandlerError
-                    ? { error: error.message, code: error.code }
-                    : { error: error.message }),
+                  (failure instanceof HandlerError
+                    ? { error: failure.message, code: failure.code }
+                    : { error: failure.message }),
               },
             },
             result: 'error',
-            error,
+            error: failure,
           });
         } else {
           outcomes.push({
@@ -184,16 +185,17 @@ export async function invokeWithAdapter(
           meta: {
             ...record.meta,
             http: {
-              status: disposition?.status ?? (error instanceof HandlerError ? error.status : 500),
+              status:
+                disposition?.status ?? (failure instanceof HandlerError ? failure.status : 500),
               body:
                 disposition?.body ??
-                (error instanceof HandlerError
-                  ? { error: error.message, code: error.code }
-                  : { error: error.message }),
+                (failure instanceof HandlerError
+                  ? { error: failure.message, code: failure.code }
+                  : { error: failure.message }),
             },
           },
           result: 'error',
-          error,
+          error: failure,
         });
       }
     } finally {

@@ -1,20 +1,18 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { z } from 'zod';
 import type {
   SlingshotContext,
   SlingshotHandler,
   TriggerAdapter,
 } from '@lastshotlabs/slingshot-core';
 import { HandlerError, ValidationError } from '@lastshotlabs/slingshot-core';
-import { z } from 'zod';
 import { invokeWithAdapter } from '../src/invocationLoop';
 import { apigwTrigger } from '../src/triggers/apigw';
 import { kinesisTrigger } from '../src/triggers/kinesis';
 import { scheduleTrigger } from '../src/triggers/schedule';
 import { sqsTrigger } from '../src/triggers/sqs';
 
-function createContextFixture(
-  overrides: Partial<SlingshotContext> = {},
-): SlingshotContext {
+function createContextFixture(overrides: Partial<SlingshotContext> = {}): SlingshotContext {
   return {
     app: {},
     appName: 'test-app',
@@ -82,9 +80,7 @@ function createContextFixture(
   } as unknown as SlingshotContext;
 }
 
-function createHandler(
-  impl: (input: unknown) => Promise<unknown>,
-): SlingshotHandler {
+function createHandler(impl: (input: unknown) => Promise<unknown>): SlingshotHandler {
   return {
     name: 'test.handler',
     input: z.any(),
@@ -221,6 +217,40 @@ describe('invokeWithAdapter', () => {
       statusCode: 202,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ accepted: true }),
+      isBase64Encoded: false,
+    });
+  });
+
+  test('uses onError replacement errors when building single-record HTTP failures', async () => {
+    const ctx = createContextFixture();
+    const handler = createHandler(async () => {
+      throw new Error('boom');
+    });
+
+    const result = await invokeWithAdapter(
+      handler,
+      apigwTrigger as TriggerAdapter,
+      {
+        body: JSON.stringify({ ok: true }),
+        headers: {},
+        requestContext: { requestId: 'req-3' },
+      },
+      ctx,
+      {
+        async onError() {
+          return {
+            replaceWith: new HandlerError('replaced', { status: 409, code: 'conflict' }),
+          };
+        },
+      },
+      undefined,
+      true,
+    );
+
+    expect(result).toEqual({
+      statusCode: 409,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ error: 'replaced', code: 'conflict' }),
       isBase64Encoded: false,
     });
   });

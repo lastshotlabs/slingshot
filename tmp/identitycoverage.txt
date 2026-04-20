@@ -1657,3 +1657,112 @@ tests\integration\saml.test.ts:
 (pass) SAML login initiation CSRF protection > GET /auth/saml/login is no longer mounted
 (pass) SamlConfig type > config stores saml config
 (pass) SAML HTTPS enforcement > initSaml throws on http:// URL in production
+(pass) SAML HTTPS enforcement > initSaml warns but does not throw on http:// URL in development [2563.00ms]
+(pass) SAML request ID store (memory) > store + consume round-trip returns true
+(pass) SAML request ID store (memory) > consume is single-use - second consume returns false
+(pass) SAML request ID store (memory) > consuming unknown request ID returns false
+(pass) SAML request ID store (memory) > expired request IDs are not consumable
+(pass) SAML request ID store (memory) > fresh repo has no entries (simulates clear)
+(pass) SAML request ID store (memory) > request IDs are stored as SHA-256 hashes (not plaintext)
+
+tests\integration\scim-get-put-validation.test.ts:
+(pass) SCIM GET /scim/v2/Users — query parameter validation > count=0 (below min=1) returns 400 in SCIM error format
+(pass) SCIM GET /scim/v2/Users — query parameter validation > count=300 (above max=200) returns 400 in SCIM error format
+(pass) SCIM GET /scim/v2/Users — query parameter validation > startIndex=0 (below min=1) returns 400 in SCIM error format
+(pass) SCIM GET /scim/v2/Users — query parameter validation > valid GET /scim/v2/Users returns 200 with list response (smoke test)
+(pass) SCIM PUT /scim/v2/Users/:id — body validation > invalid userName format returns 400 in SCIM error format
+(pass) SCIM PUT /scim/v2/Users/:id — body validation > name.givenName exceeding 256 chars returns 400 in SCIM error format
+(pass) SCIM PUT /scim/v2/Users/:id — body validation > valid PUT returns 200 (smoke test)
+(pass) SCIM DELETE /scim/v2/Users/:id — not-found response > DELETE for non-existent user returns 404 in SCIM error format [15.00ms]
+
+tests\integration\scim-validation-errors.test.ts:
+(pass) SCIM validation errors — RFC 7644 format > POST /scim/v2/Users with missing userName returns 400 in SCIM error format [16.00ms]
+(pass) SCIM validation errors — RFC 7644 format > PATCH /scim/v2/Users/:id with missing Operations returns 400 in SCIM error format
+(pass) SCIM validation errors — RFC 7644 format > POST /scim/v2/Users with completely empty body returns 400 in SCIM error format
+(pass) SCIM validation errors — RFC 7644 format > SCIM error detail includes the offending field path
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) SCIM validation errors — RFC 7644 format > valid POST /scim/v2/Users still returns 201 (smoke test) [203.00ms]
+(pass) SCIM validation errors — RFC 7644 format > PATCH with valid Operations returns 200 (smoke test)
+
+tests\integration\scim.test.ts:
+(pass) SCIM — authentication > rejects requests without bearer token
+(pass) SCIM — authentication > rejects requests with wrong token [16.00ms]
+(pass) SCIM — user listing > GET /scim/v2/Users returns empty list
+(pass) SCIM — user listing > GET /scim/v2/Users lists created users
+(pass) SCIM — user listing > GET /scim/v2/Users rejects unsupported filters instead of widening to full-list reads
+[slingshot] Memory adapter for auth has no eviction — for development/testing only
+(pass) SCIM — user CRUD > POST /scim/v2/Users creates a user [187.00ms]
+(pass) SCIM — user CRUD > DELETE /scim/v2/Users/:id suspends user by default
+(pass) SCIM — user CRUD > DELETE /scim/v2/Users/:id returns 501 when suspend deprovisioning is unsupported
+(pass) SCIM — user CRUD > DELETE /scim/v2/Users/:id returns 501 when delete deprovisioning is unsupported
+(pass) SCIM — user CRUD > PATCH /scim/v2/Users/:id deactivates user
+(pass) SCIM — user CRUD > PATCH /scim/v2/Users/:id returns 404 before attempting adapter writes for unknown users
+(pass) SCIM — discovery > GET /scim/v2/ServiceProviderConfig returns config [16.00ms]
+(pass) parseScimFilter > parses userName eq filter
+(pass) parseScimFilter > parses active eq filter
+(pass) parseScimFilter > returns null for unsupported filter attributes
+(pass) parseScimFilter > returns null for invalid active filter values
+
+tests\integration\secrets-at-rest.test.ts:
+(pass) MFA setup + verify with encryption enabled > setupMfa returns a base32 secret and QR URI [328.00ms]
+(pass) MFA setup + verify with encryption enabled > setupMfa stores secret encrypted; verifySetup decrypts and validates with real TOTP code [281.00ms]
+(pass) Refresh token rotation (hash at rest) > register returns a refresh token [188.00ms]
+(pass) Refresh token rotation (hash at rest) > POST /auth/refresh with valid refresh token issues new tokens [203.00ms]
+(pass) Refresh token rotation (hash at rest) > old refresh token after rotation is invalid (hashed, no plaintext fallback) [6203.00ms]
+
+tests\integration\session-idle-timeout.test.ts:
+(pass) session idle timeout > session is active before idle timeout expires [141.00ms]
+(pass) session idle timeout > session is rejected after idle timeout passes [1250.00ms]
+(pass) session idle timeout > idle timeout does not trigger when requests come within the window [156.00ms]
+(pass) session idle timeout > idleTimeout config enables lastActiveAt tracking implicitly [188.00ms]
+(pass) session absolute timeout (F2) > absoluteTimeout drives JWT expiry when refresh tokens are disabled [125.00ms]
+(pass) session absolute timeout (F2) > default absoluteTimeout is 7 days (604800s) when not configured [156.00ms]
+
+tests\integration\session.test.ts:
+(pass) GET /auth/sessions > lists the active session after registration [141.00ms]
+(pass) GET /auth/sessions > lists multiple sessions from separate logins [281.00ms]
+(pass) GET /auth/sessions > returns 401 without authentication [16.00ms]
+(pass) DELETE /auth/sessions/:sessionId > revokes a specific session [250.00ms]
+(pass) DELETE /auth/sessions/:sessionId > returns 404 for non-existent session [140.00ms]
+(pass) maxSessions eviction > evicts oldest session when exceeding maxSessions [438.00ms]
+
+tests\integration\sqlite-advanced.test.ts:
+(pass) SQLite: provider linking > registers and logs in on SQLite [157.00ms]
+(pass) SQLite: provider linking > sets and checks password [421.00ms]
+(pass) SQLite: provider linking > deletes account on SQLite [250.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) SQLite: MFA operations > initiates MFA setup on SQLite [157.00ms]
+(pass) SQLite: tenant roles > manages tenant-scoped roles [15.00ms]
+(pass) SQLite: tenant roles > addTenantRole is idempotent
+(pass) SQLite: WebAuthn credentials > adds and retrieves credentials [16.00ms]
+(pass) SQLite: WebAuthn credentials > updates sign count [16.00ms]
+(pass) SQLite: WebAuthn credentials > removes a credential [15.00ms]
+(pass) SQLite: WebAuthn credentials > finds user by credential ID [16.00ms]
+(pass) SQLite: WebAuthn credentials > returns null for unknown credential [15.00ms]
+(pass) SQLite: OAuth state store > stores and consumes OAuth state
+(pass) SQLite: OAuth state store > state is single-use
+(pass) SQLite: cache pattern deletion > deletes by wildcard pattern with proper escaping [16.00ms]
+(pass) SQLite: cache pattern deletion > treats LIKE metacharacters and backslashes literally
+
+tests\integration\sqlite-emailverify.test.ts:
+(pass) SQLite email verification > register triggers verification email [188.00ms]
+(pass) SQLite email verification > login before verification returns 403 [281.00ms]
+(pass) SQLite email verification > verify with valid token succeeds [125.00ms]
+(pass) SQLite email verification > login after verification succeeds [265.00ms]
+(pass) SQLite email verification > resend verification sends new token [532.00ms]
+
+tests\integration\sqlite-mfa.test.ts:
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) SQLite MFA (TOTP) > setup MFA returns secret and URI [172.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) SQLite MFA (TOTP) > verify setup enables MFA [187.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) SQLite MFA (TOTP) > login returns mfaRequired when MFA enabled [438.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) SQLite MFA (TOTP) > MFA verify with TOTP completes login [421.00ms]
+[slingshot-auth] WARNING: MFA configured without SLINGSHOT_DATA_ENCRYPTION_KEY. TOTP secrets stored in plaintext. Set this key in production.
+(pass) SQLite MFA (TOTP) > disable MFA with TOTP code [438.00ms]
+
+tests\integration\sqlite-passwordreset.test.ts:
+(pass) SQLite password reset > forgot password sends reset email [328.00ms]
+(pass) SQLite password reset > reset password with valid token works [516.00ms]

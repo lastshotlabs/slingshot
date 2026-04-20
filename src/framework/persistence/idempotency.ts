@@ -186,7 +186,10 @@ export function createMongoIdempotencyAdapter(
   return {
     async get(key) {
       const doc = await getModel()
-        .findOne({ key, expiresAt: { $gt: new Date() } }, 'status body createdAt requestFingerprint')
+        .findOne(
+          { key, expiresAt: { $gt: new Date() } },
+          'status body createdAt requestFingerprint',
+        )
         .lean();
       if (!doc) return null;
       return {

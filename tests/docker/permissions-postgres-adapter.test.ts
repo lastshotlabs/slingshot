@@ -388,9 +388,7 @@ describe('Permissions Postgres adapter (docker)', () => {
 
       await pool.query('DROP INDEX IF EXISTS idx_permission_schema_version_singleton');
       await pool.query('DELETE FROM _permission_schema_version');
-      await pool.query(
-        'INSERT INTO _permission_schema_version (version) VALUES (0), (1), (1)',
-      );
+      await pool.query('INSERT INTO _permission_schema_version (version) VALUES (0), (1), (1)');
 
       const repairPool = createTestPool();
       try {
@@ -410,7 +408,9 @@ describe('Permissions Postgres adapter (docker)', () => {
     test('fails closed when the stored schema version is newer than this binary supports', async () => {
       await resetPermissionsSchema(pool);
 
-      await pool.query('CREATE TABLE _permission_schema_version (version INTEGER NOT NULL DEFAULT 0)');
+      await pool.query(
+        'CREATE TABLE _permission_schema_version (version INTEGER NOT NULL DEFAULT 0)',
+      );
       await pool.query('INSERT INTO _permission_schema_version (version) VALUES (2)');
 
       const futurePool = createTestPool();

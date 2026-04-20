@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
 import {
+  type CoverageFileSummary,
   discoverOwnedFiles,
   fileNeedsRuntimeCoverage,
   parseLcov,
-  type CoverageFileSummary,
 } from './coverage-lcov';
 import { type CoverageSuite, coverageArtifactPath, coverageSuites } from './workspace-test-suites';
 

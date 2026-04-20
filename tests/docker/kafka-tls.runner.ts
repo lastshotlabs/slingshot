@@ -6,10 +6,10 @@ import {
   createKafkaConnectors,
   getKafkaAdapterIntrospectionOrNull,
 } from '@lastshotlabs/slingshot-kafka';
+import { Kafka, type KafkaMessage } from '../../packages/slingshot-kafka/node_modules/kafkajs';
 import { createServerFromManifest } from '../../src/lib/createServerFromManifest';
 import { createManifestHandlerRegistry } from '../../src/lib/manifestHandlerRegistry';
 import { getServerContext } from '../../src/server';
-import { Kafka, type KafkaMessage } from '../../packages/slingshot-kafka/node_modules/kafkajs';
 
 const KAFKA_TLS_BROKER = 'localhost:39094';
 const KAFKA_MTLS_BROKER = 'localhost:49095';
@@ -391,9 +391,11 @@ async function runManifestBootstrapScenario(): Promise<void> {
   process.env.KAFKA_CLIENT_ID = uniqueName('manifest-tls');
   process.env.KAFKA_SSL = 'true';
   cleanup.push(async () => {
-    if (previousEnv.KAFKA_BROKERS !== undefined) process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
+    if (previousEnv.KAFKA_BROKERS !== undefined)
+      process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
     else delete process.env.KAFKA_BROKERS;
-    if (previousEnv.KAFKA_CLIENT_ID !== undefined) process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
+    if (previousEnv.KAFKA_CLIENT_ID !== undefined)
+      process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
     else delete process.env.KAFKA_CLIENT_ID;
     if (previousEnv.KAFKA_SSL !== undefined) process.env.KAFKA_SSL = previousEnv.KAFKA_SSL;
     else delete process.env.KAFKA_SSL;
@@ -481,7 +483,9 @@ async function runManifestBootstrapScenario(): Promise<void> {
   const producer = await createTlsProducer();
   await producer.send({
     topic: inboundTopic,
-    messages: [{ key: 'tls-inbound-1', value: Buffer.from(JSON.stringify({ id: 'tls-inbound-1' })) }],
+    messages: [
+      { key: 'tls-inbound-1', value: Buffer.from(JSON.stringify({ id: 'tls-inbound-1' })) },
+    ],
   });
 
   await waitFor(
@@ -501,9 +505,11 @@ async function runManifestMtlsScenario(): Promise<void> {
   delete process.env.KAFKA_CLIENT_ID;
   delete process.env.KAFKA_SSL;
   cleanup.push(async () => {
-    if (previousEnv.KAFKA_BROKERS !== undefined) process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
+    if (previousEnv.KAFKA_BROKERS !== undefined)
+      process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
     else delete process.env.KAFKA_BROKERS;
-    if (previousEnv.KAFKA_CLIENT_ID !== undefined) process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
+    if (previousEnv.KAFKA_CLIENT_ID !== undefined)
+      process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
     else delete process.env.KAFKA_CLIENT_ID;
     if (previousEnv.KAFKA_SSL !== undefined) process.env.KAFKA_SSL = previousEnv.KAFKA_SSL;
     else delete process.env.KAFKA_SSL;
@@ -598,7 +604,9 @@ async function runManifestMtlsScenario(): Promise<void> {
   const producer = await createTlsProducer(TLS_MUTUAL_SSL, KAFKA_MTLS_BROKER);
   await producer.send({
     topic: inboundTopic,
-    messages: [{ key: 'mtls-inbound-1', value: Buffer.from(JSON.stringify({ id: 'mtls-inbound-1' })) }],
+    messages: [
+      { key: 'mtls-inbound-1', value: Buffer.from(JSON.stringify({ id: 'mtls-inbound-1' })) },
+    ],
   });
 
   await waitFor(

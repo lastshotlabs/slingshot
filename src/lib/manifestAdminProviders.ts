@@ -30,10 +30,7 @@ import type {
   PermissionsState,
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
-import {
-  SUPER_ADMIN_ROLE,
-  getPermissionsStateOrNull,
-} from '@lastshotlabs/slingshot-core';
+import { SUPER_ADMIN_ROLE, getPermissionsStateOrNull } from '@lastshotlabs/slingshot-core';
 
 /**
  * Create deferred admin providers that resolve real implementations lazily.

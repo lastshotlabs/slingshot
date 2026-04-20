@@ -33,14 +33,13 @@ async function collectFiles(pattern: string): Promise<string[]> {
 }
 
 export async function collectRootTestFiles(): Promise<string[]> {
-  return (await Promise.all(patterns.map(collectFiles)))
-    .flat()
-    .sort((a, b) => a.localeCompare(b));
+  return (await Promise.all(patterns.map(collectFiles))).flat().sort((a, b) => a.localeCompare(b));
 }
 
 export async function collectRootCoverageTestFiles(): Promise<string[]> {
-  return Array.from(new Set([...(await collectRootTestFiles()), ...rootCoverageSupplementalFiles]))
-    .sort((a, b) => a.localeCompare(b));
+  return Array.from(
+    new Set([...(await collectRootTestFiles()), ...rootCoverageSupplementalFiles]),
+  ).sort((a, b) => a.localeCompare(b));
 }
 
 export function fileRequiresIsolatedProcess(path: string): boolean {

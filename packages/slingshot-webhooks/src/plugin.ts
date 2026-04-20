@@ -4,11 +4,7 @@ import type {
   SlingshotEventBus,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
-import {
-  deepFreeze,
-  getPluginState,
-  validatePluginConfig,
-} from '@lastshotlabs/slingshot-core';
+import { deepFreeze, getPluginState, validatePluginConfig } from '@lastshotlabs/slingshot-core';
 import { deliverWebhook } from './lib/dispatcher';
 import { wireEventSubscriptions } from './lib/eventWiring';
 import { createWebhookMemoryQueue } from './queues/memory';

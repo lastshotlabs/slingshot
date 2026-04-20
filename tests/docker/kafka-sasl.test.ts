@@ -1,16 +1,16 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import {
   createKafkaAdapter,
   createKafkaConnectors,
   getKafkaAdapterIntrospectionOrNull,
 } from '@lastshotlabs/slingshot-kafka';
+import { Kafka, type KafkaMessage } from '../../packages/slingshot-kafka/node_modules/kafkajs';
 import { createServerFromManifest } from '../../src/lib/createServerFromManifest';
 import { createManifestHandlerRegistry } from '../../src/lib/manifestHandlerRegistry';
 import { getServerContext } from '../../src/server';
-import { Kafka, type KafkaMessage } from '../../packages/slingshot-kafka/node_modules/kafkajs';
 
 process.env.KAFKAJS_NO_PARTITIONER_WARNING = '1';
 
@@ -159,7 +159,13 @@ async function ensureExtraSaslCoverageConfigured(): Promise<void> {
       'sasl.mechanism=SCRAM-SHA-256',
     ];
 
-    const mechanisms = execInRedpandaSasl([...adminArgs, 'cluster', 'config', 'get', 'sasl_mechanisms']);
+    const mechanisms = execInRedpandaSasl([
+      ...adminArgs,
+      'cluster',
+      'config',
+      'get',
+      'sasl_mechanisms',
+    ]);
     if (!mechanisms.includes('PLAIN')) {
       execInRedpandaSasl([
         ...adminArgs,
@@ -389,7 +395,10 @@ describe('Kafka SASL runtime paths (Docker)', () => {
           {
             key: 'secure-consume',
             value: Buffer.from(
-              JSON.stringify({ userId: 'secure-consume-user', sessionId: 'secure-consume-session' }),
+              JSON.stringify({
+                userId: 'secure-consume-user',
+                sessionId: 'secure-consume-session',
+              }),
             ),
           },
         ],
@@ -405,7 +414,10 @@ describe('Kafka SASL runtime paths (Docker)', () => {
       ]);
 
       const brokerMessages = await collectSecureMessages(topic);
-      bus.emit('auth:login', { userId: 'secure-produce-user', sessionId: 'secure-produce-session' });
+      bus.emit('auth:login', {
+        userId: 'secure-produce-user',
+        sessionId: 'secure-produce-session',
+      });
 
       await waitFor(
         () => brokerMessages.length === 1,
@@ -471,9 +483,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
         'SCRAM connectors did not bridge the event through Kafka',
       );
 
-      expect(received).toEqual([
-        { userId: 'secure-connector-user', email: 'secure@example.com' },
-      ]);
+      expect(received).toEqual([{ userId: 'secure-connector-user', email: 'secure@example.com' }]);
       expect(
         warned.mock.calls.some(call => String(call[0]).includes('SASL configured without SSL')),
       ).toBe(true);
@@ -550,7 +560,10 @@ describe('Kafka SASL runtime paths (Docker)', () => {
       sasl: KAFKA_SASL_SCRAM_512,
       groupId: `${groupPrefix}.collector`,
     });
-    bus.emit('auth:login', { userId: 'scram512-produce-user', sessionId: 'scram512-produce-session' });
+    bus.emit('auth:login', {
+      userId: 'scram512-produce-user',
+      sessionId: 'scram512-produce-session',
+    });
 
     await waitFor(
       () => brokerMessages.length === 1,
@@ -647,15 +660,20 @@ describe('Kafka SASL runtime paths (Docker)', () => {
     delete process.env.KAFKA_SSL;
 
     cleanup.push(async () => {
-      if (previousEnv.KAFKA_BROKERS !== undefined) process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
+      if (previousEnv.KAFKA_BROKERS !== undefined)
+        process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
       else delete process.env.KAFKA_BROKERS;
-      if (previousEnv.KAFKA_CLIENT_ID !== undefined) process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
+      if (previousEnv.KAFKA_CLIENT_ID !== undefined)
+        process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
       else delete process.env.KAFKA_CLIENT_ID;
-      if (previousEnv.KAFKA_SASL_USERNAME !== undefined) process.env.KAFKA_SASL_USERNAME = previousEnv.KAFKA_SASL_USERNAME;
+      if (previousEnv.KAFKA_SASL_USERNAME !== undefined)
+        process.env.KAFKA_SASL_USERNAME = previousEnv.KAFKA_SASL_USERNAME;
       else delete process.env.KAFKA_SASL_USERNAME;
-      if (previousEnv.KAFKA_SASL_PASSWORD !== undefined) process.env.KAFKA_SASL_PASSWORD = previousEnv.KAFKA_SASL_PASSWORD;
+      if (previousEnv.KAFKA_SASL_PASSWORD !== undefined)
+        process.env.KAFKA_SASL_PASSWORD = previousEnv.KAFKA_SASL_PASSWORD;
       else delete process.env.KAFKA_SASL_PASSWORD;
-      if (previousEnv.KAFKA_SASL_MECHANISM !== undefined) process.env.KAFKA_SASL_MECHANISM = previousEnv.KAFKA_SASL_MECHANISM;
+      if (previousEnv.KAFKA_SASL_MECHANISM !== undefined)
+        process.env.KAFKA_SASL_MECHANISM = previousEnv.KAFKA_SASL_MECHANISM;
       else delete process.env.KAFKA_SASL_MECHANISM;
       if (previousEnv.KAFKA_SSL !== undefined) process.env.KAFKA_SSL = previousEnv.KAFKA_SSL;
       else delete process.env.KAFKA_SSL;
@@ -753,7 +771,12 @@ describe('Kafka SASL runtime paths (Docker)', () => {
       const producer = await createSecureProducer();
       await producer.send({
         topic: inboundTopic,
-        messages: [{ key: 'secure-inbound-1', value: Buffer.from(JSON.stringify({ id: 'secure-inbound-1' })) }],
+        messages: [
+          {
+            key: 'secure-inbound-1',
+            value: Buffer.from(JSON.stringify({ id: 'secure-inbound-1' })),
+          },
+        ],
       });
 
       await waitFor(

@@ -59,9 +59,9 @@ import {
   resolveRepoAsync,
 } from '@lastshotlabs/slingshot-core';
 import type { DrizzlePostgresDb } from '@lastshotlabs/slingshot-postgres';
+import type { DbConfig as AppDbConfig } from '../config/types/db';
 import type { LoggingConfig } from '../config/types/logging';
 import { resolveLoggingConfig } from '../config/types/logging';
-import type { DbConfig as AppDbConfig } from '../config/types/db';
 import { resolveMongoMode } from './dbDefaults';
 
 // ---------------------------------------------------------------------------

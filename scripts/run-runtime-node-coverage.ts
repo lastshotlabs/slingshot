@@ -42,11 +42,7 @@ export async function runRuntimeNodeCoverage(
   if (packageTests.length > 0) {
     const code = await runCommand(
       'runtime-node:bun-smoke',
-      [
-        process.execPath,
-        'test',
-        ...packageTests,
-      ],
+      [process.execPath, 'test', ...packageTests],
       spawnFn,
     );
     if (code !== 0 && exitCode === 0) {

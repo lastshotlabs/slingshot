@@ -124,10 +124,13 @@ export default class Seed extends Command {
           }
         }
 
-        const record = generateFromSchema(schemas.createSchema as { _zod: { def: { type: string } } }, {
-          faker: fakerInstance,
-          overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
-        });
+        const record = generateFromSchema(
+          schemas.createSchema as { _zod: { def: { type: string } } },
+          {
+            faker: fakerInstance,
+            overrides: Object.keys(overrides).length > 0 ? overrides : undefined,
+          },
+        );
         records.push(record);
       }
 

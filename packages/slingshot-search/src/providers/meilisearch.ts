@@ -39,7 +39,6 @@ interface HttpResponse<T = unknown> {
   readonly data: T | undefined;
 }
 
- 
 interface HttpClient {
   get<T>(path: string): Promise<{ readonly status: number; readonly data: T }>;
   post<T>(path: string, body?: unknown): Promise<{ readonly status: number; readonly data: T }>;
@@ -48,7 +47,6 @@ interface HttpClient {
   delete<T>(path: string, body?: unknown): Promise<{ readonly status: number; readonly data: T }>;
   send<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>>;
 }
- 
 
 /**
  * Create a lightweight HTTP client pre-configured for a Meilisearch instance.

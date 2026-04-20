@@ -14,10 +14,15 @@ export interface IdempotencyOptions {
   ttl?: number;
 }
 
-async function buildRequestFingerprint(c: Parameters<MiddlewareHandler<AppEnv>>[0]): Promise<string> {
+async function buildRequestFingerprint(
+  c: Parameters<MiddlewareHandler<AppEnv>>[0],
+): Promise<string> {
   const url = new URL(c.req.url);
   const contentType = c.req.header('content-type') ?? '';
-  const body = await c.req.raw.clone().text().catch(() => '');
+  const body = await c.req.raw
+    .clone()
+    .text()
+    .catch(() => '');
   return sha256(`${c.req.method}\n${url.pathname}\n${url.search}\n${contentType}\n${body}`);
 }
 

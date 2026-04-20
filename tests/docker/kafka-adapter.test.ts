@@ -89,8 +89,6 @@ describe('Kafka adapter and connectors (Docker)', () => {
     bus.emit('auth:user.created', { userId: 'connector-user', email: 'connector@example.com' });
 
     await waitFor(() => received.length === 1);
-    expect(received).toEqual([
-      { userId: 'connector-user', email: 'connector@example.com' },
-    ]);
+    expect(received).toEqual([{ userId: 'connector-user', email: 'connector@example.com' }]);
   });
 });

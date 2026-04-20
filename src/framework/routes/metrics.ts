@@ -9,10 +9,10 @@ import type { QueueFactory } from '@lib/queue';
 import type { Queue as BullMQQueue } from 'bullmq';
 import type { Context, MiddlewareHandler, Next } from 'hono';
 import {
+  type PostgresBundle,
   createRouter,
   getRouteAuth,
   getSlingshotCtx,
-  type PostgresBundle,
 } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 

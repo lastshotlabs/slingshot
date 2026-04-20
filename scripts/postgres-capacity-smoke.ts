@@ -53,7 +53,10 @@ export function resolvePostgresCapacitySmokeConfig(
 
 export function percentile(sortedValues: number[], ratio: number): number {
   if (sortedValues.length === 0) return 0;
-  const index = Math.min(sortedValues.length - 1, Math.max(0, Math.ceil(sortedValues.length * ratio) - 1));
+  const index = Math.min(
+    sortedValues.length - 1,
+    Math.max(0, Math.ceil(sortedValues.length * ratio) - 1),
+  );
   return sortedValues[index] ?? 0;
 }
 
@@ -108,7 +111,9 @@ export async function runPostgresCapacitySmoke(
   const successfulQueries = latenciesMs.length;
   const sortedLatencies = [...latenciesMs].sort((a, b) => a - b);
   const averageLatencyMs =
-    successfulQueries === 0 ? 0 : latenciesMs.reduce((sum, value) => sum + value, 0) / successfulQueries;
+    successfulQueries === 0
+      ? 0
+      : latenciesMs.reduce((sum, value) => sum + value, 0) / successfulQueries;
 
   return {
     connectionString: config.connectionString,

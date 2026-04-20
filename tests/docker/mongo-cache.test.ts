@@ -1,7 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
-import {
-  getCacheModel,
-} from '../../src/framework/middleware/cacheResponse';
+import { getCacheModel } from '../../src/framework/middleware/cacheResponse';
 import {
   connectTestMongo,
   disconnectTestServices,

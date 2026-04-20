@@ -103,10 +103,7 @@ export {
   registerSchemas,
 } from '@lastshotlabs/slingshot-core';
 export { zodToMongoose } from './framework/lib/zodToMongoose.js';
-export type {
-  ZodToMongooseConfig,
-  ZodToMongooseRefConfig,
-} from './framework/lib/zodToMongoose.js';
+export type { ZodToMongooseConfig, ZodToMongooseRefConfig } from './framework/lib/zodToMongoose.js';
 export { createDtoMapper } from './framework/lib/createDtoMapper.js';
 export type { DtoMapperConfig } from './framework/lib/createDtoMapper.js';
 export type {
@@ -181,12 +178,7 @@ export type { AuditLogOptions, AuditLogQuery } from './framework/auditLog/index.
 // WebSocket — consumer API
 export { createWsUpgradeHandler } from './framework/ws/index.js';
 export type { SocketData } from './framework/ws/index.js';
-export {
-  publish,
-  getSubscriptions,
-  getRooms,
-  getRoomSubscribers,
-} from './framework/ws/rooms.js';
+export { publish, getSubscriptions, getRooms, getRoomSubscribers } from './framework/ws/rooms.js';
 export type { PublishOptions } from './framework/ws/rooms.js';
 export type {
   WsEventContext,

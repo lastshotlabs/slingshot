@@ -50,7 +50,9 @@ async function runCoverage(
   configPath?: string,
   spawnFn: typeof Bun.spawn = Bun.spawn,
 ): Promise<number> {
-  console.log(`test:coverage:${suiteLabel} -> ${files.length === 1 ? files[0] : `${files.length} file(s)`}`);
+  console.log(
+    `test:coverage:${suiteLabel} -> ${files.length === 1 ? files[0] : `${files.length} file(s)`}`,
+  );
   const proc = spawnFn(
     [
       process.execPath,

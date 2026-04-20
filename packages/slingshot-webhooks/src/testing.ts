@@ -15,8 +15,8 @@ import {
   attachContext,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryWebhookAdapter } from './adapters/memory';
-import type { WebhookAdapter } from './types/adapter';
 import { createWebhookPlugin } from './plugin';
+import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
 import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 
@@ -121,7 +121,11 @@ export async function createWebhooksTestApp(
 
   if (!frameworkOptions.standalone) {
     const { createEntityFactories } = await import('@lastshotlabs/slingshot-entity');
-    Reflect.set(frameworkConfig.storeInfra as object, RESOLVE_ENTITY_FACTORIES, createEntityFactories);
+    Reflect.set(
+      frameworkConfig.storeInfra as object,
+      RESOLVE_ENTITY_FACTORIES,
+      createEntityFactories,
+    );
   }
 
   // Simulate the framework's global auth middleware — in production, app.ts mounts

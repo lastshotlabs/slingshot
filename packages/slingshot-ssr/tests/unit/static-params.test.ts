@@ -2,10 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
-import {
-  scanStaticParams,
-  writeStaticParamsManifest,
-} from '../../src/static-params/index';
+import { scanStaticParams, writeStaticParamsManifest } from '../../src/static-params/index';
 import {
   buildConcreteUrl,
   createPrerenderedCache,
@@ -48,9 +45,7 @@ describe('static params helpers', () => {
     const outputDir = join(routesDir, 'dist');
     await writeStaticParamsManifest(routes, outputDir);
 
-    expect(
-      JSON.parse(await readFile(join(outputDir, 'static-params.json'), 'utf8')),
-    ).toEqual([
+    expect(JSON.parse(await readFile(join(outputDir, 'static-params.json'), 'utf8'))).toEqual([
       {
         routePath: '/players/[id]',
         paramSets: [{ id: '42' }, { id: '99' }],
@@ -61,9 +56,7 @@ describe('static params helpers', () => {
   test('prerender helpers build concrete URLs and cache rendered HTML', async () => {
     const cache = createPrerenderedCache();
 
-    expect(buildConcreteUrl('/blog/[...slug]', { slug: 'news/latest' })).toBe(
-      '/blog/news/latest',
-    );
+    expect(buildConcreteUrl('/blog/[...slug]', { slug: 'news/latest' })).toBe('/blog/news/latest');
 
     await prerenderStaticRoutes(
       [

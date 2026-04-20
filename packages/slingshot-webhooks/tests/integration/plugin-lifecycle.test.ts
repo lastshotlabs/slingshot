@@ -133,7 +133,11 @@ describe('webhook plugin delivery lifecycle', () => {
 
       expect(response.status).toBe(500);
 
-      const delivery = await waitForDelivery(runtime, endpointId, item => item.event === 'webhook:test');
+      const delivery = await waitForDelivery(
+        runtime,
+        endpointId,
+        item => item.event === 'webhook:test',
+      );
       expect(delivery.status).toBe('dead');
       expect(delivery.lastAttempt?.error).toContain('enqueue failed');
     } finally {

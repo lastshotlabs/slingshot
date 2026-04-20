@@ -109,8 +109,8 @@ async function loadBullMQModule(): Promise<{
 
   try {
     const bullmq = await import('bullmq');
-    namespace =
-      ((bullmq as unknown as { default?: typeof bullmq }).default ?? bullmq) as typeof namespace;
+    namespace = ((bullmq as unknown as { default?: typeof bullmq }).default ??
+      bullmq) as typeof namespace;
   } catch {
     throw new Error('BullMQ webhook queue requires bullmq to be installed. Run: bun add bullmq');
   }

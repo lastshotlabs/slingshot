@@ -10,11 +10,7 @@ function getNodeAsyncHooksModule(): typeof import('node:async_hooks') | null {
   if (typeof proc.getBuiltinModule !== 'function') return null;
 
   const asyncHooks = proc.getBuiltinModule('node:async_hooks');
-  if (
-    typeof asyncHooks === 'object' &&
-    asyncHooks !== null &&
-    'AsyncLocalStorage' in asyncHooks
-  ) {
+  if (typeof asyncHooks === 'object' && asyncHooks !== null && 'AsyncLocalStorage' in asyncHooks) {
     return asyncHooks as typeof import('node:async_hooks');
   }
 

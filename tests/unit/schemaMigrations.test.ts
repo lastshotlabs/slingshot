@@ -201,6 +201,19 @@ describe('Migration SQL generation', () => {
     expect(sql).toContain('CREATE INDEX');
   });
 
+  it('keeps Postgres transaction boundaries outside editable schema/index sections', () => {
+    const plan = diffEntityConfig(MessageV1, v2);
+    const sql = generateMigrationPostgres(plan);
+
+    const schemaSection = sql.match(/-- --- section:schema ---([\s\S]*?)-- --- end:schema ---/);
+    const indexSection = sql.match(/-- --- section:indexes ---([\s\S]*?)-- --- end:indexes ---/);
+
+    expect(schemaSection?.[1]).not.toContain('BEGIN;');
+    expect(indexSection?.[1]).not.toContain('COMMIT;');
+    expect(sql).toContain('-- --- section:transaction ---');
+    expect(sql).toContain('-- --- section:footer ---');
+  });
+
   it('generates Mongo migration', () => {
     const plan = diffEntityConfig(MessageV1, v2);
     const script = generateMigrationMongo(plan);

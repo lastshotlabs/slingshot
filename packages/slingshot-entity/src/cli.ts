@@ -14,6 +14,7 @@ import { generate } from './generate';
 import type { GenerateOptions } from './generate';
 import { generateMigrations } from './migrations/index';
 import { loadSnapshot, saveSnapshot } from './migrations/snapshotStore';
+import type { EntitySnapshot } from './migrations/types';
 import type { ResolvedEntityConfig } from './types';
 
 /**
@@ -46,6 +47,19 @@ export interface WriteOptions extends GenerateOptions {
    * The returned file map is identical to a real run.
    */
   dryRun?: boolean;
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  if (typeof a !== 'object' || typeof b !== 'object') return false;
+  const aKeys = Object.keys(a as Record<string, unknown>).sort();
+  const bKeys = Object.keys(b as Record<string, unknown>).sort();
+  if (aKeys.length !== bKeys.length) return false;
+  if (aKeys.some((key, index) => key !== bKeys[index])) return false;
+  return aKeys.every(key =>
+    deepEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+  );
 }
 
 /**
@@ -96,18 +110,18 @@ export function writeGenerated(
   // We diff against the prior snapshot BEFORE saving the new one so the diff
   // sees the actual previous state.
   const snapshotDir = options.snapshotDir ? resolve(options.snapshotDir) : undefined;
+  const previousSnapshot: EntitySnapshot | null = snapshotDir
+    ? loadSnapshot(snapshotDir, config)
+    : null;
 
-  if (snapshotDir && options.migration) {
-    const previous = loadSnapshot(snapshotDir, config);
-    if (previous) {
-      const migrations = generateMigrations(previous.entity, config, options.backends);
-      for (const [filename, script] of Object.entries(migrations)) {
-        if (script.trim()) {
-          const normalizedName = filename.startsWith('migration.')
-            ? filename.slice('migration.'.length)
-            : filename;
-          files[`migrations/${normalizedName}`] = script;
-        }
+  if (snapshotDir && options.migration && previousSnapshot) {
+    const migrations = generateMigrations(previousSnapshot.entity, config, options.backends);
+    for (const [filename, script] of Object.entries(migrations)) {
+      if (script.trim()) {
+        const normalizedName = filename.startsWith('migration.')
+          ? filename.slice('migration.'.length)
+          : filename;
+        files[`migrations/${normalizedName}`] = script;
       }
     }
   }
@@ -135,7 +149,13 @@ export function writeGenerated(
   // Snapshot saved only after all files are written successfully — if a write
   // throws, the snapshot stays behind actual on-disk state and the next run
   // will regenerate correctly.
-  if (snapshotDir) {
+  const shouldAdvanceSnapshot =
+    snapshotDir &&
+    (options.migration ||
+      previousSnapshot === null ||
+      deepEqual(previousSnapshot.entity, config));
+
+  if (shouldAdvanceSnapshot) {
     saveSnapshot(snapshotDir, config);
   }
 

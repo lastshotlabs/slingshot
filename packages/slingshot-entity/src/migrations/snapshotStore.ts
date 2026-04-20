@@ -5,13 +5,38 @@
  * (default: .slingshot/snapshots/).
  */
 import { randomBytes } from 'crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import type { ResolvedEntityConfig } from '../types';
 import type { EntitySnapshot } from './types';
 
 function snapshotFilename(config: ResolvedEntityConfig): string {
   return `${config._storageName}.json`;
+}
+
+function readSnapshotFile(filePath: string): EntitySnapshot | null {
+  try {
+    const raw = readFileSync(filePath, 'utf-8');
+    return JSON.parse(raw) as EntitySnapshot;
+  } catch {
+    return null;
+  }
+}
+
+function isMatchingEntitySnapshot(
+  snapshot: EntitySnapshot | null,
+  config: ResolvedEntityConfig,
+): snapshot is EntitySnapshot {
+  if (!snapshot) return false;
+  return snapshot.entity.name === config.name && snapshot.entity.namespace === config.namespace;
+}
+
+function isMatchingEntityName(
+  snapshot: EntitySnapshot | null,
+  config: ResolvedEntityConfig,
+): snapshot is EntitySnapshot {
+  if (!snapshot) return false;
+  return snapshot.entity.name === config.name;
 }
 
 /**
@@ -40,9 +65,24 @@ export function loadSnapshot(
   config: ResolvedEntityConfig,
 ): EntitySnapshot | null {
   const filePath = join(snapshotDir, snapshotFilename(config));
-  if (!existsSync(filePath)) return null;
-  const raw = readFileSync(filePath, 'utf-8');
-  return JSON.parse(raw) as EntitySnapshot;
+  if (existsSync(filePath)) {
+    return readSnapshotFile(filePath);
+  }
+  if (!existsSync(snapshotDir)) return null;
+
+  const snapshots = readdirSync(snapshotDir)
+    .filter(filename => filename.endsWith('.json'))
+    .map(filename => readSnapshotFile(join(snapshotDir, filename)));
+
+  const matchingSnapshots = snapshots.filter(snapshot => isMatchingEntitySnapshot(snapshot, config));
+  if (matchingSnapshots.length > 0) {
+    matchingSnapshots.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
+    return matchingSnapshots[0] ?? null;
+  }
+
+  const nameOnlyMatches = snapshots.filter(snapshot => isMatchingEntityName(snapshot, config));
+  if (nameOnlyMatches.length !== 1) return null;
+  return nameOnlyMatches[0] ?? null;
 }
 
 /**

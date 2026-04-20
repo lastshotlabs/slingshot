@@ -77,6 +77,10 @@ export function generateMigrationPostgres(plan: MigrationPlan): string {
     ].join('\n'),
   );
 
+  sections.push(
+    ['-- --- section:transaction ---', 'BEGIN;', '-- --- end:transaction ---'].join('\n'),
+  );
+
   // --- section:warnings ---
   const warnings: string[] = ['-- --- section:warnings ---'];
   for (const w of plan.warnings) warnings.push(`-- WARNING: ${w}`);
@@ -84,7 +88,7 @@ export function generateMigrationPostgres(plan: MigrationPlan): string {
   sections.push(warnings.join('\n'));
 
   // --- section:schema ---
-  const schema: string[] = ['-- --- section:schema ---', 'BEGIN;'];
+  const schema: string[] = ['-- --- section:schema ---'];
   // --- section:indexes ---
   const indexes: string[] = ['-- --- section:indexes ---'];
 
@@ -155,10 +159,10 @@ export function generateMigrationPostgres(plan: MigrationPlan): string {
   }
 
   schema.push('-- --- end:schema ---');
-  indexes.push('COMMIT;');
   indexes.push('-- --- end:indexes ---');
   sections.push(schema.join('\n'));
   sections.push(indexes.join('\n'));
+  sections.push(['-- --- section:footer ---', 'COMMIT;', '-- --- end:footer ---'].join('\n'));
 
   return sections.join('\n\n') + '\n';
 }

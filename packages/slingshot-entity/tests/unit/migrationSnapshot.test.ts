@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { defineEntity, field } from '../../src/index';
+import { writeGenerated } from '../../src/cli';
 import { loadSnapshot, saveSnapshot } from '../../src/migrations/snapshotStore';
 
 const TMP_DIR = join(import.meta.dir, '../.tmp-snapshot-test');
@@ -110,5 +111,74 @@ describe('saveSnapshot', () => {
 
     expect(snapAlpha!.entity.name).toBe('Alpha');
     expect(snapBeta!.entity.name).toBe('Beta');
+  });
+
+  it('preserves the last migrated snapshot when source generation runs without migration', () => {
+    const outDir = join(TMP_DIR, 'generated');
+
+    const PostV1 = defineEntity('Post', {
+      fields: {
+        id: field.string({ primary: true, default: 'uuid' }),
+        title: field.string(),
+      },
+    });
+
+    const PostV2 = defineEntity('Post', {
+      fields: {
+        id: field.string({ primary: true, default: 'uuid' }),
+        title: field.string(),
+        body: field.string({ optional: true }),
+      },
+    });
+
+    writeGenerated(PostV1, {
+      outDir,
+      snapshotDir: TMP_DIR,
+    });
+
+    writeGenerated(PostV2, {
+      outDir,
+      snapshotDir: TMP_DIR,
+    });
+
+    const preserved = loadSnapshot(TMP_DIR, PostV2);
+    expect(Object.keys(preserved!.entity.fields)).not.toContain('body');
+
+    const migrated = writeGenerated(PostV2, {
+      outDir,
+      snapshotDir: TMP_DIR,
+      migration: true,
+    });
+
+    expect(migrated['migrations/sqlite.sql']).toBeDefined();
+    expect(migrated['migrations/postgres.sql']).toBeDefined();
+
+    const advanced = loadSnapshot(TMP_DIR, PostV2);
+    expect(Object.keys(advanced!.entity.fields)).toContain('body');
+  });
+
+  it('falls back to a same-name snapshot when the namespace changed', () => {
+    const BillingUser = defineEntity('User', {
+      namespace: 'billing',
+      fields: {
+        id: field.string({ primary: true, default: 'uuid' }),
+        email: field.string(),
+      },
+    });
+
+    const AccountsUser = defineEntity('User', {
+      namespace: 'accounts',
+      fields: {
+        id: field.string({ primary: true, default: 'uuid' }),
+        email: field.string(),
+        status: field.string({ optional: true }),
+      },
+    });
+
+    saveSnapshot(TMP_DIR, BillingUser);
+
+    const snapshot = loadSnapshot(TMP_DIR, AccountsUser);
+    expect(snapshot).not.toBeNull();
+    expect(snapshot!.entity.namespace).toBe('billing');
   });
 });

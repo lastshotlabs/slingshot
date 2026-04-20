@@ -132,6 +132,10 @@ Dependency ordering is enforced before any plugin code runs. Slingshot rejects m
 
 Standalone-only plugins are also treated explicitly: a package that defines only `setup()` can still support plain Hono usage, but `createApp()` and `createServer()` skip it unless it also exposes one of the framework lifecycle phases.
 
+That same lifecycle ordering also applies when Slingshot assembles an app for non-listening hosts
+such as manifest inspection, tests, or Lambda cold start. The host boundary changes, but the plugin
+phases and context finalization rules stay the same.
+
 ## See also
 
 - [Context and Registrar](/slingshot/internals/context-registrar/) — what's inside `SlingshotContext`

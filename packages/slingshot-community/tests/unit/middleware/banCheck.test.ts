@@ -89,10 +89,7 @@ describe('banCheck middleware', () => {
   test('allows user whose ban has expired', async () => {
     const pastDate = new Date(Date.now() - 60_000).toISOString();
     const expiredBan: Partial<Ban> = { userId: 'u1', containerId: 'c1', expiresAt: pastDate };
-    const app = buildApp(
-      stubAdapter([expiredBan]),
-      { subject: 'u1', roles: [] },
-    );
+    const app = buildApp(stubAdapter([expiredBan]), { subject: 'u1', roles: [] });
     const res = await app.request('/containers/c1/threads', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -104,10 +101,7 @@ describe('banCheck middleware', () => {
   test('blocks user whose ban has not expired', async () => {
     const futureDate = new Date(Date.now() + 3_600_000).toISOString();
     const activeBan: Partial<Ban> = { userId: 'u1', containerId: 'c1', expiresAt: futureDate };
-    const app = buildApp(
-      stubAdapter([activeBan]),
-      { subject: 'u1', roles: [] },
-    );
+    const app = buildApp(stubAdapter([activeBan]), { subject: 'u1', roles: [] });
     const res = await app.request('/containers/c1/threads', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -123,10 +117,7 @@ describe('banCheck middleware', () => {
       unbannedAt: new Date().toISOString(),
       unbannedBy: 'mod-1',
     };
-    const app = buildApp(
-      stubAdapter([liftedBan]),
-      { subject: 'u1', roles: [] },
-    );
+    const app = buildApp(stubAdapter([liftedBan]), { subject: 'u1', roles: [] });
     const res = await app.request('/containers/c1/threads', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

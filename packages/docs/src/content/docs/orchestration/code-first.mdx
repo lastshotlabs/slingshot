@@ -21,8 +21,8 @@ next phase, not a hidden feature flag.
 ## Define tasks
 
 ```typescript
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
 import { z } from 'zod';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration';
 
 export const capturePayment = defineTask({
   name: 'capture-payment',
@@ -49,6 +49,7 @@ export const capturePayment = defineTask({
 ## Compose a workflow
 
 ```typescript
+import { z } from 'zod';
 import {
   type AnyResolvedTask,
   defineWorkflow,
@@ -56,7 +57,6 @@ import {
   step,
   stepResult,
 } from '@lastshotlabs/slingshot-orchestration';
-import { z } from 'zod';
 
 declare const capturePayment: AnyResolvedTask;
 declare const generateInvoice: AnyResolvedTask;
@@ -139,10 +139,7 @@ optionally, exposed over protected HTTP routes.
 
 ```typescript
 import type { MiddlewareHandler } from 'hono';
-import type {
-  AnyResolvedTask,
-  AnyResolvedWorkflow,
-} from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
 
@@ -176,12 +173,12 @@ Other plugins can read the runtime from `pluginState` through `getOrchestration(
 without going through the HTTP API:
 
 ```typescript
-import { getContext, type SlingshotPlugin } from '@lastshotlabs/slingshot';
+import { type SlingshotPlugin, getContext } from '@lastshotlabs/slingshot';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 import {
   ORCHESTRATION_PLUGIN_KEY,
   getOrchestration,
 } from '@lastshotlabs/slingshot-orchestration-plugin';
-import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 
 declare const processInvoiceWorkflow: AnyResolvedWorkflow;
 

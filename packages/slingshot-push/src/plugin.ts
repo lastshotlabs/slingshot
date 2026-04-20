@@ -1,9 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { MiddlewareHandler } from 'hono';
-import type {
-  PluginSetupContext,
-  SlingshotPlugin,
-} from '@lastshotlabs/slingshot-core';
+import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
   getNotificationsStateOrNull,

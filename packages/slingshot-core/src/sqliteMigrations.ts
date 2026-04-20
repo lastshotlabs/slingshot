@@ -1,10 +1,6 @@
 import type { RuntimeSqliteDatabase } from './runtime';
 
-function parseSqliteMigrationVersion(
-  raw: unknown,
-  subsystem: string,
-  maxVersion: number,
-): number {
+function parseSqliteMigrationVersion(raw: unknown, subsystem: string, maxVersion: number): number {
   if (raw === null || raw === undefined) return 0;
   if (!Number.isInteger(raw) || (raw as number) < 0) {
     throw new Error(

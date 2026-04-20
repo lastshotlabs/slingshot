@@ -91,7 +91,6 @@ export function createSlingshotManagedUserProvider(
       };
     },
 
-     
     async getCapabilities(): Promise<ManagedUserCapabilities> {
       return {
         canListUsers: true,

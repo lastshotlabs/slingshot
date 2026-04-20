@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { defaultValidationErrorFormatter, defaultHook, createRouter, getSlingshotCtx } from '../../src/context';
+import {
+  createRouter,
+  defaultHook,
+  defaultValidationErrorFormatter,
+  getSlingshotCtx,
+} from '../../src/context';
 
 describe('defaultValidationErrorFormatter', () => {
   test('formats issues into error + details', () => {
@@ -58,10 +63,7 @@ describe('defaultHook', () => {
     const issues = [{ path: ['name'], message: 'Required', code: 'invalid_type' }];
     const hookResultData = { success: false, error: { issues } };
     const hookResult: never = hookResultData as never;
-    defaultHook(
-      hookResult,
-      c as never,
-    );
+    defaultHook(hookResult, c as never);
     expect(capturedStatus).toBe(400);
     expect((capturedBody as { requestId: string }).requestId).toBe('req-abc');
   });
@@ -83,10 +85,10 @@ describe('defaultHook', () => {
     const issues = [{ path: [], message: 'Bad', code: 'custom' }];
     const hookResultData = { success: false, error: { issues } };
     const hookResult: never = hookResultData as never;
-    const result = defaultHook(
-      hookResult,
-      c as never,
-    ) as { body: { custom: boolean }; status: number };
+    const result = defaultHook(hookResult, c as never) as {
+      body: { custom: boolean };
+      status: number;
+    };
     expect(result.body.custom).toBe(true);
     expect(result.status).toBe(400);
   });
@@ -110,10 +112,7 @@ describe('defaultHook', () => {
     const issues = [{ path: ['field'], message: 'Invalid', code: 'invalid_type' }];
     const hookResultData = { success: false, error: { issues } };
     const hookResult: never = hookResultData as never;
-    defaultHook(
-      hookResult,
-      c as never,
-    );
+    defaultHook(hookResult, c as never);
     expect((capturedBody as { requestId: string }).requestId).toBe('req-fallback');
     expect((capturedBody as { details: unknown[] }).details).toHaveLength(1);
   });
@@ -133,10 +132,7 @@ describe('defaultHook', () => {
     const issues = [{ path: [], message: 'Bad', code: 'custom' }];
     const hookResultData = { success: false, error: { issues } };
     const hookResult: never = hookResultData as never;
-    defaultHook(
-      hookResult,
-      c as never,
-    );
+    defaultHook(hookResult, c as never);
     expect((capturedBody as { requestId: string }).requestId).toBe('unknown');
   });
 });

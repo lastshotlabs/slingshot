@@ -50,11 +50,7 @@ interface ActiveTask {
 }
 
 export interface TaskRunner {
-  submit(
-    def: AnyResolvedTask,
-    input: unknown,
-    options: TaskRunnerSubmissionOptions,
-  ): RunHandle;
+  submit(def: AnyResolvedTask, input: unknown, options: TaskRunnerSubmissionOptions): RunHandle;
   cancel(runId: string): Promise<void>;
   waitForIdle(): Promise<void>;
 }
@@ -286,9 +282,7 @@ export function createTaskRunner(options: {
                 });
               }
               next.reject(
-                isCancelled
-                  ? new OrchestrationError('ADAPTER_ERROR', 'Run cancelled')
-                  : error,
+                isCancelled ? new OrchestrationError('ADAPTER_ERROR', 'Run cancelled') : error,
               );
               return undefined;
             } finally {

@@ -2,11 +2,11 @@ import { getContext } from '@lastshotlabs/slingshot-core';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   OrchestrationError,
-  createOrchestrationRuntime,
   type OrchestrationRuntime,
+  createOrchestrationRuntime,
 } from '@lastshotlabs/slingshot-orchestration';
-import { createSlingshotEventSink } from './eventSink';
 import { ORCHESTRATION_PLUGIN_KEY } from './context';
+import { createSlingshotEventSink } from './eventSink';
 import { createOrchestrationRouter } from './routes';
 import type { OrchestrationPluginOptions } from './types';
 

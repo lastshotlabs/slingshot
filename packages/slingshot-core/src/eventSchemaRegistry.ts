@@ -119,8 +119,7 @@ export function validateEventPayload(
     return result.data;
   }
 
-  const message =
-    `[EventSchemaRegistry] validation failed for event "${event}":\n${formatIssues(result.error)}`;
+  const message = `[EventSchemaRegistry] validation failed for event "${event}":\n${formatIssues(result.error)}`;
   if (mode === 'strict') {
     throw new Error(message, { cause: result.error });
   }

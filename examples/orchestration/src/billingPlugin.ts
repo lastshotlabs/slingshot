@@ -1,7 +1,4 @@
-import {
-  getContext,
-  type SlingshotPlugin,
-} from '@lastshotlabs/slingshot';
+import { type SlingshotPlugin, getContext } from '@lastshotlabs/slingshot';
 import {
   ORCHESTRATION_PLUGIN_KEY,
   getOrchestration,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { resolveActor, type HandlerMeta } from '../../src/handler';
+import { type HandlerMeta, resolveActor } from '../../src/handler';
 import { ANONYMOUS_ACTOR, type Actor } from '../../src/identity';
 
 // ---------------------------------------------------------------------------
@@ -55,9 +55,7 @@ function baseMeta(overrides: Partial<HandlerMeta> = {}): HandlerMeta {
 }
 
 /** Build a meta WITHOUT the actor field — simulates legacy external callers. */
-function legacyMeta(
-  overrides: Partial<Omit<HandlerMeta, 'actor'>> = {},
-): HandlerMeta {
+function legacyMeta(overrides: Partial<Omit<HandlerMeta, 'actor'>> = {}): HandlerMeta {
   const meta = {
     requestId: 'req-1',
     tenantId: null as string | null,
@@ -141,9 +139,7 @@ describe('resolveActor', () => {
     });
 
     test('builds user actor with roles', () => {
-      const actor = resolveActor(
-        legacyMeta({ authUserId: 'user-1', roles: ['admin', 'editor'] }),
-      );
+      const actor = resolveActor(legacyMeta({ authUserId: 'user-1', roles: ['admin', 'editor'] }));
       expect(actor.roles).toEqual(['admin', 'editor']);
     });
 
@@ -155,9 +151,7 @@ describe('resolveActor', () => {
     });
 
     test('builds api-key actor with tenantId', () => {
-      const actor = resolveActor(
-        legacyMeta({ bearerClientId: 'key-1', tenantId: 'org-3' }),
-      );
+      const actor = resolveActor(legacyMeta({ bearerClientId: 'key-1', tenantId: 'org-3' }));
       expect(actor.tenantId).toBe('org-3');
     });
 
@@ -181,24 +175,18 @@ describe('resolveActor', () => {
     });
 
     test('authUserId takes priority over bearerClientId in legacy', () => {
-      const actor = resolveActor(
-        legacyMeta({ authUserId: 'user-1', bearerClientId: 'key-1' }),
-      );
+      const actor = resolveActor(legacyMeta({ authUserId: 'user-1', bearerClientId: 'key-1' }));
       expect(actor.kind).toBe('user');
       expect(actor.id).toBe('user-1');
     });
 
     test('authUserId takes priority over authClientId in legacy', () => {
-      const actor = resolveActor(
-        legacyMeta({ authUserId: 'user-1', authClientId: 'svc-1' }),
-      );
+      const actor = resolveActor(legacyMeta({ authUserId: 'user-1', authClientId: 'svc-1' }));
       expect(actor.kind).toBe('user');
     });
 
     test('bearerClientId takes priority over authClientId in legacy', () => {
-      const actor = resolveActor(
-        legacyMeta({ bearerClientId: 'key-1', authClientId: 'svc-1' }),
-      );
+      const actor = resolveActor(legacyMeta({ bearerClientId: 'key-1', authClientId: 'svc-1' }));
       expect(actor.kind).toBe('api-key');
       expect(actor.id).toBe('key-1');
     });
@@ -212,9 +200,7 @@ describe('resolveActor', () => {
     });
 
     test('null authUserId falls through to bearerClientId', () => {
-      const actor = resolveActor(
-        legacyMeta({ authUserId: null, bearerClientId: 'key-1' }),
-      );
+      const actor = resolveActor(legacyMeta({ authUserId: null, bearerClientId: 'key-1' }));
       expect(actor.kind).toBe('api-key');
     });
 
@@ -286,9 +272,7 @@ describe('resolveActor', () => {
     });
 
     test('legacy meta roles are carried through', () => {
-      const actor = resolveActor(
-        legacyMeta({ authUserId: 'u', roles: ['r1', 'r2'] }),
-      );
+      const actor = resolveActor(legacyMeta({ authUserId: 'u', roles: ['r1', 'r2'] }));
       expect(actor.roles).toEqual(['r1', 'r2']);
     });
 

@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import {
-  OrchestrationError,
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
+  OrchestrationError,
   type OrchestrationRuntime,
   type RunFilter,
-  type RunStatus,
   type RunOptions,
+  type RunStatus,
 } from '@lastshotlabs/slingshot-orchestration';
 
 const VALID_STATUSES = new Set<RunStatus>([
@@ -49,10 +49,18 @@ function parseRunOptions(body: Record<string, unknown>, tenantId?: string): RunO
     }
     opts.tags = validated;
   }
-  if (body['metadata'] && typeof body['metadata'] === 'object' && !Array.isArray(body['metadata'])) {
+  if (
+    body['metadata'] &&
+    typeof body['metadata'] === 'object' &&
+    !Array.isArray(body['metadata'])
+  ) {
     opts.metadata = body['metadata'] as Record<string, unknown>;
   }
-  if (body['adapterHints'] && typeof body['adapterHints'] === 'object' && !Array.isArray(body['adapterHints'])) {
+  if (
+    body['adapterHints'] &&
+    typeof body['adapterHints'] === 'object' &&
+    !Array.isArray(body['adapterHints'])
+  ) {
     opts.adapterHints = body['adapterHints'] as Record<string, unknown>;
   }
 
@@ -137,9 +145,7 @@ export function createOrchestrationRouter(options: {
       return c.json(
         {
           error:
-            error instanceof OrchestrationError
-              ? error.message
-              : 'Internal orchestration error',
+            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
           code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
         },
         status,
@@ -175,9 +181,7 @@ export function createOrchestrationRouter(options: {
       return c.json(
         {
           error:
-            error instanceof OrchestrationError
-              ? error.message
-              : 'Internal orchestration error',
+            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
           code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
         },
         status,
@@ -189,7 +193,10 @@ export function createOrchestrationRouter(options: {
     try {
       const run = await options.runtime.getRun(c.req.param('id'));
       if (!run) {
-        return c.json({ error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' }, 404);
+        return c.json(
+          { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },
+          404,
+        );
       }
       return c.json(run, 200);
     } catch (error) {
@@ -197,9 +204,7 @@ export function createOrchestrationRouter(options: {
       return c.json(
         {
           error:
-            error instanceof OrchestrationError
-              ? error.message
-              : 'Internal orchestration error',
+            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
           code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
         },
         status,
@@ -211,7 +216,10 @@ export function createOrchestrationRouter(options: {
     try {
       const run = await options.runtime.getRun(c.req.param('id'));
       if (!run) {
-        return c.json({ error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' }, 404);
+        return c.json(
+          { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },
+          404,
+        );
       }
       await options.runtime.cancelRun(c.req.param('id'));
       return c.body(null, 204);
@@ -220,9 +228,7 @@ export function createOrchestrationRouter(options: {
       return c.json(
         {
           error:
-            error instanceof OrchestrationError
-              ? error.message
-              : 'Internal orchestration error',
+            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
           code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
         },
         status,
@@ -232,19 +238,22 @@ export function createOrchestrationRouter(options: {
 
   router.get('/runs', async c => {
     if (!options.runtime.supports('observability')) {
-      return c.json({ error: 'Adapter does not support run listing', code: 'CAPABILITY_NOT_SUPPORTED' }, 501);
+      return c.json(
+        { error: 'Adapter does not support run listing', code: 'CAPABILITY_NOT_SUPPORTED' },
+        501,
+      );
     }
     try {
       const tenantId = getTenantId(c);
-      return c.json(await options.runtime.listRuns(parseListRunsQuery(new URL(c.req.url), tenantId)));
+      return c.json(
+        await options.runtime.listRuns(parseListRunsQuery(new URL(c.req.url), tenantId)),
+      );
     } catch (error) {
       const status = mapErrorToStatus(error);
       return c.json(
         {
           error:
-            error instanceof OrchestrationError
-              ? error.message
-              : 'Internal orchestration error',
+            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
           code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
         },
         status,
@@ -254,7 +263,10 @@ export function createOrchestrationRouter(options: {
 
   router.post('/runs/:id/signal/:signalName', async c => {
     if (!options.runtime.supports('signals')) {
-      return c.json({ error: 'Adapter does not support signals', code: 'CAPABILITY_NOT_SUPPORTED' }, 501);
+      return c.json(
+        { error: 'Adapter does not support signals', code: 'CAPABILITY_NOT_SUPPORTED' },
+        501,
+      );
     }
     try {
       let body: Record<string, unknown>;
@@ -270,9 +282,7 @@ export function createOrchestrationRouter(options: {
       return c.json(
         {
           error:
-            error instanceof OrchestrationError
-              ? error.message
-              : 'Internal orchestration error',
+            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
           code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
         },
         status,

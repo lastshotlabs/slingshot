@@ -115,8 +115,8 @@ See [Reflect Symbol DI](/slingshot/internals/reflect-di/) for the full pattern, 
 When state is too plugin-specific for the registrar, use `ctx.pluginState`:
 
 ```typescript
+import { type AuthRuntimeContext, getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import { AUTH_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-core';
-import { getAuthRuntimeContext, type AuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 
 const ctx = {
   pluginState: new Map<string, unknown>(),

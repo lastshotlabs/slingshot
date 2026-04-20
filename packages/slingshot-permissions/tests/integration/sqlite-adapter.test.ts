@@ -320,9 +320,7 @@ describe('Permissions SQLite adapter', () => {
     });
 
     test('grant with resourceType but null resourceId applies to all instances', async () => {
-      await adapter.createGrant(
-        makeGrant({ resourceType: 'document', resourceId: null }),
-      );
+      await adapter.createGrant(makeGrant({ resourceType: 'document', resourceId: null }));
       const grants = await adapter.getGrantsForSubject('user-1');
       expect(grants[0].resourceType).toBe('document');
       expect(grants[0].resourceId).toBeNull();

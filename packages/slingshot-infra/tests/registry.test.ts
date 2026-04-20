@@ -231,9 +231,7 @@ describe('createRegistryFromConfig', () => {
 
   it('throws for Postgres without connectionString', () => {
     const pgConfig = { provider: 'postgres' };
-    expect(() => createRegistryFromConfig(pgConfig as never)).toThrow(
-      'connectionString',
-    );
+    expect(() => createRegistryFromConfig(pgConfig as never)).toThrow('connectionString');
   });
 
   it('throws for local without path', () => {

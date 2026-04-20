@@ -1,7 +1,7 @@
+import { type CreateAppConfig, createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
-import { createServer, type CreateAppConfig } from '@lastshotlabs/slingshot';
 import { createBillingApiPlugin } from './billingPlugin.ts';
 import {
   orchestrationTasks,

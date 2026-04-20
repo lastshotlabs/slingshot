@@ -250,7 +250,9 @@ describe('nan type', () => {
 describe('never type', () => {
   test('z.never() throws', () => {
     const schema = z.never();
-    expect(() => walkSchema(schema as any, { seed: 1 })).toThrow('Cannot generate a value for z.never()');
+    expect(() => walkSchema(schema as any, { seed: 1 })).toThrow(
+      'Cannot generate a value for z.never()',
+    );
   });
 });
 
@@ -467,7 +469,7 @@ describe('pipe wrapper', () => {
 
 describe('transform wrapper', () => {
   test('transform produces a string', () => {
-    const schema = z.string().transform((s) => s.toUpperCase());
+    const schema = z.string().transform(s => s.toUpperCase());
     const val = walkSchema(schema as any, { seed: 1 });
     expect(typeof val).toBe('string');
   });
@@ -620,9 +622,7 @@ describe('string regex check via mock', () => {
     // Construct a schema with a regex check that extractStringConstraints picks up
     const schema = mockSchema({
       type: 'string',
-      checks: [
-        { _zod: { def: { check: 'regex', pattern: /^test/ } } },
-      ],
+      checks: [{ _zod: { def: { check: 'regex', pattern: /^test/ } } }],
     });
     const val = walkSchema(schema, { seed: 1 }) as string;
     expect(typeof val).toBe('string');
@@ -670,9 +670,7 @@ describe('int type via mock', () => {
   test('int type with negative max (effectiveMax < 0 default range)', () => {
     const schema = mockSchema({
       type: 'int',
-      checks: [
-        { _zod: { def: { check: 'less_than', value: -5, inclusive: true } } },
-      ],
+      checks: [{ _zod: { def: { check: 'less_than', value: -5, inclusive: true } } }],
     });
     const val = walkSchema(schema, { seed: 1 }) as number;
     expect(Number.isInteger(val)).toBe(true);
@@ -682,9 +680,7 @@ describe('int type via mock', () => {
   test('int type with large min (effectiveMin > 10000 default range)', () => {
     const schema = mockSchema({
       type: 'int',
-      checks: [
-        { _zod: { def: { check: 'greater_than', value: 20000, inclusive: true } } },
-      ],
+      checks: [{ _zod: { def: { check: 'greater_than', value: 20000, inclusive: true } } }],
     });
     const val = walkSchema(schema, { seed: 1 }) as number;
     expect(Number.isInteger(val)).toBe(true);

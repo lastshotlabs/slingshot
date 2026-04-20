@@ -28,10 +28,7 @@ export const renderer: SlingshotSsrRenderer = {
     );
   },
 
-  async renderChain(
-    chain: SsrRouteChain,
-    shell: SsrShell,
-  ): Promise<Response> {
+  async renderChain(chain: SsrRouteChain, shell: SsrShell): Promise<Response> {
     return htmlResponse(
       'Content Platform',
       `<main><h1>SSR route chain</h1><p>${chain.page.url.pathname}</p></main>`,
@@ -39,10 +36,7 @@ export const renderer: SlingshotSsrRenderer = {
     );
   },
 
-  async renderPage(
-    result: PageLoaderResult,
-    shell: SsrShell,
-  ): Promise<Response> {
+  async renderPage(result: PageLoaderResult, shell: SsrShell): Promise<Response> {
     return htmlResponse(
       'Content Platform',
       `<main><h1>Page declaration</h1><p>${result.declaration.key}</p></main>`,

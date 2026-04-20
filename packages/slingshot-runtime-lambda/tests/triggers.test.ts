@@ -4,9 +4,9 @@ import { apigwTrigger } from '../src/triggers/apigw';
 import { apigwV2Trigger } from '../src/triggers/apigw-v2';
 import { dynamodbStreamsTrigger } from '../src/triggers/dynamodb-streams';
 import { eventbridgeTrigger } from '../src/triggers/eventbridge';
+import { resolveLambdaTrigger } from '../src/triggers/index';
 import { kinesisTrigger } from '../src/triggers/kinesis';
 import { mskTrigger } from '../src/triggers/msk';
-import { resolveLambdaTrigger } from '../src/triggers/index';
 import { s3Trigger } from '../src/triggers/s3';
 import { scheduleTrigger } from '../src/triggers/schedule';
 import { snsTrigger } from '../src/triggers/sns';
@@ -33,9 +33,9 @@ describe('lambda trigger adapters', () => {
     });
 
     expect(record.body).toEqual({ page: '1', note: 'hello', id: '123' });
-    expect(apigwTrigger.extractMeta({ requestContext: { requestId: 'req-1' } }, record)).toMatchObject(
-      { requestId: 'req-1' },
-    );
+    expect(
+      apigwTrigger.extractMeta({ requestContext: { requestId: 'req-1' } }, record),
+    ).toMatchObject({ requestId: 'req-1' });
     expect(
       apigwTrigger.assembleResult([
         {
@@ -72,9 +72,9 @@ describe('lambda trigger adapters', () => {
     });
 
     expect(record.body).toEqual({ verbose: 'true', action: 'approve', id: 'abc' });
-    expect(apigwV2Trigger.extractMeta({ requestContext: { requestId: 'req-2' } }, record)).toMatchObject(
-      { requestId: 'req-2' },
-    );
+    expect(
+      apigwV2Trigger.extractMeta({ requestContext: { requestId: 'req-2' } }, record),
+    ).toMatchObject({ requestId: 'req-2' });
   });
 
   test('albTrigger decodes base64 bodies and preserves successful status descriptions', () => {
@@ -242,7 +242,12 @@ describe('lambda trigger adapters', () => {
       detailType: 'OrderCreated',
       source: 'orders',
     });
-    expect(eventbridgeTrigger.extractMeta({ id: 'eb-1', detail: { correlationId: 'corr-eb-1' } }, eventRecord)).toMatchObject({
+    expect(
+      eventbridgeTrigger.extractMeta(
+        { id: 'eb-1', detail: { correlationId: 'corr-eb-1' } },
+        eventRecord,
+      ),
+    ).toMatchObject({
       requestId: 'eb-1',
       correlationId: 'corr-eb-1',
       idempotencyKey: 'eb:eb-1',

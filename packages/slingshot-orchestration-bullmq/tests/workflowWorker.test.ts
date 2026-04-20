@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineTask, defineWorkflow, sleep, step } from '@lastshotlabs/slingshot-orchestration';
-import type { OrchestrationEventMap, OrchestrationEventSink } from '@lastshotlabs/slingshot-orchestration';
+import type {
+  OrchestrationEventMap,
+  OrchestrationEventSink,
+} from '@lastshotlabs/slingshot-orchestration';
 import { createBullMQWorkflowProcessor } from '../src/workflowWorker';
 
 class FakeTaskJob {
@@ -16,7 +19,8 @@ class FakeTaskJob {
 }
 
 class FakeQueue {
-  addCalls: Array<{ name: string; data: Record<string, unknown>; opts?: Record<string, unknown> }> = [];
+  addCalls: Array<{ name: string; data: Record<string, unknown>; opts?: Record<string, unknown> }> =
+    [];
   results: unknown[] = [];
 
   async add(name: string, data: Record<string, unknown>, opts?: Record<string, unknown>) {

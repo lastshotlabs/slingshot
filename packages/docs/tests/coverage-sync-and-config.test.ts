@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { WorkspacePackage } from '../workspacePackages';
 
 const tmpRoot = join(import.meta.dir, '.tmp-docs-sync');

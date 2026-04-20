@@ -1,8 +1,11 @@
-import { describe, expect, mock, test } from 'bun:test';
 import type { Job } from 'bullmq';
+import { describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
 import { defineTask } from '@lastshotlabs/slingshot-orchestration';
-import type { OrchestrationEventMap, OrchestrationEventSink } from '@lastshotlabs/slingshot-orchestration';
+import type {
+  OrchestrationEventMap,
+  OrchestrationEventSink,
+} from '@lastshotlabs/slingshot-orchestration';
 import { createBullMQTaskProcessor } from '../src/taskWorker';
 
 function createFakeJob(data: Record<string, unknown>): Job<Record<string, unknown>> {

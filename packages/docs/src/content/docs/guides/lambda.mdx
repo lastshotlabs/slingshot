@@ -17,8 +17,8 @@ bun add @lastshotlabs/slingshot-runtime-lambda
 Use `createLambdaRuntime()` when your entry module chooses the exported Lambda handlers explicitly:
 
 ```ts
-import { createLambdaRuntime } from '@lastshotlabs/slingshot-runtime-lambda';
 import type { SlingshotHandler } from '@lastshotlabs/slingshot-core';
+import { createLambdaRuntime } from '@lastshotlabs/slingshot-runtime-lambda';
 
 declare const processOrder: SlingshotHandler;
 

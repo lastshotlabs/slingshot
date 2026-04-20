@@ -1,4 +1,3 @@
- 
 import {
   DEFAULT_MAX_ENTRIES,
   createEvictExpired,
@@ -12,10 +11,10 @@ import {
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from '../config/authConfig';
-import { isSqliteDuplicateColumnError } from './sqliteSchemaErrors';
+import type { RedisLike } from '../types/redis';
 import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
-import type { RedisLike } from '../types/redis';
+import { isSqliteDuplicateColumnError } from './sqliteSchemaErrors';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -300,7 +299,11 @@ export function createSqliteMfaChallengeRepository(
       expiresAt         INTEGER NOT NULL
     )`);
     // Migrate pre-existing tables that lack newer columns
-    addColumnIfMissing(db, 'ALTER TABLE mfa_challenges ADD COLUMN emailOtpHash TEXT', 'emailOtpHash');
+    addColumnIfMissing(
+      db,
+      'ALTER TABLE mfa_challenges ADD COLUMN emailOtpHash TEXT',
+      'emailOtpHash',
+    );
     addColumnIfMissing(
       db,
       'ALTER TABLE mfa_challenges ADD COLUMN createdAt INTEGER NOT NULL DEFAULT 0',

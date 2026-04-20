@@ -169,7 +169,7 @@ export function generatePostgres(config: ResolvedEntityConfig): string {
   lines.push('    if (initialized) return;');
   lines.push('    if (initializationPromise) return initializationPromise;');
   lines.push('    initializationPromise = (async () => {');
-  lines.push("      const client = await pool.connect();");
+  lines.push('      const client = await pool.connect();');
   lines.push('      try {');
   lines.push("        await client.query('BEGIN');");
   lines.push(

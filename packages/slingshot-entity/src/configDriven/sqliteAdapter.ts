@@ -87,9 +87,7 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
           const idx = config.indexes[i];
           const colList = idx.fields.map(f => toSnakeCase(f)).join(', ');
           const unique = idx.unique ? 'UNIQUE ' : '';
-          db.run(
-            `CREATE ${unique}INDEX IF NOT EXISTS idx_${table}_${i} ON ${table} (${colList})`,
-          );
+          db.run(`CREATE ${unique}INDEX IF NOT EXISTS idx_${table}_${i} ON ${table} (${colList})`);
         }
       }
 
@@ -98,9 +96,7 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
         for (let i = 0; i < config.uniques.length; i++) {
           const uq = config.uniques[i];
           const colList = uq.fields.map(f => toSnakeCase(f)).join(', ');
-          db.run(
-            `CREATE UNIQUE INDEX IF NOT EXISTS uidx_${table}_${i} ON ${table} (${colList})`,
-          );
+          db.run(`CREATE UNIQUE INDEX IF NOT EXISTS uidx_${table}_${i} ON ${table} (${colList})`);
         }
       }
     });

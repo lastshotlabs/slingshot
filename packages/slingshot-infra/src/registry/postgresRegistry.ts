@@ -232,7 +232,9 @@ export function createPostgresRegistry(config: PostgresRegistryConfig): Registry
           `SELECT version FROM ${tableName} WHERE id = 'default'`,
         );
         if (res.rows.length === 0) {
-          throw new Error('[slingshot-infra] Registry not initialized. Run: slingshot registry init');
+          throw new Error(
+            '[slingshot-infra] Registry not initialized. Run: slingshot registry init',
+          );
         }
         const etag = String(res.rows[0].version);
 

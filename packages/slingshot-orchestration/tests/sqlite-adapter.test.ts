@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineTask } from '../src/defineTask';
 import { createOrchestrationRuntime } from '../src/runtime';
@@ -58,7 +58,11 @@ describe('sqlite orchestration adapter', () => {
     });
 
     await adapter.start();
-    const handle = await runtime.runTask('sqlite-task', { value: 'sqlite' }, { tenantId: 'tenant-sqlite' });
+    const handle = await runtime.runTask(
+      'sqlite-task',
+      { value: 'sqlite' },
+      { tenantId: 'tenant-sqlite' },
+    );
     await expect(handle.result()).resolves.toEqual({ echoed: 'sqlite' });
 
     const run = await runtime.getRun(handle.id);

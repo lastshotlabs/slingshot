@@ -8,7 +8,13 @@ import type {
   PolicyDecision,
   PolicyResolver,
 } from './entityRouteConfig';
-import { type AfterHook, type Guard, HandlerError, IdempotencyCacheHit, resolveActor } from './handler';
+import {
+  type AfterHook,
+  type Guard,
+  HandlerError,
+  IdempotencyCacheHit,
+  resolveActor,
+} from './handler';
 import { getPermissionsStateOrNull } from './permissions';
 import { getRateLimitAdapter } from './rateLimit';
 
@@ -66,8 +72,8 @@ function resolveScopedValue(
   if (binding.startsWith('ctx:')) {
     const field = binding.slice(4);
     // Legacy aliases — still work as before.
-    if (field === 'tenantId') return (meta.actor?.tenantId ?? meta.tenantId) ?? undefined;
-    if (field === 'authUserId') return (meta.actor?.id ?? meta.authUserId) ?? undefined;
+    if (field === 'tenantId') return meta.actor?.tenantId ?? meta.tenantId ?? undefined;
+    if (field === 'authUserId') return meta.actor?.id ?? meta.authUserId ?? undefined;
     // New actor-aware bindings.
     if (field === 'actor.id') return meta.actor?.id ?? undefined;
     if (field === 'actor.tenantId') return meta.actor?.tenantId ?? undefined;
@@ -280,7 +286,9 @@ export function requirePermission(action: string, opts: PermissionGuardOptions =
       return;
     }
 
-    const scope: Record<string, string | undefined> = { tenantId: resolveActor(meta).tenantId ?? undefined };
+    const scope: Record<string, string | undefined> = {
+      tenantId: resolveActor(meta).tenantId ?? undefined,
+    };
     for (const [key, binding] of Object.entries(opts.scope ?? {})) {
       scope[key] = resolveScopedValue(binding, inputRecord, record, meta);
     }

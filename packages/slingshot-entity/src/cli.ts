@@ -151,9 +151,7 @@ export function writeGenerated(
   // will regenerate correctly.
   const shouldAdvanceSnapshot =
     snapshotDir &&
-    (options.migration ||
-      previousSnapshot === null ||
-      deepEqual(previousSnapshot.entity, config));
+    (options.migration || previousSnapshot === null || deepEqual(previousSnapshot.entity, config));
 
   if (shouldAdvanceSnapshot) {
     saveSnapshot(snapshotDir, config);

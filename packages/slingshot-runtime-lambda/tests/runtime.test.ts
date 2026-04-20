@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import type { SlingshotContext, SlingshotHandler } from '@lastshotlabs/slingshot-core';
 import { z } from 'zod';
+import type { SlingshotContext, SlingshotHandler } from '@lastshotlabs/slingshot-core';
 
 const runtimeState = {
   bootstrapCalls: 0,

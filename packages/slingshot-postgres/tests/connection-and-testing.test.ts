@@ -107,7 +107,9 @@ describe('slingshot-postgres connection helpers', () => {
       },
     } as never);
 
-    expect(deletedTables.map(table => (table as Record<symbol, string>)[drizzleNameSymbol])).toEqual([
+    expect(
+      deletedTables.map(table => (table as Record<symbol, string>)[drizzleNameSymbol]),
+    ).toEqual([
       (schema.groupMemberships as Record<symbol, string>)[drizzleNameSymbol],
       (schema.recoveryCodes as Record<symbol, string>)[drizzleNameSymbol],
       (schema.webauthnCredentials as Record<symbol, string>)[drizzleNameSymbol],

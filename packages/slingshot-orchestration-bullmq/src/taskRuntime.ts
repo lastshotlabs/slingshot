@@ -1,8 +1,5 @@
 import type { BackoffStrategy, JobsOptions } from 'bullmq';
-import type {
-  AnyResolvedTask,
-  RetryPolicy,
-} from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedTask, RetryPolicy } from '@lastshotlabs/slingshot-orchestration';
 
 export interface TaskRuntimeConfig {
   retry: RetryPolicy;
@@ -40,9 +37,7 @@ export function readTaskRuntimeConfig(
   return {
     retry: taskRuntime['retry'],
     timeout:
-      typeof taskRuntime['timeout'] === 'number'
-        ? (taskRuntime['timeout'] as number)
-        : undefined,
+      typeof taskRuntime['timeout'] === 'number' ? (taskRuntime['timeout'] as number) : undefined,
   };
 }
 
@@ -70,10 +65,9 @@ export function computeRetryDelay(retry: RetryPolicy, attempt: number): number {
   return baseDelay;
 }
 
-export function createJobRetryOptions(taskRuntime: TaskRuntimeConfig): Pick<
-  JobsOptions,
-  'attempts' | 'backoff'
-> {
+export function createJobRetryOptions(
+  taskRuntime: TaskRuntimeConfig,
+): Pick<JobsOptions, 'attempts' | 'backoff'> {
   return {
     attempts: taskRuntime.retry.maxAttempts,
     backoff:

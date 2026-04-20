@@ -1,17 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { MAX_CONTENT_BODY_LENGTH } from '@lastshotlabs/slingshot-core';
 import {
-  ChatRepoNotImplementedError,
   CHAT_PLUGIN_STATE_KEY,
+  ChatRepoNotImplementedError,
   chatManifest,
   createChatPlugin,
 } from '../../src/index';
 import * as entry from '../../src/index';
-import {
-  createMessageSchema,
-  createRoomSchema,
-  updateRoomSchema,
-} from '../../src/schemas';
+import { createMessageSchema, createRoomSchema, updateRoomSchema } from '../../src/schemas';
 
 describe('slingshot-chat public api', () => {
   test('entrypoint re-exports the main runtime surface', () => {

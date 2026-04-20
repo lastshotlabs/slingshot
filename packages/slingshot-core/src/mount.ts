@@ -3,7 +3,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { AppEnv } from './context';
 import { getSlingshotCtx } from './context';
 import type { SlingshotHandler } from './handler';
-import { HandlerError, type GuardWithMetadata, type HandlerMeta } from './handler';
+import { type GuardWithMetadata, HandlerError, type HandlerMeta } from './handler';
 import type { IdentityResolverInput } from './identity';
 
 type RouteMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head';
@@ -182,7 +182,10 @@ export function toRouteHandler(
  */
 export function mount(
   app: {
-    openapi(route: ReturnType<typeof createRoute>, handler: (c: Context<AppEnv>) => Promise<Response>): unknown;
+    openapi(
+      route: ReturnType<typeof createRoute>,
+      handler: (c: Context<AppEnv>) => Promise<Response>,
+    ): unknown;
   },
   handler: SlingshotHandler,
   opts: RouteOpts,

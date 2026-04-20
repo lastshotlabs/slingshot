@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import {
+  type PermissionGrant,
   attachPostgresPoolRuntime,
   createPostgresPoolRuntime,
-  type PermissionGrant,
 } from '@lastshotlabs/slingshot-core';
 import { createPermissionsPostgresAdapter } from '../../src/adapters/postgres';
 import type { PgParam, PgRow, PoolClientLike, PoolLike } from '../../src/adapters/postgres';
@@ -348,9 +348,9 @@ describe('Postgres permissions adapter — migrations', () => {
     expect(pool.captured.some(q => q.sql.includes('UPDATE _permission_schema_version'))).toBe(
       false,
     );
-    expect(pool.captured.some(q => q.sql.includes('CREATE TABLE IF NOT EXISTS permission_grants'))).toBe(
-      false,
-    );
+    expect(
+      pool.captured.some(q => q.sql.includes('CREATE TABLE IF NOT EXISTS permission_grants')),
+    ).toBe(false);
   });
 
   test('canonicalizes duplicate version rows before applying migrations', async () => {
@@ -387,10 +387,7 @@ describe('Postgres permissions adapter — migrations', () => {
   test('skips migrations when the pool runtime is configured as assume-ready', async () => {
     const pool = new MockPool();
     pool.schemaVersion = 999;
-    attachPostgresPoolRuntime(
-      pool,
-      createPostgresPoolRuntime({ migrationMode: 'assume-ready' }),
-    );
+    attachPostgresPoolRuntime(pool, createPostgresPoolRuntime({ migrationMode: 'assume-ready' }));
 
     await expect(makeAdapter(pool)).resolves.toBeDefined();
     expect(pool.captured).toHaveLength(0);

@@ -188,15 +188,31 @@ export const entityRouteConfigSchema = z
       auth === 'userAuth' || auth === 'bearer';
 
     const getEffectiveAuth = (
-      op: (typeof cfg)['create'] | (typeof cfg)['get'] | (typeof cfg)['list'] | (typeof cfg)['update'] | (typeof cfg)['delete'] | Record<string, unknown> | undefined,
+      op:
+        | (typeof cfg)['create']
+        | (typeof cfg)['get']
+        | (typeof cfg)['list']
+        | (typeof cfg)['update']
+        | (typeof cfg)['delete']
+        | Record<string, unknown>
+        | undefined,
     ): string | undefined => {
       const auth =
-        op && typeof op === 'object' && 'auth' in op ? (op['auth'] as string | undefined) : undefined;
+        op && typeof op === 'object' && 'auth' in op
+          ? (op['auth'] as string | undefined)
+          : undefined;
       return auth ?? cfg.defaults?.auth;
     };
 
     const getEffectiveIdempotency = (
-      op: (typeof cfg)['create'] | (typeof cfg)['get'] | (typeof cfg)['list'] | (typeof cfg)['update'] | (typeof cfg)['delete'] | Record<string, unknown> | undefined,
+      op:
+        | (typeof cfg)['create']
+        | (typeof cfg)['get']
+        | (typeof cfg)['list']
+        | (typeof cfg)['update']
+        | (typeof cfg)['delete']
+        | Record<string, unknown>
+        | undefined,
     ): { enabled: boolean; scope: 'user' | 'tenant' | 'global' } => {
       const raw =
         op && typeof op === 'object' && 'idempotency' in op

@@ -1,5 +1,5 @@
 import type { Job, Queue, QueueEvents } from 'bullmq';
-import { generateRunId, OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+import { OrchestrationError, generateRunId } from '@lastshotlabs/slingshot-orchestration';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -172,11 +172,9 @@ export function createBullMQWorkflowProcessor(options: {
                 },
                 {
                   delay: 0,
-                  priority:
-                    typeof job.opts.priority === 'number' ? job.opts.priority : undefined,
+                  priority: typeof job.opts.priority === 'number' ? job.opts.priority : undefined,
                   ...createJobRetryOptions(taskRuntime),
-                  ...(job.data['adapterHints'] &&
-                  typeof job.data['adapterHints'] === 'object'
+                  ...(job.data['adapterHints'] && typeof job.data['adapterHints'] === 'object'
                     ? (job.data['adapterHints'] as Record<string, unknown>)
                     : {}),
                 },

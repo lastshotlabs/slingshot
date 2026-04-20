@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  offsetParams,
-  parseOffsetParams,
-  paginatedResponse,
-  cursorParams,
-  parseCursorParams,
-  cursorPaginatedResponse,
-} from '../../src/pagination';
 import { z } from 'zod';
+import {
+  cursorPaginatedResponse,
+  cursorParams,
+  offsetParams,
+  paginatedResponse,
+  parseCursorParams,
+  parseOffsetParams,
+} from '../../src/pagination';
 
 describe('offsetParams', () => {
   test('returns a zod object schema with limit and offset', () => {

@@ -1,5 +1,5 @@
-import { OrchestrationError } from './errors';
 import { supportsCapability, throwUnsupported } from './adapter';
+import { OrchestrationError } from './errors';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -39,8 +39,7 @@ export function createOrchestrationRuntime(
     input: unknown,
     opts?: unknown,
   ) {
-    const workflowName =
-      typeof workflowOrName === 'string' ? workflowOrName : workflowOrName.name;
+    const workflowName = typeof workflowOrName === 'string' ? workflowOrName : workflowOrName.name;
     return options.adapter.runWorkflow(workflowName, input, opts as never);
   }
 

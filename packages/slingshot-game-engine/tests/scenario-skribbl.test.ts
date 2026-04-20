@@ -19,10 +19,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import {
-  createChannelState,
-  recordSubmission,
-} from '../src/lib/channels';
+import { createChannelState, recordSubmission } from '../src/lib/channels';
 import {
   playerRoom,
   resolveRelayTargets,

@@ -1,7 +1,4 @@
-import type {
-  OperationConfig,
-  ResolvedEntityConfig,
-} from '@lastshotlabs/slingshot-core';
+import type { OperationConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -9,10 +6,7 @@ function normalizeDateValue(value: unknown): unknown {
   return value instanceof Date ? value.toISOString() : value;
 }
 
-export function normalizeEntityRecordResult(
-  config: ResolvedEntityConfig,
-  value: unknown,
-): unknown {
+export function normalizeEntityRecordResult(config: ResolvedEntityConfig, value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return value;
   }
@@ -35,10 +29,7 @@ export function normalizeEntityRecordResult(
   return changed ? normalized : value;
 }
 
-export function normalizeEntityListResult(
-  config: ResolvedEntityConfig,
-  value: unknown,
-): unknown {
+export function normalizeEntityListResult(config: ResolvedEntityConfig, value: unknown): unknown {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return value;
   }

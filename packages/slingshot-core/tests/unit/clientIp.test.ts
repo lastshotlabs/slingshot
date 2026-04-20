@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  setStandaloneTrustProxy,
-  setStandaloneClientIp,
-  getClientIpFromRequest,
   getClientIp,
+  getClientIpFromRequest,
+  setStandaloneClientIp,
+  setStandaloneTrustProxy,
 } from '../../src/clientIp';
 
 describe('setStandaloneTrustProxy', () => {

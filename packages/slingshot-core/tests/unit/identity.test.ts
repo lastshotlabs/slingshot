@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
   ANONYMOUS_ACTOR,
-  createDefaultIdentityResolver,
   type Actor,
   type IdentityResolverInput,
+  createDefaultIdentityResolver,
 } from '../../src/identity';
 
 // ---------------------------------------------------------------------------
@@ -86,17 +86,13 @@ describe('createDefaultIdentityResolver', () => {
     });
 
     test('authUserId takes priority over bearerClientId', () => {
-      const actor = resolver.resolve(
-        input({ authUserId: 'user-1', bearerClientId: 'client-1' }),
-      );
+      const actor = resolver.resolve(input({ authUserId: 'user-1', bearerClientId: 'client-1' }));
       expect(actor.kind).toBe('user');
       expect(actor.id).toBe('user-1');
     });
 
     test('authUserId takes priority over authClientId', () => {
-      const actor = resolver.resolve(
-        input({ authUserId: 'user-1', authClientId: 'svc-1' }),
-      );
+      const actor = resolver.resolve(input({ authUserId: 'user-1', authClientId: 'svc-1' }));
       expect(actor.kind).toBe('user');
       expect(actor.id).toBe('user-1');
     });
@@ -122,30 +118,22 @@ describe('createDefaultIdentityResolver', () => {
     });
 
     test('session is always null for api-key', () => {
-      const actor = resolver.resolve(
-        input({ bearerClientId: 'key-1', sessionId: 'sess-ignored' }),
-      );
+      const actor = resolver.resolve(input({ bearerClientId: 'key-1', sessionId: 'sess-ignored' }));
       expect(actor.sessionId).toBeNull();
     });
 
     test('carries roles', () => {
-      const actor = resolver.resolve(
-        input({ bearerClientId: 'key-1', roles: ['reader'] }),
-      );
+      const actor = resolver.resolve(input({ bearerClientId: 'key-1', roles: ['reader'] }));
       expect(actor.roles).toEqual(['reader']);
     });
 
     test('carries tenantId', () => {
-      const actor = resolver.resolve(
-        input({ bearerClientId: 'key-1', tenantId: 'org-9' }),
-      );
+      const actor = resolver.resolve(input({ bearerClientId: 'key-1', tenantId: 'org-9' }));
       expect(actor.tenantId).toBe('org-9');
     });
 
     test('bearerClientId takes priority over authClientId when no authUserId', () => {
-      const actor = resolver.resolve(
-        input({ bearerClientId: 'key-1', authClientId: 'svc-1' }),
-      );
+      const actor = resolver.resolve(input({ bearerClientId: 'key-1', authClientId: 'svc-1' }));
       expect(actor.kind).toBe('api-key');
       expect(actor.id).toBe('key-1');
     });
@@ -163,23 +151,17 @@ describe('createDefaultIdentityResolver', () => {
     });
 
     test('session is always null for service-account', () => {
-      const actor = resolver.resolve(
-        input({ authClientId: 'svc-1', sessionId: 'sess-ignored' }),
-      );
+      const actor = resolver.resolve(input({ authClientId: 'svc-1', sessionId: 'sess-ignored' }));
       expect(actor.sessionId).toBeNull();
     });
 
     test('carries tenantId', () => {
-      const actor = resolver.resolve(
-        input({ authClientId: 'svc-1', tenantId: 'tenant-3' }),
-      );
+      const actor = resolver.resolve(input({ authClientId: 'svc-1', tenantId: 'tenant-3' }));
       expect(actor.tenantId).toBe('tenant-3');
     });
 
     test('carries roles', () => {
-      const actor = resolver.resolve(
-        input({ authClientId: 'svc-1', roles: ['service'] }),
-      );
+      const actor = resolver.resolve(input({ authClientId: 'svc-1', roles: ['service'] }));
       expect(actor.roles).toEqual(['service']);
     });
   });
@@ -232,9 +214,7 @@ describe('createDefaultIdentityResolver', () => {
     });
 
     test('tokenPayload is ignored by the default resolver', () => {
-      const actor = resolver.resolve(
-        input({ tokenPayload: { sub: 'tok-user', scope: 'admin' } }),
-      );
+      const actor = resolver.resolve(input({ tokenPayload: { sub: 'tok-user', scope: 'admin' } }));
       expect(actor.kind).toBe('anonymous');
     });
 

@@ -1,8 +1,4 @@
-import type {
-  HandlerMeta,
-  TriggerAdapter,
-  TriggerRecord,
-} from '@lastshotlabs/slingshot-core';
+import type { HandlerMeta, TriggerAdapter, TriggerRecord } from '@lastshotlabs/slingshot-core';
 
 type DynamoRecord = {
   eventID: string;

@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { Hono, type Context } from 'hono';
+import { type Context, Hono } from 'hono';
+import { z } from 'zod';
 import type { AppEnv } from '../../src/context';
 import { attachContext } from '../../src/context/contextStore';
 import {
@@ -8,7 +9,6 @@ import {
   getOrCreateEntityPolicyRegistry,
   registerEntityPolicy,
 } from '../../src/entityPolicy';
-import { defineHandler } from '../../src/handler';
 import {
   enforceDataScope,
   idempotent,
@@ -16,9 +16,9 @@ import {
   requireAuth,
   requireUserAuth,
 } from '../../src/guards';
+import { defineHandler } from '../../src/handler';
 import { createDefaultIdentityResolver } from '../../src/identity';
 import { mount, toRoute, toRouteHandler } from '../../src/mount';
-import { z } from 'zod';
 
 function createContextFixture(overrides: Record<string, unknown> = {}) {
   const app = new Hono<AppEnv>();
@@ -80,7 +80,9 @@ function createArgs(
 describe('entity policy, guards, and mounting', () => {
   test('entity policy registry resolves per app and freezes after route assembly', () => {
     const { app, ctx } = createContextFixture();
-    const registry = getOrCreateEntityPolicyRegistry((ctx as { pluginState: Map<string, unknown> }).pluginState);
+    const registry = getOrCreateEntityPolicyRegistry(
+      (ctx as { pluginState: Map<string, unknown> }).pluginState,
+    );
     const resolver = async () => true;
 
     expect(registry.resolvers.size).toBe(0);
@@ -100,15 +102,17 @@ describe('entity policy, guards, and mounting', () => {
     ).rejects.toMatchObject({ status: 401 });
 
     const createInput: Record<string, unknown> = { title: 'Hello' };
-    await enforceDataScope({ field: 'tenantId', from: 'ctx:tenantId' }, { op: 'create' })(
-      createArgs(ctx, createInput) as never,
-    );
+    await enforceDataScope(
+      { field: 'tenantId', from: 'ctx:tenantId' },
+      { op: 'create' },
+    )(createArgs(ctx, createInput) as never);
     expect(createInput).toMatchObject({ tenantId: 'tenant-1' });
 
     const listInput: Record<string, unknown> = {};
-    await enforceDataScope({ field: 'tenantId', from: 'ctx:tenantId' }, { op: 'list' })(
-      createArgs(ctx, listInput) as never,
-    );
+    await enforceDataScope(
+      { field: 'tenantId', from: 'ctx:tenantId' },
+      { op: 'list' },
+    )(createArgs(ctx, listInput) as never);
     expect(listInput).toMatchObject({
       tenantId: 'tenant-1',
       _scopeFilter: { tenantId: 'tenant-1' },
@@ -134,7 +138,9 @@ describe('entity policy, guards, and mounting', () => {
     await afterHook({ ...args, output: { id: 'item-1' } });
 
     expect(idempotency.set).toHaveBeenCalledTimes(1);
-    expect(idempotency.set.mock.calls[0]?.[0]).toContain('idempotency:items.update:tenant:tenant-1');
+    expect(idempotency.set.mock.calls[0]?.[0]).toContain(
+      'idempotency:items.update:tenant:tenant-1',
+    );
     expect(idempotency.set.mock.calls[0]?.[2]).toBe(200);
     expect(idempotency.set.mock.calls[0]?.[3]).toBe(90);
   });

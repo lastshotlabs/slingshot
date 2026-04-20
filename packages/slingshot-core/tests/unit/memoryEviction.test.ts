@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  evictOldest,
-  createEvictExpired,
-  evictOldestArray,
   DEFAULT_MAX_ENTRIES,
+  createEvictExpired,
+  evictOldest,
+  evictOldestArray,
 } from '../../src/memoryEviction';
 
 describe('evictOldest', () => {
@@ -100,9 +100,7 @@ describe('createEvictExpired', () => {
   test('throttles scans to intervalMs', () => {
     const evictExpired = createEvictExpired(60_000); // 60 second interval
     const now = Date.now();
-    const map = new Map([
-      ['expired', { value: 'a', expiresAt: now - 1000 }],
-    ]);
+    const map = new Map([['expired', { value: 'a', expiresAt: now - 1000 }]]);
 
     // First call runs the scan
     evictExpired(map);
@@ -122,9 +120,7 @@ describe('createEvictExpired', () => {
     const evict2 = createEvictExpired(60_000);
     const now = Date.now();
 
-    const map = new Map([
-      ['expired', { value: 'a', expiresAt: now - 1000 }],
-    ]);
+    const map = new Map([['expired', { value: 'a', expiresAt: now - 1000 }]]);
 
     // evict1 has 0 interval, so it always runs
     evict1(map);
@@ -141,12 +137,8 @@ describe('createEvictExpired', () => {
     const evictExpired = createEvictExpired(60_000);
     const now = Date.now();
 
-    const map1 = new Map([
-      ['expired', { value: 'a', expiresAt: now - 1000 }],
-    ]);
-    const map2 = new Map([
-      ['expired', { value: 'b', expiresAt: now - 1000 }],
-    ]);
+    const map1 = new Map([['expired', { value: 'a', expiresAt: now - 1000 }]]);
+    const map2 = new Map([['expired', { value: 'b', expiresAt: now - 1000 }]]);
 
     evictExpired(map1);
     expect(map1.size).toBe(0);
@@ -159,9 +151,7 @@ describe('createEvictExpired', () => {
   test('removes entry when expiresAt equals current time', () => {
     const evictExpired = createEvictExpired(0);
     const now = Date.now();
-    const map = new Map([
-      ['exact', { value: 'a', expiresAt: now }],
-    ]);
+    const map = new Map([['exact', { value: 'a', expiresAt: now }]]);
     evictExpired(map);
     // expiresAt <= now, so it should be removed
     expect(map.size).toBe(0);
@@ -169,9 +159,7 @@ describe('createEvictExpired', () => {
 
   test('does not remove entries with expiresAt of 0 (falsy)', () => {
     const evictExpired = createEvictExpired(0);
-    const map = new Map([
-      ['zero', { value: 'a', expiresAt: 0 }],
-    ]);
+    const map = new Map([['zero', { value: 'a', expiresAt: 0 }]]);
     evictExpired(map);
     // expiresAt is 0, which is falsy — condition `val.expiresAt && ...` skips it
     expect(map.size).toBe(1);

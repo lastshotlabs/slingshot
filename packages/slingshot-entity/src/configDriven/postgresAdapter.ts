@@ -33,8 +33,8 @@ import {
   toSnakeCase,
 } from './fieldUtils';
 import { resolveListFilter } from './listFilter';
-import { buildPostgresOperations } from './postgresOperationWiring';
 import { withOptionalPostgresTransaction } from './operationExecutors/postgresTransaction';
+import { buildPostgresOperations } from './postgresOperationWiring';
 
 /**
  * Minimal `pg` Pool interface required by this adapter.

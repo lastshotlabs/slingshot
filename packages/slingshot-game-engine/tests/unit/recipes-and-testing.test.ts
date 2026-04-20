@@ -5,7 +5,7 @@ import { buildReplayEntry, createReplaySequence } from '../../src/lib/replay';
 import { blindSchedule } from '../../src/recipes/blindSchedule';
 import { elimination } from '../../src/recipes/elimination';
 import { gridBoard } from '../../src/recipes/gridBoard';
-import { standardDeck, type Card } from '../../src/recipes/standardDeck';
+import { type Card, standardDeck } from '../../src/recipes/standardDeck';
 import { wordValidator } from '../../src/recipes/wordValidator';
 import { gameAssertions } from '../../src/testing/assertions';
 import { createTestHarness } from '../../src/testing/harness';
@@ -14,18 +14,9 @@ import { createMockClock } from '../../src/testing/timeControl';
 
 function makeProcessContext() {
   const players = new Map([
-    [
-      'alice',
-      { userId: 'alice', playerState: null, isSpectator: false, team: 'red' },
-    ],
-    [
-      'bob',
-      { userId: 'bob', playerState: null, isSpectator: false, team: 'red' },
-    ],
-    [
-      'carol',
-      { userId: 'carol', playerState: null, isSpectator: false, team: 'blue' },
-    ],
+    ['alice', { userId: 'alice', playerState: null, isSpectator: false, team: 'red' }],
+    ['bob', { userId: 'bob', playerState: null, isSpectator: false, team: 'red' }],
+    ['carol', { userId: 'carol', playerState: null, isSpectator: false, team: 'blue' }],
   ]);
   const scores = new Map([
     ['alice', 10],
@@ -102,16 +93,14 @@ describe('recipes', () => {
       'carol',
     ]);
     expect(
-      elimination.checkLastStanding(
-        {
-          ...ctx,
-          getPlayers: () => [
-            { userId: 'alice', playerState: null, isSpectator: false, team: 'red' },
-            { userId: 'bob', playerState: null, isSpectator: false, team: 'red' },
-            { userId: 'carol', playerState: 'eliminated', isSpectator: false, team: 'blue' },
-          ],
-        } as any,
-      ),
+      elimination.checkLastStanding({
+        ...ctx,
+        getPlayers: () => [
+          { userId: 'alice', playerState: null, isSpectator: false, team: 'red' },
+          { userId: 'bob', playerState: null, isSpectator: false, team: 'red' },
+          { userId: 'carol', playerState: 'eliminated', isSpectator: false, team: 'blue' },
+        ],
+      } as any),
     ).toEqual({
       winningTeam: 'red',
       winners: ['alice', 'bob'],
@@ -159,7 +148,12 @@ describe('recipes', () => {
   test('builds decks, compares cards, and evaluates poker hands', () => {
     const deck = standardDeck.create({ decks: 2, jokers: 2 });
     expect(deck).toHaveLength(106);
-    expect(standardDeck.compare({ suit: 'clubs', rank: '2', value: 2 }, { suit: 'spades', rank: 'A', value: 14 })).toBe(-1);
+    expect(
+      standardDeck.compare(
+        { suit: 'clubs', rank: '2', value: 2 },
+        { suit: 'spades', rank: 'A', value: 14 },
+      ),
+    ).toBe(-1);
 
     const royalFlush: Card[] = [
       { suit: 'hearts', rank: '10', value: 10 },
@@ -281,16 +275,20 @@ describe('testing helpers', () => {
 
     expect(bot.hasStrategy('buzz')).toBe(true);
     expect(
-      bot.getResponse('buzz', { prompt: 'go' }, {
-        userId: 'bot-user',
-        gameState: {},
-        phase: 'lobby',
-        random: {
-          int: () => 1,
-          pick: array => array[0]!,
-          bool: () => true,
+      bot.getResponse(
+        'buzz',
+        { prompt: 'go' },
+        {
+          userId: 'bot-user',
+          gameState: {},
+          phase: 'lobby',
+          random: {
+            int: () => 1,
+            pick: array => array[0]!,
+            bool: () => true,
+          },
         },
-      }),
+      ),
     ).toEqual({ answer: 'bot-user' });
     expect(
       bot.getRaceDelay('race', {

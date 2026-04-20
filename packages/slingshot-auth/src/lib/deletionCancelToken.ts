@@ -1,4 +1,3 @@
- 
 import { DEFAULT_MAX_ENTRIES, createEvictExpired, evictOldest } from '@lastshotlabs/slingshot-core';
 import { sha256 as hashToken } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------
@@ -6,9 +5,9 @@ import { sha256 as hashToken } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------
 
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import type { RedisLike } from '../types/redis';
 import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
-import type { RedisLike } from '../types/redis';
 
 // ---------------------------------------------------------------------------
 // Repository interface

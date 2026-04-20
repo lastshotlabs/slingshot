@@ -415,21 +415,31 @@ describe('PermissionEvaluator', () => {
       grantedAt: new Date(),
     };
     const mockAdapter: PermissionsAdapter = {
-      async createGrant() { return ''; },
-      async revokeGrant() { return false; },
-      async getGrantsForSubject() { return [mismatchGrant]; },
-      async getEffectiveGrantsForSubject() { return [mismatchGrant]; },
-      async listGrantHistory() { return []; },
-      async listGrantsOnResource() { return []; },
+      async createGrant() {
+        return '';
+      },
+      async revokeGrant() {
+        return false;
+      },
+      async getGrantsForSubject() {
+        return [mismatchGrant];
+      },
+      async getEffectiveGrantsForSubject() {
+        return [mismatchGrant];
+      },
+      async listGrantHistory() {
+        return [];
+      },
+      async listGrantsOnResource() {
+        return [];
+      },
       async deleteAllGrantsForSubject() {},
     };
     const ev = createPermissionEvaluator({ registry, adapter: mockAdapter });
     // Scope has tenantId but NO resourceType — grant should not match
-    const result = await ev.can(
-      { subjectId: 'user-1', subjectType: 'user' },
-      'read',
-      { tenantId: 'tenant-a' },
-    );
+    const result = await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+      tenantId: 'tenant-a',
+    });
     expect(result).toBe(false);
   });
 
@@ -456,11 +466,9 @@ describe('PermissionEvaluator', () => {
       grantedBy: 'system',
     });
     // 'delete' is denied by reader? No — reader only has ['read'], so deny loop falls through
-    const result = await evaluator.can(
-      { subjectId: 'user-1', subjectType: 'user' },
-      'delete',
-      { resourceType: 'post' },
-    );
+    const result = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'delete', {
+      resourceType: 'post',
+    });
     expect(result).toBe(true);
   });
 

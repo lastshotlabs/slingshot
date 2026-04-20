@@ -1,8 +1,4 @@
-import type {
-  HandlerMeta,
-  TriggerAdapter,
-  TriggerRecord,
-} from '@lastshotlabs/slingshot-core';
+import type { HandlerMeta, TriggerAdapter, TriggerRecord } from '@lastshotlabs/slingshot-core';
 import { decodeHttpBody, firstString, readHeader } from '../correlation';
 
 type ApiGatewayV2Event = {
@@ -46,11 +42,12 @@ export const apigwV2Trigger: TriggerAdapter<ApiGatewayV2Event, Record<string, un
   extractMeta(event): Partial<HandlerMeta> {
     return {
       requestId: event.requestContext?.requestId,
-      correlationId: firstString(
-        readHeader(event.headers, 'x-correlation-id'),
-        readHeader(event.headers, 'x-request-id'),
-        event.requestContext?.requestId,
-      ) ?? undefined,
+      correlationId:
+        firstString(
+          readHeader(event.headers, 'x-correlation-id'),
+          readHeader(event.headers, 'x-request-id'),
+          event.requestContext?.requestId,
+        ) ?? undefined,
       ip: event.requestContext?.http?.sourceIp ?? null,
       method: event.requestContext?.http?.method,
       path: event.requestContext?.http?.path,
@@ -62,9 +59,7 @@ export const apigwV2Trigger: TriggerAdapter<ApiGatewayV2Event, Record<string, un
     const outcome = outcomes[0];
     const httpMeta = (outcome?.meta.http ?? {}) as { status?: number; body?: unknown };
     const statusCode =
-      outcome?.result === 'error'
-        ? (httpMeta.status ?? 500)
-        : (httpMeta.status ?? 200);
+      outcome?.result === 'error' ? (httpMeta.status ?? 500) : (httpMeta.status ?? 200);
     const body =
       outcome?.result === 'error'
         ? (httpMeta.body ?? { error: outcome.error?.message ?? 'Internal Server Error' })

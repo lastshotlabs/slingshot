@@ -8,11 +8,11 @@ import type {
   RouteAuthRegistry,
   UserResolver,
 } from '../coreContracts';
-import type { IdentityResolver } from '../identity';
 import type { CronRegistryRepository } from '../cronRegistry';
 import type { DataEncryptionKey } from '../crypto';
 import type { SlingshotEventBus } from '../eventBus';
 import type { IdempotencyAdapter } from '../idempotency';
+import type { IdentityResolver } from '../identity';
 import type { KafkaConnectorHandle } from '../kafkaConnectors';
 import type { SlingshotPlugin } from '../plugin';
 import type { RuntimeSqliteDatabase } from '../runtime';

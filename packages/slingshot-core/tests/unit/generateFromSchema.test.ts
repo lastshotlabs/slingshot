@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'bun:test';
 import { faker as fakerInstance } from '@faker-js/faker';
+import { describe, expect, it } from 'bun:test';
 import { z } from 'zod';
-import { generateFromSchema, generateMany, generateExample } from '../../src/faker';
+import { generateExample, generateFromSchema, generateMany } from '../../src/faker';
 
 // ---------------------------------------------------------------------------
 // Primitives
@@ -269,7 +269,7 @@ describe('generateFromSchema — wrappers', () => {
     // Generate many and check that at least some are non-null and type is correct
     const schema = z.string().nullable();
     const results = generateMany<string | null>(schema, 50, { seed: 42 });
-    const nonNull = results.filter((r) => r !== null);
+    const nonNull = results.filter(r => r !== null);
     expect(nonNull.length).toBeGreaterThan(0);
     for (const r of nonNull) {
       expect(typeof r).toBe('string');
@@ -419,10 +419,7 @@ describe('generateFromSchema — tuples', () => {
 
 describe('generateFromSchema — intersections', () => {
   it('merges two object schemas', () => {
-    const schema = z.intersection(
-      z.object({ name: z.string() }),
-      z.object({ age: z.number() }),
-    );
+    const schema = z.intersection(z.object({ name: z.string() }), z.object({ age: z.number() }));
     const result = generateFromSchema<{ name: string; age: number }>(schema, { seed: 1 });
     expect(typeof result.name).toBe('string');
     expect(typeof result.age).toBe('number');

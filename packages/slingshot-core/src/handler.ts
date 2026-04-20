@@ -1,6 +1,6 @@
-import { z, type ZodTypeAny } from 'zod';
-import { ValidationError } from './errors';
+import { type ZodTypeAny, z } from 'zod';
 import type { SlingshotContext } from './context/slingshotContext';
+import { ValidationError } from './errors';
 import { ANONYMOUS_ACTOR, type Actor } from './identity';
 
 /**
@@ -88,10 +88,9 @@ export type Guard<TInput extends ZodTypeAny = ZodTypeAny> = (
 /**
  * A transport-agnostic post-handle side effect.
  */
-export type AfterHook<
-  TInput extends ZodTypeAny = ZodTypeAny,
-  TOutput = unknown,
-> = (args: HandlerArgs<TInput> & { output: TOutput }) => MaybePromise<void>;
+export type AfterHook<TInput extends ZodTypeAny = ZodTypeAny, TOutput = unknown> = (
+  args: HandlerArgs<TInput> & { output: TOutput },
+) => MaybePromise<void>;
 
 type HttpAuthRequirement = 'userAuth' | 'bearer';
 

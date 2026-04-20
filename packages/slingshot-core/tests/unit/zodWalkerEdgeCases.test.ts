@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { z } from 'zod';
-import { generateFromSchema, generateMany, generateExample, walkSchema } from '../../src/faker';
+import { generateExample, generateFromSchema, generateMany, walkSchema } from '../../src/faker';
 
 // ---------------------------------------------------------------------------
 // Bug regression: double optional roll
@@ -30,7 +30,7 @@ describe('optional field probability (no double-roll)', () => {
       optionalRate: 0.7,
     });
 
-    const withBio = results.filter((r) => r.bio !== undefined && 'bio' in r).length;
+    const withBio = results.filter(r => r.bio !== undefined && 'bio' in r).length;
     const rate = withBio / results.length;
 
     // Accept 55%–85% range (70% target ± reasonable variance for 200 samples)
@@ -131,10 +131,12 @@ describe('optional wrapper ordering', () => {
 describe('nested overrides with optional parent', () => {
   it('override on nested field forces optional parent to be present', () => {
     const schema = z.object({
-      address: z.object({
-        city: z.string(),
-        zip: z.string(),
-      }).optional(),
+      address: z
+        .object({
+          city: z.string(),
+          zip: z.string(),
+        })
+        .optional(),
     });
 
     const result = generateFromSchema<{ address?: { city: string; zip: string } }>(schema, {
@@ -178,11 +180,11 @@ describe('seeded generateMany distinctness', () => {
 
     // With a seed, records should still be distinct — the seed initializes
     // the PRNG once, and subsequent calls advance the state.
-    const results = generateMany<{ name: string; email: string; score: number }>(
-      schema, 20, { seed: 42 },
-    );
+    const results = generateMany<{ name: string; email: string; score: number }>(schema, 20, {
+      seed: 42,
+    });
 
-    const emails = new Set(results.map((r) => r.email));
+    const emails = new Set(results.map(r => r.email));
     // All 20 should be unique (or nearly — at minimum more than half)
     expect(emails.size).toBeGreaterThan(10);
   });
@@ -622,7 +624,7 @@ describe('generateMany diversity', () => {
 
     // Without a seed, records should be diverse
     const results = generateMany<{ name: string; email: string }>(schema, 20);
-    const emails = new Set(results.map((r) => r.email));
+    const emails = new Set(results.map(r => r.email));
 
     // At least half should be unique
     expect(emails.size).toBeGreaterThan(10);
@@ -1176,10 +1178,12 @@ describe('record with typed keys', () => {
 describe('nullable + nested overrides', () => {
   it('never returns null when overrides target inner fields', () => {
     const schema = z.object({
-      address: z.nullable(z.object({
-        city: z.string(),
-        zip: z.string(),
-      })),
+      address: z.nullable(
+        z.object({
+          city: z.string(),
+          zip: z.string(),
+        }),
+      ),
     });
     // Run many times — the old bug had ~10% null rate
     for (let i = 0; i < 200; i++) {
@@ -1297,10 +1301,12 @@ describe('empty multipleOf range', () => {
 
 describe('nonoptional (z.object().required())', () => {
   it('always includes fields made required via .required()', () => {
-    const schema = z.object({
-      a: z.string().optional(),
-      b: z.number().optional(),
-    }).required();
+    const schema = z
+      .object({
+        a: z.string().optional(),
+        b: z.number().optional(),
+      })
+      .required();
     for (let i = 0; i < 200; i++) {
       const result = generateFromSchema<any>(schema as any);
       expect(result.a).toBeDefined();
@@ -1316,7 +1322,11 @@ describe('nonoptional (z.object().required())', () => {
 // ---------------------------------------------------------------------------
 
 describe('numeric nativeEnum', () => {
-  enum Priority { Low = 0, Medium = 1, High = 2 }
+  enum Priority {
+    Low = 0,
+    Medium = 1,
+    High = 2,
+  }
 
   it('only generates numeric values, not reverse-mapped strings', () => {
     const schema = z.nativeEnum(Priority);
@@ -1336,7 +1346,11 @@ describe('numeric nativeEnum', () => {
   });
 
   it('still works correctly with string nativeEnums', () => {
-    enum Color { Red = 'red', Green = 'green', Blue = 'blue' }
+    enum Color {
+      Red = 'red',
+      Green = 'green',
+      Blue = 'blue',
+    }
     const schema = z.nativeEnum(Color);
     for (let i = 0; i < 100; i++) {
       const val = generateFromSchema<Color>(schema as any);

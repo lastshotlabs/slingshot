@@ -23,6 +23,7 @@ import type { AuthRateLimitService } from './lib/authRateLimit';
 import type { CredentialStuffingService } from './lib/credentialStuffing';
 import type { DeletionCancelTokenRepository } from './lib/deletionCancelToken';
 import type { VerificationTokenRepository } from './lib/emailVerification';
+import type { AuthLogger } from './lib/logger';
 import type { MagicLinkRepository } from './lib/magicLink';
 import type { MfaChallengeRepository } from './lib/mfaChallenge';
 import type { OAuthProviders, OAuthStateStore } from './lib/oauth';
@@ -32,7 +33,6 @@ import type { ResetTokenRepository } from './lib/resetPassword';
 import type { SamlRequestIdRepository } from './lib/samlRequestId';
 import type { SecurityGate } from './lib/securityGate';
 import type { SessionRepository } from './lib/session/index.js';
-import type { AuthLogger } from './lib/logger';
 
 /**
  * Per-app auth runtime state, created by `bootstrapAuth` and stored in

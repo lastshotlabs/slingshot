@@ -245,7 +245,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
               entry.endsWith('*') ? path.startsWith(entry.slice(0, -1)) : path === entry,
             );
             if (bypassed) return next();
-             
+
             return bearerAuthMiddleware(c as Context<AppEnv>, next);
           });
         }

@@ -1,8 +1,4 @@
-import type {
-  HandlerMeta,
-  TriggerAdapter,
-  TriggerRecord,
-} from '@lastshotlabs/slingshot-core';
+import type { HandlerMeta, TriggerAdapter, TriggerRecord } from '@lastshotlabs/slingshot-core';
 import { decodeMaybeJson, firstString } from '../correlation';
 
 type SnsRecord = {
@@ -34,8 +30,9 @@ export const snsTrigger: TriggerAdapter<SnsEvent, void> = {
     };
     const correlationId =
       firstString(
-        Object.entries(meta.attributes ?? {}).find(([name]) => name.toLowerCase() === 'correlationid')?.[1]
-          ?.Value,
+        Object.entries(meta.attributes ?? {}).find(
+          ([name]) => name.toLowerCase() === 'correlationid',
+        )?.[1]?.Value,
         meta.messageId,
       ) ?? undefined;
     return {

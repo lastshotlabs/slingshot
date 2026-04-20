@@ -44,7 +44,9 @@ export function emitEvent(
 ): AfterHook {
   return async ({ ctx, meta, output }) => {
     const outputRecord =
-      output && typeof output === 'object' ? (output as Record<string, unknown>) : { value: output };
+      output && typeof output === 'object'
+        ? (output as Record<string, unknown>)
+        : { value: output };
     const payload = includeMeta(pickPayload(outputRecord, opts?.payload), meta, opts?.include);
     (ctx.bus as unknown as { emit(key: string, payload: unknown): void }).emit(eventKey, payload);
   };

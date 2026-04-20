@@ -1,14 +1,14 @@
-import {
-  sha256,
-  type HandlerMeta,
-  type SlingshotContext,
-} from '@lastshotlabs/slingshot-core';
+import { type HandlerMeta, type SlingshotContext, sha256 } from '@lastshotlabs/slingshot-core';
 
 export interface RuntimeIdempotencyConfig {
   ttl?: number;
   scope?: 'global' | 'tenant' | 'user';
   fingerprint?: boolean;
-  key?: (record: { body: unknown; meta: Record<string, unknown>; naturalKey?: string }) => string | null;
+  key?: (record: {
+    body: unknown;
+    meta: Record<string, unknown>;
+    naturalKey?: string;
+  }) => string | null;
 }
 
 function stableStringify(value: unknown): string {
@@ -64,7 +64,9 @@ export async function invokeWithRecordIdempotency<T>(
 ): Promise<T> {
   const ttl = config?.ttl ?? 86400;
   const scope = config?.scope ?? 'global';
-  const rawKey = config?.key ? config.key(record) : (record.naturalKey ?? meta.idempotencyKey ?? null);
+  const rawKey = config?.key
+    ? config.key(record)
+    : (record.naturalKey ?? meta.idempotencyKey ?? null);
   if (!rawKey) {
     return invoke();
   }

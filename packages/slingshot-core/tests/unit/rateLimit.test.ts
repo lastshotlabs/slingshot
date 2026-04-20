@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { attachContext, getContextOrNull } from '../../src/context/contextStore';
-import { getRateLimitAdapter, getFingerprintBuilder } from '../../src/rateLimit';
+import { getFingerprintBuilder, getRateLimitAdapter } from '../../src/rateLimit';
 
 /**
  * Build a minimal context fixture branded via attachContext so resolveContext accepts it.

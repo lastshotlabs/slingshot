@@ -1,12 +1,10 @@
-import { Job, Queue, QueueEvents, Worker, type ConnectionOptions, type JobType } from 'bullmq';
+import { type ConnectionOptions, Job, type JobType, Queue, QueueEvents, Worker } from 'bullmq';
 import {
-  OrchestrationError,
-  createCachedRunHandle,
-  generateRunId,
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
   type ObservabilityCapability,
   type OrchestrationAdapter,
+  OrchestrationError,
   type OrchestrationEventSink,
   type Run,
   type RunFilter,
@@ -15,19 +13,21 @@ import {
   type ScheduleCapability,
   type ScheduleHandle,
   type WorkflowRun,
+  createCachedRunHandle,
+  generateRunId,
 } from '@lastshotlabs/slingshot-orchestration';
 import { mapBullMQStatus } from './statusMap';
-import { createBullMQTaskProcessor } from './taskWorker';
-import { createBullMQWorkflowProcessor } from './workflowWorker';
 import {
   bullmqBackoffStrategy,
   createJobRetryOptions,
   resolveTaskRuntimeConfig,
 } from './taskRuntime';
+import { createBullMQTaskProcessor } from './taskWorker';
 import {
-  bullmqOrchestrationAdapterOptionsSchema,
   type BullMQOrchestrationAdapterOptions,
+  bullmqOrchestrationAdapterOptionsSchema,
 } from './validation';
+import { createBullMQWorkflowProcessor } from './workflowWorker';
 
 function toRun(job: Job<Record<string, unknown>>, type: 'task' | 'workflow'): Run | WorkflowRun {
   const progress = job.progress && typeof job.progress === 'object' ? job.progress : undefined;
@@ -40,7 +40,8 @@ function toRun(job: Job<Record<string, unknown>>, type: 'task' | 'workflow'): Ru
     status: 'pending',
     input: job.data['input'],
     output: job.returnvalue,
-    tenantId: typeof job.data['tenantId'] === 'string' ? (job.data['tenantId'] as string) : undefined,
+    tenantId:
+      typeof job.data['tenantId'] === 'string' ? (job.data['tenantId'] as string) : undefined,
     priority: typeof job.opts.priority === 'number' ? job.opts.priority : undefined,
     tags:
       job.data['tags'] && typeof job.data['tags'] === 'object'
@@ -56,7 +57,10 @@ function toRun(job: Job<Record<string, unknown>>, type: 'task' | 'workflow'): Ru
   };
 }
 
-function matchesTags(runTags: Record<string, string> | undefined, filterTags: Record<string, string>): boolean {
+function matchesTags(
+  runTags: Record<string, string> | undefined,
+  filterTags: Record<string, string>,
+): boolean {
   if (!runTags) return false;
   return Object.entries(filterTags).every(([key, value]) => runTags[key] === value);
 }
@@ -259,21 +263,22 @@ export function createBullMQOrchestrationAdapter(
     return queueEvents;
   }
 
-  function createResultHandle(
-    id: string,
-    jobPromiseLoader: () => Promise<unknown>,
-  ): RunHandle {
+  function createResultHandle(id: string, jobPromiseLoader: () => Promise<unknown>): RunHandle {
     return createCachedRunHandle(id, jobPromiseLoader);
   }
 
-  async function findJobByRunId(queue: Queue, runId: string): Promise<Job<Record<string, unknown>> | null> {
+  async function findJobByRunId(
+    queue: Queue,
+    runId: string,
+  ): Promise<Job<Record<string, unknown>> | null> {
     const direct = await Job.fromId(queue, runId);
     if (direct) return direct;
 
     const jobs = await queue.getJobs(lookupStates);
     return (
       jobs.find(job => {
-        const jobRunId = typeof job.data['runId'] === 'string' ? (job.data['runId'] as string) : undefined;
+        const jobRunId =
+          typeof job.data['runId'] === 'string' ? (job.data['runId'] as string) : undefined;
         return jobRunId === runId;
       }) ?? null
     );
@@ -440,7 +445,11 @@ export function createBullMQOrchestrationAdapter(
           const childJob = await Job.fromId(queue, childId);
           if (!childJob) continue;
           const childState = await childJob.getState();
-          if (childState === 'waiting' || childState === 'delayed' || childState === 'prioritized') {
+          if (
+            childState === 'waiting' ||
+            childState === 'delayed' ||
+            childState === 'prioritized'
+          ) {
             await childJob.remove();
           } else if (childState === 'active') {
             await (
@@ -490,14 +499,16 @@ export function createBullMQOrchestrationAdapter(
         filter?.type === 'task' ? Promise.resolve([]) : workflowQueue.getJobs(states),
         ...(filter?.type === 'workflow' ? [] : taskQueues.map(queue => queue.getJobs(states))),
       ]);
-      const merged = await Promise.all([
-        ...taskJobGroups.flat().map(job => ({ job, type: 'task' as const })),
-        ...workflowJobs.map(job => ({ job, type: 'workflow' as const })),
-      ].map(async ({ job, type }) => {
-        const run = toRun(job, type);
-        run.status = mapBullMQStatus(await job.getState());
-        return run;
-      }));
+      const merged = await Promise.all(
+        [
+          ...taskJobGroups.flat().map(job => ({ job, type: 'task' as const })),
+          ...workflowJobs.map(job => ({ job, type: 'workflow' as const })),
+        ].map(async ({ job, type }) => {
+          const run = toRun(job, type);
+          run.status = mapBullMQStatus(await job.getState());
+          return run;
+        }),
+      );
       const filtered = merged
         .filter(run => {
           if (filter?.name && run.name !== filter.name) return false;
@@ -576,10 +587,7 @@ export function createBullMQOrchestrationAdapter(
           }
         }
       }
-      throw new OrchestrationError(
-        'RUN_NOT_FOUND',
-        `Schedule '${scheduleId}' not found.`,
-      );
+      throw new OrchestrationError('RUN_NOT_FOUND', `Schedule '${scheduleId}' not found.`);
     },
     async listSchedules() {
       await ensureStarted();

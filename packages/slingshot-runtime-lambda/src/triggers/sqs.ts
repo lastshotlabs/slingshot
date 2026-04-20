@@ -1,8 +1,4 @@
-import type {
-  HandlerMeta,
-  TriggerAdapter,
-  TriggerRecord,
-} from '@lastshotlabs/slingshot-core';
+import type { HandlerMeta, TriggerAdapter, TriggerRecord } from '@lastshotlabs/slingshot-core';
 import { decodeMaybeJson, firstString } from '../correlation';
 
 type SqsRecord = {
@@ -16,7 +12,10 @@ type SqsRecord = {
 
 type SqsEvent = { Records: SqsRecord[] };
 
-export const sqsTrigger: TriggerAdapter<SqsEvent, { batchItemFailures: Array<{ itemIdentifier: string }> }> = {
+export const sqsTrigger: TriggerAdapter<
+  SqsEvent,
+  { batchItemFailures: Array<{ itemIdentifier: string }> }
+> = {
   kind: 'sqs',
   extractInputs(event): TriggerRecord[] {
     return event.Records.map(record => ({
@@ -26,12 +25,16 @@ export const sqsTrigger: TriggerAdapter<SqsEvent, { batchItemFailures: Array<{ i
     }));
   },
   extractMeta(_event, record): Partial<HandlerMeta> {
-    const meta = record.meta as { messageId?: string; messageAttributes?: Record<string, { stringValue?: string }> };
+    const meta = record.meta as {
+      messageId?: string;
+      messageAttributes?: Record<string, { stringValue?: string }>;
+    };
     const messageAttributes = meta.messageAttributes ?? {};
     const correlationId =
       firstString(
-        Object.entries(messageAttributes).find(([name]) => name.toLowerCase() === 'correlationid')?.[1]
-          ?.stringValue,
+        Object.entries(messageAttributes).find(
+          ([name]) => name.toLowerCase() === 'correlationid',
+        )?.[1]?.stringValue,
         meta.messageId,
       ) ?? undefined;
     return {

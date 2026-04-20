@@ -50,7 +50,14 @@ function buildMeta(
   } else if (bearerClientId) {
     actor = { id: bearerClientId, kind: 'api-key', tenantId, sessionId: null, roles, claims: {} };
   } else if (authClientId) {
-    actor = { id: authClientId, kind: 'service-account', tenantId, sessionId: null, roles, claims: {} };
+    actor = {
+      id: authClientId,
+      kind: 'service-account',
+      tenantId,
+      sessionId: null,
+      roles,
+      claims: {},
+    };
   } else {
     actor = { ...ANONYMOUS_ACTOR, tenantId };
   }

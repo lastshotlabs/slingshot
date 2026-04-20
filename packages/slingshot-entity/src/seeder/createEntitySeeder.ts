@@ -29,8 +29,8 @@
  *
  * @module
  */
-import { generateFromSchema, type GenerateOptions } from '@lastshotlabs/slingshot-core/faker';
 import { faker as defaultFaker } from '@faker-js/faker';
+import { type GenerateOptions, generateFromSchema } from '@lastshotlabs/slingshot-core/faker';
 import type { ResolvedEntityConfig } from '../types/entity';
 
 // ---------------------------------------------------------------------------
@@ -171,7 +171,7 @@ export async function seedAll(
   // Lazy import to avoid circular dependency at module level
   const { topoSortEntities } = await import('./topoSort');
 
-  const configs = options.entities.map((e) => e.config);
+  const configs = options.entities.map(e => e.config);
   const sorted = topoSortEntities(configs);
 
   const entryByName = new Map<string, MultiSeederEntry>();

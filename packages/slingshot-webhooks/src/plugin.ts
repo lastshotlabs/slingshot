@@ -174,7 +174,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
 
   return {
     name: WEBHOOKS_PLUGIN_STATE_KEY,
-    dependencies: [],
+    dependencies: config.adapter ? [] : ['slingshot-auth'],
     publicPaths: inboundRoutePatterns,
     csrfExemptPaths: inboundRoutePatterns,
 

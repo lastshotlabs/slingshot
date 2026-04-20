@@ -76,14 +76,16 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     const plugin = createPermissionsPlugin();
 
     await expect(
-      plugin.setupMiddleware?.(asNever({
-        app,
-        config: {
-          resolvedStores: { authStore: 'redis' },
-          storeInfra: {},
-        },
-        bus: {},
-      })),
+      plugin.setupMiddleware?.(
+        asNever({
+          app,
+          config: {
+            resolvedStores: { authStore: 'redis' },
+            storeInfra: {},
+          },
+          bus: {},
+        }),
+      ),
     ).rejects.toThrow('Redis is not supported as a permissions store');
   });
 
@@ -94,14 +96,16 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     const plugin = createPermissionsPlugin();
 
-    await plugin.setupMiddleware?.(asNever({
-      app,
-      config: {
-        resolvedStores: { authStore: 'memory' },
-        storeInfra: {},
-      },
-      bus: {},
-    }));
+    await plugin.setupMiddleware?.(
+      asNever({
+        app,
+        config: {
+          resolvedStores: { authStore: 'memory' },
+          storeInfra: {},
+        },
+        bus: {},
+      }),
+    );
 
     const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as Record<string, unknown> | undefined;
     expect(plugin.name).toBe('slingshot-permissions');
@@ -120,14 +124,16 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     const plugin = createPermissionsPlugin();
 
-    await plugin.setupMiddleware?.(asNever({
-      app,
-      config: {
-        resolvedStores: { authStore: 'memory' },
-        storeInfra: {},
-      },
-      bus: {},
-    }));
+    await plugin.setupMiddleware?.(
+      asNever({
+        app,
+        config: {
+          resolvedStores: { authStore: 'memory' },
+          storeInfra: {},
+        },
+        bus: {},
+      }),
+    );
 
     expect(ctx.pluginState.get(PERMISSIONS_STATE_KEY)).toBe(sentinel);
   });
@@ -154,14 +160,16 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     const plugin = createPermissionsPlugin();
 
-    await plugin.setupMiddleware?.(asNever({
-      app,
-      config: {
-        resolvedStores: { authStore: 'memory' },
-        storeInfra: {},
-      },
-      bus: {},
-    }));
+    await plugin.setupMiddleware?.(
+      asNever({
+        app,
+        config: {
+          resolvedStores: { authStore: 'memory' },
+          storeInfra: {},
+        },
+        bus: {},
+      }),
+    );
 
     const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as
       | {

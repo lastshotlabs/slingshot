@@ -1,9 +1,8 @@
 import Database from 'better-sqlite3';
 import { createCachedRunHandle, generateRunId } from '../adapter';
-import { OrchestrationError } from '../errors';
 import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
-import { sqliteAdapterOptionsSchema } from '../validation';
+import { OrchestrationError } from '../errors';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -19,6 +18,7 @@ import type {
   StepRun,
   WorkflowRun,
 } from '../types';
+import { sqliteAdapterOptionsSchema } from '../validation';
 
 type SqliteRunRow = {
   id: string;
@@ -84,7 +84,10 @@ function toRun(row: SqliteRunRow, steps?: Record<string, StepRun>): Run | Workfl
   return base;
 }
 
-function matchesTags(runTags: Record<string, string> | undefined, filterTags: Record<string, string>): boolean {
+function matchesTags(
+  runTags: Record<string, string> | undefined,
+  filterTags: Record<string, string>,
+): boolean {
   if (!runTags) return false;
   return Object.entries(filterTags).every(([key, value]) => runTags[key] === value);
 }
@@ -205,10 +208,9 @@ export function createSqliteAdapter(options: {
     SET progress = @progress
     WHERE id = @id
   `);
-  const getRunRow = db.prepare(`SELECT * FROM orchestration_runs WHERE id = ?`) as Database.Statement<
-    [string],
-    SqliteRunRow
-  >;
+  const getRunRow = db.prepare(
+    `SELECT * FROM orchestration_runs WHERE id = ?`,
+  ) as Database.Statement<[string], SqliteRunRow>;
   const getRunByIdempotency = db.prepare(
     `SELECT id FROM orchestration_runs WHERE idempotency_key = ?`,
   ) as Database.Statement<[string], { id: string }>;
@@ -333,11 +335,13 @@ export function createSqliteAdapter(options: {
     if (row.type === 'task') {
       const def = taskRegistry.get(row.name);
       if (!def) return;
-      const promise = taskRunner.submit(def, JSON.parse(row.input), {
-        runId: row.id,
-        tenantId: row.tenant_id ?? undefined,
-        priority: row.priority,
-      }).result();
+      const promise = taskRunner
+        .submit(def, JSON.parse(row.input), {
+          runId: row.id,
+          tenantId: row.tenant_id ?? undefined,
+          priority: row.priority,
+        })
+        .result();
       resultPromises.set(row.id, promise);
       return;
     }
@@ -414,7 +418,8 @@ export function createSqliteAdapter(options: {
             output: json(output),
             error: null,
             attempts,
-            startedAt: getStepStartedAt.get(runId, stepName)?.started_at ?? new Date().toISOString(),
+            startedAt:
+              getStepStartedAt.get(runId, stepName)?.started_at ?? new Date().toISOString(),
             completedAt: new Date().toISOString(),
           });
         },
@@ -427,7 +432,8 @@ export function createSqliteAdapter(options: {
             output: null,
             error: json(error),
             attempts,
-            startedAt: getStepStartedAt.get(runId, stepName)?.started_at ?? new Date().toISOString(),
+            startedAt:
+              getStepStartedAt.get(runId, stepName)?.started_at ?? new Date().toISOString(),
             completedAt: new Date().toISOString(),
           });
         },
@@ -528,12 +534,14 @@ export function createSqliteAdapter(options: {
         startedAt: null,
         completedAt: null,
       });
-      const promise = taskRunner.submit(def, input, {
-        runId,
-        tenantId: opts?.tenantId,
-        priority: opts?.priority,
-        delay: opts?.delay,
-      }).result();
+      const promise = taskRunner
+        .submit(def, input, {
+          runId,
+          tenantId: opts?.tenantId,
+          priority: opts?.priority,
+          delay: opts?.delay,
+        })
+        .result();
       resultPromises.set(runId, promise);
       return createHandle(runId, promise);
     },
@@ -629,7 +637,9 @@ export function createSqliteAdapter(options: {
                   output: json(output),
                   error: null,
                   attempts,
-                  startedAt: stepRowsByRun.all(runIdValue).find(step => step.name === stepName)?.started_at ?? new Date().toISOString(),
+                  startedAt:
+                    stepRowsByRun.all(runIdValue).find(step => step.name === stepName)
+                      ?.started_at ?? new Date().toISOString(),
                   completedAt: new Date().toISOString(),
                 });
               },
@@ -642,7 +652,9 @@ export function createSqliteAdapter(options: {
                   output: null,
                   error: json(error),
                   attempts,
-                  startedAt: stepRowsByRun.all(runIdValue).find(step => step.name === stepName)?.started_at ?? new Date().toISOString(),
+                  startedAt:
+                    stepRowsByRun.all(runIdValue).find(step => step.name === stepName)
+                      ?.started_at ?? new Date().toISOString(),
                   completedAt: new Date().toISOString(),
                 });
               },

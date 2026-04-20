@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { getPushFormatterPeer, getPushFormatterPeerOrNull } from '../../src/pushPeer';
 import { PUSH_PLUGIN_STATE_KEY } from '../../src/pluginKeys';
+import { getPushFormatterPeer, getPushFormatterPeerOrNull } from '../../src/pushPeer';
 
 describe('getPushFormatterPeerOrNull', () => {
   test('returns null for null input', () => {

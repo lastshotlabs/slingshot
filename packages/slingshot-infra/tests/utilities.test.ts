@@ -1,9 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-
-/** Cast a value to `never` without triggering object-literal type assertions. */
-function asNever<T>(value: T): never {
-  return value as never;
-}
 import { resolvePlatformConfig } from '../src/config/resolvePlatformConfig';
 import { deepMerge } from '../src/override/resolveOverrides';
 import { createPresetRegistry } from '../src/preset/presetRegistry';
@@ -13,6 +8,11 @@ import { createProvisionerRegistry } from '../src/resource/provisionerRegistry';
 import { generateInfraTemplate } from '../src/scaffold/infraTemplate';
 import { generatePlatformTemplate } from '../src/scaffold/platformTemplate';
 import { resolveRequiredKeys } from '../src/secrets/resolveRequiredKeys';
+
+/** Cast a value to `never` without triggering object-literal type assertions. */
+function asNever<T>(value: T): never {
+  return value as never;
+}
 
 // ---------------------------------------------------------------------------
 // deepMerge
@@ -69,9 +69,13 @@ describe('resolveDomain', () => {
   });
 
   it('applies domainSuffix by extracting subdomain', () => {
-    const result = resolveDomain('api.myapp.com', 'dev', asNever({
-      domainSuffix: '.dev.myapp.com',
-    }));
+    const result = resolveDomain(
+      'api.myapp.com',
+      'dev',
+      asNever({
+        domainSuffix: '.dev.myapp.com',
+      }),
+    );
     expect(result).toBe('api.dev.myapp.com');
   });
 
@@ -108,9 +112,13 @@ describe('resolveDomain', () => {
   });
 
   it('applies domainSuffix even for prod when the stage declares one', () => {
-    const result = resolveDomain('api.myapp.com', 'prod', asNever({
-      domainSuffix: '.prod.myapp.com',
-    }));
+    const result = resolveDomain(
+      'api.myapp.com',
+      'prod',
+      asNever({
+        domainSuffix: '.prod.myapp.com',
+      }),
+    );
     expect(result).toBe('api.prod.myapp.com');
   });
 });

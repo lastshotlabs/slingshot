@@ -13,8 +13,8 @@
  * - Set without TTL (indefinite persistence)
  * - Numeric string values
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import {
   createMemoryCacheAdapter,
   createRedisCacheAdapter,
@@ -215,7 +215,9 @@ describe('memory cache adapter', () => {
 describe('sqlite cache adapter', () => {
   test('delPattern escapes LIKE metacharacters and backslashes', async () => {
     const db = new Database(':memory:');
-    const cache = createSqliteCacheAdapter(db as unknown as Parameters<typeof createSqliteCacheAdapter>[0]);
+    const cache = createSqliteCacheAdapter(
+      db as unknown as Parameters<typeof createSqliteCacheAdapter>[0],
+    );
 
     await cache.set('rate%limit_key', 'keep');
     await cache.set('rate%limit_key:1', 'delete');

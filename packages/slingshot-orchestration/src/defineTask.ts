@@ -1,5 +1,5 @@
-import type { RetryPolicy, TaskDefinition, ResolvedTask } from './types';
 import { OrchestrationError } from './errors';
+import type { ResolvedTask, RetryPolicy, TaskDefinition } from './types';
 
 const KEBAB_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
@@ -55,7 +55,11 @@ export function normalizeRetryPolicy(
       `${ownerLabel} retry maxDelayMs must be a positive integer.`,
     );
   }
-  if (retry?.maxDelayMs !== undefined && retry?.delayMs !== undefined && retry.maxDelayMs < retry.delayMs) {
+  if (
+    retry?.maxDelayMs !== undefined &&
+    retry?.delayMs !== undefined &&
+    retry.maxDelayMs < retry.delayMs
+  ) {
     throw new OrchestrationError(
       'INVALID_CONFIG',
       `${ownerLabel} retry maxDelayMs must be >= delayMs.`,

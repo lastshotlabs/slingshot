@@ -2,11 +2,11 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import {
-  attachPostgresPoolRuntime,
-  createPostgresPoolRuntime,
   type PostgresHealthCheckResult,
   type PostgresMigrationMode,
   type PostgresPoolStatsSnapshot,
+  attachPostgresPoolRuntime,
+  createPostgresPoolRuntime,
 } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -53,7 +53,10 @@ type InstrumentedClient = Queryable & {
   __slingshotInstrumented?: boolean;
 };
 
-function wrapQueryableQueries(target: Queryable, recordQuery: (durationMs: number, failed: boolean) => void): void {
+function wrapQueryableQueries(
+  target: Queryable,
+  recordQuery: (durationMs: number, failed: boolean) => void,
+): void {
   const originalQuery = target.query.bind(target);
   target.query = (async (...args: unknown[]) => {
     const startedAt = performance.now();
@@ -68,13 +71,18 @@ function wrapQueryableQueries(target: Queryable, recordQuery: (durationMs: numbe
   }) as Queryable['query'];
 }
 
-function instrumentPool(pool: Pool, recordQuery: (durationMs: number, failed: boolean) => void): void {
+function instrumentPool(
+  pool: Pool,
+  recordQuery: (durationMs: number, failed: boolean) => void,
+): void {
   wrapQueryableQueries(pool as unknown as Queryable, recordQuery);
 
   if (typeof pool.connect !== 'function') return;
 
   const originalConnect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
-  (pool as Pool & { connect: (...args: unknown[]) => unknown }).connect = (async (...args: unknown[]) => {
+  (pool as Pool & { connect: (...args: unknown[]) => unknown }).connect = (async (
+    ...args: unknown[]
+  ) => {
     const client = await originalConnect(...args);
     if (!client || typeof client !== 'object' || !('query' in client)) {
       return client;

@@ -1,12 +1,11 @@
- 
 import { hashToken } from '@lastshotlabs/slingshot-core';
 import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import { type AuthResolvedConfig, DEFAULT_AUTH_CONFIG } from '../../config/authConfig';
+import { createSqliteInitializer } from '../sqliteInit';
 import {
   isSqliteMissingColumnError,
   isSqliteUnsupportedDropColumnError,
 } from '../sqliteSchemaErrors';
-import { createSqliteInitializer } from '../sqliteInit';
 import { getSessionTtlMs, isIdleExpired } from './policy';
 import type { SessionRepository } from './repository';
 import type { SessionInfo } from './types';

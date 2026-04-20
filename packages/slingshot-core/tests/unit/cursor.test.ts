@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { encodeCursor, decodeCursor } from '../../src/cursor';
+import { decodeCursor, encodeCursor } from '../../src/cursor';
 
 describe('encodeCursor', () => {
   test('returns a base64-encoded JSON string', () => {

@@ -40,7 +40,6 @@ import { CHAT_PLUGIN_STATE_KEY } from './state';
 import type { Message as ChatMessage, ChatPluginConfig, ChatPluginState } from './types';
 import { buildIncomingDispatch } from './ws/incoming';
 
-
 /**
  * Create the slingshot-chat plugin using the manifest-driven entity system.
  *

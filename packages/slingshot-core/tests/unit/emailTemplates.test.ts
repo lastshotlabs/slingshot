@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { getEmailTemplates, getEmailTemplate } from '../../src/emailTemplates';
-import type { EmailTemplate } from '../../src/emailTemplates';
 import { attachContext } from '../../src/context/contextStore';
+import { getEmailTemplate, getEmailTemplates } from '../../src/emailTemplates';
+import type { EmailTemplate } from '../../src/emailTemplates';
 
 /**
  * Build a minimal fake SlingshotContext with only `emailTemplates` populated.
@@ -33,7 +33,7 @@ describe('getEmailTemplates', () => {
     const carrier = makeCarrier(templates);
     const result = getEmailTemplates(carrier);
     expect(result).toEqual({
-      'welcome': welcomeTemplate,
+      welcome: welcomeTemplate,
       'password-reset': resetTemplate,
     });
   });
@@ -45,9 +45,7 @@ describe('getEmailTemplates', () => {
   });
 
   test('returns a snapshot — mutations do not affect the source', () => {
-    const templates = new Map<string, EmailTemplate>([
-      ['welcome', welcomeTemplate],
-    ]);
+    const templates = new Map<string, EmailTemplate>([['welcome', welcomeTemplate]]);
     const carrier = makeCarrier(templates);
     const snapshot = getEmailTemplates(carrier);
     snapshot['injected'] = resetTemplate;
@@ -58,17 +56,13 @@ describe('getEmailTemplates', () => {
 
 describe('getEmailTemplate', () => {
   test('returns the template for an existing key', () => {
-    const templates = new Map<string, EmailTemplate>([
-      ['welcome', welcomeTemplate],
-    ]);
+    const templates = new Map<string, EmailTemplate>([['welcome', welcomeTemplate]]);
     const carrier = makeCarrier(templates);
     expect(getEmailTemplate(carrier, 'welcome')).toBe(welcomeTemplate);
   });
 
   test('returns null for a non-existent key', () => {
-    const templates = new Map<string, EmailTemplate>([
-      ['welcome', welcomeTemplate],
-    ]);
+    const templates = new Map<string, EmailTemplate>([['welcome', welcomeTemplate]]);
     const carrier = makeCarrier(templates);
     expect(getEmailTemplate(carrier, 'does-not-exist')).toBeNull();
   });

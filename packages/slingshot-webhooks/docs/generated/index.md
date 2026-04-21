@@ -24,6 +24,8 @@ bun add @lastshotlabs/slingshot-webhooks
 ## Export Paths
 
 - `.`
+- `./bullmq`
+- `./manifest`
 - `./testing`
 
 ## Package Scripts
@@ -35,10 +37,10 @@ bun add @lastshotlabs/slingshot-webhooks
 ## Dependencies
 
 - `@lastshotlabs/slingshot-core`: `workspace:*`
-- `@lastshotlabs/slingshot-entity`: `workspace:*`
 
 ## Peer Dependencies
 
+- `@lastshotlabs/slingshot-entity`: `workspace:*`
 - `hono`: `>=4.12.12 <5`
 - `mongoose`: `>=9.0 <10`
 - `pg`: `^8.20.0`

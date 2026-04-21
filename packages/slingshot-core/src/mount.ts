@@ -3,7 +3,8 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { AppEnv } from './context';
 import { getSlingshotCtx } from './context';
 import type { SlingshotHandler } from './handler';
-import { HandlerError, type GuardWithMetadata, type HandlerMeta } from './handler';
+import { type GuardWithMetadata, HandlerError, type HandlerMeta } from './handler';
+import type { IdentityResolverInput } from './identity';
 
 type RouteMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head';
 
@@ -140,15 +141,30 @@ export function toRouteHandler(
       ...(c.req.param() as Record<string, string>),
     };
 
+    const sCtx = getSlingshotCtx(c);
+    const resolverInput: IdentityResolverInput = {
+      authUserId: c.get('authUserId') ?? null,
+      sessionId: c.get('sessionId') ?? null,
+      roles: c.get('roles') ?? null,
+      authClientId: c.get('authClientId') ?? null,
+      bearerClientId: c.get('bearerClientId') ?? null,
+      tenantId: c.get('tenantId') ?? null,
+      tokenPayload: c.get('tokenPayload') ?? null,
+    };
+    const actor = sCtx.identityResolver.resolve(resolverInput);
+
     const meta: Partial<HandlerMeta> = {
       requestId: c.get('requestId'),
-      tenantId: c.get('tenantId') ?? null,
-      authUserId: c.get('authUserId') ?? null,
+      actor,
+      // Legacy aliases projected from actor.
+      tenantId: actor.tenantId,
+      authUserId: actor.kind === 'user' ? actor.id : null,
+      roles: actor.roles,
       correlationId: c.get('requestId'),
       ip: readClientIp(c),
       idempotencyKey: c.req.header('idempotency-key') ?? undefined,
-      authClientId: c.get('authClientId') ?? null,
-      bearerClientId: c.get('bearerClientId') ?? null,
+      authClientId: actor.kind === 'service-account' ? actor.id : (c.get('authClientId') ?? null),
+      bearerClientId: actor.kind === 'api-key' ? actor.id : (c.get('bearerClientId') ?? null),
     };
 
     const output = await handler.invoke(raw, { ctx: getSlingshotCtx(c), meta });
@@ -166,7 +182,10 @@ export function toRouteHandler(
  */
 export function mount(
   app: {
-    openapi(route: ReturnType<typeof createRoute>, handler: (c: Context<AppEnv>) => Promise<Response>): unknown;
+    openapi(
+      route: ReturnType<typeof createRoute>,
+      handler: (c: Context<AppEnv>) => Promise<Response>,
+    ): unknown;
   },
   handler: SlingshotHandler,
   opts: RouteOpts,

@@ -173,7 +173,11 @@ describe('ws incoming dispatch', () => {
     const rooms = makeWsContext('guest-user');
     rooms.ctx.payload = { type: 'game:stream.subscribe', sessionId: 'session-1', channel: 'state' };
     await findHandler('game:stream.subscribe')(rooms.ctx as any);
-    rooms.ctx.payload = { type: 'game:stream.unsubscribe', sessionId: 'session-1', channel: 'state' };
+    rooms.ctx.payload = {
+      type: 'game:stream.unsubscribe',
+      sessionId: 'session-1',
+      channel: 'state',
+    };
     await findHandler('game:stream.unsubscribe')(rooms.ctx as any);
     rooms.ctx.payload = { type: 'game:unsubscribe', sessionId: 'session-1' };
     await findHandler('game:unsubscribe')(rooms.ctx as any);

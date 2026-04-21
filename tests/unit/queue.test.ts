@@ -1,5 +1,13 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { EventEmitter } from 'events';
+import {
+  cleanupStaleSchedulers,
+  createCronWorker,
+  createDLQHandler,
+  createQueue,
+  createQueueFactory,
+  createWorker,
+} from '../../src/lib/queue';
 
 // ---------------------------------------------------------------------------
 // Mock BullMQ
@@ -40,15 +48,6 @@ mock.module('bullmq', () => ({
   Queue: MockQueue,
   Worker: MockWorker,
 }));
-
-import {
-  cleanupStaleSchedulers,
-  createCronWorker,
-  createDLQHandler,
-  createQueue,
-  createQueueFactory,
-  createWorker,
-} from '../../src/lib/queue';
 
 const REDIS_CREDS = { host: 'localhost:6379' };
 const INVALID_CREDS = { host: '' };
@@ -99,7 +98,12 @@ describe('createWorker', () => {
 
   test('creates a worker with the given name and processor', () => {
     const processor = async () => 'done';
-    const worker = createWorker('my-worker', processor, undefined, REDIS_CREDS) as unknown as MockWorker;
+    const worker = createWorker(
+      'my-worker',
+      processor,
+      undefined,
+      REDIS_CREDS,
+    ) as unknown as MockWorker;
     expect(worker).toBeInstanceOf(MockWorker);
     expect(worker.name).toBe('my-worker');
     expect(worker.processor).toBe(processor);
@@ -131,9 +135,9 @@ describe('createCronWorker (standalone)', () => {
 
 describe('cleanupStaleSchedulers (standalone)', () => {
   test('throws when no credentials provided', () => {
-    expect(() =>
-      cleanupStaleSchedulers([], new Set(), undefined),
-    ).toThrow('Queue helpers require explicit Redis credentials');
+    expect(() => cleanupStaleSchedulers([], new Set(), undefined)).toThrow(
+      'Queue helpers require explicit Redis credentials',
+    );
   });
 });
 
@@ -383,7 +387,9 @@ describe('QueueFactory methods', () => {
 
     try {
       const result = factory.createDLQHandler(sourceWorker as never, 'source-queue', {
-        onDeadLetter: async () => { throw new Error('callback error'); },
+        onDeadLetter: async () => {
+          throw new Error('callback error');
+        },
       });
       (result.dlqQueue as unknown as { add: mock<() => Promise<unknown>> }).add = mock(
         async () => ({}),

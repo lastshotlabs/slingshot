@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { HandlerMeta, SlingshotContext } from '@lastshotlabs/slingshot-core';
+import { type Actor, type HandlerMeta, type SlingshotContext } from '@lastshotlabs/slingshot-core';
 import { invokeWithRecordIdempotency } from '../src/idempotency';
 
 function createContext(): SlingshotContext {
@@ -34,10 +34,21 @@ function createContext(): SlingshotContext {
 }
 
 function createMeta(overrides?: Partial<HandlerMeta>): HandlerMeta {
+  const authUserId = overrides?.authUserId ?? 'user-1';
+  const tenantId = overrides?.tenantId ?? 'tenant-1';
+  const actor: Actor = overrides?.actor ?? {
+    id: authUserId,
+    kind: 'user',
+    tenantId,
+    sessionId: null,
+    roles: null,
+    claims: {},
+  };
   return {
     requestId: 'req-1',
-    tenantId: 'tenant-1',
-    authUserId: 'user-1',
+    actor,
+    tenantId,
+    authUserId,
     correlationId: 'corr-1',
     ip: null,
     authClientId: null,

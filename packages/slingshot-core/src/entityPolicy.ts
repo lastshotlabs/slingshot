@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
-import type { PolicyResolver } from './entityRouteConfig';
 import type { AppEnv } from './context';
 import { getContext, getContextOrNull } from './context/index';
+import type { PolicyResolver } from './entityRouteConfig';
 import type { PluginStateCarrier, PluginStateMap } from './pluginState';
 import { resolvePluginState } from './pluginState';
 

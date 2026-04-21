@@ -5,7 +5,6 @@
  */
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { WsState } from '@lastshotlabs/slingshot-core';
-
 import { handleIncomingEvent } from '../../src/framework/ws/dispatch';
 import { checkRateLimit } from '../../src/framework/ws/rateLimit';
 import { pruneExpiredSessions, writeSession } from '../../src/framework/ws/recovery';

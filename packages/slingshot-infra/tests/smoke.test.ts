@@ -383,12 +383,7 @@ describe('smoke: config derivation chain', () => {
       },
     };
     const infraConfig = { uses, env: { APP_NAME: 'myapp' } };
-    const env = resolveEnvironment(
-      platform as never,
-      infraConfig as never,
-      'dev',
-      registry,
-    );
+    const env = resolveEnvironment(platform as never, infraConfig as never, 'dev', registry);
     expect(env.NODE_ENV).toBe('development');
     expect(env.REDIS_HOST).toBe('redis://local:6379');
     expect(env.APP_NAME).toBe('myapp');

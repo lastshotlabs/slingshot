@@ -7,10 +7,10 @@
  */
 import { describe, expect, test } from 'bun:test';
 import {
+  createMongoIdempotencyAdapter,
+  createPostgresIdempotencyAdapter,
   createRedisIdempotencyAdapter,
   createSqliteIdempotencyAdapter,
-  createPostgresIdempotencyAdapter,
-  createMongoIdempotencyAdapter,
 } from '../../src/framework/persistence/idempotency';
 
 // ---------------------------------------------------------------------------
@@ -248,7 +248,13 @@ describe('createPostgresIdempotencyAdapter', () => {
         failTimes--;
         throw new Error(`forced failure: ${normalized}`);
       }
-      if (sql.includes('CREATE TABLE') || sql.includes('ALTER TABLE') || sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
+      if (
+        sql.includes('CREATE TABLE') ||
+        sql.includes('ALTER TABLE') ||
+        sql === 'BEGIN' ||
+        sql === 'COMMIT' ||
+        sql === 'ROLLBACK'
+      ) {
         return { rows: [], rowCount: 0 };
       }
       if (sql.includes('INSERT INTO')) {
@@ -406,7 +412,9 @@ describe('createMongoIdempotencyAdapter', () => {
     };
 
     const mockSchema = function () {};
-    mockSchema.prototype.index = function () { return this; };
+    mockSchema.prototype.index = function () {
+      return this;
+    };
 
     const mongoosePkg = {
       Schema: function () {

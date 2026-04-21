@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
-import { defineTask, type ProgressCapability } from '@lastshotlabs/slingshot-orchestration';
+import { type ProgressCapability, defineTask } from '@lastshotlabs/slingshot-orchestration';
 
 type MockJobState =
   | 'active'
@@ -142,7 +142,7 @@ mock.module('bullmq', () => ({
   Worker: MockWorker,
 }));
 
-let createBullMQOrchestrationAdapter: typeof import('../src/adapter')['createBullMQOrchestrationAdapter'];
+let createBullMQOrchestrationAdapter: (typeof import('../src/adapter'))['createBullMQOrchestrationAdapter'];
 
 beforeAll(async () => {
   const mod = await import('../src/adapter');
@@ -188,9 +188,7 @@ describe('bullmq orchestration adapter', () => {
     });
 
     const taskQueue = MockQueue.instances.find(queue => queue.name === 'status-map:tasks');
-    const workflowQueue = MockQueue.instances.find(
-      queue => queue.name === 'status-map:workflows',
-    );
+    const workflowQueue = MockQueue.instances.find(queue => queue.name === 'status-map:workflows');
 
     taskQueue?.jobs.push(
       new MockJob({

@@ -1,8 +1,7 @@
- 
 import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
-import { createSqliteInitializer } from './sqliteInit';
 import type { RedisLike } from '../types/redis';
+import { createSqliteInitializer } from './sqliteInit';
 
 // ---------------------------------------------------------------------------
 // Cache adapter interface
@@ -86,9 +85,7 @@ function globToRegex(pattern: string): RegExp {
 }
 
 function globToSqlLike(pattern: string): string {
-  return pattern
-    .replace(/[\\%_]/g, '\\$&')
-    .replace(/\*/g, '%');
+  return pattern.replace(/[\\%_]/g, '\\$&').replace(/\*/g, '%');
 }
 
 /**

@@ -23,9 +23,8 @@ mock.module('../../../packages/slingshot-infra/src/resource/provisionViaSst', ()
   const { spawnSync } = require('node:child_process') as typeof import('node:child_process');
 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } = require(
-    'node:fs',
-  ) as typeof import('node:fs');
+  const { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } =
+    require('node:fs') as typeof import('node:fs');
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { tmpdir } = require('node:os') as typeof import('node:os');
   // eslint-disable-next-line @typescript-eslint/no-require-imports

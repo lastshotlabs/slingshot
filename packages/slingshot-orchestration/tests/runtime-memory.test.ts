@@ -39,7 +39,11 @@ describe('memory orchestration runtime', () => {
     });
 
     const startedAt = Date.now();
-    const handle = await runtime.runTask('echo-task', { value: 'ok' }, { delay: 40, tenantId: 'tenant-a' });
+    const handle = await runtime.runTask(
+      'echo-task',
+      { value: 'ok' },
+      { delay: 40, tenantId: 'tenant-a' },
+    );
     const output = (await handle.result()) as { value: string; executedAt: number };
 
     expect(output.value).toBe('ok');

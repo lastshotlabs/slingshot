@@ -1,6 +1,5 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { runRollback } from '../../../packages/slingshot-infra/src/deploy/rollback';
-
 import type { DefineInfraConfig } from '../../../packages/slingshot-infra/src/types/infra';
 import type { DefinePlatformConfig } from '../../../packages/slingshot-infra/src/types/platform';
 import type { PresetProvider } from '../../../packages/slingshot-infra/src/types/preset';

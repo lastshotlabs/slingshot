@@ -5,7 +5,11 @@ import {
   type AuditLogProvider,
   DEFAULT_MAX_ENTRIES,
 } from '@lastshotlabs/slingshot-core';
-import { createAuditLogProvider, createAuditLogFactories, auditLogFactories } from '../../src/framework/auditLog';
+import {
+  auditLogFactories,
+  createAuditLogFactories,
+  createAuditLogProvider,
+} from '../../src/framework/auditLog';
 import { decodeCursor } from '../../src/framework/auditLog/cursor';
 
 function makeEntry(overrides?: Partial<AuditLogEntry>): AuditLogEntry {
@@ -159,15 +163,11 @@ describe('auditLog — memory store', () => {
 
 describe('createAuditLogProvider — error paths', () => {
   test('throws when store is sqlite but no db is provided', () => {
-    expect(() => createAuditLogProvider({ store: 'sqlite' })).toThrow(
-      /sqlite.*no db instance/i,
-    );
+    expect(() => createAuditLogProvider({ store: 'sqlite' })).toThrow(/sqlite.*no db instance/i);
   });
 
   test('throws when store is mongo but no connection is provided', () => {
-    expect(() => createAuditLogProvider({ store: 'mongo' })).toThrow(
-      /mongo.*no connection/i,
-    );
+    expect(() => createAuditLogProvider({ store: 'mongo' })).toThrow(/mongo.*no connection/i);
   });
 
   test('throws a helpful message for postgres directing to createAuditLogFactories', () => {

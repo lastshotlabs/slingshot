@@ -1,4 +1,3 @@
- 
 import {
   Apple,
   Bitbucket,
@@ -14,9 +13,9 @@ import {
 } from 'arctic';
 import { DEFAULT_MAX_ENTRIES, createEvictExpired, evictOldest } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories, RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
+import type { RedisLike } from '../types/redis';
 import { createPostgresInitializer } from './postgresInit';
 import { createSqliteInitializer } from './sqliteInit';
-import type { RedisLike } from '../types/redis';
 
 /**
  * OAuth provider credential configuration map.

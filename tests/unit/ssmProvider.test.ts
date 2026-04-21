@@ -1,4 +1,5 @@
-import { describe, expect, mock, test, beforeEach } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createSsmSecretRepository } from '../../src/framework/secrets/providers/ssmProvider';
 
 // ---------------------------------------------------------------------------
 // Mock AWS SSM SDK
@@ -75,8 +76,6 @@ mock.module('@aws-sdk/client-ssm', () => ({
   GetParameterCommand: MockGetParameterCommand,
   GetParametersCommand: MockGetParametersCommand,
 }));
-
-import { createSsmSecretRepository } from '../../src/framework/secrets/providers/ssmProvider';
 
 beforeEach(() => {
   storedParams.clear();

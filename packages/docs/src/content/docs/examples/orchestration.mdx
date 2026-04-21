@@ -22,6 +22,7 @@ This example shows the current supported orchestration path in the worktree:
 ## Define the orchestration work
 
 ```typescript title="src/orchestration.ts"
+import { z } from 'zod';
 import {
   type AnyResolvedTask,
   defineTask,
@@ -30,7 +31,6 @@ import {
   step,
   stepResult,
 } from '@lastshotlabs/slingshot-orchestration';
-import { z } from 'zod';
 
 declare const generateInvoice: AnyResolvedTask;
 declare const recordLedgerEntry: AnyResolvedTask;
@@ -106,9 +106,9 @@ mount orchestration routes without at least one `routeMiddleware` entry.
 ```typescript title="src/index.ts"
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import {
-  createMemoryAdapter,
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
+  createMemoryAdapter,
 } from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
 
@@ -147,12 +147,12 @@ export function buildAppConfig() {
 ## Start workflows from your own route handlers
 
 ```typescript title="src/billingPlugin.ts"
-import { getContext, type SlingshotPlugin } from '@lastshotlabs/slingshot';
+import { type SlingshotPlugin, getContext } from '@lastshotlabs/slingshot';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 import {
   ORCHESTRATION_PLUGIN_KEY,
   getOrchestration,
 } from '@lastshotlabs/slingshot-orchestration-plugin';
-import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 
 declare const processInvoiceWorkflow: AnyResolvedWorkflow;
 

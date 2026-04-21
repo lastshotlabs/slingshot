@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
   createMemoryUploadRegistry,
+  createMongoUploadRegistry,
+  createPostgresUploadRegistry,
   createRedisUploadRegistry,
   createSqliteUploadRegistry,
-  createPostgresUploadRegistry,
-  createMongoUploadRegistry,
   createUploadRegistryFactories,
 } from '../../src/framework/persistence/uploadRegistry';
 
@@ -555,7 +555,11 @@ describe('createUploadRegistryFactories', () => {
           models: emptyInfraModels as Record<string, unknown>,
           model: () => mockModel,
         },
-        mg: { Schema: class { index() {} } },
+        mg: {
+          Schema: class {
+            index() {}
+          },
+        },
       }),
       appName: 'test',
     };

@@ -58,14 +58,22 @@ describe('orchestration sqlite adapter (node runtime)', () => {
 
     await adapter.start();
 
-    const first = await runtime.runTask(echoTask, { value: 'sqlite' }, {
-      tenantId: 'tenant-sqlite',
-      idempotencyKey: 'task:sqlite',
-    });
-    const second = await runtime.runTask(echoTask, { value: 'ignored' }, {
-      tenantId: 'tenant-sqlite',
-      idempotencyKey: 'task:sqlite',
-    });
+    const first = await runtime.runTask(
+      echoTask,
+      { value: 'sqlite' },
+      {
+        tenantId: 'tenant-sqlite',
+        idempotencyKey: 'task:sqlite',
+      },
+    );
+    const second = await runtime.runTask(
+      echoTask,
+      { value: 'ignored' },
+      {
+        tenantId: 'tenant-sqlite',
+        idempotencyKey: 'task:sqlite',
+      },
+    );
 
     expect(second.id).toBe(first.id);
     await expect(first.result()).resolves.toEqual({ echoed: 'sqlite' });
@@ -119,7 +127,11 @@ describe('orchestration sqlite adapter (node runtime)', () => {
     });
 
     await adapterA.start();
-    const handle = await runtimeA.runWorkflow(orderWorkflow, { orderId: 'ord_123' }, { delay: 200 });
+    const handle = await runtimeA.runWorkflow(
+      orderWorkflow,
+      { orderId: 'ord_123' },
+      { delay: 200 },
+    );
     void handle.result().catch(() => undefined);
     await adapterA.shutdown();
 

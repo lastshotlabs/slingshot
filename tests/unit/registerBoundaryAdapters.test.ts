@@ -7,7 +7,6 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type {
   CacheAdapter,
-
   CoreRegistrar,
   FingerprintBuilder,
   RateLimitAdapter,
@@ -29,6 +28,7 @@ function makeMockRegistrar() {
   const registeredCacheAdapters = new Map<StoreType, CacheAdapter>();
 
   const registrar: CoreRegistrar = {
+    setIdentityResolver: mock(() => {}),
     setRouteAuth: mock(() => {}),
     setUserResolver: mock(() => {}),
     addEmailTemplates: mock(() => {}),

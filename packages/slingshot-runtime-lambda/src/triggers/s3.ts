@@ -1,8 +1,4 @@
-import type {
-  HandlerMeta,
-  TriggerAdapter,
-  TriggerRecord,
-} from '@lastshotlabs/slingshot-core';
+import type { HandlerMeta, TriggerAdapter, TriggerRecord } from '@lastshotlabs/slingshot-core';
 import { firstString } from '../correlation';
 
 type S3Record = {

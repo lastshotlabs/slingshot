@@ -18,10 +18,7 @@ import {
   index,
   relation,
 } from '../../packages/slingshot-core/src/entityConfig';
-import type {
-  EntityAdapter,
-  InferEntity,
-} from '../../packages/slingshot-core/src/entityConfig';
+import type { EntityAdapter, InferEntity } from '../../packages/slingshot-core/src/entityConfig';
 import { resolveRepo } from '../../packages/slingshot-core/src/storeInfra';
 import type { StoreInfra } from '../../packages/slingshot-core/src/storeInfra';
 import {

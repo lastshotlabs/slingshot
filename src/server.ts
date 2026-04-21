@@ -1,5 +1,6 @@
 import { validateServerConfig } from '@framework/config/schema';
 import { log } from '@framework/lib/logger';
+import { getContextStoreInfra } from '@framework/persistence/internalRepoResolution';
 import { runPluginTeardown } from '@framework/runPluginLifecycle';
 import { routePatternCanMatchLiteral } from '@framework/sse/collision';
 // ensureClientSafeEventKey is now an instance method on SlingshotEventBus
@@ -15,7 +16,6 @@ import {
 } from '@framework/ws/heartbeat';
 import { type SocketData, createWsUpgradeHandler } from '@framework/ws/index';
 import { wsEndpointKey } from '@framework/ws/namespace';
-import { getContextStoreInfra } from '@framework/persistence/internalRepoResolution';
 import { trackSocket, untrackSocket } from '@framework/ws/presence';
 import { checkRateLimit, cleanupRateLimitBucket } from '@framework/ws/rateLimit';
 import { writeSession } from '@framework/ws/recovery';

@@ -56,7 +56,9 @@ describe('kafkaConnectors', () => {
       outbound: [{ event: 'auth:login', topic: 'slingshot.events.auth.login' }],
     });
 
-    await expect(connectors.start(bus)).rejects.toThrow('also produced by the internal Kafka event bus adapter');
+    await expect(connectors.start(bus)).rejects.toThrow(
+      'also produced by the internal Kafka event bus adapter',
+    );
   });
 
   test('warns when broker certificate verification is disabled', () => {
@@ -70,9 +72,9 @@ describe('kafkaConnectors', () => {
         ssl: { rejectUnauthorized: false },
       });
 
-      expect(warn.mock.calls.some(call => String(call[0]).includes('ssl.rejectUnauthorized=false'))).toBe(
-        true,
-      );
+      expect(
+        warn.mock.calls.some(call => String(call[0]).includes('ssl.rejectUnauthorized=false')),
+      ).toBe(true);
     } finally {
       console.warn = originalWarn;
     }
@@ -128,7 +130,9 @@ describe('kafkaConnectors', () => {
     expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
     expect(fakeKafkaState.producerSendCalls[0]?.topic).toBe('external.users.created');
     expect(
-      new TextDecoder().decode(fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array),
+      new TextDecoder().decode(
+        fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array,
+      ),
     ).toContain('"42"');
 
     await connectors.stop();
@@ -297,7 +301,9 @@ describe('kafkaConnectors', () => {
     await flushAsyncWork();
 
     expect(
-      new TextDecoder().decode(fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array),
+      new TextDecoder().decode(
+        fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array,
+      ),
     ).toContain('"user:abc"');
 
     await connectors.stop();

@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  attachPostgresPoolRuntime,
-  createPostgresPoolRuntime,
-} from '@lastshotlabs/slingshot-core';
+import { attachPostgresPoolRuntime, createPostgresPoolRuntime } from '@lastshotlabs/slingshot-core';
 import { createPostgresInitializer as createAuthPostgresInitializer } from '../../packages/slingshot-auth/src/lib/postgresInit';
 import { createPostgresInitializer as createFrameworkPostgresInitializer } from '../../src/framework/persistence/postgresInit';
 
@@ -114,10 +111,7 @@ describe('createPostgresInitializer', () => {
           };
         },
       };
-      attachPostgresPoolRuntime(
-        pool,
-        createPostgresPoolRuntime({ migrationMode: 'assume-ready' }),
-      );
+      attachPostgresPoolRuntime(pool, createPostgresPoolRuntime({ migrationMode: 'assume-ready' }));
 
       const ensureTable = createPostgresInitializer(pool as never, async () => {
         schemaCalls++;

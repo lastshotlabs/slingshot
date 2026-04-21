@@ -31,8 +31,8 @@ not widen core contracts for AWS-only behavior unless that behavior is required 
 Use `createLambdaRuntime()` when your Lambda entry module wires handlers explicitly:
 
 ```ts
-import { createLambdaRuntime } from '@lastshotlabs/slingshot-runtime-lambda';
 import type { SlingshotHandler } from '@lastshotlabs/slingshot-core';
+import { createLambdaRuntime } from '@lastshotlabs/slingshot-runtime-lambda';
 
 declare const processOrder: SlingshotHandler;
 

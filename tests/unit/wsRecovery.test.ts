@@ -122,9 +122,7 @@ describe('wsRecovery', () => {
         { id: 'm2', endpoint: '/ws', room: 'room2', senderId: null, payload: 2, createdAt: 2 },
         { id: 'm3', endpoint: '/ws', room: 'room2', senderId: null, payload: 3, createdAt: 3 },
       ];
-      getMessageHistoryMock
-        .mockResolvedValueOnce(room1Msgs)
-        .mockResolvedValueOnce(room2Msgs);
+      getMessageHistoryMock.mockResolvedValueOnce(room1Msgs).mockResolvedValueOnce(room2Msgs);
 
       state.sessionRegistry.set('sess-2', {
         rooms: ['room1', 'room2'],
@@ -308,40 +306,40 @@ describe('wsRecovery', () => {
     });
   });
 
-    it('getMessageHistory throws — sends recover_failed with history_unavailable (lines 64,67-68)', async () => {
-      getMessageHistoryMock.mockRejectedValue(new Error('db error'));
+  it('getMessageHistory throws — sends recover_failed with history_unavailable (lines 64,67-68)', async () => {
+    getMessageHistoryMock.mockRejectedValue(new Error('db error'));
 
-      state.sessionRegistry.set('sess-err', {
-        rooms: ['room1'],
-        lastEventId: 'm0',
-        expiresAt: Date.now() + 60_000,
-      });
-
-      const errorSpy = mock(() => {});
-      const originalError = console.error;
-      console.error = errorSpy;
-
-      const ws = createMockWs('s1');
-      try {
-        await handleRecover(
-          state,
-          ws as never,
-          { sessionId: 'sess-err', rooms: ['room1'], lastEventId: 'm0' },
-          { persistence: { store: 'memory' } },
-          fakeApp,
-        );
-      } finally {
-        console.error = originalError;
-      }
-
-      expect(errorSpy).toHaveBeenCalled();
-      expect(ws.sent).toHaveLength(1);
-      expect(JSON.parse(ws.sent[0])).toEqual({
-        event: 'recover_failed',
-        reason: 'history_unavailable',
-        room: 'room1',
-      });
+    state.sessionRegistry.set('sess-err', {
+      rooms: ['room1'],
+      lastEventId: 'm0',
+      expiresAt: Date.now() + 60_000,
     });
+
+    const errorSpy = mock(() => {});
+    const originalError = console.error;
+    console.error = errorSpy;
+
+    const ws = createMockWs('s1');
+    try {
+      await handleRecover(
+        state,
+        ws as never,
+        { sessionId: 'sess-err', rooms: ['room1'], lastEventId: 'm0' },
+        { persistence: { store: 'memory' } },
+        fakeApp,
+      );
+    } finally {
+      console.error = originalError;
+    }
+
+    expect(errorSpy).toHaveBeenCalled();
+    expect(ws.sent).toHaveLength(1);
+    expect(JSON.parse(ws.sent[0])).toEqual({
+      event: 'recover_failed',
+      reason: 'history_unavailable',
+      room: 'room1',
+    });
+  });
 
   describe('pruneExpiredSessions', () => {
     it('removes entries with expiresAt < now, keeps valid ones', () => {

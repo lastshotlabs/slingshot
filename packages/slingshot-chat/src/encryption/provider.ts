@@ -1,10 +1,6 @@
 import type { ChatAesGcmEncryptionConfig, ChatEncryptionConfig } from '../types';
+import type { ChatEncryptionProvider } from './types';
 import { createAesGcmEncryptionProvider } from './providers/aesGcm';
-
-export interface ChatEncryptionProvider {
-  encrypt(plaintext: string, roomId: string): Promise<string>;
-  decrypt(ciphertext: string, roomId: string): Promise<string>;
-}
 
 function assertNever(value: never): never {
   throw new Error(`[slingshot-chat] Unsupported encryption provider: ${String(value)}`);

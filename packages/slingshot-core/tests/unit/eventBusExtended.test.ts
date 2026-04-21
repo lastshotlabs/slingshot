@@ -1,8 +1,8 @@
 import { describe, expect, mock, test } from 'bun:test';
 import {
-  InProcessAdapter,
   BUILTIN_CLIENT_SAFE_KEYS,
   FORBIDDEN_CLIENT_PREFIXES,
+  InProcessAdapter,
 } from '../../src/eventBus';
 
 describe('InProcessAdapter', () => {
@@ -28,13 +28,11 @@ describe('InProcessAdapter', () => {
 
   test('registerClientSafeEvents throws on forbidden prefix', () => {
     const bus = new InProcessAdapter();
-    expect(() => bus.registerClientSafeEvents(['security.auth.fake'])).toThrow(
+    expect(() => bus.registerClientSafeEvents(['security.auth.fake'])).toThrow('Cannot register');
+    expect(() => bus.registerClientSafeEvents(['auth:user.created'])).toThrow('Cannot register');
+    expect(() => bus.registerClientSafeEvents(['community:delivery.email'])).toThrow(
       'Cannot register',
     );
-    expect(() => bus.registerClientSafeEvents(['auth:user.created'])).toThrow('Cannot register');
-    expect(() =>
-      bus.registerClientSafeEvents(['community:delivery.email']),
-    ).toThrow('Cannot register');
     expect(() => bus.registerClientSafeEvents(['push:notification'])).toThrow('Cannot register');
     expect(() => bus.registerClientSafeEvents(['app:ready'])).toThrow('Cannot register');
   });

@@ -10,8 +10,8 @@
  * - Lines 239-244: mountCors with custom object options
  * - Lines 248-250: mountCors wildcard warning in production
  */
-import { describe, expect, it, spyOn } from 'bun:test';
 import { OpenAPIHono } from '@hono/zod-openapi';
+import { describe, expect, it, spyOn } from 'bun:test';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { createMetricsState } from '../../src/framework/metrics/registry';
 import {
@@ -51,9 +51,7 @@ describe('mountFrameworkMiddleware', () => {
         metricsState: state,
         logging: { onLog: () => {} },
       }),
-    ).rejects.toThrow(
-      '[security] metrics.auth is required in production.',
-    );
+    ).rejects.toThrow('[security] metrics.auth is required in production.');
   });
 
   it('warns when metrics.enabled=true, auth=none, no unsafePublic, isProd=false (lines 108-110)', async () => {
@@ -186,9 +184,7 @@ describe('mountTenantMiddleware', () => {
     const app = makeApp();
     const tenancyData = { resolution: 'subdomain' };
     const tenancy = tenancyData as unknown as never;
-    await expect(
-      mountTenantMiddleware(app, tenancy, undefined, true),
-    ).rejects.toThrow(
+    await expect(mountTenantMiddleware(app, tenancy, undefined, true)).rejects.toThrow(
       '[security] Tenancy is configured without an onResolve callback.',
     );
   });
@@ -216,12 +212,7 @@ describe('mountTenantMiddleware', () => {
     };
     const tenancyWithResolve = tenancyWithResolveData as unknown as never;
     await expect(
-      mountTenantMiddleware(
-        app,
-        tenancyWithResolve,
-        undefined,
-        false,
-      ),
+      mountTenantMiddleware(app, tenancyWithResolve, undefined, false),
     ).resolves.toBeUndefined();
   });
 });

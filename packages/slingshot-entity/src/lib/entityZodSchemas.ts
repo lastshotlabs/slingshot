@@ -192,8 +192,7 @@ export function buildEntityZodSchemas(config: ResolvedEntityConfig): EntityZodSc
     const hasLiteralDefault = def.default !== undefined && !isAutoDefault(def.default);
     const base = fieldToZod({ ...def, optional: false }, isNullable);
     const isInjected = dataScopeCreateFields.has(fieldName);
-    createShape[fieldName] =
-      isNullable || hasLiteralDefault || isInjected ? base.optional() : base;
+    createShape[fieldName] = isNullable || hasLiteralDefault || isInjected ? base.optional() : base;
   }
   const create = z.object(createShape);
 

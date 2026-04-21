@@ -1,5 +1,5 @@
-import { OrchestrationError } from './errors';
 import { assertKebab, normalizeRetryPolicy } from './defineTask';
+import { OrchestrationError } from './errors';
 import type {
   AnyResolvedTask,
   ParallelEntry,
@@ -14,7 +14,10 @@ function freezeStepOptions<TWorkflowInput>(
   stepName: string,
   options: StepOptions<TWorkflowInput> | undefined,
 ): StepOptions<TWorkflowInput> {
-  if (options?.timeout !== undefined && (!Number.isFinite(options.timeout) || options.timeout <= 0)) {
+  if (
+    options?.timeout !== undefined &&
+    (!Number.isFinite(options.timeout) || options.timeout <= 0)
+  ) {
     throw new OrchestrationError(
       'INVALID_CONFIG',
       `Step '${stepName}' timeout must be a positive number.`,
@@ -24,9 +27,7 @@ function freezeStepOptions<TWorkflowInput>(
   return Object.freeze({
     input: options?.input,
     condition: options?.condition,
-    retry: options?.retry
-      ? normalizeRetryPolicy(options.retry, `Step '${stepName}'`)
-      : undefined,
+    retry: options?.retry ? normalizeRetryPolicy(options.retry, `Step '${stepName}'`) : undefined,
     timeout: options?.timeout,
     continueOnFailure: options?.continueOnFailure ?? false,
   });
@@ -75,7 +76,9 @@ export function parallel<TWorkflowInput = unknown>(
  */
 export function sleep<TWorkflowInput = unknown>(
   name: string,
-  duration: number | ((ctx: { workflowInput: TWorkflowInput; results: Record<string, unknown> }) => number),
+  duration:
+    | number
+    | ((ctx: { workflowInput: TWorkflowInput; results: Record<string, unknown> }) => number),
 ): SleepEntry<TWorkflowInput> {
   assertKebab(name, 'Sleep step');
   if (typeof duration === 'number' && (!Number.isFinite(duration) || duration < 0)) {

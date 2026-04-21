@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
   createMemoryIdempotencyAdapter,
+  createMongoIdempotencyAdapter,
+  createPostgresIdempotencyAdapter,
   createRedisIdempotencyAdapter,
   createSqliteIdempotencyAdapter,
-  createPostgresIdempotencyAdapter,
-  createMongoIdempotencyAdapter,
   idempotencyFactories,
 } from '../../src/framework/persistence/idempotency';
 
@@ -75,12 +75,7 @@ describe('createRedisIdempotencyAdapter', () => {
         }
         return entry.value;
       },
-      async set(
-        key: string,
-        value: string,
-        exFlag: 'EX',
-        ttl: number,
-      ) {
+      async set(key: string, value: string, exFlag: 'EX', ttl: number) {
         if (store.has(key)) return null; // NX semantics
         store.set(key, { value, expiresAt: Date.now() + ttl * 1000 });
         return 'OK';
@@ -546,7 +541,9 @@ describe('idempotencyFactories', () => {
         return {
           lean() {
             const key = filter['key'] as string;
-            return Promise.resolve(docs[key] ? { ...docs[key], createdAt: { getTime: () => Date.now() } } : null);
+            return Promise.resolve(
+              docs[key] ? { ...docs[key], createdAt: { getTime: () => Date.now() } } : null,
+            );
           },
         };
       },

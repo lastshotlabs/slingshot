@@ -696,7 +696,9 @@ describe('PostgresAdapter (docker)', () => {
   test('migrations fail closed when the stored schema version is newer than this binary supports', async () => {
     await resetAuthSchema(pool);
 
-    await pool.query('CREATE TABLE _slingshot_auth_schema_version (version INTEGER NOT NULL DEFAULT 0)');
+    await pool.query(
+      'CREATE TABLE _slingshot_auth_schema_version (version INTEGER NOT NULL DEFAULT 0)',
+    );
     await pool.query('INSERT INTO _slingshot_auth_schema_version (version) VALUES (3)');
 
     const futurePool = createTestPool();

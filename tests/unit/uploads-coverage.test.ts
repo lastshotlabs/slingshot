@@ -51,11 +51,9 @@ function makeUploadApp(options?: {
       c.set('tenantId', c.req.header('x-tenant-id') ?? 'tenant-1');
       await next();
     },
-    requireRole:
-      () =>
-      async (_c: any, next: () => Promise<void>) => {
-        await next();
-      },
+    requireRole: () => async (_c: any, next: () => Promise<void>) => {
+      await next();
+    },
   };
 
   const slingshotCtx = {

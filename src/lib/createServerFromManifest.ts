@@ -17,7 +17,7 @@ import type {
   ValidationMode,
 } from '@lastshotlabs/slingshot-core';
 import { getOrganizationsOrgServiceOrNull } from '@lastshotlabs/slingshot-organizations';
-import { createServer, getServerContext, type CreateServerConfig } from '../server';
+import { type CreateServerConfig, createServer, getServerContext } from '../server';
 import { createBuiltinPluginFactory, loadBuiltinPlugin } from './builtinPlugins';
 import { validateAppManifest } from './manifest';
 import type { AppManifest } from './manifest';
@@ -348,9 +348,7 @@ function extractManifestKafkaBrokerList(
 
 function manifestNeedsEventSchemas(manifest: AppManifest): boolean {
   const eventValidation =
-    manifest.eventBus &&
-    typeof manifest.eventBus === 'object' &&
-    'validation' in manifest.eventBus
+    manifest.eventBus && typeof manifest.eventBus === 'object' && 'validation' in manifest.eventBus
       ? (manifest.eventBus.validation ?? 'off')
       : 'off';
   if (eventValidation !== 'off') {
@@ -528,14 +526,8 @@ async function resolveManifestKafkaConnectors(
 
   const connectorConfig = manifest.kafkaConnectors;
   const secretBundle = await resolveSecretBundle(manifest.secrets);
-  const {
-    kafkaBrokers,
-    kafkaClientId,
-    kafkaSaslUser,
-    kafkaSaslPass,
-    kafkaSaslMech,
-    kafkaSsl,
-  } = secretBundle.framework;
+  const { kafkaBrokers, kafkaClientId, kafkaSaslUser, kafkaSaslPass, kafkaSaslMech, kafkaSsl } =
+    secretBundle.framework;
   let brokers = connectorConfig.brokers;
   if (!brokers || brokers.length === 0) {
     if (!kafkaBrokers) {
@@ -714,7 +706,11 @@ export async function resolveManifestConfig(
 ): Promise<ResolvedManifestConfig> {
   const absPath = typeof manifestPathOrObject === 'string' ? resolve(manifestPathOrObject) : null;
   const baseDir =
-    typeof options?.baseDir === 'string' ? options.baseDir : absPath ? dirname(absPath) : process.cwd();
+    typeof options?.baseDir === 'string'
+      ? options.baseDir
+      : absPath
+        ? dirname(absPath)
+        : process.cwd();
 
   let raw: unknown;
   if (absPath) {
@@ -765,7 +761,11 @@ export async function resolveManifestConfig(
     ? createEventSchemaRegistry()
     : undefined;
 
-  await ensureBuiltinEventBusFactories(manifestWithSyntheticPlugins, effectiveRegistry, eventSchemas);
+  await ensureBuiltinEventBusFactories(
+    manifestWithSyntheticPlugins,
+    effectiveRegistry,
+    eventSchemas,
+  );
 
   // Pre-load builtin plugins for manifest entries not yet in the user registry.
   const pluginRefs = getManifestPluginRefs(manifestWithSyntheticPlugins);

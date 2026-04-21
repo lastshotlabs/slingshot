@@ -1,5 +1,5 @@
-import { describe, test, expect } from 'bun:test';
 import { resolve } from 'node:path';
+import { describe, expect, test } from 'bun:test';
 
 // ---------------------------------------------------------------------------
 // TUI utility tests — subprocess-based

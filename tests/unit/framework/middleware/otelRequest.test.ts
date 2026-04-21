@@ -86,7 +86,7 @@ describe('otelRequestMiddleware', () => {
 
     const res = await app.request('/with-header', {
       headers: {
-        'traceparent': '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+        traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
         'x-custom-trace': 'value',
       },
     });
@@ -100,7 +100,7 @@ describe('otelRequestMiddleware', () => {
 
     const res = await app.request('/keys-test', {
       headers: {
-        'accept': 'application/json',
+        accept: 'application/json',
         'x-request-id': 'test-id-123',
       },
     });

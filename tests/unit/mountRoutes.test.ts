@@ -89,7 +89,7 @@ describe('mountRoutes — flat with actual route files', () => {
     const req = new Request('http://localhost/openapi.json');
     const res = await app.fetch(req);
     expect(res.status).toBe(200);
-    const spec = await res.json() as Record<string, unknown>;
+    const spec = (await res.json()) as Record<string, unknown>;
     // Should have the test path defined
     const paths = spec.paths as Record<string, unknown>;
     expect(paths['/test-defined']).toBeDefined();
@@ -163,7 +163,14 @@ describe('mountRoutes — versioned', () => {
   test('root /openapi.json redirects to default version spec', async () => {
     const app = new OpenAPIHono<AppEnv>();
     const glob = makeEmptyGlob();
-    await mountRoutes(app, '/routes', { versions: ['v1', 'v2'], defaultVersion: 'v1' }, 'API', '1.0.0', glob);
+    await mountRoutes(
+      app,
+      '/routes',
+      { versions: ['v1', 'v2'], defaultVersion: 'v1' },
+      'API',
+      '1.0.0',
+      glob,
+    );
 
     const req = new Request('http://localhost/openapi.json');
     const res = await app.fetch(req);
@@ -190,7 +197,7 @@ describe('mountRoutes — versioned', () => {
     const req = new Request('http://localhost/v1/openapi.json');
     const res = await app.fetch(req);
     expect(res.status).toBe(200);
-    const spec = await res.json() as { openapi: string; info: { title: string } };
+    const spec = (await res.json()) as { openapi: string; info: { title: string } };
     expect(spec.openapi).toBe('3.0.0');
     expect(spec.info.title).toContain('V1');
   });
@@ -205,14 +212,7 @@ describe('mountRoutes — versioned', () => {
         return empty();
       },
     };
-    await mountRoutes(
-      app,
-      '/routes',
-      { versions: ['v1'], sharedDir: false },
-      'API',
-      '1.0.0',
-      glob,
-    );
+    await mountRoutes(app, '/routes', { versions: ['v1'], sharedDir: false }, 'API', '1.0.0', glob);
     // Should only scan the version dir, not a shared dir
     expect(scannedDirs.every(d => !d.endsWith('/shared'))).toBe(true);
   });
@@ -225,11 +225,15 @@ describe('mountRoutes — versioned', () => {
     const glob = {
       scan: async (_pattern: string, opts: { cwd: string }) => {
         if (opts.cwd.endsWith('/v1')) {
-          async function* gen() { yield 'hello.ts'; }
+          async function* gen() {
+            yield 'hello.ts';
+          }
           return gen();
         }
         if (opts.cwd.endsWith('/shared')) {
-          async function* gen() { yield 'health.ts'; }
+          async function* gen() {
+            yield 'health.ts';
+          }
           return gen();
         }
         async function* empty() {}

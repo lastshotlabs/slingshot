@@ -119,7 +119,10 @@ export function parseLcov(path: string): CoverageReport {
       if (line.startsWith('FNDA:')) {
         const match = line.match(/^FNDA:(\d+),(.+)$/);
         if (match) {
-          accumulator.functions.set(match[2], accumulator.functions.get(match[2]) === true || Number(match[1]) > 0);
+          accumulator.functions.set(
+            match[2],
+            accumulator.functions.get(match[2]) === true || Number(match[1]) > 0,
+          );
         }
         continue;
       }

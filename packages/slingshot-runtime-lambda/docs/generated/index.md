@@ -33,7 +33,7 @@ bun add @lastshotlabs/slingshot-runtime-lambda
 
 ## Dependencies
 
-- `@lastshotlabs/slingshot`: `workspace:*`
+- `@lastshotlabs/slingshot`: `file:../..`
 - `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-runtime-node`: `workspace:*`
 

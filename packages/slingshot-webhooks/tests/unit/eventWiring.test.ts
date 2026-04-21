@@ -176,7 +176,11 @@ describe('eventWiring', () => {
     const offMock = mock(() => {});
     const bus: SlingshotEventBus = {
       emit: () => {},
-      on: ((event: string, _listener: (payload: unknown) => void | Promise<void>, opts?: SubscriptionOpts) => {
+      on: ((
+        event: string,
+        _listener: (payload: unknown) => void | Promise<void>,
+        opts?: SubscriptionOpts,
+      ) => {
         onCalls.push({ event, opts });
       }) as SlingshotEventBus['on'],
       off: offMock as SlingshotEventBus['off'],

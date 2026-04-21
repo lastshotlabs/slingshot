@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test';
 import { resolve } from 'node:path';
+import { describe, expect, test } from 'bun:test';
 
 const TLS_CA_PATH = resolve(process.cwd(), 'tests/fixtures/redpanda-tls/ca.crt');
 const RUNNER_PATH = resolve(process.cwd(), 'tests/docker/kafka-tls.runner.ts');

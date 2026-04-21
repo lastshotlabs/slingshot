@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { auditLog, emitEvent, emitEventDynamic } from '../../src/afterHooks';
-import { defineHandler, HandlerError, IdempotencyCacheHit } from '../../src/handler';
+import { HandlerError, IdempotencyCacheHit, defineHandler } from '../../src/handler';
 
 function createTestContext() {
   const emitted: Array<{ key: string; payload: unknown }> = [];

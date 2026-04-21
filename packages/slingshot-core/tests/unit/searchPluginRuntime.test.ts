@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  SEARCH_PLUGIN_STATE_KEY,
   getSearchPluginRuntime,
   getSearchPluginRuntimeOrNull,
-  SEARCH_PLUGIN_STATE_KEY,
 } from '../../src/searchPluginRuntime';
 
 describe('getSearchPluginRuntimeOrNull', () => {

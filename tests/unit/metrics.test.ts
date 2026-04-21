@@ -158,8 +158,16 @@ describe('defaultNormalizePath', () => {
 describe('closeMetricsQueues', () => {
   test('closes all queues, clears the map, and sets queues to null', async () => {
     const closedQueues: string[] = [];
-    const q1 = { close: async () => { closedQueues.push('q1'); } };
-    const q2 = { close: async () => { closedQueues.push('q2'); } };
+    const q1 = {
+      close: async () => {
+        closedQueues.push('q1');
+      },
+    };
+    const q2 = {
+      close: async () => {
+        closedQueues.push('q2');
+      },
+    };
 
     const queueMap = new Map<string, { close(): Promise<void> }>([
       ['q1', q1],
@@ -183,11 +191,23 @@ describe('closeMetricsQueues', () => {
   test('continues closing remaining queues when one close() throws (best-effort)', async () => {
     const closedQueues: string[] = [];
     const q1 = {
-      close: async () => { throw new Error('q1 close failed'); },
+      close: async () => {
+        throw new Error('q1 close failed');
+      },
     };
-    const q2 = { close: async () => { closedQueues.push('q2'); } };
+    const q2 = {
+      close: async () => {
+        closedQueues.push('q2');
+      },
+    };
 
-    setMetricsQueues(state, new Map([['q1', q1], ['q2', q2]]));
+    setMetricsQueues(
+      state,
+      new Map([
+        ['q1', q1],
+        ['q2', q2],
+      ]),
+    );
 
     await expect(closeMetricsQueues(state)).resolves.toBeUndefined();
     expect(closedQueues).toContain('q2');

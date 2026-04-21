@@ -19,7 +19,8 @@ import * as serverModule from '../../src/server';
 // ---------------------------------------------------------------------------
 
 function writeTempManifest(content: string, dir?: string): string {
-  const d = dir ?? join(tmpdir(), `slingshot-cov-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  const d =
+    dir ?? join(tmpdir(), `slingshot-cov-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   mkdirSync(d, { recursive: true });
   const path = join(d, 'app.manifest.json');
   writeFileSync(path, content, 'utf-8');
@@ -95,7 +96,9 @@ describe('synthetic entity plugin with afterAdapters hooks', () => {
       expect(capturedEntityConfig).toBeDefined();
       const entityManifest = capturedEntityConfig!.manifest as Record<string, unknown>;
       expect(entityManifest).toBeDefined();
-      const entityHooks = entityManifest.hooks as { afterAdapters: Array<{ handler: string; params?: unknown }> };
+      const entityHooks = entityManifest.hooks as {
+        afterAdapters: Array<{ handler: string; params?: unknown }>;
+      };
       expect(entityHooks).toBeDefined();
       expect(entityHooks.afterAdapters).toHaveLength(2);
       expect(entityHooks.afterAdapters[0].handler).toBe('myAfterAdaptersHook');
@@ -418,7 +421,9 @@ describe('manifest seed', () => {
     try {
       await createServerFromManifest(path);
       const warnings = warnSpy.mock.calls.map(c => c[0]);
-      expect(warnings.some((w: string) => w.includes('permissions plugin is not running'))).toBe(true);
+      expect(warnings.some((w: string) => w.includes('permissions plugin is not running'))).toBe(
+        true,
+      );
     } finally {
       authMock.mockRestore();
       permsMock.mockRestore();
@@ -469,7 +474,9 @@ describe('manifest seed', () => {
     try {
       await createServerFromManifest(path);
       const warnings = warnSpy.mock.calls.map(c => c[0]);
-      expect(warnings.some((w: string) => w.includes('slingshot-organizations plugin is not running'))).toBe(true);
+      expect(
+        warnings.some((w: string) => w.includes('slingshot-organizations plugin is not running')),
+      ).toBe(true);
     } finally {
       authMock.mockRestore();
       permsMock.mockRestore();
@@ -628,7 +635,9 @@ describe('manifest seed', () => {
     try {
       await createServerFromManifest(path);
       const warnings = warnSpy.mock.calls.map(c => c[0]);
-      expect(warnings.some((w: string) => w.includes('Could not retrieve server context'))).toBe(true);
+      expect(warnings.some((w: string) => w.includes('Could not retrieve server context'))).toBe(
+        true,
+      );
     } finally {
       serverSpy.mockRestore();
       warnSpy.mockRestore();
@@ -656,7 +665,11 @@ describe('manifest validation warnings', () => {
     try {
       await createServerFromManifest(path);
       const warnings = warnSpy.mock.calls.map(c => c[0]);
-      expect(warnings.some((w: string) => typeof w === 'string' && w.includes('[createServerFromManifest]'))).toBe(true);
+      expect(
+        warnings.some(
+          (w: string) => typeof w === 'string' && w.includes('[createServerFromManifest]'),
+        ),
+      ).toBe(true);
     } finally {
       warnSpy.mockRestore();
       serverSpy.mockRestore();
@@ -786,8 +799,8 @@ describe('entity handler and hook registration into entity plugin', () => {
     const registry = createManifestHandlerRegistry();
     // Note: 'notRegistered' handler is NOT registered in the registry
 
-    const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(
-      () => makePlugin('mock-plugin'),
+    const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(() =>
+      makePlugin('mock-plugin'),
     );
     const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
 
@@ -819,8 +832,8 @@ describe('entity handler and hook registration into entity plugin', () => {
     const registry = createManifestHandlerRegistry();
     // 'nonexistentHook' is NOT registered
 
-    const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(
-      () => makePlugin('mock-plugin'),
+    const loadSpy = spyOn(builtinPluginsModule, 'loadBuiltinPlugin').mockResolvedValue(() =>
+      makePlugin('mock-plugin'),
     );
     const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
 

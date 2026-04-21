@@ -1,7 +1,6 @@
 import { createVerificationToken } from '@auth/lib/emailVerification';
 import { type TokenClaims, signToken, verifyToken } from '@auth/lib/jwt';
 import { createMfaChallenge } from '@auth/lib/mfaChallenge';
-import type { SessionMetadata } from '../lib/session/index.js';
 import { getSuspended } from '@auth/lib/suspension';
 import { generateEmailOtpCode, generateWebAuthnAuthenticationOptions } from '@auth/services/mfa';
 import {
@@ -12,6 +11,7 @@ import {
   timingSafeEqual,
 } from '@lastshotlabs/slingshot-core';
 import type { HookContext } from '../config/authConfig';
+import type { SessionMetadata } from '../lib/session/index.js';
 import type { AuthRuntimeContext } from '../runtime';
 
 /**

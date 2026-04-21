@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { SlingshotHandler } from '@lastshotlabs/slingshot-core';
 import { z } from 'zod';
+import type { SlingshotHandler } from '@lastshotlabs/slingshot-core';
 
 type ResolvedManifestState = {
   config: Record<string, unknown>;

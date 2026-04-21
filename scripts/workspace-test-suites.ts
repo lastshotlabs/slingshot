@@ -15,7 +15,12 @@ export interface CoverageSuite extends TestCommandSuite {
   ignoredGlobs: string[];
 }
 
-const coverageReporterArgs = ['--coverage-reporter', 'text', '--coverage-reporter', 'lcov'] as const;
+const coverageReporterArgs = [
+  '--coverage-reporter',
+  'text',
+  '--coverage-reporter',
+  'lcov',
+] as const;
 
 function normalizePath(value: string): string {
   return value.replace(/\\/g, '/');
@@ -179,17 +184,15 @@ function packageCoverageSuites(): CoverageSuite[] {
         testFiles: packageTests.length > 0 ? packageTests : undefined,
         configPath,
         coverageDir: `coverage/${name}`,
-        command:
-          override?.coverageCommand ??
-          [
-            'scripts/run-coverage-files.ts',
-            '--label',
-            name,
-            '--coverage-dir',
-            `coverage/${name}`,
-            ...(configPath ? ['--config', configPath] : []),
-            ...coverageTestFiles,
-          ],
+        command: override?.coverageCommand ?? [
+          'scripts/run-coverage-files.ts',
+          '--label',
+          name,
+          '--coverage-dir',
+          `coverage/${name}`,
+          ...(configPath ? ['--config', configPath] : []),
+          ...coverageTestFiles,
+        ],
         ownedGlobs: [`packages/${name}/**/*.ts`, `packages/${name}/**/*.tsx`],
         ignoredGlobs: [
           `packages/${name}/node_modules/**`,

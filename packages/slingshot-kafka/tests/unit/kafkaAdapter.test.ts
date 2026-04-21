@@ -10,9 +10,8 @@ import {
 
 mock.module('kafkajs', () => createFakeKafkaJsModule());
 
-const { createKafkaAdapter, getKafkaAdapterIntrospectionOrNull } = await import(
-  '../../src/kafkaAdapter'
-);
+const { createKafkaAdapter, getKafkaAdapterIntrospectionOrNull } =
+  await import('../../src/kafkaAdapter');
 
 afterEach(async () => {
   resetFakeKafkaState();
@@ -137,7 +136,9 @@ describe('kafkaAdapter', () => {
         offset: '0',
         key: Buffer.from('key-1'),
         headers: {},
-        value: Buffer.from(serializer.serialize('auth:login', { userId: 'user-a', sessionId: 's-3' })),
+        value: Buffer.from(
+          serializer.serialize('auth:login', { userId: 'user-a', sessionId: 's-3' }),
+        ),
       },
       heartbeat: async () => {},
     });
@@ -178,9 +179,9 @@ describe('kafkaAdapter', () => {
         ssl: { rejectUnauthorized: false },
       });
 
-      expect(warn.mock.calls.some(call => String(call[0]).includes('ssl.rejectUnauthorized=false'))).toBe(
-        true,
-      );
+      expect(
+        warn.mock.calls.some(call => String(call[0]).includes('ssl.rejectUnauthorized=false')),
+      ).toBe(true);
     } finally {
       console.warn = originalWarn;
     }

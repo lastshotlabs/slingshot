@@ -176,7 +176,9 @@ describe('createKvIsrCache()', () => {
         'simulated put failure',
       );
 
-      await expect(cache.set('/posts/2', makeEntry('/posts/2', ['posts']))).resolves.toBeUndefined();
+      await expect(
+        cache.set('/posts/2', makeEntry('/posts/2', ['posts'])),
+      ).resolves.toBeUndefined();
       expect(JSON.parse(kv._store.get('isr:tag:posts') ?? '[]')).toEqual(['/posts/2']);
     });
 
@@ -197,7 +199,9 @@ describe('createKvIsrCache()', () => {
         'simulated get failure',
       );
 
-      await expect(cache.set('/posts/2', makeEntry('/posts/2', ['posts']))).resolves.toBeUndefined();
+      await expect(
+        cache.set('/posts/2', makeEntry('/posts/2', ['posts'])),
+      ).resolves.toBeUndefined();
       expect(JSON.parse(kv._store.get('isr:tag:posts') ?? '[]')).toEqual(['/posts/1', '/posts/2']);
     });
   });

@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import * as realInfra from './infra/realBunshotInfra';
 
 function makeOclifConfig() {
@@ -164,7 +164,7 @@ describe('root cli registry/platform surface', () => {
 
     const written = join(outDir, 'slingshot.platform.ts');
     expect(existsSync(written)).toBe(true);
-    expect(readFileSync(written, 'utf8')).toContain("definePlatform");
+    expect(readFileSync(written, 'utf8')).toContain('definePlatform');
     expect(logs.join('\n')).toContain('Downloaded platform config');
 
     rmSync(outDir, { recursive: true, force: true });

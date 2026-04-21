@@ -75,9 +75,7 @@ describe('loadBuiltinPlugin', () => {
     const originalPkg = entry.pkg;
     (entry as { pkg: string; factory: string }).pkg = '@lastshotlabs/nonexistent-package';
     try {
-      await expect(loadBuiltinPlugin('slingshot-auth')).rejects.toThrow(
-        'which is not installed',
-      );
+      await expect(loadBuiltinPlugin('slingshot-auth')).rejects.toThrow('which is not installed');
     } finally {
       (entry as { pkg: string; factory: string }).pkg = originalPkg;
     }
@@ -132,7 +130,12 @@ describe('createBuiltinPluginFactory', () => {
       received = config;
       return { name: 'slingshot-webhooks' };
     };
-    const wrapped = createBuiltinPluginFactory('slingshot-webhooks', fakeFactory, undefined, '/app');
+    const wrapped = createBuiltinPluginFactory(
+      'slingshot-webhooks',
+      fakeFactory,
+      undefined,
+      '/app',
+    );
     wrapped({ retryCount: 5 });
     expect(received).toBeDefined();
     expect(received!['retryCount']).toBe(5);

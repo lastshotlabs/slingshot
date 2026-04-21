@@ -40,11 +40,7 @@ import {
   getScore,
   setScore,
 } from '../src/lib/scoring';
-import {
-  applyPatches,
-  deepCloneState,
-  diffState,
-} from '../src/lib/state';
+import { applyPatches, deepCloneState, diffState } from '../src/lib/state';
 import type { ReadonlyHandlerContext } from '../src/types/models';
 
 function makeReadonlyCtx(): ReadonlyHandlerContext {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { z } from 'zod';
-import { createEntitySeeder, topoSortEntities, seedAll } from '../../src/seeder';
 import { defineEntity, field } from '../../src';
+import { createEntitySeeder, seedAll, topoSortEntities } from '../../src/seeder';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,7 +49,7 @@ describe('topoSortEntities', () => {
 
     // Provide in reverse order — Post before User
     const sorted = topoSortEntities([Post, User]);
-    const names = sorted.map((c) => c.name);
+    const names = sorted.map(c => c.name);
     expect(names.indexOf('User')).toBeLessThan(names.indexOf('Post'));
   });
 
@@ -112,7 +112,7 @@ describe('topoSortEntities', () => {
 
     // Should not create a circular dependency
     const sorted = topoSortEntities([Post, User]);
-    expect(sorted.map((c) => c.name)).toEqual(['User', 'Post']);
+    expect(sorted.map(c => c.name)).toEqual(['User', 'Post']);
   });
 });
 
@@ -155,7 +155,7 @@ describe('createEntitySeeder', () => {
       expect(u).toHaveProperty('name');
       expect(u).toHaveProperty('email');
       expect(typeof u.email).toBe('string');
-      expect((u.email as string)).toContain('@');
+      expect(u.email as string).toContain('@');
     }
   });
 
@@ -300,7 +300,7 @@ describe('seedAll', () => {
 
     // Every post's authorId should match a user's id
     const userIds = new Set(
-      (result.records.get('User') as Array<Record<string, unknown>>).map((u) => u.id),
+      (result.records.get('User') as Array<Record<string, unknown>>).map(u => u.id),
     );
     for (const post of result.records.get('Post') as Array<Record<string, unknown>>) {
       expect(userIds.has(post.authorId)).toBe(true);
@@ -324,16 +324,14 @@ describe('seedAll', () => {
 
     const result = await seedAll(
       {
-        entities: [
-          { config: UserConfig, adapter: userAdapter, createSchema: userCreateSchema },
-        ],
+        entities: [{ config: UserConfig, adapter: userAdapter, createSchema: userCreateSchema }],
         generateOptions: { seed: 42 },
       },
       { User: { count: 10 } },
     );
 
     const users = result.records.get('User') as Array<Record<string, unknown>>;
-    const names = new Set(users.map((u) => u.name));
+    const names = new Set(users.map(u => u.name));
     // All 10 should be distinct — if re-seeding bug exists, all would be identical
     expect(names.size).toBeGreaterThan(1);
   });

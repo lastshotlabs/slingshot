@@ -4,11 +4,11 @@
  * and the Mongo cache adapter.
  */
 import { afterEach, describe, expect, mock, test } from 'bun:test';
+import * as realAuth from '../../packages/slingshot-auth/src/index';
 import {
   boundaryCacheFactories,
   createRedisBoundaryCacheAdapter,
 } from '../../src/framework/boundaryAdapters/cacheFactories';
-import * as realAuth from '../../packages/slingshot-auth/src/index';
 
 afterEach(() => {
   mock.restore();
@@ -141,7 +141,12 @@ describe('boundaryCacheFactories — dispatch map', () => {
 
   test('redis factory throws when redis is null', () => {
     expect(() =>
-      boundaryCacheFactories.redis({ redis: null, mongo: null, sqliteDb: null, postgresPool: null }),
+      boundaryCacheFactories.redis({
+        redis: null,
+        mongo: null,
+        sqliteDb: null,
+        postgresPool: null,
+      }),
     ).toThrow('[framework/boundaryAdapters] Redis cache adapter requested without a Redis client');
   });
 
@@ -172,7 +177,12 @@ describe('boundaryCacheFactories — dispatch map', () => {
 
   test('mongo factory throws when mongo is null', () => {
     expect(() =>
-      boundaryCacheFactories.mongo({ redis: null, mongo: null, sqliteDb: null, postgresPool: null }),
+      boundaryCacheFactories.mongo({
+        redis: null,
+        mongo: null,
+        sqliteDb: null,
+        postgresPool: null,
+      }),
     ).toThrow(
       '[framework/boundaryAdapters] Mongo cache adapter requested without a Mongo connection',
     );
@@ -279,10 +289,7 @@ describe('createMongoBoundaryCacheAdapter', () => {
         };
       }),
       updateOne: mock(
-        async (
-          filter: { key: string },
-          update: { $set: { value: string; expiresAt?: Date } },
-        ) => {
+        async (filter: { key: string }, update: { $set: { value: string; expiresAt?: Date } }) => {
           store.set(filter.key, { value: update.$set.value, expiresAt: update.$set.expiresAt });
         },
       ),
@@ -305,9 +312,8 @@ describe('createMongoBoundaryCacheAdapter', () => {
       getCacheModel: () => cacheModel,
     }));
 
-    const { createMongoBoundaryCacheAdapter } = await import(
-      '../../src/framework/boundaryAdapters/cacheFactories'
-    );
+    const { createMongoBoundaryCacheAdapter } =
+      await import('../../src/framework/boundaryAdapters/cacheFactories');
     const adapter = await createMongoBoundaryCacheAdapter(appConnection as any);
     return { adapter, cacheModel, appConnection };
   }
@@ -328,9 +334,8 @@ describe('createMongoBoundaryCacheAdapter', () => {
     mock.module('@framework/middleware/cacheResponse', () => ({
       getCacheModel: () => cacheModel,
     }));
-    const { createMongoBoundaryCacheAdapter } = await import(
-      '../../src/framework/boundaryAdapters/cacheFactories'
-    );
+    const { createMongoBoundaryCacheAdapter } =
+      await import('../../src/framework/boundaryAdapters/cacheFactories');
     const adapter = await createMongoBoundaryCacheAdapter(appConnection as any);
     expect(adapter.isReady()).toBe(false);
   });

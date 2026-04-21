@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { z } from 'zod';
 import {
   defineTask,
   defineWorkflow,
@@ -6,7 +7,6 @@ import {
   step,
   stepResult,
 } from '@lastshotlabs/slingshot-orchestration';
-import { z } from 'zod';
 
 type ProcessInvoiceWorkflowInput = {
   invoiceId: string;
@@ -111,7 +111,11 @@ export const processInvoiceWorkflow = defineWorkflow({
       'capture-payment',
       capturePayment,
     );
-    const invoice = stepResult<{ invoiceUrl: string }>(results, 'generate-invoice', generateInvoice);
+    const invoice = stepResult<{ invoiceUrl: string }>(
+      results,
+      'generate-invoice',
+      generateInvoice,
+    );
     const ledger = stepResult<{ recorded: boolean }>(
       results,
       'record-ledger-entry',
@@ -170,12 +174,7 @@ export const processInvoiceWorkflow = defineWorkflow({
   ],
 });
 
-export const orchestrationTasks = [
-  capturePayment,
-  generateInvoice,
-  recordLedgerEntry,
-  sendReceipt,
-];
+export const orchestrationTasks = [capturePayment, generateInvoice, recordLedgerEntry, sendReceipt];
 export const orchestrationWorkflows = [processInvoiceWorkflow];
 
 export const requireOperationsKey: MiddlewareHandler = async (c, next) => {

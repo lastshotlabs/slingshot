@@ -19,10 +19,7 @@ import { buildPlayerLeaveGuard } from '../../src/middleware/playerLeaveGuard';
 import { buildRulesValidationGuard } from '../../src/middleware/rulesValidationGuard';
 import { buildSessionCreateGuard } from '../../src/middleware/sessionCreateGuard';
 import { buildStartGameGuard } from '../../src/middleware/startGameGuard';
-import {
-  ClientToServerMessageSchema,
-  GameInputMessageSchema,
-} from '../../src/validation/input';
+import { ClientToServerMessageSchema, GameInputMessageSchema } from '../../src/validation/input';
 import {
   SessionCreateInputSchema,
   SessionJoinByCodeInputSchema,

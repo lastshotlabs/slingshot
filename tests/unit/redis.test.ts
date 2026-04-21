@@ -35,12 +35,7 @@ mock.module('ioredis', () => ({
 }));
 
 const redisLib = await import(`../../src/lib/redis.ts?redis-unit=${Date.now()}`);
-const {
-  connectRedis,
-  disconnectRedis,
-  getRedisConnectionOptions,
-  getRedisFromApp,
-} = redisLib;
+const { connectRedis, disconnectRedis, getRedisConnectionOptions, getRedisFromApp } = redisLib;
 
 describe('getRedisConnectionOptions', () => {
   test('parses host:port format', () => {
@@ -54,7 +49,9 @@ describe('getRedisConnectionOptions', () => {
   });
 
   test('throws when host format is missing port', () => {
-    expect(() => getRedisConnectionOptions({ host: 'localhost' })).toThrow('Invalid Redis host format');
+    expect(() => getRedisConnectionOptions({ host: 'localhost' })).toThrow(
+      'Invalid Redis host format',
+    );
   });
 
   test('includes username when provided', () => {
@@ -88,18 +85,18 @@ describe('connectRedis', () => {
 
   test('resolved client has correct host and port from credentials', async () => {
     redisInstances.length = 0;
-    const client = await connectRedis({ host: 'myhost:6380' }) as unknown as MockRedis;
+    const client = (await connectRedis({ host: 'myhost:6380' })) as unknown as MockRedis;
     expect(client.host).toBe('myhost');
     expect(client.port).toBe(6380);
   });
 
   test('passes username and password to Redis options', async () => {
     redisInstances.length = 0;
-    const client = await connectRedis({
+    const client = (await connectRedis({
       host: 'myhost:6379',
       user: 'redisuser',
       password: 'supersecret',
-    }) as unknown as MockRedis;
+    })) as unknown as MockRedis;
     expect(client.username).toBe('redisuser');
     expect(client.password).toBe('supersecret');
   });

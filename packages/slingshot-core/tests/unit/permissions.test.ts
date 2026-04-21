@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  validateGrant,
-  getPermissionsStateOrNull,
-  getPermissionsState,
-  SUPER_ADMIN_ROLE,
   PERMISSIONS_STATE_KEY,
+  SUPER_ADMIN_ROLE,
+  getPermissionsState,
+  getPermissionsStateOrNull,
+  validateGrant,
 } from '../../src/permissions';
 
 const baseGrant = (overrides: Partial<Parameters<typeof validateGrant>[0]> = {}) => ({
@@ -47,9 +47,9 @@ describe('validateGrant', () => {
   });
 
   test('past expiresAt throws', () => {
-    expect(() =>
-      validateGrant(baseGrant({ expiresAt: new Date(Date.now() - 100000) })),
-    ).toThrow('expiresAt must be in the future');
+    expect(() => validateGrant(baseGrant({ expiresAt: new Date(Date.now() - 100000) }))).toThrow(
+      'expiresAt must be in the future',
+    );
   });
 
   test('invalid subjectType throws', () => {
@@ -86,9 +86,9 @@ describe('validateGrant', () => {
   });
 
   test('resourceType exceeding max length throws', () => {
-    expect(() =>
-      validateGrant(baseGrant({ resourceType: 'x'.repeat(300) })),
-    ).toThrow('resourceType exceeds maximum length');
+    expect(() => validateGrant(baseGrant({ resourceType: 'x'.repeat(300) }))).toThrow(
+      'resourceType exceeds maximum length',
+    );
   });
 
   test('resourceId exceeding max length throws', () => {
@@ -105,9 +105,7 @@ describe('validateGrant', () => {
 
   test('too many roles throws', () => {
     const roles = Array.from({ length: 60 }, (_, i) => `role-${i}`);
-    expect(() => validateGrant(baseGrant({ roles }))).toThrow(
-      'roles array exceeds maximum length',
-    );
+    expect(() => validateGrant(baseGrant({ roles }))).toThrow('roles array exceeds maximum length');
   });
 
   test('role name exceeding max length throws', () => {
@@ -134,12 +132,7 @@ describe('getPermissionsStateOrNull', () => {
   });
 
   test('returns null when state is incomplete (missing adapter)', () => {
-    const map = new Map([
-      [
-        PERMISSIONS_STATE_KEY,
-        { registry: {}, evaluator: {} },
-      ],
-    ]);
+    const map = new Map([[PERMISSIONS_STATE_KEY, { registry: {}, evaluator: {} }]]);
     expect(getPermissionsStateOrNull(map)).toBeNull();
   });
 

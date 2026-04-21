@@ -509,7 +509,9 @@ describe('generated search with $and/$or filters', () => {
     await adapter.create({ roomId: 'r1', content: 'goodbye' });
 
     // Search with $and filter: roomId=r1 AND status != deleted
-    const results = await (adapter as unknown as Record<string, (...args: unknown[]) => unknown>).filteredSearch('hello', {
+    const results = await (
+      adapter as unknown as Record<string, (...args: unknown[]) => unknown>
+    ).filteredSearch('hello', {
       roomId: 'r1',
     });
 
@@ -542,13 +544,12 @@ describe('generated search with $and/$or filters', () => {
     await adapter.create({ category: 'food', content: 'typescript cookies' });
     await adapter.create({ category: 'sports', content: 'typescript league' });
 
-    const results = await (adapter as unknown as Record<string, (...args: unknown[]) => unknown>).searchByCategory(
-      'typescript',
-      {
-        cat1: 'tech',
-        cat2: 'food',
-      },
-    );
+    const results = await (
+      adapter as unknown as Record<string, (...args: unknown[]) => unknown>
+    ).searchByCategory('typescript', {
+      cat1: 'tech',
+      cat2: 'food',
+    });
 
     expect(results.length).toBe(2);
     const categories = results.map((r: Record<string, unknown>) => r.category).sort();

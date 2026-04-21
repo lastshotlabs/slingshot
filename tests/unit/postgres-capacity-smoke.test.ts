@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-
 import {
   percentile,
   resolvePostgresCapacitySmokeConfig,
@@ -83,7 +82,14 @@ describe('postgres capacity smoke script', () => {
       },
     );
 
-    expect(queryCalls).toEqual(['SELECT 7', 'SELECT 7', 'SELECT 7', 'SELECT 7', 'SELECT 7', 'SELECT 7']);
+    expect(queryCalls).toEqual([
+      'SELECT 7',
+      'SELECT 7',
+      'SELECT 7',
+      'SELECT 7',
+      'SELECT 7',
+      'SELECT 7',
+    ]);
     expect(ended).toBe(true);
     expect(summary).toMatchObject({
       connectionString: 'postgres://smoke',

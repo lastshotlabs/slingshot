@@ -29,7 +29,7 @@ function createMinimalApp(logEntries: RequestLogEntry[]) {
   });
 
   app.get('/throw-string', () => {
-    throw 'string error value';  
+    throw 'string error value';
   });
 
   return app;

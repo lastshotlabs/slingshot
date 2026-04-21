@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import {
-  createWebhooksManifestRuntime,
   type WebhookRuntimeAdapter,
+  createWebhooksManifestRuntime,
 } from '../../src/manifest/runtime';
 import type { WebhookAttempt } from '../../src/types/models';
 
@@ -148,10 +148,10 @@ async function setupRuntime(options?: {
 
   const endpointAdapter =
     options?.endpointAdapter ??
-    createEndpointBaseAdapter([...(options?.endpoints ?? [])]) as BareEntityAdapter;
+    (createEndpointBaseAdapter([...(options?.endpoints ?? [])]) as BareEntityAdapter);
   const deliveryAdapter =
     options?.deliveryAdapter ??
-    createDeliveryBaseAdapter([...(options?.deliveries ?? [])]) as BareEntityAdapter;
+    (createDeliveryBaseAdapter([...(options?.deliveries ?? [])]) as BareEntityAdapter);
 
   const transformCtx = {
     app: {} as never,
@@ -161,13 +161,12 @@ async function setupRuntime(options?: {
     adapters: {},
   };
 
-  const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!
-    .resolve('webhooks.endpoint.runtime')(endpointAdapter, transformCtx as never);
-  const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!
-    .resolve('webhooks.delivery.runtime')(
-      deliveryAdapter,
-      { ...transformCtx, entityName: 'WebhookDelivery' } as never,
-    );
+  const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!.resolve(
+    'webhooks.endpoint.runtime',
+  )(endpointAdapter, transformCtx as never);
+  const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!.resolve(
+    'webhooks.delivery.runtime',
+  )(deliveryAdapter, { ...transformCtx, entityName: 'WebhookDelivery' } as never);
 
   await manifestRuntime.hooks!.resolve('webhooks.captureAdapters')({
     app: {} as never,
@@ -294,22 +293,24 @@ describe('webhooks manifest runtime', () => {
     } satisfies BareEntityAdapter;
     const deliveryAdapter = createDeliveryBaseAdapter([]);
 
-    const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!
-      .resolve('webhooks.endpoint.runtime')(endpointAdapter, {
-        app: {} as never,
-        bus: {} as never,
-        pluginName: 'webhooks',
-        entityName: 'WebhookEndpoint',
-        adapters: {},
-      } as never);
-    const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!
-      .resolve('webhooks.delivery.runtime')(deliveryAdapter, {
-        app: {} as never,
-        bus: {} as never,
-        pluginName: 'webhooks',
-        entityName: 'WebhookDelivery',
-        adapters: {},
-      } as never);
+    const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!.resolve(
+      'webhooks.endpoint.runtime',
+    )(endpointAdapter, {
+      app: {} as never,
+      bus: {} as never,
+      pluginName: 'webhooks',
+      entityName: 'WebhookEndpoint',
+      adapters: {},
+    } as never);
+    const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!.resolve(
+      'webhooks.delivery.runtime',
+    )(deliveryAdapter, {
+      app: {} as never,
+      bus: {} as never,
+      pluginName: 'webhooks',
+      entityName: 'WebhookDelivery',
+      adapters: {},
+    } as never);
 
     expect(() =>
       manifestRuntime.hooks!.resolve('webhooks.captureAdapters')({
@@ -346,22 +347,24 @@ describe('webhooks manifest runtime', () => {
       },
     } satisfies BareEntityAdapter;
 
-    const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!
-      .resolve('webhooks.endpoint.runtime')(endpointAdapter, {
-        app: {} as never,
-        bus: {} as never,
-        pluginName: 'webhooks',
-        entityName: 'WebhookEndpoint',
-        adapters: {},
-      } as never);
-    const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!
-      .resolve('webhooks.delivery.runtime')(deliveryAdapter, {
-        app: {} as never,
-        bus: {} as never,
-        pluginName: 'webhooks',
-        entityName: 'WebhookDelivery',
-        adapters: {},
-      } as never);
+    const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!.resolve(
+      'webhooks.endpoint.runtime',
+    )(endpointAdapter, {
+      app: {} as never,
+      bus: {} as never,
+      pluginName: 'webhooks',
+      entityName: 'WebhookEndpoint',
+      adapters: {},
+    } as never);
+    const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!.resolve(
+      'webhooks.delivery.runtime',
+    )(deliveryAdapter, {
+      app: {} as never,
+      bus: {} as never,
+      pluginName: 'webhooks',
+      entityName: 'WebhookDelivery',
+      adapters: {},
+    } as never);
 
     expect(() =>
       manifestRuntime.hooks!.resolve('webhooks.captureAdapters')({

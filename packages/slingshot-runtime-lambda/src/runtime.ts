@@ -6,9 +6,9 @@ import type {
   SlingshotHandler,
   TriggerOpts,
 } from '@lastshotlabs/slingshot-core';
-import { bootstrap, type BootstrapResult } from './bootstrap';
+import { type BootstrapResult, bootstrap } from './bootstrap';
 import { invokeWithAdapter } from './invocationLoop';
-import { resolveLambdaTrigger, type LambdaTriggerKind } from './triggers';
+import { type LambdaTriggerKind, resolveLambdaTrigger } from './triggers';
 
 type LambdaContextLike = {
   awsRequestId?: string;

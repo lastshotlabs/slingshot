@@ -152,10 +152,7 @@ function createAbortSignal(parent: AbortSignal | undefined, timeout: number | un
   };
 }
 
-function withStepOverrides(
-  task: AnyResolvedTask,
-  options: StepEntry['options'],
-): AnyResolvedTask {
+function withStepOverrides(task: AnyResolvedTask, options: StepEntry['options']): AnyResolvedTask {
   if (!options.retry && options.timeout === undefined) {
     return task;
   }
@@ -186,11 +183,9 @@ async function awaitTaskResult(options: {
 
   if (options.signal.aborted) {
     await options.taskRunner.cancel(options.childRunId);
-    throw (
-      options.signal.reason instanceof Error
-        ? options.signal.reason
-        : new Error(String(options.signal.reason ?? 'Run cancelled'))
-    );
+    throw options.signal.reason instanceof Error
+      ? options.signal.reason
+      : new Error(String(options.signal.reason ?? 'Run cancelled'));
   }
 
   return await Promise.race([
@@ -213,10 +208,7 @@ async function awaitTaskResult(options: {
   ]);
 }
 
-function resolveTask(
-  entry: StepEntry,
-  registry: Map<string, AnyResolvedTask>,
-): AnyResolvedTask {
+function resolveTask(entry: StepEntry, registry: Map<string, AnyResolvedTask>): AnyResolvedTask {
   if (entry.taskRef) return entry.taskRef;
   const task = registry.get(entry.task);
   if (!task) {
@@ -286,7 +278,8 @@ export async function executeWorkflow(options: {
         }
 
         const context = { workflowInput, results };
-        const sleepMs = typeof entry.duration === 'function' ? entry.duration(context) : entry.duration;
+        const sleepMs =
+          typeof entry.duration === 'function' ? entry.duration(context) : entry.duration;
         assertSleepDuration(entry.name, sleepMs);
         const existingWakeAt =
           persistedStep?.status === 'running' &&
@@ -335,7 +328,10 @@ export async function executeWorkflow(options: {
             return { step: stepEntry, status: 'fulfilled' as const, value: persistedStep.output };
           }
 
-          const taskDef = withStepOverrides(resolveTask(stepEntry, options.taskRegistry), stepEntry.options);
+          const taskDef = withStepOverrides(
+            resolveTask(stepEntry, options.taskRegistry),
+            stepEntry.options,
+          );
           const childRunId = generateRunId();
           await options.callbacks.onStepStarted(options.runId, stepEntry.name, taskDef.name);
           const stepInput = stepEntry.options.input
@@ -343,12 +339,11 @@ export async function executeWorkflow(options: {
             : workflowInput;
 
           try {
-            const childHandle = options.taskRunner
-              .submit(taskDef, stepInput, {
-                runId: childRunId,
-                tenantId: options.tenantId,
-                priority: 0,
-              });
+            const childHandle = options.taskRunner.submit(taskDef, stepInput, {
+              runId: childRunId,
+              tenantId: options.tenantId,
+              priority: 0,
+            });
             options.onChildRun?.(childRunId);
             const output = await awaitTaskResult({
               taskRunner: options.taskRunner,
@@ -366,7 +361,10 @@ export async function executeWorkflow(options: {
         let hardFailure: unknown = null;
 
         for (const item of settled) {
-          const taskDef = withStepOverrides(resolveTask(item.step, options.taskRegistry), item.step.options);
+          const taskDef = withStepOverrides(
+            resolveTask(item.step, options.taskRegistry),
+            item.step.options,
+          );
           if (item.status === 'fulfilled') {
             results[item.step.name] = item.value;
             await options.callbacks.onStepCompleted(
@@ -435,12 +433,11 @@ export async function executeWorkflow(options: {
       await options.callbacks.onStepStarted(options.runId, entry.name, taskDef.name);
 
       try {
-        const childHandle = options.taskRunner
-          .submit(taskDef, stepInput, {
-            runId: childRunId,
-            tenantId: options.tenantId,
-            priority: 0,
-          });
+        const childHandle = options.taskRunner.submit(taskDef, stepInput, {
+          runId: childRunId,
+          tenantId: options.tenantId,
+          priority: 0,
+        });
         options.onChildRun?.(childRunId);
         const output = await awaitTaskResult({
           taskRunner: options.taskRunner,

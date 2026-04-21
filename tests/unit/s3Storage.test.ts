@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { s3Storage } from '../../src/framework/adapters/s3Storage';
 
 // ---------------------------------------------------------------------------
 // Mock AWS SDK modules
@@ -16,7 +17,10 @@ class MockS3Client {
     const cmd = command as { _type: string; input: Record<string, unknown> };
     if (cmd._type === 'GetObjectCommand') {
       if (cmd.input.Key === 'missing.txt') {
-        const err = new Error('NoSuchKey') as Error & { name: string; $metadata: { httpStatusCode: number } };
+        const err = new Error('NoSuchKey') as Error & {
+          name: string;
+          $metadata: { httpStatusCode: number };
+        };
         err.name = 'NoSuchKey';
         err.$metadata = { httpStatusCode: 404 };
         throw err;
@@ -78,8 +82,6 @@ mock.module('@aws-sdk/lib-storage', () => ({
     done = uploadDoneMock;
   },
 }));
-
-import { s3Storage } from '../../src/framework/adapters/s3Storage';
 
 function resetCommands() {
   sentCommands.length = 0;

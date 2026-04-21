@@ -3,7 +3,7 @@
  *
  * Targets uncovered lines: 75, 84-92, 101-107, 112-159, 163-182, 191-197, 202-242
  */
-import { describe, expect, test, mock } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import {
   createDeferredAdminProviders,
   createInMemoryAuditLog,
@@ -25,7 +25,10 @@ function mockPermissionsState() {
   const grants: unknown[] = [];
   return {
     adapter: {
-      createGrant: (grant: unknown) => { grants.push(grant); return Promise.resolve(grant as never); },
+      createGrant: (grant: unknown) => {
+        grants.push(grant);
+        return Promise.resolve(grant as never);
+      },
       revokeGrant: () => Promise.resolve(),
       getGrantsForSubject: () => Promise.resolve([]),
       getEffectiveGrantsForSubject: () => Promise.resolve([]),
@@ -137,9 +140,7 @@ describe('createDeferredAdminProviders — coverage', () => {
       'Auth runtime not bound',
     );
     // getCapabilities throws synchronously from requireAdapter before returning a promise
-    expect(() => result.managedUserProvider!.getCapabilities()).toThrow(
-      'Auth runtime not bound',
-    );
+    expect(() => result.managedUserProvider!.getCapabilities()).toThrow('Auth runtime not bound');
     await expect(result.managedUserProvider!.deleteUser('u1')).rejects.toThrow(
       'Auth runtime not bound',
     );
@@ -292,17 +293,20 @@ describe('createDeferredAdminProviders — coverage', () => {
   test('getUser returns mapped ManagedUserRecord', async () => {
     const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
     const pluginState = new Map<string, unknown>();
-    pluginState.set('slingshot-auth', mockAuthRuntime({
-      getUser: async () => ({
-        email: 'bob@example.com',
-        displayName: 'Bob',
-        firstName: 'Bob',
-        lastName: 'Jones',
-        externalId: 'ext-bob',
-        suspended: true,
-        userMetadata: { role: 'viewer' },
+    pluginState.set(
+      'slingshot-auth',
+      mockAuthRuntime({
+        getUser: async () => ({
+          email: 'bob@example.com',
+          displayName: 'Bob',
+          firstName: 'Bob',
+          lastName: 'Jones',
+          externalId: 'ext-bob',
+          suspended: true,
+          userMetadata: { role: 'viewer' },
+        }),
       }),
-    }));
+    );
     result.bind(pluginState);
     const user = await result.managedUserProvider!.getUser('bob-id');
     expect(user).toEqual({
@@ -324,13 +328,16 @@ describe('createDeferredAdminProviders — coverage', () => {
   test('getCapabilities returns true for methods present on the adapter', async () => {
     const result = createDeferredAdminProviders({ managedUserProvider: 'slingshot-auth' });
     const pluginState = new Map<string, unknown>();
-    pluginState.set('slingshot-auth', mockAuthRuntime({
-      listUsers: async () => ({ users: [], totalResults: 0 }),
-      getUser: async () => null,
-      deleteUser: async () => {},
-      setSuspended: async () => {},
-      setUserMetadata: async () => {},
-    }));
+    pluginState.set(
+      'slingshot-auth',
+      mockAuthRuntime({
+        listUsers: async () => ({ users: [], totalResults: 0 }),
+        getUser: async () => null,
+        deleteUser: async () => {},
+        setSuspended: async () => {},
+        setUserMetadata: async () => {},
+      }),
+    );
     result.bind(pluginState);
     const caps = await result.managedUserProvider!.getCapabilities();
     expect(caps).toEqual({
@@ -388,9 +395,9 @@ describe('createDeferredAdminProviders — coverage', () => {
   test('permissions.evaluator.can throws when perms state is not bound', () => {
     const result = createDeferredAdminProviders({ permissions: 'slingshot-permissions' });
     // Do NOT call bind — requirePerms throws synchronously
-    expect(() =>
-      result.permissions!.evaluator.can({ id: 'u1', type: 'user' }, 'read'),
-    ).toThrow('Permissions state not bound');
+    expect(() => result.permissions!.evaluator.can({ id: 'u1', type: 'user' }, 'read')).toThrow(
+      'Permissions state not bound',
+    );
   });
 
   test('permissions.registry.getActionsForRole throws when perms state is not bound', () => {
@@ -465,17 +472,11 @@ describe('createDeferredAdminProviders — coverage', () => {
     pluginState.set('slingshot-permissions', perms);
     result.bind(pluginState);
 
-    const allowed = await result.permissions!.evaluator.can(
-      { id: 'u1', type: 'user' },
-      'write',
-      { tenantId: 't1' },
-    );
+    const allowed = await result.permissions!.evaluator.can({ id: 'u1', type: 'user' }, 'write', {
+      tenantId: 't1',
+    });
     expect(allowed).toBe(true);
-    expect(canSpy).toHaveBeenCalledWith(
-      { id: 'u1', type: 'user' },
-      'write',
-      { tenantId: 't1' },
-    );
+    expect(canSpy).toHaveBeenCalledWith({ id: 'u1', type: 'user' }, 'write', { tenantId: 't1' });
   });
 
   test('permissions.registry.register delegates to real registry after bind', () => {

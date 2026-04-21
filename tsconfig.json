@@ -28,9 +28,7 @@
       "@lastshotlabs/slingshot-auth": ["./packages/slingshot-auth/src/index.ts"],
       "@lastshotlabs/slingshot-auth/testing": ["./packages/slingshot-auth/src/testing.ts"],
       "@lastshotlabs/slingshot-admin": ["./packages/slingshot-admin/src/index.ts"],
-      "@lastshotlabs/slingshot-orchestration": [
-        "./packages/slingshot-orchestration/src/index.ts"
-      ],
+      "@lastshotlabs/slingshot-orchestration": ["./packages/slingshot-orchestration/src/index.ts"],
       "@lastshotlabs/slingshot-orchestration-plugin": [
         "./packages/slingshot-orchestration-plugin/src/index.ts"
       ],

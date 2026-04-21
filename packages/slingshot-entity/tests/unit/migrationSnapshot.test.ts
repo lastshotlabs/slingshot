@@ -4,8 +4,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
-import { defineEntity, field } from '../../src/index';
 import { writeGenerated } from '../../src/cli';
+import { defineEntity, field } from '../../src/index';
 import { loadSnapshot, saveSnapshot } from '../../src/migrations/snapshotStore';
 
 const TMP_DIR = join(import.meta.dir, '../.tmp-snapshot-test');

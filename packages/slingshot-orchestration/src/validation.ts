@@ -25,13 +25,25 @@ export const retryPolicySchema = z
       .describe('Upper bound applied to exponential retry backoff.'),
   })
   .refine(
-    data => data.maxDelayMs === undefined || data.delayMs === undefined || data.maxDelayMs >= data.delayMs,
+    data =>
+      data.maxDelayMs === undefined ||
+      data.delayMs === undefined ||
+      data.maxDelayMs >= data.delayMs,
     { message: 'maxDelayMs must be >= delayMs when both are specified.' },
   );
 
 export const runOptionsSchema = z.object({
-  idempotencyKey: z.string().min(1).optional().describe('Optional idempotency key for deduping runs.'),
-  delay: z.number().int().nonnegative().optional().describe('Optional delay before execution in milliseconds.'),
+  idempotencyKey: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Optional idempotency key for deduping runs.'),
+  delay: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe('Optional delay before execution in milliseconds.'),
   tenantId: z.string().min(1).optional().describe('Optional tenant ID associated with the run.'),
   priority: z
     .number()
@@ -46,7 +58,9 @@ export const runOptionsSchema = z.object({
     .refine(tags => !tags || Object.keys(tags).length <= 50, {
       message: 'Maximum 50 tags per run.',
     })
-    .describe('Filterable string tags attached to the run. Max 50 tags, keys <=256 chars, values <=1024 chars.'),
+    .describe(
+      'Filterable string tags attached to the run. Max 50 tags, keys <=256 chars, values <=1024 chars.',
+    ),
   metadata: z
     .record(z.string(), z.unknown())
     .optional()

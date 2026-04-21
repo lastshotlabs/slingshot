@@ -153,16 +153,11 @@ function resolveEventBus(
     typeof spec === 'object'
       ? {
           ...((spec as { config?: Record<string, unknown> }).config ?? {}),
-          ...('validation' in spec && spec.validation
-            ? { validation: spec.validation }
-            : {}),
+          ...('validation' in spec && spec.validation ? { validation: spec.validation } : {}),
         }
       : undefined;
 
-  return registry.resolveEventBus(
-    (spec as { type: string }).type,
-    config,
-  );
+  return registry.resolveEventBus((spec as { type: string }).type, config);
 }
 
 function resolveSecrets(

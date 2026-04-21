@@ -1,9 +1,9 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { defineEntity, field } from '@lastshotlabs/slingshot-core';
+import { collectionSqlite } from '../../src/configDriven/operationExecutors/collection';
 import { createPostgresEntityAdapter } from '../../src/configDriven/postgresAdapter';
 import { createSqliteEntityAdapter } from '../../src/configDriven/sqliteAdapter';
-import { collectionSqlite } from '../../src/configDriven/operationExecutors/collection';
 import { generatePostgres } from '../../src/generators/postgres';
 import { generateSqlite } from '../../src/generators/sqlite';
 
@@ -204,9 +204,10 @@ describe('entity bootstrap hardening', () => {
     ).toThrow('insert failed');
 
     const rows = raw
-      .query<{ id: string; label: string }, [string]>(
-        'SELECT id, label FROM parent_table_items WHERE parent_id = ? ORDER BY id ASC',
-      )
+      .query<
+        { id: string; label: string },
+        [string]
+      >('SELECT id, label FROM parent_table_items WHERE parent_id = ? ORDER BY id ASC')
       .all('p1');
 
     expect(rows).toEqual([{ id: 'existing', label: 'Existing' }]);
@@ -259,13 +260,12 @@ describe('entity bootstrap hardening', () => {
 
     await collection.set('p1', [{ id: 'child-1', label: 'Child' }]);
 
-    const parentRows = raw
-      .query<{ id: string }, []>('SELECT id FROM parent_table')
-      .all();
+    const parentRows = raw.query<{ id: string }, []>('SELECT id FROM parent_table').all();
     const childRows = raw
-      .query<{ id: string; label: string }, [string]>(
-        'SELECT id, label FROM parent_table_items WHERE parent_id = ?',
-      )
+      .query<
+        { id: string; label: string },
+        [string]
+      >('SELECT id, label FROM parent_table_items WHERE parent_id = ?')
       .all('p1');
 
     expect(parentRows).toEqual([]);

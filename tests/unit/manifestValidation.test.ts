@@ -52,8 +52,8 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const fieldIssue = issues.find(
-      i => (i.message as string).includes('Unknown field "unknownField"'),
+    const fieldIssue = issues.find(i =>
+      (i.message as string).includes('Unknown field "unknownField"'),
     );
     expect(fieldIssue).toBeDefined();
   });
@@ -71,9 +71,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const sortIssue = issues.find(i =>
-      (i.path as string[]).includes('defaultSort'),
-    );
+    const sortIssue = issues.find(i => (i.path as string[]).includes('defaultSort'));
     expect(sortIssue).toBeDefined();
   });
 
@@ -90,9 +88,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const filterIssue = issues.find(i =>
-      (i.path as string[]).includes('filters'),
-    );
+    const filterIssue = issues.find(i => (i.path as string[]).includes('filters'));
     expect(filterIssue).toBeDefined();
   });
 
@@ -109,9 +105,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const rowClickIssue = issues.find(i =>
-      (i.path as string[]).includes('rowClick'),
-    );
+    const rowClickIssue = issues.find(i => (i.path as string[]).includes('rowClick'));
     expect(rowClickIssue).toBeDefined();
   });
 
@@ -128,9 +122,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const actionIssue = issues.find(i =>
-      (i.path as string[]).includes('create'),
-    );
+    const actionIssue = issues.find(i => (i.path as string[]).includes('create'));
     expect(actionIssue).toBeDefined();
   });
 
@@ -165,9 +157,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const bothIssue = issues.find(i =>
-      (i.message as string).includes('cannot declare both'),
-    );
+    const bothIssue = issues.find(i => (i.message as string).includes('cannot declare both'));
     expect(bothIssue).toBeDefined();
   });
 
@@ -197,9 +187,7 @@ describe('validateManifestCrossFields', () => {
           type: 'entity-detail',
           entity: 'user',
           fields: [],
-          related: [
-            { entity: 'unknownEntity', foreignKey: 'userId', fields: [] },
-          ],
+          related: [{ entity: 'unknownEntity', foreignKey: 'userId', fields: [] }],
           title: 'User Detail',
         },
       },
@@ -221,16 +209,12 @@ describe('validateManifestCrossFields', () => {
           type: 'entity-detail',
           entity: 'user',
           fields: [],
-          related: [
-            { entity: 'post', foreignKey: 'noSuchKey', fields: ['title'] },
-          ],
+          related: [{ entity: 'post', foreignKey: 'noSuchKey', fields: ['title'] }],
           title: 'User Detail',
         },
       },
     });
-    const fkIssue = issues.find(i =>
-      (i.message as string).includes('Unknown field "noSuchKey"'),
-    );
+    const fkIssue = issues.find(i => (i.message as string).includes('Unknown field "noSuchKey"'));
     expect(fkIssue).toBeDefined();
   });
 
@@ -249,9 +233,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const lookupIssue = issues.find(i =>
-      (i.path as string[]).includes('lookup'),
-    );
+    const lookupIssue = issues.find(i => (i.path as string[]).includes('lookup'));
     expect(lookupIssue).toBeDefined();
   });
 
@@ -268,9 +250,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const lookupIssues = issues.filter(i =>
-      (i.path as string[]).includes('lookup'),
-    );
+    const lookupIssues = issues.filter(i => (i.path as string[]).includes('lookup'));
     expect(lookupIssues).toHaveLength(0);
   });
 
@@ -287,9 +267,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const editIssue = issues.find(i =>
-      (i.path as string[]).includes('edit'),
-    );
+    const editIssue = issues.find(i => (i.path as string[]).includes('edit'));
     expect(editIssue).toBeDefined();
   });
 
@@ -306,9 +284,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const backIssue = issues.find(i =>
-      (i.path as string[]).includes('back'),
-    );
+    const backIssue = issues.find(i => (i.path as string[]).includes('back'));
     expect(backIssue).toBeDefined();
   });
 
@@ -326,9 +302,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const lookupIssue = issues.find(i =>
-      (i.message as string).includes('require a lookup'),
-    );
+    const lookupIssue = issues.find(i => (i.message as string).includes('require a lookup'));
     expect(lookupIssue).toBeDefined();
   });
 
@@ -348,9 +322,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const lookupIssue = issues.find(i =>
-      (i.path as string[]).includes('lookup'),
-    );
+    const lookupIssue = issues.find(i => (i.path as string[]).includes('lookup'));
     expect(lookupIssue).toBeDefined();
   });
 
@@ -384,9 +356,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const statIssue = issues.find(i =>
-      (i.message as string).includes('Unknown entity "noSuch"'),
-    );
+    const statIssue = issues.find(i => (i.message as string).includes('Unknown entity "noSuch"'));
     expect(statIssue).toBeDefined();
   });
 
@@ -401,9 +371,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const fieldIssue = issues.find(i =>
-      (i.message as string).includes('require a field'),
-    );
+    const fieldIssue = issues.find(i => (i.message as string).includes('require a field'));
     expect(fieldIssue).toBeDefined();
   });
 
@@ -436,9 +404,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const activityIssue = issues.find(i =>
-      (i.path as string[]).includes('activity'),
-    );
+    const activityIssue = issues.find(i => (i.path as string[]).includes('activity'));
     expect(activityIssue).toBeDefined();
   });
 
@@ -476,9 +442,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const chartIssue = issues.find(i =>
-      (i.path as string[]).includes('chart'),
-    );
+    const chartIssue = issues.find(i => (i.path as string[]).includes('chart'));
     expect(chartIssue).toBeDefined();
   });
 
@@ -494,9 +458,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const chartIssue = issues.find(i =>
-      (i.message as string).includes('Unknown field "noSuch"'),
-    );
+    const chartIssue = issues.find(i => (i.message as string).includes('Unknown field "noSuch"'));
     expect(chartIssue).toBeDefined();
   });
 
@@ -512,9 +474,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const chartIssue = issues.find(i =>
-      (i.message as string).includes('Unknown field "noSuch"'),
-    );
+    const chartIssue = issues.find(i => (i.message as string).includes('Unknown field "noSuch"'));
     expect(chartIssue).toBeDefined();
   });
 
@@ -554,9 +514,7 @@ describe('validateManifestCrossFields', () => {
         },
       },
     });
-    const titleIssue = issues.find(i =>
-      (i.path as string[]).includes('field'),
-    );
+    const titleIssue = issues.find(i => (i.path as string[]).includes('field'));
     expect(titleIssue).toBeDefined();
   });
 

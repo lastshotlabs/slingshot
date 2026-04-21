@@ -5,8 +5,8 @@
  */
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { AuditLogEntry } from '@lastshotlabs/slingshot-core';
-import { createPostgresAuditLogProvider } from '../../src/framework/auditLog/postgresProvider';
 import { encodeCursor } from '../../src/framework/auditLog/cursor';
+import { createPostgresAuditLogProvider } from '../../src/framework/auditLog/postgresProvider';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -372,12 +372,14 @@ describe('createMongoAuditLogProvider', () => {
    * imports and invokes the real `createMongoAuditLogProvider` so that production
    * code lines 10-76 are exercised.
    */
-  async function makeRealMongoProvider(opts: {
-    docs?: Array<Record<string, unknown>>;
-    ttlDays?: number;
-    throwOnCreate?: boolean;
-    captureFilter?: (filter: object) => void;
-  } = {}) {
+  async function makeRealMongoProvider(
+    opts: {
+      docs?: Array<Record<string, unknown>>;
+      ttlDays?: number;
+      throwOnCreate?: boolean;
+      captureFilter?: (filter: object) => void;
+    } = {},
+  ) {
     const { docs = [], ttlDays, throwOnCreate = false, captureFilter } = opts;
     const created: object[] = [];
     const returnDocs = docs.slice();
@@ -409,9 +411,8 @@ describe('createMongoAuditLogProvider', () => {
     }));
 
     // Re-import after mock is installed to pick up the mocked dependency
-    const { createMongoAuditLogProvider: create } = await import(
-      '../../src/framework/auditLog/mongoProvider'
-    );
+    const { createMongoAuditLogProvider: create } =
+      await import('../../src/framework/auditLog/mongoProvider');
 
     const fakeConn = {} as any;
     const provider = create(fakeConn, ttlDays);
@@ -518,7 +519,9 @@ describe('createMongoAuditLogProvider', () => {
   test('getLogs filters by userId', async () => {
     let capturedFilter: object = {};
     const { provider } = await makeRealMongoProvider({
-      captureFilter: (f) => { capturedFilter = f; },
+      captureFilter: f => {
+        capturedFilter = f;
+      },
     });
 
     await provider.getLogs({ userId: 'alice' });
@@ -528,7 +531,9 @@ describe('createMongoAuditLogProvider', () => {
   test('getLogs filters by tenantId', async () => {
     let capturedFilter: object = {};
     const { provider } = await makeRealMongoProvider({
-      captureFilter: (f) => { capturedFilter = f; },
+      captureFilter: f => {
+        capturedFilter = f;
+      },
     });
 
     await provider.getLogs({ tenantId: 't1' });
@@ -538,7 +543,9 @@ describe('createMongoAuditLogProvider', () => {
   test('getLogs applies after/before as $and conditions', async () => {
     let capturedFilter: Record<string, unknown> = {};
     const { provider } = await makeRealMongoProvider({
-      captureFilter: (f) => { capturedFilter = f as Record<string, unknown>; },
+      captureFilter: f => {
+        capturedFilter = f as Record<string, unknown>;
+      },
     });
 
     await provider.getLogs({
@@ -561,7 +568,9 @@ describe('createMongoAuditLogProvider', () => {
   test('getLogs applies only after filter when before is omitted', async () => {
     let capturedFilter: Record<string, unknown> = {};
     const { provider } = await makeRealMongoProvider({
-      captureFilter: (f) => { capturedFilter = f as Record<string, unknown>; },
+      captureFilter: f => {
+        capturedFilter = f as Record<string, unknown>;
+      },
     });
 
     await provider.getLogs({ after: new Date('2024-01-01').toISOString() });
@@ -574,7 +583,9 @@ describe('createMongoAuditLogProvider', () => {
   test('getLogs applies cursor for pagination', async () => {
     let capturedFilter: Record<string, unknown> = {};
     const { provider } = await makeRealMongoProvider({
-      captureFilter: (f) => { capturedFilter = f as Record<string, unknown>; },
+      captureFilter: f => {
+        capturedFilter = f as Record<string, unknown>;
+      },
     });
 
     const cursor = encodeCursor('2024-01-01T00:00:00.000Z', 'entry-id');
@@ -649,7 +660,10 @@ describe('createMongoAuditLogProvider', () => {
     let capturedLimit = 0;
     const mockModelForLimit = {
       created: [] as object[],
-      create: async (doc: object) => { mockModelForLimit.created.push(doc); return doc; },
+      create: async (doc: object) => {
+        mockModelForLimit.created.push(doc);
+        return doc;
+      },
       find: () => ({
         sort: () => ({
           limit: (n: number) => {
@@ -664,9 +678,8 @@ describe('createMongoAuditLogProvider', () => {
     bunMock.module('@framework/models/AuditLog', () => ({
       getAuditLogModel: () => mockModelForLimit,
     }));
-    const { createMongoAuditLogProvider: create } = await import(
-      '../../src/framework/auditLog/mongoProvider'
-    );
+    const { createMongoAuditLogProvider: create } =
+      await import('../../src/framework/auditLog/mongoProvider');
     const provider = create({} as any);
     await provider.getLogs({ limit: 9999 });
 
@@ -711,7 +724,9 @@ describe('createMongoAuditLogProvider', () => {
   test('getLogs combines cursor with before filter', async () => {
     let capturedFilter: Record<string, unknown> = {};
     const { provider } = await makeRealMongoProvider({
-      captureFilter: (f) => { capturedFilter = f as Record<string, unknown>; },
+      captureFilter: f => {
+        capturedFilter = f as Record<string, unknown>;
+      },
     });
 
     const cursor = encodeCursor('2024-06-01T00:00:00.000Z', 'some-id');
@@ -729,7 +744,10 @@ describe('createMongoAuditLogProvider', () => {
     let capturedLimit = 0;
     const mockModelForLimit = {
       created: [] as object[],
-      create: async (doc: object) => { mockModelForLimit.created.push(doc); return doc; },
+      create: async (doc: object) => {
+        mockModelForLimit.created.push(doc);
+        return doc;
+      },
       find: () => ({
         sort: () => ({
           limit: (n: number) => {
@@ -744,9 +762,8 @@ describe('createMongoAuditLogProvider', () => {
     bunMock.module('@framework/models/AuditLog', () => ({
       getAuditLogModel: () => mockModelForLimit,
     }));
-    const { createMongoAuditLogProvider: create } = await import(
-      '../../src/framework/auditLog/mongoProvider'
-    );
+    const { createMongoAuditLogProvider: create } =
+      await import('../../src/framework/auditLog/mongoProvider');
     const provider = create({} as any);
     await provider.getLogs({});
 
@@ -762,9 +779,8 @@ describe('createMongoAuditLogProvider', () => {
 describe('createMemoryAuditLogProvider — logEntry catch block', () => {
   test('suppresses startup warnings when emitWarnings is false', async () => {
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-    const { createMemoryAuditLogProvider } = await import(
-      '../../src/framework/auditLog/memoryProvider'
-    );
+    const { createMemoryAuditLogProvider } =
+      await import('../../src/framework/auditLog/memoryProvider');
 
     createMemoryAuditLogProvider({ emitWarnings: false });
 
@@ -775,9 +791,8 @@ describe('createMemoryAuditLogProvider — logEntry catch block', () => {
   test('logs error and resolves when push throws', async () => {
     const consoleSpy = spyOn(console, 'error').mockImplementation(() => {});
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-    const { createMemoryAuditLogProvider } = await import(
-      '../../src/framework/auditLog/memoryProvider'
-    );
+    const { createMemoryAuditLogProvider } =
+      await import('../../src/framework/auditLog/memoryProvider');
     const provider = createMemoryAuditLogProvider();
 
     // Monkey-patch Array.prototype.push temporarily to make it throw
@@ -795,10 +810,7 @@ describe('createMemoryAuditLogProvider — logEntry catch block', () => {
     shouldThrow = false;
     Array.prototype.push = origPush;
 
-    expect(consoleSpy).toHaveBeenCalledWith(
-      '[auditLog] failed to write entry:',
-      expect.any(Error),
-    );
+    expect(consoleSpy).toHaveBeenCalledWith('[auditLog] failed to write entry:', expect.any(Error));
     consoleSpy.mockRestore();
     warnSpy.mockRestore();
   });

@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { createRoute, registerSchema, registerSchemas, maybeAutoRegister, withSecurity } from '../../src/createRoute';
+import {
+  createRoute,
+  maybeAutoRegister,
+  registerSchema,
+  registerSchemas,
+  withSecurity,
+} from '../../src/createRoute';
 
 describe('createRoute', () => {
   test('returns a route config with method and path', () => {

@@ -124,11 +124,9 @@ function makeRouter(
       c.set('authUserId', 'user-abc');
       await next();
     },
-    requireRole:
-      () =>
-      async (_c: any, next: any) => {
-        await next();
-      },
+    requireRole: () => async (_c: any, next: any) => {
+      await next();
+    },
   };
 
   const app = createRouter();

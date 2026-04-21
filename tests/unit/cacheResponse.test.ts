@@ -97,11 +97,15 @@ describe('cacheResponse — adapter not ready', () => {
 
     const notReadyAdapter = {
       name: 'memory' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
       async del() {},
       async delPattern() {},
-      isReady() { return false; },
+      isReady() {
+        return false;
+      },
     };
 
     const testApp = createRouter();
@@ -111,10 +115,8 @@ describe('cacheResponse — adapter not ready', () => {
       cacheAdapters: new Map([['memory', notReadyAdapter]]),
     } as any);
 
-    testApp.get(
-      '/not-ready',
-      cacheResponse({ key: 'not-ready-key', store: 'memory' }),
-      c => c.json({ ok: true }),
+    testApp.get('/not-ready', cacheResponse({ key: 'not-ready-key', store: 'memory' }), c =>
+      c.json({ ok: true }),
     );
 
     const server = Bun.serve({ port: 0, fetch: testApp.fetch });
@@ -294,11 +296,16 @@ describe('cacheResponse — storeSet not ready', () => {
     let getCallCount = 0;
     const intermittentAdapter = {
       name: 'memory' as const,
-      async get() { getCallCount++; return null; },
+      async get() {
+        getCallCount++;
+        return null;
+      },
       async set() {},
       async del() {},
       async delPattern() {},
-      isReady() { return getCallCount === 0; }, // ready for GET, not ready for SET
+      isReady() {
+        return getCallCount === 0;
+      }, // ready for GET, not ready for SET
     };
 
     const testApp = createRouter();
@@ -308,10 +315,8 @@ describe('cacheResponse — storeSet not ready', () => {
       cacheAdapters: new Map([['memory', intermittentAdapter]]),
     } as any);
 
-    testApp.get(
-      '/set-not-ready',
-      cacheResponse({ key: 'set-not-ready-key', store: 'memory' }),
-      c => c.json({ ok: true }),
+    testApp.get('/set-not-ready', cacheResponse({ key: 'set-not-ready-key', store: 'memory' }), c =>
+      c.json({ ok: true }),
     );
 
     const server = Bun.serve({ port: 0, fetch: testApp.fetch });
@@ -337,11 +342,15 @@ describe('cacheResponse — bustCache and bustCachePattern', () => {
     const delMock = async () => {};
     const adapter = {
       name: 'memory' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
       del: delMock,
       async delPattern() {},
-      isReady() { return true; },
+      isReady() {
+        return true;
+      },
     };
 
     const testApp = createRouter();
@@ -362,11 +371,15 @@ describe('cacheResponse — bustCache and bustCachePattern', () => {
     const delPatternMock = async () => {};
     const adapter = {
       name: 'memory' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
       async del() {},
       delPattern: delPatternMock,
-      isReady() { return true; },
+      isReady() {
+        return true;
+      },
     };
 
     const testApp = createRouter();
@@ -386,11 +399,15 @@ describe('cacheResponse — bustCache and bustCachePattern', () => {
 
     const adapter = {
       name: 'memory' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
       async del() {},
       async delPattern() {},
-      isReady() { return false; },
+      isReady() {
+        return false;
+      },
     };
 
     const testApp = createRouter();
@@ -410,11 +427,15 @@ describe('cacheResponse — bustCache and bustCachePattern', () => {
 
     const adapter = {
       name: 'memory' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
       async del() {},
       async delPattern() {},
-      isReady() { return false; },
+      isReady() {
+        return false;
+      },
     };
 
     const testApp = createRouter();
@@ -462,10 +483,8 @@ describe('cacheResponse — storeSet adapter not ready', () => {
       cacheAdapters: new Map([['memory', notReadyOnSetAdapter]]),
     } as any);
 
-    testApp.get(
-      '/set-not-ready',
-      cacheResponse({ key: 'set-not-ready-key', store: 'memory' }),
-      c => c.json({ ok: true }),
+    testApp.get('/set-not-ready', cacheResponse({ key: 'set-not-ready-key', store: 'memory' }), c =>
+      c.json({ ok: true }),
     );
 
     const server = Bun.serve({ port: 0, fetch: testApp.fetch });
@@ -491,11 +510,17 @@ describe('cacheResponse — bustCache key construction', () => {
     const deletedKeys: string[] = [];
     const adapter = {
       name: 'memory' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
-      async del(key: string) { deletedKeys.push(key); },
+      async del(key: string) {
+        deletedKeys.push(key);
+      },
       async delPattern() {},
-      isReady() { return true; },
+      isReady() {
+        return true;
+      },
     };
 
     const testApp = createRouter();
@@ -517,26 +542,41 @@ describe('cacheResponse — bustCache key construction', () => {
     const redisDeleted: string[] = [];
     const memoryAdapter = {
       name: 'memory' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
-      async del(key: string) { memoryDeleted.push(key); },
+      async del(key: string) {
+        memoryDeleted.push(key);
+      },
       async delPattern() {},
-      isReady() { return true; },
+      isReady() {
+        return true;
+      },
     };
     const redisAdapter = {
       name: 'redis' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
-      async del(key: string) { redisDeleted.push(key); },
+      async del(key: string) {
+        redisDeleted.push(key);
+      },
       async delPattern() {},
-      isReady() { return true; },
+      isReady() {
+        return true;
+      },
     };
 
     const testApp = createRouter();
     attachContext(testApp, {
       app: testApp,
       config: { appName: 'app2' },
-      cacheAdapters: new Map([['memory', memoryAdapter], ['redis', redisAdapter]] as any),
+      cacheAdapters: new Map([
+        ['memory', memoryAdapter],
+        ['redis', redisAdapter],
+      ] as any),
     } as any);
 
     await bustCache('items:all', testApp);
@@ -551,11 +591,17 @@ describe('cacheResponse — bustCache key construction', () => {
     const deletedPatterns: string[] = [];
     const adapter = {
       name: 'memory' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
       async del() {},
-      async delPattern(pattern: string) { deletedPatterns.push(pattern); },
-      isReady() { return true; },
+      async delPattern(pattern: string) {
+        deletedPatterns.push(pattern);
+      },
+      isReady() {
+        return true;
+      },
     };
 
     const testApp = createRouter();
@@ -577,26 +623,41 @@ describe('cacheResponse — bustCache key construction', () => {
     const redisPatterns: string[] = [];
     const memoryAdapter = {
       name: 'memory' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
       async del() {},
-      async delPattern(pattern: string) { memoryPatterns.push(pattern); },
-      isReady() { return true; },
+      async delPattern(pattern: string) {
+        memoryPatterns.push(pattern);
+      },
+      isReady() {
+        return true;
+      },
     };
     const redisAdapter = {
       name: 'redis' as const,
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
       async del() {},
-      async delPattern(pattern: string) { redisPatterns.push(pattern); },
-      isReady() { return true; },
+      async delPattern(pattern: string) {
+        redisPatterns.push(pattern);
+      },
+      isReady() {
+        return true;
+      },
     };
 
     const testApp = createRouter();
     attachContext(testApp, {
       app: testApp,
       config: { appName: 'app3' },
-      cacheAdapters: new Map([['memory', memoryAdapter], ['redis', redisAdapter]] as any),
+      cacheAdapters: new Map([
+        ['memory', memoryAdapter],
+        ['redis', redisAdapter],
+      ] as any),
     } as any);
 
     await bustCachePattern('products:*', testApp);
@@ -689,10 +750,8 @@ describe('cacheResponse — middleware store resolution', () => {
     const { cacheResponse } = await getCacheResponseMiddleware();
     const testApp = await createTestApp({ plugins: [] });
 
-    testApp.get(
-      '/no-ttl-test',
-      cacheResponse({ key: 'no-ttl', store: 'memory' }),
-      c => c.json({ indefinite: true }),
+    testApp.get('/no-ttl-test', cacheResponse({ key: 'no-ttl', store: 'memory' }), c =>
+      c.json({ indefinite: true }),
     );
 
     const server = Bun.serve({ port: 0, fetch: testApp.fetch });

@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import * as realInfra from './infra/realBunshotInfra';
 
@@ -150,7 +150,10 @@ describe('root cli scaffold/generation surface', () => {
     }));
 
     const Fire = (await import('../../src/cli/commands/fire')).default;
-    const schemaCommand = new Fire(['--schema', schemaPath, '--count', '2'], makeOclifConfig() as never);
+    const schemaCommand = new Fire(
+      ['--schema', schemaPath, '--count', '2'],
+      makeOclifConfig() as never,
+    );
     const schemaLogs = captureLogs(schemaCommand);
     await schemaCommand.run();
     expect(schemaLogs.join('\n')).toContain('[');
@@ -188,7 +191,10 @@ describe('root cli scaffold/generation surface', () => {
     }));
 
     const InfraInit = (await import('../../src/cli/commands/infra/init')).default;
-    const infraCommand = new InfraInit(['--dir', infraTmp, '--port', '8080'], makeOclifConfig() as never);
+    const infraCommand = new InfraInit(
+      ['--dir', infraTmp, '--port', '8080'],
+      makeOclifConfig() as never,
+    );
     const infraLogs = captureLogs(infraCommand);
     await infraCommand.run();
     expect(readFileSync(join(infraTmp, 'slingshot.infra.ts'), 'utf8')).toContain('// infra');
@@ -293,9 +299,7 @@ describe('root cli scaffold/generation surface', () => {
       createEcsPreset: () => ({}),
       createEc2NginxPreset: () => ({}),
       runRollback: async () => ({
-        services: [
-          { name: 'api', success: true, previousTag: 'v2', rolledBackTag: 'v1' },
-        ],
+        services: [{ name: 'api', success: true, previousTag: 'v2', rolledBackTag: 'v1' }],
       }),
       loadInfraConfig: async () => ({
         config: { platform: undefined },
@@ -317,10 +321,7 @@ describe('root cli scaffold/generation surface', () => {
     expect((writes.at(-1) as any).resources.postgres.stages.prod.status).toBe('active');
 
     const Rollback = (await import('../../src/cli/commands/rollback')).default;
-    const rollbackCommand = new Rollback(
-      ['--stage', 'prod', '--yes'],
-      makeOclifConfig() as never,
-    );
+    const rollbackCommand = new Rollback(['--stage', 'prod', '--yes'], makeOclifConfig() as never);
     const rollbackLogs = captureLogs(rollbackCommand);
     await rollbackCommand.run();
     expect(rollbackLogs.join('\n')).toContain('api: v2 -> v1');

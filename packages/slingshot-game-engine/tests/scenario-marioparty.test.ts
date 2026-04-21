@@ -23,11 +23,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import {
-  computeVoteTally,
-  createChannelState,
-  recordSubmission,
-} from '../src/lib/channels';
+import { computeVoteTally, createChannelState, recordSubmission } from '../src/lib/channels';
 import {
   completeChildSession,
   createChildSessionState,

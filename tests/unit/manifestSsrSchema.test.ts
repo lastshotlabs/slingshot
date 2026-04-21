@@ -9,9 +9,7 @@ describe('navigationSectionSchema — navigationItemSchema (lines 525-554)', () 
   it('validates a minimal navigation section with one item', () => {
     const result = navigationSectionSchema.safeParse({
       shell: 'sidebar',
-      items: [
-        { label: 'Dashboard', path: '/dashboard' },
-      ],
+      items: [{ label: 'Dashboard', path: '/dashboard' }],
     });
     expect(result.success).toBe(true);
   });
@@ -66,9 +64,7 @@ describe('navigationSectionSchema — navigationItemSchema (lines 525-554)', () 
             {
               label: 'Level 2',
               path: '/level1/level2',
-              children: [
-                { label: 'Level 3', path: '/level1/level2/level3' },
-              ],
+              children: [{ label: 'Level 3', path: '/level1/level2/level3' }],
             },
           ],
         },
@@ -98,9 +94,7 @@ describe('navigationSectionSchema — navigationItemSchema (lines 525-554)', () 
   it('rejects item with invalid auth value', () => {
     const result = navigationSectionSchema.safeParse({
       shell: 'sidebar',
-      items: [
-        { label: 'Home', path: '/home', auth: 'invalid-auth' },
-      ],
+      items: [{ label: 'Home', path: '/home', auth: 'invalid-auth' }],
     });
     expect(result.success).toBe(false);
   });
@@ -108,9 +102,7 @@ describe('navigationSectionSchema — navigationItemSchema (lines 525-554)', () 
   it('rejects item with path that does not start with /', () => {
     const result = navigationSectionSchema.safeParse({
       shell: 'sidebar',
-      items: [
-        { label: 'Home', path: 'no-leading-slash' },
-      ],
+      items: [{ label: 'Home', path: 'no-leading-slash' }],
     });
     expect(result.success).toBe(false);
   });

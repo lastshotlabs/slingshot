@@ -7,10 +7,10 @@
  */
 import { describe, expect, test } from 'bun:test';
 import {
+  createMongoUploadRegistry,
+  createPostgresUploadRegistry,
   createRedisUploadRegistry,
   createSqliteUploadRegistry,
-  createPostgresUploadRegistry,
-  createMongoUploadRegistry,
   createUploadRegistryFactories,
 } from '../../src/framework/persistence/uploadRegistry';
 
@@ -34,7 +34,9 @@ describe('createRedisUploadRegistry', () => {
     const store = new Map<string, string>();
     return {
       store,
-      async get(key: string) { return store.get(key) ?? null; },
+      async get(key: string) {
+        return store.get(key) ?? null;
+      },
       async set(key: string, value: string) {
         store.set(key, value);
         return 'OK';
@@ -148,7 +150,9 @@ describe('createSqliteUploadRegistry', () => {
             if (!row) return null;
             return row as T;
           },
-          all() { return [] as T[]; },
+          all() {
+            return [] as T[];
+          },
         };
       },
     };

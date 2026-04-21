@@ -49,9 +49,9 @@ describe('defineEntity validation', () => {
   };
 
   test('throws when no primary key', () => {
-    expect(() =>
-      defineEntity('Foo', { fields: { name: field.string() } }),
-    ).toThrow('No primary key field defined');
+    expect(() => defineEntity('Foo', { fields: { name: field.string() } })).toThrow(
+      'No primary key field defined',
+    );
   });
 
   test('throws when multiple primary keys', () => {
@@ -66,9 +66,9 @@ describe('defineEntity validation', () => {
   });
 
   test('throws when PK type is invalid (boolean)', () => {
-    expect(() =>
-      defineEntity('Foo', { fields: { id: field.boolean({ primary: true }) } }),
-    ).toThrow('Primary key must be string, number, or integer');
+    expect(() => defineEntity('Foo', { fields: { id: field.boolean({ primary: true }) } })).toThrow(
+      'Primary key must be string, number, or integer',
+    );
   });
 
   test('throws when softDelete field not found', () => {

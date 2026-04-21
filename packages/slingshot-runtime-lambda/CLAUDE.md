@@ -5,14 +5,14 @@ record-level invocation flow, and manifest-driven Lambda export wiring.
 
 ## Key Files
 
-| File                  | What                                                              |
-| --------------------- | ----------------------------------------------------------------- |
-| src/index.ts          | Public API surface for Lambda runtime entrypoints                 |
-| src/runtime.ts        | `createLambdaRuntime()` bootstrap caching, shutdown, and wrapping |
-| src/invocationLoop.ts | Per-record invocation lifecycle, hooks, idempotency, and outcomes |
-| src/triggers/index.ts | Trigger registry and adapter lookup                               |
+| File                  | What                                                               |
+| --------------------- | ------------------------------------------------------------------ |
+| src/index.ts          | Public API surface for Lambda runtime entrypoints                  |
+| src/runtime.ts        | `createLambdaRuntime()` bootstrap caching, shutdown, and wrapping  |
+| src/invocationLoop.ts | Per-record invocation lifecycle, hooks, idempotency, and outcomes  |
+| src/triggers/index.ts | Trigger registry and adapter lookup                                |
 | src/manifest.ts       | `createFunctionsFromManifest()` and manifest lambda binding wiring |
-| docs/human/index.md   | Package guide synced into the docs site                           |
+| docs/human/index.md   | Package guide synced into the docs site                            |
 
 ## Connections
 

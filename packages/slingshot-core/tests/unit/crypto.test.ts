@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { randomBytes } from 'crypto';
 import {
-  timingSafeEqual,
-  sha256,
-  hmacSign,
-  hashToken,
-  encryptField,
   decryptField,
-  isEncryptedField,
+  encryptField,
   generateSecureToken,
+  hashToken,
+  hmacSign,
+  isEncryptedField,
+  sha256,
+  timingSafeEqual,
 } from '../../src/crypto';
 import type { DataEncryptionKey } from '../../src/crypto';
 

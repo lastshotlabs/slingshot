@@ -332,7 +332,6 @@ export function createMemoryAuthAdapter(
   // Return the combined AuthAdapter + MemoryAuthStores object
   // -------------------------------------------------------------------------
 
-   
   return {
     // -----------------------------------------------------------------------
     // AuthAdapter methods
@@ -1443,5 +1442,4 @@ export function createMemoryAuthAdapter(
       return { userId: entry.userId, purpose: entry.purpose };
     },
   };
-   
 }

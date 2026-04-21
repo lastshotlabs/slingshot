@@ -253,7 +253,9 @@ describe('wsDispatch — handleIncomingEvent', () => {
   });
 
   it('middleware throws — treated as deny, ack error forbidden', async () => {
-    const guard = mock(() => { throw new Error('guard crash'); });
+    const guard = mock(() => {
+      throw new Error('guard crash');
+    });
     const handler = mock(() => 'nope');
     const ws = createMockWs('s1');
     const msg = JSON.stringify({ action: 'event', event: 'guarded', ackId: 'a-throw' });
@@ -278,11 +280,17 @@ describe('wsDispatch — handleIncomingEvent', () => {
     });
 
     expect(handler).not.toHaveBeenCalled();
-    expect(JSON.parse(ws.sent[0])).toEqual({ event: 'ack', ackId: 'a-bearer', error: 'unauthenticated' });
+    expect(JSON.parse(ws.sent[0])).toEqual({
+      event: 'ack',
+      ackId: 'a-bearer',
+      error: 'unauthenticated',
+    });
   });
 
   it('handler throws non-Error — error message is stringified', async () => {
-    const handler = mock(() => { throw 42; });
+    const handler = mock(() => {
+      throw 42;
+    });
     const ws = createMockWs('s1');
     const msg = JSON.stringify({ action: 'event', event: 'thrownum', ackId: 'a-num' });
 

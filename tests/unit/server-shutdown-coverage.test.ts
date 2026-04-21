@@ -344,7 +344,11 @@ describe('SQLite close in graceful shutdown (lines 634-639)', () => {
     expect(exitCode).toBe(1);
 
     // Restore and actually close
-    try { origClose(); } catch { /* already closed or error */ }
+    try {
+      origClose();
+    } catch {
+      /* already closed or error */
+    }
     server = null;
   });
 });
@@ -409,7 +413,11 @@ describe('outer catch in graceful shutdown (lines 642-643)', () => {
     expect(exitCode).toBe(1);
 
     // Actually stop the server for cleanup
-    try { origStop(true); } catch { /* best-effort */ }
+    try {
+      origStop(true);
+    } catch {
+      /* best-effort */
+    }
     server = null;
   });
 });

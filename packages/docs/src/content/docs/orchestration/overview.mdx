@@ -13,22 +13,22 @@ memory, SQLite, or BullMQ. You define the work once, then swap adapters as infra
 
 ## Packages
 
-| Package | Role |
-| ------- | ---- |
-| `@lastshotlabs/slingshot-orchestration` | Portable task/workflow definitions, runtime, memory adapter, SQLite adapter |
-| `@lastshotlabs/slingshot-orchestration-plugin` | Slingshot plugin integration, runtime lookup helpers, HTTP routes |
-| `@lastshotlabs/slingshot-orchestration-bullmq` | BullMQ-backed adapter for Redis deployments |
+| Package                                        | Role                                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------------------- |
+| `@lastshotlabs/slingshot-orchestration`        | Portable task/workflow definitions, runtime, memory adapter, SQLite adapter |
+| `@lastshotlabs/slingshot-orchestration-plugin` | Slingshot plugin integration, runtime lookup helpers, HTTP routes           |
+| `@lastshotlabs/slingshot-orchestration-bullmq` | BullMQ-backed adapter for Redis deployments                                 |
 
 ## Current support
 
-| Adapter / Provider | Status | Notes |
-| ------------------ | ------ | ----- |
-| Memory | Supported | In-process, non-durable |
-| SQLite | Supported | Durable single-node execution |
-| BullMQ | Supported | Redis-backed queues, scheduling, progress |
-| Manifest mode | Not shipped yet | Planned as Phase 4 |
-| Trigger.dev | Not shipped yet | Planned follow-up provider |
-| Temporal | Not shipped yet | Planned follow-up provider |
+| Adapter / Provider | Status          | Notes                                     |
+| ------------------ | --------------- | ----------------------------------------- |
+| Memory             | Supported       | In-process, non-durable                   |
+| SQLite             | Supported       | Durable single-node execution             |
+| BullMQ             | Supported       | Redis-backed queues, scheduling, progress |
+| Manifest mode      | Not shipped yet | Planned as Phase 4                        |
+| Trigger.dev        | Not shipped yet | Planned follow-up provider                |
+| Temporal           | Not shipped yet | Planned follow-up provider                |
 
 So, no: Temporal and the other cloud-provider adapters are not available in this worktree yet.
 Current provider support stops at memory, SQLite, and BullMQ.
@@ -39,12 +39,12 @@ The current implementation is code-first. Define tasks and workflows in TypeScri
 them into a runtime or Slingshot plugin.
 
 ```typescript
+import { z } from 'zod';
 import {
   createMemoryAdapter,
   createOrchestrationRuntime,
   defineTask,
 } from '@lastshotlabs/slingshot-orchestration';
-import { z } from 'zod';
 
 const resizeImage = defineTask({
   name: 'resize-image',
@@ -65,12 +65,9 @@ For Slingshot integration:
 
 ```typescript
 import type { MiddlewareHandler } from 'hono';
-import {
-  createMemoryAdapter,
-  defineTask,
-} from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
 import { z } from 'zod';
+import { createMemoryAdapter, defineTask } from '@lastshotlabs/slingshot-orchestration';
+import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
 
 const resizeImage = defineTask({
   name: 'resize-image',

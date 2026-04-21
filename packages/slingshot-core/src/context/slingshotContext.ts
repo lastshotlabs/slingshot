@@ -12,6 +12,7 @@ import type { CronRegistryRepository } from '../cronRegistry';
 import type { DataEncryptionKey } from '../crypto';
 import type { SlingshotEventBus } from '../eventBus';
 import type { IdempotencyAdapter } from '../idempotency';
+import type { IdentityResolver } from '../identity';
 import type { KafkaConnectorHandle } from '../kafkaConnectors';
 import type { SlingshotPlugin } from '../plugin';
 import type { RuntimeSqliteDatabase } from '../runtime';
@@ -659,6 +660,17 @@ export interface SlingshotContext {
    * `null` when the app does not use Kafka inbound/outbound connectors.
    */
   readonly kafkaConnectors: KafkaConnectorHandle | null;
+
+  /**
+   * Identity resolver that maps raw auth context variables into a canonical `Actor`.
+   *
+   * Configured via `CoreRegistrar.setIdentityResolver()` during plugin setup, or
+   * defaults to `createDefaultIdentityResolver()` which preserves existing behavior.
+   * Custom auth integrations (gateway auth, external IdP, Lambda authorizer) provide
+   * their own resolver so all framework consumers get a consistent identity shape
+   * without conforming to hardcoded field names.
+   */
+  readonly identityResolver: IdentityResolver;
 
   /** Route auth registry for framework-owned routes. */
   readonly routeAuth: RouteAuthRegistry | null;

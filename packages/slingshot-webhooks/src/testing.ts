@@ -14,9 +14,9 @@ import {
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
 } from '@lastshotlabs/slingshot-core';
-import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
-import type { WebhookRuntimeAdapter } from './manifest/runtime';
+import { createMemoryWebhookAdapter } from './adapters/memory';
 import { createWebhookPlugin } from './plugin';
+import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
 import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 
@@ -35,13 +35,14 @@ const memoryInfra: StoreInfra = {
 interface WebhooksTestFrameworkOptions {
   storeInfra?: StoreInfra;
   storeType?: StoreType;
+  /** When true, use the in-memory adapter instead of slingshot-entity. */
+  standalone?: boolean;
 }
 
 function createTestFrameworkConfig(options: WebhooksTestFrameworkOptions = {}) {
   const storeInfra = options.storeInfra ?? memoryInfra;
   const storeType = options.storeType ?? ('memory' as StoreType);
 
-  Reflect.set(storeInfra as object, RESOLVE_ENTITY_FACTORIES, createEntityFactories);
   const registeredEntities: ResolvedEntityConfig[] = [];
   const entityRegistry: EntityRegistry = {
     register(config: ResolvedEntityConfig) {
@@ -56,6 +57,7 @@ function createTestFrameworkConfig(options: WebhooksTestFrameworkOptions = {}) {
   };
 
   const registrar: CoreRegistrar = {
+    setIdentityResolver() {},
     setRouteAuth() {},
     setUserResolver() {},
     setRateLimitAdapter() {},
@@ -89,13 +91,16 @@ function createTestFrameworkConfig(options: WebhooksTestFrameworkOptions = {}) {
 
 /**
  * Create a Hono test app with the manifest-driven webhook plugin mounted.
+ *
+ * Pass `standalone: true` in `frameworkOptions` to boot without `slingshot-entity` —
+ * the in-memory adapter is injected automatically.
  */
 export async function createWebhooksTestApp(
   configOverrides: Partial<WebhookPluginConfig> = {},
   frameworkOptions: WebhooksTestFrameworkOptions = {},
 ): Promise<{
   app: OpenAPIHono<AppEnv>;
-  runtime: WebhookRuntimeAdapter;
+  runtime: WebhookAdapter;
   bus: InProcessAdapter;
   teardown: () => Promise<void>;
 }> {
@@ -103,6 +108,9 @@ export async function createWebhooksTestApp(
     mountPath: '/webhooks',
     managementRole: 'admin',
     ...configOverrides,
+    ...(frameworkOptions.standalone && !configOverrides.adapter
+      ? { adapter: createMemoryWebhookAdapter() }
+      : {}),
   };
   const plugin = createWebhookPlugin(pluginConfig);
 
@@ -111,15 +119,33 @@ export async function createWebhooksTestApp(
   const frameworkConfig = createTestFrameworkConfig(frameworkOptions);
   const pluginState = new Map<string, unknown>();
 
-  const routeAuth = {
-    userAuth: (async (c, next) => {
-      const userId = c.req.header('x-user-id');
-      if (!userId) {
-        return c.json({ error: 'Unauthorized' }, 401);
-      }
+  if (!frameworkOptions.standalone) {
+    const { createEntityFactories } = await import('@lastshotlabs/slingshot-entity');
+    Reflect.set(
+      frameworkConfig.storeInfra as object,
+      RESOLVE_ENTITY_FACTORIES,
+      createEntityFactories,
+    );
+  }
+
+  // Simulate the framework's global auth middleware — in production, app.ts mounts
+  // auth middleware that populates context variables before any route handler runs.
+  // Here we read from x-* headers so tests can control identity per-request.
+  app.use('*', (async (c, next) => {
+    const userId = c.req.header('x-user-id');
+    if (userId) {
       c.set('authUserId', userId);
       c.set('tenantId', c.req.header('x-tenant-id') ?? null);
       c.set('roles', [c.req.header('x-role') ?? 'admin']);
+    }
+    await next();
+  }) as MiddlewareHandler);
+
+  const routeAuth = {
+    userAuth: (async (c, next) => {
+      if (!c.get('authUserId')) {
+        return c.json({ error: 'Unauthorized' }, 401);
+      }
       await next();
     }) as MiddlewareHandler,
     requireRole: (...roles: string[]) =>
@@ -150,7 +176,7 @@ export async function createWebhooksTestApp(
   await plugin.setupRoutes?.(setupContext);
   await plugin.setupPost?.(setupContext);
 
-  const runtime = pluginState.get(WEBHOOKS_PLUGIN_STATE_KEY) as WebhookRuntimeAdapter | undefined;
+  const runtime = pluginState.get(WEBHOOKS_PLUGIN_STATE_KEY) as WebhookAdapter | undefined;
   if (!runtime) {
     throw new Error('Webhook plugin did not register runtime state');
   }

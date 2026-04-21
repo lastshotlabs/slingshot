@@ -295,7 +295,13 @@ describe('idempotency write-collision paths', () => {
       app: app2,
       config: {
         appName: 'test',
-        resolvedStores: { sessions: 'memory', oauthState: 'memory', cache: 'memory', authStore: 'memory', sqlite: undefined },
+        resolvedStores: {
+          sessions: 'memory',
+          oauthState: 'memory',
+          cache: 'memory',
+          authStore: 'memory',
+          sqlite: undefined,
+        },
         security: { cors: '*' },
         signing: null,
         dataEncryptionKeys: [],
@@ -370,7 +376,13 @@ describe('idempotency write-collision paths', () => {
       app: app2,
       config: {
         appName: 'test',
-        resolvedStores: { sessions: 'memory', oauthState: 'memory', cache: 'memory', authStore: 'memory', sqlite: undefined },
+        resolvedStores: {
+          sessions: 'memory',
+          oauthState: 'memory',
+          cache: 'memory',
+          authStore: 'memory',
+          sqlite: undefined,
+        },
         security: { cors: '*' },
         signing: null,
         dataEncryptionKeys: [],
@@ -425,7 +437,13 @@ describe('idempotency — non-text response skips caching (lines 104-109)', () =
       app: app2,
       config: {
         appName: 'test',
-        resolvedStores: { sessions: 'memory', oauthState: 'memory', cache: 'memory', authStore: 'memory', sqlite: undefined },
+        resolvedStores: {
+          sessions: 'memory',
+          oauthState: 'memory',
+          cache: 'memory',
+          authStore: 'memory',
+          sqlite: undefined,
+        },
         security: { cors: '*' },
         signing: null,
         dataEncryptionKeys: [],

@@ -190,7 +190,14 @@ function requireEndpointRuntimeAdapter(value: BareEntityAdapter): EndpointRuntim
 }
 
 function isDeliveryRuntimeAdapter(value: unknown): value is DeliveryRuntimeAdapter {
-  return hasMethods(value, ['applyTransition', 'transition', 'create', 'getById', 'list', 'update']);
+  return hasMethods(value, [
+    'applyTransition',
+    'transition',
+    'create',
+    'getById',
+    'list',
+    'update',
+  ]);
 }
 
 function normalizeStatuses(
@@ -200,7 +207,11 @@ function normalizeStatuses(
   return Array.isArray(value) ? [...value] : [value];
 }
 
-function requireNextCursor(scope: string, nextCursor: string | undefined, seen: Set<string>): string {
+function requireNextCursor(
+  scope: string,
+  nextCursor: string | undefined,
+  seen: Set<string>,
+): string {
   if (!nextCursor) {
     throw new Error(`[slingshot-webhooks] ${scope} returned hasMore without nextCursor`);
   }
@@ -446,7 +457,8 @@ export function createWebhooksManifestRuntime(
       const page = await endpoints.listRaw({ filter: { enabled: true }, limit: 500, cursor });
       matches.push(
         ...page.items.filter(
-          endpoint => endpoint.enabled && endpoint.events.some(pattern => matchGlob(pattern, event)),
+          endpoint =>
+            endpoint.enabled && endpoint.events.some(pattern => matchGlob(pattern, event)),
         ),
       );
 
@@ -454,7 +466,11 @@ export function createWebhooksManifestRuntime(
         return matches;
       }
 
-      cursor = requireNextCursor('webhook endpoint discovery pagination', page.nextCursor, seenCursors);
+      cursor = requireNextCursor(
+        'webhook endpoint discovery pagination',
+        page.nextCursor,
+        seenCursors,
+      );
     }
   });
 

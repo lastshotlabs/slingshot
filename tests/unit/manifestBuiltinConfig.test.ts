@@ -3,7 +3,10 @@ import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
 
 type ManifestBuiltinConfigModule = typeof import('../../src/lib/manifestBuiltinConfig');
 
-function makeRuntimeStub(serveLabel: string, supportsAsyncLocalStorage = true): SlingshotRuntime & {
+function makeRuntimeStub(
+  serveLabel: string,
+  supportsAsyncLocalStorage = true,
+): SlingshotRuntime & {
   serve: () => string;
 } {
   return {
@@ -138,7 +141,9 @@ describe('isHandlerRefLike', () => {
 
 describe('requireRegistry', () => {
   it('throws when registry is undefined', () => {
-    expect(() => requireRegistry(undefined, 'test')).toThrow(/requires a manifest handler registry/);
+    expect(() => requireRegistry(undefined, 'test')).toThrow(
+      /requires a manifest handler registry/,
+    );
   });
 
   it('returns registry when defined', () => {
@@ -456,12 +461,7 @@ describe('resolveSsrManifestConfig', () => {
 
   it('keeps inline JSON assetsManifest as-is', () => {
     const json = '{"main.js": "/assets/main.abc.js"}';
-    const result = resolveSsrManifestConfig(
-      { assetsManifest: json },
-      undefined,
-      '/base',
-      'ssr',
-    );
+    const result = resolveSsrManifestConfig({ assetsManifest: json }, undefined, '/base', 'ssr');
     expect(result['assetsManifest']).toBe(json);
   });
 
@@ -478,46 +478,26 @@ describe('resolveSsrManifestConfig', () => {
   });
 
   it('resolves runtime: "bun" to a lazy proxy that loads on first access (lines 46-72)', () => {
-    const result = resolveSsrManifestConfig(
-      { runtime: 'bun' },
-      undefined,
-      '/base',
-      'ssr',
-    );
+    const result = resolveSsrManifestConfig({ runtime: 'bun' }, undefined, '/base', 'ssr');
     const runtime = result['runtime'] as Record<string, unknown>;
     // Access a property to trigger the proxy getter (lines 61-68)
     expect(typeof runtime.serve).toBe('function');
   });
 
   it('resolves runtime: "node" to a lazy proxy that loads on first access', () => {
-    const result = resolveSsrManifestConfig(
-      { runtime: 'node' },
-      undefined,
-      '/base',
-      'ssr',
-    );
+    const result = resolveSsrManifestConfig({ runtime: 'node' }, undefined, '/base', 'ssr');
     const runtime = result['runtime'] as Record<string, unknown>;
     expect(typeof runtime.serve).toBe('function');
   });
 
   it('resolves runtime: "edge" to a lazy proxy that loads on first access', () => {
-    const result = resolveSsrManifestConfig(
-      { runtime: 'edge' },
-      undefined,
-      '/base',
-      'ssr',
-    );
+    const result = resolveSsrManifestConfig({ runtime: 'edge' }, undefined, '/base', 'ssr');
     const runtime = result['runtime'] as Record<string, unknown>;
     expect(typeof runtime.serve).toBe('function');
   });
 
   it('proxy caches the resolved runtime on subsequent accesses', () => {
-    const result = resolveSsrManifestConfig(
-      { runtime: 'bun' },
-      undefined,
-      '/base',
-      'ssr',
-    );
+    const result = resolveSsrManifestConfig({ runtime: 'bun' }, undefined, '/base', 'ssr');
     const runtime = result['runtime'] as Record<string, unknown>;
     // First access triggers require + factory
     const serve1 = runtime.serve;
@@ -540,28 +520,19 @@ describe('resolveWebhookManifestConfig', () => {
 
   it('resolves adapter handler ref', () => {
     const reg = { resolveHandler: () => ({ send: () => {} }) } as any;
-    const result = resolveWebhookManifestConfig(
-      { adapter: { handler: 'webhookAdapter' } },
-      reg,
-    );
+    const result = resolveWebhookManifestConfig({ adapter: { handler: 'webhookAdapter' } }, reg);
     expect(typeof result['adapter']).toBe('object');
   });
 
   it('resolves queue handler ref', () => {
     const reg = { resolveHandler: () => ({ enqueue: () => {} }) } as any;
-    const result = resolveWebhookManifestConfig(
-      { queue: { handler: 'webhookQueue' } },
-      reg,
-    );
+    const result = resolveWebhookManifestConfig({ queue: { handler: 'webhookQueue' } }, reg);
     expect(typeof result['queue']).toBe('object');
   });
 
   it('resolves adminGuard handler ref', () => {
     const reg = { resolveHandler: () => ({ check: () => {} }) } as any;
-    const result = resolveWebhookManifestConfig(
-      { adminGuard: { handler: 'myGuard' } },
-      reg,
-    );
+    const result = resolveWebhookManifestConfig({ adminGuard: { handler: 'myGuard' } }, reg);
     expect(typeof result['adminGuard']).toBe('object');
   });
 
@@ -577,7 +548,7 @@ describe('resolveWebhookManifestConfig', () => {
   });
 
   it('resolves queueConfig.onDeadLetter handler ref', () => {
-    const reg = { resolveHandler: () => (() => {}) } as any;
+    const reg = { resolveHandler: () => () => {} } as any;
     const result = resolveWebhookManifestConfig(
       { queueConfig: { maxRetries: 3, onDeadLetter: { handler: 'dlqHandler' } } },
       reg,

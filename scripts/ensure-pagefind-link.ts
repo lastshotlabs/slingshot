@@ -9,7 +9,9 @@ export interface PagefindPaths {
   rootNodeModules: string;
 }
 
-export function getPagefindPaths(repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')): PagefindPaths {
+export function getPagefindPaths(
+  repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..'),
+): PagefindPaths {
   const rootNodeModules = resolve(repoRoot, 'node_modules');
   return {
     rootNodeModules,

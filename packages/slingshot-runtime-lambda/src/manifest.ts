@@ -3,7 +3,7 @@ import type {
   SlingshotHandler,
   TriggerOpts,
 } from '@lastshotlabs/slingshot-core';
-import { createLambdaRuntime, type LambdaTriggerKind } from './runtime';
+import { type LambdaTriggerKind, createLambdaRuntime } from './runtime';
 
 type ResolveManifestConfig = (
   manifestPathOrObject: string | Record<string, unknown>,
@@ -60,7 +60,9 @@ function isSlingshotHandler(value: unknown): value is SlingshotHandler {
 export async function createFunctionsFromManifest(
   manifest: string | Record<string, unknown>,
   options?: Pick<FunctionsRuntimeConfig, 'runtime' | 'hooks' | 'handlersPath'>,
-): Promise<Record<string, (event: unknown, context: { awsRequestId?: string }) => Promise<unknown>>> {
+): Promise<
+  Record<string, (event: unknown, context: { awsRequestId?: string }) => Promise<unknown>>
+> {
   const resolved = await resolveManifestConfig(manifest, undefined, {
     handlersPath: options?.handlersPath,
   });

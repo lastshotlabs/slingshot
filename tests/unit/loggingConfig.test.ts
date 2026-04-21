@@ -37,14 +37,11 @@ describe('logging config', () => {
       expect(response.status).toBe(200);
 
       const identifyLogs = logSpy.mock.calls.filter(args =>
-        args.some(
-          value => typeof value === 'string' && value.includes('[identify]'),
-        ),
+        args.some(value => typeof value === 'string' && value.includes('[identify]')),
       );
       const auditWarnings = warnSpy.mock.calls.filter(args =>
         args.some(
-          value =>
-            typeof value === 'string' && value.includes('Memory adapter for audit log'),
+          value => typeof value === 'string' && value.includes('Memory adapter for audit log'),
         ),
       );
 

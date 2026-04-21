@@ -1,7 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
-import type {
-  SlingshotPlugin,
-} from '@lastshotlabs/slingshot-core';
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { getContext } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
 import { runPluginTeardown } from '../../src/framework/runPluginLifecycle';

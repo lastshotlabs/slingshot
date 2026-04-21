@@ -24,27 +24,21 @@ function buildApp(threadAdapter: ThreadAdapter) {
 describe('threadStateGuard middleware', () => {
   test('published and unlocked thread allows reply', async () => {
     const thread: Partial<Thread> = { id: 't1', status: 'published', locked: false };
-    const app = buildApp(
-      stubThreadAdapter(thread),
-    );
+    const app = buildApp(stubThreadAdapter(thread));
     const res = await app.request('/threads/t1/replies', { method: 'POST' });
     expect(res.status).toBe(200);
   });
 
   test('locked thread returns 403', async () => {
     const thread: Partial<Thread> = { id: 't1', status: 'published', locked: true };
-    const app = buildApp(
-      stubThreadAdapter(thread),
-    );
+    const app = buildApp(stubThreadAdapter(thread));
     const res = await app.request('/threads/t1/replies', { method: 'POST' });
     expect(res.status).toBe(403);
   });
 
   test('unpublished thread returns 404', async () => {
     const thread: Partial<Thread> = { id: 't1', status: 'draft', locked: false };
-    const app = buildApp(
-      stubThreadAdapter(thread),
-    );
+    const app = buildApp(stubThreadAdapter(thread));
     const res = await app.request('/threads/t1/replies', { method: 'POST' });
     expect(res.status).toBe(404);
   });
@@ -57,9 +51,7 @@ describe('threadStateGuard middleware', () => {
 
   test('body-scoped reply creation checks threadId from JSON body', async () => {
     const thread: Partial<Thread> = { id: 't1', status: 'published', locked: false };
-    const app = buildApp(
-      stubThreadAdapter(thread),
-    );
+    const app = buildApp(stubThreadAdapter(thread));
     const res = await app.request('/replies', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -70,9 +62,7 @@ describe('threadStateGuard middleware', () => {
 
   test('body-scoped reply creation blocks locked thread', async () => {
     const thread: Partial<Thread> = { id: 't1', status: 'published', locked: true };
-    const app = buildApp(
-      stubThreadAdapter(thread),
-    );
+    const app = buildApp(stubThreadAdapter(thread));
     const res = await app.request('/replies', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

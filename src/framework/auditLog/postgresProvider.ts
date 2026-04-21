@@ -1,7 +1,7 @@
 import { HttpError } from '@lastshotlabs/slingshot-core';
 import type { AuditLogEntry, AuditLogProvider } from '@lastshotlabs/slingshot-core';
-import { decodeCursor, encodeCursor } from './cursor';
 import { createPostgresInitializer } from '../persistence/postgresInit';
+import { decodeCursor, encodeCursor } from './cursor';
 
 type PgPool = {
   connect(): Promise<{

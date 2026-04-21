@@ -1,22 +1,19 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { join } from 'node:path';
-import {
-  Kafka,
-  type KafkaMessage,
-  type Message,
-} from '../../packages/slingshot-kafka/node_modules/kafkajs';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
-import {
-  createEventSchemaRegistry,
-  createInProcessAdapter,
-} from '@lastshotlabs/slingshot-core';
+import { createEventSchemaRegistry, createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import {
   createKafkaAdapter,
   createKafkaConnectors,
   getKafkaAdapterIntrospectionOrNull,
 } from '@lastshotlabs/slingshot-kafka';
+import {
+  Kafka,
+  type KafkaMessage,
+  type Message,
+} from '../../packages/slingshot-kafka/node_modules/kafkajs';
 import { createServerFromManifest } from '../../src/lib/createServerFromManifest';
 import { createManifestHandlerRegistry } from '../../src/lib/manifestHandlerRegistry';
 import { getServerContext } from '../../src/server';

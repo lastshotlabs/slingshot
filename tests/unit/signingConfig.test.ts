@@ -39,18 +39,14 @@ describe('getDataEncryptionKeys', () => {
   test('throws for entry missing colon separator', () => {
     const keyBytes = new Uint8Array(32).fill(0x01);
     const base64Key = Buffer.from(keyBytes).toString('base64');
-    expect(() => getDataEncryptionKeys(`v1${base64Key}`)).toThrow(
-      'invalid entry',
-    );
+    expect(() => getDataEncryptionKeys(`v1${base64Key}`)).toThrow('invalid entry');
   });
 
   test('throws for key that is not 32 bytes', () => {
     // 16 bytes = not 32
     const keyBytes = new Uint8Array(16).fill(0x01);
     const base64Key = Buffer.from(keyBytes).toString('base64');
-    expect(() => getDataEncryptionKeys(`v1:${base64Key}`)).toThrow(
-      'must be 32 bytes',
-    );
+    expect(() => getDataEncryptionKeys(`v1:${base64Key}`)).toThrow('must be 32 bytes');
   });
 
   test('handles keyId with colons in value (takes first colon as separator)', () => {

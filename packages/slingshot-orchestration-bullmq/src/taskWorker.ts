@@ -38,7 +38,10 @@ export function createBullMQTaskProcessor(options: {
     const controller = new AbortController();
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     if (taskRuntime.timeout !== undefined) {
-      timeoutHandle = setTimeout(() => controller.abort(new Error('Task timed out')), taskRuntime.timeout);
+      timeoutHandle = setTimeout(
+        () => controller.abort(new Error('Task timed out')),
+        taskRuntime.timeout,
+      );
     }
 
     try {

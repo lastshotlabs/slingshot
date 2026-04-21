@@ -7,19 +7,15 @@ import type {
 import {
   deepFreeze,
   getPluginState,
-  getRouteAuth,
+  getRouteAuthOrNull,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { deliverWebhook } from './lib/dispatcher';
 import { wireEventSubscriptions } from './lib/eventWiring';
-import { createWebhooksManifestRuntime } from './manifest/runtime';
-import type { WebhookRuntimeAdapter } from './manifest/runtime';
-import { webhooksManifest } from './manifest/webhooksManifest';
 import { createWebhookMemoryQueue } from './queues/memory';
 import { createInboundRouter } from './routes/inbound';
 import { WEBHOOK_ROUTES } from './routes/index';
+import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
 import { webhookPluginConfigSchema } from './types/config';
 import type { InboundProvider } from './types/inbound';
@@ -27,6 +23,10 @@ import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
 
+/**
+ * Runs a Hono middleware and returns its response if it blocked (did not call
+ * `next()`), or `null` if it passed through.
+ */
 async function runGuardMiddleware(
   middleware: MiddlewareHandler,
   c: Parameters<MiddlewareHandler>[0],
@@ -35,26 +35,34 @@ async function runGuardMiddleware(
   const result = await middleware(c, async () => {
     nextCalled = true;
   });
-  if (nextCalled) {
-    return null;
-  }
+  if (nextCalled) return null;
   return result instanceof Response ? result : c.res;
 }
 
-function buildAdminMiddleware(role: string): MiddlewareHandler {
+/**
+ * Builds an admin guard middleware that resolves and checks the required role.
+ *
+ * When the full framework context is available (auth plugin registered), it
+ * delegates to `routeAuth.requireRole()` which resolves effective roles from the
+ * adapter (respecting tenant scoping). When running standalone (no auth plugin),
+ * it falls back to reading `c.get('roles')` directly — the host app is
+ * responsible for populating roles on the context.
+ */
+function buildRoleGuard(role: string): MiddlewareHandler {
   return async (c, next) => {
-    const slingshotCtx = c.get('slingshotCtx') as Parameters<typeof getRouteAuth>[0] | undefined;
-    if (!slingshotCtx) {
-      return c.json({ error: 'Unauthorized' }, 401);
+    const slingshotCtx = c.get('slingshotCtx') as Parameters<typeof getRouteAuthOrNull>[0] | undefined;
+    if (slingshotCtx) {
+      const routeAuth = getRouteAuthOrNull(slingshotCtx);
+      if (routeAuth) {
+        const blocked = await runGuardMiddleware(routeAuth.requireRole(role), c);
+        if (blocked) return blocked;
+        return next();
+      }
     }
-    const routeAuth = getRouteAuth(slingshotCtx);
-    const authFailure = await runGuardMiddleware(routeAuth.userAuth, c);
-    if (authFailure) {
-      return authFailure;
-    }
-    const roleFailure = await runGuardMiddleware(routeAuth.requireRole(role), c);
-    if (roleFailure) {
-      return roleFailure;
+    // Standalone: roles already on context from host app middleware
+    const roles = c.get('roles') as string[] | null | undefined;
+    if (!roles || !roles.includes(role)) {
+      return c.json({ error: 'Forbidden' }, 403);
     }
     await next();
   };
@@ -78,7 +86,7 @@ async function activate(
   bus: SlingshotEventBus,
   config: Readonly<WebhookPluginConfig>,
   queue: WebhookQueue,
-  runtime: WebhookRuntimeAdapter,
+  runtime: WebhookAdapter,
 ): Promise<Array<() => void>> {
   const maxAttempts = config.queueConfig?.maxAttempts ?? 5;
   const baseDelay = config.queueConfig?.retryBaseDelayMs ?? 1000;
@@ -129,7 +137,7 @@ async function activate(
 }
 
 async function resolveTestDelivery(
-  runtime: WebhookRuntimeAdapter,
+  runtime: WebhookAdapter,
   queue: WebhookQueue,
   config: Readonly<WebhookPluginConfig>,
   endpointId: string,
@@ -190,36 +198,42 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       : config.queue;
   const mountPath = config.mountPath ?? '/webhooks';
   const managementRole = config.managementRole ?? 'admin';
-  const requireWebhookAdmin = buildAdminMiddleware(managementRole);
+  const requireWebhookAdmin = buildRoleGuard(managementRole);
   const inboundRoutePatterns = buildInboundPublicPaths(
     mountPath,
     config.inbound,
     config.disableRoutes,
   );
   let unsubscribers: Array<() => void> = [];
-  let innerPlugin: EntityPlugin | undefined;
-  let runtimeAdapter: WebhookRuntimeAdapter | undefined;
+  let innerPlugin: SlingshotPlugin | undefined;
+  let runtimeAdapter: WebhookAdapter | undefined;
 
   return {
     name: WEBHOOKS_PLUGIN_STATE_KEY,
-    dependencies: ['slingshot-auth'],
+    dependencies: config.adapter ? [] : ['slingshot-auth'],
     publicPaths: inboundRoutePatterns,
     csrfExemptPaths: inboundRoutePatterns,
 
     async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      innerPlugin = createEntityPlugin({
-        name: WEBHOOKS_PLUGIN_STATE_KEY,
-        mountPath,
-        manifest: webhooksManifest,
-        manifestRuntime: createWebhooksManifestRuntime(adapter => {
-          runtimeAdapter = adapter;
-        }),
-        middleware: {
-          webhooksAdminGuard: requireWebhookAdmin,
-        },
-      });
-
-      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
+      if (config.adapter) {
+        runtimeAdapter = config.adapter;
+      } else {
+        const { createEntityPlugin } = await import('@lastshotlabs/slingshot-entity');
+        const { createWebhooksManifestRuntime } = await import('./manifest/runtime');
+        const { webhooksManifest } = await import('./manifest/webhooksManifest');
+        innerPlugin = createEntityPlugin({
+          name: WEBHOOKS_PLUGIN_STATE_KEY,
+          mountPath,
+          manifest: webhooksManifest,
+          manifestRuntime: createWebhooksManifestRuntime(adapter => {
+            runtimeAdapter = adapter;
+          }),
+          middleware: {
+            webhooksAdminGuard: requireWebhookAdmin,
+          },
+        });
+        await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
+      }
     },
 
     async setupRoutes({ app, bus, config: frameworkConfig }: PluginSetupContext): Promise<void> {

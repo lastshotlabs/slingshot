@@ -17,7 +17,7 @@ import {
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { chatPluginConfigSchema } from './config.schema';
-import type { ChatEncryptionProvider } from './encryption/provider';
+import type { ChatEncryptionProvider } from './encryption/types';
 import { resolveChatEncryptionProvider } from './encryption/provider';
 import { buildEncryptionRouter } from './encryption/stub';
 import { registerChatPushFormatters } from './lib/pushFormatters';
@@ -39,7 +39,6 @@ import { probePushFormatterRegistry } from './peers/push';
 import { CHAT_PLUGIN_STATE_KEY } from './state';
 import type { Message as ChatMessage, ChatPluginConfig, ChatPluginState } from './types';
 import { buildIncomingDispatch } from './ws/incoming';
-
 
 /**
  * Create the slingshot-chat plugin using the manifest-driven entity system.

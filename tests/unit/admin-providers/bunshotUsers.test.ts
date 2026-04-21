@@ -4,9 +4,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { AuthAdapter } from '@lastshotlabs/slingshot-core';
 import type { ManagedUserRecord } from '@lastshotlabs/slingshot-core';
 
-const mockSetSuspended = mock(
-  async () => {},
-);
+const mockSetSuspended = mock(async () => {});
 
 type ManagedUserProviderModule =
   typeof import('../../../packages/slingshot-auth/src/admin/slingshotUsers');

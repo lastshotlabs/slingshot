@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
-import { runtimeNodeInternals, nodeRuntime } from '../../packages/runtime-node/src/index';
+import { nodeRuntime, runtimeNodeInternals } from '../../packages/runtime-node/src/index';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -36,10 +36,7 @@ function deferred<T = void>() {
   return { promise, resolve, reject };
 }
 
-async function openRawSocket(
-  port: number,
-  headers: string[],
-): Promise<import('node:net').Socket> {
+async function openRawSocket(port: number, headers: string[]): Promise<import('node:net').Socket> {
   const net = await import('node:net');
   const socket = net.createConnection({ host: '127.0.0.1', port });
   await new Promise<void>((resolve, reject) => {
@@ -85,9 +82,9 @@ describe('WebSocket payload normalization helpers', () => {
   });
 
   it('throws for unsupported chunk-array entries', () => {
-    expect(() =>
-      runtimeNodeInternals.stringifyWsPayload(['ok', { bad: true }]),
-    ).toThrowError('Unsupported WebSocket message chunk type');
+    expect(() => runtimeNodeInternals.stringifyWsPayload(['ok', { bad: true }])).toThrowError(
+      'Unsupported WebSocket message chunk type',
+    );
   });
 
   it('throws for unsupported top-level payloads', () => {
@@ -1409,11 +1406,13 @@ describe('WebSocket (ws)', () => {
     const runtime = nodeRuntime();
     const realSetTimeout = global.setTimeout;
     const fetchCalled = deferred();
-    const setTimeoutSpy = vi
-      .spyOn(global, 'setTimeout')
-      .mockImplementation(((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
-        return realSetTimeout(handler, timeout === 30_000 ? 5 : timeout, ...args);
-      }) as typeof setTimeout);
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      return realSetTimeout(handler, timeout === 30_000 ? 5 : timeout, ...args);
+    }) as typeof setTimeout);
 
     const server = await runtime.server.listen({
       port: 0,

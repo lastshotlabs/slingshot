@@ -1,14 +1,7 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { afterEach, describe, expect, test } from 'bun:test';
 
 describe('build and publish scripts', () => {
   const tempDirs: string[] = [];
@@ -32,11 +25,7 @@ describe('build and publish scripts', () => {
 
     writeFileSync(
       join(nestedDir, 'types.d.ts'),
-      [
-        'export * from "../../config/app";',
-        'export * from "../../lib/helpers";',
-        '',
-      ].join('\n'),
+      ['export * from "../../config/app";', 'export * from "../../lib/helpers";', ''].join('\n'),
       'utf8',
     );
     writeFileSync(join(cleanDir, 'keep', 'file.txt'), 'keep\n', 'utf8');

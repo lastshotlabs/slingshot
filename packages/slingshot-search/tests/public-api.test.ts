@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import * as entry from '../src/index';
 import { SEARCH_CLIENT_SAFE_KEYS } from '../src/events';
+import * as entry from '../src/index';
 import { createSearchPlugin } from '../src/plugin';
 import { SEARCH_ROUTES } from '../src/routes/index';
 import { createTestSearchPlugin, createTestSearchProvider } from '../src/testing';

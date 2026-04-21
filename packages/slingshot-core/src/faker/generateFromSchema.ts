@@ -28,8 +28,8 @@
  *
  * @module
  */
-import { faker as defaultFaker, type Faker } from '@faker-js/faker';
-import { walkSchema, type WalkOptions } from './zodWalker';
+import { type Faker, faker as defaultFaker } from '@faker-js/faker';
+import { type WalkOptions, walkSchema } from './zodWalker';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -127,8 +127,9 @@ export function generateMany<T>(
     maxDepth: opts.maxDepth,
     optionalRate: opts.optionalRate,
   };
-  return Array.from({ length: count }, () =>
-    walkSchema(schema as Parameters<typeof walkSchema>[0], walkOpts) as T,
+  return Array.from(
+    { length: count },
+    () => walkSchema(schema as Parameters<typeof walkSchema>[0], walkOpts) as T,
   );
 }
 
@@ -148,10 +149,12 @@ export function generateExample<T>(
     overrides,
   });
   // Strip undefined and coerce non-serializable types for JSON-clean output
-  return JSON.parse(JSON.stringify(result, (_key, value) => {
-    if (typeof value === 'bigint') return Number(value);
-    if (value instanceof Set) return [...value];
-    if (value instanceof Map) return Object.fromEntries(value);
-    return value;
-  })) as T;
+  return JSON.parse(
+    JSON.stringify(result, (_key, value) => {
+      if (typeof value === 'bigint') return Number(value);
+      if (value instanceof Set) return [...value];
+      if (value instanceof Map) return Object.fromEntries(value);
+      return value;
+    }),
+  ) as T;
 }

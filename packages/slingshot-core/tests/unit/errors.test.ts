@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { HttpError, ValidationError, UnsupportedAdapterFeatureError } from '../../src/errors';
+import { HttpError, UnsupportedAdapterFeatureError, ValidationError } from '../../src/errors';
 
 describe('HttpError', () => {
   test('sets status, message, and code', () => {

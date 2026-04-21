@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { createTenantService } from '../../src/framework/tenancy/service';
 
 // Mock mongoose module to avoid actual DB connection
 mock.module('mongoose', () => {
@@ -11,8 +12,6 @@ mock.module('mongoose', () => {
     Schema,
   };
 });
-
-import { createTenantService } from '../../src/framework/tenancy/service';
 
 // ---------------------------------------------------------------------------
 // Build a mock Mongoose Connection
@@ -34,12 +33,14 @@ function makeQuery(result: unknown) {
   return { lean: mock(async () => result) };
 }
 
-function makeMockTenantModel(opts: {
-  findOne?: unknown;
-  findOneAndUpdate?: unknown;
-  create?: unknown;
-  find?: unknown;
-} = {}) {
+function makeMockTenantModel(
+  opts: {
+    findOne?: unknown;
+    findOneAndUpdate?: unknown;
+    create?: unknown;
+    find?: unknown;
+  } = {},
+) {
   const model: Record<string, unknown> = {
     findOne: mock(() => makeQuery(opts.findOne ?? null)),
     findOneAndUpdate: mock(async () => null),
@@ -49,10 +50,7 @@ function makeMockTenantModel(opts: {
   return model;
 }
 
-function makeConnection(
-  model: Record<string, unknown>,
-  hasExisting = false,
-) {
+function makeConnection(model: Record<string, unknown>, hasExisting = false) {
   return {
     models: hasExisting ? { Tenant: model } : {},
     model: mock(() => model),
@@ -87,7 +85,10 @@ describe('createTenantService', () => {
     await service.createTenant('tenant-new', { displayName: 'New Tenant' });
 
     expect(mockModel.create as ReturnType<typeof mock>).toHaveBeenCalledTimes(1);
-    const createArg = (mockModel.create as ReturnType<typeof mock>).mock.calls[0][0] as Record<string, unknown>;
+    const createArg = (mockModel.create as ReturnType<typeof mock>).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
     expect(createArg.tenantId).toBe('tenant-new');
     expect(createArg.displayName).toBe('New Tenant');
   });

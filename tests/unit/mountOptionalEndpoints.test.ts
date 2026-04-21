@@ -65,7 +65,9 @@ describe('mountOptionalEndpoints', () => {
       }),
     };
     const mockFactory = mockFactoryData as unknown as never;
-    const createQueueFactory = spyOn(queueModule, 'createQueueFactory').mockReturnValue(mockFactory);
+    const createQueueFactory = spyOn(queueModule, 'createQueueFactory').mockReturnValue(
+      mockFactory,
+    );
 
     const app = new OpenAPIHono<AppEnv>();
     mountOptionalEndpoints(
@@ -163,15 +165,7 @@ describe('mountOptionalEndpoints', () => {
 
   test('mounts sw.js endpoint that returns empty JS body', async () => {
     const app = new OpenAPIHono<AppEnv>();
-    mountOptionalEndpoints(
-      app,
-      undefined,
-      undefined,
-      undefined,
-      createMetricsState(),
-      {},
-      false,
-    );
+    mountOptionalEndpoints(app, undefined, undefined, undefined, createMetricsState(), {}, false);
 
     const res = await app.request('/sw.js');
     expect(res.status).toBe(200);

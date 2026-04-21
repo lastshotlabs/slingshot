@@ -7,10 +7,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import {
-  attachContext,
-  createMemoryRateLimitAdapter,
-} from '@lastshotlabs/slingshot-core';
+import { attachContext, createMemoryRateLimitAdapter } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { rateLimit } from '../../src/framework/middleware/rateLimit';
 
@@ -82,7 +79,7 @@ describe('rateLimit middleware', () => {
     const customAdapter = {
       async trackAttempt(key: string) {
         if (key.includes('ip:')) return false; // IP always passes
-        if (key.includes('fp:')) return true;  // fingerprint always fails
+        if (key.includes('fp:')) return true; // fingerprint always fails
         return false;
       },
     };

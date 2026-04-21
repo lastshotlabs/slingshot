@@ -15,8 +15,8 @@ A task is a named unit of work with:
 - optional per-task concurrency limit
 
 ```typescript
-import { defineTask } from '@lastshotlabs/slingshot-orchestration';
 import { z } from 'zod';
+import { defineTask } from '@lastshotlabs/slingshot-orchestration';
 
 export const sendWelcomeEmail = defineTask({
   name: 'send-welcome-email',
@@ -42,12 +42,8 @@ A workflow is an ordered array of entries:
 Workflows execute in array order. Parallelism is explicit. There is no DAG authoring API.
 
 ```typescript
-import {
-  defineWorkflow,
-  parallel,
-  step,
-} from '@lastshotlabs/slingshot-orchestration';
 import { z } from 'zod';
+import { defineWorkflow, parallel, step } from '@lastshotlabs/slingshot-orchestration';
 
 export const onboardUser = defineWorkflow({
   name: 'onboard-user',

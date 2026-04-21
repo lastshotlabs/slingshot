@@ -3,6 +3,13 @@ import { z } from 'zod';
 import { GameErrorCode } from '../../src/errors';
 import { loadContent } from '../../src/lib/content';
 import {
+  deserializeMap,
+  deserializeSet,
+  serializeGameState,
+  serializeMap,
+  serializeSet,
+} from '../../src/lib/serialize';
+import {
   acquireLease,
   createLeaseState,
   getLeaseHolder,
@@ -10,13 +17,6 @@ import {
   releaseAllLeases,
   releaseLease,
 } from '../../src/lib/sessionLease';
-import {
-  deserializeMap,
-  deserializeSet,
-  serializeGameState,
-  serializeMap,
-  serializeSet,
-} from '../../src/lib/serialize';
 import { gameEngineManifest } from '../../src/manifest/gameEngineManifest';
 import { createGameEngineManifestRuntime } from '../../src/manifest/runtime';
 import {
@@ -63,7 +63,9 @@ describe('loadContent', () => {
   });
 
   test('validates named providers, freezes resolved content, and surfaces provider failures', async () => {
-    const load = mock(async (input: unknown) => ({ prompt: `deck:${String((input as any).deckId)}` }));
+    const load = mock(async (input: unknown) => ({
+      prompt: `deck:${String((input as any).deckId)}`,
+    }));
     const validate = mock((data: unknown) => (data as { prompt: string }).prompt.length > 5);
     const gameDef = {
       content: {
@@ -158,7 +160,9 @@ describe('session leases', () => {
 
   test('renews adapter-backed leases, detects lease loss, and releases all owned sessions', async () => {
     const intervalCallbacks: Array<() => Promise<void> | void> = [];
-    const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(((callback: () => void) => {
+    const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(((
+      callback: () => void,
+    ) => {
       intervalCallbacks.push(callback);
       return intervalCallbacks.length as unknown as ReturnType<typeof setInterval>;
     }) as typeof globalThis.setInterval);

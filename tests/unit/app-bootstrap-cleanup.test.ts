@@ -149,6 +149,10 @@ describe('cleanupBootstrapFailure', () => {
 
     // Clean up the temp file
     const fs = await import('node:fs');
-    try { fs.unlinkSync(tmpPath); } catch { /* best-effort */ }
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      /* best-effort */
+    }
   });
 });

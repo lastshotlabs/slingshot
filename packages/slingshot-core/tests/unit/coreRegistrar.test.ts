@@ -108,12 +108,16 @@ describe('createCoreRegistrar', () => {
   test('addEmailTemplates merges multiple template sets', () => {
     const { registrar, drain } = createCoreRegistrar();
 
-    registrar.addEmailTemplates(asNever({
-      welcome: { subject: 'Welcome', html: '<p>Welcome</p>' },
-    }));
-    registrar.addEmailTemplates(asNever({
-      reset: { subject: 'Reset', html: '<p>Reset</p>' },
-    }));
+    registrar.addEmailTemplates(
+      asNever({
+        welcome: { subject: 'Welcome', html: '<p>Welcome</p>' },
+      }),
+    );
+    registrar.addEmailTemplates(
+      asNever({
+        reset: { subject: 'Reset', html: '<p>Reset</p>' },
+      }),
+    );
 
     const snapshot = drain();
     expect(snapshot.emailTemplates.size).toBe(2);

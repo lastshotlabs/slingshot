@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { webhooksManifest } from '../../src';
+import { webhooksManifest } from '../../src/manifest/webhooksManifest';
 import { createWebhooksTestApp } from '../../src/testing';
 
 const originalFetch = globalThis.fetch;

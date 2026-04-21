@@ -156,9 +156,9 @@ describe('slingshot-postgres adapter — error paths', () => {
 
   test('fails closed when the database schema version is newer than this binary supports', async () => {
     mockMigrationVersion = 3;
-    await expect(
-      createPostgresAdapter({ pool: new (await import('pg')).Pool() }),
-    ).rejects.toThrow('Database schema version 3 is newer than this binary supports (2)');
+    await expect(createPostgresAdapter({ pool: new (await import('pg')).Pool() })).rejects.toThrow(
+      'Database schema version 3 is newer than this binary supports (2)',
+    );
   });
 
   test('skips adapter migrations when the pool runtime is configured as assume-ready', async () => {

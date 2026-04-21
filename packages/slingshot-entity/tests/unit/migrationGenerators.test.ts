@@ -402,7 +402,7 @@ describe('generateMigrationMongo', () => {
     expect(generateMigrationMongo(plan)).toBe(script);
     // Should parse without syntax errors (ignoring the undefined `db`
     // identifier — we only care the script is syntactically valid JS).
-     
+
     expect(() => new Function('db', script)).not.toThrow();
   });
 

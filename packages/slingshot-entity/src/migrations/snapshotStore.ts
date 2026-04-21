@@ -74,7 +74,9 @@ export function loadSnapshot(
     .filter(filename => filename.endsWith('.json'))
     .map(filename => readSnapshotFile(join(snapshotDir, filename)));
 
-  const matchingSnapshots = snapshots.filter(snapshot => isMatchingEntitySnapshot(snapshot, config));
+  const matchingSnapshots = snapshots.filter(snapshot =>
+    isMatchingEntitySnapshot(snapshot, config),
+  );
   if (matchingSnapshots.length > 0) {
     matchingSnapshots.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
     return matchingSnapshots[0] ?? null;

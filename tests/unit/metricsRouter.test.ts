@@ -7,8 +7,8 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { AppEnv, PostgresBundle } from '@lastshotlabs/slingshot-core';
 import { attachContext } from '@lastshotlabs/slingshot-core';
 import { createMetricsState } from '../../src/framework/metrics/registry';
-import { createMetricsRouter } from '../../src/framework/routes/metrics';
 import type { MetricsState } from '../../src/framework/metrics/registry';
+import { createMetricsRouter } from '../../src/framework/routes/metrics';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,9 +32,9 @@ beforeEach(() => {
 
 describe('createMetricsRouter — production guard', () => {
   test('throws in production when auth is "none" without unsafePublic', () => {
-    expect(() =>
-      createMetricsRouter({ auth: 'none', isProd: true }, state),
-    ).toThrow('[security] metrics.auth is required in production');
+    expect(() => createMetricsRouter({ auth: 'none', isProd: true }, state)).toThrow(
+      '[security] metrics.auth is required in production',
+    );
   });
 
   test('does not throw in production when unsafePublic is true', () => {

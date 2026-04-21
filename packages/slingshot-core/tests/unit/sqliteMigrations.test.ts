@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { runSubsystemMigrations } from '../../src/sqliteMigrations';
+import { describe, expect, test } from 'bun:test';
 import type { RuntimeSqliteDatabase } from '../../src/runtime';
+import { runSubsystemMigrations } from '../../src/sqliteMigrations';
 
 function createTestDb(): RuntimeSqliteDatabase {
   const raw = new Database(':memory:');
@@ -53,7 +53,9 @@ describe('runSubsystemMigrations', () => {
     ];
     runSubsystemMigrations(db, 'test-plugin', migrations);
 
-    const row = db.query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?').get('test-plugin');
+    const row = db
+      .query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
+      .get('test-plugin');
     expect(row?.version).toBe(2);
   });
 
@@ -83,8 +85,12 @@ describe('runSubsystemMigrations', () => {
       (d: RuntimeSqliteDatabase) => d.run('ALTER TABLE perm_grants ADD COLUMN role TEXT'),
     ]);
 
-    const authRow = db.query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?').get('auth');
-    const permsRow = db.query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?').get('perms');
+    const authRow = db
+      .query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
+      .get('auth');
+    const permsRow = db
+      .query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
+      .get('perms');
     expect(authRow?.version).toBe(1);
     expect(permsRow?.version).toBe(2);
   });
@@ -92,7 +98,9 @@ describe('runSubsystemMigrations', () => {
   test('empty migrations array is a no-op', () => {
     const db = createTestDb();
     runSubsystemMigrations(db, 'empty', []);
-    const row = db.query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?').get('empty');
+    const row = db
+      .query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
+      .get('empty');
     // bun:sqlite .get() returns null when no row found
     expect(row).toBeNull();
   });
@@ -153,9 +161,10 @@ describe('runSubsystemMigrations', () => {
 
     const rows = raw.query<{ id: string }, []>('SELECT id FROM items').all();
     const migrationTable = raw
-      .query<{ name: string }, [string]>(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
-      )
+      .query<
+        { name: string },
+        [string]
+      >("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
       .get('_slingshot_migrations');
 
     expect(rows).toEqual([]);
@@ -245,7 +254,9 @@ describe('runSubsystemMigrations', () => {
     db.run("INSERT INTO _slingshot_migrations (subsystem, version) VALUES ('corrupt', 'abc')");
 
     expect(() =>
-      runSubsystemMigrations(db, 'corrupt', [d => d.run('CREATE TABLE nope (id TEXT PRIMARY KEY)')]),
+      runSubsystemMigrations(db, 'corrupt', [
+        d => d.run('CREATE TABLE nope (id TEXT PRIMARY KEY)'),
+      ]),
     ).toThrow("Invalid schema version for subsystem 'corrupt'");
   });
 });

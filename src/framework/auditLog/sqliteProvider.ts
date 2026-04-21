@@ -3,8 +3,8 @@ import type {
   AuditLogProvider,
   RuntimeSqliteDatabase,
 } from '@lastshotlabs/slingshot-core';
-import { decodeCursorOrThrow, encodeCursor } from './cursor';
 import { createSqliteInitializer } from '../persistence/sqliteInit';
+import { decodeCursorOrThrow, encodeCursor } from './cursor';
 
 const sqliteAuditLogInitializers = new WeakMap<RuntimeSqliteDatabase, () => void>();
 

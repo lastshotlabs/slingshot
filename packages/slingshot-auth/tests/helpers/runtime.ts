@@ -16,6 +16,7 @@ import {
 } from '../../src/lib/authRateLimit';
 import { createMemoryDeletionCancelTokenRepository } from '../../src/lib/deletionCancelToken';
 import { createMemoryVerificationTokenRepository } from '../../src/lib/emailVerification';
+import { createAuthLogger } from '../../src/lib/logger';
 import { createMemoryMagicLinkRepository } from '../../src/lib/magicLink';
 import { createMemoryMfaChallengeRepository } from '../../src/lib/mfaChallenge';
 import type { OAuthProviders } from '../../src/lib/oauth';
@@ -25,7 +26,6 @@ import { createMemoryOAuthReauthRepository } from '../../src/lib/oauthReauth';
 import { createMemoryResetTokenRepository } from '../../src/lib/resetPassword';
 import { createSecurityGate } from '../../src/lib/securityGate';
 import { createMemorySessionRepository } from '../../src/lib/session';
-import { createAuthLogger } from '../../src/lib/logger';
 import { AUTH_RUNTIME_KEY } from '../../src/runtime';
 import type { AuthRuntimeContext } from '../../src/runtime';
 import { makeDummyHashGetter } from '../../src/services/auth';

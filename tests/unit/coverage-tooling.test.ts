@@ -23,9 +23,9 @@ describe('coverage tooling', () => {
 
   test('discovers root and package coverage suites and respects suite filters', async () => {
     const unfiltered = await import(`../../scripts/workspace-test-suites.ts?all=${Date.now()}`);
-    expect(
-      unfiltered.coverageSuites.some((suite: { name: string }) => suite.name === 'root'),
-    ).toBe(true);
+    expect(unfiltered.coverageSuites.some((suite: { name: string }) => suite.name === 'root')).toBe(
+      true,
+    );
     expect(
       unfiltered.coverageSuites.some((suite: { name: string }) => suite.name === 'runtime-bun'),
     ).toBe(true);
@@ -33,7 +33,9 @@ describe('coverage tooling', () => {
       unfiltered.coverageSuites.some((suite: { name: string }) => suite.name === 'slingshot-auth'),
     ).toBe(true);
     expect(
-      unfiltered.coverageSuites.some((suite: { name: string }) => suite.name === 'slingshot-bullmq'),
+      unfiltered.coverageSuites.some(
+        (suite: { name: string }) => suite.name === 'slingshot-bullmq',
+      ),
     ).toBe(true);
 
     Bun.env.SLINGSHOT_SUITE_FILTER = 'root,runtime-bun,slingshot-bullmq';
@@ -214,8 +216,7 @@ describe('coverage tooling', () => {
       collectRootTestFiles,
       fileRequiresIsolatedProcess,
       partitionRootTestFiles,
-    } =
-      await import(`../../scripts/root-test-files.ts?root=${Date.now()}`);
+    } = await import(`../../scripts/root-test-files.ts?root=${Date.now()}`);
 
     const files = await collectRootTestFiles();
     const coverageFiles = await collectRootCoverageTestFiles();
@@ -255,10 +256,16 @@ describe('coverage tooling', () => {
     const { runSuite: runCoverageSuite } = await import(
       `../../scripts/run-coverage.ts?stdin-coverage=${Date.now()}`
     );
-    const { runStep } = await import(`../../scripts/run-docker-tests.ts?stdin-docker=${Date.now()}`);
+    const { runStep } = await import(
+      `../../scripts/run-docker-tests.ts?stdin-docker=${Date.now()}`
+    );
 
     await runFiles('bulk 1', ['tests/unit/webhookAuth.test.ts'], spawnFn);
-    await runPackageSuite('slingshot-auth', ['bun', 'test', 'packages/slingshot-auth/tests'], spawnFn);
+    await runPackageSuite(
+      'slingshot-auth',
+      ['bun', 'test', 'packages/slingshot-auth/tests'],
+      spawnFn,
+    );
     await runCoverageFiles(
       ['--coverage-dir', join(tempDir, 'coverage'), 'tests/unit/webhookAuth.test.ts'],
       spawnFn,

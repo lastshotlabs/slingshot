@@ -353,7 +353,11 @@ describe('parseCursorParams — signing', () => {
 
   it('returns invalidCursor:true when signed cursor is tampered', () => {
     const signing = { config: { cursors: true }, secret: 'test-secret-32-chars-long-xxxxxxx' };
-    const result = parseCursorParams({ cursor: 'tampered-cursor-value' }, undefined, signing as any);
+    const result = parseCursorParams(
+      { cursor: 'tampered-cursor-value' },
+      undefined,
+      signing as any,
+    );
     expect(result.cursor).toBeUndefined();
     expect(result.invalidCursor).toBe(true);
   });

@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  resolvePluginState,
-  getPluginStateOrNull,
   getPluginState,
-  getPluginStateFromRequestOrNull,
   getPluginStateFromRequest,
+  getPluginStateFromRequestOrNull,
+  getPluginStateOrNull,
+  resolvePluginState,
 } from '../../src/pluginState';
 
 describe('resolvePluginState', () => {
@@ -91,7 +91,9 @@ describe('getPluginStateFromRequestOrNull', () => {
 describe('getPluginStateFromRequest', () => {
   test('throws when pluginState not available on request', () => {
     const c = { get: () => null };
-    expect(() => getPluginStateFromRequest(c)).toThrow('pluginState is not available on this request');
+    expect(() => getPluginStateFromRequest(c)).toThrow(
+      'pluginState is not available on this request',
+    );
   });
 
   test('returns pluginState from request context', () => {

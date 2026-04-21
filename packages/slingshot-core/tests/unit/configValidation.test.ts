@@ -2,9 +2,9 @@ import { describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
 import {
   disableRoutesSchema,
-  warnUnknownPluginKeys,
   validateAdapterShape,
   validatePluginConfig,
+  warnUnknownPluginKeys,
 } from '../../src/configValidation';
 
 describe('disableRoutesSchema', () => {
@@ -51,14 +51,16 @@ describe('warnUnknownPluginKeys', () => {
 describe('validateAdapterShape', () => {
   test('passes when all methods present', () => {
     const adapter = { createGrant: () => {}, revokeGrant: () => {} };
-    expect(() => validateAdapterShape('perms', 'adapter', adapter, ['createGrant', 'revokeGrant'])).not.toThrow();
+    expect(() =>
+      validateAdapterShape('perms', 'adapter', adapter, ['createGrant', 'revokeGrant']),
+    ).not.toThrow();
   });
 
   test('throws when methods are missing', () => {
     const adapter = { createGrant: () => {} };
-    expect(() => validateAdapterShape('perms', 'adapter', adapter, ['createGrant', 'revokeGrant'])).toThrow(
-      'missing required methods: revokeGrant',
-    );
+    expect(() =>
+      validateAdapterShape('perms', 'adapter', adapter, ['createGrant', 'revokeGrant']),
+    ).toThrow('missing required methods: revokeGrant');
   });
 
   test('throws when adapter is null', () => {

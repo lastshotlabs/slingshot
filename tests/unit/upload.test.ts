@@ -282,7 +282,7 @@ describe('generateUploadKeyFromFilename', () => {
       undefined,
       {},
       {
-        generateKey: (file) => `fallback/${file.name}`,
+        generateKey: file => `fallback/${file.name}`,
       },
     );
     expect(key).toBe('fallback/upload');

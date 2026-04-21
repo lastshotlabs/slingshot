@@ -216,8 +216,8 @@ describe('parseContentTokens edge cases', () => {
     // Should not throw; body is truncated to 65536
     expect(result.segments.length).toBeGreaterThan(0);
     const totalText = result.segments
-      .filter((s) => s.type === 'text')
-      .map((s) => (s as { value: string }).value)
+      .filter(s => s.type === 'text')
+      .map(s => (s as { value: string }).value)
       .join('');
     expect(totalText.length).toBe(65_536);
   });

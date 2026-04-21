@@ -1,8 +1,7 @@
 import { createCachedRunHandle, generateRunId } from '../adapter';
-import { OrchestrationError } from '../errors';
 import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
-import { memoryAdapterOptionsSchema } from '../validation';
+import { OrchestrationError } from '../errors';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -18,6 +17,7 @@ import type {
   StepRun,
   WorkflowRun,
 } from '../types';
+import { memoryAdapterOptionsSchema } from '../validation';
 
 function toError(error: unknown) {
   if (error instanceof Error) {
@@ -26,7 +26,10 @@ function toError(error: unknown) {
   return { message: String(error) };
 }
 
-function matchesTags(runTags: Record<string, string> | undefined, filterTags: Record<string, string>): boolean {
+function matchesTags(
+  runTags: Record<string, string> | undefined,
+  filterTags: Record<string, string>,
+): boolean {
   if (!runTags) return false;
   return Object.entries(filterTags).every(([key, value]) => runTags[key] === value);
 }
@@ -58,10 +61,12 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
  * durability across process restarts, and full support for observability/progress
  * within the running process.
  */
-export function createMemoryAdapter(options: {
-  concurrency?: number;
-  eventSink?: OrchestrationEventSink;
-} = {}): OrchestrationAdapter & ObservabilityCapability {
+export function createMemoryAdapter(
+  options: {
+    concurrency?: number;
+    eventSink?: OrchestrationEventSink;
+  } = {},
+): OrchestrationAdapter & ObservabilityCapability {
   const parsed = memoryAdapterOptionsSchema.parse({ concurrency: options.concurrency });
   const taskRegistry = new Map<string, AnyResolvedTask>();
   const workflowRegistry = new Map<string, AnyResolvedWorkflow>();
@@ -154,7 +159,10 @@ export function createMemoryAdapter(options: {
           const existingPromise =
             resultPromises.get(existingRunId) ??
             Promise.reject(
-              new OrchestrationError('ADAPTER_ERROR', `Run '${existingRunId}' is not active in this process.`),
+              new OrchestrationError(
+                'ADAPTER_ERROR',
+                `Run '${existingRunId}' is not active in this process.`,
+              ),
             );
           return createCachedRunHandle(existingRunId, () => existingPromise);
         }
@@ -203,7 +211,10 @@ export function createMemoryAdapter(options: {
           const existingPromise =
             resultPromises.get(existingRunId) ??
             Promise.reject(
-              new OrchestrationError('ADAPTER_ERROR', `Run '${existingRunId}' is not active in this process.`),
+              new OrchestrationError(
+                'ADAPTER_ERROR',
+                `Run '${existingRunId}' is not active in this process.`,
+              ),
             );
           return createCachedRunHandle(existingRunId, () => existingPromise);
         }

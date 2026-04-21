@@ -38,10 +38,7 @@ export async function createTestHttpServer(
   if (options?.resetBackend !== false && dbConfigUsesPostgres(mergedDbConfig)) {
     await resetPostgresE2eState(resolveTestPostgresUrl());
   }
-  const app = await createTestApp(
-    { ...overrides, db: mergedDbConfig },
-    authOverrides,
-  );
+  const app = await createTestApp({ ...overrides, db: mergedDbConfig }, authOverrides);
   const server = Bun.serve({ port: 0, fetch: app.fetch });
   const baseUrl = `http://localhost:${server.port}`;
   const wsUrl = `ws://localhost:${server.port}`;

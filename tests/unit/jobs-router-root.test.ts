@@ -276,9 +276,7 @@ describe('createJobsRouter (root coverage)', () => {
   });
 
   test('passes state and pagination filters through to the queue adapter', async () => {
-    const getJobs = mock(async () => [
-      makeFakeJob({ id: 'failed-job', state: 'failed' }),
-    ]);
+    const getJobs = mock(async () => [makeFakeJob({ id: 'failed-job', state: 'failed' })]);
     const getJobCounts = mock(async () => ({ failed: 1 }));
     const queueFactory = {
       createQueue() {

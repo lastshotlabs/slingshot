@@ -41,7 +41,10 @@ describe('Deploy.run()', () => {
     mock.module('@lastshotlabs/slingshot-infra', () => ({
       ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
-      loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
+      loadInfraConfig: async () => ({
+        config: { platform: {} },
+        configPath: '/app/slingshot.infra.ts',
+      }),
       createRegistryFromConfig: () => ({}),
       createPresetRegistry: () => ({}),
       createEcsPreset: () => ({}),
@@ -60,7 +63,9 @@ describe('Deploy.run()', () => {
     const cmd = new Deploy(['--stage', 'staging', '--plan'], makeOclifConfig() as never);
 
     const logged: string[] = [];
-    cmd.log = (...args: any[]) => { logged.push(args.join(' ')); };
+    cmd.log = (...args: any[]) => {
+      logged.push(args.join(' '));
+    };
 
     await cmd.run();
     expect(logged.some(l => l.includes(planText))).toBe(true);
@@ -70,7 +75,10 @@ describe('Deploy.run()', () => {
     mock.module('@lastshotlabs/slingshot-infra', () => ({
       ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
-      loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
+      loadInfraConfig: async () => ({
+        config: { platform: {} },
+        configPath: '/app/slingshot.infra.ts',
+      }),
       createRegistryFromConfig: () => ({}),
       createPresetRegistry: () => ({}),
       createEcsPreset: () => ({}),
@@ -78,7 +86,11 @@ describe('Deploy.run()', () => {
       formatDeployPlan: () => '',
       runDeployPipeline: async () => ({
         services: [
-          { name: 'web', stack: 'ecs', result: { success: true, serviceUrl: 'https://web.example.com' } },
+          {
+            name: 'web',
+            stack: 'ecs',
+            result: { success: true, serviceUrl: 'https://web.example.com' },
+          },
         ],
       }),
     }));
@@ -90,7 +102,9 @@ describe('Deploy.run()', () => {
     const cmd = new Deploy(['--stage', 'staging', '--dry-run'], makeOclifConfig() as never);
 
     const logged: string[] = [];
-    cmd.log = (...args: any[]) => { logged.push(args.join(' ')); };
+    cmd.log = (...args: any[]) => {
+      logged.push(args.join(' '));
+    };
 
     await cmd.run();
     expect(logged.some(l => l.includes('dry run'))).toBe(true);
@@ -101,7 +115,10 @@ describe('Deploy.run()', () => {
     mock.module('@lastshotlabs/slingshot-infra', () => ({
       ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
-      loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
+      loadInfraConfig: async () => ({
+        config: { platform: {} },
+        configPath: '/app/slingshot.infra.ts',
+      }),
       createRegistryFromConfig: () => ({}),
       createPresetRegistry: () => ({}),
       createEcsPreset: () => ({}),
@@ -109,9 +126,7 @@ describe('Deploy.run()', () => {
       formatDeployPlan: () => 'plan-text',
       runDeployPipeline: async () => ({
         plan: { services: [] },
-        services: [
-          { name: 'api', stack: 'ecs', result: { success: true } },
-        ],
+        services: [{ name: 'api', stack: 'ecs', result: { success: true } }],
       }),
     }));
     mock.module('../../src/cli/utils/resolvePlatformConfig', () => ({
@@ -122,7 +137,9 @@ describe('Deploy.run()', () => {
     const cmd = new Deploy(['--stage', 'prod', '--yes'], makeOclifConfig() as never);
 
     const logged: string[] = [];
-    cmd.log = (...args: any[]) => { logged.push(args.join(' ')); };
+    cmd.log = (...args: any[]) => {
+      logged.push(args.join(' '));
+    };
 
     await cmd.run();
     expect(logged.some(l => l.includes('api'))).toBe(true);
@@ -133,7 +150,10 @@ describe('Deploy.run()', () => {
     mock.module('@lastshotlabs/slingshot-infra', () => ({
       ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
-      loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
+      loadInfraConfig: async () => ({
+        config: { platform: {} },
+        configPath: '/app/slingshot.infra.ts',
+      }),
       createRegistryFromConfig: () => ({}),
       createPresetRegistry: () => ({}),
       createEcsPreset: () => ({}),
@@ -152,7 +172,9 @@ describe('Deploy.run()', () => {
     const cmd = new Deploy(['--stage', 'prod'], makeOclifConfig() as never);
 
     const logged: string[] = [];
-    cmd.log = (...args: any[]) => { logged.push(args.join(' ')); };
+    cmd.log = (...args: any[]) => {
+      logged.push(args.join(' '));
+    };
 
     await cmd.run();
     expect(logged.some(l => l.includes('Deploy cancelled'))).toBe(true);
@@ -162,7 +184,10 @@ describe('Deploy.run()', () => {
     mock.module('@lastshotlabs/slingshot-infra', () => ({
       ...realInfra,
       loadPlatformConfig: async () => ({ config: { registry: {} } }),
-      loadInfraConfig: async () => ({ config: { platform: {} }, configPath: '/app/slingshot.infra.ts' }),
+      loadInfraConfig: async () => ({
+        config: { platform: {} },
+        configPath: '/app/slingshot.infra.ts',
+      }),
       createRegistryFromConfig: () => ({}),
       createPresetRegistry: () => ({}),
       createEcsPreset: () => ({}),
@@ -170,9 +195,7 @@ describe('Deploy.run()', () => {
       formatDeployPlan: () => '',
       runDeployPipeline: async () => ({
         plan: { services: [] },
-        services: [
-          { name: 'worker', stack: 'ec2', result: { success: false, error: 'timeout' } },
-        ],
+        services: [{ name: 'worker', stack: 'ec2', result: { success: false, error: 'timeout' } }],
       }),
     }));
     mock.module('../../src/cli/utils/resolvePlatformConfig', () => ({
@@ -183,7 +206,9 @@ describe('Deploy.run()', () => {
     const cmd = new Deploy(['--stage', 'prod', '--yes'], makeOclifConfig() as never);
 
     const logged: string[] = [];
-    cmd.log = (...args: any[]) => { logged.push(args.join(' ')); };
+    cmd.log = (...args: any[]) => {
+      logged.push(args.join(' '));
+    };
 
     await cmd.run();
     expect(logged.some(l => l.includes('\u2717') && l.includes('timeout'))).toBe(true);

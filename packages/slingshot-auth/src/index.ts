@@ -88,10 +88,7 @@ export type { EmailTemplate, TemplateVariables } from './lib/emailTemplates';
 // Config
 /** Resolve raw auth config into the normalized runtime config used during boot. */
 export { createAuthResolvedConfig } from './config/authConfig';
-export type {
-  AuthResolvedConfig,
-  HookContext,
-} from './config/authConfig';
+export type { AuthResolvedConfig, HookContext } from './config/authConfig';
 
 // Event bus utilities
 /** Security event wiring contracts for audit and alerting integrations. */

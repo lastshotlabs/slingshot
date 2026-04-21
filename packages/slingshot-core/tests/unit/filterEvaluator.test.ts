@@ -40,7 +40,9 @@ describe('evaluateFilter', () => {
 
   // --- param:x references ---
   test('param reference resolves from params', () => {
-    expect(evaluateFilter({ userId: 'usr_1' }, { userId: 'param:userId' }, { userId: 'usr_1' })).toBe(true);
+    expect(
+      evaluateFilter({ userId: 'usr_1' }, { userId: 'param:userId' }, { userId: 'usr_1' }),
+    ).toBe(true);
   });
 
   test('param reference with missing param returns undefined (mismatch)', () => {
@@ -125,23 +127,33 @@ describe('evaluateFilter', () => {
   // --- $and, $or ---
   test('$and all must match', () => {
     const record = { status: 'active', score: 10 };
-    expect(evaluateFilter(record, { $and: [{ status: 'active' }, { score: { $gte: 5 } }] })).toBe(true);
-    expect(evaluateFilter(record, { $and: [{ status: 'active' }, { score: { $gte: 20 } }] })).toBe(false);
+    expect(evaluateFilter(record, { $and: [{ status: 'active' }, { score: { $gte: 5 } }] })).toBe(
+      true,
+    );
+    expect(evaluateFilter(record, { $and: [{ status: 'active' }, { score: { $gte: 20 } }] })).toBe(
+      false,
+    );
   });
 
   test('$or at least one must match', () => {
     const record = { status: 'deleted', score: 10 };
-    expect(evaluateFilter(record, { $or: [{ status: 'active' }, { score: { $gte: 10 } }] })).toBe(true);
-    expect(evaluateFilter(record, { $or: [{ status: 'active' }, { score: { $gte: 20 } }] })).toBe(false);
+    expect(evaluateFilter(record, { $or: [{ status: 'active' }, { score: { $gte: 10 } }] })).toBe(
+      true,
+    );
+    expect(evaluateFilter(record, { $or: [{ status: 'active' }, { score: { $gte: 20 } }] })).toBe(
+      false,
+    );
   });
 
   test('field conditions + $and + $or combined', () => {
     const record = { status: 'active', score: 15, level: 3 };
-    expect(evaluateFilter(record, {
-      status: 'active',
-      $and: [{ score: { $gte: 10 } }],
-      $or: [{ level: 5 }, { level: 3 }],
-    })).toBe(true);
+    expect(
+      evaluateFilter(record, {
+        status: 'active',
+        $and: [{ score: { $gte: 10 } }],
+        $or: [{ level: 5 }, { level: 3 }],
+      }),
+    ).toBe(true);
   });
 
   // --- Fallback strict equality ---
@@ -159,7 +171,9 @@ describe('evaluateFilter', () => {
   });
 
   test('$contains with param reference', () => {
-    expect(evaluateFilter({ name: 'FooBar' }, { name: { $contains: 'param:q' } }, { q: 'foo' })).toBe(true);
+    expect(
+      evaluateFilter({ name: 'FooBar' }, { name: { $contains: 'param:q' } }, { q: 'foo' }),
+    ).toBe(true);
   });
 });
 

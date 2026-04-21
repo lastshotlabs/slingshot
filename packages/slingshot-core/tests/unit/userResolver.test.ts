@@ -1,13 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { getUserResolver, getUserResolverOrNull } from '../../src/userResolver';
 import { attachContext } from '../../src/context/contextStore';
+import { getUserResolver, getUserResolverOrNull } from '../../src/userResolver';
 
 /**
  * Create a minimal branded SlingshotContext-like object with just the fields
  * needed by userResolver. We use attachContext to install the brand symbol,
  * then pass the context directly to the resolver helpers.
  */
-function createBrandedContext(userResolver: { resolveUserId(req: Request): Promise<string | null> } | null) {
+function createBrandedContext(
+  userResolver: { resolveUserId(req: Request): Promise<string | null> } | null,
+) {
   // Build a minimal context object that satisfies the shape resolveContext checks.
   const ctxData = { userResolver };
   const ctx = ctxData as unknown as Record<string, unknown>;
@@ -31,9 +33,7 @@ describe('getUserResolver', () => {
 
   test('throws when no UserResolver is registered (null)', () => {
     const ctx = createBrandedContext(null);
-    expect(() => getUserResolver(ctx)).toThrow(
-      'No UserResolver registered for this app instance.',
-    );
+    expect(() => getUserResolver(ctx)).toThrow('No UserResolver registered for this app instance.');
   });
 
   test('resolves user from the returned resolver', async () => {
@@ -80,8 +80,6 @@ describe('getUserResolver with app carrier', () => {
 
   test('throws when app has no context attached', () => {
     const plainObj = {};
-    expect(() => getUserResolver(plainObj)).toThrow(
-      'SlingshotContext not found',
-    );
+    expect(() => getUserResolver(plainObj)).toThrow('SlingshotContext not found');
   });
 });

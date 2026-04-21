@@ -1,8 +1,9 @@
 /** @type {import('dependency-cruiser').IConfiguration} */
-const FOUNDATION_PACKAGES = 'slingshot-(?:core|entity|auth|permissions|postgres|bullmq|ssr)';
-const FEATURE_PACKAGE_PATH = `^packages/(slingshot-(?!(?:core|entity|auth|permissions|postgres|bullmq|ssr)(?:/|$))[^/]+)/`;
+const FOUNDATION_PACKAGES =
+  'slingshot-(?:core|entity|auth|permissions|postgres|bullmq|ssr|orchestration)';
+const FEATURE_PACKAGE_PATH = `^packages/(slingshot-(?!(?:core|entity|auth|permissions|postgres|bullmq|ssr|orchestration)(?:/|$))[^/]+)/`;
 const FOUNDATION_PACKAGE_PATH = `^packages/(${FOUNDATION_PACKAGES})/`;
-const NON_AUTH_EXTENSION_PACKAGE_PATH = `^packages/(slingshot-(?!(?:auth|oauth|oidc|scim|m2m)(?:/|$))[^/]+)/`;
+const NON_AUTH_EXTENSION_PACKAGE_PATH = `^packages/(slingshot-(?!(?:core|entity|auth|permissions|postgres|bullmq|ssr|orchestration|oauth|oidc|scim|m2m)(?:/|$))[^/]+)/`;
 
 module.exports = {
   forbidden: [

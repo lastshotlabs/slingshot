@@ -19,7 +19,7 @@ describe('webhooks manifest conversion', () => {
     const fetchMock = mock(async () => new Response(null, { status: 200 }));
     globalThis.fetch = asFetch(fetchMock);
 
-    const { app, bus } = await createWebhooksTestApp({
+    const { app, events } = await createWebhooksTestApp({
       events: ['auth:*'],
     });
 
@@ -32,9 +32,11 @@ describe('webhooks manifest conversion', () => {
         'x-tenant-id': 'tenant-a',
       },
       body: JSON.stringify({
+        ownerType: 'user',
+        ownerId: 'user-1',
         url: 'https://example.com/hooks/auth',
         secret: 'super-secret-token',
-        events: ['auth:*'],
+        subscriptions: [{ pattern: 'auth:*' }],
       }),
     });
     expect(createEndpoint.status).toBe(201);
@@ -46,11 +48,19 @@ describe('webhooks manifest conversion', () => {
     expect(createdEndpoint.enabled).toBe(true);
     expect(createdEndpoint.secret).toBe('oken');
 
-    bus.emit('auth:user.created', {
-      userId: 'user-1',
-      email: 'user@example.com',
-      tenantId: 'tenant-a',
-    });
+    events.publish(
+      'auth:login',
+      {
+        userId: 'user-1',
+        sessionId: 'sess-1',
+        tenantId: 'tenant-a',
+      },
+      {
+        tenantId: 'tenant-a',
+        userId: 'user-1',
+        actorId: 'user-1',
+      },
+    );
     await new Promise(resolve => setTimeout(resolve, 50));
 
     const listDeliveries = await app.request(
@@ -70,7 +80,7 @@ describe('webhooks manifest conversion', () => {
     expect(deliveries.items.length).toBe(1);
     expect(deliveries.items[0]).toMatchObject({
       status: 'delivered',
-      event: 'auth:user.created',
+      event: 'auth:login',
       attempts: 1,
     });
 

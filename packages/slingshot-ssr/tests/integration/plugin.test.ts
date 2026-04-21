@@ -151,7 +151,6 @@ describe('createSsrPlugin — production mode manifest check', () => {
     const mockBus = {
       on: () => {},
       emit: () => {},
-      registerClientSafeEvents: () => {},
       drain: async () => {},
     };
 
@@ -178,7 +177,6 @@ describe('createSsrPlugin — production mode manifest check', () => {
     const mockBus = {
       on: () => {},
       emit: () => {},
-      registerClientSafeEvents: () => {},
       drain: async () => {},
     };
 

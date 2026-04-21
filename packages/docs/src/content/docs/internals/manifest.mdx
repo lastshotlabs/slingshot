@@ -322,6 +322,11 @@ Manifest startup includes more than shape validation. Slingshot also performs cr
 
 Built-in plugin config is normalized before the factory runs. Strategy strings and handler refs are resolved into runtime objects first, so first-party plugins receive the same kinds of values in manifest mode that they would receive in code-first composition.
 
+That same normalization now matters for webhook management as well: the plugin config still uses an
+`events` filter for webhook intake subscription, but endpoint management payloads use
+`subscriptions`, which are expanded into concrete approved event keys and persisted in normalized
+form. Legacy endpoint `events` payloads are rejected on writes.
+
 ## Shared manifest resolution
 
 The root package also exports `resolveManifestConfig()` from `@lastshotlabs/slingshot/manifest`.

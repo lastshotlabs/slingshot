@@ -2,7 +2,7 @@ import { extname } from 'node:path';
 import type { Context } from 'hono';
 import type { StorageAdapter, UploadResult } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { HttpError, resolveContext } from '@lastshotlabs/slingshot-core';
+import { HttpError, getActor, resolveContext } from '@lastshotlabs/slingshot-core';
 
 export interface UploadOpts {
   field?: string | string[];
@@ -163,8 +163,9 @@ export const parseUpload = async (
   const body = await c.req.parseBody({ all: true });
   const results: UploadResult[] = [];
 
-  const userId = c.get('authUserId') ?? undefined;
-  const tenantId = c.get('tenantId') ?? undefined;
+  const actor = getActor(c);
+  const userId = actor.id ?? undefined;
+  const tenantId = actor.tenantId ?? undefined;
   const bucket = c.get('uploadBucket');
 
   for (const field of fields) {

@@ -13,6 +13,8 @@ import {
   InProcessAdapter,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import type {
   CoreRegistrar,
@@ -101,6 +103,15 @@ interface PushHarness {
   teardown: () => void;
 }
 
+function createRuntime() {
+  const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
+  return { bus, events };
+}
+
 type TestAuthRuntime = {
   adapter: {
     getSuspended?: (
@@ -132,7 +143,7 @@ async function createPushHarness(opts?: {
   authRuntime?: TestAuthRuntime;
 }): Promise<PushHarness> {
   const userId = opts?.userId ?? 'user-1';
-  const bus = new InProcessAdapter();
+  const runtime = createRuntime();
   const frameworkConfig = createFrameworkConfig();
 
   const deliveryAdapterCalls: unknown[] = [];
@@ -185,7 +196,8 @@ async function createPushHarness(opts?: {
     ws: null,
     wsEndpoints: {},
     wsPublish: null,
-    bus,
+    bus: runtime.bus,
+    events: runtime.events,
   } as unknown as Parameters<typeof attachContext>[1]);
 
   const routeAuth: RouteAuthRegistry = {
@@ -207,7 +219,10 @@ async function createPushHarness(opts?: {
     await next();
   });
 
-  const setupContext = toSetupContext({ app, config: frameworkConfig, bus });
+  const setupContext = {
+    ...toSetupContext({ app, config: frameworkConfig, bus: runtime.bus }),
+    events: runtime.events,
+  } as import('@lastshotlabs/slingshot-core').PluginSetupContext;
   await plugin.setupMiddleware?.(setupContext);
   await plugin.setupRoutes?.(setupContext);
   await plugin.setupPost?.(setupContext);
@@ -216,7 +231,7 @@ async function createPushHarness(opts?: {
 
   return {
     app,
-    bus,
+    bus: runtime.bus,
     pluginState: state,
     teardown() {},
   };
@@ -411,7 +426,7 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
   test('subscribe to topic requires authentication (401 without user)', async () => {
     // Override to not set authUserId
     const app = new Hono();
-    const bus = new InProcessAdapter();
+    const runtime = createRuntime();
     const fc = createFrameworkConfig();
     const pluginState = new Map<string, unknown>();
     attachContext(app, {
@@ -420,7 +435,8 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
       ws: null,
       wsEndpoints: {},
       wsPublish: null,
-      bus,
+      bus: runtime.bus,
+      events: runtime.events,
     } as unknown as Parameters<typeof attachContext>[1]);
     app.use('*', async (c, next) => {
       (c as unknown as { set(k: string, v: unknown): void }).set('slingshotCtx', {
@@ -438,7 +454,10 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
       web: { vapid: TEST_VAPID },
       mountPath: '/push',
     });
-    const setupContext = toSetupContext({ app, config: fc, bus });
+    const setupContext = {
+      ...toSetupContext({ app, config: fc, bus: runtime.bus }),
+      events: runtime.events,
+    } as import('@lastshotlabs/slingshot-core').PluginSetupContext;
     await plugin.setupMiddleware?.(setupContext);
     await plugin.setupRoutes?.(setupContext);
     await plugin.setupPost?.(setupContext);
@@ -576,7 +595,7 @@ describe('createPushPlugin — delivery ack', () => {
 describe('createPushPlugin — notifications delivery adapter wiring', () => {
   test('registers delivery adapter with slingshot-notifications when present', async () => {
     let registeredAdapter: unknown = null;
-    const bus = new InProcessAdapter();
+    const runtime = createRuntime();
     const fc = createFrameworkConfig();
     const pluginState = new Map<string, unknown>();
     const mockNotificationsState = {
@@ -617,7 +636,8 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
       ws: null,
       wsEndpoints: {},
       wsPublish: null,
-      bus,
+      bus: runtime.bus,
+      events: runtime.events,
     } as unknown as Parameters<typeof attachContext>[1]);
     app.use('*', async (c, next) => {
       (c as unknown as { set(k: string, v: unknown): void }).set('slingshotCtx', { routeAuth });
@@ -629,7 +649,10 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
       web: { vapid: TEST_VAPID },
       mountPath: '/push',
     });
-    const setupContext = toSetupContext({ app, config: fc, bus });
+    const setupContext = {
+      ...toSetupContext({ app, config: fc, bus: runtime.bus }),
+      events: runtime.events,
+    } as import('@lastshotlabs/slingshot-core').PluginSetupContext;
     await plugin.setupMiddleware?.(setupContext);
     await plugin.setupRoutes?.(setupContext);
     await plugin.setupPost?.(setupContext);
@@ -639,7 +662,7 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
   });
 
   test('boots without notifications plugin present', async () => {
-    const bus = new InProcessAdapter();
+    const runtime = createRuntime();
     const fc = createFrameworkConfig();
     const pluginState = new Map<string, unknown>(); // No notifications state
 
@@ -650,7 +673,8 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
       ws: null,
       wsEndpoints: {},
       wsPublish: null,
-      bus,
+      bus: runtime.bus,
+      events: runtime.events,
     } as unknown as Parameters<typeof attachContext>[1]);
     app.use('*', async (_c, next) => {
       await next();
@@ -662,7 +686,10 @@ describe('createPushPlugin — notifications delivery adapter wiring', () => {
       mountPath: '/push',
     });
     await expect(async () => {
-      const setupContext = toSetupContext({ app, config: fc, bus });
+      const setupContext = {
+        ...toSetupContext({ app, config: fc, bus: runtime.bus }),
+        events: runtime.events,
+      } as import('@lastshotlabs/slingshot-core').PluginSetupContext;
       await plugin.setupMiddleware?.(setupContext);
       await plugin.setupRoutes?.(setupContext);
       await plugin.setupPost?.(setupContext);

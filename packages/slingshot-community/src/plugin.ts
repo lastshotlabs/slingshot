@@ -8,6 +8,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   PERMISSIONS_STATE_KEY,
+  defineEvent,
   deepFreeze,
   getContextOrNull,
   getNotificationsStateOrNull,
@@ -245,7 +246,56 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
     name: COMMUNITY_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth', 'slingshot-notifications', 'slingshot-permissions'],
 
-    async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      if (!events.get('community:thread.embeds.resolved')) {
+        events.register(
+          defineEvent('community:thread.embeds.resolved', {
+            ownerPlugin: COMMUNITY_PLUGIN_STATE_KEY,
+            exposure: ['client-safe'],
+            resolveScope(payload) {
+              return {
+                tenantId: payload.tenantId ?? null,
+                actorId: null,
+                resourceType: 'community:container',
+                resourceId: payload.containerId,
+              };
+            },
+          }),
+        );
+      }
+      if (!events.get('community:reply.embeds.resolved')) {
+        events.register(
+          defineEvent('community:reply.embeds.resolved', {
+            ownerPlugin: COMMUNITY_PLUGIN_STATE_KEY,
+            exposure: ['client-safe'],
+            resolveScope(payload) {
+              return {
+                tenantId: payload.tenantId ?? null,
+                actorId: null,
+                resourceType: 'community:container',
+                resourceId: payload.containerId,
+              };
+            },
+          }),
+        );
+      }
+      if (!events.get('community:invite.redeemed')) {
+        events.register(
+          defineEvent('community:invite.redeemed', {
+            ownerPlugin: COMMUNITY_PLUGIN_STATE_KEY,
+            exposure: ['client-safe'],
+            resolveScope(payload) {
+              return {
+                userId: payload.userId,
+                actorId: payload.userId,
+                resourceType: 'community:container',
+                resourceId: payload.containerId,
+              };
+            },
+          }),
+        );
+      }
+
       // Auto-bridge auth context to community principal when configured.
       if (config.authBridge === 'auto') {
         const mountPath = config.mountPath ?? '/community';
@@ -440,13 +490,13 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       });
 
       if (innerPlugin.setupMiddleware) {
-        await innerPlugin.setupMiddleware({ app, config: frameworkConfig, bus });
+        await innerPlugin.setupMiddleware({ app, config: frameworkConfig, bus, events });
       }
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       const pluginState = getPluginStateOrNull(app);
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus });
+      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
       if (permissionsRef && pluginState) {
         if (!pluginState.has(PERMISSIONS_STATE_KEY)) {
@@ -460,7 +510,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       const appCtx = getContextOrNull(app);
       const pluginState = getPluginStateOrNull(app);
       notificationsStateRef ??= getNotificationsStateOrNull(pluginState) ?? undefined;
@@ -470,7 +520,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
             'Register createNotificationsPlugin() before this plugin.',
         );
       }
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
 
       // Push formatter registration — optional integration with slingshot-push.
       // Duck-typed to avoid a direct dependency on @lastshotlabs/slingshot-push.

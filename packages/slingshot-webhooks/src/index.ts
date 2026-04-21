@@ -8,9 +8,14 @@ export type { WebhookPluginConfig } from './types/config';
 export type { WebhookAdapter } from './types/adapter';
 export type {
   WebhookEndpoint,
+  WebhookEndpointSubscription,
+  WebhookEndpointSubscriptionInput,
   WebhookDelivery,
   WebhookAttempt,
   DeliveryStatus,
+  WebhookOwnerType,
+  WebhookSubscriber,
+  WebhookSubscriptionExposure,
 } from './types/models';
 export type { WebhookQueue, WebhookJob } from './types/queue';
 export { WebhookDeliveryError } from './types/queue';
@@ -21,4 +26,3 @@ export type { MemoryWebhookAdapter } from './adapters/memory';
 export { createWebhookMemoryQueue } from './queues/memory';
 
 export { signPayload, verifySignature } from './lib/signing';
-export { WEBHOOK_DEFAULT_SUBSCRIBABLE_EVENTS } from './subscribableEvents';

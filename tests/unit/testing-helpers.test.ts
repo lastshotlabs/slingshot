@@ -193,7 +193,7 @@ describe('createTestFullServer', () => {
 
   test('creates a full server with defaults and responds to health check', async () => {
     handle = await createTestFullServer({
-      routesDir: `${import.meta.dir}/fixtures/empty-routes`,
+      routesDir: `${import.meta.dir}/../fixtures/routes`,
       security: {
         rateLimit: { windowMs: 60_000, max: 1000 },
         signing: {
@@ -217,7 +217,7 @@ describe('createTestFullServer', () => {
     process.env.PORT = '9999';
 
     handle = await createTestFullServer({
-      routesDir: `${import.meta.dir}/fixtures/empty-routes`,
+      routesDir: `${import.meta.dir}/../fixtures/routes`,
       port: 0,
       security: {
         rateLimit: { windowMs: 60_000, max: 1000 },

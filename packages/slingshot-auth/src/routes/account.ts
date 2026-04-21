@@ -28,6 +28,7 @@ import type {
   PrimaryField,
   RefreshTokenConfig,
 } from '../config/authConfig';
+import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';
 
 export interface AccountRouterOptions {
@@ -452,15 +453,15 @@ export const createAccountRouter = (
             jobId,
             accountDeletion.gracePeriod,
           );
-          eventBus.emit('auth:account.deletion.scheduled', {
+          publishAuthEvent(runtime.events, 'auth:account.deletion.scheduled', {
             userId: authUserId,
             cancelToken,
             gracePeriodSeconds: accountDeletion.gracePeriod ?? 0,
-          });
+          }, { userId: authUserId, actorId: authUserId });
           const user = adapter.getUser ? await adapter.getUser(authUserId) : null;
           const email = user?.email ?? '';
           if (email) {
-            eventBus.emit('auth:delivery.account_deletion', {
+            publishAuthEvent(runtime.events, 'auth:delivery.account_deletion', {
               userId: authUserId,
               email,
               cancelToken,
@@ -471,7 +472,10 @@ export const createAccountRouter = (
           // No grace period — deletion is immediate via the queue (delay=0).
           // Emit the same events as the synchronous path so listeners are notified.
           eventBus.emit('security.auth.account.deleted', { userId: authUserId });
-          eventBus.emit('auth:user.deleted', { userId: authUserId });
+          publishAuthEvent(runtime.events, 'auth:user.deleted', { userId: authUserId }, {
+            userId: authUserId,
+            actorId: authUserId,
+          });
         }
 
         clearAuthCookie(c, COOKIE_TOKEN, isProd(), runtime.config);
@@ -492,7 +496,10 @@ export const createAccountRouter = (
       await adapter.deleteUser(authUserId);
 
       eventBus.emit('security.auth.account.deleted', { userId: authUserId });
-      eventBus.emit('auth:user.deleted', { userId: authUserId });
+      publishAuthEvent(runtime.events, 'auth:user.deleted', { userId: authUserId }, {
+        userId: authUserId,
+        actorId: authUserId,
+      });
 
       if (accountDeletion?.onAfterDelete) {
         await accountDeletion.onAfterDelete(authUserId);

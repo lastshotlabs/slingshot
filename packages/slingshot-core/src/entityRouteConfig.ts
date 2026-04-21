@@ -5,6 +5,8 @@
 // rate limits, events, and custom middleware onto a Hono router.
 // ============================================================================
 
+import type { EventExposure } from './eventDefinition';
+
 /**
  * Authentication strategy for a route or operation.
  *
@@ -443,8 +445,7 @@ export interface RouteIdempotencyConfig {
  *
  * @remarks
  * Event keys that use a forbidden namespace (`security.`, `auth:`, `community:delivery.`,
- * `push:`, `app:`) are rejected at validation time. To stream an event to browser clients
- * via SSE, also register the key in `EntityRouteConfig.clientSafeEvents`.
+ * `push:`, `app:`) are rejected at validation time.
  * `payload` defaults to including all entity fields when omitted — specify an explicit list
  * to limit the data surface exposed to event consumers.
  *
@@ -468,11 +469,8 @@ export interface RouteEventConfig {
    * @remarks
    * Must follow the format `namespace:storageName.action` (e.g. `'post:post.created'`).
    * Forbidden namespaces (`security.*`, `auth:*`, `community:delivery.*`, `push:*`, `app:*`)
-   * are rejected at validation time — do not use them here.
-   *
-   * To stream this event to browser clients via SSE, also add the key to
-   * `EntityRouteConfig.clientSafeEvents`. The event is never emitted when the route
-   * handler returns an error response.
+   * are rejected at validation time — do not use them here. The event is never emitted when
+   * the route handler returns an error response.
    */
   key: string;
 
@@ -502,6 +500,35 @@ export interface RouteEventConfig {
    * audit/trace context in the event payload.
    */
   include?: ('tenantId' | 'actorId' | 'requestId' | 'ip')[];
+
+  /**
+   * Exposure surfaces allowed to consume this event definition.
+   *
+   * @remarks
+   * Omit to default to `['internal']`. External webhook exposures require a scope mapping
+   * that can resolve the relevant owner dimension at publish time. `internal` cannot be
+   * combined with any external exposure.
+   */
+  exposure?: EventExposure[];
+
+  /**
+   * Scope mapping used to build the canonical event envelope metadata.
+   *
+   * Values starting with `record:` resolve from the emitted payload fields. Values starting
+   * with `ctx:` resolve from the publish context supplied by the route runtime.
+   */
+  scope?: RouteEventScopeConfig;
+}
+
+export type RouteEventScopeValue = `record:${string}` | `ctx:${string}`;
+
+export interface RouteEventScopeConfig {
+  tenantId?: RouteEventScopeValue;
+  userId?: RouteEventScopeValue;
+  appId?: RouteEventScopeValue;
+  actorId?: RouteEventScopeValue;
+  resourceType?: string;
+  resourceId?: RouteEventScopeValue;
 }
 
 // --- Per-Operation Config ---
@@ -816,8 +843,8 @@ export interface EntityPermissionConfig {
 /**
  * Source prefix for an {@link EntityRouteDataScopeConfig.from} binding.
  *
- * - `'ctx:'` reads from a Hono context variable (for example, `'ctx:authUserId'` reads
- *   `c.get('authUserId')`).
+ * - `'ctx:'` reads from request context (for example, `'ctx:actor.id'` reads the
+ *   resolved actor ID and `'ctx:tenantId'` remains a legacy alias).
  * - `'param:'` reads from a URL path parameter (for example, `'param:orgId'` reads
  *   `c.req.param('orgId')`).
  *
@@ -864,7 +891,8 @@ export interface EntityRouteDataScopeConfig {
    * The source expression used to resolve the scope value.
    *
    * @remarks
-   * Supports `ctx:<name>` and `param:<name>` sources.
+   * Supports `ctx:<name>` and `param:<name>` sources, including dot paths such as
+   * `ctx:actor.id` and `ctx:actor.claims.orgId`.
    */
   from: EntityRouteDataScopeSource;
 
@@ -1061,17 +1089,6 @@ export interface EntityRouteConfig {
    * disabling route generation entirely.
    */
   disable?: string[];
-
-  /**
-   * Bus event keys to register as client-safe for SSE streaming.
-   *
-   * @remarks
-   * Registering a key here calls `bus.registerClientSafeEvents([...keys])` at startup.
-   * Only registered keys are delivered to browser clients via the SSE endpoint — all
-   * other keys are filtered out. This is the authoritative list; event keys referenced
-   * in `RouteEventConfig` do not auto-register as client-safe.
-   */
-  clientSafeEvents?: string[];
 
   /** Named outbound webhook configs. */
   webhooks?: Record<string, RouteWebhookConfig>;

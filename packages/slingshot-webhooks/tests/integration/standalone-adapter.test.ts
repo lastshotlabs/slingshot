@@ -23,15 +23,15 @@ function adminHeaders(tenantId = 'tenant-a'): Record<string, string> {
 
 describe('standalone adapter mode', () => {
   test('boots without slingshot-entity using standalone: true', async () => {
-    const { app, runtime, teardown } = await createWebhooksTestApp(
-      { events: ['order.*'] },
+    const { runtime, teardown } = await createWebhooksTestApp(
+      { events: ['auth:*'] },
       { standalone: true },
     );
 
     try {
       expect(runtime).toBeDefined();
       expect(typeof runtime.getEndpoint).toBe('function');
-      expect(typeof runtime.findEndpointsForEvent).toBe('function');
+      expect(typeof runtime.listEnabledEndpoints).toBe('function');
       expect(typeof runtime.createDelivery).toBe('function');
       expect(typeof runtime.updateDelivery).toBe('function');
       expect(typeof runtime.getDelivery).toBe('function');
@@ -46,7 +46,7 @@ describe('standalone adapter mode', () => {
 
     const { runtime, teardown } = await createWebhooksTestApp({
       adapter,
-      events: ['order.*'],
+      events: ['auth:*'],
     });
 
     try {
@@ -63,27 +63,33 @@ describe('standalone adapter mode', () => {
     const adapter = createMemoryWebhookAdapter();
     adapter.addEndpoint({
       id: 'ep-1',
+      ownerType: 'user',
+      ownerId: 'user-123',
       tenantId: 'tenant-a',
-      url: 'https://example.com/hooks/orders',
+      url: 'https://example.com/hooks/auth',
       secret: 'test-secret',
-      events: ['order.*'],
+      subscriptions: [{ event: 'auth:login', exposure: 'user-webhook' }],
       enabled: true,
     });
 
-    const { bus, runtime, teardown } = await createWebhooksTestApp({
+    const { events, runtime, teardown } = await createWebhooksTestApp({
       adapter,
-      events: ['order.*'],
-      extraEventKeys: ['order.created'],
+      events: ['auth:*'],
     });
 
     try {
-      bus.emit('order.created', { orderId: '123', tenantId: 'tenant-a' });
+      events.publish(
+        'auth:login',
+        { userId: 'user-123', sessionId: 'sess-1', tenantId: 'tenant-a' },
+        { tenantId: 'tenant-a', userId: 'user-123', actorId: 'user-123' },
+      );
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const page = await runtime.listDeliveries({ endpointId: 'ep-1' });
       expect(page.items.length).toBe(1);
       expect(page.items[0]).toMatchObject({
-        event: 'order.created',
+        event: 'auth:login',
+        subscriber: { ownerType: 'user', ownerId: 'user-123', tenantId: 'tenant-a' },
         status: 'delivered',
         attempts: 1,
       });
@@ -100,16 +106,18 @@ describe('standalone adapter mode', () => {
     const adapter = createMemoryWebhookAdapter();
     adapter.addEndpoint({
       id: 'ep-test',
+      ownerType: 'tenant',
+      ownerId: 'tenant-a',
       tenantId: 'tenant-a',
       url: 'https://example.com/hooks/test',
       secret: 'test-secret',
-      events: ['*'],
+      subscriptions: [{ event: 'auth:login', exposure: 'user-webhook' }],
       enabled: true,
     });
 
     const { app, runtime, teardown } = await createWebhooksTestApp({
       adapter,
-      events: ['*'],
+      events: ['auth:*'],
     });
 
     try {
@@ -134,16 +142,26 @@ describe('standalone adapter mode', () => {
     const adapter = createMemoryWebhookAdapter();
     adapter.addEndpoint({
       id: 'ep-1',
-      tenantId: null,
+      ownerType: 'tenant',
+      ownerId: 'tenant-a',
+      tenantId: 'tenant-a',
       url: 'https://example.com/hook',
       secret: 's',
-      events: ['*'],
+      subscriptions: [{ event: 'auth:login', exposure: 'user-webhook' }],
       enabled: true,
     });
 
     const delivery = await adapter.createDelivery({
       endpointId: 'ep-1',
-      event: 'test',
+      event: 'auth:login',
+      eventId: 'evt-1',
+      occurredAt: new Date().toISOString(),
+      subscriber: {
+        ownerType: 'tenant',
+        ownerId: 'tenant-a',
+        tenantId: 'tenant-a',
+      },
+      sourceScope: { tenantId: 'tenant-a', userId: 'user-1' },
       payload: '{}',
       maxAttempts: 3,
     });
@@ -151,41 +169,35 @@ describe('standalone adapter mode', () => {
 
     await adapter.updateDelivery(delivery.id, { status: 'delivered' });
 
-    // delivered → pending is not allowed
     await expect(
       adapter.updateDelivery(delivery.id, { status: 'pending' }),
     ).rejects.toThrow("Invalid delivery transition from 'delivered' to 'pending'");
   });
 
-  test('memory adapter filters endpoints by enabled and glob pattern', async () => {
+  test('memory adapter lists only enabled endpoints', async () => {
     const adapter = createMemoryWebhookAdapter();
     adapter.addEndpoint({
       id: 'ep-active',
-      tenantId: null,
+      ownerType: 'tenant',
+      ownerId: 'tenant-a',
+      tenantId: 'tenant-a',
       url: 'https://a.example.com/hook',
       secret: 's',
-      events: ['order.*'],
+      subscriptions: [{ event: 'auth:login', exposure: 'user-webhook' }],
       enabled: true,
     });
     adapter.addEndpoint({
       id: 'ep-disabled',
-      tenantId: null,
+      ownerType: 'tenant',
+      ownerId: 'tenant-a',
+      tenantId: 'tenant-a',
       url: 'https://b.example.com/hook',
       secret: 's',
-      events: ['order.*'],
+      subscriptions: [{ event: 'auth:login', exposure: 'user-webhook' }],
       enabled: false,
     });
-    adapter.addEndpoint({
-      id: 'ep-other',
-      tenantId: null,
-      url: 'https://c.example.com/hook',
-      secret: 's',
-      events: ['user.*'],
-      enabled: true,
-    });
 
-    const matches = await adapter.findEndpointsForEvent('order.created');
-    expect(matches.length).toBe(1);
-    expect(matches[0].id).toBe('ep-active');
+    const matches = await adapter.listEnabledEndpoints();
+    expect(matches.map(endpoint => endpoint.id)).toEqual(['ep-active']);
   });
 });

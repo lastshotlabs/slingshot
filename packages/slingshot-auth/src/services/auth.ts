@@ -10,6 +10,7 @@ import {
   sha256,
   timingSafeEqual,
 } from '@lastshotlabs/slingshot-core';
+import { publishAuthEvent } from '../eventGovernance';
 import type { HookContext } from '../config/authConfig';
 import type { SessionMetadata } from '../lib/session/index.js';
 import type { AuthRuntimeContext } from '../runtime';
@@ -121,7 +122,7 @@ export const emitLoginSuccess = (
   runtime: AuthRuntimeContext,
 ): void => {
   runtime.eventBus.emit('security.auth.login.success', { userId });
-  runtime.eventBus.emit('auth:login', { userId, sessionId });
+  publishAuthEvent(runtime.events, 'auth:login', { userId, sessionId }, { userId, actorId: userId });
 };
 
 /**
@@ -342,12 +343,12 @@ export const register = async (
           identifier,
           config,
         );
-        eventBus.emit('auth:delivery.email_verification', {
+        publishAuthEvent(runtime.events, 'auth:delivery.email_verification', {
           email: identifier,
           token: verificationToken,
           userId: user.id,
         });
-        eventBus.emit('auth:delivery.welcome', { email: identifier, identifier });
+        publishAuthEvent(runtime.events, 'auth:delivery.welcome', { email: identifier, identifier });
       } catch (e) {
         console.error(
           '[email-verification] Failed to send verification email:',
@@ -357,7 +358,10 @@ export const register = async (
     }
 
     eventBus.emit('security.auth.register.success', { userId: user.id });
-    eventBus.emit('auth:user.created', { userId: user.id, email: identifier });
+    publishAuthEvent(runtime.events, 'auth:user.created', { userId: user.id, email: identifier }, {
+      userId: user.id,
+      actorId: user.id,
+    });
     if (hooks.postRegister) {
       const postRegister = hooks.postRegister;
       Promise.resolve()
@@ -531,7 +535,9 @@ export const login = async (
       const { code, hash } = generateEmailOtpCode(runtime);
       emailOtpHash = hash;
       const email = fullUser?.email;
-      if (email) eventBus.emit('auth:delivery.email_otp', { email, code });
+      if (email) {
+        publishAuthEvent(runtime.events, 'auth:delivery.email_otp', { email, code });
+      }
     }
 
     // Generate WebAuthn authentication options if enabled
@@ -725,7 +731,7 @@ export const deleteAccount = async (
   await adapter.deleteUser(userId);
 
   eventBus.emit('security.auth.account.deleted', { userId });
-  eventBus.emit('auth:user.deleted', { userId });
+  publishAuthEvent(runtime.events, 'auth:user.deleted', { userId }, { userId, actorId: userId });
   if (hooks.postDeleteAccount) {
     const postDeleteAccount = hooks.postDeleteAccount;
     Promise.resolve()
@@ -748,7 +754,7 @@ export const logout = async (token: string | null, runtime: AuthRuntimeContext) 
       await runtime.repos.session.deleteSession(sessionId, runtime.config);
       runtime.eventBus.emit('security.auth.logout', { sessionId, userId });
       if (userId) {
-        runtime.eventBus.emit('auth:logout', { userId, sessionId });
+        publishAuthEvent(runtime.events, 'auth:logout', { userId, sessionId }, { userId, actorId: userId });
       }
     }
   }
@@ -824,8 +830,9 @@ export const passkeyLogin = async (
       const { code, hash } = generateEmailOtpCode(runtime);
       emailOtpHash = hash;
       const fullUser = adapter.getUser ? await adapter.getUser(userId) : null;
-      if (fullUser?.email)
-        eventBus.emit('auth:delivery.email_otp', { email: fullUser.email, code });
+      if (fullUser?.email) {
+        publishAuthEvent(runtime.events, 'auth:delivery.email_otp', { email: fullUser.email, code });
+      }
     }
 
     let webauthnChallenge2: string | undefined;

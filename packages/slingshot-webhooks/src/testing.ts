@@ -4,6 +4,7 @@ import type {
   AppEnv,
   CoreRegistrar,
   EntityRegistry,
+  SlingshotEvents,
   PluginSetupContext,
   ResolvedEntityConfig,
   StoreInfra,
@@ -13,7 +14,10 @@ import {
   InProcessAdapter,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
+import { registerAuthEventDefinitions } from '@lastshotlabs/slingshot-auth';
 import { createMemoryWebhookAdapter } from './adapters/memory';
 import { createWebhookPlugin } from './plugin';
 import type { WebhookAdapter } from './types/adapter';
@@ -37,6 +41,7 @@ interface WebhooksTestFrameworkOptions {
   storeType?: StoreType;
   /** When true, use the in-memory adapter instead of slingshot-entity. */
   standalone?: boolean;
+  registerDefinitions?: (events: SlingshotEvents) => void;
 }
 
 function createTestFrameworkConfig(options: WebhooksTestFrameworkOptions = {}) {
@@ -102,6 +107,7 @@ export async function createWebhooksTestApp(
   app: OpenAPIHono<AppEnv>;
   runtime: WebhookAdapter;
   bus: InProcessAdapter;
+  events: SlingshotEvents;
   teardown: () => Promise<void>;
 }> {
   const pluginConfig: WebhookPluginConfig = {
@@ -116,6 +122,12 @@ export async function createWebhooksTestApp(
 
   const app = new OpenAPIHono<AppEnv>();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
+  registerAuthEventDefinitions(events);
+  frameworkOptions.registerDefinitions?.(events);
   const frameworkConfig = createTestFrameworkConfig(frameworkOptions);
   const pluginState = new Map<string, unknown>();
 
@@ -170,6 +182,7 @@ export async function createWebhooksTestApp(
     app,
     config: frameworkConfig as never,
     bus: bus as unknown as import('@lastshotlabs/slingshot-core').SlingshotEventBus,
+    events,
   };
 
   await plugin.setupMiddleware?.(setupContext);
@@ -184,6 +197,7 @@ export async function createWebhooksTestApp(
     app,
     runtime,
     bus,
+    events,
     teardown: async () => {
       await plugin.teardown?.();
     },

@@ -44,9 +44,21 @@ function makeAuthRuntime(overrides?: {
 function makeContext(authUserId: unknown, opts?: { suspended?: boolean; emailVerified?: boolean }) {
   const pluginState = new Map([[AUTH_RUNTIME_KEY, makeAuthRuntime(opts)]]);
   const slingshotCtx = { pluginState };
+  const actor =
+    typeof authUserId === 'string' && authUserId.length > 0
+      ? {
+          id: authUserId,
+          kind: 'user',
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }
+      : null;
 
   const store = new Map<string, unknown>([
     ['authUserId', authUserId],
+    ['actor', actor],
     ['slingshotCtx', slingshotCtx],
   ]);
 
@@ -61,28 +73,28 @@ describe('getAuthenticatedAccountGuardFailure', () => {
   test('throws when authUserId is null (lines 19-21)', async () => {
     const ctx = makeContext(null);
     await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
-      /authenticated route guard requires/,
+      /authenticated user actor/,
     );
   });
 
   test('throws when authUserId is undefined (lines 19-21)', async () => {
     const ctx = makeContext(undefined);
     await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
-      /authenticated route guard requires/,
+      /authenticated user actor/,
     );
   });
 
   test('throws when authUserId is empty string (lines 19-21)', async () => {
     const ctx = makeContext('');
     await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
-      /authenticated route guard requires/,
+      /authenticated user actor/,
     );
   });
 
   test('throws when authUserId is a number', async () => {
     const ctx = makeContext(42);
     await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
-      /authenticated route guard requires/,
+      /authenticated user actor/,
     );
   });
 

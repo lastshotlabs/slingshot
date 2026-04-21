@@ -28,6 +28,8 @@ export async function deliverWebhook(job: WebhookJob): Promise<void> {
       'Content-Type': 'application/json',
       'X-Webhook-Signature': signature,
       'X-Webhook-Event': job.event,
+      'X-Webhook-Event-Id': job.eventId,
+      'X-Webhook-Occurred-At': job.occurredAt,
       'X-Webhook-Delivery': job.deliveryId,
     },
     body: job.payload,

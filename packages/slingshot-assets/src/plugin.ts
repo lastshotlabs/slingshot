@@ -80,7 +80,7 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
     name: ASSETS_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth', 'slingshot-permissions'],
 
-    async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       const permissions: PermissionsState =
         getPermissionsStateOrNull(getPluginState(app)) ??
         (() => {
@@ -101,11 +101,11 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
         permissions,
       });
 
-      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
+      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus });
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
       if (assetAdapterRef) {
         const state: AssetsPluginState = Object.freeze({
@@ -117,8 +117,8 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
     },
   };
 }

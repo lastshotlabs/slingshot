@@ -58,14 +58,35 @@ This package is intentionally broad in surface area but narrow in behavior. It s
 `src/plugin.ts` is the backbone of package integration. The three main lifecycle phases are:
 
 - `setupMiddleware` for early request middleware
-- `setupRoutes` for mounted routes and route-aware plugin behavior
-- `setupPost` for discovery, event hookups, and post-assembly work
+- `setupRoutes` for mounted routes, route-aware plugin behavior, and any plugin-owned state that becomes canonical at route-assembly time
+- `setupPost` for event subscriptions, registrar writes, WebSocket draft mutation, and other post-assembly work
 
 That ordering is a contract. Packages should treat it as stable.
+
+One important exception to the old "pluginState is setupPost-owned" shorthand now exists on purpose:
+entity adapters are published during `setupRoutes` via the framework-owned merge contract so
+dependent plugins can discover them while composing routes. Treat that as a documented lifecycle
+state fix, not as a reason to move arbitrary mutable state earlier.
 
 ### Registrar and context
 
 `src/coreRegistrar.ts` and `src/context/` are the handoff points where plugins publish capabilities for the rest of the app to use. This is how auth, permissions, mail templates, route auth, and similar concerns become discoverable without hard package edges.
+
+`src/pluginState.ts` owns the other discovery seam: plugin-owned runtime state. If a package publishes
+state here, it must stay mergeable, frozen at publication boundaries, and keyed by the plugin that
+owns it. Cross-plugin reads should go through the helper APIs instead of reaching into ad hoc shapes.
+
+### Event governance
+
+Core now owns the registry-backed event contract:
+
+- `defineEvent(...)` for canonical ownership, exposure, payload, and scope
+- `createEventDefinitionRegistry(...)` for app-instance event definitions
+- `createEventPublisher(...)` / `ctx.events.publish(...)` for canonical envelope creation
+- `EventEnvelope` as the cross-transport unit for SSE, webhooks, BullMQ, and Kafka
+
+If a package needs externally visible events, the definition belongs in core-owned contracts and the
+publish path should go through `ctx.events`, not raw `bus.emit(...)` plus sidecar allowlists.
 
 ### Config-driven platform
 

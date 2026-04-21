@@ -49,6 +49,12 @@ export const Poll = defineEntity('Poll', {
       event: {
         key: 'polls:poll.created',
         payload: ['id', 'sourceType', 'sourceId', 'authorId', 'scopeId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:authorId',
+          resourceType: 'poll:scope',
+          resourceId: 'record:scopeId',
+        },
       },
     },
     delete: {
@@ -56,6 +62,11 @@ export const Poll = defineEntity('Poll', {
       event: {
         key: 'polls:poll.deleted',
         payload: ['id', 'scopeId'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'poll:scope',
+          resourceId: 'record:scopeId',
+        },
       },
     },
     operations: {
@@ -72,12 +83,17 @@ export const Poll = defineEntity('Poll', {
         event: {
           key: 'polls:poll.closed',
           payload: ['id', 'sourceType', 'sourceId', 'scopeId', 'closedBy'],
+          exposure: ['client-safe'],
+          scope: {
+            userId: 'record:closedBy',
+            resourceType: 'poll:scope',
+            resourceId: 'record:scopeId',
+          },
         },
       },
       // `results` is mounted manually in the plugin — cross-entity access
       // (poll + votes) cannot go through a single entity's op.custom factory.
     },
-    clientSafeEvents: ['polls:poll.created', 'polls:poll.closed', 'polls:poll.deleted'],
     permissions: {
       resourceType: 'poll',
       actions: ['read', 'vote', 'create', 'admin'],

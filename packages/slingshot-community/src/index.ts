@@ -1,3 +1,5 @@
+import './events';
+
 export { createCommunityPlugin } from './plugin';
 export type { CommunityPlugin } from './plugin';
 export { communityManifest } from './manifest/communityManifest';

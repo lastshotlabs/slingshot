@@ -21,6 +21,7 @@ import {
 import { getClientIp } from '@lastshotlabs/slingshot-core';
 import type { HookContext } from '../config/authConfig';
 import type { AuthRateLimitConfig } from '../config/authConfig';
+import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';
 
 const hookCtx = (c: Context): HookContext => ({
@@ -312,7 +313,10 @@ export const createMfaRouter = (
       const { code } = c.req.valid('json');
       const recoveryCodes = await MfaService.verifySetup(userId, code, runtime);
       eventBus.emit('security.auth.mfa.setup', { userId });
-      eventBus.emit('auth:mfa.enabled', { userId, method: 'totp' });
+      publishAuthEvent(runtime.events, 'auth:mfa.enabled', { userId, method: 'totp' }, {
+        userId,
+        actorId: userId,
+      });
       return c.json({ ok: true as const, recoveryCodes }, 200);
     },
   );
@@ -611,7 +615,10 @@ export const createMfaRouter = (
       if (adapter.setMfaMethods) {
         await adapter.setMfaMethods(userId, []);
       }
-      eventBus.emit('auth:mfa.disabled', { userId });
+      publishAuthEvent(runtime.events, 'auth:mfa.disabled', { userId }, {
+        userId,
+        actorId: userId,
+      });
       return c.json({ ok: true as const }, 200);
     },
   );
@@ -807,7 +814,10 @@ export const createMfaRouter = (
       const { setupToken, code } = c.req.valid('json');
       const recoveryCodes = await MfaService.confirmEmailOtp(userId, setupToken, code, runtime);
       eventBus.emit('security.auth.mfa.setup', { userId });
-      eventBus.emit('auth:mfa.enabled', { userId, method: 'email-otp' });
+      publishAuthEvent(runtime.events, 'auth:mfa.enabled', { userId, method: 'email-otp' }, {
+        userId,
+        actorId: userId,
+      });
       return c.json({ ok: true as const, recoveryCodes: recoveryCodes ?? undefined }, 200);
     },
   );
@@ -894,7 +904,10 @@ export const createMfaRouter = (
           if (adapter.setRecoveryCodes) await adapter.setRecoveryCodes(userId, []);
         }
       }
-      eventBus.emit('auth:mfa.disabled', { userId, method: 'email-otp' });
+      publishAuthEvent(runtime.events, 'auth:mfa.disabled', { userId, method: 'email-otp' }, {
+        userId,
+        actorId: userId,
+      });
       return c.json({ ok: true as const }, 200);
     },
   );
@@ -962,7 +975,7 @@ export const createMfaRouter = (
       // Get user email and send
       const user = adapter.getUser ? await adapter.getUser(result.userId) : null;
       if (user?.email) {
-        eventBus.emit('auth:delivery.email_otp', { email: user.email, code });
+        publishAuthEvent(runtime.events, 'auth:delivery.email_otp', { email: user.email, code });
       }
 
       return c.json({ ok: true as const }, 200);
@@ -1150,7 +1163,10 @@ export const createMfaRouter = (
           name,
         );
         eventBus.emit('security.auth.mfa.setup', { userId });
-        eventBus.emit('auth:mfa.enabled', { userId, method: 'webauthn' });
+        publishAuthEvent(runtime.events, 'auth:mfa.enabled', { userId, method: 'webauthn' }, {
+          userId,
+          actorId: userId,
+        });
         return c.json({ ok: true as const, ...result }, 200);
       },
     );

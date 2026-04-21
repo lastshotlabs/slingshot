@@ -82,7 +82,6 @@ describe('public plugin surface', () => {
   test('exports the public runtime entry points and validates plugin config', async () => {
     const mod = await import('../../src/index');
 
-    expect(mod.GAME_ENGINE_CLIENT_SAFE_EVENTS).toContain('game:phase.entered');
     expect(mod.GAME_ENGINE_PLUGIN_STATE_KEY).toBe('slingshot-game-engine');
     expect(mod.gameSessionFactories).toBeDefined();
     expect(mod.gamePlayerFactories).toBeDefined();

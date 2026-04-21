@@ -3,7 +3,7 @@
  *
  * Wires entities into the Slingshot plugin lifecycle:
  *  - setupRoutes: builds bare routes, applies config middleware, mounts onto app
- *  - setupPost:   registers client-safe events, permission resource types
+ *  - setupPost:   registers permission resource types and post-route integrations
  *  - teardown:    unsubscribes cascade event handlers
  *
  * Consumers wire entities via EntityPluginEntry — either with buildAdapter (manual)
@@ -15,6 +15,8 @@ import type {
   AppEnv,
   EntityChannelConfig,
   EntityRouteConfig,
+  RouteEventConfig,
+  RouteOperationConfig,
   OperationConfig,
   PermissionEvaluator,
   PermissionRegistry,
@@ -33,7 +35,10 @@ import {
   RESOLVE_ENTITY_FACTORIES,
   RESOLVE_REINDEX_SOURCE,
   createRouter,
+  defineEvent,
   getContextOrNull,
+  publishEntityAdaptersState,
+  requireEntityAdapter,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import type {
@@ -51,8 +56,18 @@ import type { RuntimeHookRef } from './manifest/entityManifestSchema';
 import type { MultiEntityManifest } from './manifest/multiEntityManifest';
 import { resolveMultiEntityManifest } from './manifest/multiEntityManifest';
 import { freezeEntityPolicyRegistry, getEntityPolicyResolver } from './policy/registerEntityPolicy';
-import { applyRouteConfig, buildBareEntityRoutes } from './routing';
-import type { BareEntityAdapter, RouteConfigDeps } from './routing';
+import {
+  applyRouteConfig,
+  buildBareEntityRoutes,
+  planEntityRoutes,
+} from './routing';
+import type {
+  BareEntityAdapter,
+  EntityExtraRoute,
+  EntityRouteExecutorOverrides,
+  PlannedEntityRoute,
+  RouteConfigDeps,
+} from './routing';
 import { buildEventKeyMap, extractEventKey, wireActivityLog } from './wiring/activityLog';
 import { wireAutoGrant } from './wiring/autoGrant';
 import { createPermissionsResolver } from './wiring/resolvePermissions';
@@ -65,14 +80,6 @@ function supportsOpenApiRegistration(value: unknown): value is OpenApiCapableRou
   return typeof (value as { openapi?: unknown } | null)?.openapi === 'function';
 }
 
-/**
- * Plugin-state key under which resolved entity adapters are published.
- *
- * The value stored at this key is a frozen record of adapters keyed by
- * entity name. Consumers such as the SSR plugin read it during `setupPost`.
- */
-export const ENTITY_ADAPTERS_KEY = 'entity:adapters';
-
 // ---------------------------------------------------------------------------
 // Public API types
 // ---------------------------------------------------------------------------
@@ -83,6 +90,10 @@ interface EntityPluginEntryBase {
   config: ResolvedEntityConfig;
   /** Operations from `defineOperations()`, if any. */
   operations?: Record<string, OperationConfig>;
+  /** Additional plugin-owned routes composed under the entity base path. */
+  extraRoutes?: readonly EntityExtraRoute[];
+  /** Executor overrides for generated CRUD and named operation routes. */
+  overrides?: EntityRouteExecutorOverrides;
   /** Optional channel config for declarative WebSocket channel wiring. */
   channels?: EntityChannelConfig;
   /**
@@ -320,8 +331,9 @@ type ManifestResolvedEntry = EntityPluginEntryManual & {
 };
 
 type SetupRoutePlanEntry = {
-  entry: EntityPluginEntry;
+  entry: EntityPluginEntry | ManifestResolvedEntry;
   adapter: BareEntityAdapter;
+  plannedRoutes: PlannedEntityRoute[];
 };
 
 /**
@@ -711,9 +723,8 @@ export interface EntityPlugin extends SlingshotPlugin {
  *   entity in the framework registry, creates a Hono router, applies route
  *   config (auth, permissions, rate limits, middleware, events), mounts bare
  *   CRUD + named operation routes, and wires cascade event handlers.
- * - **`setupPost`** — registers `clientSafeEvents` on the event bus, registers
- *   permission resource types, wires WebSocket channel event forwarding, and
- *   calls the optional `setupPost` hook from the config.
+ * - **`setupPost`** — registers permission resource types, wires WebSocket
+ *   channel event forwarding, and calls the optional `setupPost` hook from the config.
  * - **`teardown`** — unsubscribes all cascade and channel event handlers
  *   registered during `setupRoutes` and `setupPost`.
  *
@@ -788,9 +799,14 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
     name: pluginConfig.name,
     dependencies,
 
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupMiddleware({ events }: PluginSetupContext) {
+      registerEntityEventDefinitions(events, pluginConfig.name, resolvedEntries);
+    },
+
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       capturedApp = app;
       const resolvedPermissions = resolvePermissions(app);
+      const pluginCtx = getContextOrNull(app);
 
       const mountPath = pluginConfig.mountPath ?? '';
       const storeType = frameworkConfig.resolvedStores.authStore;
@@ -810,9 +826,21 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
           pluginConfig.manifestRuntime,
         );
         const { config } = entry;
+        const planningParentPath = supportsOpenApiRegistration(app)
+          ? [mountPath, entry.parentPath]
+              .filter((part): part is string => Boolean(part))
+              .join('/')
+              .replace(/\/+/g, '/')
+          : entry.parentPath;
+        const plannedRoutes = planEntityRoutes(config, entry.operations, {
+          routePath: entry.routePath,
+          parentPath: planningParentPath,
+          extraRoutes: entry.extraRoutes,
+          overrides: entry.overrides,
+        });
 
         resolvedAdapters[config.name] = adapter;
-        routePlan.push({ entry, adapter });
+        routePlan.push({ entry, adapter, plannedRoutes });
 
         // 2. Register entity in framework registry
         try {
@@ -832,16 +860,21 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
         pluginConfig.manifestRuntime,
       );
 
-      for (const { entry, adapter } of routePlan) {
+      if (pluginCtx?.pluginState) {
+        publishEntityAdaptersState(pluginCtx.pluginState, pluginConfig.name, resolvedAdapters);
+      }
+
+      for (const { entry, adapter, plannedRoutes } of routePlan) {
         const { config, operations } = entry;
         // 3. Build bare routes + apply config (same applyRouteConfig as codegen path).
         // IMPORTANT: applyRouteConfig registers Hono middleware, which must be registered
         // BEFORE route handlers to take effect.
-        if (config.routes) {
+        if (config.routes || plannedRoutes.length > 0) {
+          const routeConfig = (config.routes ?? {}) as EntityRouteConfig;
           // Build named-operation route override maps from route config so handler
           // registration matches the middleware paths/methods applied below.
           const operationMethods = Object.fromEntries(
-            Object.entries(config.routes.operations ?? {})
+            Object.entries(routeConfig.operations ?? {})
               .filter(
                 (entry): entry is [string, (typeof entry)[1] & { method: string }] =>
                   !!entry[1].method,
@@ -849,7 +882,7 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               .map(([name, cfg]) => [name, cfg.method]),
           );
           const operationPaths = Object.fromEntries(
-            Object.entries(config.routes.operations ?? {})
+            Object.entries(routeConfig.operations ?? {})
               .filter(
                 (entry): entry is [string, (typeof entry)[1] & { path: string }] => !!entry[1].path,
               )
@@ -862,10 +895,14 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
           // Resolve policy resolvers for this entity's route config.
           // Collect all unique resolver keys, look each up in the registry,
           // and throw a startup error if any key is missing.
-          const policyResolvers = resolvePolicyResolversForEntity(app, config.routes);
+          const policyResolvers = resolvePolicyResolversForEntity(
+            app,
+            routeConfig,
+            entry.extraRoutes,
+          );
           // Determine the "defaults" policy config (used by buildBareEntityRoutes
           // for the post-fetch pass on get/update/delete).
-          const defaultsPolicyConfig = config.routes.defaults?.permission?.policy ?? undefined;
+          const defaultsPolicyConfig = routeConfig.defaults?.permission?.policy ?? undefined;
           const defaultsPolicyResolver = defaultsPolicyConfig
             ? policyResolvers.get(defaultsPolicyConfig.resolver)
             : undefined;
@@ -877,9 +914,10 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               .filter(Boolean)
               .join('/');
             const parentPath = mountPrefix ? `/${mountPrefix}` : undefined;
-            applyRouteConfig(app, config, config.routes, {
+            applyRouteConfig(app, config, routeConfig, {
               adapter,
               bus,
+              events,
               permissionEvaluator: resolvedPermissions?.evaluator,
               permissionRegistry: resolvedPermissions?.registry,
               rateLimitFactory: pluginConfig.rateLimitFactory,
@@ -889,25 +927,31 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               parentAdapter,
               policyResolvers,
               operationConfigs: operations,
+              plannedRoutes,
             });
             buildBareEntityRoutes(config, operations, adapter, app, {
               routePath: entry.routePath,
               parentPath,
               operationMethods,
               operationPaths,
-              dataScope: config.routes.dataScope,
+              dataScope: routeConfig.dataScope,
               policyConfig: defaultsPolicyConfig,
               policyResolver: defaultsPolicyResolver,
               bus,
               tag: pluginConfig.defaultTag,
+              plannedRoutes,
+              getEntityAdapter(args) {
+                return requireEntityAdapter(app, args);
+              },
             });
           } else {
             const router = createRouter();
             const appMountPath = mountPath === '' ? '/' : mountPath;
             const parentPath = entry.parentPath;
-            applyRouteConfig(router, config, config.routes, {
+            applyRouteConfig(router, config, routeConfig, {
               adapter,
               bus,
+              events,
               permissionEvaluator: resolvedPermissions?.evaluator,
               permissionRegistry: resolvedPermissions?.registry,
               rateLimitFactory: pluginConfig.rateLimitFactory,
@@ -917,17 +961,22 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               parentAdapter,
               policyResolvers,
               operationConfigs: operations,
+              plannedRoutes,
             });
             buildBareEntityRoutes(config, operations, adapter, router, {
               routePath: entry.routePath,
               parentPath,
               operationMethods,
               operationPaths,
-              dataScope: config.routes.dataScope,
+              dataScope: routeConfig.dataScope,
               policyConfig: defaultsPolicyConfig,
               policyResolver: defaultsPolicyResolver,
               bus,
               tag: pluginConfig.defaultTag,
+              plannedRoutes,
+              getEntityAdapter(args) {
+                return requireEntityAdapter(app, args);
+              },
             });
             app.route(appMountPath, router);
           }
@@ -971,16 +1020,6 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
       capturedApp = app;
       const resolvedPermissions = resolvePermissions(app);
       const pluginCtx = getContextOrNull(app);
-
-      if (pluginCtx?.pluginState) {
-        pluginCtx.pluginState.set(ENTITY_ADAPTERS_KEY, Object.freeze({ ...resolvedAdapters }));
-      }
-
-      // Register all client-safe events declared across all entities
-      const allClientSafe = resolvedEntries.flatMap(e => e.config.routes?.clientSafeEvents ?? []);
-      if (allClientSafe.length > 0) {
-        bus.registerClientSafeEvents(allClientSafe);
-      }
 
       // Register permission resource types for all entities
       if (resolvedPermissions) {
@@ -1282,6 +1321,7 @@ function resolveFilterParams(
 function resolvePolicyResolversForEntity(
   app: import('hono').Hono<AppEnv>,
   routeConfig: EntityRouteConfig,
+  extraRoutes?: readonly EntityExtraRoute[],
 ): ReadonlyMap<string, PolicyResolver> {
   const keys = new Set<string>();
 
@@ -1302,6 +1342,12 @@ function resolvePolicyResolversForEntity(
     }
   }
 
+  for (const route of extraRoutes ?? []) {
+    if (route.permission?.policy) {
+      keys.add(route.permission.policy.resolver);
+    }
+  }
+
   if (keys.size === 0) return new Map();
 
   const resolved = new Map<string, PolicyResolver>();
@@ -1317,4 +1363,123 @@ function resolvePolicyResolversForEntity(
     resolved.set(key, resolver);
   }
   return resolved;
+}
+
+function normalizeRouteEventConfig(
+  event: RouteOperationConfig['event'],
+): RouteEventConfig | undefined {
+  if (!event) {
+    return undefined;
+  }
+  return typeof event === 'string' ? { key: event, exposure: ['internal'] } : event;
+}
+
+function listEntityRouteEvents(
+  routeConfig: EntityRouteConfig | undefined,
+  extraRoutes?: readonly EntityExtraRoute[],
+): RouteEventConfig[] {
+  const events: RouteEventConfig[] = [];
+  for (const opConfig of [
+    routeConfig?.create,
+    routeConfig?.get,
+    routeConfig?.list,
+    routeConfig?.update,
+    routeConfig?.delete,
+    ...Object.values(routeConfig?.operations ?? {}),
+    ...(extraRoutes ?? []),
+  ]) {
+    const event = normalizeRouteEventConfig(opConfig?.event);
+    if (event) {
+      events.push({ exposure: ['internal'], ...event });
+    }
+  }
+  return events;
+}
+
+function resolvePublishContextValue(
+  publishContext: Record<string, unknown>,
+  path: string,
+): unknown {
+  let current: unknown = publishContext;
+  for (const segment of path.split('.')) {
+    if (typeof current !== 'object' || current === null) {
+      return undefined;
+    }
+    current = Reflect.get(current, segment);
+  }
+  return current;
+}
+
+function resolveScopeValue(
+  value: string | undefined,
+  payload: Record<string, unknown>,
+  publishContext: Record<string, unknown>,
+): string | null | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (value.startsWith('record:')) {
+    const resolved = payload[value.slice('record:'.length)];
+    return typeof resolved === 'string' ? resolved : resolved === null ? null : undefined;
+  }
+  if (value.startsWith('ctx:')) {
+    const resolved = resolvePublishContextValue(publishContext, value.slice('ctx:'.length));
+    return typeof resolved === 'string' ? resolved : resolved === null ? null : undefined;
+  }
+  return undefined;
+}
+
+function buildRouteEventScope(
+  event: RouteEventConfig,
+  payload: Record<string, unknown>,
+  publishContext: Record<string, unknown>,
+) {
+  if (!event.scope) {
+    return null;
+  }
+
+  const scope = {
+    tenantId: resolveScopeValue(event.scope.tenantId, payload, publishContext),
+    userId: resolveScopeValue(event.scope.userId, payload, publishContext),
+    appId: resolveScopeValue(event.scope.appId, payload, publishContext),
+    actorId: resolveScopeValue(event.scope.actorId, payload, publishContext),
+    resourceType: event.scope.resourceType,
+    resourceId: resolveScopeValue(event.scope.resourceId, payload, publishContext) ?? undefined,
+  };
+
+  if (
+    scope.tenantId === undefined &&
+    scope.userId === undefined &&
+    scope.appId === undefined &&
+    scope.actorId === undefined &&
+    scope.resourceType === undefined &&
+    scope.resourceId === undefined
+  ) {
+    return null;
+  }
+
+  return scope;
+}
+
+function registerEntityEventDefinitions(
+  events: import('@lastshotlabs/slingshot-core').SlingshotEvents,
+  pluginName: string,
+  entries: Array<EntityPluginEntry | ManifestResolvedEntry>,
+): void {
+  for (const entry of entries) {
+    for (const event of listEntityRouteEvents(entry.config.routes, entry.extraRoutes)) {
+      const definition = defineEvent(event.key as keyof import('@lastshotlabs/slingshot-core').SlingshotEventMap, {
+        ownerPlugin: pluginName,
+        exposure: Object.freeze([...(event.exposure ?? ['internal'])]),
+        resolveScope(payload, publishContext) {
+          return buildRouteEventScope(
+            event,
+            payload as Record<string, unknown>,
+            publishContext as Record<string, unknown>,
+          );
+        },
+      });
+      events.register(definition);
+    }
+  }
 }

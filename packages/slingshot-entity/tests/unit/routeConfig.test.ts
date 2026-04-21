@@ -41,7 +41,6 @@ describe('validateEntityRouteConfig', () => {
       delete: { auth: 'userAuth' },
       defaults: { auth: 'userAuth' },
       disable: ['clear'],
-      clientSafeEvents: ['post:created', 'post:updated'],
       webhooks: { 'post:created': { payload: ['id', 'title'] } },
       retention: {
         hardDelete: { after: '90d', when: { status: 'deleted' } },
@@ -226,39 +225,6 @@ describe('entityConfigSchema routes cross-field validation', () => {
     ).not.toThrow();
   });
 
-  it('rejects clientSafeEvents with forbidden namespace', () => {
-    expect(() =>
-      defineEntity('Post', {
-        fields: baseFields,
-        routes: {
-          clientSafeEvents: ['security.post.created'],
-        },
-      }),
-    ).toThrow(/forbidden namespace/i);
-  });
-
-  it('rejects clientSafeEvents with auth: prefix', () => {
-    expect(() =>
-      defineEntity('Post', {
-        fields: baseFields,
-        routes: {
-          clientSafeEvents: ['auth:post.created'],
-        },
-      }),
-    ).toThrow(/forbidden namespace/i);
-  });
-
-  it('accepts clientSafeEvents with custom namespace', () => {
-    expect(() =>
-      defineEntity('Post', {
-        fields: baseFields,
-        routes: {
-          clientSafeEvents: ['post:created', 'community:post.published'],
-        },
-      }),
-    ).not.toThrow();
-  });
-
   it('rejects routes.disable with unknown operation name', () => {
     expect(() =>
       defineEntity('Post', {
@@ -331,6 +297,11 @@ describe('resolveDataScope helpers', () => {
     const c = createContext({ authUserId: 'user-1' }, { orgId: 'org-2' });
     expect(resolveDataScopeValue('ctx:authUserId', c)).toBe('user-1');
     expect(resolveDataScopeValue('param:orgId', c)).toBe('org-2');
+  });
+
+  it('preserves legacy empty-string tenant context for ctx:tenantId', () => {
+    const c = createContext({ tenantId: '' }, {});
+    expect(resolveDataScopeValue('ctx:tenantId', c)).toBe('');
   });
 
   it('returns missing when a scope source is absent', () => {

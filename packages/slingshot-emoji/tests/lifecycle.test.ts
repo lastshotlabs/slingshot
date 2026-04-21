@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:
 import { Hono } from 'hono';
 import {
   PERMISSIONS_STATE_KEY,
+  RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
   createInProcessAdapter,
 } from '@lastshotlabs/slingshot-core';
+import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { createTestPermissions } from '../../../tests/setup';
 import { createEmojiPlugin } from '../src/plugin';
 
@@ -22,22 +26,63 @@ afterEach(() => {
 function makeAppContext(
   pluginState = new Map<unknown, unknown>(),
   uploadAdapter?: { delete(uploadKey: string): Promise<void> },
+  runtime?: {
+    bus?: ReturnType<typeof createInProcessAdapter>;
+    events?: ReturnType<typeof createEventPublisher>;
+  },
 ) {
   return {
     app: null,
     pluginState,
     upload: uploadAdapter ? { adapter: uploadAdapter } : undefined,
+    bus: runtime?.bus,
+    events: runtime?.events,
   };
 }
 
-const emptyConfigRaw = {};
-const emptyConfig = emptyConfigRaw as unknown as never;
+function createRuntime() {
+  const bus = createInProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
+  return { bus, events };
+}
+
+function createFrameworkConfig() {
+  const storeInfra = {};
+  Reflect.set(storeInfra, RESOLVE_ENTITY_FACTORIES, createEntityFactories);
+  const registeredEntities: unknown[] = [];
+
+  return {
+    resolvedStores: {
+      sessions: 'memory',
+      oauthState: 'memory',
+      cache: 'memory',
+      authStore: 'memory',
+      sqlite: undefined,
+    },
+    storeInfra,
+    entityRegistry: {
+      register(config: unknown) {
+        registeredEntities.push(config);
+      },
+      getAll() {
+        return registeredEntities;
+      },
+      filter(predicate: (entity: unknown) => boolean) {
+        return registeredEntities.filter(predicate);
+      },
+    },
+  } as const;
+}
 
 describe('slingshot-emoji lifecycle', () => {
   test('setupMiddleware can resolve permissions from pluginState fallback', async () => {
     const app = new Hono();
     const pluginState = new Map([[PERMISSIONS_STATE_KEY, createTestPermissions()]]);
-    const ctx = makeAppContext(pluginState);
+    const runtime = createRuntime();
+    const ctx = makeAppContext(pluginState, undefined, runtime);
     ctx.app = app;
     attachContext(app, ctx as never);
 
@@ -45,8 +90,9 @@ describe('slingshot-emoji lifecycle', () => {
 
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: emptyConfig,
-      bus: createInProcessAdapter(),
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
     });
 
     const response = await app.request('/emoji', {
@@ -66,7 +112,8 @@ describe('slingshot-emoji lifecycle', () => {
 
   test('setupMiddleware throws when permissions are unavailable', async () => {
     const app = new Hono();
-    const ctx = makeAppContext(new Map());
+    const runtime = createRuntime();
+    const ctx = makeAppContext(new Map(), undefined, runtime);
     ctx.app = app;
     attachContext(app, ctx as never);
 
@@ -75,30 +122,39 @@ describe('slingshot-emoji lifecycle', () => {
     await expect(
       plugin.setupMiddleware?.({
         app: app as never,
-        config: emptyConfig,
-        bus: createInProcessAdapter(),
+        config: createFrameworkConfig() as never,
+        bus: runtime.bus,
+        events: runtime.events,
       }),
     ).rejects.toThrow('No permissions available');
   });
 
   test('setupPost warns when no storage adapter is configured', async () => {
     const app = new Hono();
-    const ctx = makeAppContext();
+    const runtime = createRuntime();
+    const ctx = makeAppContext(new Map(), undefined, runtime);
     ctx.app = app;
     attachContext(app, ctx as never);
 
     const plugin = createEmojiPlugin({ permissions: createTestPermissions() });
-    const bus = createInProcessAdapter();
 
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: emptyConfig,
-      bus,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
+    });
+    await plugin.setupRoutes?.({
+      app: app as never,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
     });
     await plugin.setupPost?.({
       app: app as never,
-      config: emptyConfig,
-      bus,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
     });
 
     expect(warnSpy).toHaveBeenCalledWith(
@@ -109,27 +165,35 @@ describe('slingshot-emoji lifecycle', () => {
   test('delete cascade warns and skips deletes when uploadKey is missing', async () => {
     const app = new Hono();
     const deleteMock = mock(async () => {});
-    const ctx = makeAppContext(new Map(), { delete: deleteMock });
+    const runtime = createRuntime();
+    const ctx = makeAppContext(new Map(), { delete: deleteMock }, runtime);
     ctx.app = app;
     attachContext(app, ctx as never);
 
     const plugin = createEmojiPlugin({ permissions: createTestPermissions() });
-    const bus = createInProcessAdapter();
 
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: emptyConfig,
-      bus,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
+    });
+    await plugin.setupRoutes?.({
+      app: app as never,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
     });
     await plugin.setupPost?.({
       app: app as never,
-      config: emptyConfig,
-      bus,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
     });
 
     const deleteEventRaw = { id: 'emoji-1' };
     const deleteEvent = deleteEventRaw as unknown as never;
-    bus.emit('emoji:emoji.deleted', deleteEvent);
+    runtime.bus.emit('emoji:emoji.deleted', deleteEvent);
     await Promise.resolve();
 
     expect(deleteMock).not.toHaveBeenCalled();
@@ -141,7 +205,8 @@ describe('slingshot-emoji lifecycle', () => {
   test('delete cascade removes uploaded files when uploadKey is present', async () => {
     const app = new Hono();
     const deleteMock = mock(async () => {});
-    const ctx = makeAppContext(new Map(), { delete: deleteMock });
+    const runtime = createRuntime();
+    const ctx = makeAppContext(new Map(), { delete: deleteMock }, runtime);
     ctx.app = app;
     attachContext(app, ctx as never);
 
@@ -149,22 +214,28 @@ describe('slingshot-emoji lifecycle', () => {
       permissions: createTestPermissions(),
       mountPath: '/custom-emoji',
     });
-    const bus = createInProcessAdapter();
-
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: emptyConfig,
-      bus,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
+    });
+    await plugin.setupRoutes?.({
+      app: app as never,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
     });
     await plugin.setupPost?.({
       app: app as never,
-      config: emptyConfig,
-      bus,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
     });
 
     const deleteWithKeyEventRaw = { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' };
     const deleteWithKeyEvent = deleteWithKeyEventRaw as unknown as never;
-    bus.emit('emoji:emoji.deleted', deleteWithKeyEvent);
+    runtime.bus.emit('emoji:emoji.deleted', deleteWithKeyEvent);
     await Promise.resolve();
 
     expect(deleteMock).toHaveBeenCalledTimes(1);
@@ -177,28 +248,36 @@ describe('slingshot-emoji lifecycle', () => {
   test('teardown unregisters the delete cascade listener', async () => {
     const app = new Hono();
     const deleteMock = mock(async () => {});
-    const ctx = makeAppContext(new Map(), { delete: deleteMock });
+    const runtime = createRuntime();
+    const ctx = makeAppContext(new Map(), { delete: deleteMock }, runtime);
     ctx.app = app;
     attachContext(app, ctx as never);
 
     const plugin = createEmojiPlugin({ permissions: createTestPermissions() });
-    const bus = createInProcessAdapter();
 
     await plugin.setupMiddleware?.({
       app: app as never,
-      config: emptyConfig,
-      bus,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
+    });
+    await plugin.setupRoutes?.({
+      app: app as never,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
     });
     await plugin.setupPost?.({
       app: app as never,
-      config: emptyConfig,
-      bus,
+      config: createFrameworkConfig() as never,
+      bus: runtime.bus,
+      events: runtime.events,
     });
     await plugin.teardown?.();
 
     const deleteWithKeyEventRaw = { id: 'emoji-1', uploadKey: 'uploads/emoji-1.png' };
     const deleteWithKeyEvent = deleteWithKeyEventRaw as never;
-    bus.emit('emoji:emoji.deleted', deleteWithKeyEvent);
+    runtime.bus.emit('emoji:emoji.deleted', deleteWithKeyEvent);
     await Promise.resolve();
 
     expect(deleteMock).not.toHaveBeenCalled();

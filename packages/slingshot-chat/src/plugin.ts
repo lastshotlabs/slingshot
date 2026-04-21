@@ -7,6 +7,7 @@ import type {
   WsPluginEndpoint,
 } from '@lastshotlabs/slingshot-core';
 import {
+  defineEvent,
   deepFreeze,
   getContext,
   getNotificationsState,
@@ -98,7 +99,56 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
     name: CHAT_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth', 'slingshot-notifications', 'slingshot-permissions'],
 
-    async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      if (!events.get('chat:message.embeds.resolved')) {
+        events.register(
+          defineEvent('chat:message.embeds.resolved', {
+            ownerPlugin: CHAT_PLUGIN_STATE_KEY,
+            exposure: ['client-safe'],
+            resolveScope(payload) {
+              return {
+                userId: null,
+                actorId: null,
+                resourceType: 'chat:room',
+                resourceId: payload.roomId,
+              };
+            },
+          }),
+        );
+      }
+      if (!events.get('chat:message.scheduled.created')) {
+        events.register(
+          defineEvent('chat:message.scheduled.created', {
+            ownerPlugin: CHAT_PLUGIN_STATE_KEY,
+            exposure: ['client-safe'],
+            resolveScope(payload) {
+              return {
+                userId: payload.authorId ?? null,
+                actorId: payload.authorId ?? null,
+                resourceType: 'chat:room',
+                resourceId: payload.roomId,
+              };
+            },
+          }),
+        );
+      }
+      if (!events.get('chat:message.scheduled.delivered')) {
+        events.register(
+          defineEvent('chat:message.scheduled.delivered', {
+            ownerPlugin: CHAT_PLUGIN_STATE_KEY,
+            exposure: ['client-safe'],
+            resolveScope(payload) {
+              return {
+                userId: payload.authorId ?? null,
+                actorId: null,
+                resourceType: 'chat:room',
+                resourceId: payload.roomId,
+              };
+            },
+          }),
+        );
+      }
+
       const permissions = getPermissionsState(app) as PermissionsState;
       notificationsStateRef = getNotificationsState(app) as NotificationsPeerState;
       permissionsRef = permissions;
@@ -230,11 +280,18 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
                 const embeds = await embedsState.unfurl(urls);
                 if (embeds.length > 0) {
                   await msgAdapter.attachEmbeds({ id: msgId }, { embeds });
-                  postBus.emit('chat:message.embeds.resolved', {
-                    id: msgId,
-                    roomId,
-                    embeds: embeds as NonNullable<ChatMessage['embeds']>,
-                  });
+                  events.publish(
+                    'chat:message.embeds.resolved',
+                    {
+                      id: msgId,
+                      roomId,
+                      embeds: embeds as NonNullable<ChatMessage['embeds']>,
+                    },
+                    {
+                      source: 'system',
+                      userId: typeof payload.authorId === 'string' ? payload.authorId : null,
+                    },
+                  );
                 }
               } catch {
                 // Silent skip - embed failures should not break messaging.
@@ -269,7 +326,10 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
               try {
                 const claimed = await msgAdapter.claimDueScheduledMessages({ limit: 100 });
                 for (const msg of claimed) {
-                  postBus.emit('chat:message.scheduled.delivered', msg);
+                  events.publish('chat:message.scheduled.delivered', msg, {
+                    source: 'system',
+                    userId: msg.authorId ?? null,
+                  });
                   await rmAdapter
                     .updateLastMessage(
                       { id: msg.roomId },
@@ -340,11 +400,11 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
         },
       });
 
-      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
+      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus });
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
       if (
         roomAdapterRef &&
@@ -388,8 +448,8 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
     },
 
     teardown() {

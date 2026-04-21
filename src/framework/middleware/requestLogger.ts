@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getClientIp } from '@lastshotlabs/slingshot-core';
+import { getActor, getClientIp } from '@lastshotlabs/slingshot-core';
 
 /**
  * Severity level for a structured request log entry.
@@ -38,11 +38,11 @@ export interface RequestLogEntry {
   ip: string;
   /** `User-Agent` request header value, or `null` if absent. */
   userAgent: string | null;
-  /** Authenticated user ID from `c.get('authUserId')`, or `null` if unauthenticated. */
+  /** Resolved actor ID, or `null` if unauthenticated. */
   userId: string | null;
-  /** Session ID from `c.get('sessionId')`, or `null` if not set. */
+  /** Session ID from the resolved actor, or `null` if not set. */
   sessionId: string | null;
-  /** Tenant ID from `c.get('tenantId')`, or `null` in non-multi-tenant apps. */
+  /** Tenant ID from the resolved actor, or `null` in non-multi-tenant apps. */
   tenantId: string | null;
   /** OTel trace ID when distributed tracing is active, or `null` otherwise. */
   traceId: string | null;
@@ -168,6 +168,7 @@ export const requestLogger = (options: RequestLoggerOptions = {}): MiddlewareHan
 
     const otelSpan = c.get('otelSpan');
     const spanContext = otelSpan?.spanContext();
+    const actor = getActor(c);
 
     const entry: RequestLogEntry = {
       level,
@@ -180,9 +181,9 @@ export const requestLogger = (options: RequestLoggerOptions = {}): MiddlewareHan
       responseTime: Math.round((performance.now() - start) * 100) / 100,
       ip: getClientIp(c),
       userAgent: c.req.header('user-agent') ?? null,
-      userId: c.get('authUserId') ?? null,
-      sessionId: c.get('sessionId') ?? null,
-      tenantId: c.get('tenantId') ?? null,
+      userId: actor.id,
+      sessionId: actor.sessionId,
+      tenantId: actor.tenantId,
       traceId: spanContext?.traceId ?? null,
       spanId: spanContext?.spanId ?? null,
     };

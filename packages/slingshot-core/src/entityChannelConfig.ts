@@ -112,9 +112,9 @@ export interface ChannelPermissionConfig {
  * `{storageName}:{entityId}:{channelName}`.
  *
  * @remarks
- * Only bus events that are registered as client-safe (via `bus.registerClientSafeEvents()`)
- * are eligible to be forwarded to WebSocket subscribers. Attempting to forward a
- * non-client-safe event is a configuration error caught at startup.
+ * Only events whose registry definitions allow external delivery are eligible
+ * to be forwarded to WebSocket subscribers. Attempting to forward an event
+ * without client-safe exposure is a configuration error caught at startup.
  * List at least one event in `events`; the schema enforces a minimum length of 1.
  *
  * @example
@@ -130,13 +130,14 @@ export interface ChannelForwardConfig {
    * Bus event keys to forward to channel subscribers. Must contain at least one entry.
    *
    * @remarks
-   * Only events registered as client-safe (via `bus.registerClientSafeEvents()`) are
-   * eligible for forwarding. The framework validates all declared event keys at startup —
-   * an unregistered or forbidden-namespace event key is a startup-time error.
+   * Only events whose registry definitions allow client-safe exposure are
+   * eligible for forwarding. The framework validates all declared event keys
+   * at startup — an unregistered or forbidden-namespace event key is a
+   * startup-time error.
    *
    * Valid event key format is `namespace:storageName.action`, e.g. `'post:post.created'`.
    * Forbidden namespaces (`security.*`, `auth:*`, `community:delivery.*`, `push:*`, `app:*`)
-   * are never client-safe and cannot appear here.
+   * are never externally deliverable and cannot appear here.
    */
   events: string[];
 

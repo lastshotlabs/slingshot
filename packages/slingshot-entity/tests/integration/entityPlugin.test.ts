@@ -101,7 +101,6 @@ const noteEntity: ResolvedEntityConfig = {
   routes: {
     create: { event: 'note:created' },
     list: {},
-    clientSafeEvents: ['note:created'],
   },
 };
 
@@ -169,25 +168,18 @@ function createFramework() {
 
 function createBus(): SlingshotEventBus & {
   emitted: Array<{ key: string; payload: unknown }>;
-  registeredClientSafe: string[][];
   subscriptions: Array<{
     event: string;
     handler: (p: Record<string, unknown>) => void | Promise<void>;
   }>;
 } {
   const emitted: Array<{ key: string; payload: unknown }> = [];
-  const registeredClientSafe: string[][] = [];
   const subscriptions: Array<{
     event: string;
     handler: (p: Record<string, unknown>) => void | Promise<void>;
   }> = [];
 
   return {
-    clientSafeKeys: new Set(),
-    registerClientSafeEvents: mock((keys: string[]) => {
-      registeredClientSafe.push([...keys]);
-    }),
-    ensureClientSafeEventKey: mock((k: string) => k),
     emit: mock((key: string, payload: unknown) => {
       emitted.push({ key, payload });
     }) as unknown as SlingshotEventBus['emit'],
@@ -199,7 +191,6 @@ function createBus(): SlingshotEventBus & {
       if (idx !== -1) subscriptions.splice(idx, 1);
     }),
     emitted,
-    registeredClientSafe,
     subscriptions,
   };
 }
@@ -341,7 +332,7 @@ describe('createEntityPlugin E2E', () => {
     expect((items[0] as Record<string, unknown>).noteId).toBe('99');
   });
 
-  it('setupPost registers clientSafeEvents', async () => {
+  it('setupPost stays quiet for entities without post-phase subscriptions', async () => {
     const plugin = createEntityPlugin({
       name: 'notes-plugin',
       entities: [
@@ -354,7 +345,7 @@ describe('createEntityPlugin E2E', () => {
 
     await plugin.setupPost!({ app, config: fw, bus });
 
-    expect(bus.registeredClientSafe.flat()).toContain('note:created');
+    expect(bus.subscriptions).toHaveLength(0);
   });
 
   it('teardown removes cascade subscriptions', async () => {

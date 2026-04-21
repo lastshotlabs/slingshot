@@ -121,7 +121,15 @@ export const Thread = defineEntity('Thread', {
       },
       event: {
         key: 'community:thread.created',
-        payload: ['id', 'containerId', 'authorId', 'title', 'format'],
+        payload: ['id', 'tenantId', 'containerId', 'authorId', 'title', 'format'],
+        exposure: ['client-safe', 'tenant-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          userId: 'record:authorId',
+          actorId: 'ctx:actorId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
       },
       middleware: [
         'pollRequiredGuard',
@@ -136,14 +144,34 @@ export const Thread = defineEntity('Thread', {
         requires: 'community:container.write',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
       },
-      event: { key: 'community:thread.updated', payload: ['id', 'containerId'] },
+      event: {
+        key: 'community:thread.updated',
+        payload: ['id', 'tenantId', 'containerId'],
+        exposure: ['client-safe', 'tenant-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          actorId: 'ctx:actorId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
+      },
     },
     delete: {
       permission: {
         requires: 'community:container.delete-content',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
       },
-      event: { key: 'community:thread.deleted', payload: ['id', 'containerId'] },
+      event: {
+        key: 'community:thread.deleted',
+        payload: ['id', 'tenantId', 'containerId'],
+        exposure: ['client-safe', 'tenant-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          actorId: 'ctx:actorId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
+      },
     },
 
     operations: {
@@ -154,7 +182,15 @@ export const Thread = defineEntity('Thread', {
         },
         event: {
           key: 'community:thread.published',
-          payload: ['id', 'containerId', 'authorId'],
+          payload: ['id', 'tenantId', 'containerId', 'authorId'],
+          exposure: ['client-safe', 'tenant-webhook'],
+          scope: {
+            tenantId: 'record:tenantId',
+            userId: 'record:authorId',
+            actorId: 'ctx:actorId',
+            resourceType: 'community:container',
+            resourceId: 'record:containerId',
+          },
         },
       },
       lock: {
@@ -162,28 +198,68 @@ export const Thread = defineEntity('Thread', {
           requires: 'community:container.lock',
           scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
         },
-        event: { key: 'community:thread.locked', payload: ['id'] },
+        event: {
+          key: 'community:thread.locked',
+          payload: ['id', 'tenantId', 'containerId'],
+          exposure: ['client-safe', 'tenant-webhook'],
+          scope: {
+            tenantId: 'record:tenantId',
+            actorId: 'ctx:actorId',
+            resourceType: 'community:container',
+            resourceId: 'record:containerId',
+          },
+        },
       },
       unlock: {
         permission: {
           requires: 'community:container.lock',
           scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
         },
-        event: { key: 'community:thread.unlocked', payload: ['id'] },
+        event: {
+          key: 'community:thread.unlocked',
+          payload: ['id', 'tenantId', 'containerId'],
+          exposure: ['client-safe', 'tenant-webhook'],
+          scope: {
+            tenantId: 'record:tenantId',
+            actorId: 'ctx:actorId',
+            resourceType: 'community:container',
+            resourceId: 'record:containerId',
+          },
+        },
       },
       pin: {
         permission: {
           requires: 'community:container.pin',
           scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
         },
-        event: { key: 'community:thread.pinned', payload: ['id', 'containerId'] },
+        event: {
+          key: 'community:thread.pinned',
+          payload: ['id', 'tenantId', 'containerId'],
+          exposure: ['client-safe', 'tenant-webhook'],
+          scope: {
+            tenantId: 'record:tenantId',
+            actorId: 'ctx:actorId',
+            resourceType: 'community:container',
+            resourceId: 'record:containerId',
+          },
+        },
       },
       unpin: {
         permission: {
           requires: 'community:container.pin',
           scope: { resourceType: 'community:container', resourceId: 'body:containerId' },
         },
-        event: { key: 'community:thread.unpinned', payload: ['id', 'containerId'] },
+        event: {
+          key: 'community:thread.unpinned',
+          payload: ['id', 'tenantId', 'containerId'],
+          exposure: ['client-safe', 'tenant-webhook'],
+          scope: {
+            tenantId: 'record:tenantId',
+            actorId: 'ctx:actorId',
+            resourceType: 'community:container',
+            resourceId: 'record:containerId',
+          },
+        },
       },
       search: { auth: 'none' },
       listByContainer: { auth: 'none' },
@@ -198,7 +274,14 @@ export const Thread = defineEntity('Thread', {
         },
         event: {
           key: 'community:thread.solved',
-          payload: ['id', 'containerId', 'solutionReplyId'],
+          payload: ['id', 'tenantId', 'containerId', 'solutionReplyId'],
+          exposure: ['client-safe', 'tenant-webhook'],
+          scope: {
+            tenantId: 'record:tenantId',
+            actorId: 'ctx:actorId',
+            resourceType: 'community:container',
+            resourceId: 'record:containerId',
+          },
         },
       },
       unmarkAsSolution: {
@@ -209,28 +292,18 @@ export const Thread = defineEntity('Thread', {
         },
         event: {
           key: 'community:thread.unsolved',
-          payload: ['id', 'containerId'],
+          payload: ['id', 'tenantId', 'containerId'],
+          exposure: ['client-safe', 'tenant-webhook'],
+          scope: {
+            tenantId: 'record:tenantId',
+            actorId: 'ctx:actorId',
+            resourceType: 'community:container',
+            resourceId: 'record:containerId',
+          },
         },
       },
       incrementView: { auth: 'none' },
     },
-
-    clientSafeEvents: [
-      'community:thread.created',
-      'community:thread.published',
-      'community:thread.updated',
-      'community:thread.deleted',
-      'community:thread.locked',
-      'community:thread.unlocked',
-      'community:thread.pinned',
-      'community:thread.unpinned',
-      'community:thread.solved',
-      'community:thread.unsolved',
-      'community:thread.tagged',
-      'community:thread.untagged',
-      'community:thread.embeds.resolved',
-    ],
-
     permissions: {
       resourceType: 'community:container',
       scopeField: 'containerId',

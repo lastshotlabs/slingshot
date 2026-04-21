@@ -16,6 +16,7 @@ import type {
   RuntimePassword,
   SigningConfig,
   SlingshotEventBus,
+  SlingshotEvents,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryAuthAdapter } from './adapters/memoryAuth';
@@ -127,6 +128,7 @@ function getErrorMessage(err: unknown): string {
 export async function bootstrapAuth(
   config: AuthPluginConfig,
   bus: SlingshotEventBus,
+  events: SlingshotEvents,
   resolvedStores?: ResolvedStores,
   runtimeInfra?: AuthRuntimeInfra,
 ): Promise<BootstrapResult> {
@@ -608,7 +610,7 @@ export async function bootstrapAuth(
 
         if (workerAdapter.deleteUser) await workerAdapter.deleteUser(userId);
         bus.emit('security.auth.account.deleted', { userId });
-        bus.emit('auth:user.deleted', { userId });
+        events.publish('auth:user.deleted', { userId }, { userId, actorId: userId, source: 'job' });
 
         if (deletionConfig.onAfterDelete) await deletionConfig.onAfterDelete(userId);
         const postDeleteHook = authHooks?.postDeleteAccount;
@@ -696,6 +698,7 @@ export async function bootstrapAuth(
         return decision;
       },
       eventBus: bus,
+      events,
       config: resolvedConfig,
       stores,
       signing,

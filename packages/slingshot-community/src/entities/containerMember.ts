@@ -43,7 +43,16 @@ export const ContainerMember = defineEntity('ContainerMember', {
 
     create: {
       middleware: ['memberJoinGuard', 'grantManager'],
-      event: { key: 'community:member.joined', payload: ['containerId', 'userId'] },
+      event: {
+        key: 'community:member.joined',
+        payload: ['containerId', 'userId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
+      },
     },
     delete: {
       permission: {
@@ -51,7 +60,16 @@ export const ContainerMember = defineEntity('ContainerMember', {
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
       },
       middleware: ['grantManager'],
-      event: { key: 'community:member.left', payload: ['containerId', 'userId'] },
+      event: {
+        key: 'community:member.left',
+        payload: ['containerId', 'userId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
+      },
     },
 
     operations: {
@@ -64,13 +82,6 @@ export const ContainerMember = defineEntity('ContainerMember', {
         middleware: ['grantManager'],
       },
     },
-
-    clientSafeEvents: [
-      'community:member.joined',
-      'community:member.left',
-      'community:moderator.assigned',
-      'community:moderator.removed',
-    ],
 
     middleware: { grantManager: true, memberJoinGuard: true },
 

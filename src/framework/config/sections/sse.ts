@@ -13,7 +13,7 @@ import { fnSchema } from './shared';
  * - `events` — **Required.** Array of event-name strings that this endpoint
  *   will forward to connected clients. Only events whose names are in this list
  *   (and that pass `filter`, if provided) are streamed. Event names must match
- *   keys registered via `bus.registerClientSafeEvents()` — the framework
+ *   event definitions exposed as `client-safe` in the registry — the framework
  *   enforces this at startup to prevent accidental exposure of internal events.
  * - `upgrade` — Optional Hono middleware `(c: Context, next: Next) => Promise<void>`
  *   executed before the SSE connection is established. Use this to authenticate
@@ -62,12 +62,9 @@ export const sseEndpointSchema = z.object({
  * **Important constraints:**
  * - Endpoint paths must be unique across `sse.endpoints` and must not collide
  *   with any application routes.
- * - Event names listed in `events` must be registered as client-safe via
- *   `bus.registerClientSafeEvents()` before the server starts. The framework
+ * - Event names listed in `events` must have a registered event definition whose
+ *   exposure includes `client-safe` before the server starts. The framework
  *   validates this at startup.
- * - Events in the namespaces `security.*`, `auth:*`, `community:delivery.*`,
- *   `push:*`, and `app:*` cannot be registered as client-safe and will cause a
- *   startup error if referenced here.
  *
  * @example
  * ```ts

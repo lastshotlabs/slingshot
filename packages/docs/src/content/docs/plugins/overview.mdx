@@ -81,7 +81,7 @@ Plugins run through three ordered phases:
 
 1. **`setupMiddleware`** — before route matching. Use for auth, CSRF, request guards, anything that must run first.
 2. **`setupRoutes`** — mount routes and route-adjacent behavior. Runs after tenant middleware, so routes have tenant context.
-3. **`setupPost`** — after all routes are registered. Use for event subscriptions, cross-plugin discovery, permission registration, and side-effect wiring.
+3. **`setupPost`** — after all routes are registered. Use for event subscriptions, registrar writes, and other true post-assembly wiring. Publish plugin-owned runtime state earlier when it becomes canonical during `setupRoutes`.
 
 ## Where to go next
 

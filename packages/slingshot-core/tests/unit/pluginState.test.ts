@@ -1,9 +1,13 @@
 import { describe, expect, test } from 'bun:test';
+import { attachContext } from '../../src/context/index';
 import {
   getPluginState,
   getPluginStateFromRequest,
   getPluginStateFromRequestOrNull,
   getPluginStateOrNull,
+  maybeEntityAdapter,
+  publishEntityAdaptersState,
+  requireEntityAdapter,
   resolvePluginState,
 } from '../../src/pluginState';
 
@@ -100,5 +104,101 @@ describe('getPluginStateFromRequest', () => {
     const map = new Map();
     const c = { get: (key: string) => (key === 'slingshotCtx' ? { pluginState: map } : null) };
     expect(getPluginStateFromRequest(c)).toBe(map);
+  });
+});
+
+describe('entity adapter plugin state', () => {
+  test('publishEntityAdaptersState creates a frozen plugin-owned state object', () => {
+    const pluginState = new Map<string, unknown>();
+    const adapter = { list: () => Promise.resolve([]) };
+
+    const state = publishEntityAdaptersState(pluginState, 'catalog', {
+      Retailer: adapter,
+    });
+
+    expect(state).toEqual({
+      entityAdapters: {
+        Retailer: adapter,
+      },
+    });
+    expect(Object.isFrozen(state)).toBe(true);
+    expect(Object.isFrozen(state.entityAdapters!)).toBe(true);
+    expect(pluginState.get('catalog')).toBe(state);
+  });
+
+  test('publishEntityAdaptersState preserves top-level keys and merges adapters by entity name', () => {
+    const adapter = { list: () => Promise.resolve([]) };
+    const pluginState = new Map<string, unknown>([
+      [
+        'catalog',
+        Object.freeze({
+          interactionsPeer: { refresh: () => Promise.resolve() },
+          entityAdapters: Object.freeze({
+            Retailer: adapter,
+          }),
+        }),
+      ],
+    ]);
+
+    const nextState = publishEntityAdaptersState(pluginState, 'catalog', {
+      Retailer: adapter,
+      Category: { list: () => Promise.resolve([]) },
+    });
+
+    expect(Object.isFrozen(nextState)).toBe(true);
+    expect(Object.isFrozen(nextState.entityAdapters!)).toBe(true);
+    expect(nextState).toMatchObject({
+      interactionsPeer: { refresh: expect.any(Function) },
+      entityAdapters: {
+        Retailer: adapter,
+        Category: expect.any(Object),
+      },
+    });
+  });
+
+  test('publishEntityAdaptersState rejects non-mergeable plugin state', () => {
+    const pluginState = new Map<string, unknown>([['catalog', 'not-an-object']]);
+
+    expect(() =>
+      publishEntityAdaptersState(pluginState, 'catalog', {
+        Retailer: { list: () => Promise.resolve([]) },
+      }),
+    ).toThrow("pluginState['catalog'] is not mergeable");
+  });
+
+  test('publishEntityAdaptersState rejects duplicate entity publication with a different instance', () => {
+    const pluginState = new Map<string, unknown>();
+
+    publishEntityAdaptersState(pluginState, 'catalog', {
+      Retailer: { list: () => Promise.resolve([]) },
+    });
+
+    expect(() =>
+      publishEntityAdaptersState(pluginState, 'catalog', {
+        Retailer: { list: () => Promise.resolve([]) },
+      }),
+    ).toThrow("Entity adapter 'Retailer' for plugin 'catalog' was already published");
+  });
+
+  test('maybeEntityAdapter and requireEntityAdapter resolve adapters from attached app context', () => {
+    const app = {};
+    const pluginState = new Map<string, unknown>();
+    const adapter = { list: () => Promise.resolve([]) };
+
+    attachContext(app, { pluginState } as never);
+    publishEntityAdaptersState(pluginState, 'catalog', {
+      Retailer: adapter,
+    });
+
+    expect(maybeEntityAdapter(app, { plugin: 'catalog', entity: 'Retailer' })).toBe(adapter);
+    expect(requireEntityAdapter(app, { plugin: 'catalog', entity: 'Retailer' })).toBe(adapter);
+  });
+
+  test('requireEntityAdapter throws a clear error when the adapter is missing', () => {
+    const pluginState = new Map<string, unknown>();
+
+    expect(() =>
+      requireEntityAdapter(pluginState, { plugin: 'catalog', entity: 'Retailer' }),
+    ).toThrow("Entity adapter 'Retailer' from plugin 'catalog' is not available");
   });
 });

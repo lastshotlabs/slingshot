@@ -7,6 +7,10 @@ import { Aside, Steps, TabItem, Tabs } from '@astrojs/starlight/components';
 
 This wires up the foundations of a multi-tenant SaaS: user accounts, organizations, member roles, per-resource permission grants, and full-text search scoped to org data.
 
+The search slice in this stack now follows the same registry-backed event model as the rest of the
+platform: entity updates publish canonical envelopes, and external delivery stays derived from event
+definitions instead of string allowlists.
+
 **What you end up with:**
 
 - Users register, log in, and belong to multiple organizations

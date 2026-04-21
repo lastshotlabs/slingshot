@@ -7,6 +7,7 @@ import type {
   PolicyResolver,
   SlingshotEventBus,
 } from '@lastshotlabs/slingshot-core';
+import { getActor } from '@lastshotlabs/slingshot-core';
 
 /**
  * Arguments for `resolvePolicy`.
@@ -48,18 +49,16 @@ export async function resolvePolicy<TRecord, TInput>(
 ): Promise<void> {
   const { c, config, resolver, action, record, input, bus } = args;
 
-  const userId = c.get('authUserId' as never) as string | null;
-  if (!userId) {
+  const actor = getActor(c as Context<import('@lastshotlabs/slingshot-core').AppEnv>);
+  if (!actor.id) {
     throw new HTTPException(500, {
-      message: 'policy: authUserId missing at enforcement time (bad config)',
+      message: 'policy: actor identity missing at enforcement time (bad config)',
     });
   }
 
-  const tenantId = (c.get('tenantId' as never) as string | null) ?? null;
-
   let raw: boolean | PolicyDecision;
   try {
-    raw = await resolver({ action, userId, tenantId, record, input, c });
+    raw = await resolver({ action, userId: actor.id, tenantId: actor.tenantId, record, input, c });
   } catch (err) {
     // Resolver threw — surface as 500. Throwing is a programmer/config
     // error, not a deny decision.
@@ -79,7 +78,7 @@ export async function resolvePolicy<TRecord, TInput>(
     (bus as unknown as { emit(key: string, payload: unknown): void }).emit('entity:policy.denied', {
       resolverKey: config.resolver,
       action,
-      userId,
+      userId: actor.id,
       reason: decision.reason,
     });
   }

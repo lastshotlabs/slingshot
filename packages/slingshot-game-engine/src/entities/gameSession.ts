@@ -71,6 +71,13 @@ export const GameSession = defineEntity('GameSession', {
       event: {
         key: 'game:session.created',
         payload: ['id', 'gameType', 'hostUserId', 'tenantId'],
+        exposure: ['client-safe'],
+        scope: {
+          tenantId: 'record:tenantId',
+          userId: 'record:hostUserId',
+          resourceType: 'game-session',
+          resourceId: 'record:id',
+        },
       },
     },
     delete: {
@@ -87,6 +94,11 @@ export const GameSession = defineEntity('GameSession', {
         event: {
           key: 'game:session.started',
           payload: ['id', 'gameType'],
+          exposure: ['client-safe'],
+          scope: {
+            resourceType: 'game-session',
+            resourceId: 'record:id',
+          },
         },
       },
       pauseGame: {
@@ -108,15 +120,14 @@ export const GameSession = defineEntity('GameSession', {
         event: {
           key: 'game:session.completed',
           payload: ['id', 'gameType'],
+          exposure: ['client-safe'],
+          scope: {
+            resourceType: 'game-session',
+            resourceId: 'record:id',
+          },
         },
       },
     },
-    clientSafeEvents: [
-      'game:session.created',
-      'game:session.started',
-      'game:session.completed',
-      'game:session.abandoned',
-    ],
     permissions: {
       resourceType: 'game-session',
       actions: ['read', 'create', 'join', 'admin'],

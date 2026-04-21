@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Context } from 'hono';
 import { attachContext, createRouter } from '@lastshotlabs/slingshot-core';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import type { Actor, AppEnv } from '@lastshotlabs/slingshot-core';
 import { memoryStorage } from '../../src/framework/adapters/memoryStorage';
 import {
   generateUploadKey,
@@ -193,6 +193,39 @@ describe('parseUpload', () => {
     const results = await parseUpload(ctx, { field: 'file' });
     expect(results).toHaveLength(1);
     expect(results[0].originalName).toBe('hello.txt');
+  });
+
+  it('uses actor-derived identity when raw auth variables are absent', async () => {
+    const { slingshotCtx } = makeUploadRuntime();
+    const actor: Actor = {
+      id: 'user-9',
+      kind: 'user',
+      tenantId: 'tenant-9',
+      sessionId: null,
+      roles: null,
+      claims: {},
+    };
+    const body = { file: new File(['content'], 'hello.txt', { type: 'text/plain' }) };
+    const ctx = {
+      req: {
+        parseBody: async () => body,
+        header: () => undefined,
+      },
+      get: (key: string) => {
+        if (key === 'slingshotCtx') return slingshotCtx;
+        if (key === 'actor') return actor;
+        if (key === 'uploadBucket') return undefined;
+        return null;
+      },
+      set: () => {},
+    } as unknown as Context<AppEnv>;
+
+    const results = await parseUpload(ctx, {
+      field: 'file',
+      generateKey: (_file, identity) => `${identity.tenantId}/${identity.userId}/upload.txt`,
+    });
+
+    expect(results[0].key).toBe('tenant-9/user-9/upload.txt');
   });
 
   it('handles multiple field names', async () => {

@@ -1,3 +1,5 @@
+import './events';
+
 export { createNotificationsPlugin } from './plugin';
 export { NOTIFICATIONS_PLUGIN_STATE_KEY } from './state';
 export type { NotificationsPluginState } from './state';

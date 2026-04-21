@@ -47,7 +47,6 @@ function createContextFixture(overrides: Partial<SlingshotContext> = {}): Slings
       emit() {},
       on() {},
       off() {},
-      registerClientSafeEvents() {},
     },
     adapters: {},
     routeAuth: null,

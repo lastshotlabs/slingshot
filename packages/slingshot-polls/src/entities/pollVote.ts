@@ -48,6 +48,12 @@ export const PollVote = defineEntity('PollVote', {
       event: {
         key: 'polls:poll.voted',
         payload: ['pollId', 'optionIndex', 'userId', 'sourceType', 'sourceId', 'scopeId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'poll:scope',
+          resourceId: 'record:scopeId',
+        },
       },
       middleware: ['pollVoteGuard', 'pollVoteRateLimit'],
     },
@@ -56,6 +62,12 @@ export const PollVote = defineEntity('PollVote', {
       event: {
         key: 'polls:poll.vote_retracted',
         payload: ['pollId', 'optionIndex', 'userId', 'sourceType', 'sourceId', 'scopeId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'poll:scope',
+          resourceId: 'record:scopeId',
+        },
       },
     },
     operations: {
@@ -85,6 +97,5 @@ export const PollVote = defineEntity('PollVote', {
         },
       },
     },
-    clientSafeEvents: ['polls:poll.voted', 'polls:poll.vote_retracted'],
   },
 });

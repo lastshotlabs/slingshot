@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { createRoute, errorResponse } from '@lastshotlabs/slingshot-core';
 import { HttpError, createRouter, getClientIp } from '@lastshotlabs/slingshot-core';
 import type { AuthRateLimitConfig, HookContext } from '../config/authConfig';
+import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';
 
 export interface PasswordResetRouterOptions {
@@ -143,8 +144,13 @@ export const createPasswordResetRouter = (
               email,
               runtime.config,
             );
-            eventBus.emit('auth:delivery.password_reset', { email, token });
-            eventBus.emit('auth:password.reset.requested', { userId: user.id, email });
+            publishAuthEvent(runtime.events, 'auth:delivery.password_reset', { email, token });
+            publishAuthEvent(
+              runtime.events,
+              'auth:password.reset.requested',
+              { userId: user.id, email },
+              { userId: user.id, actorId: user.id },
+            );
           } catch (err) {
             console.error(
               'Failed to send password reset email:',

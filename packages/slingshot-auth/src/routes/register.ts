@@ -25,6 +25,7 @@ import type {
   PrimaryField,
   RefreshTokenConfig,
 } from '../config/authConfig';
+import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';
 
 export interface RegisterRouterOptions {
@@ -368,7 +369,12 @@ export const createRegisterRouter = (
         const entry = await consumeVerificationToken(runtime.repos.verificationToken, token);
         if (!entry) return errorResponse(c, 'Invalid or expired verification token', 400);
         if (adapter.setEmailVerified) await adapter.setEmailVerified(entry.userId, true);
-        eventBus.emit('auth:email.verified', { userId: entry.userId, email: entry.email });
+        publishAuthEvent(
+          runtime.events,
+          'auth:email.verified',
+          { userId: entry.userId, email: entry.email },
+          { userId: entry.userId, actorId: entry.userId },
+        );
         const { getSuspended } = await import('@auth/lib/suspension');
         const suspensionStatus = await getSuspended(adapter, entry.userId);
         if (suspensionStatus.suspended) {

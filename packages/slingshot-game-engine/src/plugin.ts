@@ -36,7 +36,6 @@ import { gamePlayerFactories, gameSessionFactories } from './entities/factories'
 import { GamePlayer } from './entities/gamePlayer';
 import { GameSession } from './entities/gameSession';
 import { GameErrorCode } from './errors';
-import { GAME_ENGINE_CLIENT_SAFE_EVENTS } from './events';
 import { listAdapterRecords } from './lib/adapterQuery';
 import { createCleanupState, startCleanupSweep, stopCleanupSweep } from './lib/cleanup';
 import { rejectInput } from './lib/input';
@@ -254,18 +253,17 @@ export function createGameEnginePlugin(
     async setupMiddleware(ctx: PluginSetupContext) {
       // Register dispatched policy resolver before entity routes are mounted.
       registerEntityPolicy(ctx.app, GAME_SESSION_POLICY_KEY, createGameSessionPolicy());
-      await innerPlugin?.setupMiddleware?.(ctx);
-    },
-
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      innerPlugin = createEntityPlugin({
+      innerPlugin ??= createEntityPlugin({
         name: GAME_ENGINE_PLUGIN_STATE_KEY,
         mountPath: config.mountPath,
         entities,
         middleware,
       });
+      await innerPlugin?.setupMiddleware?.(ctx);
+    },
 
-      await innerPlugin.setupRoutes?.({ app, config: frameworkConfig, bus });
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
       const mountPath = config.mountPath;
 
@@ -656,8 +654,8 @@ export function createGameEnginePlugin(
       app.route(`${mountPath}/sessions`, sessionRoutes);
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
 
       if (!sessionAdapter || !playerAdapter) {
         throw new Error('[slingshot-game-engine] Adapters not resolved after entity plugin setup.');
@@ -900,11 +898,6 @@ export function createGameEnginePlugin(
       // §1.5 — Store refs for teardown.
       onSessionStartedRef = onSessionStarted;
       busRef = bus;
-
-      // Register client-safe events on the bus.
-      if (typeof bus.registerClientSafeEvents === 'function') {
-        bus.registerClientSafeEvents([...GAME_ENGINE_CLIENT_SAFE_EVENTS]);
-      }
 
       // Start cleanup sweep with real adapter calls.
       startCleanupSweep(cleanupState, {

@@ -365,14 +365,6 @@ export const entityConfigSchema = z
     if (config.routes) {
       const rc = config.routes;
       const crudNames = ['create', 'get', 'list', 'update', 'delete', 'clear'];
-      const FORBIDDEN_EVENT_PREFIXES = [
-        'security.',
-        'auth:',
-        'community:delivery.',
-        'push:',
-        'app:',
-      ];
-
       // Collect all op entries for cross-field checks
       const opEntries: [string, RouteOperationConfig | undefined][] = [
         ...(['create', 'get', 'list', 'update', 'delete'] as const).map(
@@ -422,17 +414,6 @@ export const entityConfigSchema = z
               });
             }
           }
-        }
-      }
-
-      // clientSafeEvents must not use forbidden namespaces
-      for (const key of rc.clientSafeEvents ?? []) {
-        if (FORBIDDEN_EVENT_PREFIXES.some(p => key.startsWith(p))) {
-          ctx.addIssue({
-            code: 'custom',
-            message: `clientSafeEvents "${key}" uses a forbidden namespace`,
-            path: ['routes', 'clientSafeEvents'],
-          });
         }
       }
 

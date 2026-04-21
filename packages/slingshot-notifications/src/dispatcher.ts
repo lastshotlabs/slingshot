@@ -1,4 +1,4 @@
-import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import type { SlingshotEventBus, SlingshotEvents } from '@lastshotlabs/slingshot-core';
 import { DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS, resolvePreferences } from './preferences';
 import type {
   NotificationAdapter,
@@ -6,10 +6,6 @@ import type {
   NotificationPreferenceAdapter,
   NotificationPreferenceDefaults,
 } from './types';
-
-type DynamicBus = {
-  emit(event: string, payload: unknown): void;
-};
 
 export interface DispatcherAdapter {
   start(): void;
@@ -21,6 +17,7 @@ export interface CreateIntervalDispatcherOptions {
   readonly notifications: NotificationAdapter;
   readonly preferences: NotificationPreferenceAdapter;
   readonly bus: SlingshotEventBus;
+  readonly events: SlingshotEvents;
   readonly defaultPreferences?: NotificationPreferenceDefaults;
   readonly intervalMs?: number;
   readonly maxPerTick?: number;
@@ -38,7 +35,6 @@ export function createIntervalDispatcher(
   const intervalMs = options.intervalMs ?? 30_000;
   const maxPerTick = options.maxPerTick ?? 500;
   const defaultPreferences = options.defaultPreferences ?? DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS;
-  const dynamicBus = options.bus as unknown as DynamicBus;
   let timer: ReturnType<typeof setInterval> | null = null;
 
   return {
@@ -80,7 +76,12 @@ export function createIntervalDispatcher(
           notification: row,
           preferences,
         };
-        dynamicBus.emit('notifications:notification.created', payload);
+        options.events.publish('notifications:notification.created', payload, {
+          tenantId: row.tenantId ?? null,
+          userId: row.userId,
+          actorId: row.actorId ?? row.userId,
+          source: 'system',
+        });
       }
 
       return Math.min(safeRows.length, maxPerTick);

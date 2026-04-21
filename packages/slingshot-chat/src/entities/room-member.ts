@@ -45,7 +45,16 @@ export const RoomMember = defineEntity('RoomMember', {
         requires: 'chat:room.invite',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
       },
-      event: { key: 'chat:member.added', payload: ['id', 'roomId', 'userId', 'role'] },
+      event: {
+        key: 'chat:member.added',
+        payload: ['id', 'roomId', 'userId', 'role'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
       middleware: ['dmRoomGuard', 'memberGrant', 'memberInviteNotify'],
     },
     update: {
@@ -53,14 +62,32 @@ export const RoomMember = defineEntity('RoomMember', {
         requires: 'chat:room.manage',
         scope: { resourceType: 'chat:room', resourceId: 'record:roomId' },
       },
-      event: { key: 'chat:member.updated', payload: ['id', 'roomId', 'userId'] },
+      event: {
+        key: 'chat:member.updated',
+        payload: ['id', 'roomId', 'userId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
     },
     delete: {
       permission: {
         requires: 'chat:room.kick',
         scope: { resourceType: 'chat:room', resourceId: 'record:roomId' },
       },
-      event: { key: 'chat:member.removed', payload: ['id', 'roomId', 'userId'] },
+      event: {
+        key: 'chat:member.removed',
+        payload: ['id', 'roomId', 'userId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
     },
     operations: {
       listByRoom: { auth: 'userAuth' },
@@ -71,7 +98,6 @@ export const RoomMember = defineEntity('RoomMember', {
       unreadCount: { auth: 'userAuth' },
     },
     middleware: { dmRoomGuard: true, memberGrant: true, memberInviteNotify: true },
-    clientSafeEvents: ['chat:member.added', 'chat:member.updated', 'chat:member.removed'],
   },
 });
 

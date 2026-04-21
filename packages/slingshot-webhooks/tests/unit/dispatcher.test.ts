@@ -10,7 +10,14 @@ function makeJob(overrides?: Partial<WebhookJob>): WebhookJob {
     endpointId: 'ep-1',
     url: 'https://example.com/hook',
     secret: 'test-secret',
-    event: 'auth:user.created',
+    event: 'auth:login',
+    eventId: 'evt-1',
+    occurredAt: '2026-01-01T00:00:00.000Z',
+    subscriber: {
+      ownerType: 'user',
+      ownerId: 'user-1',
+      tenantId: 'tenant-a',
+    },
     payload: '{"userId":"u1"}',
     attempts: 0,
     createdAt: new Date(),
@@ -42,7 +49,9 @@ describe('deliverWebhook', () => {
     expect(url).toBe('https://example.com/hook');
     expect(init.method).toBe('POST');
     expect(init.headers).toHaveProperty('X-Webhook-Signature');
-    expect(init.headers).toHaveProperty('X-Webhook-Event', 'auth:user.created');
+    expect(init.headers).toHaveProperty('X-Webhook-Event', 'auth:login');
+    expect(init.headers).toHaveProperty('X-Webhook-Event-Id', 'evt-1');
+    expect(init.headers).toHaveProperty('X-Webhook-Occurred-At', '2026-01-01T00:00:00.000Z');
     expect(init.headers).toHaveProperty('X-Webhook-Delivery', 'del-1');
     expect(init.headers).toHaveProperty('Content-Type', 'application/json');
     expect(init.body).toBe('{"userId":"u1"}');

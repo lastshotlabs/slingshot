@@ -53,7 +53,6 @@ function createContextFixture(): SlingshotContext {
       emit() {},
       on() {},
       off() {},
-      registerClientSafeEvents() {},
     },
     adapters: {},
     routeAuth: null,

@@ -49,13 +49,29 @@ export const Reaction = defineEntity('Reaction', {
     create: {
       event: {
         key: 'community:reaction.added',
-        payload: ['targetId', 'targetType', 'containerId', 'userId', 'type', 'value'],
+        payload: ['targetId', 'targetType', 'tenantId', 'containerId', 'userId', 'type', 'value'],
+        exposure: ['client-safe', 'tenant-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          userId: 'record:userId',
+          actorId: 'ctx:actorId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
       },
     },
     delete: {
       event: {
         key: 'community:reaction.removed',
-        payload: ['targetId', 'targetType', 'containerId', 'userId', 'type'],
+        payload: ['targetId', 'targetType', 'tenantId', 'containerId', 'userId', 'type'],
+        exposure: ['client-safe', 'tenant-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          userId: 'record:userId',
+          actorId: 'ctx:actorId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
       },
     },
 
@@ -64,9 +80,6 @@ export const Reaction = defineEntity('Reaction', {
       getUserReaction: { auth: 'none' },
       updateScore: { auth: 'userAuth' },
     },
-
-    clientSafeEvents: ['community:reaction.added', 'community:reaction.removed'],
-
     cascades: [
       {
         event: 'auth:user.deleted',

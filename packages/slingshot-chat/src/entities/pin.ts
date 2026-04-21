@@ -36,7 +36,16 @@ export const Pin = defineEntity('Pin', {
         requires: 'chat:room.manage',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
       },
-      event: { key: 'chat:message.pinned', payload: ['id', 'roomId', 'messageId', 'pinnedBy'] },
+      event: {
+        key: 'chat:message.pinned',
+        payload: ['id', 'roomId', 'messageId', 'pinnedBy'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:pinnedBy',
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
     },
     update: { auth: 'none' },
     delete: {
@@ -44,14 +53,21 @@ export const Pin = defineEntity('Pin', {
         requires: 'chat:room.manage',
         scope: { resourceType: 'chat:room', resourceId: 'record:roomId' },
       },
-      event: { key: 'chat:message.unpinned', payload: ['id', 'roomId', 'messageId'] },
+      event: {
+        key: 'chat:message.unpinned',
+        payload: ['id', 'roomId', 'messageId'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
     },
     operations: {
       listByRoom: { auth: 'userAuth' },
       unpin: { auth: 'userAuth' },
       isPinned: { auth: 'userAuth' },
     },
-    clientSafeEvents: ['chat:message.pinned', 'chat:message.unpinned'],
   },
 });
 

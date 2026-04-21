@@ -33,6 +33,8 @@ import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
   deepFreeze,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
@@ -373,6 +375,10 @@ export async function createChatTestApp(
 
   const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
   const frameworkConfig = createTestFrameworkConfig();
 
   // Attach minimal SlingshotContext so getContext(app) works in plugin lifecycle
@@ -425,6 +431,8 @@ export async function createChatTestApp(
     ws: null,
     wsEndpoints: {},
     wsPublish: null,
+    bus,
+    events,
   } as unknown as Parameters<typeof attachContext>[1]);
 
   // Per-request slingshotCtx for entity route auth (applyRouteConfig reads routeAuth)
@@ -445,7 +453,10 @@ export async function createChatTestApp(
     if (uid) {
       (c as typeof c & { set(key: string, value: unknown): void }).set('authUserId', uid);
     }
-    (c as typeof c & { set(key: string, value: unknown): void }).set('slingshotCtx', { routeAuth });
+    (c as typeof c & { set(key: string, value: unknown): void }).set('slingshotCtx', {
+      routeAuth,
+      events,
+    });
     await next();
   });
 
@@ -454,16 +465,19 @@ export async function createChatTestApp(
     app,
     config: frameworkConfig as never,
     bus: bus as SlingshotEventBus,
+    events,
   });
   await plugin.setupRoutes?.({
     app,
     config: frameworkConfig as never,
     bus: bus as SlingshotEventBus,
+    events,
   });
   await plugin.setupPost?.({
     app,
     config: frameworkConfig as never,
     bus: bus as SlingshotEventBus,
+    events,
   });
 
   // Read the plugin's resolved state

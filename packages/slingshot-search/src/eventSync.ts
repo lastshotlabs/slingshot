@@ -13,6 +13,7 @@ import type {
   GeoSearchConfig,
   ResolvedEntityConfig,
   SlingshotEventBus,
+  SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
 import { applyGeoTransform } from './geoTransform';
 import type { SearchManager } from './searchManager';
@@ -46,6 +47,8 @@ export interface EventSyncManagerConfig {
   readonly transformRegistry: SearchTransformRegistry;
   /** The application event bus to subscribe to entity CRUD events on. */
   readonly bus: SlingshotEventBus;
+  /** Registry-backed event publisher used for package-owned search events. */
+  readonly events: SlingshotEvents;
 
   /**
    * Flush pending indexing operations after this interval in milliseconds.
@@ -195,6 +198,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     searchManager,
     transformRegistry,
     bus,
+    events,
     flushIntervalMs = 5000,
     flushThreshold = 100,
   } = config;
@@ -329,13 +333,17 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     documentId: string | undefined,
     err: unknown,
   ): void {
-    bus.emit('search:sync.failed', {
-      indexName,
-      documentId,
-      entityName,
-      error: err instanceof Error ? err.message : String(err),
-      syncMode: 'event-bus',
-    });
+    events.publish(
+      'search:sync.failed',
+      {
+        indexName,
+        documentId,
+        entityName,
+        error: err instanceof Error ? err.message : String(err),
+        syncMode: 'event-bus',
+      },
+      { source: 'system' },
+    );
   }
 
   // -------------------------------------------------------------------------

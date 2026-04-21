@@ -42,7 +42,6 @@ export const Block = defineEntity('Block', {
       listByBlocker: { auth: 'userAuth' },
       unblockUser: { auth: 'userAuth' },
     },
-    clientSafeEvents: [],
   },
 });
 

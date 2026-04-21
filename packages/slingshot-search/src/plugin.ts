@@ -22,13 +22,13 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   SEARCH_PLUGIN_STATE_KEY,
+  defineEvent,
   getPluginState,
   validateAdapterShape,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEventSyncManager } from './eventSync';
 import type { EventSyncManager } from './eventSync';
-import { SEARCH_CLIENT_SAFE_KEYS } from './events';
 import { createAdminRouter } from './routes/admin';
 import { createFederatedRouter } from './routes/federated';
 import { SEARCH_ROUTES } from './routes/index';
@@ -110,7 +110,18 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
     name: 'slingshot-search',
     dependencies: [],
 
-    setupMiddleware() {
+    setupMiddleware({ events }: PluginSetupContext) {
+      if (!events.get('search:sync.failed')) {
+        events.register(
+          defineEvent('search:sync.failed', {
+            ownerPlugin: SEARCH_PLUGIN_STATE_KEY,
+            exposure: ['internal'],
+            resolveScope() {
+              return null;
+            },
+          }),
+        );
+      }
       // Provider connection happens during setupPost (after entity discovery).
       // Middleware phase is reserved for future request-level concerns
       // (e.g. search-related request middleware).
@@ -134,10 +145,7 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      // Register client-safe SSE events
-      bus.registerClientSafeEvents([...SEARCH_CLIENT_SAFE_KEYS]);
-
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       // Discover entities with search config via entity registry.
       // The framework attaches the entity registry during bootstrap, and
       // owner plugins populate it during setupMiddleware/setupRoutes.
@@ -162,6 +170,7 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
         searchManager,
         transformRegistry,
         bus,
+        events,
       });
 
       // Subscribe to events for config-driven entities with event-bus sync

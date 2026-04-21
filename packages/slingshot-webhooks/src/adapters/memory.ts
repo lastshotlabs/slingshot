@@ -1,5 +1,4 @@
 import type { PaginatedResult } from '@lastshotlabs/slingshot-core';
-import { matchGlob } from '../lib/globMatch';
 import type { WebhookAdapter } from '../types/adapter';
 import type { DeliveryStatus, WebhookDelivery, WebhookEndpoint } from '../types/models';
 
@@ -40,22 +39,26 @@ export function createMemoryWebhookAdapter(): MemoryWebhookAdapter {
       return endpoints.get(id) ?? null;
     },
 
-    async findEndpointsForEvent(event) {
-      return [...endpoints.values()].filter(
-        ep => ep.enabled && ep.events.some(pattern => matchGlob(pattern, event)),
-      );
+    async listEnabledEndpoints() {
+      return [...endpoints.values()].filter(ep => ep.enabled);
     },
 
     async createDelivery(input) {
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      const endpoint = endpoints.get(input.endpointId);
       const delivery: WebhookDelivery = {
         id,
-        tenantId: endpoint?.tenantId ?? null,
         endpointId: input.endpointId,
         event: input.event,
-        payload: JSON.parse(input.payload),
+        eventId: input.eventId,
+        occurredAt: input.occurredAt,
+        subscriber: {
+          ownerType: input.subscriber.ownerType,
+          ownerId: input.subscriber.ownerId,
+          tenantId: input.subscriber.tenantId ?? null,
+        },
+        sourceScope: input.sourceScope ?? null,
+        projectedPayload: input.payload,
         status: 'pending',
         attempts: 0,
         nextRetryAt: null,

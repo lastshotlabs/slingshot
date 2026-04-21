@@ -236,7 +236,6 @@ export function createRedisEventBus({
   const pub = new Redis(url);
   const sub = new Redis(url);
   const handlers = new Map<string, Set<(payload: unknown) => void>>();
-  const clientSafeEvents = new Set<string>();
 
   sub.subscribe(channel);
   sub.on('message', (_ch, msg) => {
@@ -245,7 +244,6 @@ export function createRedisEventBus({
   });
 
   return {
-    clientSafeKeys: clientSafeEvents,
     emit(key: string, payload: unknown) {
       pub.publish(channel, JSON.stringify({ key, payload }));
     },
@@ -253,19 +251,13 @@ export function createRedisEventBus({
       if (!handlers.has(key)) handlers.set(key, new Set());
       handlers.get(key)?.add(handler as (payload: unknown) => void);
     },
+    onEnvelope() {},
     off(key: string, handler: (payload: unknown) => void | Promise<void>) {
       handlers.get(key)?.delete(handler as (payload: unknown) => void);
     },
-    registerClientSafeEvents(keys: string[]) {
-      for (const key of keys) {
-        clientSafeEvents.add(key);
-      }
-    },
-    ensureClientSafeEventKey(key: string) {
-      if (!clientSafeEvents.has(key)) {
-        throw new Error(`Event "${key}" is not registered as client-safe`);
-      }
-      return key;
+    offEnvelope() {},
+    async shutdown() {
+      await Promise.all([pub.quit(), sub.quit()]);
     },
   };
 }
@@ -280,14 +272,11 @@ interface SlingshotEventBus {
   emit<K extends EventKey>(key: K, payload: EventPayload<K>): void;
   on<K extends EventKey>(key: K, handler: EventHandler<K>): void;
   off<K extends EventKey>(key: K, handler: EventHandler<K>): void;
-  clientSafeKeys: ReadonlySet<string>;
-  registerClientSafeEvents(keys: string[]): void;
-  ensureClientSafeEventKey(key: string, source?: string): string;
   shutdown?(): Promise<void>;
 }
 ```
 
-The framework does not care what is underneath - Redis, NATS, Kafka, or a custom transport. Implement the interface and plugins, entities, and SSE endpoints continue to work.
+The framework does not care what is underneath - Redis, NATS, Kafka, or a custom transport. Implement the interface and plugins, entities, and SSE endpoints continue to work. Event exposure is enforced one layer up by the registry-backed `ctx.events` publisher, not by the bus transport.
 
 ## Where to go next
 

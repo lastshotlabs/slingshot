@@ -4,10 +4,6 @@ import { dispatchInteraction } from '../handlers/dispatch';
 import type { InteractionsPluginState } from '../state';
 import { dispatchRequestSchema } from './dispatchRoute.schema';
 
-type DynamicBus = {
-  emit(event: string, payload: unknown): void;
-};
-
 function readContextValue(c: Context, key: string): unknown {
   return (c as { get(name: string): unknown }).get(key);
 }
@@ -76,8 +72,7 @@ export function buildDispatchRoute(
       );
     }
 
-    const dynamicBus = state.bus as DynamicBus;
-    dynamicBus.emit(
+    state.events.publish(
       outcome.status === 'ok' ? 'interactions:event.dispatched' : 'interactions:event.failed',
       {
         userId: authUserId,
@@ -87,6 +82,12 @@ export function buildDispatchRoute(
         actionId: parsed.data.actionId,
         status: outcome.status,
         latencyMs: outcome.latencyMs,
+      },
+      {
+        source: 'http',
+        tenantId,
+        userId: authUserId,
+        actorId: authUserId,
       },
     );
 

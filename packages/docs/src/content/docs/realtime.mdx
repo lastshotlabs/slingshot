@@ -228,17 +228,22 @@ source.addEventListener('error', () => {
 
 ### Publish events from the server
 
-The SSE endpoint filters by the `clientSafeEvents` list — only events explicitly registered as safe reach clients. This prevents internal events (`security.*`, `auth:*`, etc.) from leaking.
+The SSE endpoint filters by registry-backed event exposure — only events whose definitions opt into `client-safe` delivery reach clients. This prevents internal events (`security.*`, `auth:*`, etc.) from leaking.
 
 ```typescript
-// Register which events are safe to forward (typically in a plugin's setupPost)
-ctx.bus.registerClientSafeEvents(['post.created', 'post.updated', 'comment.created']);
+// Register which events are safe to forward (typically in setupMiddleware)
+ctx.events.register(
+  defineEvent('post.created', {
+    owner: 'blog',
+    exposure: ['client-safe'],
+  }),
+);
 
-// Emit an event from anywhere — clients subscribed to /events will receive it
-ctx.bus.emit('post.created', { id: 'post-123', title: 'Hello' });
+// Publish from anywhere — clients subscribed to /events will receive it
+ctx.events.publish('post.created', { id: 'post-123', title: 'Hello' });
 ```
 
-The SSE endpoint streams only registered client-safe events. Security-sensitive events never reach clients regardless of registration.
+The SSE endpoint streams only events registered with `exposure: ['client-safe']`. Security-sensitive events never reach clients regardless of registration.
 
 ### Filter by event type
 

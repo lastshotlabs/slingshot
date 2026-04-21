@@ -2,7 +2,7 @@
  * Tests for src/framework/middleware/auditLog.ts (lines 57-96)
  */
 import { describe, expect, mock, spyOn, test } from 'bun:test';
-import type { AuditLogEntry, AuditLogProvider } from '@lastshotlabs/slingshot-core';
+import type { Actor, AuditLogEntry, AuditLogProvider } from '@lastshotlabs/slingshot-core';
 import { auditLog } from '../../src/framework/middleware/auditLog';
 
 function makeMockProvider(): AuditLogProvider & { entries: AuditLogEntry[] } {
@@ -142,9 +142,14 @@ describe('auditLog middleware', () => {
       path: '/api/action',
       status: 200,
       contextValues: {
-        authUserId: 'user-123',
-        sessionId: 'sess-456',
-        tenantId: 'tenant-789',
+        actor: {
+          id: 'user-123',
+          kind: 'user',
+          tenantId: 'tenant-789',
+          sessionId: 'sess-456',
+          roles: null,
+          claims: {},
+        } satisfies Actor,
       },
     });
     await middleware(ctx, async () => {});

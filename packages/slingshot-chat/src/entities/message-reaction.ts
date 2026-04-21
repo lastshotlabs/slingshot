@@ -41,6 +41,12 @@ export const MessageReaction = defineEntity('MessageReaction', {
       event: {
         key: 'chat:message.reaction.added',
         payload: ['messageId', 'roomId', 'userId', 'emoji'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
       },
     },
     update: { auth: 'none' },
@@ -48,6 +54,12 @@ export const MessageReaction = defineEntity('MessageReaction', {
       event: {
         key: 'chat:message.reaction.removed',
         payload: ['messageId', 'roomId', 'userId', 'emoji'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
       },
     },
     operations: {
@@ -57,7 +69,6 @@ export const MessageReaction = defineEntity('MessageReaction', {
       listAggregated: { auth: 'userAuth' },
       hasReacted: { auth: 'userAuth' },
     },
-    clientSafeEvents: ['chat:message.reaction.added', 'chat:message.reaction.removed'],
   },
 });
 

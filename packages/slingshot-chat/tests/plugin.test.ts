@@ -15,6 +15,8 @@ import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
   createEntityRegistry,
   getContext,
 } from '@lastshotlabs/slingshot-core';
@@ -161,6 +163,10 @@ describe('createChatPlugin', () => {
     const plugin = createChatPlugin({ storeType: 'postgres', enablePresence: false });
     const app = new Hono<AppEnv>();
     const bus = new InProcessAdapter();
+    const events = createEventPublisher({
+      definitions: createEventDefinitionRegistry(),
+      bus,
+    });
     const pool = new FakeChatPostgresPool();
     const frameworkConfig = createPostgresChatFrameworkConfig(pool);
 
@@ -179,16 +185,19 @@ describe('createChatPlugin', () => {
       app,
       config: frameworkConfig as never,
       bus,
+      events,
     });
     await plugin.setupRoutes?.({
       app,
       config: frameworkConfig as never,
       bus,
+      events,
     });
     await plugin.setupPost?.({
       app,
       config: frameworkConfig as never,
       bus,
+      events,
     });
 
     const state = getContext(app).pluginState.get(CHAT_PLUGIN_STATE_KEY) as

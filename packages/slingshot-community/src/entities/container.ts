@@ -56,7 +56,18 @@ export const Container = defineEntity('Container', {
 
     create: {
       permission: { requires: 'community:container.write' },
-      event: { key: 'community:container.created', payload: ['id', 'slug', 'createdBy'] },
+      event: {
+        key: 'community:container.created',
+        payload: ['id', 'slug', 'tenantId', 'createdBy'],
+        exposure: ['client-safe', 'tenant-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          userId: 'record:createdBy',
+          actorId: 'ctx:actorId',
+          resourceType: 'community:container',
+          resourceId: 'record:id',
+        },
+      },
       middleware: ['containerCreationGuard'],
     },
     update: {
@@ -70,14 +81,22 @@ export const Container = defineEntity('Container', {
         requires: 'community:container.delete',
         scope: { resourceType: 'community:container', resourceId: 'param:id' },
       },
-      event: { key: 'community:container.deleted', payload: ['id'] },
+      event: {
+        key: 'community:container.deleted',
+        payload: ['id', 'tenantId'],
+        exposure: ['client-safe', 'tenant-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          actorId: 'ctx:actorId',
+          resourceType: 'community:container',
+          resourceId: 'record:id',
+        },
+      },
     },
 
     operations: {
       getBySlug: { auth: 'none' },
     },
-
-    clientSafeEvents: ['community:container.created', 'community:container.deleted'],
 
     middleware: { containerCreationGuard: true },
   },

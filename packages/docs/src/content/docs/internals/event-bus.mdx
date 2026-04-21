@@ -19,9 +19,6 @@ interface SlingshotEventBus {
     listener: (payload: SlingshotEventMap[K]) => void,
   ): void;
   shutdown?(): Promise<void>;
-  readonly clientSafeKeys: ReadonlySet<string>;
-  registerClientSafeEvents(keys: string[]): void;
-  ensureClientSafeEventKey(key: string, source?: string): string;
 }
 ```
 
@@ -57,24 +54,23 @@ Event keys use a `namespace:entity.action` pattern. Reserved namespaces:
 - `push:*` — push notification internals
 - `app:*` — application lifecycle events
 
-Any other key can be registered as client-safe. When it appears in an entity's `clientSafeEvents` list, the bus marks it safe for SSE forwarding.
+Any other key can be exposed externally, but only when its event definition opts into `exposure: ['client-safe']`.
 
 ## Client-safe events and SSE
 
-SSE endpoints filter against the client-safe key set. Plugins declare which events flow through when registering an SSE endpoint:
+SSE endpoints filter against registry-backed event definitions. Plugins or route configs declare which events flow through by setting `exposure: ['client-safe']`:
 
 ```typescript
 declare const sseClients: Array<{ send(event: string, payload: unknown): void }>;
 
-// The entity declares which events are safe to forward to browser clients
-routes: {
-  clientSafeEvents: ['community:thread.created', 'community:reply.created'],
-}
+events.register(
+  defineEvent('community:thread.created', {
+    owner: 'community',
+    exposure: ['client-safe'],
+  }),
+);
 
-bus.registerClientSafeEvents(['community:thread.created', 'community:reply.created']);
-
-const eventKey = bus.ensureClientSafeEventKey('community:thread.created', 'SSE /events');
-sseClients.forEach(client => client.send(eventKey, { id: 'thr_123' }));
+sseClients.forEach(client => client.send('community:thread.created', { id: 'thr_123' }));
 ```
 
 This keeps internal events — session invalidation, security events, delivery status — from leaking to browser clients via SSE.

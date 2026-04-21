@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import type { z } from 'zod';
 import type { AuthVariables } from './authVariables';
 import type { SlingshotContext } from './context/slingshotContext';
+import type { Actor } from './identity';
 import type { UploadResult } from './storageAdapter';
 
 /**
@@ -144,6 +145,16 @@ export type AppVariables = {
    * directly.
    */
   slingshotCtx: SlingshotContext;
+  /**
+   * The resolved request actor, or `null` before actor resolution runs.
+   *
+   * @remarks
+   * Published by the framework actor-resolution middleware after auth and tenant
+   * context are available. Downstream code should prefer `getActor(c)`,
+   * `getActorId(c)`, and `getActorTenantId(c)` over reading legacy auth
+   * variables directly.
+   */
+  actor: Actor | null;
   /**
    * The active OpenTelemetry span for this request, or `undefined` when
    * tracing is not enabled.

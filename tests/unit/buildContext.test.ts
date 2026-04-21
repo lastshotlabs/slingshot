@@ -317,6 +317,42 @@ describe('buildContext lifecycle', () => {
   }) {
     const busShutdown = overrides?.busShutdown ?? mock(async () => {});
     const secretDestroy = overrides?.secretDestroy ?? mock(async () => {});
+    const events = {
+      definitions: {
+        register() {},
+        get() {
+          return undefined;
+        },
+        has() {
+          return false;
+        },
+        list() {
+          return [];
+        },
+        freeze() {},
+        frozen: false,
+      },
+      register() {},
+      get() {
+        return undefined;
+      },
+      list() {
+        return [];
+      },
+      publish(key: string, payload: unknown) {
+        return {
+          key,
+          payload,
+          meta: {
+            eventId: 'test-event-id',
+            occurredAt: new Date(0).toISOString(),
+            ownerPlugin: 'build-context-test',
+            exposure: ['internal'] as const,
+            scope: null,
+          },
+        };
+      },
+    };
     const app = createRouter();
     const entityRegistry = createEntityRegistry();
     const infra: Parameters<typeof buildContext>[0]['infra'] = {
@@ -381,6 +417,7 @@ describe('buildContext lifecycle', () => {
       bus: {
         shutdown: busShutdown,
       } as any,
+      events: events as any,
       secretBundle: {
         provider: {
           name: 'direct-secrets',

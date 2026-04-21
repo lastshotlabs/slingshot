@@ -55,6 +55,12 @@ export const GamePlayer = defineEntity('GamePlayer', {
       event: {
         key: 'game:player.joined',
         payload: ['sessionId', 'userId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'game-session',
+          resourceId: 'record:sessionId',
+        },
       },
     },
     delete: {
@@ -62,6 +68,12 @@ export const GamePlayer = defineEntity('GamePlayer', {
       event: {
         key: 'game:player.left',
         payload: ['sessionId', 'userId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'game-session',
+          resourceId: 'record:sessionId',
+        },
       },
     },
     operations: {
@@ -80,12 +92,6 @@ export const GamePlayer = defineEntity('GamePlayer', {
         middleware: ['hostOnlyGuard'],
       },
     },
-    clientSafeEvents: [
-      'game:player.joined',
-      'game:player.left',
-      'game:player.disconnected',
-      'game:player.reconnected',
-    ],
     permissions: {
       resourceType: 'game-player',
       actions: ['read', 'join', 'leave', 'kick'],

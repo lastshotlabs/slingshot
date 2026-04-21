@@ -1,12 +1,31 @@
 import { describe, expect, test } from 'bun:test';
-import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import { defineEvent } from '@lastshotlabs/slingshot-core';
 import { createTestFullServer } from '../setup-e2e';
+import { getServerContext } from '../../src/server';
 
-// Local dynamic-bus cast: the SSE E2E tests emit community:* events which are
-// declared via entity config (not module augmentation), so they're not in
-// SlingshotEventMap. Cast locally per engineering rule 14 rather than widening
-// the global type map.
-type DynamicEventBus = { emit(event: string, payload: Record<string, unknown>): void };
+const TEST_SSE_EVENT = 'test:sse.item.created';
+const TEST_SSE_OTHER_EVENT = 'test:sse.item.updated';
+
+function createSseDefinitionPlugin(
+  keys: string[] = [TEST_SSE_EVENT, TEST_SSE_OTHER_EVENT],
+) {
+  return {
+    name: 'test-sse-definitions',
+    setupMiddleware({ events }) {
+      for (const key of keys) {
+        events.register(
+          defineEvent(key as never, {
+            ownerPlugin: 'test-sse-definitions',
+            exposure: ['client-safe'],
+            resolveScope() {
+              return {};
+            },
+          }),
+        );
+      }
+    },
+  };
+}
 
 // Helper: read SSE chunks from a fetch response until we have `count` events or timeout
 async function readSseEvents(
@@ -42,13 +61,25 @@ async function readSseEvents(
   return events;
 }
 
+function publishRegisteredEvent(
+  server: { stop(close?: boolean): void | Promise<void> },
+  event: string,
+  payload: Record<string, unknown>,
+): void {
+  const ctx = getServerContext(server as object);
+  if (!ctx) {
+    throw new Error('SSE test server context is unavailable');
+  }
+  ctx.events.publish(event as never, payload as never, { source: 'system' });
+}
+
 describe('SSE E2E — startup validation', () => {
   test('throws when SSE path contains : (non-literal)', async () => {
     await expect(
       createTestFullServer({
         sse: {
           endpoints: {
-            '/__sse/:id': { events: ['community:thread.created'] },
+            '/__sse/:id': { events: [TEST_SSE_EVENT] },
           },
         },
       }),
@@ -60,7 +91,7 @@ describe('SSE E2E — startup validation', () => {
       createTestFullServer({
         sse: {
           endpoints: {
-            '/__sse/*': { events: ['community:thread.created'] },
+            '/__sse/*': { events: [TEST_SSE_EVENT] },
           },
         },
       }),
@@ -72,7 +103,7 @@ describe('SSE E2E — startup validation', () => {
       createTestFullServer({
         sse: {
           endpoints: {
-            '/events/feed': { events: ['community:thread.created'] },
+            '/events/feed': { events: [TEST_SSE_EVENT] },
           },
         },
       }),
@@ -82,12 +113,13 @@ describe('SSE E2E — startup validation', () => {
   test('throws on WS endpoint path collision', async () => {
     await expect(
       createTestFullServer({
+        plugins: [createSseDefinitionPlugin()],
         ws: {
           endpoints: { '/__sse/feed': {} },
         },
         sse: {
           endpoints: {
-            '/__sse/feed': { events: ['community:thread.created'] },
+            '/__sse/feed': { events: [TEST_SSE_EVENT] },
           },
         },
       }),
@@ -103,7 +135,9 @@ describe('SSE E2E — startup validation', () => {
           },
         },
       }),
-    ).rejects.toThrow(/cannot be streamed to clients/);
+    ).rejects.toThrow(
+      /not exposed as client-safe|not registered in the event definition registry|cannot be streamed to clients/,
+    );
   });
 
   test('throws when SSE endpoint includes unregistered custom event keys', async () => {
@@ -115,16 +149,17 @@ describe('SSE E2E — startup validation', () => {
           },
         },
       }),
-    ).rejects.toThrow(/is not registered as client-safe/);
+    ).rejects.toThrow(/not registered in the event definition registry/);
   });
 });
 
 describe('SSE E2E — auth', () => {
   test('default handler: unauthenticated fetch → 200 (stream opens)', async () => {
     const { url, cleanup } = await createTestFullServer({
+      plugins: [createSseDefinitionPlugin()],
       sse: {
         endpoints: {
-          '/__sse/feed': { events: ['community:thread.created'], heartbeat: false },
+          '/__sse/feed': { events: [TEST_SSE_EVENT], heartbeat: false },
         },
       },
     });
@@ -138,10 +173,11 @@ describe('SSE E2E — auth', () => {
 
   test('custom upgrade returning Response → 401', async () => {
     const { url, cleanup } = await createTestFullServer({
+      plugins: [createSseDefinitionPlugin()],
       sse: {
         endpoints: {
           '/__sse/secure': {
-            events: ['community:thread.created'],
+            events: [TEST_SSE_EVENT],
             heartbeat: false,
             upgrade: async () => new Response('Unauthorized', { status: 401 }),
           },
@@ -157,11 +193,12 @@ describe('SSE E2E — auth', () => {
 
 describe('SSE E2E — event delivery', () => {
   test('emit matching event on bus → formatted event appears in response body', async () => {
-    const { url, cleanup, bus } = await createTestFullServer({
+    const { url, cleanup, server } = await createTestFullServer({
+      plugins: [createSseDefinitionPlugin()],
       sse: {
         endpoints: {
           '/__sse/feed': {
-            events: ['community:thread.created'],
+            events: [TEST_SSE_EVENT],
             heartbeat: false,
           },
         },
@@ -174,15 +211,14 @@ describe('SSE E2E — event delivery', () => {
     // Give the stream a moment to register the client
     await new Promise(r => setTimeout(r, 50));
 
-    // Emit on the bus
-    (bus as unknown as DynamicEventBus).emit('community:thread.created', {
+    publishRegisteredEvent(server, TEST_SSE_EVENT, {
       id: 'thread-1',
       title: 'Hello',
     });
 
     const events = await readSseEvents(res, 1);
     expect(events.length).toBeGreaterThan(0);
-    const eventLine = events.find(e => e.includes('community:thread.created'));
+    const eventLine = events.find(e => e.includes(TEST_SSE_EVENT));
     expect(eventLine).toBeDefined();
     expect(eventLine).toContain('thread-1');
 
@@ -191,11 +227,12 @@ describe('SSE E2E — event delivery', () => {
   });
 
   test('emit event NOT in epConfig.events → does not appear in stream', async () => {
-    const { url, cleanup, bus } = await createTestFullServer({
+    const { url, cleanup, server } = await createTestFullServer({
+      plugins: [createSseDefinitionPlugin()],
       sse: {
         endpoints: {
           '/__sse/feed': {
-            events: ['community:thread.created'],
+            events: [TEST_SSE_EVENT],
             heartbeat: false,
           },
         },
@@ -208,10 +245,10 @@ describe('SSE E2E — event delivery', () => {
     await new Promise(r => setTimeout(r, 50));
 
     // Emit an event NOT in the list
-    (bus as unknown as DynamicEventBus).emit('community:reply.created', { id: 'reply-1' });
+    publishRegisteredEvent(server, TEST_SSE_OTHER_EVENT, { id: 'reply-1' });
 
     const events = await readSseEvents(res, 1, 300);
-    const replyEvent = events.find(e => e.includes('community:reply.created'));
+    const replyEvent = events.find(e => e.includes(TEST_SSE_OTHER_EVENT));
     expect(replyEvent).toBeUndefined();
 
     await res.body?.cancel();
@@ -219,11 +256,12 @@ describe('SSE E2E — event delivery', () => {
   });
 
   test('filter suppresses event when filter returns false', async () => {
-    const { url, cleanup, bus } = await createTestFullServer({
+    const { url, cleanup, server } = await createTestFullServer({
+      plugins: [createSseDefinitionPlugin()],
       sse: {
         endpoints: {
           '/__sse/feed': {
-            events: ['community:thread.created'],
+            events: [TEST_SSE_EVENT],
             heartbeat: false,
             filter: () => false,
           },
@@ -235,24 +273,22 @@ describe('SSE E2E — event delivery', () => {
     expect(res.status).toBe(200);
 
     await new Promise(r => setTimeout(r, 50));
-    (bus as unknown as DynamicEventBus).emit('community:thread.created', { id: 'thread-x' });
+    publishRegisteredEvent(server, TEST_SSE_EVENT, { id: 'thread-x' });
 
     const events = await readSseEvents(res, 1, 300);
-    const eventLine = events.find(e => e.includes('community:thread.created'));
+    const eventLine = events.find(e => e.includes(TEST_SSE_EVENT));
     expect(eventLine).toBeUndefined();
 
     await res.body?.cancel();
     await cleanup();
   });
 
-  test('registered custom client-safe events stream successfully', async () => {
+  test('registered custom client-safe event definitions stream successfully', async () => {
     const customEvent = 'content:test.document.created';
-    // Create a bus instance and register the custom event before server creation
-    const customBus = createInProcessAdapter();
-    customBus.registerClientSafeEvents([customEvent]);
+    const customPlugin = createSseDefinitionPlugin([customEvent]);
 
-    const { url, cleanup, bus } = await createTestFullServer({
-      eventBus: customBus,
+    const { url, cleanup, server } = await createTestFullServer({
+      plugins: [customPlugin],
       sse: {
         endpoints: {
           '/__sse/feed': {
@@ -267,7 +303,10 @@ describe('SSE E2E — event delivery', () => {
     expect(res.status).toBe(200);
 
     await new Promise(r => setTimeout(r, 50));
-    (bus as any).emit(customEvent, { id: 'doc-1', title: 'Registered custom event' });
+    publishRegisteredEvent(server, customEvent, {
+      id: 'doc-1',
+      title: 'Registered custom event',
+    });
 
     const events = await readSseEvents(res, 1);
     expect(events.length).toBeGreaterThan(0);
@@ -282,11 +321,12 @@ describe('SSE E2E — event delivery', () => {
 
 describe('SSE E2E — disconnect', () => {
   test('after cancel, no further chunks arrive on reader', async () => {
-    const { url, cleanup, bus } = await createTestFullServer({
+    const { url, cleanup, server } = await createTestFullServer({
+      plugins: [createSseDefinitionPlugin()],
       sse: {
         endpoints: {
           '/__sse/feed': {
-            events: ['community:thread.created'],
+            events: [TEST_SSE_EVENT],
             heartbeat: false,
           },
         },
@@ -307,7 +347,7 @@ describe('SSE E2E — disconnect', () => {
     await new Promise(r => setTimeout(r, 100));
 
     // Emit — should not raise errors on server side
-    (bus as unknown as DynamicEventBus).emit('community:thread.created', {
+    publishRegisteredEvent(server, TEST_SSE_EVENT, {
       id: 'after-disconnect',
     });
 

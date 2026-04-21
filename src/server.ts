@@ -1,9 +1,9 @@
 import { validateServerConfig } from '@framework/config/schema';
+import { publishAppShutdownOnce } from '@framework/buildContext';
 import { log } from '@framework/lib/logger';
 import { getContextStoreInfra } from '@framework/persistence/internalRepoResolution';
 import { runPluginTeardown } from '@framework/runPluginLifecycle';
 import { routePatternCanMatchLiteral } from '@framework/sse/collision';
-// ensureClientSafeEventKey is now an instance method on SlingshotEventBus
 import { type SseFilter, createSseRegistry, createSseUpgradeHandler } from '@framework/sse/index';
 import { handleIncomingEvent } from '@framework/ws/dispatch';
 import {
@@ -25,10 +25,10 @@ import { disconnectRedis } from '@lib/redis';
 import type { Server, WebSocketHandler } from 'bun';
 import type { Connection } from 'mongoose';
 import type {
-  ClientSafeEventKey,
+  EventKey,
+  EventEnvelope,
   RuntimeServerInstance,
   SlingshotEventBus,
-  SlingshotEventMap,
   SlingshotPlugin,
   SlingshotRuntime,
 } from '@lastshotlabs/slingshot-core';
@@ -227,7 +227,10 @@ export const createServer = async <T extends object = object>(
   const { workersDir, enableWorkers = true, ws: wsConfig } = config;
 
   const sseRegistry = createSseRegistry();
-  const sseBusListeners: Array<{ key: ClientSafeEventKey; listener: (p: unknown) => void }> = [];
+  const sseBusListeners: Array<{
+    key: string;
+    listener: (envelope: EventEnvelope) => void;
+  }> = [];
 
   if (config.sse) {
     // Read bus from context (replaces appMeta WeakMap)
@@ -265,12 +268,31 @@ export const createServer = async <T extends object = object>(
       const upgradeHandler = epConfig.upgrade ?? createSseUpgradeHandler(ssePath, ctx.userResolver);
 
       for (const rawKey of epConfig.events) {
-        const key = bus.ensureClientSafeEventKey(rawKey, `sse.endpoints["${ssePath}"].events`);
-        const listener = (payload: unknown) => {
-          sseRegistry.fanout(ssePath, key, payload, epConfig.filter as SseFilter | undefined);
+        const definition = ctx.events.definitions.get(rawKey as never);
+        if (!definition) {
+          throw new Error(
+            `[sse] "${rawKey}" is not registered in the event definition registry.`,
+          );
+        }
+        if (!definition.exposure.includes('client-safe')) {
+          throw new Error(
+            `[sse] "${rawKey}" is not exposed as client-safe in the event definition registry.`,
+          );
+        }
+        const key = rawKey as EventKey;
+        const listener = (envelope: EventEnvelope) => {
+          if (!envelope.meta.exposure.includes('client-safe')) {
+            return;
+          }
+          sseRegistry.fanout(
+            ssePath,
+            key,
+            envelope.payload,
+            epConfig.filter as SseFilter | undefined,
+          );
         };
-        bus.on(key as keyof SlingshotEventMap, listener);
-        sseBusListeners.push({ key, listener });
+        bus.onEnvelope(rawKey, listener);
+        sseBusListeners.push({ key: rawKey, listener });
       }
 
       // 6. Mount Hono GET route
@@ -581,7 +603,7 @@ export const createServer = async <T extends object = object>(
         // still publish to rooms (e.g. "user X disconnected" broadcasts).
         const slingshotPlugins: SlingshotPlugin[] = [...ctx.plugins];
         const slingshotBus: SlingshotEventBus = ctx.bus;
-        slingshotBus.emit('app:shutdown', { signal });
+        publishAppShutdownOnce(ctx, signal);
 
         try {
           await runPluginTeardown(slingshotPlugins);
@@ -600,7 +622,7 @@ export const createServer = async <T extends object = object>(
         }
 
         for (const { key, listener } of sseBusListeners)
-          slingshotBus.off(key as keyof SlingshotEventMap, listener as (payload: unknown) => void);
+          slingshotBus.offEnvelope(key, listener);
 
         try {
           await slingshotBus.shutdown?.();

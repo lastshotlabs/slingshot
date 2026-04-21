@@ -1,5 +1,5 @@
 import { getAuthRuntimeFromRequest } from '@lastshotlabs/slingshot-auth';
-import { evaluateAuthUserAccess } from '@lastshotlabs/slingshot-core';
+import { evaluateAuthUserAccess, getActor } from '@lastshotlabs/slingshot-core';
 
 function readString(c: { get(key: string): unknown }, key: string): string | null {
   const value = c.get(key);
@@ -39,18 +39,18 @@ export async function getAuthenticatedAccountGuardFailure(c: {
     header?(name: string): string | undefined;
   };
 }): Promise<{ error: string; status: 403 } | null> {
-  const userId = c.get('authUserId');
-  if (typeof userId !== 'string' || userId.length === 0) {
+  const actor = getActor(c as Parameters<typeof getActor>[0]);
+  if (actor.kind !== 'user' || !actor.id) {
     throw new Error(
-      '[security] authenticated route guard requires an authenticated authUserId context',
+      '[security] authenticated route guard requires an authenticated user actor',
     );
   }
 
   const runtime = getAuthRuntimeFromRequest(c);
   const requestInfo = readRequestInfo(c);
   const decision = await evaluateAuthUserAccess(runtime, {
-    userId,
-    tenantId: readString(c, 'tenantId'),
+    userId: actor.id,
+    tenantId: actor.tenantId,
     requestId: readString(c, 'requestId') ?? undefined,
     correlationId: readString(c, 'correlationId') ?? undefined,
     ip: readString(c, 'clientIp'),

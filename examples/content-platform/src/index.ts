@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { edgeRuntime } from '../../../packages/runtime-edge/src/index.ts';
 import { type KvNamespace, createKvIsrCache } from '../../../packages/runtime-edge/src/kv-isr.ts';
 import { createAssetsPlugin } from '../../../packages/slingshot-assets/src/index.ts';
@@ -12,9 +13,9 @@ import type { CreateAppConfig } from '../../../src/index.ts';
 import { createServer } from '../../../src/index.ts';
 import { renderer } from './renderer.ts';
 
-const serverRoutesDir = new URL('../server/routes/', import.meta.url).pathname;
-const assetsManifest = new URL('../client-manifest.json', import.meta.url).pathname;
-const staticDir = new URL('../dist/static/', import.meta.url).pathname;
+const serverRoutesDir = fileURLToPath(new URL('../server/routes/', import.meta.url));
+const assetsManifest = fileURLToPath(new URL('../client-manifest.json', import.meta.url));
+const staticDir = fileURLToPath(new URL('../dist/static/', import.meta.url));
 
 const inMemoryKv: KvNamespace = {
   async get() {

@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { createRoute, errorResponse, withSecurity } from '@lastshotlabs/slingshot-core';
 import { createRouter, getClientIp } from '@lastshotlabs/slingshot-core';
 import type { AuthRateLimitConfig } from '../config/authConfig';
+import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';
 
 export interface SessionsRouterOptions {
@@ -282,7 +283,7 @@ export const createSessionsRouter = (
           emailOtpHash = hash;
           const user = adapter.getUser ? await adapter.getUser(userId) : null;
           if (user?.email) {
-            eventBus.emit('auth:delivery.email_otp', { email: user.email, code });
+            publishAuthEvent(runtime.events, 'auth:delivery.email_otp', { email: user.email, code });
           }
         }
       }

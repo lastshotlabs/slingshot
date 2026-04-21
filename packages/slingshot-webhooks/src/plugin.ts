@@ -22,6 +22,7 @@ import type { InboundProvider } from './types/inbound';
 import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
+import type { GovernedWebhookRuntime } from './manifest/runtime';
 
 /**
  * Runs a Hono middleware and returns its response if it blocked (did not call
@@ -84,6 +85,7 @@ function buildInboundPublicPaths(
 
 async function activate(
   bus: SlingshotEventBus,
+  events: PluginSetupContext['events'],
   config: Readonly<WebhookPluginConfig>,
   queue: WebhookQueue,
   runtime: WebhookAdapter,
@@ -133,7 +135,7 @@ async function activate(
   };
 
   await queue.start(processor);
-  return wireEventSubscriptions(bus, config, queue, runtime);
+  return wireEventSubscriptions(bus, events, config, queue, runtime);
 }
 
 async function resolveTestDelivery(
@@ -152,9 +154,21 @@ async function resolveTestDelivery(
     endpointId,
     timestamp: new Date().toISOString(),
   });
+  const occurredAt = new Date().toISOString();
   const delivery = await runtime.createDelivery({
     endpointId,
-    event: 'webhook:test',
+    event: 'webhook:test' as never,
+    eventId: crypto.randomUUID(),
+    occurredAt,
+    subscriber: {
+      ownerType: endpoint.ownerType,
+      ownerId: endpoint.ownerId,
+      tenantId: endpoint.tenantId ?? null,
+    },
+    sourceScope:
+      endpoint.tenantId === undefined || endpoint.tenantId === null
+        ? null
+        : { tenantId: endpoint.tenantId },
     payload,
     maxAttempts: config.queueConfig?.maxAttempts ?? 5,
   });
@@ -165,7 +179,10 @@ async function resolveTestDelivery(
       endpointId,
       url: endpoint.url,
       secret: endpoint.secret,
-      event: 'webhook:test',
+      event: 'webhook:test' as never,
+      eventId: delivery.eventId,
+      occurredAt,
+      subscriber: delivery.subscriber,
       payload,
       attempts: 0,
     });
@@ -214,7 +231,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
     publicPaths: inboundRoutePatterns,
     csrfExemptPaths: inboundRoutePatterns,
 
-    async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       if (config.adapter) {
         runtimeAdapter = config.adapter;
       } else {
@@ -232,15 +249,20 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
             webhooksAdminGuard: requireWebhookAdmin,
           },
         });
-        await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
+        await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
       }
     },
 
-    async setupRoutes({ app, bus, config: frameworkConfig }: PluginSetupContext): Promise<void> {
+    async setupRoutes({
+      app,
+      bus,
+      config: frameworkConfig,
+      events,
+    }: PluginSetupContext): Promise<void> {
       const disabled = new Set(config.disableRoutes ?? []);
 
       if (!disabled.has(WEBHOOK_ROUTES.ENDPOINTS)) {
-        await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus });
+        await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
         app.post(`${mountPath}/endpoints/:id/test`, requireWebhookAdmin, async c => {
           const adapter = runtimeAdapter;
@@ -265,13 +287,23 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       }
     },
 
-    async setupPost({ bus, config: frameworkConfig, app }: PluginSetupContext): Promise<void> {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    async setupPost({
+      bus,
+      config: frameworkConfig,
+      app,
+      events,
+    }: PluginSetupContext): Promise<void> {
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
       if (!runtimeAdapter) {
         throw new Error('[slingshot-webhooks] Manifest adapters were not resolved during setup');
       }
+      if ('initializeGovernance' in runtimeAdapter) {
+        await (runtimeAdapter as WebhookAdapter & GovernedWebhookRuntime).initializeGovernance(
+          events.definitions,
+        );
+      }
       getPluginState(app).set(WEBHOOKS_PLUGIN_STATE_KEY, runtimeAdapter);
-      unsubscribers = await activate(bus, config, queue, runtimeAdapter);
+      unsubscribers = await activate(bus, events, config, queue, runtimeAdapter);
     },
 
     async teardown(): Promise<void> {

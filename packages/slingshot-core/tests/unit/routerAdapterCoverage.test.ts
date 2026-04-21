@@ -3,17 +3,11 @@ import type { SlingshotEventBus } from '../../src/eventBus';
 import { createRouterAdapter } from '../../src/routerAdapter';
 
 function createMockBus(keys: string[] = []): SlingshotEventBus {
-  const clientSafe = new Set<string>(keys);
   return {
     emit: mock(() => {}),
     on: mock(() => {}),
     off: mock(() => {}),
     shutdown: mock(async () => {}),
-    clientSafeKeys: clientSafe,
-    registerClientSafeEvents: mock((newKeys: string[]) => {
-      for (const k of newKeys) clientSafe.add(k);
-    }),
-    ensureClientSafeEventKey: mock((key: string) => key),
   };
 }
 

@@ -2,7 +2,7 @@ import { createAuditLogProvider } from '@framework/auditLog';
 import type { AuditLogOptions } from '@framework/auditLog';
 import type { Context, MiddlewareHandler } from 'hono';
 import type { AppEnv, AuditLogEntry, AuditLogProvider } from '@lastshotlabs/slingshot-core';
-import { getClientIp } from '@lastshotlabs/slingshot-core';
+import { getActor, getClientIp } from '@lastshotlabs/slingshot-core';
 
 export interface AuditLogMiddlewareOptions extends AuditLogOptions {
   provider?: AuditLogProvider;
@@ -68,13 +68,14 @@ export const auditLog = (options: AuditLogMiddlewareOptions): MiddlewareHandler<
     const path = c.req.path;
     if (options.exclude?.paths?.some(p => (typeof p === 'string' ? p === path : p.test(path))))
       return;
+    const actor = getActor(c);
 
     let entry: AuditLogEntry = {
       id: crypto.randomUUID(),
       requestId: c.get('requestId'),
-      userId: c.get('authUserId') ?? null,
-      sessionId: c.get('sessionId') ?? null,
-      tenantId: c.get('tenantId') ?? null,
+      userId: actor.id,
+      sessionId: actor.sessionId,
+      tenantId: actor.tenantId,
       method: c.req.method,
       path,
       status: c.res.status,

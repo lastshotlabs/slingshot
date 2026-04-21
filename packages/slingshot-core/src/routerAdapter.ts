@@ -1,4 +1,5 @@
 import type { SlingshotEventBus, SlingshotEventMap } from './eventBus';
+import type { EventEnvelope } from './eventEnvelope';
 
 /**
  * Configuration for `createRouterAdapter`.
@@ -86,8 +87,7 @@ function resolveAdapter(event: string, opts: RouterAdapterOptions): SlingshotEve
  * backing adapter based on longest-prefix namespace matching.
  *
  * `emit`, `on`, and `off` are each forwarded to the single adapter that owns the event's
- * namespace. `shutdown` and `registerClientSafeEvents` are forwarded to every adapter.
- * `clientSafeKeys` is the union of all adapter key sets.
+ * namespace. `shutdown` is forwarded to every adapter.
  *
  * @param opts - Default adapter plus optional namespace → adapter overrides.
  * @returns A `SlingshotEventBus` that transparently routes events across multiple adapters.
@@ -139,6 +139,14 @@ export function createRouterAdapter(opts: RouterAdapterOptions): SlingshotEventB
       resolveAdapter(event as string, opts).on(event, listener, subscriptionOpts);
     },
 
+    onEnvelope<K extends keyof SlingshotEventMap>(
+      event: K,
+      listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
+      subscriptionOpts?: import('./eventBus').SubscriptionOpts,
+    ): void {
+      resolveAdapter(event as string, opts).onEnvelope(event, listener, subscriptionOpts);
+    },
+
     off<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (payload: SlingshotEventMap[K]) => void,
@@ -146,28 +154,17 @@ export function createRouterAdapter(opts: RouterAdapterOptions): SlingshotEventB
       resolveAdapter(event as string, opts).off(event, listener);
     },
 
+    offEnvelope<K extends keyof SlingshotEventMap>(
+      event: K,
+      listener: (envelope: EventEnvelope<K>) => void,
+    ): void {
+      resolveAdapter(event as string, opts).offEnvelope(event, listener);
+    },
+
     async shutdown(): Promise<void> {
       for (const adapter of allAdapters()) {
         await adapter.shutdown?.();
       }
-    },
-
-    get clientSafeKeys(): ReadonlySet<string> {
-      const keys = new Set<string>();
-      for (const adapter of allAdapters()) {
-        for (const key of adapter.clientSafeKeys) keys.add(key);
-      }
-      return keys;
-    },
-
-    registerClientSafeEvents(keys: string[]): void {
-      for (const adapter of allAdapters()) {
-        adapter.registerClientSafeEvents(keys);
-      }
-    },
-
-    ensureClientSafeEventKey(key: string, source?: string) {
-      return resolveAdapter(key, opts).ensureClientSafeEventKey(key, source);
     },
   };
 }

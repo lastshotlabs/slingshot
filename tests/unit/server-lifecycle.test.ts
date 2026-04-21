@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { getContext } from '@lastshotlabs/slingshot-core';
+import { defineEvent, getContext } from '@lastshotlabs/slingshot-core';
 import { createServer, getServerContext } from '../../src/server';
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,23 @@ function waitForClose(ws: WebSocket): Promise<{ code: number; reason: string }> 
       once: true,
     });
   });
+}
+
+function createSseDefinitionPlugin(key: string): SlingshotPlugin {
+  return {
+    name: `sse-def-${key}`,
+    setupMiddleware({ events }) {
+      events.register(
+        defineEvent(key as never, {
+          ownerPlugin: 'server-lifecycle-test',
+          exposure: ['client-safe'],
+          resolveScope() {
+            return {};
+          },
+        }),
+      );
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -165,12 +182,8 @@ describe('port validation', () => {
 
 describe('SSE endpoints', () => {
   test('mounts SSE endpoint with bus subscription', async () => {
-    const plugin: SlingshotPlugin = {
-      name: 'sse-plugin',
-      setupPost({ app }) {
-        getContext(app).bus.registerClientSafeEvents(['test:item.created']);
-      },
-    };
+    const eventKey = 'test:item.created';
+    const plugin = createSseDefinitionPlugin(eventKey);
 
     server = await createServer({
       ...baseConfig,
@@ -180,7 +193,7 @@ describe('SSE endpoints', () => {
       sse: {
         endpoints: {
           '/__sse/items': {
-            events: ['test:item.created'],
+            events: [eventKey],
             heartbeat: false,
           },
         },
@@ -200,7 +213,7 @@ describe('SSE endpoints', () => {
 
     // Emit an event via the bus and verify it arrives
     const ctx = getServerContext(server)!;
-    ctx.bus.emit('test:item.created' as any, { id: 'abc' });
+    ctx.events.publish(eventKey as never, { id: 'abc' } as never, { source: 'system' });
 
     const { value: v2 } = await withTimeout(reader.read(), 2000, 'SSE event');
     const text = decoder.decode(v2);
@@ -217,12 +230,20 @@ describe('SSE endpoints', () => {
 
 describe('SSE validation errors', () => {
   test('rejects :param in SSE path', async () => {
-    const plugin: SlingshotPlugin = {
-      name: 'sse-p1',
-      setupPost({ app }) {
-        getContext(app).bus.registerClientSafeEvents(['test:x']);
-      },
-    };
+      const plugin: SlingshotPlugin = {
+        name: 'sse-p1',
+        setupPost({ events }) {
+          events.register(
+            defineEvent('test:x', {
+              ownerPlugin: 'sse-p1',
+              exposure: ['client-safe'],
+              resolveScope() {
+                return { resourceType: 'test', resourceId: 'x' };
+              },
+            }),
+          );
+        },
+      };
     await expect(
       createServer({
         ...baseConfig,
@@ -233,12 +254,20 @@ describe('SSE validation errors', () => {
   });
 
   test('rejects path not under /__sse/', async () => {
-    const plugin: SlingshotPlugin = {
-      name: 'sse-p2',
-      setupPost({ app }) {
-        getContext(app).bus.registerClientSafeEvents(['test:x']);
-      },
-    };
+      const plugin: SlingshotPlugin = {
+        name: 'sse-p2',
+        setupPost({ events }) {
+          events.register(
+            defineEvent('test:x', {
+              ownerPlugin: 'sse-p2',
+              exposure: ['client-safe'],
+              resolveScope() {
+                return { resourceType: 'test', resourceId: 'x' };
+              },
+            }),
+          );
+        },
+      };
     await expect(
       createServer({
         ...baseConfig,
@@ -249,12 +278,20 @@ describe('SSE validation errors', () => {
   });
 
   test('rejects collision with WS endpoint', async () => {
-    const plugin: SlingshotPlugin = {
-      name: 'sse-p3',
-      setupPost({ app }) {
-        getContext(app).bus.registerClientSafeEvents(['test:x']);
-      },
-    };
+      const plugin: SlingshotPlugin = {
+        name: 'sse-p3',
+        setupPost({ events }) {
+          events.register(
+            defineEvent('test:x', {
+              ownerPlugin: 'sse-p3',
+              exposure: ['client-safe'],
+              resolveScope() {
+                return { resourceType: 'test', resourceId: 'x' };
+              },
+            }),
+          );
+        },
+      };
     await expect(
       createServer({
         ...baseConfig,
@@ -268,13 +305,21 @@ describe('SSE validation errors', () => {
   test('rejects collision with Hono GET route', async () => {
     const plugin: SlingshotPlugin = {
       name: 'sse-p4',
-      setupRoutes({ app }) {
-        app.get('/__sse/items', c => c.text('x'));
-      },
-      setupPost({ app }) {
-        getContext(app).bus.registerClientSafeEvents(['test:x']);
-      },
-    };
+        setupRoutes({ app }) {
+          app.get('/__sse/items', c => c.text('x'));
+        },
+        setupPost({ events }) {
+          events.register(
+            defineEvent('test:x', {
+              ownerPlugin: 'sse-p4',
+              exposure: ['client-safe'],
+              resolveScope() {
+                return { resourceType: 'test', resourceId: 'x' };
+              },
+            }),
+          );
+        },
+      };
     await expect(
       createServer({
         ...baseConfig,
@@ -378,6 +423,36 @@ describe('graceful shutdown', () => {
     server = null;
   });
 
+  test('app:shutdown emits once across graceful shutdown and ctx.destroy()', async () => {
+    server = await createServer({
+      ...baseConfig,
+      hostname: '127.0.0.1',
+      port: 0,
+    });
+
+    const ctx = getServerContext(server)!;
+    const originalPublish = ctx.events.publish.bind(ctx.events);
+    const shutdownSignals: string[] = [];
+
+    (ctx.events as typeof ctx.events & {
+      publish: typeof ctx.events.publish;
+    }).publish = ((key, payload, publishContext) => {
+      if (key === 'app:shutdown') {
+        shutdownSignals.push((payload as { signal: string }).signal);
+      }
+      return originalPublish(key, payload, publishContext);
+    }) as typeof ctx.events.publish;
+
+    const shutdownCb = getLastShutdownCallback();
+    const exitCode = await withTimeout(shutdownCb('SIGTERM'), 5_000, 'shutdown');
+    expect(exitCode).toBe(0);
+
+    await ctx.destroy();
+
+    expect(shutdownSignals).toEqual(['SIGTERM']);
+    server = null;
+  });
+
   test('shutdown with heartbeat stops timer', async () => {
     server = await createServer({
       ...baseConfig,
@@ -418,19 +493,15 @@ describe('graceful shutdown', () => {
   });
 
   test('shutdown closes SSE streams', async () => {
-    const plugin: SlingshotPlugin = {
-      name: 'sse-sd',
-      setupPost({ app }) {
-        getContext(app).bus.registerClientSafeEvents(['test:sd']);
-      },
-    };
+    const eventKey = 'test:sd';
+    const plugin = createSseDefinitionPlugin(eventKey);
 
     server = await createServer({
       ...baseConfig,
       hostname: '127.0.0.1',
       port: 0,
       plugins: [plugin],
-      sse: { endpoints: { '/__sse/sd': { events: ['test:sd'], heartbeat: false } } },
+      sse: { endpoints: { '/__sse/sd': { events: [eventKey], heartbeat: false } } },
     });
 
     // Open an SSE connection

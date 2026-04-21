@@ -78,7 +78,15 @@ export const Reply = defineEntity('Reply', {
       },
       event: {
         key: 'community:reply.created',
-        payload: ['id', 'threadId', 'containerId', 'parentId', 'authorId'],
+        payload: ['id', 'tenantId', 'threadId', 'containerId', 'parentId', 'authorId'],
+        exposure: ['client-safe', 'tenant-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          userId: 'record:authorId',
+          actorId: 'ctx:actorId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
       },
       middleware: [
         'pollRequiredGuard',
@@ -101,7 +109,17 @@ export const Reply = defineEntity('Reply', {
         requires: 'community:container.delete-content',
         scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
       },
-      event: { key: 'community:reply.deleted', payload: ['id', 'threadId', 'containerId'] },
+      event: {
+        key: 'community:reply.deleted',
+        payload: ['id', 'tenantId', 'threadId', 'containerId'],
+        exposure: ['client-safe', 'tenant-webhook'],
+        scope: {
+          tenantId: 'record:tenantId',
+          actorId: 'ctx:actorId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
+      },
       middleware: ['replyCountDecrement'],
     },
 
@@ -110,13 +128,6 @@ export const Reply = defineEntity('Reply', {
       listByThread: { auth: 'none' },
       updateComponents: { auth: 'userAuth' },
     },
-
-    clientSafeEvents: [
-      'community:reply.created',
-      'community:reply.deleted',
-      'community:reply.embeds.resolved',
-    ],
-
     middleware: {
       pollRequiredGuard: true,
       attachmentRequiredGuard: true,

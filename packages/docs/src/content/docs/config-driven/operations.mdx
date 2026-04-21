@@ -9,6 +9,16 @@ Operations are plain JSON config objects with a `kind` field. The framework read
 
 Each operation is a JSON object like:
 
+Generated operation routes are framework-owned route shells. If the default behavior is close but
+not sufficient, prefer an entity-route executor override over replacing the route manually. Use:
+
+- `overrides.operations.<name>` to replace only a named operation executor
+- `defineEntityRoute(...)` for additional routes that live under the entity base path
+- a manual router in `setupRoutes()` only when the endpoint genuinely does not fit one entity shell
+
+Extra routes and generated routes share one planner, so effective duplicates such as `/:id` and
+`/:slug` are rejected at startup even when the literal strings differ.
+
 ```json
 { "kind": "lookup", "fields": { "roomId": "param:roomId" }, "returns": "many" }
 { "kind": "transition", "field": "status", "from": "sent", "to": "delivered", "match": { "id": "param:id" } }

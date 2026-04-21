@@ -54,21 +54,15 @@ const baseEntityConfig: ResolvedEntityConfig = {
 // ---------------------------------------------------------------------------
 
 function createMockBus() {
-  const registeredClientSafe: string[][] = [];
   const emitted: Array<{ key: string; payload: unknown }> = [];
   const bus: SlingshotEventBus = {
-    clientSafeKeys: new Set<string>(),
-    registerClientSafeEvents: mock((keys: string[]) => {
-      registeredClientSafe.push(keys);
-    }),
-    ensureClientSafeEventKey: mock((key: string) => key),
     emit: mock((event: string, payload: unknown) => {
       emitted.push({ key: event, payload });
     }) as unknown as SlingshotEventBus['emit'],
     on: mock(() => {}),
     off: mock(() => {}),
   };
-  return { bus, registeredClientSafe, emitted };
+  return { bus, emitted };
 }
 
 // ---------------------------------------------------------------------------
@@ -76,27 +70,6 @@ function createMockBus() {
 // ---------------------------------------------------------------------------
 
 describe('applyRouteConfig', () => {
-  describe('clientSafeEvents registration', () => {
-    it('registers clientSafeEvents on the bus', () => {
-      const { router } = createMockRouter();
-      const { bus, registeredClientSafe } = createMockBus();
-      const routeConfig: EntityRouteConfig = {
-        clientSafeEvents: ['post:created', 'post:updated'],
-      };
-      applyRouteConfig(router, baseEntityConfig, routeConfig, { bus });
-      expect(registeredClientSafe).toHaveLength(1);
-      expect(registeredClientSafe[0]).toEqual(['post:created', 'post:updated']);
-    });
-
-    it('skips clientSafeEvents registration when no bus', () => {
-      const { router } = createMockRouter();
-      const routeConfig: EntityRouteConfig = {
-        clientSafeEvents: ['post:created'],
-      };
-      expect(() => applyRouteConfig(router, baseEntityConfig, routeConfig, {})).not.toThrow();
-    });
-  });
-
   describe('permission registry', () => {
     it('registers permission resource type when permissionRegistry provided', () => {
       const { router } = createMockRouter();

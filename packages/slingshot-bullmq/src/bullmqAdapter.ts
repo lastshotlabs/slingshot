@@ -2,15 +2,16 @@ import { Queue, Worker } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
 import { z } from 'zod';
 import type {
-  ClientSafeEventKey,
+  EventEnvelope,
   EventBusSerializationOptions,
   SlingshotEventBus,
   SlingshotEventMap,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
 import {
-  FORBIDDEN_CLIENT_PREFIXES,
   JSON_SERIALIZER,
+  createRawEventEnvelope,
+  isEventEnvelope,
   validateEventPayload,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -103,7 +104,7 @@ interface PendingEnqueue {
   queue: Queue;
   /** The bus event key (e.g. `entity:post.created`). */
   event: string;
-  /** The serialised event payload object. */
+  /** The serialised event envelope object. */
   payload: object;
   /** Number of enqueue attempts made so far (starts at 1 after the first failure). */
   attempts: number;
@@ -201,10 +202,17 @@ export function createBullMQAdapter(
   const attempts = opts.attempts ?? 3;
   const eventSerializer = serializer ?? JSON_SERIALIZER;
   const validationMode = opts.validation ?? 'off';
-  const listeners = new Map<string, Set<(payload: unknown) => void | Promise<void>>>();
+  const envelopeListeners = new Map<string, Set<(envelope: EventEnvelope) => void | Promise<void>>>();
+  const payloadListenerWrappers = new Map<
+    string,
+    Map<
+      (payload: unknown) => void | Promise<void>,
+      (envelope: EventEnvelope) => void | Promise<void>
+    >
+  >();
 
   // Track durable listeners so off() can detect and reject them
-  const durableListeners = new Map<string, Set<(payload: unknown) => void | Promise<void>>>();
+  const durableListeners = new Map<string, Set<(envelope: EventEnvelope) => void | Promise<void>>>();
 
   // Track all created queues and workers for graceful shutdown
   const queues: Queue[] = [];
@@ -301,79 +309,24 @@ export function createBullMQAdapter(
     if (pendingBuffer.length > 0) scheduleDrain();
   }
 
-  const _clientSafeKeys: Set<string> = new Set<string>();
-
   return {
-    get clientSafeKeys(): ReadonlySet<string> {
-      return _clientSafeKeys;
-    },
-
-    /**
-     * Registers a set of event keys as safe to stream to browser clients via SSE.
-     *
-     * Each key is checked against `FORBIDDEN_CLIENT_PREFIXES` before registration.
-     * Multiple calls are additive — already-registered keys are not removed.
-     *
-     * @param keys - Array of event key strings to mark as client-safe
-     *   (e.g. `['entity:post.created', 'entity:comment.updated']`).
-     * @returns `void`. Throws synchronously if any key matches a forbidden prefix.
-     * @throws {Error} If any key starts with a forbidden namespace prefix
-     *   (e.g. `security.*`, `auth:*`).
-     */
-    registerClientSafeEvents(keys: string[]): void {
-      for (const key of keys) {
-        const forbidden = FORBIDDEN_CLIENT_PREFIXES.find(p => key.startsWith(p));
-        if (forbidden) {
-          throw new Error(
-            `Cannot register "${key}" as client-safe: "${forbidden}" namespace is forbidden`,
-          );
-        }
-        _clientSafeKeys.add(key);
-      }
-    },
-
-    /**
-     * Validates that `key` is registered as client-safe and returns it as a
-     * branded `ClientSafeEventKey`.
-     *
-     * @param key - The event key to validate (e.g. `'entity:post.created'`).
-     * @param source - Optional human-readable label used in error messages to identify
-     *   the call site (default: `'SSE config'`).
-     * @returns The same `key` value branded as `ClientSafeEventKey`.
-     * @throws {Error} If `key` starts with a forbidden namespace prefix.
-     * @throws {Error} If `key` has not been registered via `registerClientSafeEvents`.
-     */
-    ensureClientSafeEventKey(key: string, source = 'SSE config'): ClientSafeEventKey {
-      const forbidden = FORBIDDEN_CLIENT_PREFIXES.find(p => key.startsWith(p));
-      if (forbidden) {
-        throw new Error(
-          `[slingshot] ${source}: "${key}" cannot be streamed to clients because the "${forbidden}" namespace is forbidden`,
-        );
-      }
-      if (!_clientSafeKeys.has(key)) {
-        throw new Error(
-          `[slingshot] ${source}: "${key}" is not registered as client-safe. Call bus.registerClientSafeEvents([...]) before createServer().`,
-        );
-      }
-      return key;
-    },
-
     emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
-      const validatedPayload = validateEventPayload(
-        event as string,
-        payload,
-        schemaRegistry,
-        validationMode,
-      );
+      const envelope = isEventEnvelope(payload, event)
+        ? payload
+        : createRawEventEnvelope(
+            event as Extract<keyof SlingshotEventMap, string>,
+            validateEventPayload(event as string, payload, schemaRegistry, validationMode) as
+              SlingshotEventMap[K],
+          );
 
       // Fire local (non-durable) listeners synchronously via fire-and-forget.
       // Sync throws are caught separately so subsequent listeners still fire (matches InProcessAdapter).
-      const fns = listeners.get(event as string);
+      const fns = envelopeListeners.get(event as string);
       if (fns) {
         for (const fn of Array.from(fns)) {
           let result: void | Promise<void>;
           try {
-            result = fn(validatedPayload);
+            result = fn(envelope as EventEnvelope);
           } catch (err: unknown) {
             console.error(`[BullMQAdapter] listener error on event "${event}":`, err);
             continue;
@@ -390,10 +343,10 @@ export function createBullMQAdapter(
         if (name.startsWith(queuePrefix + ':')) {
           const durablePayload =
             eventSerializer === JSON_SERIALIZER
-              ? (validatedPayload as object)
+              ? (envelope as object)
               : ({
                   __slingshot_serialized: Buffer.from(
-                    eventSerializer.serialize(event as string, validatedPayload),
+                    eventSerializer.serialize(event as string, envelope),
                   ).toString('base64'),
                   __slingshot_content_type: eventSerializer.contentType,
                 } satisfies SerializedBullMQEnvelope);
@@ -423,6 +376,24 @@ export function createBullMQAdapter(
       listener: (payload: SlingshotEventMap[K]) => void | Promise<void>,
       subscriptionOpts?: SubscriptionOpts,
     ): void {
+      const key = event as string;
+      const wrapper = (envelope: EventEnvelope): void | Promise<void> =>
+        listener(envelope.payload as SlingshotEventMap[K]);
+      let wrappers = payloadListenerWrappers.get(key);
+      if (!wrappers) {
+        wrappers = new Map();
+        payloadListenerWrappers.set(key, wrappers);
+      }
+      wrappers.set(listener as (payload: unknown) => void | Promise<void>, wrapper);
+      this.onEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void | Promise<void>, subscriptionOpts);
+    },
+
+    onEnvelope<K extends keyof SlingshotEventMap>(
+      event: K,
+      listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
+      subscriptionOpts?: SubscriptionOpts,
+    ): void {
+      const key = event as string;
       if (subscriptionOpts?.durable === true) {
         if (!subscriptionOpts.name) {
           throw new Error('[BullMQAdapter] durable subscriptions require a name. Pass opts.name.');
@@ -449,21 +420,21 @@ export function createBullMQAdapter(
         const worker = new Worker(
           bullmqQueueName,
           async job => {
-            let workerPayload: unknown = job.data;
+            let decoded: unknown = job.data;
             if (isSerializedBullMQEnvelope(job.data)) {
-              workerPayload = eventSerializer.deserialize(
+              decoded = eventSerializer.deserialize(
                 event as string,
                 Buffer.from(job.data.__slingshot_serialized, 'base64'),
               );
             }
-
-            workerPayload = validateEventPayload(
-              event as string,
-              workerPayload,
-              schemaRegistry,
-              validationMode,
-            );
-            await Promise.resolve(listener(workerPayload as SlingshotEventMap[K]));
+            const envelope = isEventEnvelope(decoded, event)
+              ? decoded
+              : createRawEventEnvelope(
+                  event as Extract<keyof SlingshotEventMap, string>,
+                  validateEventPayload(event as string, decoded, schemaRegistry, validationMode) as
+                    SlingshotEventMap[K],
+                );
+            await Promise.resolve(listener(envelope as EventEnvelope<K>));
           },
           { connection: opts.connection },
         );
@@ -485,14 +456,13 @@ export function createBullMQAdapter(
         workers.push(worker);
 
         // Track durable listener so off() can detect and reject it
-        const key = event as string;
         if (!durableListeners.has(key)) durableListeners.set(key, new Set());
-        durableListeners.get(key)?.add(listener as (payload: unknown) => void | Promise<void>);
+        durableListeners.get(key)?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
       } else {
-        // Non-durable: register on local typed listener map
-        const key = event as string;
-        if (!listeners.has(key)) listeners.set(key, new Set());
-        listeners.get(key)?.add(listener as (payload: unknown) => void | Promise<void>);
+        if (!envelopeListeners.has(key)) envelopeListeners.set(key, new Set());
+        envelopeListeners
+          .get(key)
+          ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
       }
     },
 
@@ -510,15 +480,37 @@ export function createBullMQAdapter(
       event: K,
       listener: (payload: SlingshotEventMap[K]) => void,
     ): void {
+      const wrappers = payloadListenerWrappers.get(event as string);
+      const wrapper = wrappers?.get(listener as (payload: unknown) => void | Promise<void>);
+      if (!wrapper) {
+        return;
+      }
       const dl = durableListeners.get(event as string);
-      if (dl?.has(listener as (payload: unknown) => void | Promise<void>)) {
+      if (dl?.has(wrapper as (envelope: EventEnvelope) => void | Promise<void>)) {
         throw new Error(
           `[BullMQAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all workers.`,
         );
       }
-      listeners
+      wrappers?.delete(listener as (payload: unknown) => void | Promise<void>);
+      if (wrappers?.size === 0) {
+        payloadListenerWrappers.delete(event as string);
+      }
+      this.offEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void);
+    },
+
+    offEnvelope<K extends keyof SlingshotEventMap>(
+      event: K,
+      listener: (envelope: EventEnvelope<K>) => void,
+    ): void {
+      const dl = durableListeners.get(event as string);
+      if (dl?.has(listener as (envelope: EventEnvelope) => void | Promise<void>)) {
+        throw new Error(
+          `[BullMQAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all workers.`,
+        );
+      }
+      envelopeListeners
         .get(event as string)
-        ?.delete(listener as (payload: unknown) => void | Promise<void>);
+        ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
     },
 
     /**
@@ -542,7 +534,8 @@ export function createBullMQAdapter(
         );
         pendingBuffer.length = 0;
       }
-      listeners.clear();
+      envelopeListeners.clear();
+      payloadListenerWrappers.clear();
       durableListeners.clear();
       await Promise.all(workers.map(w => w.close()));
       await Promise.all(queues.map(q => q.close()));

@@ -23,20 +23,12 @@ function normalizeMountPath(value: string): string {
  * Zod schema for validating `WebhookPluginConfig`.
  */
 export const webhookPluginConfigSchema = z.object({
-  /** Subscribable event keys. Defaults to `['*']`. */
+  /** Registry-backed webhook event filters. Defaults to `['*']`. */
   events: z
     .array(z.string())
     .optional()
     .describe(
-      "Event keys clients are allowed to subscribe to. Omit to allow the built-in default of ['*'].",
-    ),
-  /** Additional event keys to make subscribable beyond the built-in list. */
-  extraEventKeys: z
-    .array(z.string())
-    .readonly()
-    .optional()
-    .describe(
-      'Additional event keys exposed beyond the built-in webhook event list. Omit to use only the built-in keys.',
+      "Registry-backed event filters the webhook plugin subscribes to. Omit to allow the default of ['*'].",
     ),
   /** Delivery queue implementation. Defaults to the in-process memory queue. */
   queue: z

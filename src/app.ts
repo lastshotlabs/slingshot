@@ -11,6 +11,7 @@ import {
 } from '@framework/mountMiddleware';
 import { mountOptionalEndpoints } from '@framework/mountOptionalEndpoints';
 import { mountOpenApiDocs, mountRoutes } from '@framework/mountRoutes';
+import { createActorResolutionMiddleware } from '@framework/middleware/resolveActor';
 import { withSpan } from '@framework/otel/spans';
 import { getTracer } from '@framework/otel/tracer';
 import { ModelSchemasConfig, preloadModelSchemas } from '@framework/preloadSchemas';
@@ -56,8 +57,12 @@ import {
   HttpError,
   ValidationError,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  createEventSchemaRegistry,
   createCoreRegistrar,
   defaultValidationErrorFormatter,
+  defineEvent,
 } from '@lastshotlabs/slingshot-core';
 import type {
   AppEnv,
@@ -67,10 +72,12 @@ import type {
   KafkaConnectorHandle,
   SlingshotContext,
   SlingshotEventBus,
+  SlingshotEvents,
   SlingshotPlugin,
   SlingshotRuntime,
 } from '@lastshotlabs/slingshot-core';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import { z } from 'zod';
 import type { DbConfig } from './config/types/db';
 import type { JobsConfig } from './config/types/jobs';
 import type { LoggingConfig } from './config/types/logging';
@@ -322,6 +329,7 @@ function freezeFrameworkSecurity(
 
 interface AppBootstrap {
   bus: SlingshotEventBus;
+  events: SlingshotEvents;
   kafkaConnectors?: KafkaConnectorHandle;
   registrar: CoreRegistrar;
   drain: () => CoreRegistrarSnapshot;
@@ -418,7 +426,35 @@ async function prepareBootstrap<T extends object>(
   };
 
   const plugins = config.plugins ?? [];
-  const bus = config.eventBus ?? createInProcessAdapter();
+  const eventSchemaRegistry = createEventSchemaRegistry();
+  const bus =
+    config.eventBus ??
+    createInProcessAdapter({
+      schemaRegistry: eventSchemaRegistry,
+      validation: 'off',
+    });
+  const definitions = createEventDefinitionRegistry({ schemaRegistry: eventSchemaRegistry });
+  const events = createEventPublisher({ definitions, bus });
+  events.register(
+    defineEvent('app:ready', {
+      ownerPlugin: 'slingshot-framework',
+      exposure: ['internal'],
+      schema: z.object({ plugins: z.array(z.string()) }),
+      resolveScope() {
+        return null;
+      },
+    }),
+  );
+  events.register(
+    defineEvent('app:shutdown', {
+      ownerPlugin: 'slingshot-framework',
+      exposure: ['internal'],
+      schema: z.object({ signal: z.enum(['SIGTERM', 'SIGINT']) }),
+      resolveScope() {
+        return null;
+      },
+    }),
+  );
   const kafkaConnectors = config.kafkaConnectors;
   const coreReg = createCoreRegistrar();
   const { registrar } = coreReg;
@@ -470,6 +506,7 @@ async function prepareBootstrap<T extends object>(
 
   return {
     bus,
+    events,
     kafkaConnectors,
     registrar,
     drain,
@@ -494,7 +531,8 @@ async function assembleApp<T extends object>(
   config: CreateAppConfig<T>,
   onContextCreated?: (ctx: SlingshotContext) => void,
 ): Promise<AppAssembly> {
-  const { bus, registrar, sortedPlugins, appName, securityConfig, secretBundle, infra } = bootstrap;
+  const { bus, events, registrar, sortedPlugins, appName, securityConfig, secretBundle, infra } =
+    bootstrap;
   const { middleware = [] } = config;
   const tracer = getTracer(bootstrap.tracingConfig);
 
@@ -515,6 +553,7 @@ async function assembleApp<T extends object>(
       metricsState,
       plugins: bootstrap.sortedPlugins,
       bus,
+      events,
       kafkaConnectors: bootstrap.kafkaConnectors,
       secretBundle,
       permissions: config.permissions,
@@ -567,8 +606,9 @@ async function assembleApp<T extends object>(
 
   // Plugin middleware phase — after framework rate limiting, before user middleware.
   await withSpan(tracer, 'slingshot.bootstrap.middleware.plugins', async () => {
-    await runPluginMiddleware(sortedPlugins, app, infra.frameworkConfig, bus, tracer);
+    await runPluginMiddleware(sortedPlugins, app, infra.frameworkConfig, bus, events, tracer);
   });
+  app.use('*', createActorResolutionMiddleware());
   for (const mw of middleware) app.use(mw);
 
   return { ...bootstrap, app, ctx, tenantCacheCarrier };
@@ -582,7 +622,7 @@ async function mountAppRoutes<T extends object>(
   assembly: AppAssembly,
   config: CreateAppConfig<T>,
 ): Promise<void> {
-  const { app, sortedPlugins, appName, openApiVersion, secretBundle, infra, bus, runtime } =
+  const { app, sortedPlugins, appName, openApiVersion, secretBundle, infra, bus, events, runtime } =
     assembly;
   const tracer = getTracer(assembly.tracingConfig);
 
@@ -593,7 +633,7 @@ async function mountAppRoutes<T extends object>(
 
   // Plugin routes — after tenant/user middleware, before framework routes.
   await withSpan(tracer, 'slingshot.bootstrap.routes.plugins', async () => {
-    await runPluginRoutes(sortedPlugins, app, infra.frameworkConfig, bus, tracer);
+    await runPluginRoutes(sortedPlugins, app, infra.frameworkConfig, bus, events, tracer);
   });
 
   // Core framework routes (health, home).
@@ -654,12 +694,15 @@ async function mountAppRoutes<T extends object>(
 // ---------------------------------------------------------------------------
 
 async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
-  const { app, ctx, sortedPlugins, bus, kafkaConnectors, drain, tenantCacheCarrier, infra } =
+  const { app, ctx, sortedPlugins, bus, events, kafkaConnectors, drain, tenantCacheCarrier, infra } =
     assembly;
   const tracer = getTracer(assembly.tracingConfig);
+  const activeFrameworkPlugins = sortedPlugins.filter(
+    plugin => plugin.setupMiddleware || plugin.setupRoutes || plugin.setupPost,
+  );
 
   await withSpan(tracer, 'slingshot.bootstrap.post', async () => {
-    await runPluginPost(sortedPlugins, app, infra.frameworkConfig, bus, tracer);
+    await runPluginPost(sortedPlugins, app, infra.frameworkConfig, bus, events, tracer);
   });
 
   if (kafkaConnectors) {
@@ -669,13 +712,18 @@ async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
   }
 
   await withSpan(tracer, 'slingshot.bootstrap.finalize', () => {
+    events.definitions.freeze();
     finalizeContext(ctx, drain());
 
     if (tenantCacheCarrier.cache) {
       ctx.pluginState.set('tenantResolutionCache', tenantCacheCarrier.cache);
     }
-    if (sortedPlugins.length > 0) {
-      bus.emit('app:ready', { plugins: sortedPlugins.map(p => p.name) });
+    if (activeFrameworkPlugins.length > 0) {
+      ctx.events.publish(
+        'app:ready',
+        { plugins: activeFrameworkPlugins.map(plugin => plugin.name) },
+        { source: 'system' },
+      );
     }
     return Promise.resolve();
   });

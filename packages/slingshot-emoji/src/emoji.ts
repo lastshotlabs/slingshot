@@ -67,6 +67,12 @@ export const emojiManifest: MultiEntityManifest = {
           event: {
             key: 'emoji:emoji.created',
             payload: ['id', 'shortcode', 'name', 'orgId', 'createdBy'],
+            exposure: ['client-safe'],
+            scope: {
+              userId: 'record:createdBy',
+              resourceType: 'emoji:emoji',
+              resourceId: 'record:id',
+            },
           },
         },
         delete: {
@@ -74,6 +80,11 @@ export const emojiManifest: MultiEntityManifest = {
           event: {
             key: 'emoji:emoji.deleted',
             payload: ['id', 'shortcode', 'uploadKey', 'orgId'],
+            exposure: ['client-safe'],
+            scope: {
+              resourceType: 'emoji:emoji',
+              resourceId: 'record:id',
+            },
           },
         },
         disable: ['update'],
@@ -96,7 +107,6 @@ export const emojiManifest: MultiEntityManifest = {
             'org:member': ['read', 'write'],
           },
         },
-        clientSafeEvents: ['emoji:emoji.created', 'emoji:emoji.deleted'],
       },
     },
   },

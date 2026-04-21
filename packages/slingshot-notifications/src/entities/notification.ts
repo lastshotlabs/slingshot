@@ -91,14 +91,33 @@ export const Notification = defineEntity('Notification', {
     operations: {
       listByUser: {},
       listUnread: {},
-      markRead: { event: { key: 'notifications:notification.read' } },
-      markAllRead: { event: { key: 'notifications:notification.updated' } },
+      markRead: {
+        event: {
+          key: 'notifications:notification.read',
+          exposure: ['client-safe', 'tenant-webhook', 'user-webhook'],
+          scope: {
+            tenantId: 'ctx:tenantId',
+            userId: 'ctx:userId',
+            actorId: 'ctx:actorId',
+          },
+        },
+      },
+      markAllRead: {
+        event: {
+          key: 'notifications:notification.updated',
+          exposure: ['client-safe', 'tenant-webhook', 'user-webhook'],
+          scope: {
+            tenantId: 'ctx:tenantId',
+            userId: 'ctx:userId',
+            actorId: 'ctx:actorId',
+          },
+        },
+      },
       unreadCount: {},
       unreadCountBySource: {},
       unreadCountByScope: {},
       hasUnreadByDedupKey: {},
     },
-    clientSafeEvents: ['notifications:notification.created', 'notifications:notification.updated'],
   },
 });
 

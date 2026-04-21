@@ -1,11 +1,64 @@
 import { describe, expect, it, mock } from 'bun:test';
-import type { SlingshotEventBus, SubscriptionOpts } from '@lastshotlabs/slingshot-core';
-import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import type {
+  SlingshotEventBus,
+  SlingshotEvents,
+  SubscriptionOpts,
+} from '@lastshotlabs/slingshot-core';
+import {
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  createInProcessAdapter,
+  defineEvent,
+} from '@lastshotlabs/slingshot-core';
 import { wireEventSubscriptions } from '../../src/lib/eventWiring';
 import { createWebhookMemoryQueue } from '../../src/queues/memory';
 import type { WebhookAdapter } from '../../src/types/adapter';
 import type { WebhookPluginConfig } from '../../src/types/config';
 import type { WebhookDelivery, WebhookEndpoint } from '../../src/types/models';
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'test:webhook.tenant.created': {
+      tenantId: string;
+      documentId: string;
+    };
+    'test:webhook.user.login': {
+      tenantId?: string | null;
+      userId: string;
+    };
+  }
+}
+
+function createEvents(bus: ReturnType<typeof createInProcessAdapter>): SlingshotEvents {
+  const definitions = createEventDefinitionRegistry();
+  const events = createEventPublisher({ definitions, bus });
+
+  events.register(
+    defineEvent('test:webhook.tenant.created', {
+      ownerPlugin: 'test-webhooks',
+      exposure: ['tenant-webhook'],
+      resolveScope(payload) {
+        return { tenantId: payload.tenantId, resourceType: 'document', resourceId: payload.documentId };
+      },
+    }),
+  );
+
+  events.register(
+    defineEvent('test:webhook.user.login', {
+      ownerPlugin: 'test-webhooks',
+      exposure: ['user-webhook'],
+      resolveScope(payload) {
+        return {
+          tenantId: payload.tenantId ?? null,
+          userId: payload.userId,
+          actorId: payload.userId,
+        };
+      },
+    }),
+  );
+
+  return events;
+}
 
 function createAdapter(seedEndpoints: WebhookEndpoint[] = []): WebhookAdapter {
   const endpoints = [...seedEndpoints];
@@ -15,15 +68,23 @@ function createAdapter(seedEndpoints: WebhookEndpoint[] = []): WebhookAdapter {
     async getEndpoint(id) {
       return endpoints.find(endpoint => endpoint.id === id) ?? null;
     },
-    async findEndpointsForEvent() {
-      return endpoints;
+    async listEnabledEndpoints() {
+      return endpoints.filter(endpoint => endpoint.enabled);
     },
     async createDelivery(input) {
       const delivery: WebhookDelivery = {
         id: `delivery-${deliveries.length + 1}`,
         endpointId: input.endpointId,
         event: input.event,
-        payload: input.payload,
+        eventId: input.eventId,
+        occurredAt: input.occurredAt,
+        subscriber: {
+          ownerType: input.subscriber.ownerType,
+          ownerId: input.subscriber.ownerId,
+          tenantId: input.subscriber.tenantId ?? null,
+        },
+        sourceScope: input.sourceScope ?? null,
+        projectedPayload: input.payload,
         status: 'pending',
         attempts: 0,
         createdAt: new Date().toISOString(),
@@ -52,9 +113,17 @@ function createAdapter(seedEndpoints: WebhookEndpoint[] = []): WebhookAdapter {
 function createEndpoint(id = 'endpoint-1'): WebhookEndpoint {
   return {
     id,
+    ownerType: 'tenant',
+    ownerId: 'tenant-a',
+    tenantId: 'tenant-a',
     url: 'https://example.com/hook',
     secret: 'secret-value',
-    events: ['auth:*'],
+    subscriptions: [
+      {
+        event: 'test:webhook.tenant.created',
+        exposure: 'tenant-webhook',
+      },
+    ],
     enabled: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -62,37 +131,48 @@ function createEndpoint(id = 'endpoint-1'): WebhookEndpoint {
 }
 
 describe('eventWiring', () => {
-  it('subscribes to matching events and delivers to matching endpoints', async () => {
+  it('subscribes to matching registry events and delivers to authorized endpoints', async () => {
     const bus = createInProcessAdapter();
+    const events = createEvents(bus);
     const adapter = createAdapter([createEndpoint()]);
     const queue = createWebhookMemoryQueue();
     const processorMock = mock(async () => {});
     await queue.start(processorMock);
 
-    const config: WebhookPluginConfig = { events: ['auth:*'] };
-    const unsubs = wireEventSubscriptions(bus, config, queue, adapter);
+    const config: WebhookPluginConfig = { events: ['test:webhook.tenant.*'] };
+    const unsubs = wireEventSubscriptions(bus, events, config, queue, adapter);
 
-    bus.emit('auth:user.created', { userId: 'u1', email: 'u@example.com', tenantId: null });
+    events.publish('test:webhook.tenant.created', {
+      tenantId: 'tenant-a',
+      documentId: 'doc-1',
+    });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
     expect(deliveries.items.length).toBe(1);
-    expect(deliveries.items[0].event).toBe('auth:user.created');
+    expect(deliveries.items[0]).toMatchObject({
+      event: 'test:webhook.tenant.created',
+      subscriber: { ownerType: 'tenant', ownerId: 'tenant-a', tenantId: 'tenant-a' },
+    });
 
     for (const unsub of unsubs) unsub();
     await queue.stop();
   });
 
-  it('does not subscribe to non-matching events', async () => {
+  it('does not subscribe to non-matching registry event filters', async () => {
     const bus = createInProcessAdapter();
+    const events = createEvents(bus);
     const adapter = createAdapter([createEndpoint()]);
     const queue = createWebhookMemoryQueue({ maxAttempts: 1 });
     await queue.start(async () => {});
 
     const config: WebhookPluginConfig = { events: ['security.*'] };
-    const unsubs = wireEventSubscriptions(bus, config, queue, adapter);
+    const unsubs = wireEventSubscriptions(bus, events, config, queue, adapter);
 
-    bus.emit('auth:user.created', { userId: 'u1', email: 'u@example.com', tenantId: null });
+    events.publish('test:webhook.tenant.created', {
+      tenantId: 'tenant-a',
+      documentId: 'doc-1',
+    });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
@@ -102,16 +182,20 @@ describe('eventWiring', () => {
     await queue.stop();
   });
 
-  it('subscribes to all events when config.events is omitted', async () => {
+  it('subscribes to all webhook-visible definitions when config.events is omitted', async () => {
     const bus = createInProcessAdapter();
+    const events = createEvents(bus);
     const adapter = createAdapter([createEndpoint()]);
     const queue = createWebhookMemoryQueue();
     await queue.start(async () => {});
 
     const config: WebhookPluginConfig = {};
-    const unsubs = wireEventSubscriptions(bus, config, queue, adapter);
+    const unsubs = wireEventSubscriptions(bus, events, config, queue, adapter);
 
-    bus.emit('auth:user.created', { userId: 'u1', email: 'u@example.com', tenantId: null });
+    events.publish('test:webhook.tenant.created', {
+      tenantId: 'tenant-a',
+      documentId: 'doc-1',
+    });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
@@ -121,22 +205,26 @@ describe('eventWiring', () => {
     await queue.stop();
   });
 
-  it('handles findEndpointsForEvent failure gracefully', async () => {
+  it('handles delivery resolution failure gracefully', async () => {
     const bus = createInProcessAdapter();
+    const events = createEvents(bus);
     const queue = createWebhookMemoryQueue();
     await queue.start(async () => {});
 
     const failingAdapter: WebhookAdapter = {
       ...createAdapter(),
-      async findEndpointsForEvent() {
+      async listEnabledEndpoints() {
         throw new Error('adapter exploded');
       },
     };
 
-    const config: WebhookPluginConfig = { events: ['auth:*'] };
-    const unsubs = wireEventSubscriptions(bus, config, queue, failingAdapter);
+    const config: WebhookPluginConfig = { events: ['test:webhook.*'] };
+    const unsubs = wireEventSubscriptions(bus, events, config, queue, failingAdapter);
 
-    bus.emit('auth:user.created', { userId: 'u1', email: 'u@example.com', tenantId: null });
+    events.publish('test:webhook.tenant.created', {
+      tenantId: 'tenant-a',
+      documentId: 'doc-1',
+    });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     for (const unsub of unsubs) unsub();
@@ -145,6 +233,7 @@ describe('eventWiring', () => {
 
   it('compensates delivery to dead when enqueue fails', async () => {
     const bus = createInProcessAdapter();
+    const events = createEvents(bus);
     const adapter = createAdapter([createEndpoint()]);
 
     const failingQueue = {
@@ -157,10 +246,13 @@ describe('eventWiring', () => {
       depth: mock(async () => 0),
     };
 
-    const config: WebhookPluginConfig = { events: ['auth:*'] };
-    const unsubs = wireEventSubscriptions(bus, config, failingQueue, adapter);
+    const config: WebhookPluginConfig = { events: ['test:webhook.*'] };
+    const unsubs = wireEventSubscriptions(bus, events, config, failingQueue, adapter);
 
-    bus.emit('auth:user.created', { userId: 'u1', email: 'u@example.com', tenantId: null });
+    events.publish('test:webhook.tenant.created', {
+      tenantId: 'tenant-a',
+      documentId: 'doc-1',
+    });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
@@ -171,41 +263,53 @@ describe('eventWiring', () => {
     for (const unsub of unsubs) unsub();
   });
 
-  it('passes durable subscription options through to the bus and skips off() teardown', async () => {
+  it('passes durable subscription options through to the bus and skips offEnvelope teardown', async () => {
+    const events = createEventPublisher({
+      definitions: createEventDefinitionRegistry(),
+      bus: createInProcessAdapter(),
+    });
+    events.register(
+      defineEvent('test:webhook.tenant.created', {
+        ownerPlugin: 'test-webhooks',
+        exposure: ['tenant-webhook'],
+        resolveScope(payload) {
+          return { tenantId: payload.tenantId };
+        },
+      }),
+    );
+
     const onCalls: Array<{ event: string; opts?: SubscriptionOpts }> = [];
-    const offMock = mock(() => {});
+    const offEnvelopeMock = mock(() => {});
     const bus: SlingshotEventBus = {
       emit: () => {},
-      on: ((
-        event: string,
-        _listener: (payload: unknown) => void | Promise<void>,
-        opts?: SubscriptionOpts,
-      ) => {
+      on: (() => {}) as SlingshotEventBus['on'],
+      off: (() => {}) as SlingshotEventBus['off'],
+      onEnvelope: ((event: string, _listener: () => void, opts?: SubscriptionOpts) => {
         onCalls.push({ event, opts });
-      }) as SlingshotEventBus['on'],
-      off: offMock as SlingshotEventBus['off'],
-      clientSafeKeys: new Set<string>(),
-      registerClientSafeEvents: () => {},
-      ensureClientSafeEventKey: key => key,
+      }) as SlingshotEventBus['onEnvelope'],
+      offEnvelope: offEnvelopeMock as SlingshotEventBus['offEnvelope'],
     };
     const adapter = createAdapter([createEndpoint()]);
     const queue = createWebhookMemoryQueue();
     const config: WebhookPluginConfig = {
-      events: ['auth:*'],
+      events: ['test:webhook.*'],
       busSubscription: {
         durable: true,
         name: 'webhooks',
       },
     };
 
-    const unsubs = wireEventSubscriptions(bus, config, queue, adapter);
+    const unsubs = wireEventSubscriptions(bus, events, config, queue, adapter);
 
-    expect(onCalls.length).toBeGreaterThan(0);
-    expect(onCalls[0]?.event).toBe('auth:user.created');
-    expect(onCalls[0]?.opts).toEqual({ durable: true, name: 'webhooks' });
+    expect(onCalls).toEqual([
+      {
+        event: 'test:webhook.tenant.created',
+        opts: { durable: true, name: 'webhooks' },
+      },
+    ]);
 
     for (const unsub of unsubs) unsub();
 
-    expect(offMock).not.toHaveBeenCalled();
+    expect(offEnvelopeMock).not.toHaveBeenCalled();
   });
 });

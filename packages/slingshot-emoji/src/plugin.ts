@@ -94,7 +94,7 @@ export function createEmojiPlugin(rawConfig: unknown): SlingshotPlugin {
         ? ['slingshot-auth']
         : ['slingshot-auth', 'slingshot-permissions'],
 
-    async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       // Resolve permissions — explicit config wins, pluginState fallback.
       const permissions: PermissionsState | undefined =
         explicitPermissions ??
@@ -138,16 +138,16 @@ export function createEmojiPlugin(rawConfig: unknown): SlingshotPlugin {
       });
 
       if (innerPlugin.setupMiddleware) {
-        await innerPlugin.setupMiddleware({ app, config: frameworkConfig, bus });
+        await innerPlugin.setupMiddleware({ app, config: frameworkConfig, bus, events });
       }
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus });
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
 
       // Delete cascade — remove the uploaded file when an emoji is deleted.
       const storageAdapter = getContext(app).upload?.adapter as StorageAdapter | null | undefined;

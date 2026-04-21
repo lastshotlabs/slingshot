@@ -13,7 +13,9 @@ Slingshot's SSE support bridges the event bus to browser clients. Events from pl
 2. SSE endpoints subscribe to the bus and forward client-safe events to connected clients
 3. Clients connect with a JWT and receive a filtered stream
 
-Only events registered as `clientSafeEvents` reach clients. The framework automatically filters internal events (auth, security, delivery status).
+Only events whose registry definitions include `exposure: ['client-safe']` reach clients. Endpoint
+filters can narrow that set further, but they cannot widen it beyond the registry-approved event
+definitions.
 
 ## Community notifications
 
@@ -98,20 +100,24 @@ For a custom event stream, define your own SSE endpoint:
 
 ## Entity-level client-safe events
 
-Events only reach SSE clients if they're declared as `clientSafeEvents` on the entity:
+Events only reach SSE clients if the route event opts into `client-safe` exposure:
 
 ```typescript
 export const Post = defineEntity('Post', {
   routes: {
     create: {
-      event: { key: 'blog:post.created', payload: ['id', 'authorId', 'title'] },
+      event: {
+        key: 'blog:post.created',
+        payload: ['id', 'authorId', 'title'],
+        scope: { resourceType: 'blog:post', resourceId: 'record:id' },
+        exposure: ['client-safe'],
+      },
     },
-    clientSafeEvents: ['blog:post.created'], // only this event is forwarded to clients
   },
 });
 ```
 
-Events not in `clientSafeEvents` — including `blog:post.deleted`, internal validation events, or anything with sensitive data — never reach clients.
+Events without `exposure: ['client-safe']` — including `blog:post.deleted`, internal validation events, or anything with sensitive data — never reach clients.
 
 ## Consuming SSE from the browser
 

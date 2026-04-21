@@ -23,6 +23,7 @@ import type {
   KafkaConnectorHandle,
   SlingshotContext,
   SlingshotEventBus,
+  SlingshotEvents,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
@@ -200,6 +201,7 @@ function freezeArrayCopy<T>(value: readonly T[]): readonly T[] {
 
 const INTERNAL_CACHE_ADAPTERS = Symbol('slingshot.internal.cacheAdapters');
 const INTERNAL_EMAIL_TEMPLATES = Symbol('slingshot.internal.emailTemplates');
+const APP_SHUTDOWN_EMITTED = Symbol('slingshot.appShutdownEmitted');
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -215,10 +217,35 @@ export interface BuildContextParams {
   metricsState: MetricsState;
   plugins: readonly SlingshotPlugin[];
   bus: SlingshotEventBus;
+  events: SlingshotEvents;
   kafkaConnectors?: KafkaConnectorHandle;
   secretBundle: ResolvedSecretBundle;
   /** Server-level permissions config. When set, bootstrap runs before plugin setup. */
   permissions?: PermissionsConfig;
+}
+
+type ShutdownSignal = 'SIGTERM' | 'SIGINT';
+
+type AppShutdownPublisher = Pick<SlingshotContext, 'events'> & {
+  [APP_SHUTDOWN_EMITTED]?: boolean;
+};
+
+export function publishAppShutdownOnce(
+  ctx: AppShutdownPublisher,
+  signal: ShutdownSignal = 'SIGTERM',
+): void {
+  if (ctx[APP_SHUTDOWN_EMITTED]) {
+    return;
+  }
+
+  Object.defineProperty(ctx, APP_SHUTDOWN_EMITTED, {
+    configurable: false,
+    enumerable: false,
+    writable: true,
+    value: true,
+  });
+
+  ctx.events.publish('app:shutdown', { signal }, { source: 'system' });
 }
 
 /**
@@ -303,6 +330,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     metricsState,
     plugins,
     bus,
+    events,
     kafkaConnectors,
     secretBundle,
   } = params;
@@ -414,6 +442,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     publicPaths,
     plugins: Object.freeze([...plugins]),
     bus,
+    events,
     kafkaConnectors: kafkaConnectors ?? null,
     identityResolver: createDefaultIdentityResolver(),
     routeAuth: null,
@@ -468,6 +497,8 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
       if (destroyPromise) return destroyPromise;
 
       destroyPromise = (async () => {
+        publishAppShutdownOnce(this);
+
         try {
           await runPluginTeardown([...this.plugins]);
         } catch {

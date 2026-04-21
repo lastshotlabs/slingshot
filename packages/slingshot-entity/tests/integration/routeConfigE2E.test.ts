@@ -4,9 +4,19 @@
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { describe, expect, it, mock } from 'bun:test';
 import type { Context, Next } from 'hono';
-import type { AppEnv, ResolvedEntityConfig, SlingshotContext } from '@lastshotlabs/slingshot-core';
+import {
+  getActorId,
+  type AppEnv,
+  type ResolvedEntityConfig,
+  type SlingshotContext,
+} from '@lastshotlabs/slingshot-core';
 import { applyRouteConfig } from '../../src/routing/applyRouteConfig';
 import { buildBareEntityRoutes } from '../../src/routing/buildBareEntityRoutes';
+import {
+  defineEntityExecutor,
+  defineEntityRoute,
+  planEntityRoutes,
+} from '../../src/routing/entityRoutePlanning';
 
 // ---------------------------------------------------------------------------
 // In-memory adapter for tests
@@ -188,6 +198,9 @@ function attachSlingshotCtx(
     } as unknown as SlingshotContext;
 
     _c.set('slingshotCtx', slingshotCtx);
+    if (options.tenantId) {
+      _c.set('tenantId', options.tenantId);
+    }
     await next();
   });
 }
@@ -439,6 +452,73 @@ describe('routePath override — HTTP round-trip', () => {
       }),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe('planned entity routes — HTTP round-trip', () => {
+  it('registers static extra routes ahead of generated dynamic routes', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const plannedEntityConfig: ResolvedEntityConfig = { ...testEntityConfig, routes: {} };
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    const plannedRoutes = planEntityRoutes(plannedEntityConfig, undefined, {
+      extraRoutes: [
+        defineEntityRoute({
+          method: 'get',
+          path: '/tree',
+          buildExecutor: () => async exec =>
+            exec.respond.json({
+              kind: 'tree',
+              total: (await exec.entityAdapter.list({})).items.length,
+            }),
+        }),
+      ],
+    });
+
+    applyRouteConfig(router, plannedEntityConfig, {}, { plannedRoutes });
+    buildBareEntityRoutes(plannedEntityConfig, undefined, adapter, router, { plannedRoutes });
+
+    await adapter.create({ text: 'hello' });
+
+    const res = await router.fetch(new Request('http://localhost/notes/tree'));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ kind: 'tree', total: 1 });
+  });
+
+  it('runs generated overrides inside the framework-owned route shell', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const plannedEntityConfig: ResolvedEntityConfig = { ...testEntityConfig, routes: {} };
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    const plannedRoutes = planEntityRoutes(plannedEntityConfig, undefined, {
+      overrides: {
+        get: defineEntityExecutor(() => async exec => {
+          if (!exec.existingRecord) {
+            return exec.respond.notFound();
+          }
+          const enriched = { ...(exec.existingRecord as Record<string, unknown>), enriched: true };
+          exec.setOpResult('get', enriched);
+          return exec.respond.json(enriched);
+        }),
+      },
+    });
+
+    applyRouteConfig(router, plannedEntityConfig, {}, { plannedRoutes });
+    buildBareEntityRoutes(plannedEntityConfig, undefined, adapter, router, { plannedRoutes });
+
+    const created = (await adapter.create({ text: 'hello' })) as Record<string, unknown>;
+
+    const res = await router.fetch(new Request(`http://localhost/notes/${created.id as string}`));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      id: created.id,
+      text: 'hello',
+      enriched: true,
+    });
   });
 });
 
@@ -697,7 +777,7 @@ describe('named operation inference — HTTP round-trip', () => {
     const router = new OpenAPIHono<AppEnv>();
     attachSlingshotCtx(router);
 
-    let sawAuthUserId: string | null = null;
+    let sawActorId: string | null = null;
     applyRouteConfig(
       router,
       testEntityConfig,
@@ -711,7 +791,7 @@ describe('named operation inference — HTTP round-trip', () => {
       {
         middleware: {
           checkAuth: async (c, next) => {
-            sawAuthUserId = (c.get('authUserId' as never) as string | undefined) ?? null;
+            sawActorId = getActorId(c);
             await next();
           },
         },
@@ -728,7 +808,66 @@ describe('named operation inference — HTTP round-trip', () => {
     );
 
     expect(res.status).toBe(201);
-    expect(sawAuthUserId === 'user-1').toBe(true);
+    expect(sawActorId).toBe('user-1');
+  });
+
+  it('injects param:actor.id and param:actor.tenantId for named operations', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = {
+      ...createMemoryAdapter(),
+      whoAmI: (params: Record<string, unknown>) =>
+        Promise.resolve({
+          actorId: params['actor.id'],
+          actorTenantId: params['actor.tenantId'],
+          legacyAuthUserId: params.authUserId,
+          legacyTenantId: params.tenantId,
+        }),
+    };
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    attachSlingshotCtx(router, { tenantId: 'tenant-actor' });
+
+    applyRouteConfig(
+      router,
+      testEntityConfig,
+      {
+        operations: {
+          whoAmI: {
+            auth: 'userAuth',
+          },
+        },
+      },
+      {},
+    );
+    buildBareEntityRoutes(
+      testEntityConfig,
+      {
+        whoAmI: {
+          kind: 'custom',
+          input: {},
+          output: 'entity',
+        } as unknown as import('@lastshotlabs/slingshot-core').OperationConfig,
+      },
+      adapter,
+      router,
+    );
+
+    const res = await router.fetch(
+      new Request('http://localhost/notes/who-am-i', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      actorId: 'user-1',
+      actorTenantId: 'tenant-actor',
+      legacyAuthUserId: 'user-1',
+      legacyTenantId: 'tenant-actor',
+    });
   });
 
   it('rejects entity writes when the authenticated account is suspended after session issue', async () => {

@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
-import { InProcessAdapter, attachContext } from '@lastshotlabs/slingshot-core';
-import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import {
+  InProcessAdapter,
+  attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  defineEvent,
+} from '@lastshotlabs/slingshot-core';
+import type { SlingshotEventBus, SlingshotEvents } from '@lastshotlabs/slingshot-core';
 import { createNotificationBuilder } from './builder';
 import { notificationFactories, notificationPreferenceFactories } from './entities/factories';
 import { DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS } from './preferences';
@@ -233,6 +239,72 @@ function wrapPreferenceAdapter(
   };
 }
 
+function registerNotificationsTestDefinitions(events: SlingshotEvents): void {
+  const exposure = ['client-safe', 'tenant-webhook', 'user-webhook'] as const;
+
+  if (!events.get('notifications:notification.created')) {
+    events.register(
+      defineEvent('notifications:notification.created', {
+        ownerPlugin: NOTIFICATIONS_PLUGIN_STATE_KEY,
+        exposure,
+        resolveScope(payload) {
+          return {
+            tenantId: payload.notification.tenantId ?? null,
+            userId: payload.notification.userId,
+            actorId: payload.notification.actorId ?? payload.notification.userId,
+          };
+        },
+      }),
+    );
+  }
+
+  if (!events.get('notifications:notification.updated')) {
+    events.register(
+      defineEvent('notifications:notification.updated', {
+        ownerPlugin: NOTIFICATIONS_PLUGIN_STATE_KEY,
+        exposure,
+        resolveScope(payload) {
+          return {
+            tenantId: payload.tenantId ?? null,
+            userId: payload.userId ?? null,
+            actorId: payload.userId ?? null,
+          };
+        },
+      }),
+    );
+  }
+
+  if (!events.get('notifications:notification.read')) {
+    events.register(
+      defineEvent('notifications:notification.read', {
+        ownerPlugin: NOTIFICATIONS_PLUGIN_STATE_KEY,
+        exposure,
+        resolveScope(payload) {
+          return {
+            tenantId: payload.tenantId ?? null,
+            userId: payload.userId ?? null,
+            actorId: payload.userId ?? null,
+          };
+        },
+      }),
+    );
+  }
+}
+
+export function createNotificationsTestEvents(
+  bus: SlingshotEventBus,
+  options: { registerDefinitions?: boolean } = {},
+): SlingshotEvents {
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
+  if (options.registerDefinitions !== false) {
+    registerNotificationsTestDefinitions(events);
+  }
+  return events;
+}
+
 /**
  * Create in-memory adapters and a builder for notification tests.
  *
@@ -241,16 +313,8 @@ function wrapPreferenceAdapter(
 export function createNotificationsTestAdapters() {
   const notifications = wrapNotificationAdapter(notificationFactories.memory());
   const preferences = wrapPreferenceAdapter(notificationPreferenceFactories.memory());
-  const bus: SlingshotEventBus = {
-    emit() {},
-    on() {},
-    off() {},
-    clientSafeKeys: new Set<string>(),
-    registerClientSafeEvents() {},
-    ensureClientSafeEventKey(key) {
-      return key;
-    },
-  };
+  const bus = new InProcessAdapter();
+  const events = createNotificationsTestEvents(bus);
 
   return {
     notifications,
@@ -261,6 +325,7 @@ export function createNotificationsTestAdapters() {
         notifications,
         preferences,
         bus,
+        events,
         rateLimitBackend: createNoopRateLimitBackend(),
         defaultPreferences: DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS,
         rateLimit: { limit: 10_000, windowMs: 60_000 },
@@ -280,6 +345,7 @@ export function createNotificationsTestAdapters() {
 export function createNotificationsTestBootstrap() {
   const app = new Hono();
   const bus = new InProcessAdapter();
+  const events = createNotificationsTestEvents(bus);
   const adapters = createNotificationsTestAdapters();
 
   attachContext(app, {
@@ -323,6 +389,7 @@ export function createNotificationsTestBootstrap() {
   return {
     app,
     bus,
+    events,
     notifications: adapters.notifications,
     preferences: adapters.preferences,
     builder: adapters.createBuilder('test'),

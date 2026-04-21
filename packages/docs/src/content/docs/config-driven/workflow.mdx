@@ -77,8 +77,11 @@ Use `createEntityPlugin()` to bind the entity and operation config to the app ru
 - choose the mount path
 - declare dependencies
 - resolve the adapter from `createEntityFactories(...)`
+- add `extraRoutes` when you want framework-owned routes composed under the entity shell
+- add `overrides` when you want to replace a generated executor but keep the generated route shape
 - register named middleware only when the entity config references it
-- add `setupPost()` only for real cross-entity or cross-package behavior
+- publish plugin-owned runtime state in the earliest phase where it becomes canonical
+- keep `setupPost()` for subscriptions, registrar writes, and other true post-assembly behavior
 
 If the plugin grows business logic that duplicates the entity or operations config, that is usually
 drift.

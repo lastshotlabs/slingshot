@@ -48,10 +48,11 @@ export const Thread = defineEntity('Thread', {
       event: {
         key: 'community:thread.created',
         payload: ['id', 'containerId', 'authorId', 'title'],
+        scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
+        exposure: ['client-safe'],
       },
       middleware: ['banCheck', 'autoMod'],
     },
-    clientSafeEvents: ['community:thread.created'],
     permissions: {
       resourceType: 'community:container',
       scopeField: 'containerId',
@@ -62,7 +63,7 @@ export const Thread = defineEntity('Thread', {
 });
 ```
 
-One definition carries the data model, index strategy, auth defaults, permission scope, event emission, client-safe event registration, and named middleware references — all in one place. Nothing drifts from anything else.
+One definition carries the data model, index strategy, auth defaults, permission scope, event emission, registry exposure, and named middleware references — all in one place. Nothing drifts from anything else.
 
 ## 2. Operations express domain behavior
 
@@ -241,7 +242,103 @@ export function createThreadsPlugin(config: ThreadPluginConfig = {}) {
 }
 ```
 
-`createEntityPlugin()` mounts the routes. `applyRouteConfig()` wires auth, permissions, events, rate limits, and middleware. Custom logic goes in named middleware and `setupPost()`.
+`createEntityPlugin()` mounts the routes. `applyRouteConfig()` wires auth, permissions, events, rate limits, and middleware. Cross-entity subscriptions still belong in `setupPost()`, but route customization now has first-class hooks inside the framework-owned entity shell.
+
+### Route composition and overrides
+
+Use the entity shell first, not a manual router.
+
+```typescript
+import type { OperationConfig, ResolvedEntityConfig, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
+import {
+  type BareEntityAdapter,
+  createEntityPlugin,
+  defineEntityExecutor,
+  defineEntityRoute,
+} from '@lastshotlabs/slingshot-entity';
+
+declare const Thread: ResolvedEntityConfig;
+declare const threadOperations: { operations: Record<string, OperationConfig> };
+declare function resolveThreadAdapter(storeType: StoreType, infra: StoreInfra): BareEntityAdapter;
+
+type ThreadRecord = { id: string };
+type ThreadAdapter = {
+  getById(id: string): Promise<ThreadRecord | null>;
+  publish(id: string): Promise<ThreadRecord>;
+};
+
+type ReplyAdapter = {
+  list(input: { filter: { containerId: string } }): Promise<unknown[]>;
+};
+
+export function createThreadsPlugin() {
+  return createEntityPlugin({
+    name: 'threads',
+    dependencies: ['slingshot-auth', 'replies'],
+    entities: [
+      {
+        config: Thread,
+        operations: threadOperations.operations,
+        buildAdapter: resolveThreadAdapter,
+        extraRoutes: [
+          defineEntityRoute({
+            key: 'preview',
+            method: 'get',
+            path: '/:id/preview',
+            auth: 'userAuth',
+            buildExecutor: defineEntityExecutor(({ entityAdapter }) => {
+              const threadAdapter = entityAdapter as unknown as ThreadAdapter;
+              return async ({ params, respond }) => {
+                const record = await threadAdapter.getById(params.id);
+                return record ? respond.json({ id: params.id, preview: record }) : respond.notFound();
+              };
+            }),
+          }),
+          defineEntityRoute({
+            key: 'feed',
+            method: 'get',
+            path: '/container/:containerId/feed',
+            auth: 'userAuth',
+            buildExecutor: defineEntityExecutor(({ getEntityAdapter }) => {
+              const replyAdapter = getEntityAdapter({
+                plugin: 'replies',
+                entity: 'Reply',
+              }) as unknown as ReplyAdapter;
+              return async ({ params, respond }) => {
+                const replies = await replyAdapter.list({
+                  filter: { containerId: params.containerId },
+                });
+                return respond.json({ replies });
+              };
+            }),
+          }),
+        ],
+        overrides: {
+          operations: {
+            publish: defineEntityExecutor(({ entityAdapter }) => {
+              const threadAdapter = entityAdapter as unknown as ThreadAdapter;
+              return async ({ params, respond }) => {
+                const result = await threadAdapter.publish(params.id);
+                return respond.json({ thread: result, audited: true });
+              };
+            }),
+          },
+        },
+      },
+    ],
+  });
+}
+```
+
+Collision rules are strict:
+
+- `/stats` can coexist with generated `/:id` because the static route is more specific
+- `/:id/preview` can coexist with generated `/:id`
+- `/:slug` collides with generated `/:id` and fails at startup
+- an extra route that matches a generated named-op shape must become an override instead
+
+Reach for a manual router in `setupRoutes()` only when the endpoint does not belong under one
+entity base path or when the response model is no longer an entity-route concern.
 
 ## Row-level isolation with `dataScope`
 

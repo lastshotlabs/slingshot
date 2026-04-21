@@ -34,6 +34,7 @@ function bootstrapWithJwt(jwt: { issuer?: string; audience?: string | string[] }
     },
     makeEventBus(),
     undefined,
+    undefined,
     {
       signing: {
         secret: 'test-secret-key-must-be-at-least-32-chars!!',
@@ -106,6 +107,7 @@ describe('auth bootstrap hardening', () => {
           },
         },
         makeEventBus(),
+        undefined,
         undefined,
         {
           signing: {

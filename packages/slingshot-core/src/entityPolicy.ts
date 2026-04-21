@@ -35,6 +35,25 @@ interface SlingshotEntityPluginState {
   [POLICY_REGISTRY_SLOT]?: EntityPolicyRegistry;
 }
 
+function ensureMutableEntityPluginState(
+  pluginState: PluginStateMap,
+  state: SlingshotEntityPluginState | undefined,
+): SlingshotEntityPluginState {
+  if (!state) {
+    const nextState: SlingshotEntityPluginState = {};
+    pluginState.set(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+    return nextState;
+  }
+
+  if (Object.isExtensible(state)) {
+    return state;
+  }
+
+  const nextState: SlingshotEntityPluginState = { ...state };
+  pluginState.set(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+  return nextState;
+}
+
 /**
  * Retrieve or create the entity policy registry for the current app instance.
  */
@@ -46,13 +65,10 @@ export function getOrCreateEntityPolicyRegistry(
     throw new Error('[slingshot-entity] pluginState is not available for policy registry access');
   }
 
-  let state = pluginState.get(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY) as
+  const existingState = pluginState.get(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY) as
     | SlingshotEntityPluginState
     | undefined;
-  if (!state) {
-    state = {};
-    pluginState.set(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, state);
-  }
+  const state = ensureMutableEntityPluginState(pluginState, existingState);
 
   if (!state[POLICY_REGISTRY_SLOT]) {
     state[POLICY_REGISTRY_SLOT] = createEntityPolicyRegistry();

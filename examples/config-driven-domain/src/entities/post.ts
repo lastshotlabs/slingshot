@@ -25,9 +25,13 @@ export const Post = defineEntity('Post', {
         requires: 'blog:post.write',
         scope: { resourceType: 'blog:author', resourceId: 'param:authorId' },
       },
-      event: { key: 'blog:post.created', payload: ['id', 'authorId', 'title'] },
+      event: {
+        key: 'blog:post.created',
+        payload: ['id', 'authorId', 'title'],
+        exposure: ['client-safe'],
+        scope: { resourceType: 'blog:author', resourceId: 'record:authorId' },
+      },
     },
-    clientSafeEvents: ['blog:post.created'],
     permissions: {
       resourceType: 'blog:author',
       scopeField: 'authorId',

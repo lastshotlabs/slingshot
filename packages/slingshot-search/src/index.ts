@@ -11,10 +11,6 @@ export { createTypesenseProvider } from './providers/typesense';
 export { createElasticsearchProvider } from './providers/elasticsearch';
 export { createAlgoliaProvider } from './providers/algolia';
 
-/** Client-safe event keys emitted by the search package during indexing and sync flows. */
-export { SEARCH_CLIENT_SAFE_KEYS } from './events';
-export type { SearchClientSafeKey } from './events';
-
 // --- Route constants ---
 /** Canonical route ids for the HTTP surface mounted by `createSearchPlugin()`. */
 export { SEARCH_ROUTES } from './routes/index';

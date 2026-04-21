@@ -43,11 +43,12 @@ const config = {} as SlingshotFrameworkConfig;
 async function buildApp() {
   const app = new Hono() as unknown as PluginSetupContext['app'];
   const bus = new InProcessAdapter();
+  const events = {} as PluginSetupContext['events'];
   const plugin = createMyPlugin({ greeting: 'hello' });
 
   // For a StandalonePlugin, call setup() directly.
   // setup() calls setupMiddleware then setupRoutes in order.
-  await plugin.setup!({ app, config, bus });
+  await plugin.setup!({ app, config, bus, events });
 
   return { app, bus };
 }
@@ -113,6 +114,7 @@ const config = {} as SlingshotFrameworkConfig;
 async function buildAuthenticatedApp() {
   const app = new Hono() as unknown as PluginSetupContext['app'];
   const bus = new InProcessAdapter();
+  const events = {} as PluginSetupContext['events'];
 
   const authPlugin = createAuthPlugin({
     auth: { roles: ['user'], defaultRole: 'user' },
@@ -121,8 +123,8 @@ async function buildAuthenticatedApp() {
   });
   const myPlugin = createMyPlugin();
 
-  await authPlugin.setup!({ app, config, bus });
-  await myPlugin.setup!({ app, config, bus });
+  await authPlugin.setup!({ app, config, bus, events });
+  await myPlugin.setup!({ app, config, bus, events });
 
   return { app, bus };
 }
@@ -210,8 +212,9 @@ describe('my-plugin event emission', () => {
   test('creating an item emits my-plugin:item.created', async () => {
     const app = new Hono() as unknown as PluginSetupContext['app'];
     const bus = new InProcessAdapter();
+    const events = {} as PluginSetupContext['events'];
     const plugin = createMyPlugin();
-    await plugin.setup!({ app, config, bus });
+    await plugin.setup!({ app, config, bus, events });
 
     // Collect emitted events before driving the request
     const emitted: Array<{ name: string; orgId: string }> = [];
@@ -236,8 +239,9 @@ describe('my-plugin event emission', () => {
   test('deleting an item emits my-plugin:item.deleted', async () => {
     const app = new Hono() as unknown as PluginSetupContext['app'];
     const bus = new InProcessAdapter();
+    const events = {} as PluginSetupContext['events'];
     const plugin = createMyPlugin();
-    await plugin.setup!({ app, config, bus });
+    await plugin.setup!({ app, config, bus, events });
 
     const deleted: string[] = [];
     bus.on('my-plugin:item.deleted' as keyof SlingshotEventMap, (payload: unknown) => {
@@ -288,9 +292,10 @@ describe('cross-plugin state via pluginState', () => {
   test('my-plugin registers its runtime under its key', async () => {
     const app = new Hono() as unknown as PluginSetupContext['app'];
     const bus = new InProcessAdapter();
+    const events = {} as PluginSetupContext['events'];
 
     const myPlugin = createMyPlugin({ featureFlag: true });
-    await myPlugin.setup!({ app, config, bus });
+    await myPlugin.setup!({ app, config, bus, events });
 
     // After setup, the plugin must have stored its state on ctx.pluginState
     const ctx = getContext(app);
@@ -303,10 +308,11 @@ describe('cross-plugin state via pluginState', () => {
   test('dependent-plugin reads my-plugin state during its own setup', async () => {
     const app = new Hono() as unknown as PluginSetupContext['app'];
     const bus = new InProcessAdapter();
+    const events = {} as PluginSetupContext['events'];
 
     // my-plugin must be set up first — dependent-plugin reads from pluginState during setup
-    await createMyPlugin({ featureFlag: true }).setup!({ app, config, bus });
-    await createDependentPlugin().setup!({ app, config, bus });
+    await createMyPlugin({ featureFlag: true }).setup!({ app, config, bus, events });
+    await createDependentPlugin().setup!({ app, config, bus, events });
 
     const ctx = getContext(app);
     // Verify the dependent plugin picked up the state
@@ -365,8 +371,9 @@ In-memory adapters hold state in closure variables. State leaks across tests if 
       async function buildApp() {
         const app = new Hono() as unknown as PluginSetupContext['app'];
         const bus = new InProcessAdapter();
+        const events = {} as PluginSetupContext['events'];
         const plugin = createMyPlugin();
-        await plugin.setup!({ app, config, bus });
+        await plugin.setup!({ app, config, bus, events });
         return { app, bus };
       }
 
@@ -413,7 +420,8 @@ In-memory adapters hold state in closure variables. State leaks across tests if 
       beforeEach(async () => {
         app = new Hono() as unknown as PluginSetupContext['app'];
         const bus = new InProcessAdapter();
-        await createMyPlugin().setup!({ app, config, bus });
+        const events = {} as PluginSetupContext['events'];
+        await createMyPlugin().setup!({ app, config, bus, events });
       });
 
       afterEach(async () => {
@@ -471,9 +479,10 @@ describe('my-plugin with SQLite', () => {
   test('items persist across separate request cycles', async () => {
     const app = new Hono() as unknown as PluginSetupContext['app'];
     const bus = new InProcessAdapter();
+    const events = {} as PluginSetupContext['events'];
     const config = { sqlite: DB_PATH } as unknown as SlingshotFrameworkConfig;
 
-    await createMyPlugin({ db: { items: 'sqlite' } }).setup!({ app, config, bus });
+    await createMyPlugin({ db: { items: 'sqlite' } }).setup!({ app, config, bus, events });
 
     // Create
     const createRes = await app.request('/my-plugin/items', {

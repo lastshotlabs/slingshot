@@ -46,7 +46,15 @@ export const Room = defineEntity('Room', {
     list: {},
     create: {
       permission: { requires: 'chat:room.write' },
-      event: { key: 'chat:room.created', payload: ['id', 'type', 'name'] },
+      event: {
+        key: 'chat:room.created',
+        payload: ['id', 'type', 'name'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'chat:room',
+          resourceId: 'record:id',
+        },
+      },
       middleware: ['roomCreatorGrant'],
     },
     update: {
@@ -54,14 +62,30 @@ export const Room = defineEntity('Room', {
         requires: 'chat:room.manage',
         scope: { resourceType: 'chat:room', resourceId: 'param:id' },
       },
-      event: { key: 'chat:room.updated', payload: ['id'] },
+      event: {
+        key: 'chat:room.updated',
+        payload: ['id'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'chat:room',
+          resourceId: 'record:id',
+        },
+      },
     },
     delete: {
       permission: {
         requires: 'chat:room.delete',
         scope: { resourceType: 'chat:room', resourceId: 'param:id' },
       },
-      event: { key: 'chat:room.deleted', payload: ['id'] },
+      event: {
+        key: 'chat:room.deleted',
+        payload: ['id'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'chat:room',
+          resourceId: 'record:id',
+        },
+      },
     },
     operations: {
       findDm: { auth: 'userAuth' },
@@ -73,7 +97,15 @@ export const Room = defineEntity('Room', {
           requires: 'chat:room.manage',
           scope: { resourceType: 'chat:room', resourceId: 'param:id' },
         },
-        event: { key: 'chat:room.archived', payload: ['id'] },
+        event: {
+          key: 'chat:room.archived',
+          payload: ['id'],
+          exposure: ['client-safe'],
+          scope: {
+            resourceType: 'chat:room',
+            resourceId: 'record:id',
+          },
+        },
       },
       unarchiveRoom: {
         auth: 'userAuth',
@@ -81,17 +113,18 @@ export const Room = defineEntity('Room', {
           requires: 'chat:room.manage',
           scope: { resourceType: 'chat:room', resourceId: 'param:id' },
         },
-        event: { key: 'chat:room.unarchived', payload: ['id'] },
+        event: {
+          key: 'chat:room.unarchived',
+          payload: ['id'],
+          exposure: ['client-safe'],
+          scope: {
+            resourceType: 'chat:room',
+            resourceId: 'record:id',
+          },
+        },
       },
     },
     middleware: { roomCreatorGrant: true },
-    clientSafeEvents: [
-      'chat:room.created',
-      'chat:room.updated',
-      'chat:room.deleted',
-      'chat:room.archived',
-      'chat:room.unarchived',
-    ],
     permissions: {
       resourceType: 'chat:room',
       actions: ['read', 'write', 'invite', 'kick', 'manage', 'delete'],

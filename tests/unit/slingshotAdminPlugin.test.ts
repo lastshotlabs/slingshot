@@ -70,8 +70,19 @@ function makeCtx(existingPermissions?: unknown): {
       on: () => {},
       off: () => {},
       emit: () => {},
-      ensureClientSafeEventKey: (k: string) => k,
     } as unknown as PluginSetupContext['bus'],
+    events: {
+      publish() {
+        return null as never;
+      },
+      register() {},
+      get() {
+        return undefined;
+      },
+      list() {
+        return [];
+      },
+    } as PluginSetupContext['events'],
   };
 
   return { ctx, pluginState };

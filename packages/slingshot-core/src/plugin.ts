@@ -2,6 +2,7 @@ import type { Hono } from 'hono';
 import type { AppEnv } from './context';
 import type { SlingshotFrameworkConfig } from './context/frameworkConfig';
 import type { SlingshotEventBus } from './eventBus';
+import type { SlingshotEvents } from './eventPublisher';
 
 /**
  * Context object passed to all plugin lifecycle methods.
@@ -12,9 +13,14 @@ import type { SlingshotEventBus } from './eventBus';
  *
  * @example
  * ```ts
- * async setupRoutes({ app, bus }: PluginSetupContext) {
+ * async setupMiddleware({ events }: PluginSetupContext) {
+ *   events.register(defineEvent('my-plugin:event.created', {
+ *     owner: 'my-plugin',
+ *   }));
+ * }
+ *
+ * async setupRoutes({ app }: PluginSetupContext) {
  *   app.route('/my-plugin', myRouter);
- *   bus.registerClientSafeEvents(['my-plugin:event.created']);
  * }
  * ```
  */
@@ -25,6 +31,8 @@ export interface PluginSetupContext {
   config: SlingshotFrameworkConfig;
   /** The instance-owned event bus. */
   bus: SlingshotEventBus;
+  /** Registry-backed event publisher shared across all plugins in this app instance. */
+  events: SlingshotEvents;
 }
 
 /**
@@ -37,8 +45,9 @@ export interface PluginSetupContext {
  * @remarks
  * Declare `dependencies` to ensure prerequisite plugins are registered first.
  * The framework resolves dependency order before calling any plugin phases.
- * Plugin runtime state should be stored in `ctx.pluginState.get(plugin.name)` during
- * `setupPost` so that state is instance-scoped rather than module-global.
+ * Plugin runtime state should be stored in `ctx.pluginState.get(plugin.name)` in the
+ * earliest lifecycle phase where it becomes canonical, so it stays instance-scoped
+ * rather than module-global and dependent plugins can read it in later phases.
  *
  * @example
  * ```ts
@@ -78,7 +87,8 @@ export interface SlingshotPlugin {
    * Declaring a dependency guarantees ordering, not availability. If a dependency plugin
    * is not registered with the same app instance, bootstrap will throw. For truly optional
    * cross-plugin coordination, read `ctx.pluginState.get('other-plugin')` inside
-   * `setupPost` and handle `null` yourself.
+   * a phase that runs after the dependency has published its state and handle `null`
+   * yourself.
    *
    * @example `['slingshot-auth', 'slingshot-tenancy']`
    */

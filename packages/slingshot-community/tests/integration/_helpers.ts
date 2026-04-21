@@ -12,6 +12,8 @@ import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import type {
   CoreRegistrar,
@@ -203,6 +205,10 @@ export async function createHarness(opts?: {
   const permAdapter = createPermAdapter();
   const notifications = createNotificationsTestAdapters();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
   const frameworkConfig = createFrameworkConfig();
 
   const permissionsState = { evaluator, registry, adapter: permAdapter };
@@ -271,9 +277,9 @@ export async function createHarness(opts?: {
     await next();
   });
 
-  await plugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
-  await plugin.setupRoutes?.({ app, config: frameworkConfig, bus });
-  await plugin.setupPost?.({ app, config: frameworkConfig, bus });
+  await plugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
+  await plugin.setupRoutes?.({ app, config: frameworkConfig, bus, events });
+  await plugin.setupPost?.({ app, config: frameworkConfig, bus, events });
 
   if (opts?.grantAll) {
     for (const action of [

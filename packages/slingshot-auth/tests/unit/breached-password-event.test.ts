@@ -26,7 +26,6 @@ function makeCapturingBus(): { bus: SlingshotEventBus; events: string[] } {
     on: () => {},
     off: () => {},
     shutdown: async () => {},
-    clientSafeKeys: [],
   } as unknown as SlingshotEventBus;
   return { bus, events };
 }
@@ -130,9 +129,6 @@ describe('checkBreachedPassword — API failure event emission (F10)', () => {
       on: () => {},
       off: () => {},
       shutdown: async () => {},
-      clientSafeKeys: new Set<string>(),
-      registerClientSafeEvents: () => {},
-      ensureClientSafeEventKey: (key: string) => key,
     } as unknown as SlingshotEventBus;
 
     try {

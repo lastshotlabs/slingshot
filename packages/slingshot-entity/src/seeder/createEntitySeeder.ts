@@ -30,7 +30,7 @@
  * @module
  */
 import { faker as defaultFaker } from '@faker-js/faker';
-import { type GenerateOptions, generateFromSchema } from '@lastshotlabs/slingshot-core/faker';
+import { type GenerateOptions, generateFromSchema } from '@lastshotlabs/slingshot-core';
 import type { ResolvedEntityConfig } from '../types/entity';
 
 // ---------------------------------------------------------------------------

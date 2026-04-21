@@ -4,6 +4,8 @@ import {
   InProcessAdapter,
   PERMISSIONS_STATE_KEY,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
   getContext,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
@@ -87,6 +89,10 @@ function createFakeChatPeer() {
 }
 
 function attachInteractionsContext(app: Hono, bus: InProcessAdapter, withPermissions = true) {
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
   const pluginState = new Map<string, unknown>([
     ['slingshot-chat', { interactionsPeer: createFakeChatPeer() }],
   ]);
@@ -107,6 +113,7 @@ function attachInteractionsContext(app: Hono, bus: InProcessAdapter, withPermiss
     wsEndpoints: {},
     wsPublish: null,
     bus,
+    events,
   };
   attachContext(app, ctx as never);
 
@@ -163,6 +170,7 @@ describe('createInteractionsPlugin lifecycle', () => {
         app: app as never,
         config: createFrameworkConfig(),
         bus,
+        events: getContext(app).events,
       }),
     ).rejects.toThrow('Permissions state not found');
   });
@@ -179,6 +187,7 @@ describe('createInteractionsPlugin lifecycle', () => {
         app: app as never,
         config: createFrameworkConfig(),
         bus,
+        events: getContext(app).events,
       }),
     ).rejects.toThrow('InteractionEvent adapter was not resolved during setupRoutes');
   });
@@ -200,6 +209,7 @@ describe('createInteractionsPlugin lifecycle', () => {
       app: app as never,
       config: createFrameworkConfig(),
       bus,
+      events: getContext(app).events,
     });
 
     const ctxState = getContext(app).pluginState.get(INTERACTIONS_PLUGIN_STATE_KEY) as
@@ -210,8 +220,8 @@ describe('createInteractionsPlugin lifecycle', () => {
     expect(ctxState?.handlers.resolve('missing:action')).toBeNull();
     expect(ctxState?.rateLimitWindowMs).toBe(30_000);
     expect(ctxState?.rateLimitMax).toBe(5);
-    expect(bus.clientSafeKeys.has('interactions:event.dispatched')).toBe(true);
-    expect(bus.clientSafeKeys.has('interactions:event.failed')).toBe(true);
+    expect(ctxState?.events.get('interactions:event.dispatched')).toBeDefined();
+    expect(ctxState?.events.get('interactions:event.failed')).toBeDefined();
 
     const runtimeDispatch = mock(async () => ({
       status: 'ok' as const,
@@ -228,6 +238,7 @@ describe('createInteractionsPlugin lifecycle', () => {
       app: app as never,
       config: createFrameworkConfig(),
       bus,
+      events: getContext(app).events,
     });
     expect(ctxState?.repos.interactionEvents).not.toBeNull();
 
@@ -235,6 +246,7 @@ describe('createInteractionsPlugin lifecycle', () => {
       app: app as never,
       config: createFrameworkConfig(),
       bus,
+      events: getContext(app).events,
     });
 
     expect(infoSpy).toHaveBeenCalled();

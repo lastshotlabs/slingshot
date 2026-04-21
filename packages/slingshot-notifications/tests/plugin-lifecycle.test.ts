@@ -9,6 +9,7 @@ import {
 import { createNotificationsPlugin } from '../src/plugin';
 import { NOTIFICATIONS_PLUGIN_STATE_KEY } from '../src/state';
 import type { NotificationsPluginState } from '../src/state';
+import { createNotificationsTestEvents } from '../src/testing';
 
 function createFrameworkConfig() {
   const cfg = {
@@ -35,51 +36,80 @@ describe('createNotificationsPlugin lifecycle', () => {
   test('setupPost fails loudly when setupRoutes never resolved the entity adapters', async () => {
     const app = new Hono();
     const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus, { registerDefinitions: false });
     attachMinimalContext(app, bus);
 
     const plugin = createNotificationsPlugin({
       dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
     });
 
+    await plugin.setupMiddleware?.({
+      app: app as never,
+      config: createFrameworkConfig(),
+      bus,
+      events,
+    });
     await expect(
       plugin.setupPost?.({
         app: app as never,
         config: createFrameworkConfig(),
         bus,
+        events,
       }),
     ).rejects.toThrow('Entity adapters were not resolved during setupRoutes');
   });
 
   test('setupRoutes mounts the SSE endpoint only when enabled', async () => {
-    const bus = new InProcessAdapter();
+    const enabledBus = new InProcessAdapter();
+    const enabledEvents = createNotificationsTestEvents(enabledBus, {
+      registerDefinitions: false,
+    });
 
     const enabledApp = new Hono();
-    attachMinimalContext(enabledApp, bus);
+    attachMinimalContext(enabledApp, enabledBus);
     const enabledPlugin = createNotificationsPlugin({
       dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
       sseEnabled: true,
       ssePath: '/stream',
     });
+    await enabledPlugin.setupMiddleware?.({
+      app: enabledApp as never,
+      config: createFrameworkConfig(),
+      bus: enabledBus,
+      events: enabledEvents,
+    });
     await enabledPlugin.setupRoutes?.({
       app: enabledApp as never,
       config: createFrameworkConfig(),
-      bus,
+      bus: enabledBus,
+      events: enabledEvents,
     });
 
     const enabledResponse = await enabledApp.request('/stream');
     expect(enabledResponse.status).toBe(401);
     expect(await enabledResponse.json()).toEqual({ error: 'Unauthorized' });
 
+    const disabledBus = new InProcessAdapter();
+    const disabledEvents = createNotificationsTestEvents(disabledBus, {
+      registerDefinitions: false,
+    });
     const disabledApp = new Hono();
-    attachMinimalContext(disabledApp, bus);
+    attachMinimalContext(disabledApp, disabledBus);
     const disabledPlugin = createNotificationsPlugin({
       dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
       sseEnabled: false,
     });
+    await disabledPlugin.setupMiddleware?.({
+      app: disabledApp as never,
+      config: createFrameworkConfig(),
+      bus: disabledBus,
+      events: disabledEvents,
+    });
     await disabledPlugin.setupRoutes?.({
       app: disabledApp as never,
       config: createFrameworkConfig(),
-      bus,
+      bus: disabledBus,
+      events: disabledEvents,
     });
 
     expect((await disabledApp.request('/notifications/sse')).status).toBe(404);
@@ -88,6 +118,7 @@ describe('createNotificationsPlugin lifecycle', () => {
   test('setupPost publishes plugin state, drives builder flow, and teardown removes listeners', async () => {
     const app = new Hono();
     const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus, { registerDefinitions: false });
     attachMinimalContext(app, bus);
 
     const plugin = createNotificationsPlugin({
@@ -99,15 +130,23 @@ describe('createNotificationsPlugin lifecycle', () => {
       },
     });
 
+    await plugin.setupMiddleware?.({
+      app: app as never,
+      config: createFrameworkConfig(),
+      bus,
+      events,
+    });
     await plugin.setupRoutes?.({
       app: app as never,
       config: createFrameworkConfig(),
       bus,
+      events,
     });
     await plugin.setupPost?.({
       app: app as never,
       config: createFrameworkConfig(),
       bus,
+      events,
     });
 
     const state = getContext(app).pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as

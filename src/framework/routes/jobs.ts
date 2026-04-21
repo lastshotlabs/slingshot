@@ -3,7 +3,12 @@ import type { QueueFactory } from '@lib/queue';
 import type { Context, Next } from 'hono';
 import { z } from 'zod';
 import { createRoute, withSecurity } from '@lastshotlabs/slingshot-core';
-import { createRouter, getRouteAuth, getSlingshotCtx } from '@lastshotlabs/slingshot-core';
+import {
+  createRouter,
+  getActorId,
+  getRouteAuth,
+  getSlingshotCtx,
+} from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import type { JobsConfig } from '../../config/types/jobs';
 
@@ -82,7 +87,7 @@ export const createJobsRouter = (
   if (scopeToUser && authConfig !== 'userAuth') {
     throw new Error(
       '[security] jobs.scopeToUser requires jobs.auth = "userAuth". ' +
-        'Custom middleware cannot safely prove per-user job ownership unless it populates the standard authUserId context.',
+        'Custom middleware cannot safely prove per-user job ownership unless it publishes the canonical actor identity.',
     );
   }
 
@@ -251,7 +256,7 @@ export const createJobsRouter = (
     // Optionally filter by userId
     let filteredJobs = jobs;
     if (scopeToUser && hasUserAuth) {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       filteredJobs = jobs.filter(job => (job.data as SlingshotJobData).userId === userId);
     }
 
@@ -321,7 +326,7 @@ export const createJobsRouter = (
 
     let filteredJobs = jobs;
     if (scopeToUser && hasUserAuth) {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       filteredJobs = jobs.filter(job => (job.data as SlingshotJobData).userId === userId);
     }
 
@@ -376,7 +381,7 @@ export const createJobsRouter = (
 
     // Scope to user if configured
     if (scopeToUser && hasUserAuth) {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if ((job.data as SlingshotJobData).userId !== userId) {
         return c.json({ error: 'Job not found' }, 404);
       }
@@ -433,7 +438,7 @@ export const createJobsRouter = (
     if (!job) return c.json({ error: 'Job not found' }, 404);
 
     if (scopeToUser && hasUserAuth) {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if ((job.data as SlingshotJobData).userId !== userId) {
         return c.json({ error: 'Job not found' }, 404);
       }

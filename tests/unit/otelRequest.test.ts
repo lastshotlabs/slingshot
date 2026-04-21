@@ -2,6 +2,7 @@ import type { Span, TextMapGetter, Tracer } from '@opentelemetry/api';
 import { SpanStatusCode, propagation } from '@opentelemetry/api';
 import { describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
+import type { Actor } from '@lastshotlabs/slingshot-core';
 import { otelRequestMiddleware } from '../../src/framework/middleware/otelRequest';
 
 // ---------------------------------------------------------------------------
@@ -87,8 +88,14 @@ function buildApp(tracer: Tracer, handler?: (c: any) => any) {
   // Provide default context variables the middleware reads after next()
   app.use('/*', async (c, next) => {
     c.set('requestId', 'req-123');
-    c.set('authUserId', 'user-456');
-    c.set('tenantId', 'tenant-789');
+    c.set('actor', {
+      id: 'user-456',
+      kind: 'user',
+      tenantId: 'tenant-789',
+      sessionId: null,
+      roles: null,
+      claims: {},
+    } satisfies Actor);
     await next();
   });
 

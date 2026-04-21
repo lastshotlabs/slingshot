@@ -151,8 +151,10 @@ ctx.bus.on('auth:user.created', async payload => {
 // Emit from anywhere
 ctx.bus.emit('note.created', { userId, noteId });
 
-// Register events as safe to forward to SSE clients
-ctx.bus.registerClientSafeEvents(['note.created', 'note.updated', 'note.deleted']);
+// Register events for client-safe delivery to SSE clients
+ctx.events.register(defineEvent('note.created', { owner: 'notes', exposure: ['client-safe'] }));
+ctx.events.register(defineEvent('note.updated', { owner: 'notes', exposure: ['client-safe'] }));
+ctx.events.register(defineEvent('note.deleted', { owner: 'notes', exposure: ['client-safe'] }));
 ```
 
 ## Config access

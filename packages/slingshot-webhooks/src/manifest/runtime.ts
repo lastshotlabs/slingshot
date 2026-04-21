@@ -1,5 +1,14 @@
 import { HTTPException } from 'hono/http-exception';
-import type { PaginatedResult } from '@lastshotlabs/slingshot-core';
+import type {
+  EventDefinition,
+  EventDefinitionRegistry,
+  EventEnvelope,
+  EventKey,
+  EventScope,
+  EventSubscriptionPrincipal,
+  PaginatedResult,
+} from '@lastshotlabs/slingshot-core';
+import { authorizeEventSubscriber } from '@lastshotlabs/slingshot-core';
 import type {
   EntityManifestRuntime,
   EntityPluginAfterAdaptersContext,
@@ -11,14 +20,28 @@ import {
 } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import { matchGlob } from '../lib/globMatch';
-import type { WebhookAttempt, WebhookDelivery, WebhookEndpoint } from '../types/models';
+import type { WebhookAdapter } from '../types/adapter';
+import type {
+  WebhookAttempt,
+  WebhookDelivery,
+  WebhookEndpoint,
+  WebhookEndpointSubscription,
+  WebhookEndpointSubscriptionInput,
+  WebhookOwnerType,
+  WebhookSubscriber,
+  WebhookSubscriptionExposure,
+} from '../types/models';
+import type { WebhookJob } from '../types/queue';
 
 type EndpointRecord = {
   id: string;
+  ownerType?: WebhookOwnerType;
+  ownerId?: string;
   tenantId?: string | null;
   url: string;
   secret: string;
-  events: string[];
+  subscriptions?: WebhookEndpointSubscription[];
+  events?: string[];
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -30,8 +53,12 @@ type DeliveryRecord = {
   id: string;
   tenantId?: string | null;
   endpointId: string;
-  event: string;
-  payload: unknown;
+  event: EventKey;
+  eventId: string;
+  occurredAt: string;
+  subscriber: WebhookSubscriber;
+  sourceScope?: EventScope | null;
+  projectedPayload: string;
   status: DeliveryTransitionStatus;
   attempts: number;
   nextRetryAt?: string | null;
@@ -42,7 +69,7 @@ type DeliveryRecord = {
 
 type EndpointRuntimeAdapter = BareEntityAdapter & {
   reveal(id: string): Promise<EndpointRecord | null>;
-  findForEvent(input: { event: string }): Promise<EndpointRecord[]>;
+  applyRawUpdate(id: string, input: Record<string, unknown>): Promise<EndpointRecord | null>;
   listRaw(opts?: {
     filter?: unknown;
     limit?: number;
@@ -67,32 +94,24 @@ type DeliveryRuntimeAdapter = BareEntityAdapter & {
   }): Promise<DeliveryRecord>;
 };
 
-export type WebhookRuntimeAdapter = {
-  getEndpoint(id: string): Promise<WebhookEndpoint | null>;
-  findEndpointsForEvent(event: string): Promise<WebhookEndpoint[]>;
-  createDelivery(input: {
-    endpointId: string;
-    event: string;
-    payload: string;
-    maxAttempts: number;
-  }): Promise<WebhookDelivery>;
-  updateDelivery(
-    id: string,
-    input: {
-      status?: WebhookDelivery['status'];
-      attempts?: number;
-      nextRetryAt?: string | null;
-      lastAttempt?: WebhookAttempt;
-    },
-  ): Promise<WebhookDelivery>;
-  getDelivery(id: string): Promise<WebhookDelivery | null>;
-  listDeliveries(input?: {
-    endpointId?: string;
-    status?: WebhookDelivery['status'] | WebhookDelivery['status'][];
-    limit?: number;
-    cursor?: string;
-  }): Promise<PaginatedResult<WebhookDelivery>>;
-};
+export interface GovernedWebhookRuntime {
+  initializeGovernance(definitions: EventDefinitionRegistry): Promise<void>;
+  listSubscribableDefinitions(subscriber: WebhookSubscriber): readonly EventDefinition[];
+}
+
+export type WebhookRuntimeAdapter = WebhookAdapter & GovernedWebhookRuntime;
+
+export interface ResolvedWebhookDelivery {
+  endpoint: WebhookEndpoint;
+  delivery: WebhookDelivery;
+  job: Omit<WebhookJob, 'id' | 'createdAt'>;
+}
+
+const WEBHOOK_EXPOSURE_PRIORITY: readonly WebhookSubscriptionExposure[] = [
+  'tenant-webhook',
+  'user-webhook',
+  'app-webhook',
+] as const;
 
 function hasMethod(value: BareEntityAdapter, method: string): boolean {
   return typeof value[method] === 'function';
@@ -110,24 +129,40 @@ function maskSecret(secret: string): string {
 
 function sanitizeEndpoint(record: EndpointRecord): WebhookEndpoint {
   return {
-    ...record,
+    id: record.id,
+    ownerType: record.ownerType ?? 'tenant',
+    ownerId: record.ownerId ?? record.tenantId ?? '',
+    tenantId: record.tenantId ?? null,
+    url: record.url,
     secret: maskSecret(record.secret),
+    subscriptions: normalizeStoredSubscriptions(record.subscriptions),
+    enabled: record.enabled,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   };
 }
 
 function sanitizeDelivery(record: DeliveryRecord): WebhookDelivery {
   return {
-    ...record,
+    id: record.id,
+    endpointId: record.endpointId,
+    event: record.event,
+    eventId: record.eventId,
+    occurredAt: record.occurredAt,
+    subscriber: {
+      ownerType: record.subscriber.ownerType,
+      ownerId: record.subscriber.ownerId,
+      tenantId: record.subscriber.tenantId ?? null,
+    },
+    sourceScope: record.sourceScope ?? null,
+    projectedPayload: record.projectedPayload,
+    status: record.status,
+    attempts: record.attempts,
     nextRetryAt: record.nextRetryAt ?? null,
+    lastAttempt: record.lastAttempt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
   };
-}
-
-function parsePayload(payload: string): unknown {
-  try {
-    return JSON.parse(payload) as unknown;
-  } catch {
-    return payload;
-  }
 }
 
 function isHttpWebhookUrl(value: string): boolean {
@@ -136,35 +171,6 @@ function isHttpWebhookUrl(value: string): boolean {
     return url.protocol === 'http:' || url.protocol === 'https:';
   } catch {
     return false;
-  }
-}
-
-function assertValidEndpointInput(input: Record<string, unknown>, partial: boolean): void {
-  const url = input.url;
-  if (!partial || url !== undefined) {
-    if (typeof url !== 'string' || !isHttpWebhookUrl(url)) {
-      throw new HTTPException(400, {
-        message: 'Webhook target URL must use http or https',
-      });
-    }
-  }
-
-  const secret = input.secret;
-  if (!partial || secret !== undefined) {
-    if (typeof secret !== 'string' || secret.length === 0) {
-      throw new HTTPException(400, { message: 'secret is required' });
-    }
-  }
-
-  const events = input.events;
-  if (!partial || events !== undefined) {
-    if (
-      !Array.isArray(events) ||
-      events.length === 0 ||
-      events.some(value => typeof value !== 'string')
-    ) {
-      throw new HTTPException(400, { message: 'events must not be empty' });
-    }
   }
 }
 
@@ -179,7 +185,7 @@ function normalizeLastAttempt(value: WebhookAttempt | undefined): WebhookAttempt
 }
 
 function isEndpointRuntimeAdapter(value: unknown): value is EndpointRuntimeAdapter {
-  return hasMethods(value, ['reveal', 'listRaw', 'findForEvent']);
+  return hasMethods(value, ['reveal', 'listRaw']);
 }
 
 function requireEndpointRuntimeAdapter(value: BareEntityAdapter): EndpointRuntimeAdapter {
@@ -246,29 +252,496 @@ function validateTransition(
   }
 }
 
+function normalizeStoredSubscriptions(
+  value: WebhookEndpointSubscription[] | undefined,
+): WebhookEndpointSubscription[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return [...value]
+    .filter(
+      (item): item is WebhookEndpointSubscription =>
+        typeof item?.event === 'string' &&
+        typeof item?.exposure === 'string' &&
+        WEBHOOK_EXPOSURE_PRIORITY.includes(item.exposure as WebhookSubscriptionExposure),
+    )
+    .sort((left, right) => left.event.localeCompare(right.event));
+}
+
+function assertValidEnabled(value: unknown): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw new HTTPException(400, { message: 'enabled must be a boolean' });
+  }
+}
+
+function assertEndpointUrl(input: Record<string, unknown>, partial: boolean): void {
+  const url = input.url;
+  if (!partial || url !== undefined) {
+    if (typeof url !== 'string' || !isHttpWebhookUrl(url)) {
+      throw new HTTPException(400, {
+        message: 'Webhook target URL must use http or https',
+      });
+    }
+  }
+}
+
+function assertEndpointSecret(input: Record<string, unknown>, partial: boolean): void {
+  const secret = input.secret;
+  if (!partial || secret !== undefined) {
+    if (typeof secret !== 'string' || secret.length === 0) {
+      throw new HTTPException(400, { message: 'secret is required' });
+    }
+  }
+}
+
+function selectExposureForOwner(
+  definition: Pick<EventDefinition, 'exposure'>,
+  ownerType: WebhookOwnerType,
+): WebhookSubscriptionExposure | null {
+  switch (ownerType) {
+    case 'tenant':
+      return definition.exposure.includes('tenant-webhook') ? 'tenant-webhook' : null;
+    case 'user':
+      return definition.exposure.includes('user-webhook') ? 'user-webhook' : null;
+    case 'app':
+      return definition.exposure.includes('app-webhook') ? 'app-webhook' : null;
+    case 'system':
+      return (
+        WEBHOOK_EXPOSURE_PRIORITY.find(exposure => definition.exposure.includes(exposure)) ?? null
+      );
+    default:
+      return null;
+  }
+}
+
+function listDefinitionsForOwner(
+  definitions: EventDefinitionRegistry,
+  ownerType: WebhookOwnerType,
+): readonly EventDefinition[] {
+  return definitions
+    .list()
+    .filter(definition => selectExposureForOwner(definition, ownerType) !== null);
+}
+
+function parseSubscriptionInput(
+  value: unknown,
+): WebhookEndpointSubscriptionInput {
+  if (typeof value !== 'object' || value === null) {
+    throw new HTTPException(400, { message: 'subscriptions entries must be objects' });
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const event = candidate.event;
+  const pattern = candidate.pattern;
+  if (typeof event === 'string' && pattern === undefined) {
+    return { event: event as EventKey };
+  }
+  if (typeof pattern === 'string' && event === undefined) {
+    return { pattern };
+  }
+  throw new HTTPException(400, {
+    message: 'subscriptions entries must provide exactly one of "event" or "pattern"',
+  });
+}
+
+function normalizeSubscriptionRequests(
+  value: unknown,
+  partial: boolean,
+): WebhookEndpointSubscriptionInput[] | undefined {
+  if (value === undefined && partial) {
+    return undefined;
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new HTTPException(400, { message: 'subscriptions must not be empty' });
+  }
+  return value.map(parseSubscriptionInput);
+}
+
+function dedupeAndSortSubscriptions(
+  subscriptions: Iterable<WebhookEndpointSubscription>,
+): WebhookEndpointSubscription[] {
+  const deduped = new Map<EventKey, WebhookEndpointSubscription>();
+  for (const subscription of subscriptions) {
+    const existing = deduped.get(subscription.event);
+    if (!existing) {
+      deduped.set(subscription.event, subscription);
+      continue;
+    }
+    if (!existing.sourcePattern && subscription.sourcePattern) {
+      deduped.set(subscription.event, subscription);
+    }
+  }
+  return [...deduped.values()].sort((left, right) => left.event.localeCompare(right.event));
+}
+
+export function normalizeWebhookSubscriptions(
+  definitions: EventDefinitionRegistry,
+  ownerType: WebhookOwnerType,
+  requested: readonly WebhookEndpointSubscriptionInput[],
+): WebhookEndpointSubscription[] {
+  const visibleDefinitions = listDefinitionsForOwner(definitions, ownerType);
+  const visibleByKey = new Map(visibleDefinitions.map(definition => [definition.key, definition]));
+  const normalized: WebhookEndpointSubscription[] = [];
+
+  for (const request of requested) {
+    if ('event' in request) {
+      const definition = visibleByKey.get(request.event);
+      const exposure =
+        definition === undefined ? null : selectExposureForOwner(definition, ownerType);
+      if (!definition || !exposure) {
+        throw new HTTPException(400, {
+          message: `subscription event "${request.event}" is not approved for this webhook owner`,
+        });
+      }
+      normalized.push({ event: definition.key, exposure });
+      continue;
+    }
+
+    const matches = visibleDefinitions.filter(definition => matchGlob(request.pattern, definition.key));
+    if (matches.length === 0) {
+      throw new HTTPException(400, {
+        message: `subscription pattern "${request.pattern}" did not match any approved events`,
+      });
+    }
+    for (const definition of matches) {
+      const exposure = selectExposureForOwner(definition, ownerType);
+      if (!exposure) continue;
+      normalized.push({
+        event: definition.key,
+        exposure,
+        sourcePattern: request.pattern,
+      });
+    }
+  }
+
+  const deduped = dedupeAndSortSubscriptions(normalized);
+  if (deduped.length === 0) {
+    throw new HTTPException(400, {
+      message: 'subscriptions did not resolve to any approved event keys',
+    });
+  }
+  return deduped;
+}
+
+function inferCreateOwner(input: Record<string, unknown>): WebhookSubscriber {
+  const ownerType = input.ownerType;
+  const ownerId = input.ownerId;
+  const tenantId =
+    input.tenantId === undefined || input.tenantId === null ? null : String(input.tenantId);
+
+  const resolvedOwnerType =
+    ownerType === undefined ? (tenantId ? 'tenant' : undefined) : ownerType;
+  if (
+    resolvedOwnerType !== 'tenant' &&
+    resolvedOwnerType !== 'user' &&
+    resolvedOwnerType !== 'app'
+  ) {
+    throw new HTTPException(400, {
+      message: 'ownerType must be one of tenant, user, or app for management writes',
+    });
+  }
+
+  const resolvedOwnerId =
+    typeof ownerId === 'string' && ownerId.length > 0
+      ? ownerId
+      : resolvedOwnerType === 'tenant'
+        ? tenantId
+        : undefined;
+  if (!resolvedOwnerId) {
+    throw new HTTPException(400, {
+      message: 'ownerId is required unless a tenant-owned endpoint can infer it from tenantId',
+    });
+  }
+
+  return {
+    ownerType: resolvedOwnerType,
+    ownerId: resolvedOwnerId,
+    tenantId,
+  };
+}
+
+function assertNoOwnershipUpdate(input: Record<string, unknown>): void {
+  for (const field of ['ownerType', 'ownerId', 'tenantId']) {
+    if (Object.prototype.hasOwnProperty.call(input, field)) {
+      throw new HTTPException(400, {
+        message: `Webhook endpoint ownership is immutable; remove "${field}" from the update body`,
+      });
+    }
+  }
+}
+
+function normalizeEndpointCreateInput(
+  input: Record<string, unknown>,
+  definitions: EventDefinitionRegistry,
+): Record<string, unknown> {
+  if (Object.prototype.hasOwnProperty.call(input, 'events')) {
+    throw new HTTPException(400, {
+      message: 'legacy "events" input is no longer supported; use "subscriptions"',
+    });
+  }
+
+  assertEndpointUrl(input, false);
+  assertEndpointSecret(input, false);
+  assertValidEnabled(input.enabled);
+  const owner = inferCreateOwner(input);
+  const subscriptions = normalizeWebhookSubscriptions(
+    definitions,
+    owner.ownerType,
+    normalizeSubscriptionRequests(input.subscriptions, false)!,
+  );
+
+  return {
+    url: input.url,
+    secret: input.secret,
+    enabled: input.enabled ?? true,
+    ownerType: owner.ownerType,
+    ownerId: owner.ownerId,
+    tenantId: owner.tenantId,
+    subscriptions,
+    events: [],
+  };
+}
+
+function normalizeEndpointUpdateInput(
+  existing: EndpointRecord,
+  input: Record<string, unknown>,
+  definitions: EventDefinitionRegistry,
+): Record<string, unknown> {
+  if (Object.prototype.hasOwnProperty.call(input, 'events')) {
+    throw new HTTPException(400, {
+      message: 'legacy "events" input is no longer supported; use "subscriptions"',
+    });
+  }
+
+  assertNoOwnershipUpdate(input);
+  assertEndpointUrl(input, true);
+  if (Object.prototype.hasOwnProperty.call(input, 'secret')) {
+    assertEndpointSecret(input, true);
+  }
+  assertValidEnabled(input.enabled);
+
+  const normalized: Record<string, unknown> = {
+    events: [],
+  };
+  if (input.url !== undefined) normalized.url = input.url;
+  if (input.secret !== undefined) normalized.secret = input.secret;
+  if (input.enabled !== undefined) normalized.enabled = input.enabled;
+  const ownerType = existing.ownerType ?? (existing.tenantId ? 'tenant' : undefined);
+  if (!ownerType) {
+    throw new HTTPException(400, {
+      message: 'Cannot update webhook endpoint with unresolved owner identity',
+    });
+  }
+  const subscriptions = normalizeSubscriptionRequests(input.subscriptions, true);
+  if (subscriptions) {
+    normalized.subscriptions = normalizeWebhookSubscriptions(definitions, ownerType, subscriptions);
+  }
+  return normalized;
+}
+
+function endpointToSubscriber(endpoint: Pick<WebhookEndpoint, 'ownerType' | 'ownerId' | 'tenantId'>): WebhookSubscriber {
+  return {
+    ownerType: endpoint.ownerType,
+    ownerId: endpoint.ownerId,
+    tenantId: endpoint.tenantId ?? null,
+  };
+}
+
+function toPrincipal(subscriber: WebhookSubscriber): EventSubscriptionPrincipal {
+  return {
+    kind:
+      subscriber.ownerType === 'tenant'
+        ? 'tenant'
+        : subscriber.ownerType === 'user'
+          ? 'user'
+          : subscriber.ownerType === 'app'
+            ? 'app'
+            : 'system',
+    ownerId: subscriber.ownerId,
+    tenantId: subscriber.tenantId ?? null,
+  };
+}
+
+function tenantCompatible(subscriber: WebhookSubscriber, scope: EventScope | null): boolean {
+  if (subscriber.tenantId === undefined || subscriber.tenantId === null) {
+    return true;
+  }
+  return scope?.tenantId === subscriber.tenantId;
+}
+
+function serializeProjectedPayload(payload: unknown): string {
+  return JSON.stringify(payload === undefined ? null : payload);
+}
+
+function supportsWebhookDelivery(definition: EventDefinition): boolean {
+  return WEBHOOK_EXPOSURE_PRIORITY.some(exposure => definition.exposure.includes(exposure));
+}
+
+function normalizeLegacySubscriptionInput(
+  record: EndpointRecord,
+): WebhookEndpointSubscriptionInput[] {
+  const subscriptions = normalizeStoredSubscriptions(record.subscriptions);
+  if (subscriptions.length > 0) {
+    return subscriptions.map(subscription => ({ event: subscription.event }));
+  }
+
+  return (record.events ?? []).map(value =>
+    value.includes('*') ? { pattern: value } : { event: value as EventKey },
+  );
+}
+
+async function migrateLegacyEndpointRows(
+  endpoints: EndpointRuntimeAdapter,
+  definitions: EventDefinitionRegistry,
+): Promise<void> {
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined;
+
+  while (true) {
+    const page = await endpoints.listRaw({ limit: 500, cursor });
+    for (const record of page.items) {
+      const patch: Record<string, unknown> = {};
+      const ownerType = record.ownerType ?? (record.tenantId ? 'tenant' : undefined);
+      const ownerId = record.ownerId ?? (ownerType === 'tenant' ? record.tenantId ?? undefined : undefined);
+
+      if (!ownerType || !ownerId) {
+        await endpoints.applyRawUpdate(record.id, {
+          enabled: false,
+          subscriptions: [],
+          events: [],
+        });
+        console.error(
+          '[slingshot-webhooks] disabled webhook endpoint during startup migration because ownership could not be resolved',
+          { endpointId: record.id, tenantId: record.tenantId ?? null },
+        );
+        continue;
+      }
+
+      patch.ownerType = ownerType;
+      patch.ownerId = ownerId;
+      patch.tenantId = record.tenantId ?? null;
+
+      try {
+        const normalized = normalizeWebhookSubscriptions(
+          definitions,
+          ownerType,
+          normalizeLegacySubscriptionInput(record),
+        );
+        patch.subscriptions = normalized;
+        patch.events = [];
+      } catch (error) {
+        patch.enabled = false;
+        patch.subscriptions = [];
+        patch.events = [];
+        console.error(
+          '[slingshot-webhooks] disabled webhook endpoint during startup migration because subscriptions could not be normalized',
+          {
+            endpointId: record.id,
+            tenantId: record.tenantId ?? null,
+            ownerType,
+            ownerId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
+
+      await endpoints.applyRawUpdate(record.id, patch);
+    }
+
+    if (!(page.hasMore ?? false)) {
+      return;
+    }
+
+    cursor = requireNextCursor('webhook endpoint migration pagination', page.nextCursor, seenCursors);
+  }
+}
+
 function buildRuntimeAdapter(
   endpoints: EndpointRuntimeAdapter,
   deliveries: DeliveryRuntimeAdapter,
 ): WebhookRuntimeAdapter {
+  let definitionsRef: EventDefinitionRegistry | undefined;
+
   return {
+    async initializeGovernance(definitions) {
+      definitionsRef = definitions;
+      await migrateLegacyEndpointRows(endpoints, definitions);
+    },
+
+    listSubscribableDefinitions(subscriber) {
+      if (!definitionsRef) {
+        return Object.freeze([]) as readonly EventDefinition[];
+      }
+      return listDefinitionsForOwner(definitionsRef, subscriber.ownerType);
+    },
+
     async getEndpoint(id) {
       const record = await endpoints.reveal(id);
-      return record;
+      if (!record) return null;
+      return {
+        id: record.id,
+        ownerType: record.ownerType ?? 'tenant',
+        ownerId: record.ownerId ?? record.tenantId ?? '',
+        tenantId: record.tenantId ?? null,
+        url: record.url,
+        secret: record.secret,
+        subscriptions: normalizeStoredSubscriptions(record.subscriptions),
+        enabled: record.enabled,
+        createdAt: record.createdAt,
+        updatedAt: record.updatedAt,
+      };
     },
-    async findEndpointsForEvent(event) {
-      const matches = await endpoints.findForEvent({ event });
-      return matches;
+
+    async listEnabledEndpoints() {
+      const items: WebhookEndpoint[] = [];
+      const seenCursors = new Set<string>();
+      let cursor: string | undefined;
+
+      while (true) {
+        const page = await endpoints.listRaw({ filter: { enabled: true }, limit: 500, cursor });
+        items.push(
+          ...page.items
+            .filter(record => record.enabled)
+            .map(record => ({
+              id: record.id,
+              ownerType: record.ownerType ?? 'tenant',
+              ownerId: record.ownerId ?? record.tenantId ?? '',
+              tenantId: record.tenantId ?? null,
+              url: record.url,
+              secret: record.secret,
+              subscriptions: normalizeStoredSubscriptions(record.subscriptions),
+              enabled: record.enabled,
+              createdAt: record.createdAt,
+              updatedAt: record.updatedAt,
+            })),
+        );
+
+        if (!(page.hasMore ?? false)) {
+          return items;
+        }
+
+        cursor = requireNextCursor('webhook endpoint discovery pagination', page.nextCursor, seenCursors);
+      }
     },
+
     async createDelivery(input) {
-      const endpoint = await endpoints.reveal(input.endpointId);
       const created = (await deliveries.create({
         endpointId: input.endpointId,
-        tenantId: endpoint?.tenantId ?? null,
+        tenantId: input.subscriber.tenantId ?? null,
         event: input.event,
-        payload: parsePayload(input.payload),
+        eventId: input.eventId,
+        occurredAt: input.occurredAt,
+        subscriber: {
+          ownerType: input.subscriber.ownerType,
+          ownerId: input.subscriber.ownerId,
+          tenantId: input.subscriber.tenantId ?? null,
+        },
+        sourceScope: input.sourceScope ?? null,
+        projectedPayload: input.payload,
       })) as DeliveryRecord;
       return sanitizeDelivery(created);
     },
+
     async updateDelivery(id, input) {
       if (input.status) {
         const transitioned = await deliveries.transition({
@@ -290,10 +763,12 @@ function buildRuntimeAdapter(
       }
       return sanitizeDelivery(updated);
     },
+
     async getDelivery(id) {
       const record = (await deliveries.getById(id)) as DeliveryRecord | null;
       return record ? sanitizeDelivery(record) : null;
     },
+
     async listDeliveries(input = {}) {
       const filter = {
         ...(input.endpointId ? { endpointId: input.endpointId } : {}),
@@ -320,8 +795,6 @@ function buildRuntimeAdapter(
       while (items.length < targetCount) {
         const page = await deliveries.list({
           filter,
-          // When filtering client-side against an opaque cursor, fetch at most the
-          // remaining requested items so the returned nextCursor never skips unseen rows.
           limit: Number.isFinite(targetCount) ? Math.max(1, targetCount - items.length) : 100,
           cursor,
         });
@@ -364,6 +837,100 @@ function buildRuntimeAdapter(
   };
 }
 
+export async function resolveWebhookDeliveries(
+  adapter: WebhookAdapter,
+  definitions: EventDefinitionRegistry,
+  envelope: EventEnvelope,
+  maxAttempts: number,
+): Promise<ResolvedWebhookDelivery[]> {
+  const definition = definitions.get(envelope.key);
+  if (!definition) {
+    console.error(
+      `[slingshot-webhooks] skipping "${envelope.key}" because no event definition is registered`,
+    );
+    return [];
+  }
+
+  if (!supportsWebhookDelivery(definition)) {
+    return [];
+  }
+
+  if (envelope.meta.scope === null) {
+    console.error(
+      `[slingshot-webhooks] skipping "${envelope.key}" because webhook delivery requires a resolved scope`,
+    );
+    return [];
+  }
+
+  const endpoints = await adapter.listEnabledEndpoints();
+  const results: ResolvedWebhookDelivery[] = [];
+
+  for (const endpoint of endpoints) {
+    const subscription = endpoint.subscriptions.find(item => item.event === envelope.key);
+    if (!subscription) {
+      continue;
+    }
+    if (!definition.exposure.includes(subscription.exposure)) {
+      continue;
+    }
+
+    const subscriber = endpointToSubscriber(endpoint);
+    if (!tenantCompatible(subscriber, envelope.meta.scope)) {
+      continue;
+    }
+    if (
+      subscriber.ownerType !== 'system' &&
+      !authorizeEventSubscriber(definition, toPrincipal(subscriber), envelope)
+    ) {
+      continue;
+    }
+
+    let payload: string;
+    try {
+      const projected =
+        definition.projectPayload?.(envelope.payload, toPrincipal(subscriber), envelope) ??
+        envelope.payload;
+      payload = serializeProjectedPayload(projected);
+    } catch (error) {
+      console.error(
+        `[slingshot-webhooks] skipping "${envelope.key}" for endpoint "${endpoint.id}" because payload projection failed`,
+        error,
+      );
+      continue;
+    }
+
+    const delivery = await adapter.createDelivery({
+      endpointId: endpoint.id,
+      event: envelope.key,
+      eventId: envelope.meta.eventId,
+      occurredAt: envelope.meta.occurredAt,
+      subscriber,
+      sourceScope: envelope.meta.scope,
+      payload,
+      maxAttempts,
+    });
+
+    results.push({
+      endpoint,
+      delivery,
+      job: {
+        deliveryId: delivery.id,
+        endpointId: endpoint.id,
+        url: endpoint.url,
+        secret: endpoint.secret,
+        event: envelope.key,
+        eventId: envelope.meta.eventId,
+        occurredAt: envelope.meta.occurredAt,
+        subscriber,
+        payload,
+        attempts: 0,
+      },
+    });
+  }
+
+  return results;
+}
+
 /**
  * Build the manifest runtime for webhook entities.
  *
@@ -378,14 +945,19 @@ export function createWebhooksManifestRuntime(
   const hooks = createEntityPluginHookRegistry();
   let endpointAdapterRef: EndpointRuntimeAdapter | undefined;
   let deliveryAdapterRef: DeliveryRuntimeAdapter | undefined;
+  let definitionsRef: EventDefinitionRegistry | undefined;
 
   adapterTransforms.register('webhooks.endpoint.runtime', adapter => {
     const base = adapter;
     return {
       ...adapter,
       create: async (input: unknown) => {
-        assertValidEndpointInput(input as Record<string, unknown>, false);
-        const created = (await base.create(input)) as EndpointRecord;
+        if (!definitionsRef) {
+          throw new Error('[slingshot-webhooks] event definitions are not ready for endpoint writes');
+        }
+        const created = (await base.create(
+          normalizeEndpointCreateInput(input as Record<string, unknown>, definitionsRef),
+        )) as EndpointRecord;
         return sanitizeEndpoint(created);
       },
       getById: async (id: string, filter?: Record<string, unknown>) => {
@@ -400,12 +972,25 @@ export function createWebhooksManifestRuntime(
         };
       },
       update: async (id: string, input: unknown, filter?: Record<string, unknown>) => {
-        assertValidEndpointInput(input as Record<string, unknown>, true);
-        const updated = (await base.update(id, input, filter)) as EndpointRecord | null;
+        if (!definitionsRef) {
+          throw new Error('[slingshot-webhooks] event definitions are not ready for endpoint writes');
+        }
+        const existing = (await base.getById(id)) as EndpointRecord | null;
+        if (!existing) {
+          return null;
+        }
+        const updated = (await base.update(
+          id,
+          normalizeEndpointUpdateInput(existing, input as Record<string, unknown>, definitionsRef),
+          filter,
+        )) as EndpointRecord | null;
         return updated ? sanitizeEndpoint(updated) : null;
       },
       reveal: async (id: string) => {
         return (await base.getById(id)) as EndpointRecord | null;
+      },
+      applyRawUpdate: async (id: string, input: Record<string, unknown>) => {
+        return (await base.update(id, input)) as EndpointRecord | null;
       },
       listRaw: async (opts?: { filter?: unknown; limit?: number; cursor?: string }) => {
         return (await base.list(opts ?? {})) as PaginatedResult<EndpointRecord>;
@@ -439,41 +1024,6 @@ export function createWebhooksManifestRuntime(
     };
   });
 
-  customHandlers.register('webhooks.endpoint.findForEvent', () => () => async (input: unknown) => {
-    const params = (input ?? {}) as Record<string, unknown>;
-    const event = typeof params.event === 'string' ? params.event : '';
-    if (!event) {
-      throw new HTTPException(400, { message: 'event is required' });
-    }
-    const endpoints = endpointAdapterRef;
-    if (!endpoints) {
-      throw new Error('[slingshot-webhooks] endpoint adapter not ready');
-    }
-    const matches: EndpointRecord[] = [];
-    const seenCursors = new Set<string>();
-    let cursor: string | undefined;
-
-    while (true) {
-      const page = await endpoints.listRaw({ filter: { enabled: true }, limit: 500, cursor });
-      matches.push(
-        ...page.items.filter(
-          endpoint =>
-            endpoint.enabled && endpoint.events.some(pattern => matchGlob(pattern, event)),
-        ),
-      );
-
-      if (!(page.hasMore ?? false)) {
-        return matches;
-      }
-
-      cursor = requireNextCursor(
-        'webhook endpoint discovery pagination',
-        page.nextCursor,
-        seenCursors,
-      );
-    }
-  });
-
   customHandlers.register('webhooks.delivery.transition', () => () => async (input: unknown) => {
     const params = (input ?? {}) as Record<string, unknown>;
     const deliveryAdapter = deliveryAdapterRef;
@@ -503,7 +1053,15 @@ export function createWebhooksManifestRuntime(
   hooks.register('webhooks.captureAdapters', (ctx: EntityPluginAfterAdaptersContext) => {
     endpointAdapterRef = requireEndpointRuntimeAdapter(ctx.adapters.WebhookEndpoint);
     deliveryAdapterRef = requireDeliveryRuntimeAdapter(ctx.adapters.WebhookDelivery);
-    onAdaptersReady(buildRuntimeAdapter(endpointAdapterRef, deliveryAdapterRef));
+    const runtime = buildRuntimeAdapter(endpointAdapterRef, deliveryAdapterRef);
+    const runtimeWithDefinitions: WebhookRuntimeAdapter = {
+      ...runtime,
+      async initializeGovernance(definitions) {
+        definitionsRef = definitions;
+        await runtime.initializeGovernance(definitions);
+      },
+    };
+    onAdaptersReady(runtimeWithDefinitions);
   });
 
   return {

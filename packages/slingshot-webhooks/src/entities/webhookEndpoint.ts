@@ -1,5 +1,4 @@
 import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
-import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
 
 /**
  * Manifest-backed outbound webhook endpoint.
@@ -8,16 +7,21 @@ export const WebhookEndpointEntity = defineEntity('WebhookEndpoint', {
   namespace: 'webhooks',
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
+    ownerType: field.enum(['tenant', 'user', 'app', 'system'] as const),
+    ownerId: field.string(),
     tenantId: field.string({ optional: true }),
     url: field.string(),
     secret: field.string(),
-    events: field.stringArray(),
+    subscriptions: field.json(),
+    // Legacy storage shadow used only for explicit startup migration.
+    events: field.stringArray({ optional: true }),
     enabled: field.boolean({ default: true }),
     createdAt: field.date({ default: 'now', immutable: true }),
     updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
   },
   indexes: [
     index(['tenantId']),
+    index(['ownerType', 'ownerId']),
     index(['tenantId', 'enabled']),
     index(['tenantId', 'createdAt'], { direction: 'desc' }),
   ],
@@ -37,11 +41,4 @@ export const WebhookEndpointEntity = defineEntity('WebhookEndpoint', {
     ],
     middleware: { webhooksAdminGuard: true },
   },
-});
-
-/**
- * Internal endpoint operations used by webhook orchestration.
- */
-export const webhookEndpointOperations = defineOperations(WebhookEndpointEntity, {
-  findForEvent: op.custom({}),
 });

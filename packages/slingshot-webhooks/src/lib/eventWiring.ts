@@ -1,100 +1,86 @@
 import type {
+  EventEnvelope,
   SlingshotEventBus,
-  SlingshotEventMap,
+  SlingshotEvents,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
-import { WEBHOOK_DEFAULT_SUBSCRIBABLE_EVENTS } from '../subscribableEvents';
 import type { WebhookAdapter } from '../types/adapter';
 import type { WebhookPluginConfig } from '../types/config';
-import type { WebhookDelivery } from '../types/models';
 import type { WebhookQueue } from '../types/queue';
+import { resolveWebhookDeliveries } from '../manifest/runtime';
 import { matchGlob } from './globMatch';
 
 /**
- * Subscribes the webhook plugin to all configured bus events and returns an array
- * of unsubscribe functions.
- *
- * For each bus event that matches the configured `config.events` filter, the function
- * attaches a handler that queries the adapter for matching active endpoints and enqueues
- * a delivery for each one.
- *
- * @param bus - The application event bus.
- * @param config - Plugin configuration (events, queueConfig).
- * @param queue - The delivery queue to enqueue jobs to.
- * @param adapter - The webhook adapter for querying endpoints and creating delivery records.
- * @returns An array of `() => void` unsubscribe functions — call all of them during teardown.
+ * Subscribes the webhook plugin to registry-backed webhook-visible events and
+ * returns an array of unsubscribe functions.
  */
 export function wireEventSubscriptions(
   bus: SlingshotEventBus,
+  events: SlingshotEvents,
   config: WebhookPluginConfig,
   queue: WebhookQueue,
   adapter: WebhookAdapter,
 ): Array<() => void> {
-  // Deduplicate before subscribing
-  const universe = [
-    ...new Set([...WEBHOOK_DEFAULT_SUBSCRIBABLE_EVENTS, ...(config.extraEventKeys ?? [])]),
-  ] as ReadonlyArray<keyof SlingshotEventMap>;
-
   const patterns = config.events ?? ['*'];
-  const subscribedKeys = universe.filter(key =>
-    patterns.some(pattern => matchGlob(pattern, key as string)),
-  );
+  const subscribedKeys = events
+    .list()
+    .filter(definition =>
+      definition.exposure.some(exposure =>
+        exposure === 'tenant-webhook' ||
+        exposure === 'user-webhook' ||
+        exposure === 'app-webhook',
+      ),
+    )
+    .map(definition => definition.key)
+    .filter(key => patterns.some(pattern => matchGlob(pattern, key as string)));
   const subscriptionOpts: SubscriptionOpts | undefined = config.busSubscription?.durable
     ? {
         durable: true,
         name: config.busSubscription.name,
       }
     : undefined;
+  const maxAttempts = config.queueConfig?.maxAttempts ?? 5;
 
   return subscribedKeys.map(key => {
-    const handler = async (_payload: SlingshotEventMap[typeof key]) => {
-      let endpoints: Awaited<ReturnType<typeof adapter.findEndpointsForEvent>>;
+    const handler = async (envelope: EventEnvelope<typeof key>) => {
+      let deliveries;
       try {
-        endpoints = await adapter.findEndpointsForEvent(key as string);
-      } catch {
-        return; // adapter failure — nothing to do, avoid crashing the process
+        deliveries = await resolveWebhookDeliveries(
+          adapter,
+          events.definitions,
+          envelope,
+          maxAttempts,
+        );
+      } catch (error) {
+        console.error(
+          `[slingshot-webhooks] failed to resolve webhook deliveries for "${String(key)}"`,
+          error,
+        );
+        return;
       }
-      const payload = JSON.stringify(_payload);
-      const maxAttempts = config.queueConfig?.maxAttempts ?? 5;
-      for (const endpoint of endpoints) {
-        let delivery: WebhookDelivery | undefined;
+
+      for (const resolved of deliveries) {
         try {
-          delivery = await adapter.createDelivery({
-            endpointId: endpoint.id,
-            event: key as string,
-            payload,
-            maxAttempts,
-          });
-          await queue.enqueue({
-            deliveryId: delivery.id,
-            endpointId: endpoint.id,
-            url: endpoint.url,
-            secret: endpoint.secret,
-            event: key as string,
-            payload,
-            attempts: 0,
-          });
+          await queue.enqueue(resolved.job);
         } catch (err) {
-          if (delivery) {
-            await adapter.updateDelivery(delivery.id, {
-              status: 'dead',
-              lastAttempt: {
-                attemptedAt: new Date().toISOString(),
-                error: 'enqueue failed: ' + String(err),
-              },
-            });
-          }
+          await adapter.updateDelivery(resolved.delivery.id, {
+            status: 'dead',
+            lastAttempt: {
+              attemptedAt: new Date().toISOString(),
+              error: 'enqueue failed: ' + String(err),
+            },
+          });
         }
       }
     };
-    bus.on(
+    bus.onEnvelope(
       key,
-      handler as (payload: SlingshotEventMap[typeof key]) => void | Promise<void>,
+      handler,
       subscriptionOpts,
     );
     if (subscriptionOpts?.durable) {
       return () => {};
     }
-    return () => bus.off(key, handler as (payload: SlingshotEventMap[typeof key]) => void);
+    return () => bus.offEnvelope(key, handler);
   });
 }

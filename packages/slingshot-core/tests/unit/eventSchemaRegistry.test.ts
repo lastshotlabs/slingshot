@@ -69,7 +69,7 @@ describe('InProcessAdapter schema validation', () => {
       }),
     );
 
-    const bus = createInProcessAdapter(undefined, {
+    const bus = createInProcessAdapter({
       schemaRegistry: registry,
       validation: 'strict',
     });
@@ -88,7 +88,7 @@ describe('InProcessAdapter schema validation', () => {
     const registry = createEventSchemaRegistry();
     registry.register('auth:login', z.object({ userId: z.string(), sessionId: z.string() }));
 
-    const bus = createInProcessAdapter(undefined, {
+    const bus = createInProcessAdapter({
       schemaRegistry: registry,
       validation: 'strict',
     });

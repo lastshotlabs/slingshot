@@ -58,6 +58,10 @@ Global state means test pollution. If `createAuthPlugin()` stored the current us
 
 That's why Slingshot tests use `new Hono()` + plugin setup per suite, not a shared singleton. `ctx.clear()` resets in-memory state. `ctx.destroy()` runs plugin teardown, shuts down the event bus, and then closes connections.
 
+Before teardown starts, `ctx.destroy()` also publishes the framework `app:shutdown` event through
+`ctx.events`. That keeps lifecycle signaling on the same registry-backed event contract as route and
+plugin publishers instead of inventing a separate shutdown channel.
+
 ## Config is frozen
 
 Config objects are `Object.freeze()`d at creation time — deep-frozen with `deepFreeze()`. Plugins receive an immutable view of their configuration. Nothing downstream can accidentally mutate a config object and create invisible shared state.

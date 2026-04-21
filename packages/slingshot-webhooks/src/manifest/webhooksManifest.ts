@@ -1,7 +1,7 @@
 import type { MultiEntityManifest } from '@lastshotlabs/slingshot-entity';
 import { entityConfigToManifestEntry } from '@lastshotlabs/slingshot-entity';
 import { WebhookDeliveryEntity, webhookDeliveryOperations } from '../entities/webhookDelivery';
-import { WebhookEndpointEntity, webhookEndpointOperations } from '../entities/webhookEndpoint';
+import { WebhookEndpointEntity } from '../entities/webhookEndpoint';
 
 /**
  * Declarative manifest for webhook persistence.
@@ -14,15 +14,8 @@ export const webhooksManifest: MultiEntityManifest = {
   },
   entities: {
     WebhookEndpoint: entityConfigToManifestEntry(WebhookEndpointEntity, {
-      operations: webhookEndpointOperations.operations,
       routePath: 'endpoints',
       adapterTransforms: [{ handler: 'webhooks.endpoint.runtime' }],
-      operationOverrides: {
-        findForEvent: {
-          kind: 'custom',
-          handler: 'webhooks.endpoint.findForEvent',
-        },
-      },
     }),
     WebhookDelivery: entityConfigToManifestEntry(WebhookDeliveryEntity, {
       operations: webhookDeliveryOperations.operations,

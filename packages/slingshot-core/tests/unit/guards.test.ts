@@ -38,7 +38,6 @@ function createContextFixture() {
       emit() {},
       on() {},
       off() {},
-      registerClientSafeEvents() {},
     },
     adapters: {},
     routeAuth: null,

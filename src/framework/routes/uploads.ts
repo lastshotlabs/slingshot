@@ -11,7 +11,12 @@ import type { Context, Next } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { createRoute } from '@lastshotlabs/slingshot-core';
-import { createRouter, getRouteAuth, getSlingshotCtx } from '@lastshotlabs/slingshot-core';
+import {
+  createRouter,
+  getActor,
+  getRouteAuth,
+  getSlingshotCtx,
+} from '@lastshotlabs/slingshot-core';
 
 const tags = ['Uploads'];
 
@@ -291,8 +296,9 @@ export const createUploadsRouter = (config: UploadsRouterConfig) => {
     }
 
     const app = slingshotCtx.app;
-    const userId = c.get('authUserId') ?? undefined;
-    const tenantId = c.get('tenantId') ?? undefined;
+    const actor = getActor(c);
+    const userId = actor.id ?? undefined;
+    const tenantId = actor.tenantId ?? undefined;
 
     // Server-generates the key — client cannot control the storage path
     const key = generateUploadKeyFromFilename(
@@ -378,8 +384,9 @@ export const createUploadsRouter = (config: UploadsRouterConfig) => {
     const { expiry: expiryStr } = c.req.valid('query');
     const guardFailure = await getAuthenticatedAccountGuardFailure(c);
     if (guardFailure) return c.json({ error: guardFailure.error }, guardFailure.status);
-    const userId = c.get('authUserId');
-    const tenantId = c.get('tenantId');
+    const actor = getActor(c);
+    const userId = actor.id;
+    const tenantId = actor.tenantId;
     const app = c.get('slingshotCtx').app;
 
     const { allowed, notFound } = await checkUploadAccess(
@@ -467,8 +474,9 @@ export const createUploadsRouter = (config: UploadsRouterConfig) => {
     if (guardFailure) return c.json({ error: guardFailure.error }, guardFailure.status);
     if (!adapter) return c.json({ error: 'No storage adapter configured' }, 500);
     const { key } = c.req.valid('param');
-    const userId = c.get('authUserId');
-    const tenantId = c.get('tenantId');
+    const actor = getActor(c);
+    const userId = actor.id;
+    const tenantId = actor.tenantId;
     const app = c.get('slingshotCtx').app;
 
     const { allowed, notFound } = await checkUploadAccess(

@@ -15,6 +15,7 @@ import {
   getClientIp,
 } from '@lastshotlabs/slingshot-core';
 import type { HookContext, MagicLinkConfig, RefreshTokenConfig } from '../config/authConfig';
+import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';
 
 export interface MagicLinkRouterOptions {
@@ -145,7 +146,11 @@ export const createMagicLinkRouter = (
             const ttl = getConfig().magicLink?.ttlSeconds ?? 900;
             const token = await createMagicLinkToken(runtime.repos.magicLink, user.id, ttl);
             const link = magicLink.linkBaseUrl ? `${magicLink.linkBaseUrl}?token=${token}` : token;
-            eventBus.emit('auth:delivery.magic_link', { identifier, token, link });
+            publishAuthEvent(runtime.events, 'auth:delivery.magic_link', {
+              identifier,
+              token,
+              link,
+            });
           } catch (err) {
             console.error(
               '[magic-link] Failed to send magic link:',

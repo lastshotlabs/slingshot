@@ -199,7 +199,7 @@ export {
 
 // Plugin factory
 /** Build the entity plugin that mounts config-driven CRUD and operation routes. */
-export { createEntityPlugin, ENTITY_ADAPTERS_KEY } from './createEntityPlugin';
+export { createEntityPlugin } from './createEntityPlugin';
 /** Plugin config and runtime context types for `createEntityPlugin()`. */
 export type {
   EntityPlugin,
@@ -207,6 +207,14 @@ export type {
   EntityPluginEntry,
   EntityPluginContext,
 } from './createEntityPlugin';
+/** Cross-plugin entity adapter publication and lookup helpers. */
+export {
+  maybeEntityAdapter,
+  publishEntityAdaptersState,
+  requireEntityAdapter,
+} from '@lastshotlabs/slingshot-core';
+/** Lookup contract for cross-plugin entity adapter access. */
+export type { EntityAdapterLookup } from '@lastshotlabs/slingshot-core';
 
 // Channel config wiring
 /** Wire entity channel config into runtime subscription and message handlers. */
@@ -223,9 +231,28 @@ export type {
 } from './channels/applyChannelConfig';
 
 /** Evaluate route auth for config-driven entity routes against runtime dependencies. */
-export { evaluateRouteAuth } from './routing';
+export {
+  defineEntityExecutor,
+  defineEntityRoute,
+  evaluateRouteAuth,
+  normalizeEntityRouteShape,
+  planEntityRoutes,
+  scoreEntityRouteSpecificity,
+} from './routing';
 /** Route-auth evaluation dependencies and result types for entity route assembly. */
-export type { EvaluateRouteAuthDeps, RouteAuthResult, BareEntityAdapter } from './routing';
+export type {
+  EvaluateRouteAuthDeps,
+  RouteAuthResult,
+  BareEntityAdapter,
+  EntityExtraRoute,
+  EntityGeneratedRouteKey,
+  EntityRouteExecutionContext,
+  EntityRouteExecutor,
+  EntityRouteExecutorBuilder,
+  EntityRouteExecutorBuilderContext,
+  EntityRouteExecutorOverrides,
+  PlannedEntityRoute,
+} from './routing';
 
 // Policy hooks
 /** Register and resolve entity policy hooks used by config-driven permission dispatch. */

@@ -5,6 +5,7 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
+  defineEvent,
   getPermissionsStateOrNull,
   getPluginState,
   getRateLimitAdapter,
@@ -89,7 +90,7 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
     name: INTERACTIONS_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth', 'slingshot-permissions'],
 
-    async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       const pluginState = getPluginState(app);
       const permissions = getPermissionsStateOrNull(pluginState);
       if (!permissions) {
@@ -98,7 +99,36 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
         );
       }
 
-      bus.registerClientSafeEvents(['interactions:event.dispatched', 'interactions:event.failed']);
+      if (!events.get('interactions:event.dispatched')) {
+        events.register(
+          defineEvent('interactions:event.dispatched', {
+            ownerPlugin: INTERACTIONS_PLUGIN_STATE_KEY,
+            exposure: ['client-safe'],
+            resolveScope(payload) {
+              return {
+                tenantId: payload.tenantId ?? null,
+                userId: payload.userId,
+                actorId: payload.userId,
+              };
+            },
+          }),
+        );
+      }
+      if (!events.get('interactions:event.failed')) {
+        events.register(
+          defineEvent('interactions:event.failed', {
+            ownerPlugin: INTERACTIONS_PLUGIN_STATE_KEY,
+            exposure: ['client-safe'],
+            resolveScope(payload) {
+              return {
+                tenantId: payload.tenantId ?? null,
+                userId: payload.userId,
+                actorId: payload.userId,
+              };
+            },
+          }),
+        );
+      }
 
       const runtimeOverlay = new Map<
         string,
@@ -123,6 +153,7 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
         rateLimit: getRateLimitAdapter(app),
         permissions,
         bus,
+        events,
         rateLimitWindowMs: config.rateLimit.windowMs,
         rateLimitMax: config.rateLimit.max,
         peers: {
@@ -152,11 +183,11 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
         entities,
       });
 
-      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
+      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus });
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
       if (!stateRef || !interactionEventsAdapterRef) {
         throw new Error(
@@ -168,8 +199,8 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
       buildDispatchRoute(app, stateRef, config.mountPath);
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
 
       const state =
         stateRef ??

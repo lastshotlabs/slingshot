@@ -5,6 +5,7 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
+  defineEvent,
   deepFreeze,
   getPluginState,
   resolveRepo,
@@ -52,7 +53,6 @@ export function createNotificationsPlugin(
 
   let notificationsAdapter: NotificationAdapter | undefined;
   let preferencesAdapter: NotificationPreferenceAdapter | undefined;
-  let innerPlugin: EntityPlugin | undefined;
   let teardown: (() => Promise<void>) | undefined;
   const deliveryAdapters = new Set<DeliveryAdapter>();
 
@@ -77,30 +77,45 @@ export function createNotificationsPlugin(
     },
   ];
 
+  const innerPlugin = createEntityPlugin({
+    name: NOTIFICATIONS_PLUGIN_STATE_KEY,
+    mountPath: config.mountPath,
+    entities,
+  });
+
   return {
     name: NOTIFICATIONS_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth'],
 
     async setupMiddleware(ctx: PluginSetupContext) {
-      await innerPlugin?.setupMiddleware?.(ctx);
+      if (!ctx.events.get('notifications:notification.created')) {
+        ctx.events.register(
+          defineEvent('notifications:notification.created', {
+            ownerPlugin: NOTIFICATIONS_PLUGIN_STATE_KEY,
+            exposure: ['client-safe', 'tenant-webhook', 'user-webhook'],
+            resolveScope(_payload, publishContext) {
+              return {
+                tenantId: publishContext.tenantId ?? null,
+                userId: publishContext.userId ?? null,
+                actorId: publishContext.actorId ?? publishContext.userId ?? null,
+              };
+            },
+          }),
+        );
+      }
+      await innerPlugin.setupMiddleware?.(ctx);
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      innerPlugin = createEntityPlugin({
-        name: NOTIFICATIONS_PLUGIN_STATE_KEY,
-        mountPath: config.mountPath,
-        entities,
-      });
-
-      await innerPlugin.setupRoutes?.({ app, config: frameworkConfig, bus });
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
       if (config.sseEnabled) {
         app.route('/', createNotificationSseRoute(bus, config.ssePath));
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin.setupPost?.({ app, config: frameworkConfig, bus, events });
 
       if (!notificationsAdapter || !preferencesAdapter) {
         throw new Error(
@@ -116,6 +131,7 @@ export function createNotificationsPlugin(
             notifications,
             preferences,
             bus,
+            events,
             defaultPreferences: config.defaultPreferences,
             intervalMs: config.dispatcher.intervalMs,
             maxPerTick: config.dispatcher.maxPerTick,
@@ -148,6 +164,7 @@ export function createNotificationsPlugin(
             notifications,
             preferences,
             bus,
+            events,
             rateLimitBackend,
             defaultPreferences: config.defaultPreferences,
             rateLimit: {

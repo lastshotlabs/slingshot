@@ -1,4 +1,6 @@
+import type { EventKey } from '@lastshotlabs/slingshot-core';
 import type { QueueLifecycle } from '@lastshotlabs/slingshot-core';
+import type { WebhookSubscriber } from './models';
 
 /**
  * A single webhook delivery job tracked by the queue.
@@ -18,8 +20,14 @@ export interface WebhookJob {
   /** HMAC-SHA256 signing secret used to produce the `X-Webhook-Signature` header. */
   secret: string;
   /** Bus event key that triggered this delivery. */
-  event: string;
-  /** JSON-serialised event payload to be sent as the request body. */
+  event: EventKey;
+  /** Stable source event ID from the canonical event envelope. */
+  eventId: string;
+  /** Original occurrence timestamp from the canonical event envelope. */
+  occurredAt: string;
+  /** Subscriber identity authorized for this delivery. */
+  subscriber: WebhookSubscriber;
+  /** JSON-serialised projected payload to be sent as the request body. */
   payload: string;
   /** Number of delivery attempts made for this job so far. */
   attempts: number;

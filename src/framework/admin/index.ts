@@ -90,7 +90,7 @@ export function createSlingshotAdminPlugin(config: SlingshotAdminPluginConfig): 
     // have run yet when admin's setupRoutes executes (plugin registration order is
     // not guaranteed). Actual route registration is deferred to setupPost (Rule 17).
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       const { createAdminPlugin } = await import('@lastshotlabs/slingshot-admin');
       const pluginState = getPluginState(app);
       const runtime = getAuthRuntimeContext(pluginState);
@@ -128,7 +128,7 @@ export function createSlingshotAdminPlugin(config: SlingshotAdminPluginConfig): 
             runtime.repos.session,
           ),
       });
-      await plugin.setupRoutes?.({ app, config: frameworkConfig, bus });
+      await plugin.setupRoutes?.({ app, config: frameworkConfig, bus, events });
     },
 
     async setup(ctx: PluginSetupContext) {

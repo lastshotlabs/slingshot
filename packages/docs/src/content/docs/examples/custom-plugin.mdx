@@ -12,7 +12,7 @@ Plugins extend Slingshot with your own routes, state, and event behavior. Use th
 A `catalog` plugin that:
 
 - Mounts `GET /catalog/products` and `POST /catalog/products`
-- Emits `entity:products.created` when a product is added
+- Publishes `entity:products.created` when a product is added
 - Requires the caller to be authenticated
 - Stores its state in `pluginState` for other plugins to read
 
@@ -66,11 +66,11 @@ export type ProductStore = ReturnType<typeof createProductStore>;
 
 ## Step 2: Mount the routes
 
-The router receives the store and event bus — no globals, no imports from outer scope:
+The router receives the store and registry-backed event publisher — no globals, no imports from outer scope:
 
 ```typescript title="src/plugins/catalog/router.ts"
 import { createRoute, createRouter, errorResponse } from '@lastshotlabs/slingshot-core';
-import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import type { SlingshotEvents } from '@lastshotlabs/slingshot-core';
 import type { Product, ProductStore } from './store';
 
 declare module '@lastshotlabs/slingshot-core' {
@@ -79,7 +79,7 @@ declare module '@lastshotlabs/slingshot-core' {
   }
 }
 
-export function createCatalogRouter(store: ProductStore, bus: SlingshotEventBus) {
+export function createCatalogRouter(store: ProductStore, events: SlingshotEvents) {
   const router = createRouter();
 
   router.openapi(
@@ -171,7 +171,11 @@ export function createCatalogRouter(store: ProductStore, bus: SlingshotEventBus)
       const product = store.create(body);
 
       // Emit to the event bus — other plugins and SSE clients can subscribe
-      bus.emit('entity:products.created', { product, userId });
+      events.publish(
+        'entity:products.created',
+        { product, userId },
+        { userId, actorId: userId, source: 'http' },
+      );
 
       return c.json(product, 201) as never;
     },
@@ -183,10 +187,10 @@ export function createCatalogRouter(store: ProductStore, bus: SlingshotEventBus)
 
 ## Step 3: Implement the plugin lifecycle
 
-A plugin runs in four phases. `setupMiddleware` fires first (before tenant middleware). `setupRoutes` fires after tenant middleware — handlers can read `tenantId` and other context values. `setupPost` fires last, after all routes register — subscribe to events and write to `pluginState` here.
+A plugin runs in four phases. `setupMiddleware` fires first (before tenant middleware). `setupRoutes` fires after tenant middleware — handlers can read `tenantId` and other context values. `setupPost` fires last, after all routes register — use it for subscriptions and other true post-assembly work. `pluginState` is not a `setupPost`-only concept: publish it in the earliest phase where the state is actually canonical.
 
 ```typescript title="src/plugins/catalog/index.ts"
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { defineEvent, getContext, type SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { createCatalogRouter } from './router';
 import { createProductStore } from './store';
 
@@ -198,28 +202,29 @@ export function createCatalogPlugin(): SlingshotPlugin {
     name: 'catalog',
     dependencies: ['slingshot-auth'], // auth must run before catalog
 
-    async setupMiddleware() {
-      // No middleware needed for this plugin
+    async setupMiddleware({ events }) {
+      events.register(
+        defineEvent('entity:products.created', {
+          ownerPlugin: 'catalog',
+          exposure: ['client-safe'],
+          resolveScope: (_payload, ctx) => ({ userId: ctx.userId ?? null, actorId: ctx.actorId ?? null }),
+        }),
+      );
     },
 
-    async setupRoutes({ app, bus }) {
+    async setupRoutes({ app, events }) {
       // Routes are mounted after tenant middleware — they get tenantId on context
-      app.route('/', createCatalogRouter(store, bus));
-    },
-
-    async setupPost({ app, bus }) {
-      // Publish the store so other plugins can read product data
-      const { getContext } = await import('@lastshotlabs/slingshot-core');
       const ctx = getContext(app);
       ctx.pluginState.set('catalog', { store });
 
+      app.route('/', createCatalogRouter(store, events));
+    },
+
+    async setupPost({ bus }) {
       // Subscribe to product events — log them for now
       bus.on('entity:products.created', async ({ product }) => {
         console.log(`Product created: ${product.name} ($${product.price})`);
       });
-
-      // Register as a client-safe event so SSE clients can receive it
-      bus.registerClientSafeEvents(['entity:products.created']);
     },
   };
 }
@@ -355,7 +360,7 @@ registration code does not need a separate path outside live server startup.
 
 ## Read catalog state from another plugin
 
-Cross-plugin communication goes through `pluginState`. If catalog isn't installed, the check returns `undefined` — no hard dependency:
+Cross-plugin communication goes through `pluginState`. If catalog isn't installed, the check returns `undefined` — no hard dependency. Publish state when it becomes canonical, then read it from a later phase or a request handler:
 
 ```typescript
 import { getContext } from '@lastshotlabs/slingshot-core';
@@ -364,7 +369,7 @@ interface ProductStore {
   list(): Array<{ id: string; name: string; price: number; createdAt: string }>;
 }
 
-// In another plugin's setupPost or a route handler:
+// In another plugin's setupRoutes, setupPost, or a route handler:
 declare const app: object;
 
 const ctx = getContext(app);

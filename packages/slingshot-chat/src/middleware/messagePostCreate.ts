@@ -1,6 +1,6 @@
 // packages/slingshot-chat/src/middleware/messagePostCreate.ts
 import type { MiddlewareHandler } from 'hono';
-import type { PermissionsAdapter } from '@lastshotlabs/slingshot-core';
+import { getSlingshotCtx, type PermissionsAdapter } from '@lastshotlabs/slingshot-core';
 import type { RoomAdapter } from '../types';
 
 /**
@@ -46,13 +46,20 @@ export function createMessagePostCreateMiddleware(deps: {
     // The scheduler will deliver them later and update lastMessage at that point.
     const isScheduled = result.scheduledAt && new Date(result.scheduledAt).getTime() > Date.now();
     if (isScheduled) {
-      const bus = c.get('bus') as { emit(key: string, payload: unknown): void } | undefined;
-      bus?.emit('chat:message.scheduled.created', {
-        id: result.id,
-        authorId: result.authorId ?? userId,
-        roomId: result.roomId,
-        scheduledAt: result.scheduledAt,
-      });
+      getSlingshotCtx(c).events.publish(
+        'chat:message.scheduled.created',
+        {
+          id: result.id,
+          authorId: result.authorId ?? userId,
+          roomId: result.roomId,
+          scheduledAt: result.scheduledAt,
+        },
+        {
+          source: 'http',
+          userId,
+          actorId: userId,
+        },
+      );
       return;
     }
 

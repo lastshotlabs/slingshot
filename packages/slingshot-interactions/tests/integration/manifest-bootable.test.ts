@@ -16,6 +16,8 @@ import {
   type PermissionsState,
   type RateLimitAdapter,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import type { ChatInteractionsPeer } from '../../src/peers/types';
@@ -171,6 +173,10 @@ async function bootFromManifest(): Promise<Harness> {
 
   const app = new Hono();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
 
   const fakePeer = createFakeChatPeer();
   const pluginState = new Map<string, unknown>([
@@ -187,6 +193,7 @@ async function bootFromManifest(): Promise<Harness> {
     wsEndpoints: {},
     wsPublish: null,
     bus,
+    events,
   } as unknown as Parameters<typeof attachContext>[1]);
 
   // A stub route for the route dispatcher to POST to.
@@ -231,9 +238,9 @@ async function bootFromManifest(): Promise<Harness> {
   };
 
   const plugin = createInteractionsPlugin(config);
-  await plugin.setupMiddleware?.({ app, config: frameworkConfig as never, bus });
-  await plugin.setupRoutes?.({ app, config: frameworkConfig as never, bus });
-  await plugin.setupPost?.({ app, config: frameworkConfig as never, bus });
+  await plugin.setupMiddleware?.({ app, config: frameworkConfig as never, bus, events });
+  await plugin.setupRoutes?.({ app, config: frameworkConfig as never, bus, events });
+  await plugin.setupPost?.({ app, config: frameworkConfig as never, bus, events });
 
   return { app, bus };
 }
@@ -466,6 +473,10 @@ describe('Config validation from manifest', () => {
 
     const app = new Hono();
     const bus = new InProcessAdapter();
+    const events = createEventPublisher({
+      definitions: createEventDefinitionRegistry(),
+      bus,
+    });
     const pluginState = new Map<string, unknown>([
       [PERMISSIONS_STATE_KEY, createFakePermissionsState()],
     ]);
@@ -479,6 +490,7 @@ describe('Config validation from manifest', () => {
       wsEndpoints: {},
       wsPublish: null,
       bus,
+      events,
     } as unknown as Parameters<typeof attachContext>[1]);
 
     const frameworkConfig = {
@@ -516,8 +528,8 @@ describe('Config validation from manifest', () => {
     };
 
     const plugin = createInteractionsPlugin(minimalConfig);
-    await plugin.setupMiddleware?.({ app, config: frameworkConfig as never, bus });
-    await plugin.setupRoutes?.({ app, config: frameworkConfig as never, bus });
+    await plugin.setupMiddleware?.({ app, config: frameworkConfig as never, bus, events });
+    await plugin.setupRoutes?.({ app, config: frameworkConfig as never, bus, events });
 
     const ctx = getContext(app);
     const state = ctx.pluginState.get('slingshot-interactions') as {

@@ -108,6 +108,10 @@ export const postOperations = defineOperations(Post, {
 
 The operation's `filter` config limits results to published posts. The search plugin keeps the index in sync as entities are created or updated via `syncMode: 'event-bus'`.
 
+Under the hood that sync path now depends on registry-backed event definitions. Search consumers
+should publish through `ctx.events.publish(...)` or entity route config, not through ad hoc raw bus
+payloads or legacy client-safe registration.
+
 ## Query the search endpoint
 
 ```bash

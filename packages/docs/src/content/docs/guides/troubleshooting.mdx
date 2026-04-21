@@ -125,14 +125,14 @@ createAuthPlugin({
 
 **Symptom:** A plugin that depends on `slingshot-auth` throws at startup because auth state isn't available.
 
-Plugin lifecycle phases run in order: `setupMiddleware` → `setupRoutes` → `setupPost`. State produced by one plugin in `setupPost` isn't available to another plugin during `setupRoutes`. The `dependencies` array controls ordering.
+Plugin lifecycle phases run in order: `setupMiddleware` → `setupRoutes` → `setupPost`. State produced by one plugin in `setupPost` isn't available to another plugin during `setupRoutes` unless the owner intentionally publishes it earlier. Entity adapters are one documented `setupRoutes` exception. The `dependencies` array still controls ordering.
 
 **Fix:**
 
 ```ts
 export const myPlugin: SlingshotPlugin = {
   name: 'my-plugin',
-  dependencies: ['slingshot-auth'], // wait for auth to finish setupPost
+  dependencies: ['slingshot-auth'], // wait for auth to publish what you need before you read it
   async setupPost(app, cfg, bus) {
     // auth runtime is available here
   },
@@ -570,25 +570,42 @@ const repo = myRepoFactories.memory(); // no cast needed
 
 ## Browser SSE client connected but not receiving events
 
-**Event not registered as client-safe:** The SSE filter forwards only events registered via `bus.registerClientSafeEvents()`. Unregistered events are silently dropped.
+**Event not exposed as client-safe:** The SSE filter forwards only events whose definitions opt into `exposure: ['client-safe']`. Unregistered or internal-only events are silently dropped.
 
 **Fix — via entity route config:**
 
 ```ts
 // In your entity route config
 const routes: EntityRouteConfig = {
-  clientSafeEvents: ['post:post.created', 'post:post.updated'],
-  create: { event: 'post:post.created' },
+  create: {
+    event: {
+      key: 'post:post.created',
+      scope: { resourceType: 'post', resourceId: 'record:id' },
+      exposure: ['client-safe'],
+    },
+  },
+  update: {
+    event: {
+      key: 'post:post.updated',
+      scope: { resourceType: 'post', resourceId: 'param:id' },
+      exposure: ['client-safe'],
+    },
+  },
 };
 ```
 
 **Fix — manually:**
 
 ```ts
-bus.registerClientSafeEvents(['post:post.created']);
+events.register(
+  defineEvent('post:post.created', {
+    owner: 'posts',
+    exposure: ['client-safe'],
+  }),
+);
 ```
 
-**Forbidden namespace:** These namespaces can never be registered as client-safe:
+**Forbidden namespace:** These namespaces can never be exposed as client-safe:
 
 - `security.*`
 - `auth:*`
@@ -637,7 +654,7 @@ proxy_read_timeout 120s;
 
 ## Event handler wired in `setupRoutes` never fires
 
-Event subscriptions wired before `setupPost` can be overwritten, or the bus may not be the final instance. Wire all subscriptions in `setupPost` instead.
+General event subscriptions should live in `setupPost`, after routes and event definitions are wired. Use `setupRoutes` for route assembly and route-owned state publication, not for long-lived event intake.
 
 ```ts
 export const myPlugin: SlingshotPlugin = {

@@ -7,17 +7,12 @@ function createMockBus() {
   const onFn = mock((): void => {});
   const offFn = mock((): void => {});
   const shutdownFn = mock((): Promise<void> => Promise.resolve());
-  const registerClientSafeEventsFn = mock((): void => {});
-  const ensureClientSafeEventKeyFn = mock((key: string): string => key);
 
   const bus: SlingshotEventBus = {
     emit: emitFn,
     on: onFn,
     off: offFn,
     shutdown: shutdownFn,
-    clientSafeKeys: new Set<string>(),
-    registerClientSafeEvents: registerClientSafeEventsFn,
-    ensureClientSafeEventKey: ensureClientSafeEventKeyFn,
   };
 
   return {
@@ -26,8 +21,6 @@ function createMockBus() {
     onFn,
     offFn,
     shutdownFn,
-    registerClientSafeEventsFn,
-    ensureClientSafeEventKeyFn,
   };
 }
 

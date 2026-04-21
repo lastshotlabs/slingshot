@@ -11,6 +11,7 @@ import type {
   EmailVerificationConfig,
   PrimaryField,
 } from '../config/authConfig';
+import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';
 
 export interface EmailVerificationRouterOptions {
@@ -120,7 +121,12 @@ export const createEmailVerificationRouter = (
       const entry = await consumeVerificationToken(runtime.repos.verificationToken, token);
       if (!entry) return errorResponse(c, 'Invalid or expired verification token', 400);
       if (adapter.setEmailVerified) await adapter.setEmailVerified(entry.userId, true);
-      eventBus.emit('auth:email.verified', { userId: entry.userId, email: entry.email });
+      publishAuthEvent(
+        runtime.events,
+        'auth:email.verified',
+        { userId: entry.userId, email: entry.email },
+        { userId: entry.userId, actorId: entry.userId },
+      );
       if (getConfig().csrfEnabled) refreshCsrfToken(c);
       return c.json({ ok: true as const }, 200);
     },
@@ -198,7 +204,7 @@ export const createEmailVerificationRouter = (
         fullUser.email,
         runtime.config,
       );
-      eventBus.emit('auth:delivery.email_verification', {
+      publishAuthEvent(runtime.events, 'auth:delivery.email_verification', {
         email: fullUser.email,
         token: verificationToken,
         userId: user.id,

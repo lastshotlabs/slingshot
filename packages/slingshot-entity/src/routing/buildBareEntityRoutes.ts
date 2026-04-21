@@ -9,7 +9,7 @@
  *   emission middleware registered by applyRouteConfig can read the result.
  */
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
-import type { Handler } from 'hono';
+import type { Context, Handler } from 'hono';
 import { z } from 'zod';
 import type {
   AppEnv,
@@ -21,9 +21,16 @@ import type {
   ResolvedEntityConfig,
   SlingshotEventBus,
 } from '@lastshotlabs/slingshot-core';
+import { getActor } from '@lastshotlabs/slingshot-core';
 import { entityToPath } from '../generators/routeHelpers';
 import { buildEntityZodSchemas } from '../lib/entityZodSchemas';
 import { policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
+import type {
+  EntityRouteExecutionContext,
+  EntityRouteExecutor,
+  EntityRouteExecutorBuilderContext,
+  PlannedEntityRoute,
+} from './entityRoutePlanning';
 import { resolveNamedOperationRoute } from './namedOperationRouting';
 import { findScopedFieldInBody, normalizeDataScopes, resolveDataScopes } from './resolveDataScope';
 
@@ -223,6 +230,501 @@ function routeDisabled(
   );
 }
 
+type PlannedRouteOptions = {
+  getEntityAdapter?: (args: { plugin: string; entity: string }) => BareEntityAdapter;
+  plannedRoutes?: readonly PlannedEntityRoute[];
+};
+
+type PlannedExecutionPrep = {
+  params: Record<string, string>;
+  query: Record<string, unknown>;
+  body: Record<string, unknown> | null;
+  input: unknown;
+  requestContext: Record<string, unknown>;
+  filter?: Record<string, unknown>;
+  dataScopeBindings?: Record<string, unknown>;
+  existingRecord?: unknown;
+};
+
+function readJsonRecord(input: unknown): Record<string, unknown> {
+  return typeof input === 'object' && input !== null ? { ...(input as Record<string, unknown>) } : {};
+}
+
+function buildRequestContext(c: Context<AppEnv>): Record<string, unknown> {
+  const actor = getActor(c);
+  return {
+    actor,
+    authUserId: c.get('authUserId' as never) as string | null | undefined,
+    tenantId: c.get('tenantId' as never) as string | null | undefined,
+    requestId: c.get('requestId' as never) as string | undefined,
+  };
+}
+
+function createResponseHelpers(
+  c: Context<AppEnv>,
+  route: PlannedEntityRoute,
+): EntityRouteExecutionContext['respond'] & { setOpResult(opName: string, result: unknown): void } {
+  return {
+    json(data: unknown, status = 200) {
+      return c.json(data, status as import('hono/utils/http-status').ContentfulStatusCode);
+    },
+    notFound() {
+      return c.json({ error: 'Not found' }, 404);
+    },
+    noContent() {
+      return c.body(null, 204);
+    },
+    setOpResult(opName: string, result: unknown) {
+      c.set('__routeKey' as never, route.routeKey as never);
+      c.set('__opName' as never, opName as never);
+      c.set('__opResult' as never, result as never);
+    },
+  };
+}
+
+function defaultGeneratedExecutor(
+  route: PlannedEntityRoute,
+  adapter: BareEntityAdapter,
+): EntityRouteExecutor {
+  if (route.generatedRouteKey === 'create') {
+    return async exec => {
+      const result = await adapter.create(exec.input);
+      exec.setOpResult('create', result);
+      return exec.respond.json(result, 201);
+    };
+  }
+
+  if (route.generatedRouteKey === 'list') {
+    return async exec => {
+      const listInput = (exec.input ?? {}) as {
+        cursor?: string;
+        limit?: number;
+        sortDir?: 'asc' | 'desc';
+      };
+      const result = await adapter.list({
+        filter: exec.filter,
+        limit: listInput.limit,
+        cursor: listInput.cursor,
+        sortDir: listInput.sortDir,
+      });
+      exec.setOpResult('list', result);
+      return exec.respond.json(result);
+    };
+  }
+
+  if (route.generatedRouteKey === 'get') {
+    return async exec => {
+      if (!exec.existingRecord) {
+        return exec.respond.notFound();
+      }
+      exec.setOpResult('get', exec.existingRecord);
+      return exec.respond.json(exec.existingRecord);
+    };
+  }
+
+  if (route.generatedRouteKey === 'update') {
+    return async exec => {
+      const id = exec.params.id;
+      if (!id) {
+        return exec.respond.notFound();
+      }
+      const result = await adapter.update(id, exec.input, exec.filter);
+      if (!result) {
+        return exec.respond.notFound();
+      }
+      exec.setOpResult('update', result);
+      return exec.respond.json(result);
+    };
+  }
+
+  if (route.generatedRouteKey === 'delete') {
+    return async exec => {
+      const id = exec.params.id;
+      if (!id) {
+        return exec.respond.notFound();
+      }
+      const ok = await adapter.delete(id, exec.filter);
+      if (!ok) {
+        return exec.respond.notFound();
+      }
+      exec.setOpResult('delete', { id });
+      return exec.respond.noContent();
+    };
+  }
+
+  return async exec => {
+    const opFn = adapter[route.opName];
+    if (typeof opFn !== 'function' || !route.operationConfig) {
+      return exec.respond.notFound();
+    }
+    const result = await invokeNamedOperation(route.operationConfig, opFn as OperationFunction, exec.input as Record<string, unknown>);
+    exec.setOpResult(route.opName, result);
+    if (route.operationConfig.kind === 'lookup' && route.operationConfig.returns === 'one') {
+      if (!result) {
+        return exec.respond.notFound();
+      }
+      return exec.respond.json(result);
+    }
+    if (route.operationConfig.kind === 'exists') {
+      return new Response(null, { status: result ? 200 : 404 });
+    }
+    return exec.respond.json(result);
+  };
+}
+
+async function preparePlannedExecution(
+  route: PlannedEntityRoute,
+  c: Context<AppEnv>,
+  adapter: BareEntityAdapter,
+  schemas: ReturnType<typeof buildEntityZodSchemas>,
+  dataScopes: ReturnType<typeof normalizeDataScopes>,
+): Promise<PlannedExecutionPrep | Response> {
+  const params = c.req.param() as Record<string, string>;
+  const query = Object.fromEntries(new URL(c.req.url).searchParams.entries());
+  const requestContext = buildRequestContext(c);
+
+  if (route.kind === 'extra') {
+    let body: Record<string, unknown> | null = null;
+    if (route.method !== 'get' && route.method !== 'head' && route.method !== 'delete') {
+      try {
+        body = readJsonRecord((await c.req.json()) as unknown);
+      } catch {
+        body = null;
+      }
+    }
+    return {
+      params,
+      query,
+      body,
+      input: body ?? query,
+      requestContext,
+    };
+  }
+
+  switch (route.generatedRouteKey) {
+    case 'create': {
+      const body = readJsonRecord((await c.req.json()) as unknown);
+      let dataScopeBindings: Record<string, unknown> | undefined;
+      if (dataScopes.length > 0) {
+        const resolution = resolveDataScopes(dataScopes, 'create', c);
+        if (resolution.status === 'missing') {
+          return c.json(
+            { error: `dataScope source '${resolution.source}' not set on request context` },
+            401,
+          );
+        }
+        dataScopeBindings = resolution.bindings;
+        Object.assign(body, resolution.bindings);
+      }
+      return {
+        params,
+        query,
+        body,
+        input: body,
+        requestContext,
+        dataScopeBindings,
+      };
+    }
+
+    case 'list': {
+      const parsedQuery = schemas.listOptions.safeParse(query);
+      if (!parsedQuery.success) {
+        return c.json(
+          {
+            success: false,
+            error: { name: 'ZodError', message: parsedQuery.error.message },
+          },
+          400,
+        );
+      }
+
+      const { limit, cursor, sortDir, ...validatedFilters } = parsedQuery.data as Record<
+        string,
+        unknown
+      > & {
+        limit?: number;
+        cursor?: string;
+        sortDir?: 'asc' | 'desc';
+      };
+      let filter = Object.keys(validatedFilters).length > 0 ? { ...validatedFilters } : undefined;
+      let dataScopeBindings: Record<string, unknown> | undefined;
+      if (dataScopes.length > 0) {
+        const resolution = resolveDataScopes(dataScopes, 'list', c);
+        if (resolution.status === 'missing') {
+          return c.json(
+            { error: `dataScope source '${resolution.source}' not set on request context` },
+            401,
+          );
+        }
+        dataScopeBindings = resolution.bindings;
+        filter = { ...(filter ?? {}), ...resolution.bindings };
+      }
+      return {
+        params,
+        query,
+        body: null,
+        input: { ...validatedFilters, limit, cursor, sortDir },
+        requestContext,
+        filter,
+        dataScopeBindings,
+      };
+    }
+
+    case 'get':
+    case 'update':
+    case 'delete': {
+      const id = readRequiredParam(c, 'id');
+      let body: Record<string, unknown> | null = null;
+      if (route.generatedRouteKey === 'update') {
+        body = readJsonRecord((await c.req.json()) as unknown);
+        if (dataScopes.length > 0) {
+          const offending = findScopedFieldInBody(dataScopes, body);
+          if (offending !== null) {
+            return c.json({ error: 'scoped_field_immutable', field: offending }, 400);
+          }
+        }
+      }
+
+      let filter: Record<string, unknown> | undefined;
+      let dataScopeBindings: Record<string, unknown> | undefined;
+      if (dataScopes.length > 0) {
+        const resolution = resolveDataScopes(dataScopes, route.generatedRouteKey, c);
+        if (resolution.status === 'missing') {
+          return c.json(
+            { error: `dataScope source '${resolution.source}' not set on request context` },
+            401,
+          );
+        }
+        filter = resolution.bindings;
+        dataScopeBindings = resolution.bindings;
+      }
+
+      const existingRecord = await adapter.getById(id, filter);
+      if (!existingRecord) {
+        return c.json({ error: 'Not found' }, 404);
+      }
+
+      return {
+        params,
+        query,
+        body,
+        input: route.generatedRouteKey === 'update' ? (body ?? {}) : null,
+        requestContext,
+        filter,
+        dataScopeBindings,
+        existingRecord,
+      };
+    }
+
+    default: {
+      let input: unknown = {};
+      try {
+        input = (await c.req.json()) as unknown;
+      } catch {
+        input = {};
+      }
+      const body = readJsonRecord(input);
+      const pathParams = c.req.param() as Record<string, string>;
+      const actor = getActor(c);
+      const ctxOverrides: Record<string, unknown> = {};
+      if (actor.id != null) {
+        ctxOverrides['actor.id'] = actor.id;
+        ctxOverrides.authUserId = actor.id;
+      }
+      if (actor.tenantId != null) {
+        ctxOverrides['actor.tenantId'] = actor.tenantId;
+        ctxOverrides.tenantId = actor.tenantId;
+      }
+      ctxOverrides['actor.kind'] = actor.kind;
+      const mergedInput = { ...query, ...body, ...pathParams, ...ctxOverrides };
+      return {
+        params,
+        query,
+        body,
+        input: mergedInput,
+        requestContext,
+      };
+    }
+  }
+}
+
+async function applyPostFetchPolicyForPlannedRoute(
+  route: PlannedEntityRoute,
+  c: Context<AppEnv>,
+  options: {
+    policyConfig?: EntityRoutePolicyConfig;
+    policyResolver?: PolicyResolver;
+    bus?: SlingshotEventBus;
+  },
+  prep: PlannedExecutionPrep,
+): Promise<Response | null> {
+  if (
+    !options.policyConfig ||
+    !options.policyResolver ||
+    !prep.existingRecord ||
+    (route.generatedRouteKey !== 'get' &&
+      route.generatedRouteKey !== 'update' &&
+      route.generatedRouteKey !== 'delete')
+  ) {
+    return null;
+  }
+
+  if (!policyAppliesToOp(options.policyConfig, route.opName)) {
+    return null;
+  }
+
+  await resolvePolicy({
+    c,
+    config: options.policyConfig,
+    resolver: options.policyResolver,
+    action:
+      route.generatedRouteKey === 'get'
+        ? { kind: 'get' }
+        : route.generatedRouteKey === 'update'
+          ? { kind: 'update' }
+          : { kind: 'delete' },
+    record: prep.existingRecord,
+    input: prep.body,
+    bus: options.bus,
+  });
+  return null;
+}
+
+function createPlannedRouteDefinition(
+  route: PlannedEntityRoute,
+  config: ResolvedEntityConfig,
+  schemas: ReturnType<typeof buildEntityZodSchemas>,
+  tag: string,
+): RouteDefinition {
+  const errorSchema = z.object({ error: z.string() });
+
+  if (route.kind === 'extra') {
+    return createRoute({
+      method: route.method,
+      path: route.path,
+      tags: [tag],
+      summary: route.summary ?? route.opName,
+      responses: {
+        200: {
+          content: { 'application/json': { schema: z.unknown() } },
+          description: 'OK',
+        },
+      },
+    });
+  }
+
+  switch (route.generatedRouteKey) {
+    case 'create':
+      return createRoute({
+        method: 'post',
+        path: route.path,
+        tags: [tag],
+        summary: `Create ${config.name}`,
+        request: { body: { content: { 'application/json': { schema: schemas.create } } } },
+        responses: {
+          201: {
+            content: { 'application/json': { schema: schemas.entity } },
+            description: 'Created',
+          },
+        },
+      });
+    case 'list':
+      return createRoute({
+        method: 'get',
+        path: route.path,
+        tags: [tag],
+        summary: `List ${config.name}`,
+        request: { query: schemas.listOptions },
+        responses: {
+          200: { content: { 'application/json': { schema: schemas.list } }, description: 'OK' },
+        },
+      });
+    case 'get':
+      return createRoute({
+        method: 'get',
+        path: route.path,
+        tags: [tag],
+        summary: `Get ${config.name} by ID`,
+        responses: {
+          200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
+          404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not found' },
+        },
+      });
+    case 'update':
+      return createRoute({
+        method: 'patch',
+        path: route.path,
+        tags: [tag],
+        summary: `Update ${config.name}`,
+        request: { body: { content: { 'application/json': { schema: schemas.update } } } },
+        responses: {
+          200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
+          404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not found' },
+        },
+      });
+    case 'delete':
+      return createRoute({
+        method: 'delete',
+        path: route.path,
+        tags: [tag],
+        summary: `Delete ${config.name}`,
+        responses: { 204: { description: 'Deleted' } },
+      });
+    default: {
+      const operationConfig = route.operationConfig;
+      const routeParams =
+        operationConfig?.kind === 'lookup' || operationConfig?.kind === 'exists'
+          ? [...new Set(route.path.match(/:([A-Za-z]\w*)/g)?.map(param => param.slice(1)) ?? [])]
+          : [];
+      const request =
+        routeParams.length > 0
+          ? {
+              params: z.object(Object.fromEntries(routeParams.map(param => [param, z.string()]))),
+            }
+          : undefined;
+      const responses: Parameters<typeof createRoute>[0]['responses'] =
+        operationConfig?.kind === 'lookup'
+          ? operationConfig.returns === 'one'
+            ? {
+                200: {
+                  content: { 'application/json': { schema: schemas.entity } },
+                  description: 'Found',
+                },
+                404: {
+                  content: { 'application/json': { schema: errorSchema } },
+                  description: 'Not found',
+                },
+              }
+            : {
+                200: {
+                  content: { 'application/json': { schema: schemas.list } },
+                  description: 'List result',
+                },
+              }
+          : operationConfig?.kind === 'exists'
+            ? {
+                200: { description: 'Exists' },
+                404: { description: 'Not found' },
+              }
+            : {
+                200: {
+                  content: { 'application/json': { schema: schemas.entity } },
+                  description: 'OK',
+                },
+              };
+
+      return createRoute({
+        method: route.method,
+        path: route.path,
+        tags: [tag],
+        summary: route.opName,
+        ...(request ? { request } : {}),
+        responses,
+      });
+    }
+  }
+}
+
 /**
  * Build a Hono router with bare CRUD and named operation handlers for an entity.
  *
@@ -272,13 +774,13 @@ function routeDisabled(
  * is body < path params < context overrides:
  * - Body fields — from the parsed JSON request body (lowest priority)
  * - Path params — from URL path parameters (e.g. `:id` in `operationPaths` or `op.custom http.path`)
- * - `tenantId` — from `c.get('tenantId')` (set by tenant middleware)
- * - `authUserId` — from `c.get('authUserId')` (set by auth middleware)
+ * - `actor.id` / `actor.tenantId` / `actor.kind` — projected from the canonical request actor
+ * - `tenantId` / `authUserId` — legacy aliases projected from the same actor
  *
- * This allows transaction step bindings like `'param:authUserId'`, `'param:tenantId'`,
- * and `'param:id'` to resolve from server-side context or URL params rather than
- * requiring the client to supply them in the request body. Context values always win —
- * clients cannot override them.
+ * This allows transaction step bindings like `'param:actor.id'`, `'param:actor.tenantId'`,
+ * `'param:authUserId'`, `'param:tenantId'`, and `'param:id'` to resolve from server-side
+ * context or URL params rather than requiring the client to supply them in the request body.
+ * Context values always win — clients cannot override them.
  * @returns The router (either `existingRouter` or the newly created one).
  *
  * @remarks
@@ -317,7 +819,7 @@ export function buildBareEntityRoutes<
     bus?: SlingshotEventBus;
     /** Override the OpenAPI tag for all routes. Defaults to entity name. */
     tag?: string;
-  },
+  } & PlannedRouteOptions,
 ): RouterT | OpenAPIHono<AppEnv> {
   const router = existingRouter ?? new OpenAPIHono<AppEnv>();
   const entitySegment = options?.routePath ?? entityToPath(config.name);
@@ -332,6 +834,76 @@ export function buildBareEntityRoutes<
   const policyResolver = options?.policyResolver;
   const policyBus = options?.bus;
   const errorSchema = z.object({ error: z.string() });
+  const plannedRoutes = options?.plannedRoutes;
+
+  if (plannedRoutes && plannedRoutes.length > 0) {
+    const getEntityAdapter =
+      options.getEntityAdapter ??
+      (() => {
+        throw new Error(
+          `Cross-entity adapter lookup is unavailable for planned routes on '${config.name}'`,
+        );
+      });
+
+    for (const route of plannedRoutes) {
+      const executorBuilderContext: EntityRouteExecutorBuilderContext = {
+        entity: config,
+        routeKey: route.routeKey,
+        generatedRouteKey: route.generatedRouteKey,
+        entityAdapter: adapter,
+        getEntityAdapter,
+      };
+      const executor =
+        route.buildExecutor?.(executorBuilderContext) ?? defaultGeneratedExecutor(route, adapter);
+      const routeDef = createPlannedRouteDefinition(route, config, schemas, tag);
+
+      registerRoute(router, routeDef, async c => {
+        c.set('__routeKey' as never, route.routeKey as never);
+        const prep = await preparePlannedExecution(route, c, adapter, schemas, dataScopes);
+        if (prep instanceof Response) {
+          return prep;
+        }
+
+        const policyResponse = await applyPostFetchPolicyForPlannedRoute(
+          route,
+          c,
+          {
+            policyConfig,
+            policyResolver,
+            bus: policyBus,
+          },
+          prep,
+        );
+        if (policyResponse) {
+          return policyResponse;
+        }
+
+        const helpers = createResponseHelpers(c, route);
+        const execContext: EntityRouteExecutionContext = {
+          request: c,
+          entity: config,
+          routeKey: route.routeKey,
+          generatedRouteKey: route.generatedRouteKey,
+          entityAdapter: adapter,
+          params: prep.params,
+          query: prep.query,
+          body: prep.body,
+          input: prep.input,
+          requestContext: prep.requestContext,
+          filter: prep.filter,
+          dataScopeBindings: prep.dataScopeBindings,
+          existingRecord: prep.existingRecord,
+          getEntityAdapter,
+          respond: helpers,
+          setOpResult: helpers.setOpResult,
+        };
+
+        return executor(execContext);
+      });
+    }
+
+    return router;
+  }
 
   // Named operations are registered BEFORE CRUD routes so that static paths
   // (e.g. /notes/list-by-document) take precedence over the dynamic GET /notes/:id
@@ -400,9 +972,9 @@ export function buildBareEntityRoutes<
       } catch {
         // no body
       }
-      // Inject well-known context values so transaction param bindings (e.g.
-      // 'param:authUserId', 'param:tenantId') can resolve from auth/tenant
-      // middleware without requiring the client to supply them in the body.
+      // Inject actor-derived context values so transaction param bindings (e.g.
+      // 'param:actor.id', 'param:actor.tenantId') resolve from request identity
+      // without requiring the client to supply them in the body.
       // Merge priority: body < path params < context overrides.
       // Context values always win — clients cannot spoof them.
       const bodyRecord =
@@ -412,11 +984,17 @@ export function buildBareEntityRoutes<
       const pathParams = c.req.param() as Record<string, string>;
       const queryParams = Object.fromEntries(new URL(c.req.url).searchParams.entries());
       // Context values override both body and path params — clients cannot spoof them.
-      const tenantId = c.get('tenantId' as never) as string | null | undefined;
-      const authUserId = c.get('authUserId' as never) as string | null | undefined;
+      const actor = getActor(c);
       const ctxOverrides: Record<string, unknown> = {};
-      if (tenantId != null) ctxOverrides.tenantId = tenantId;
-      if (authUserId != null) ctxOverrides.authUserId = authUserId;
+      if (actor.id != null) {
+        ctxOverrides['actor.id'] = actor.id;
+        ctxOverrides.authUserId = actor.id;
+      }
+      if (actor.tenantId != null) {
+        ctxOverrides['actor.tenantId'] = actor.tenantId;
+        ctxOverrides.tenantId = actor.tenantId;
+      }
+      ctxOverrides['actor.kind'] = actor.kind;
       const params = { ...queryParams, ...bodyRecord, ...pathParams, ...ctxOverrides };
 
       const opFn = adapter[opName];

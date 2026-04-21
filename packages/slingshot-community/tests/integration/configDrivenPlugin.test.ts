@@ -20,6 +20,8 @@ import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import type {
   CoreRegistrar,
@@ -227,6 +229,10 @@ async function createCommunityHarness(opts?: {
   const permAdapter = createAdapter();
   const notifications = createNotificationsTestAdapters();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
   const frameworkConfig = createFrameworkConfig();
 
   const plugin = createCommunityPlugin({
@@ -303,9 +309,9 @@ async function createCommunityHarness(opts?: {
   // banCheck runs before autoMod. We intercept `app.route` at the community
   // mount path: since plugin middleware runs before route handlers, we
   // observe order through the underlying wrappers below.
-  await plugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
-  await plugin.setupRoutes?.({ app, config: frameworkConfig, bus });
-  await plugin.setupPost?.({ app, config: frameworkConfig, bus });
+  await plugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
+  await plugin.setupRoutes?.({ app, config: frameworkConfig, bus, events });
+  await plugin.setupPost?.({ app, config: frameworkConfig, bus, events });
 
   return {
     app,

@@ -26,7 +26,7 @@ createServer(config)
   ├── 8. Mount error handlers
   │
   ├── 9. Run setupPost() on all plugins, in order
-  │      └── Event subscriptions, cross-plugin discovery, permission registration
+  │      └── Event subscriptions, registrar writes, WS draft patching, final post-assembly hooks
   │
   └── 10. Start the HTTP server
 ```
@@ -51,15 +51,20 @@ Runs after tenant middleware — routes registered here have tenant context. Use
 - Mounting Hono routers
 - Entity-driven plugin routes via `createEntityPlugin()`
 - Package-owned route families
+- Publishing plugin-owned runtime state when it becomes canonical during route assembly
 
 Order matters here. If plugin A's routes depend on middleware mounted by plugin B, A must declare B as a dependency so B boots first.
+
+`setupRoutes` is also where the entity system now publishes resolved entity adapters into plugin
+state. That exception exists so dependency-ordered route composition can look up sibling adapters
+without waiting for `setupPost`.
 
 ### `setupPost` — after everything is wired
 
 Runs after all routes and error handlers are registered. The app is fully assembled — not yet serving requests. Use it for:
 
 - Event bus subscriptions
-- Publishing capabilities to the registrar for other plugins to consume
+- Registrar writes and other post-assembly framework discovery
 - Cross-plugin discovery (finding what other plugins have registered)
 - Initial state setup that depends on the full plugin graph being present
 
@@ -98,10 +103,11 @@ Plugins store runtime state in `getContext(app).pluginState`, keyed by a plugin-
 ```typescript
 const MY_PLUGIN_STATE_KEY = 'my-plugin' as const;
 
-// Plugin A stores something (in setupRoutes or setupPost)
+// Plugin A publishes canonical state in the earliest safe phase.
+// Entity adapters are one framework-owned example published during setupRoutes.
 getContext(app).pluginState.set(MY_PLUGIN_STATE_KEY, { someCapability: ... });
 
-// Plugin B reads it in setupPost
+// Plugin B reads it in a later phase or request handler.
 const pluginAState = getContext(app).pluginState.get(MY_PLUGIN_STATE_KEY);
 ```
 

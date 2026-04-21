@@ -11,14 +11,12 @@ import {
   MAX_CONTENT_ATTACHMENTS,
   MAX_CONTENT_BODY_LENGTH,
   MAX_CONTENT_MENTIONS,
-} from '@lastshotlabs/slingshot-core';
-import {
   assetRefSchema,
   contactDataSchema,
   locationDataSchema,
   quotePreviewSchema,
   systemEventDataSchema,
-} from '@lastshotlabs/slingshot-core/content';
+} from '@lastshotlabs/slingshot-core';
 
 // ─── Room ─────────────────────────────────────────────────────────────────────
 

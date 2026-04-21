@@ -1,4 +1,4 @@
-import type { ClientSafeEventKey } from './eventBus';
+import type { EventKey } from './eventDefinition';
 
 /**
  * Data attached to each active SSE connection.
@@ -33,7 +33,7 @@ export type SseClientData<T extends object = object> = {
  */
 export type SseFilter<T extends object = object> = (
   client: SseClientData<T>,
-  event: ClientSafeEventKey,
+  event: EventKey,
   payload: unknown,
 ) => boolean | Promise<boolean>;
 
@@ -57,8 +57,8 @@ export type SseFilter<T extends object = object> = (
  * ```
  */
 export interface SseEndpointConfig<T extends object = object> {
-  /** Client-safe event keys this endpoint streams to subscribers. */
-  events: ClientSafeEventKey[];
+  /** Registry-backed event keys this endpoint streams to subscribers. */
+  events: EventKey[];
   /**
    * Auth hook called when a client opens an SSE connection.
    * Return `SseClientData<T>` to accept the connection; return a `Response` to reject.

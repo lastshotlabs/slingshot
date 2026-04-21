@@ -2,6 +2,7 @@ import { trace } from '@opentelemetry/api';
 import { describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import type { Actor } from '@lastshotlabs/slingshot-core';
 import { otelRequestMiddleware } from '../../src/framework/middleware/otelRequest';
 import { requestId } from '../../src/framework/middleware/requestId';
 import { requestLogger } from '../../src/framework/middleware/requestLogger';
@@ -144,15 +145,22 @@ describe('requestLogger middleware', () => {
   test('userId and tenantId captured from context', async () => {
     const { app, logs } = createLoggerApp();
     app.use(async (c, next) => {
-      c.set('authUserId', 'user-123');
-      c.set('tenantId', 'tenant-456');
+      c.set('actor', {
+        id: 'actor-123',
+        kind: 'user',
+        tenantId: 'tenant-456',
+        sessionId: null,
+        roles: null,
+        claims: {},
+      } satisfies Actor);
+      c.set('authUserId', 'legacy-user');
       await next();
     });
     app.get('/api/data', c => c.json({ ok: true }));
 
     await app.request('/api/data');
 
-    expect(logs[0].userId).toBe('user-123');
+    expect(logs[0].userId).toBe('actor-123');
     expect(logs[0].tenantId).toBe('tenant-456');
   });
 
@@ -217,7 +225,14 @@ describe('requestLogger middleware', () => {
   test('sessionId captured from context', async () => {
     const { app, logs } = createLoggerApp();
     app.use(async (c, next) => {
-      c.set('sessionId', 'sess-789');
+      c.set('actor', {
+        id: 'user-1',
+        kind: 'user',
+        tenantId: null,
+        sessionId: 'sess-789',
+        roles: null,
+        claims: {},
+      } satisfies Actor);
       await next();
     });
     app.get('/api/data', c => c.json({ ok: true }));

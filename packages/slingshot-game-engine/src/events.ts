@@ -2,8 +2,8 @@
  * Game engine event bus events.
  *
  * Module augmentation on `SlingshotEventMap` (the sanctioned pattern per
- * Rule 12 exception documented in spec §2.5). Client-safe events are
- * registered via `bus.registerClientSafeEvents()` in `setupPost`.
+ * Rule 12 exception documented in spec 2.5). External delivery is governed
+ * by event definitions and exposure metadata registered by the runtime.
  */
 import type { WinResult } from './types/models';
 
@@ -66,18 +66,3 @@ declare module '@lastshotlabs/slingshot-core' {
     };
   }
 }
-
-/**
- * Event keys the game engine registers as client-safe (relayed to WS clients).
- *
- * Passed to `bus.registerClientSafeEvents()` in `setupPost`.
- * Events not in this list (e.g., `game:error`, `game:session.completed`
- * with internal data) stay server-side only.
- */
-export const GAME_ENGINE_CLIENT_SAFE_EVENTS = [
-  'game:session.created',
-  'game:player.joined',
-  'game:player.disconnected',
-  'game:player.reconnected',
-  'game:phase.entered',
-] as const;

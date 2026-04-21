@@ -21,15 +21,17 @@ function adminHeaders(tenantId = 'tenant-a'): Record<string, string> {
 async function createEndpoint(
   app: Awaited<ReturnType<typeof createWebhooksTestApp>>['app'],
   headers: Record<string, string>,
-  events: string[],
+  subscriptions: Array<{ event: string } | { pattern: string }>,
 ): Promise<string> {
   const response = await app.request('/webhooks/endpoints', {
     method: 'POST',
     headers,
     body: JSON.stringify({
+      ownerType: 'user',
+      ownerId: 'user-1',
       url: 'https://example.com/hooks/test',
       secret: 'super-secret-token',
-      events,
+      subscriptions,
     }),
   });
 
@@ -64,14 +66,18 @@ describe('webhook plugin delivery lifecycle', () => {
     const fetchMock = mock(async () => new Response('bad request', { status: 400 }));
     globalThis.fetch = asFetch(fetchMock);
 
-    const { app, bus, runtime, teardown } = await createWebhooksTestApp({
-      events: ['auth:user.created'],
+    const { app, events, runtime, teardown } = await createWebhooksTestApp({
+      events: ['auth:*'],
       queueConfig: { maxAttempts: 3, retryBaseDelayMs: 1 },
     });
 
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), ['auth:user.created']);
-      bus.emit('auth:user.created', { userId: 'user-1', tenantId: 'tenant-a' });
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
+      events.publish(
+        'auth:login',
+        { userId: 'user-1', sessionId: 'sess-1', tenantId: 'tenant-a' },
+        { tenantId: 'tenant-a', userId: 'user-1', actorId: 'user-1' },
+      );
 
       const delivery = await waitForDelivery(runtime, endpointId, item => item.status === 'dead');
       expect(delivery.attempts).toBe(1);
@@ -87,14 +93,18 @@ describe('webhook plugin delivery lifecycle', () => {
     const fetchMock = mock(async () => new Response('upstream error', { status: 500 }));
     globalThis.fetch = asFetch(fetchMock);
 
-    const { app, bus, runtime, teardown } = await createWebhooksTestApp({
-      events: ['auth:user.created'],
+    const { app, events, runtime, teardown } = await createWebhooksTestApp({
+      events: ['auth:*'],
       queueConfig: { maxAttempts: 2, retryBaseDelayMs: 1 },
     });
 
     try {
-      const endpointId = await createEndpoint(app, adminHeaders(), ['auth:user.created']);
-      bus.emit('auth:user.created', { userId: 'user-2', tenantId: 'tenant-a' });
+      const endpointId = await createEndpoint(app, adminHeaders(), [{ event: 'auth:login' }]);
+      events.publish(
+        'auth:login',
+        { userId: 'user-1', sessionId: 'sess-2', tenantId: 'tenant-a' },
+        { tenantId: 'tenant-a', userId: 'user-1', actorId: 'user-1' },
+      );
 
       const delivery = await waitForDelivery(runtime, endpointId, item => item.status === 'dead');
       expect(delivery.attempts).toBe(2);
@@ -119,12 +129,12 @@ describe('webhook plugin delivery lifecycle', () => {
 
     const { app, runtime, teardown } = await createWebhooksTestApp({
       queue: failingQueue,
-      events: ['auth:user.created'],
+      events: ['auth:*'],
     });
 
     try {
       const headers = adminHeaders();
-      const endpointId = await createEndpoint(app, headers, ['auth:user.created']);
+      const endpointId = await createEndpoint(app, headers, [{ event: 'auth:login' }]);
 
       const response = await app.request(`/webhooks/endpoints/${endpointId}/test`, {
         method: 'POST',
@@ -147,7 +157,7 @@ describe('webhook plugin delivery lifecycle', () => {
 
   it('rejects invalid webhook endpoint URLs and empty event lists', async () => {
     const { app, teardown } = await createWebhooksTestApp({
-      events: ['auth:user.created'],
+      events: ['auth:*'],
     });
 
     try {
@@ -156,16 +166,18 @@ describe('webhook plugin delivery lifecycle', () => {
         method: 'POST',
         headers,
         body: JSON.stringify({
+          ownerType: 'user',
+          ownerId: 'user-1',
           url: 'ftp://example.com/hooks/test',
           secret: 'super-secret-token',
-          events: ['auth:user.created'],
+          subscriptions: [{ event: 'auth:login' }],
         }),
       });
 
       expect(createResponse.status).toBe(400);
       expect(await createResponse.text()).toContain('Webhook target URL must use http or https');
 
-      const endpointId = await createEndpoint(app, headers, ['auth:user.created']);
+      const endpointId = await createEndpoint(app, headers, [{ event: 'auth:login' }]);
       const updateResponse = await app.request(`/webhooks/endpoints/${endpointId}`, {
         method: 'PATCH',
         headers,
@@ -173,7 +185,7 @@ describe('webhook plugin delivery lifecycle', () => {
       });
 
       expect(updateResponse.status).toBe(400);
-      expect(await updateResponse.text()).toContain('events must not be empty');
+      expect(await updateResponse.text()).toContain('legacy "events" input is no longer supported');
     } finally {
       await teardown();
     }

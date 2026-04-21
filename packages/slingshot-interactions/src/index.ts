@@ -1,3 +1,5 @@
+import './events';
+
 export { createInteractionsPlugin } from './plugin';
 export { INTERACTIONS_PLUGIN_STATE_KEY } from './state';
 export type { InteractionsPluginState } from './state';

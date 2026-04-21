@@ -1,6 +1,7 @@
 import { createMfaChallenge } from '@auth/lib/mfaChallenge';
 import type { WebAuthnCredential } from '@lastshotlabs/slingshot-core';
 import { HttpError } from '@lastshotlabs/slingshot-core';
+import { publishAuthEvent } from '../eventGovernance';
 import {
   decryptField,
   encryptField,
@@ -373,7 +374,7 @@ export const initiateEmailOtp = async (
   if (!user?.email) throw new HttpError(400, 'No email address on account');
 
   const { code, hash } = generateEmailOtpCode(runtime);
-  eventBus.emit('auth:delivery.email_otp', { email: user.email, code });
+  publishAuthEvent(runtime.events, 'auth:delivery.email_otp', { email: user.email, code });
 
   // Store the hash in a challenge token for verification
   const setupToken = await createMfaChallenge(

@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import type { EntityRouteDataScopeSource } from './entityRouteConfig';
+import type {
+  EntityRouteDataScopeSource,
+  RouteEventConfig,
+  RouteEventScopeValue,
+} from './entityRouteConfig';
 
 const FORBIDDEN_EVENT_PREFIXES = ['security.', 'auth:', 'community:delivery.', 'push:', 'app:'];
 
@@ -57,12 +61,42 @@ const eventKeySchema = z
       'Event key uses a forbidden namespace (security., auth:, community:delivery., push:, app:)',
   });
 
-const routeEventSchema = z.union([
+const routeEventScopeValueSchema = z.custom<RouteEventScopeValue>(
+  value =>
+    typeof value === 'string' && (value.startsWith('record:') || value.startsWith('ctx:')),
+  {
+    message: "event.scope values must start with 'record:' or 'ctx:'",
+  },
+);
+
+const routeEventSchema: z.ZodType<string | RouteEventConfig> = z.union([
   eventKeySchema,
   z.object({
     key: eventKeySchema,
     payload: z.array(z.string()).optional(),
     include: z.array(z.enum(['tenantId', 'actorId', 'requestId', 'ip'])).optional(),
+    exposure: z
+      .array(
+        z.enum([
+          'internal',
+          'client-safe',
+          'tenant-webhook',
+          'user-webhook',
+          'app-webhook',
+          'connector',
+        ]),
+      )
+      .optional(),
+    scope: z
+      .object({
+        tenantId: routeEventScopeValueSchema.optional(),
+        userId: routeEventScopeValueSchema.optional(),
+        appId: routeEventScopeValueSchema.optional(),
+        actorId: routeEventScopeValueSchema.optional(),
+        resourceType: z.string().min(1).optional(),
+        resourceId: routeEventScopeValueSchema.optional(),
+      })
+      .optional(),
   }),
 ]);
 
@@ -81,6 +115,25 @@ const routeNamedOperationConfigSchema = routeOperationConfigSchema.extend({
   method: namedOpHttpMethodSchema.optional(),
   path: z.string().min(1).optional(),
 });
+
+function normalizeRouteEventConfig(
+  event: string | RouteEventConfig | undefined,
+): RouteEventConfig | undefined {
+  if (!event) {
+    return undefined;
+  }
+  return typeof event === 'string' ? { key: event } : event;
+}
+
+function getEventExposure(event: RouteEventConfig): readonly string[] {
+  return event.exposure ?? ['internal'];
+}
+
+type RecordScopeValue = Extract<RouteEventScopeValue, `record:${string}`>;
+
+function isRecordScopeValue(value: RouteEventScopeValue | undefined): value is RecordScopeValue {
+  return typeof value === 'string' && value.startsWith('record:');
+}
 
 const webhookConfigSchema = z.object({
   payload: z.array(z.string()).optional(),
@@ -121,11 +174,11 @@ const dataScopedCrudOpSchema = z.enum(['list', 'get', 'create', 'update', 'delet
 const dataScopeSourceSchema = z.custom<EntityRouteDataScopeSource>(
   value => {
     if (typeof value !== 'string') return false;
-    return /^(ctx|param):[a-zA-Z_][a-zA-Z0-9_]*$/.test(value);
+    return /^(ctx|param):[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$/.test(value);
   },
   {
     message:
-      "dataScope.from must start with 'ctx:' or 'param:' followed by an identifier (e.g. 'ctx:authUserId')",
+      "dataScope.from must start with 'ctx:' or 'param:' followed by an identifier or dot path (e.g. 'ctx:actor.id')",
   },
 );
 
@@ -176,7 +229,6 @@ export const entityRouteConfigSchema = z
       .union([entityRouteDataScopeConfigSchema, z.array(entityRouteDataScopeConfigSchema).min(1)])
       .optional(),
     disable: z.array(z.string()).optional(),
-    clientSafeEvents: z.array(z.string()).optional(),
     webhooks: z.record(z.string(), webhookConfigSchema).optional(),
     retention: retentionConfigSchema.optional(),
     permissions: entityPermissionConfigSchema.optional(),
@@ -287,6 +339,92 @@ export const entityRouteConfigSchema = z
         message:
           "idempotency.scope 'user' requires auth — set defaults.auth or operation.auth to 'userAuth' or 'bearer', or choose scope 'tenant' or 'global'.",
       });
+    }
+
+    const eventBearingOps = [
+      ['create', cfg.create],
+      ['get', cfg.get],
+      ['list', cfg.list],
+      ['update', cfg.update],
+      ['delete', cfg.delete],
+      ...Object.entries(cfg.operations ?? {}),
+    ] as const;
+
+    for (const [opName, opConfig] of eventBearingOps) {
+      const event = normalizeRouteEventConfig(opConfig?.event);
+      if (!event) continue;
+
+      const exposure = getEventExposure(event);
+      const scope = event.scope;
+      const path =
+        opName === 'create' ||
+        opName === 'get' ||
+        opName === 'list' ||
+        opName === 'update' ||
+        opName === 'delete'
+          ? [opName, 'event']
+          : ['operations', opName, 'event'];
+
+      if (exposure.includes('internal') && exposure.length > 1) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [...path, 'exposure'],
+          message: 'event.exposure cannot mix "internal" with external exposures.',
+        });
+      }
+
+      if (exposure.some(value => value.endsWith('webhook')) && !scope) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [...path, 'scope'],
+          message: 'Webhook-exposed events require event.scope to resolve subscriber ownership.',
+        });
+      }
+
+      if (exposure.includes('tenant-webhook') && !scope?.tenantId) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [...path, 'scope', 'tenantId'],
+          message: 'tenant-webhook exposure requires event.scope.tenantId.',
+        });
+      }
+
+      if (exposure.includes('user-webhook') && !scope?.userId) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [...path, 'scope', 'userId'],
+          message: 'user-webhook exposure requires event.scope.userId.',
+        });
+      }
+
+      if (exposure.includes('app-webhook') && !scope?.appId) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [...path, 'scope', 'appId'],
+          message: 'app-webhook exposure requires event.scope.appId.',
+        });
+      }
+
+      const recordScopeFields = [
+        scope?.tenantId,
+        scope?.userId,
+        scope?.appId,
+        scope?.actorId,
+        scope?.resourceId,
+      ].filter(isRecordScopeValue);
+      if (recordScopeFields.length > 0 && event.payload && event.payload.length > 0) {
+        for (const value of recordScopeFields) {
+          const fieldName = value.slice('record:'.length);
+          if (!event.payload.includes(fieldName)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [...path, 'payload'],
+              message:
+                `event.payload must include "${fieldName}" because event.scope references ${value}.`,
+            });
+          }
+        }
+      }
     }
   });
 

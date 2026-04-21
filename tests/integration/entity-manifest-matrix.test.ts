@@ -48,7 +48,6 @@ function matrixManifest(namespace: string): MultiEntityManifest {
           update: {},
           delete: {},
           disable: ['delete'],
-          clientSafeEvents: [`${namespace}:matrix_item.created`],
           operations: {
             publish: { method: 'post' },
             rename: { method: 'patch' },

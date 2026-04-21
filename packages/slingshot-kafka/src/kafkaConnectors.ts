@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { type Admin, type Consumer, Kafka, type KafkaMessage, type Producer } from 'kafkajs';
 import { type ZodType, z } from 'zod';
 import type {
+  EventEnvelope,
   EventSchemaRegistry,
   EventSerializer,
   KafkaConnectorHandle,
@@ -57,20 +58,31 @@ export type InboundTransform = (
   metadata: InboundMessageMetadata,
 ) => unknown | Promise<unknown>;
 
+/**
+ * Envelope shape exposed to outbound connector hooks.
+ *
+ * Payload is intentionally `unknown` because connector transforms may project it
+ * away from the original event schema before serialization.
+ */
+export type OutboundEnvelope = Readonly<{
+  key: EventEnvelope['key'];
+  payload: unknown;
+  meta: EventEnvelope['meta'];
+}>;
+
 /** Predicate that decides whether an outbound event should be published. */
-export type OutboundFilter = (payload: unknown, event: string) => boolean | Promise<boolean>;
+export type OutboundFilter = (envelope: OutboundEnvelope) => boolean | Promise<boolean>;
 /** Transform applied to an outbound event payload before serialization. */
-export type OutboundTransform = (payload: unknown, event: string) => unknown | Promise<unknown>;
+export type OutboundTransform = (envelope: OutboundEnvelope) => unknown | Promise<unknown>;
 /** Hook that can add or replace Kafka headers for outbound publishes. */
 export type OutboundHeaderEnricher = (
   defaults: Record<string, string>,
-  payload: unknown,
-  event: string,
+  envelope: OutboundEnvelope,
 ) => Record<string, string>;
 /** Resolve a stable message identifier for dedupe or trace correlation. */
-export type OutboundMessageIdExtractor = (event: string, payload: unknown) => string | null;
+export type OutboundMessageIdExtractor = (envelope: OutboundEnvelope) => string | null;
 /** Resolve the Kafka partition key for an outbound publish. */
-export type OutboundPartitionKeyExtractor = (event: string, payload: unknown) => string | null;
+export type OutboundPartitionKeyExtractor = (envelope: OutboundEnvelope) => string | null;
 
 /**
  * Optional observability hooks for the connector bridge.
@@ -95,7 +107,7 @@ export interface ConnectorObservabilityHooks {
   onOutboundSuppressed?(
     event: string,
     topic: string,
-    reason: 'filter' | 'transform-null' | 'validation',
+    reason: 'filter' | 'transform-null' | 'validation' | 'not-exposed',
   ): void;
 }
 
@@ -234,7 +246,7 @@ interface InboundRuntime {
 
 interface OutboundRuntime {
   config: OutboundConnectorConfig;
-  listener: (payload: unknown) => void;
+  listener: (envelope: EventEnvelope) => void;
   health: MutableKafkaOutboundConnectorHealth;
 }
 
@@ -293,19 +305,27 @@ function validatePayload(
   return payload;
 }
 
-function resolvePartitionKey(config: OutboundConnectorConfig, payload: unknown): string | null {
+function resolvePartitionKey(
+  config: OutboundConnectorConfig,
+  envelope: OutboundEnvelope,
+  payload: unknown,
+): string | null {
   if (!config.partitionKey) return null;
   if (typeof config.partitionKey === 'function') {
-    return config.partitionKey(config.event, payload);
+    return config.partitionKey(envelope);
   }
   if (!payload || typeof payload !== 'object') return null;
   const value = (payload as Record<string, unknown>)[config.partitionKey];
   return value == null ? null : String(value);
 }
 
-function resolveMessageId(config: OutboundConnectorConfig, payload: unknown): string {
+function resolveMessageId(
+  config: OutboundConnectorConfig,
+  envelope: OutboundEnvelope,
+  payload: unknown,
+): string {
   if (typeof config.messageId === 'function') {
-    const resolved = config.messageId(config.event, payload);
+    const resolved = config.messageId(envelope);
     if (resolved) return String(resolved);
   } else if (typeof config.messageId === 'string' && payload && typeof payload === 'object') {
     const value = (payload as Record<string, unknown>)[config.messageId];
@@ -313,7 +333,37 @@ function resolveMessageId(config: OutboundConnectorConfig, payload: unknown): st
       return String(value);
     }
   }
-  return randomUUID();
+  return envelope.meta.eventId || randomUUID();
+}
+
+function createOutboundEnvelope(
+  envelope: OutboundEnvelope,
+  payload: unknown,
+): OutboundEnvelope {
+  return Object.freeze({
+    key: envelope.key,
+    payload,
+    meta: envelope.meta,
+  });
+}
+
+function buildOutboundHeaders(
+  envelope: OutboundEnvelope,
+  serializerContentType: string,
+  messageId: string,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    'slingshot.event': envelope.key,
+    'slingshot.event-id': envelope.meta.eventId,
+    'slingshot.owner-plugin': envelope.meta.ownerPlugin,
+    'slingshot.exposure': envelope.meta.exposure.join(','),
+    'slingshot.content-type': serializerContentType,
+    'slingshot.message-id': messageId,
+  };
+  if (envelope.meta.scope?.tenantId) {
+    headers['slingshot.tenant-id'] = envelope.meta.scope.tenantId;
+  }
+  return headers;
 }
 
 async function waitWithHeartbeat(heartbeat: () => Promise<void>, delayMs: number): Promise<void> {
@@ -561,23 +611,28 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
 
   async function produceOutbound(
     config: OutboundConnectorConfig,
-    payload: unknown,
+    envelope: EventEnvelope,
     runtime: OutboundRuntime,
   ): Promise<void> {
     const startMs = Date.now();
     let pendingEntry: Omit<PendingProduceEntry, 'attempts'> | null = null;
     try {
+      if (!envelope.meta.exposure.includes('connector')) {
+        hooks?.onOutboundSuppressed?.(config.event, config.topic, 'not-exposed');
+        return;
+      }
+
       if (config.filter) {
-        const keep = await Promise.resolve(config.filter(payload, config.event));
+        const keep = await Promise.resolve(config.filter(envelope));
         if (!keep) {
           hooks?.onOutboundSuppressed?.(config.event, config.topic, 'filter');
           return;
         }
       }
 
-      let transformed = payload;
+      let transformed: unknown = envelope.payload;
       if (config.transform) {
-        transformed = await Promise.resolve(config.transform(payload, config.event));
+        transformed = await Promise.resolve(config.transform(envelope));
         if (transformed == null) {
           hooks?.onOutboundSuppressed?.(config.event, config.topic, 'transform-null');
           return;
@@ -598,26 +653,28 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
         throw err;
       }
 
+      const outboundEnvelope = createOutboundEnvelope(envelope, transformed);
       const serializer = resolveSerializer(config.serializer, opts.serializer);
-      const messageId = resolveMessageId(config, transformed);
-      const key = resolvePartitionKey(config, transformed);
-      const serialized = serializer.serialize(config.event, transformed);
+      const messageId = resolveMessageId(config, envelope, transformed);
+      const key = resolvePartitionKey(config, envelope, transformed);
+      const serialized = serializer.serialize(config.event, outboundEnvelope);
 
-      let messageHeaders: Record<string, string> = {
-        'slingshot.event': config.event,
-        'slingshot.timestamp': Date.now().toString(),
-        'slingshot.content-type': serializer.contentType,
-        'slingshot.message-id': messageId,
-      };
+      let messageHeaders = buildOutboundHeaders(outboundEnvelope, serializer.contentType, messageId);
       if (config.headers) {
-        messageHeaders = config.headers(messageHeaders, transformed, config.event);
+        messageHeaders = config.headers(messageHeaders, outboundEnvelope);
       }
       messageHeaders = {
         ...messageHeaders,
-        'slingshot.event': config.event,
+        'slingshot.event': outboundEnvelope.key,
+        'slingshot.event-id': outboundEnvelope.meta.eventId,
+        'slingshot.owner-plugin': outboundEnvelope.meta.ownerPlugin,
+        'slingshot.exposure': outboundEnvelope.meta.exposure.join(','),
         'slingshot.content-type': serializer.contentType,
         'slingshot.message-id': messageId,
       };
+      if (outboundEnvelope.meta.scope?.tenantId) {
+        messageHeaders['slingshot.tenant-id'] = outboundEnvelope.meta.scope.tenantId;
+      }
       pendingEntry = {
         topic: config.topic,
         event: config.event,
@@ -838,15 +895,15 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
               pendingCount: 0,
             },
           };
-          const listener = (payload: unknown) => {
-            void produceOutbound(config, payload, runtime);
+          const listener = (envelope: EventEnvelope) => {
+            void produceOutbound(config, envelope, runtime);
           };
           runtime.listener = listener;
           outboundRuntimes.push(runtime);
           if (config.durable) {
-            bus.on(config.event, listener, { durable: true, name: config.name! });
+            bus.onEnvelope(config.event, listener, { durable: true, name: config.name! });
           } else {
-            bus.on(config.event, listener);
+            bus.onEnvelope(config.event, listener);
           }
         }
 
@@ -881,7 +938,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
       if (boundBus) {
         for (const runtime of outboundRuntimes) {
           try {
-            boundBus.off(runtime.config.event, runtime.listener);
+            boundBus.offEnvelope(runtime.config.event, runtime.listener);
           } catch {
             // Durable listeners are cleaned up by the underlying bus shutdown.
           }

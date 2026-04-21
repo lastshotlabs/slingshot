@@ -17,9 +17,10 @@
  * | `search:reindex.completed` | After a full reindex operation finishes |
  * | `search:sync.failed` | After a sync operation fails (event-bus or write-through) |
  *
- * Only `search:index.updated` and `search:reindex.completed` are registered
- * as client-safe SSE events (see `SEARCH_CLIENT_SAFE_KEYS`). The remaining
- * events carry document IDs or error details and are kept server-side only.
+ * `search:index.updated` and `search:reindex.completed` are the intended
+ * external-facing events when a consumer registers definitions with
+ * `exposure: ['client-safe']`. The remaining events carry document IDs or
+ * error details and are kept server-side only.
  */
 
 declare module '@lastshotlabs/slingshot-core' {
@@ -69,32 +70,5 @@ declare module '@lastshotlabs/slingshot-core' {
   }
 }
 
-/**
- * Search event keys safe to stream to browser clients via SSE.
- *
- * Only non-sensitive events appear here: index metadata updates and reindex
- * completion notifications. Events carrying document content (indexed/deleted)
- * or error details are intentionally excluded.
- *
- * The search plugin registers these automatically in `setupPost` via
- * `bus.registerClientSafeEvents()`. Consumer apps can import the list to
- * subscribe in custom SSE handlers.
- *
- * @example
- * ```ts
- * import { SEARCH_CLIENT_SAFE_KEYS } from '@lastshotlabs/slingshot-search';
- *
- * bus.registerClientSafeEvents([...SEARCH_CLIENT_SAFE_KEYS]);
- * ```
- */
-export const SEARCH_CLIENT_SAFE_KEYS = [
-  'search:index.updated',
-  'search:reindex.completed',
-] as const;
+export {};
 
-/**
- * Union type of search event key names safe to stream to browser clients.
- *
- * @see SEARCH_CLIENT_SAFE_KEYS
- */
-export type SearchClientSafeKey = (typeof SEARCH_CLIENT_SAFE_KEYS)[number];

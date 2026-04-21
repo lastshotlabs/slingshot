@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { defineEvent } from '@lastshotlabs/slingshot-core';
 import { stopHeartbeat } from '../../src/framework/ws/heartbeat';
 import { createServer, getServerContext } from '../../src/server';
 
@@ -24,6 +25,23 @@ const baseConfig = {
   },
   logging: { onLog: () => {} },
 };
+
+function createSseDefinitionPlugin(key: string) {
+  return {
+    name: `sse-coverage-${key}`,
+    setupMiddleware({ events }: { events: { register(definition: unknown): void } }) {
+      events.register(
+        defineEvent(key as never, {
+          ownerPlugin: 'server-coverage-test',
+          exposure: ['client-safe'],
+          resolveScope() {
+            return {};
+          },
+        }),
+      );
+    },
+  };
+}
 
 let server: Awaited<ReturnType<typeof createServer>> | null = null;
 
@@ -562,15 +580,7 @@ describe('config validation warnings', () => {
 
 describe('createServer with SSE events', () => {
   test('SSE endpoint with events registers bus listeners', async () => {
-    // We need a plugin that registers events as client-safe before SSE setup.
-    const ssePlugin = {
-      name: 'sse-test-plugin',
-      async setupPost({ app }: { app: unknown }) {
-        const { getContext } = await import('@lastshotlabs/slingshot-core');
-        const ctx = getContext(app);
-        ctx.bus.registerClientSafeEvents(['test:event']);
-      },
-    };
+    const ssePlugin = createSseDefinitionPlugin('test:event');
 
     server = await createServer({
       ...baseConfig,
@@ -622,14 +632,7 @@ describe('createServer with WS rate limit', () => {
 
 describe('SSE HTTP endpoint', () => {
   test('SSE endpoint responds with text/event-stream', async () => {
-    const ssePlugin = {
-      name: 'sse-http-test-plugin',
-      async setupPost({ app }: { app: unknown }) {
-        const { getContext } = await import('@lastshotlabs/slingshot-core');
-        const ctx = getContext(app);
-        ctx.bus.registerClientSafeEvents(['test:sse-http']);
-      },
-    };
+    const ssePlugin = createSseDefinitionPlugin('test:sse-http');
 
     server = await createServer({
       ...baseConfig,

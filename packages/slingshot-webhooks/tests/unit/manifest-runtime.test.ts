@@ -1,17 +1,32 @@
 import { describe, expect, it } from 'bun:test';
+import {
+  createEventDefinitionRegistry,
+  defineEvent,
+  type EventDefinitionRegistry,
+} from '@lastshotlabs/slingshot-core';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import {
   type WebhookRuntimeAdapter,
   createWebhooksManifestRuntime,
 } from '../../src/manifest/runtime';
-import type { WebhookAttempt } from '../../src/types/models';
+import type { WebhookAttempt, WebhookEndpointSubscription } from '../../src/types/models';
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'test:webhook.visible': { tenantId: string; id: string };
+    'test:webhook.other': { tenantId: string; id: string };
+  }
+}
 
 type EndpointRecord = {
   id: string;
+  ownerType?: 'tenant' | 'user' | 'app' | 'system';
+  ownerId?: string;
   tenantId?: string | null;
   url: string;
   secret: string;
-  events: string[];
+  subscriptions?: WebhookEndpointSubscription[];
+  events?: string[];
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -22,7 +37,15 @@ type DeliveryRecord = {
   tenantId?: string | null;
   endpointId: string;
   event: string;
-  payload: unknown;
+  eventId: string;
+  occurredAt: string;
+  subscriber: {
+    ownerType: 'tenant' | 'user' | 'app' | 'system';
+    ownerId: string;
+    tenantId?: string | null;
+  };
+  sourceScope?: { tenantId?: string | null } | null;
+  projectedPayload: string;
   status: 'pending' | 'delivered' | 'failed' | 'dead';
   attempts: number;
   nextRetryAt?: string | null;
@@ -30,6 +53,29 @@ type DeliveryRecord = {
   createdAt: string;
   updatedAt: string;
 };
+
+function createDefinitions(): EventDefinitionRegistry {
+  const definitions = createEventDefinitionRegistry();
+  definitions.register(
+    defineEvent('test:webhook.visible', {
+      ownerPlugin: 'test-webhooks',
+      exposure: ['tenant-webhook'],
+      resolveScope(payload) {
+        return { tenantId: payload.tenantId };
+      },
+    }),
+  );
+  definitions.register(
+    defineEvent('test:webhook.other', {
+      ownerPlugin: 'test-webhooks',
+      exposure: ['tenant-webhook'],
+      resolveScope(payload) {
+        return { tenantId: payload.tenantId };
+      },
+    }),
+  );
+  return definitions;
+}
 
 function paginate<T>(
   items: T[],
@@ -76,9 +122,6 @@ function createEndpointBaseAdapter(records: EndpointRecord[]): BareEntityAdapter
     },
     async delete() {
       return true;
-    },
-    async findForEvent(input: { event: string }) {
-      return records.filter(record => record.events.includes(input.event));
     },
   };
 }
@@ -139,7 +182,7 @@ async function setupRuntime(options?: {
   deliveryAdapter?: BareEntityAdapter;
 }): Promise<{
   runtime: WebhookRuntimeAdapter;
-  manifestRuntime: ReturnType<typeof createWebhooksManifestRuntime>;
+  endpointCrud: BareEntityAdapter;
 }> {
   let runtimeAdapter: WebhookRuntimeAdapter | undefined;
   const manifestRuntime = createWebhooksManifestRuntime(adapter => {
@@ -148,10 +191,10 @@ async function setupRuntime(options?: {
 
   const endpointAdapter =
     options?.endpointAdapter ??
-    (createEndpointBaseAdapter([...(options?.endpoints ?? [])]) as BareEntityAdapter);
+    (createEndpointBaseAdapter(options?.endpoints ?? []) as BareEntityAdapter);
   const deliveryAdapter =
     options?.deliveryAdapter ??
-    (createDeliveryBaseAdapter([...(options?.deliveries ?? [])]) as BareEntityAdapter);
+    (createDeliveryBaseAdapter(options?.deliveries ?? []) as BareEntityAdapter);
 
   const transformCtx = {
     app: {} as never,
@@ -185,7 +228,7 @@ async function setupRuntime(options?: {
 
   return {
     runtime: runtimeAdapter,
-    manifestRuntime,
+    endpointCrud: transformedEndpointAdapter,
   };
 }
 
@@ -196,8 +239,12 @@ describe('webhooks manifest runtime', () => {
         {
           id: 'delivery-1',
           endpointId: 'endpoint-1',
-          event: 'evt.delivered.1',
-          payload: { ok: true },
+          event: 'test:webhook.visible',
+          eventId: 'evt-1',
+          occurredAt: '2026-01-01T00:00:00.000Z',
+          subscriber: { ownerType: 'tenant', ownerId: 'tenant-a', tenantId: 'tenant-a' },
+          sourceScope: { tenantId: 'tenant-a' },
+          projectedPayload: '{"ok":true}',
           status: 'delivered',
           attempts: 1,
           createdAt: '2026-01-01T00:00:00.000Z',
@@ -206,8 +253,12 @@ describe('webhooks manifest runtime', () => {
         {
           id: 'delivery-2',
           endpointId: 'endpoint-1',
-          event: 'evt.dead.1',
-          payload: { ok: true },
+          event: 'test:webhook.visible',
+          eventId: 'evt-2',
+          occurredAt: '2026-01-01T00:00:01.000Z',
+          subscriber: { ownerType: 'tenant', ownerId: 'tenant-a', tenantId: 'tenant-a' },
+          sourceScope: { tenantId: 'tenant-a' },
+          projectedPayload: '{"ok":true}',
           status: 'dead',
           attempts: 2,
           createdAt: '2026-01-01T00:00:01.000Z',
@@ -216,8 +267,12 @@ describe('webhooks manifest runtime', () => {
         {
           id: 'delivery-3',
           endpointId: 'endpoint-1',
-          event: 'evt.delivered.2',
-          payload: { ok: true },
+          event: 'test:webhook.visible',
+          eventId: 'evt-3',
+          occurredAt: '2026-01-01T00:00:02.000Z',
+          subscriber: { ownerType: 'tenant', ownerId: 'tenant-a', tenantId: 'tenant-a' },
+          sourceScope: { tenantId: 'tenant-a' },
+          projectedPayload: '{"ok":true}',
           status: 'delivered',
           attempts: 1,
           createdAt: '2026-01-01T00:00:02.000Z',
@@ -226,8 +281,12 @@ describe('webhooks manifest runtime', () => {
         {
           id: 'delivery-4',
           endpointId: 'endpoint-1',
-          event: 'evt.dead.2',
-          payload: { ok: true },
+          event: 'test:webhook.visible',
+          eventId: 'evt-4',
+          occurredAt: '2026-01-01T00:00:03.000Z',
+          subscriber: { ownerType: 'tenant', ownerId: 'tenant-a', tenantId: 'tenant-a' },
+          sourceScope: { tenantId: 'tenant-a' },
+          projectedPayload: '{"ok":true}',
           status: 'dead',
           attempts: 3,
           createdAt: '2026-01-01T00:00:03.000Z',
@@ -250,80 +309,62 @@ describe('webhooks manifest runtime', () => {
     expect(secondPage.hasMore).toBe(false);
   });
 
-  it('scans all enabled endpoints for event matches instead of stopping at the first 500', async () => {
+  it('migrates legacy endpoint rows across paginated scans before delivery wiring starts', async () => {
     const endpoints: EndpointRecord[] = Array.from({ length: 501 }, (_, index) => ({
       id: `endpoint-${index + 1}`,
-      tenantId: null,
+      tenantId: 'tenant-a',
       url: `https://example.com/${index + 1}`,
       secret: `secret-${index + 1}`,
-      events: index === 500 ? ['event.match'] : ['event.other'],
+      events: index === 500 ? ['test:webhook.visible'] : ['test:webhook.other'],
       enabled: true,
       createdAt: `2026-01-01T00:00:${String(index).padStart(2, '0')}.000Z`,
       updatedAt: `2026-01-01T00:00:${String(index).padStart(2, '0')}.000Z`,
     }));
-    const { manifestRuntime } = await setupRuntime({ endpoints });
+    const { runtime } = await setupRuntime({ endpoints });
 
-    const handlerFactory = manifestRuntime.customHandlers!.resolve(
-      'webhooks.endpoint.findForEvent',
-    ) as () => (input: unknown) => Promise<EndpointRecord[]>;
-    const handler = handlerFactory();
+    await runtime.initializeGovernance(createDefinitions());
 
-    const matches = await handler({ event: 'event.match' });
-    expect(matches.map(match => match.id)).toEqual(['endpoint-501']);
+    expect(endpoints[500]).toMatchObject({
+      ownerType: 'tenant',
+      ownerId: 'tenant-a',
+      subscriptions: [{ event: 'test:webhook.visible', exposure: 'tenant-webhook' }],
+      events: [],
+    });
   });
 
-  it('fails fast when endpoint runtime hooks are incomplete', async () => {
-    const manifestRuntime = createWebhooksManifestRuntime(() => {});
-    const endpointAdapter = {
-      async create(data: unknown) {
-        return data;
-      },
-      async getById() {
-        return null;
-      },
-      async list() {
-        return { items: [], hasMore: false };
-      },
-      async update() {
-        return null;
-      },
-      async delete() {
-        return true;
-      },
-    } satisfies BareEntityAdapter;
-    const deliveryAdapter = createDeliveryBaseAdapter([]);
+  it('normalizes management writes to concrete subscriptions and rejects legacy events input', async () => {
+    const records: EndpointRecord[] = [];
+    const { runtime, endpointCrud } = await setupRuntime({ endpoints: records });
+    await runtime.initializeGovernance(createDefinitions());
 
-    const transformedEndpointAdapter = await manifestRuntime.adapterTransforms!.resolve(
-      'webhooks.endpoint.runtime',
-    )(endpointAdapter, {
-      app: {} as never,
-      bus: {} as never,
-      pluginName: 'webhooks',
-      entityName: 'WebhookEndpoint',
-      adapters: {},
-    } as never);
-    const transformedDeliveryAdapter = await manifestRuntime.adapterTransforms!.resolve(
-      'webhooks.delivery.runtime',
-    )(deliveryAdapter, {
-      app: {} as never,
-      bus: {} as never,
-      pluginName: 'webhooks',
-      entityName: 'WebhookDelivery',
-      adapters: {},
-    } as never);
+    const created = (await endpointCrud.create({
+      id: 'endpoint-1',
+      tenantId: 'tenant-a',
+      url: 'https://example.com/hook',
+      secret: 'super-secret',
+      subscriptions: [{ pattern: 'test:webhook.*' }],
+      enabled: true,
+    })) as {
+      subscriptions: WebhookEndpointSubscription[];
+      secret: string;
+    };
 
-    expect(() =>
-      manifestRuntime.hooks!.resolve('webhooks.captureAdapters')({
-        app: {} as never,
-        bus: {} as never,
-        pluginName: 'webhooks',
-        adapters: {
-          WebhookEndpoint: transformedEndpointAdapter,
-          WebhookDelivery: transformedDeliveryAdapter,
-        },
-        permissions: null,
+    expect(created.subscriptions).toEqual([
+      { event: 'test:webhook.other', exposure: 'tenant-webhook', sourcePattern: 'test:webhook.*' },
+      { event: 'test:webhook.visible', exposure: 'tenant-webhook', sourcePattern: 'test:webhook.*' },
+    ]);
+    expect(created.secret).toBe('cret');
+    expect(records[0]?.subscriptions).toEqual(created.subscriptions);
+
+    await expect(
+      endpointCrud.create({
+        id: 'endpoint-2',
+        tenantId: 'tenant-a',
+        url: 'https://example.com/hook',
+        secret: 'super-secret',
+        events: ['test:webhook.visible'],
       }),
-    ).toThrow('[slingshot-webhooks] endpoint adapter runtime hooks are missing');
+    ).rejects.toThrow('legacy "events" input is no longer supported');
   });
 
   it('fails fast when delivery runtime hooks are incomplete', async () => {

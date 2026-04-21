@@ -1,18 +1,40 @@
+import type { EventKey, EventScope } from '@lastshotlabs/slingshot-core';
+
 /**
  * Lifecycle status of a webhook delivery.
  */
 export type DeliveryStatus = 'pending' | 'delivered' | 'failed' | 'dead';
+
+export type WebhookOwnerType = 'tenant' | 'user' | 'app' | 'system';
+
+export type WebhookSubscriptionExposure = 'tenant-webhook' | 'user-webhook' | 'app-webhook';
+
+export interface WebhookEndpointSubscription {
+  event: EventKey;
+  exposure: WebhookSubscriptionExposure;
+  sourcePattern?: string;
+}
+
+export type WebhookEndpointSubscriptionInput = { event: EventKey } | { pattern: string };
+
+export interface WebhookSubscriber {
+  ownerType: WebhookOwnerType;
+  ownerId: string;
+  tenantId?: string | null;
+}
 
 /**
  * Persisted outbound webhook endpoint.
  */
 export interface WebhookEndpoint {
   id: string;
+  ownerType: WebhookOwnerType;
+  ownerId: string;
   tenantId?: string | null;
   url: string;
   /** Masked in HTTP responses; the runtime adapter reveals the full value internally. */
   secret: string;
-  events: string[];
+  subscriptions: WebhookEndpointSubscription[];
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -33,10 +55,13 @@ export interface WebhookAttempt {
  */
 export interface WebhookDelivery {
   id: string;
-  tenantId?: string | null;
   endpointId: string;
-  event: string;
-  payload: unknown;
+  event: EventKey;
+  eventId: string;
+  occurredAt: string;
+  subscriber: WebhookSubscriber;
+  sourceScope: EventScope | null;
+  projectedPayload: string;
   status: DeliveryStatus;
   attempts: number;
   nextRetryAt?: string | null;

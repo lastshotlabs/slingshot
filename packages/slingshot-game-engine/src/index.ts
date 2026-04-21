@@ -52,11 +52,6 @@ export {
   registerGameSessionPolicies,
 } from './policy';
 
-// ── Events ──────────────────────────────────────────────────────
-
-/** Event keys registered as client-safe for WS relay. */
-export { GAME_ENGINE_CLIENT_SAFE_EVENTS } from './events';
-
 // ── Error Codes ─────────────────────────────────────────────────
 
 /** Error code registry and structured error class for REST and WS error responses. */

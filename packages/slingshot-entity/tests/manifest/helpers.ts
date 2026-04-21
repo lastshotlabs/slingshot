@@ -27,24 +27,17 @@ export function createMockAdapter(): BareEntityAdapter {
 }
 
 export function createMockBus(): SlingshotEventBus & {
-  registeredClientSafe: string[][];
   subscriptions: Array<{
     event: string;
     handler: (payload: Record<string, unknown>) => void | Promise<void>;
   }>;
 } {
-  const registeredClientSafe: string[][] = [];
   const subscriptions: Array<{
     event: string;
     handler: (payload: Record<string, unknown>) => void | Promise<void>;
   }> = [];
 
   return {
-    clientSafeKeys: new Set(),
-    registerClientSafeEvents: mock((keys: string[]) => {
-      registeredClientSafe.push([...keys]);
-    }),
-    ensureClientSafeEventKey: mock((key: string) => key),
     emit: mock(() => {}) as unknown as SlingshotEventBus['emit'],
     on: mock(
       (event: string, handler: (payload: Record<string, unknown>) => void | Promise<void>) => {
@@ -57,7 +50,6 @@ export function createMockBus(): SlingshotEventBus & {
         if (index !== -1) subscriptions.splice(index, 1);
       },
     ),
-    registeredClientSafe,
     subscriptions,
   };
 }

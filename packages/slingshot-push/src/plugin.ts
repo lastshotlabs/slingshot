@@ -86,7 +86,7 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
     publicPaths: enabledPlatforms.has('web') ? [`${config.mountPath}/vapid-public-key`] : [],
     csrfExemptPaths: [`${config.mountPath}/*`],
 
-    async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       innerPlugin = createEntityPlugin({
         name: PUSH_PLUGIN_STATE_KEY,
         mountPath: config.mountPath,
@@ -94,11 +94,11 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
         manifestRuntime,
       });
 
-      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus });
+      await innerPlugin.setupMiddleware?.({ app, config: frameworkConfig, bus, events });
     },
 
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus });
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
       const requireUserAuth: MiddlewareHandler = async (c, next) => {
         const slingshotCtx = c.get('slingshotCtx') as
@@ -214,8 +214,8 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
 
       (
         bus as {

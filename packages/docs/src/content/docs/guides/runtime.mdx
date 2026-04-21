@@ -179,6 +179,11 @@ copies `ws.endpoints` into `ctx.wsEndpoints` before plugin `setupPost`, and `cre
 starts from that same live endpoint map on Bun or Node. The runtime only changes the host transport
 implementation underneath.
 
+The same split now applies to registry-backed event delivery. `createApp()` assembles `ctx.events`
+and freezes the bootstrap contract; `createServer()` is the host boundary that turns those event
+definitions into live SSE subscriptions, websocket fan-out, and graceful shutdown publishing. Event
+exposure and scope stay owned by the registry, while the runtime package only owns the transport.
+
 Root `ws` is typed as the same `WsConfig` shape on both APIs. `createApp()` only carries that
 bootstrap config far enough for plugin wiring and context setup, while `createServer()` additionally
 owns transport startup, upgrade handling, and host-specific websocket wiring.

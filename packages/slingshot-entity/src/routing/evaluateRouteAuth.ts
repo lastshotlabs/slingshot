@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActor, getActorId, getActorTenantId, type AppEnv } from '@lastshotlabs/slingshot-core';
 import type {
   PermissionEvaluator,
   RouteAuthRegistry,
@@ -128,7 +128,7 @@ export async function evaluateRouteAuth(
     }
 
     const parent = (await deps.parentAdapter.getById(parentId)) as Record<string, unknown> | null;
-    const tenantId = c.get('tenantId' as never) as string | undefined;
+    const tenantId = getActorTenantId(c) ?? undefined;
     if (!parent || parent[permission.parentAuth.tenantField] !== tenantId) {
       return {
         authorized: false,
@@ -141,7 +141,8 @@ export async function evaluateRouteAuth(
     return { authorized: true };
   }
 
-  const subjectId = c.get('authUserId' as never) as string | undefined;
+  const actor = getActor(c);
+  const subjectId = getActorId(c) ?? undefined;
   if (!subjectId) {
     return {
       authorized: false,
@@ -150,7 +151,7 @@ export async function evaluateRouteAuth(
   }
 
   const scope: Record<string, string | undefined> = {
-    tenantId: c.get('tenantId' as never) as string | undefined,
+    tenantId: getActorTenantId(c) ?? undefined,
   };
 
   let entityRecord: Record<string, unknown> | null | undefined;
@@ -206,7 +207,7 @@ export async function evaluateRouteAuth(
 
   const subject = {
     subjectId,
-    subjectType: 'user' as const,
+    subjectType: actor.kind === 'user' ? ('user' as const) : ('service-account' as const),
   };
 
   let allowed = await deps.permissionEvaluator.can(subject, permission.requires, scope);

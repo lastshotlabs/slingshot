@@ -1,6 +1,6 @@
 import { resolveUserId } from '@framework/lib/resolveUserId';
 import type {
-  ClientSafeEventKey,
+  EventKey,
   SseClientData,
   SseFilter,
   UserResolver,
@@ -78,15 +78,14 @@ export interface SseRegistry {
    * Use explicit `false` return values in your filter to deny delivery.
    *
    * @param endpoint - Endpoint path used as the routing key.
-   * @param key - Client-safe event key (must be pre-registered via
-   *   `bus.registerClientSafeEvents()`). Must not contain newline characters.
+   * @param key - Registry-backed event key. Must not contain newline characters.
    * @param payload - Event payload, serialised with `JSON.stringify`.
    * @param filter - Optional async predicate `(client, key, payload) => boolean`.
    *   Called per-client; delivery is skipped when it resolves to `false`.
    */
   fanout(
     endpoint: string,
-    key: ClientSafeEventKey,
+    key: EventKey,
     payload: unknown,
     filter: SseFilter | undefined,
   ): void;

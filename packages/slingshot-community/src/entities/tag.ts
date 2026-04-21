@@ -28,7 +28,15 @@ export const Tag = defineEntity('Tag', {
     list: { auth: 'none' },
     create: {
       permission: { requires: 'community:tag.write' },
-      event: { key: 'community:tag.created', payload: ['id', 'slug'] },
+      event: {
+        key: 'community:tag.created',
+        payload: ['id', 'slug'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'community:tag',
+          resourceId: 'record:id',
+        },
+      },
     },
     update: {
       permission: { requires: 'community:tag.write' },
@@ -36,7 +44,6 @@ export const Tag = defineEntity('Tag', {
     delete: {
       permission: { requires: 'community:tag.write' },
     },
-    clientSafeEvents: ['community:tag.created'],
   },
 });
 

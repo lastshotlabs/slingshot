@@ -1,5 +1,5 @@
 import type { Context } from 'hono';
-import type { AppEnv, AuthRuntimePeer } from '@lastshotlabs/slingshot-core';
+import { getActor, type AppEnv, type AuthRuntimePeer } from '@lastshotlabs/slingshot-core';
 import {
   getAuthRuntimePeerOrNull,
   getPluginStateFromRequestOrNull,
@@ -46,10 +46,10 @@ function getAuthRuntime(c: Context<AppEnv, string>): AuthRuntimeLike | null {
 export async function getUserAuthAccountGuardFailure(
   c: Context<AppEnv, string>,
 ): Promise<AccountGuardFailure | null> {
-  const userId = c.get('authUserId' as never) as unknown;
-  if (typeof userId !== 'string' || userId.length === 0) {
+  const actor = getActor(c);
+  if (actor.kind !== 'user' || !actor.id) {
     throw new Error(
-      '[security] entity userAuth account guard requires an authenticated authUserId context',
+      '[security] entity userAuth account guard requires an authenticated user actor',
     );
   }
 
@@ -59,7 +59,7 @@ export async function getUserAuthAccountGuardFailure(
   }
 
   const suspensionStatus = runtime.adapter.getSuspended
-    ? ((await runtime.adapter.getSuspended(userId)) ?? { suspended: false })
+    ? ((await runtime.adapter.getSuspended(actor.id)) ?? { suspended: false })
     : { suspended: false };
   if (suspensionStatus.suspended) {
     return { error: 'Account suspended', status: 403 };
@@ -71,7 +71,7 @@ export async function getUserAuthAccountGuardFailure(
     return null;
   }
 
-  const verified = await runtime.adapter.getEmailVerified(userId);
+  const verified = await runtime.adapter.getEmailVerified(actor.id);
   if (!verified) {
     return { error: 'Email not verified', status: 403 };
   }

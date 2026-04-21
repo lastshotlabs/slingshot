@@ -23,7 +23,6 @@ describe('entityRouteConfigSchema — valid configs', () => {
       delete: { auth: 'userAuth', permission: { requires: 'posts.delete' } },
       defaults: { auth: 'userAuth' },
       disable: ['clear'],
-      clientSafeEvents: ['entity:posts.created'],
       middleware: { requireAdmin: true },
     });
     expect(result.success).toBe(true);
@@ -57,6 +56,7 @@ describe('entityRouteConfigSchema — valid configs', () => {
           key: 'entity:posts.created',
           payload: ['id', 'title'],
           include: ['tenantId', 'actorId'],
+          exposure: ['client-safe'],
         },
       },
     });
@@ -137,9 +137,14 @@ describe('entityRouteConfigSchema — forbidden event prefixes', () => {
     });
   }
 
-  test('clientSafeEvents with allowed key parses', () => {
+  test('event exposure with allowed key parses', () => {
     const result = entityRouteConfigSchema.safeParse({
-      clientSafeEvents: ['entity:posts.created', 'entity:posts.updated'],
+      update: {
+        event: {
+          key: 'entity:posts.updated',
+          exposure: ['client-safe'],
+        },
+      },
     });
     expect(result.success).toBe(true);
   });

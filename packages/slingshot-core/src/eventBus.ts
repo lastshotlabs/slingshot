@@ -1,5 +1,8 @@
 import { validateEventPayload } from './eventSchemaRegistry';
 import type { EventBusSerializationOptions, ValidationMode } from './eventSerializer';
+import type { EventKey } from './eventDefinition';
+import type { EventEnvelope } from './eventEnvelope';
+import { createRawEventEnvelope, isEventEnvelope } from './eventEnvelope';
 
 /**
  * Central event map for all built-in Slingshot events.
@@ -7,11 +10,6 @@ import type { EventBusSerializationOptions, ValidationMode } from './eventSerial
  * Typed key → payload pairs consumed by `SlingshotEventBus`. Plugin packages extend
  * this map via TypeScript module augmentation in their own `events.ts` file — never
  * by modifying this interface directly.
- *
- * @remarks
- * Forbidden namespaces (`security.*`, `auth:*`, `community:delivery.*`, `push:*`,
- * `app:*`) cannot be registered as client-safe events. Security and delivery events
- * carry sensitive data (tokens, session IDs, emails) that must never reach browsers.
  *
  * @example
  * ```ts
@@ -173,131 +171,11 @@ export interface DynamicEventBus {
  */
 export type SecurityEventKey = Extract<keyof SlingshotEventMap, `security.${string}`>;
 
-function createReadonlySetView<T>(backing: Set<T>): ReadonlySet<T> {
-  const collectValues = <U>(other: ReadonlySetLike<U>): U[] => {
-    const values: U[] = [];
-    const iterator = other.keys();
-    for (let next = iterator.next(); !next.done; next = iterator.next()) {
-      values.push(next.value);
-    }
-    return values;
-  };
-
-  const view: ReadonlySet<T> = {
-    get size() {
-      return backing.size;
-    },
-    has(value: T): boolean {
-      return backing.has(value);
-    },
-    entries(): SetIterator<[T, T]> {
-      return backing.entries();
-    },
-    keys(): SetIterator<T> {
-      return backing.keys();
-    },
-    values(): SetIterator<T> {
-      return backing.values();
-    },
-    forEach(
-      callbackfn: (value: T, value2: T, set: ReadonlySet<T>) => void,
-      thisArg?: unknown,
-    ): void {
-      backing.forEach((value1, value2) => {
-        callbackfn.call(thisArg, value1, value2, view);
-      });
-    },
-    union<U>(other: ReadonlySetLike<U>): Set<T | U> {
-      const result = new Set<T | U>(backing);
-      for (const value of collectValues(other)) {
-        result.add(value);
-      }
-      return result;
-    },
-    intersection<U>(other: ReadonlySetLike<U>): Set<T & U> {
-      const result = new Set<T & U>();
-      for (const value of backing) {
-        if (other.has(value as unknown as U)) {
-          result.add(value as T & U);
-        }
-      }
-      return result;
-    },
-    difference<U>(other: ReadonlySetLike<U>): Set<T> {
-      const result = new Set<T>();
-      for (const value of backing) {
-        if (!other.has(value as unknown as U)) {
-          result.add(value);
-        }
-      }
-      return result;
-    },
-    symmetricDifference<U>(other: ReadonlySetLike<U>): Set<T | U> {
-      const result = new Set<T | U>();
-      for (const value of backing) {
-        if (!other.has(value as unknown as U)) {
-          result.add(value);
-        }
-      }
-      for (const value of collectValues(other)) {
-        if (!backing.has(value as unknown as T)) {
-          result.add(value);
-        }
-      }
-      return result;
-    },
-    isSubsetOf(other: ReadonlySetLike<unknown>): boolean {
-      for (const value of backing) {
-        if (!other.has(value)) {
-          return false;
-        }
-      }
-      return true;
-    },
-    isSupersetOf(other: ReadonlySetLike<unknown>): boolean {
-      for (const value of collectValues(other)) {
-        if (!backing.has(value as T)) {
-          return false;
-        }
-      }
-      return true;
-    },
-    isDisjointFrom(other: ReadonlySetLike<unknown>): boolean {
-      for (const value of backing) {
-        if (other.has(value)) {
-          return false;
-        }
-      }
-      return true;
-    },
-    [Symbol.iterator](): SetIterator<T> {
-      return backing[Symbol.iterator]();
-    },
-  };
-
-  return Object.freeze(view);
-}
-
 /**
  * Complete list of all `security.*` event keys defined in `SlingshotEventMap`.
  *
- * Used by the audit log plugin and SSE guard to identify events that must never
+ * Used by the audit log plugin to identify events that must never
  * reach browser clients. The array is frozen and typed as `ReadonlyArray<SecurityEventKey>`.
- *
- * @remarks
- * These namespaces are permanently forbidden for client-safe registration because they carry
- * sensitive data that must never be streamed to browsers:
- * - `security.*` — internal audit trail events containing session IDs, user IDs, IP
- *   addresses, authentication failure details, and credential-stuffing signals.
- * - `auth:*` — domain auth events containing `sessionId`, email addresses, and reset tokens.
- * - `community:delivery.*` — delivery metadata (notification payloads, email addresses).
- * - `push:*` — push notification delivery metadata.
- * - `app:*` — server lifecycle signals (`app:ready`, `app:shutdown`) that reveal internal
- *   deployment topology to clients.
- *
- * `registerClientSafeEvents()` enforces these bans at runtime by checking
- * `FORBIDDEN_CLIENT_PREFIXES`. This constant provides a typed enumeration used by the
- * audit log plugin to subscribe to all security events in a single `for...of` loop.
  */
 export const SECURITY_EVENT_TYPES: ReadonlyArray<SecurityEventKey> = [
   'security.auth.login.success',
@@ -334,107 +212,6 @@ export const SECURITY_EVENT_TYPES: ReadonlyArray<SecurityEventKey> = [
 ] as const;
 
 /**
- * Built-in event keys safe to stream to browser clients via SSE.
- * Frozen seed — copied into each event bus instance at creation.
- * Instance-scoped mutable set lives on bus.clientSafeKeys.
- *
- * Includes community domain events that are safe for client consumption.
- * Excluded: community:content.reported (reporterId privacy),
- * community:delivery.* (forbidden prefix), and all security/auth/push/app namespaces.
- *
- * Never stream (forbidden namespaces enforced by registerClientSafeEvents):
- * - `security.*`           — internal audit trail
- * - `auth:*`               — sessionId, email, tokens
- * - `community:delivery.*` — delivery metadata
- * - `push:*`               — delivery metadata
- * - `app:*`                — server lifecycle signals
- */
-export const BUILTIN_CLIENT_SAFE_KEYS: ReadonlySet<string> = createReadonlySetView(
-  new Set<string>([
-    'community:container.created',
-    'community:container.deleted',
-    'community:thread.created',
-    'community:thread.published',
-    'community:thread.deleted',
-    'community:thread.locked',
-    'community:thread.unlocked',
-    'community:thread.updated',
-    'community:thread.pinned',
-    'community:thread.unpinned',
-    'community:reply.created',
-    'community:reply.deleted',
-    'community:reaction.added',
-    'community:reaction.removed',
-    'community:user.banned',
-    'community:user.unbanned',
-    'community:member.joined',
-    'community:member.left',
-    'community:moderator.assigned',
-    'community:moderator.removed',
-  ]),
-);
-
-/**
- * A string that has been validated as a safe-to-stream event key.
- *
- * Branded as `string` rather than a nominal type so it passes through `JSON.stringify`
- * and other generic string utilities without ceremony.
- */
-export type ClientSafeEventKey = string;
-
-/**
- * Event key namespace prefixes that are always forbidden for client streaming.
- *
- * Any event key that starts with one of these prefixes will be rejected by
- * `registerClientSafeEvents()` and `ensureClientSafeEventKey()`. Forbidden namespaces
- * carry sensitive data — session tokens, delivery metadata, server lifecycle signals.
- */
-export const FORBIDDEN_CLIENT_PREFIXES = [
-  'security.',
-  'auth:',
-  'community:delivery.',
-  'push:',
-  'app:',
-] as const;
-
-/**
- * Returns the first entry from `FORBIDDEN_CLIENT_PREFIXES` that `key` starts with,
- * or `undefined` if the key is not in any forbidden namespace.
- *
- * @param key - The event key to test (e.g. `'security.auth.login.success'`).
- * @returns The matching forbidden prefix string (e.g. `'security.'`), or `undefined`.
- *
- * @remarks
- * The check is a simple `startsWith` scan over `FORBIDDEN_CLIENT_PREFIXES` in declaration
- * order. Prefix order does not affect correctness because the prefixes are disjoint —
- * no event key can match more than one forbidden prefix simultaneously.
- */
-function getForbiddenClientSafePrefix(key: string): string | undefined {
-  return FORBIDDEN_CLIENT_PREFIXES.find(prefix => key.startsWith(prefix));
-}
-
-/**
- * Returns a formatted error message if `key` falls within a forbidden client-safe namespace,
- * or `null` if the key is safe to register.
- *
- * @param key - The event key being validated for client-safe registration.
- * @returns A human-readable error string if the key is forbidden, or `null` if it is allowed.
- *
- * @remarks
- * The returned message is intended to be passed directly to `new Error(...)` by
- * `registerClientSafeEvents`. Separating detection from the throw allows the error text to
- * be tested in isolation and keeps `registerClientSafeEvents` concise.
- */
-function getClientSafeRegistrationError(key: string): string | null {
-  const prefix = getForbiddenClientSafePrefix(key);
-  if (!prefix) return null;
-  return `Cannot register "${key}" as client-safe: "${prefix}" namespace is forbidden`;
-}
-
-// ensureClientSafeEventKey and registerClientSafeEvents are now instance methods
-// on SlingshotEventBus — no module-level mutable state.
-
-/**
  * Options for `SlingshotEventBus.on()` subscriptions.
  *
  * @remarks
@@ -460,10 +237,8 @@ export interface SubscriptionOpts {
  * implementation (in-process, Redis Streams, etc.).
  *
  * @remarks
- * Security events (`security.*`) and delivery events (`auth:delivery.*`) are never
- * forwarded to browser clients via SSE. Use `registerClientSafeEvents()` to allow
- * domain events to be streamed, and `ensureClientSafeEventKey()` in SSE config
- * validation to catch misconfigured keys at startup.
+ * Server-side policy consumers should prefer `onEnvelope()` so they can inspect
+ * canonical metadata such as scope and exposure without re-deriving it from payloads.
  *
  * @example
  * ```ts
@@ -506,6 +281,21 @@ export interface SlingshotEventBus {
     opts?: SubscriptionOpts,
   ): void;
   /**
+   * Register an envelope listener for an event.
+   * Infrastructure consumers use this to access canonical metadata such as scope.
+   */
+  onEnvelope<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
+    opts?: SubscriptionOpts,
+  ): void;
+  /** Subscribe to a dynamically named event envelope. */
+  onEnvelope(
+    event: string,
+    listener: (envelope: EventEnvelope) => void | Promise<void>,
+    opts?: SubscriptionOpts,
+  ): void;
+  /**
    * Unregister a previously registered listener.
    * @param event - The event key.
    * @param listener - The exact listener function reference to remove.
@@ -518,6 +308,15 @@ export interface SlingshotEventBus {
   /** Unregister a dynamically named event listener. */
   off(event: string, listener: (payload: unknown) => void): void;
   /**
+   * Unregister a previously registered envelope listener.
+   */
+  offEnvelope<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void,
+  ): void;
+  /** Unregister a dynamically named envelope listener. */
+  offEnvelope(event: string, listener: (envelope: EventEnvelope) => void): void;
+  /**
    * Drain in-flight handlers, remove listeners, and release resources on graceful shutdown.
    *
    * Implementations should stop accepting new deliveries before awaiting any already-running
@@ -525,37 +324,6 @@ export interface SlingshotEventBus {
    */
   shutdown?(): Promise<void>;
 
-  /**
-   * Instance-scoped set of event keys that may be streamed to browser clients via SSE.
-   *
-   * @remarks
-   * This set is mutable during the plugin setup lifecycle — plugins extend it by calling
-   * `registerClientSafeEvents()`. After `createServer()` resolves, the set should be
-   * treated as effectively frozen: registering new keys after startup may not be respected
-   * by SSE endpoints that captured the set at route registration time.
-   *
-   * Seeded from `BUILTIN_CLIENT_SAFE_KEYS` (community domain events) at construction.
-   */
-  readonly clientSafeKeys: ReadonlySet<string>;
-
-  /**
-   * Register additional event keys as client-safe for SSE streaming.
-   * Keys with forbidden prefixes (`security.*`, `auth:*`, `community:delivery.*`,
-   * `push:*`, `app:*`) are rejected with a thrown `Error`.
-   * @returns `void`. The keys are added to `clientSafeKeys` immediately.
-   */
-  registerClientSafeEvents(keys: string[]): void;
-
-  /**
-   * Validate that a key is registered as client-safe, returning it as a `ClientSafeEventKey`.
-   * Throws on forbidden namespaces or if the key has not been registered via
-   * `registerClientSafeEvents`.
-   * @param key - The event key to validate.
-   * @param source - A human-readable description of the call site, included in error messages
-   *   (e.g. `'SSE /events config'`). Defaults to `'SSE config'` when omitted.
-   * @returns The validated key, typed as `ClientSafeEventKey`.
-   */
-  ensureClientSafeEventKey(key: string, source?: string): ClientSafeEventKey;
 }
 
 /**
@@ -570,8 +338,7 @@ export interface SlingshotEventBus {
  * requests degrade to non-durable with a console warning.
  *
  * For production multi-instance deployments, swap this for a queue-backed adapter
- * (e.g., Redis Streams). The constructor accepts `initialClientSafeKeys` to seed
- * the allow-list beyond the built-in community events in `BUILTIN_CLIENT_SAFE_KEYS`.
+ * (e.g., Redis Streams).
  *
  * @example
  * ```ts
@@ -584,67 +351,37 @@ export interface SlingshotEventBus {
  * ```
  */
 export class InProcessAdapter implements SlingshotEventBus {
-  private listeners = new Map<string, Set<(payload: unknown) => void | Promise<void>>>();
-  private _clientSafeKeys: Set<string>;
-  private readonly clientSafeKeysView: ReadonlySet<string>;
+  private envelopeListeners = new Map<
+    string,
+    Set<(envelope: EventEnvelope) => void | Promise<void>>
+  >();
+  private payloadListenerWrappers = new Map<
+    string,
+    Map<(payload: unknown) => void | Promise<void>, (envelope: EventEnvelope) => void | Promise<void>>
+  >();
   private pendingHandlers = new Set<Promise<void>>();
   private readonly registry?: EventBusSerializationOptions['schemaRegistry'];
   private readonly validation: ValidationMode;
 
-  /**
-   * @param initialClientSafeKeys - Additional event keys to seed as client-safe.
-   *   Defaults to `BUILTIN_CLIENT_SAFE_KEYS`. Pass a custom set to override.
-   */
-  constructor(
-    initialClientSafeKeys?: Iterable<string>,
-    serializationOpts?: EventBusSerializationOptions,
-  ) {
-    this._clientSafeKeys = new Set(initialClientSafeKeys ?? BUILTIN_CLIENT_SAFE_KEYS);
-    this.clientSafeKeysView = createReadonlySetView(this._clientSafeKeys);
+  constructor(serializationOpts?: EventBusSerializationOptions) {
     this.registry = serializationOpts?.schemaRegistry;
     this.validation = serializationOpts?.validation ?? 'off';
   }
 
-  get clientSafeKeys(): ReadonlySet<string> {
-    return this.clientSafeKeysView;
-  }
-
-  registerClientSafeEvents(keys: string[]): void {
-    for (const key of keys) {
-      const error = getClientSafeRegistrationError(key);
-      if (error) throw new Error(error);
-      this._clientSafeKeys.add(key);
-    }
-  }
-
-  ensureClientSafeEventKey(key: string, source = 'SSE config'): ClientSafeEventKey {
-    const forbiddenPrefix = getForbiddenClientSafePrefix(key);
-    if (forbiddenPrefix) {
-      throw new Error(
-        `[slingshot] ${source}: "${key}" cannot be streamed to clients because the "${forbiddenPrefix}" namespace is forbidden`,
-      );
-    }
-    if (!this._clientSafeKeys.has(key)) {
-      throw new Error(
-        `[slingshot] ${source}: "${key}" is not registered as client-safe. Call bus.registerClientSafeEvents([...]) before createServer().`,
-      );
-    }
-    return key;
-  }
-
   emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
-    const validatedPayload = validateEventPayload(
-      event as string,
-      payload,
-      this.registry,
-      this.validation,
-    );
-    const fns = this.listeners.get(event as string);
+    const envelope = isEventEnvelope(payload, event)
+      ? payload
+      : createRawEventEnvelope(
+          event as EventKey,
+          validateEventPayload(event as string, payload, this.registry, this.validation) as
+            SlingshotEventMap[K],
+        );
+    const fns = this.envelopeListeners.get(event as string);
     if (!fns) return;
     for (const fn of Array.from(fns)) {
       let result: void | Promise<void>;
       try {
-        result = fn(validatedPayload);
+        result = fn(envelope as EventEnvelope);
       } catch (err) {
         console.error(`[SlingshotEventBus] listener error on event "${event}":`, err);
         continue;
@@ -685,6 +422,23 @@ export class InProcessAdapter implements SlingshotEventBus {
     listener: (payload: SlingshotEventMap[K]) => void | Promise<void>,
     opts?: SubscriptionOpts,
   ): void {
+    const key = event as string;
+    const wrapper = (envelope: EventEnvelope): void | Promise<void> =>
+      listener(envelope.payload as SlingshotEventMap[K]);
+    let wrappers = this.payloadListenerWrappers.get(key);
+    if (!wrappers) {
+      wrappers = new Map();
+      this.payloadListenerWrappers.set(key, wrappers);
+    }
+    wrappers.set(listener as (payload: unknown) => void | Promise<void>, wrapper);
+    this.onEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void | Promise<void>, opts);
+  }
+
+  onEnvelope<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
+    opts?: SubscriptionOpts,
+  ): void {
     if (opts?.durable === true) {
       if (!opts.name) {
         throw new Error('SlingshotEventBus: durable subscriptions require a name. Pass opts.name.');
@@ -695,22 +449,40 @@ export class InProcessAdapter implements SlingshotEventBus {
       );
     }
     const key = event as string; // K extends string — safe cast
-    if (!this.listeners.has(key)) this.listeners.set(key, new Set());
-    const listenerSet = this.listeners.get(key);
-    if (listenerSet) listenerSet.add(listener as (payload: unknown) => void | Promise<void>);
+    if (!this.envelopeListeners.has(key)) this.envelopeListeners.set(key, new Set());
+    const listenerSet = this.envelopeListeners.get(key);
+    if (listenerSet)
+      listenerSet.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
   }
 
   off<K extends keyof SlingshotEventMap>(
     event: K,
     listener: (payload: SlingshotEventMap[K]) => void,
   ): void {
-    this.listeners
+    const wrappers = this.payloadListenerWrappers.get(event as string);
+    const wrapper = wrappers?.get(listener as (payload: unknown) => void | Promise<void>);
+    if (!wrapper) {
+      return;
+    }
+    wrappers?.delete(listener as (payload: unknown) => void | Promise<void>);
+    if (wrappers?.size === 0) {
+      this.payloadListenerWrappers.delete(event as string);
+    }
+    this.offEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void);
+  }
+
+  offEnvelope<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void,
+  ): void {
+    this.envelopeListeners
       .get(event as string)
-      ?.delete(listener as (payload: unknown) => void | Promise<void>);
+      ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
   }
 
   async shutdown(): Promise<void> {
-    this.listeners.clear();
+    this.envelopeListeners.clear();
+    this.payloadListenerWrappers.clear();
     await Promise.allSettled([...this.pendingHandlers]);
   }
 }
@@ -722,27 +494,23 @@ export class InProcessAdapter implements SlingshotEventBus {
  * `SlingshotEventBus` interface rather than the concrete class, keeping the call site
  * decoupled from the implementation.
  *
- * @param initialClientSafeKeys - Optional iterable of event keys to seed as client-safe
- *   in addition to `BUILTIN_CLIENT_SAFE_KEYS`. Useful when a plugin registers its own
- *   domain events before `createServer()` runs.
  * @returns A fresh `SlingshotEventBus` instance with no shared state.
  *
  * @remarks
  * Each call returns a fully independent instance — listeners, pending handlers, and the
- * `clientSafeKeys` set are all owned by the returned object and never shared. Calling
+ * listener registrations and pending handler sets are all owned by the returned object and never shared. Calling
  * `createInProcessAdapter()` twice produces two completely isolated buses.
  *
  * @example
  * ```ts
  * import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
  *
- * const bus = createInProcessAdapter(['my-plugin:item.created']);
+ * const bus = createInProcessAdapter();
  * bus.on('my-plugin:item.created', ({ id }) => console.log('created', id));
  * ```
  */
 export function createInProcessAdapter(
-  initialClientSafeKeys?: Iterable<string>,
   serializationOpts?: EventBusSerializationOptions,
 ): SlingshotEventBus {
-  return new InProcessAdapter(initialClientSafeKeys, serializationOpts);
+  return new InProcessAdapter(serializationOpts);
 }

@@ -32,11 +32,28 @@ export const Asset = defineEntity('Asset', {
     list: {},
     create: {
       auth: 'userAuth',
-      event: { key: 'assets:asset.created', payload: ['id', 'key', 'ownerUserId', 'mimeType'] },
+      event: {
+        key: 'assets:asset.created',
+        payload: ['id', 'key', 'ownerUserId', 'mimeType'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:ownerUserId',
+          resourceType: 'assets:asset',
+          resourceId: 'record:id',
+        },
+      },
     },
     delete: {
       auth: 'userAuth',
-      event: { key: 'assets:asset.deleted', payload: ['id', 'key'] },
+      event: {
+        key: 'assets:asset.deleted',
+        payload: ['id', 'key'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'assets:asset',
+          resourceId: 'record:id',
+        },
+      },
       middleware: ['deleteStorageFile'],
     },
     operations: {
@@ -48,7 +65,6 @@ export const Asset = defineEntity('Asset', {
       serveImage: { auth: 'userAuth' },
     },
     middleware: { deleteStorageFile: true },
-    clientSafeEvents: ['assets:asset.created', 'assets:asset.deleted'],
   },
 });
 

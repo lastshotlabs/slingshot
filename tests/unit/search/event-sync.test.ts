@@ -30,8 +30,6 @@ function createMockBus() {
     off: mock((event: string, listener: DynamicListener) => {
       listeners.get(event)?.delete(listener);
     }),
-    clientSafeKeys: new Set<string>(),
-    registerClientSafeEvents: mock(() => {}),
     _listeners: listeners,
   };
 

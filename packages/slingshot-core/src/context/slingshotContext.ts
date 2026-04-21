@@ -11,6 +11,7 @@ import type {
 import type { CronRegistryRepository } from '../cronRegistry';
 import type { DataEncryptionKey } from '../crypto';
 import type { SlingshotEventBus } from '../eventBus';
+import type { SlingshotEvents } from '../eventPublisher';
 import type { IdempotencyAdapter } from '../idempotency';
 import type { IdentityResolver } from '../identity';
 import type { KafkaConnectorHandle } from '../kafkaConnectors';
@@ -653,6 +654,11 @@ export interface SlingshotContext {
    * Replaces the appMeta WeakMap — instance-scoped, no module-level state.
    */
   readonly bus: SlingshotEventBus;
+
+  /**
+   * Registry-backed event publish surface for this application instance.
+   */
+  readonly events: SlingshotEvents;
 
   /**
    * Optional Kafka connector bridge started by `createApp()`.

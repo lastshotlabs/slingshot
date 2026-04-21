@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
-import { createEventSchemaRegistry, createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  createEventSchemaRegistry,
+  createInProcessAdapter,
+  defineEvent,
+} from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
   fakeKafkaState,
@@ -19,6 +25,24 @@ afterEach(async () => {
 });
 
 describe('kafkaConnectors', () => {
+  function createPublishedBus() {
+    const bus = createInProcessAdapter();
+    const definitions = createEventDefinitionRegistry();
+    const events = createEventPublisher({ definitions, bus });
+
+    events.register(
+      defineEvent('auth:user.created', {
+        ownerPlugin: 'test-auth',
+        exposure: ['connector'],
+        resolveScope() {
+          return {};
+        },
+      }),
+    );
+
+    return { bus, events };
+  }
+
   test('default duplicate publish policy warns when connector overlaps adapter topic', async () => {
     const warn = mock((..._args: unknown[]) => {});
     const originalWarn = console.warn;
@@ -111,7 +135,7 @@ describe('kafkaConnectors', () => {
   });
 
   test('outbound connectors subscribe to the bus and publish transformed payloads', async () => {
-    const bus = createInProcessAdapter();
+    const { bus, events } = createPublishedBus();
     const connectors = createKafkaConnectors({
       brokers: ['localhost:19092'],
       outbound: [
@@ -124,16 +148,38 @@ describe('kafkaConnectors', () => {
     });
 
     await connectors.start(bus);
-    bus.emit('auth:user.created', { userId: 42 } as never);
+    events.publish('auth:user.created', { userId: 42 } as never);
     await flushAsyncWork();
 
     expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
     expect(fakeKafkaState.producerSendCalls[0]?.topic).toBe('external.users.created');
+    expect(fakeKafkaState.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.owner-plugin']).toBe(
+      'test-auth',
+    );
+    expect(fakeKafkaState.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.exposure']).toBe(
+      'connector',
+    );
     expect(
       new TextDecoder().decode(
         fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array,
       ),
-    ).toContain('"42"');
+    ).toContain('"payload":{"userId":"42"}');
+
+    await connectors.stop();
+  });
+
+  test('outbound connectors suppress raw internal bus events without connector exposure', async () => {
+    const bus = createInProcessAdapter();
+    const connectors = createKafkaConnectors({
+      brokers: ['localhost:19092'],
+      outbound: [{ event: 'auth:user.created', topic: 'external.users.created' }],
+    });
+
+    await connectors.start(bus);
+    bus.emit('auth:user.created', { userId: 'raw-only' } as never);
+    await flushAsyncWork();
+
+    expect(fakeKafkaState.producerSendCalls).toHaveLength(0);
 
     await connectors.stop();
   });
@@ -289,7 +335,7 @@ describe('kafkaConnectors', () => {
       }),
     );
 
-    const bus = createInProcessAdapter();
+    const { bus, events } = createPublishedBus();
     const connectors = createKafkaConnectors({
       brokers: ['localhost:19092'],
       schemaRegistry: registry,
@@ -297,7 +343,7 @@ describe('kafkaConnectors', () => {
     });
 
     await connectors.start(bus);
-    bus.emit('auth:user.created', { userId: 'abc' } as never);
+    events.publish('auth:user.created', { userId: 'abc' } as never);
     await flushAsyncWork();
 
     expect(

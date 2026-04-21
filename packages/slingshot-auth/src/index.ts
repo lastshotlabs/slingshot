@@ -93,6 +93,8 @@ export type { AuthResolvedConfig, HookContext } from './config/authConfig';
 // Event bus utilities
 /** Security event wiring contracts for audit and alerting integrations. */
 export type { SecurityEventsConfig, SecurityEvent } from './lib/securityEventWiring';
+/** Register auth-owned event definitions on a Slingshot event publisher. */
+export { publishAuthEvent, registerAuthEventDefinitions } from './eventGovernance';
 
 // Runtime context
 /** Read the auth runtime that the plugin stores in Slingshot context and request state. */

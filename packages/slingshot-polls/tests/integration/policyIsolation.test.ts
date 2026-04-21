@@ -13,6 +13,8 @@ import {
   InProcessAdapter,
   PERMISSIONS_STATE_KEY,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import { createPollsPlugin } from '../../src/plugin';
 
@@ -65,6 +67,10 @@ function createTestFrameworkConfig() {
 async function buildTestApp(plugin: ReturnType<typeof createPollsPlugin>) {
   const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
   const frameworkConfig = createTestFrameworkConfig();
 
   const pluginState = new Map<string, unknown>();
@@ -90,6 +96,8 @@ async function buildTestApp(plugin: ReturnType<typeof createPollsPlugin>) {
     ws: null,
     wsEndpoints: {},
     wsPublish: null,
+    bus,
+    events,
   } as unknown as Parameters<typeof attachContext>[1]);
 
   const routeAuth = {
@@ -111,7 +119,10 @@ async function buildTestApp(plugin: ReturnType<typeof createPollsPlugin>) {
     if (tid) {
       (c as typeof c & { set(key: string, value: unknown): void }).set('tenantId', tid);
     }
-    (c as typeof c & { set(key: string, value: unknown): void }).set('slingshotCtx', { routeAuth });
+    (c as typeof c & { set(key: string, value: unknown): void }).set('slingshotCtx', {
+      routeAuth,
+      events,
+    });
     await next();
   });
 
@@ -119,6 +130,7 @@ async function buildTestApp(plugin: ReturnType<typeof createPollsPlugin>) {
     app,
     config: frameworkConfig as never,
     bus: bus as unknown as import('@lastshotlabs/slingshot-core').SlingshotEventBus,
+    events,
   };
   await plugin.setupMiddleware?.(ctx);
   await plugin.setupRoutes?.(ctx);

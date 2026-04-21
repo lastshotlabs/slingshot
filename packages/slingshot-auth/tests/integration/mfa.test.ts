@@ -915,9 +915,6 @@ describe('MFA routes', () => {
         on: () => {},
         off: () => {},
         shutdown: async () => {},
-        clientSafeKeys: new Set<string>(),
-        registerClientSafeEvents: () => {},
-        ensureClientSafeEventKey: (key: string) => key,
       } as unknown as typeof emailOtpRuntime.eventBus;
 
       const hash = await Bun.password.hash(PASSWORD);
@@ -962,9 +959,6 @@ describe('MFA routes', () => {
         on: () => {},
         off: () => {},
         shutdown: async () => {},
-        clientSafeKeys: new Set<string>(),
-        registerClientSafeEvents: () => {},
-        ensureClientSafeEventKey: (key: string) => key,
       } as unknown as typeof emailOtpRuntime.eventBus;
 
       const hash = await Bun.password.hash(PASSWORD);
@@ -1000,9 +994,6 @@ describe('MFA routes', () => {
         on: () => {},
         off: () => {},
         shutdown: async () => {},
-        clientSafeKeys: new Set<string>(),
-        registerClientSafeEvents: () => {},
-        ensureClientSafeEventKey: (key: string) => key,
       } as unknown as typeof emailOtpRuntime.eventBus;
 
       const hash = await Bun.password.hash(PASSWORD);
@@ -1029,9 +1020,6 @@ describe('MFA routes', () => {
         on: () => {},
         off: () => {},
         shutdown: async () => {},
-        clientSafeKeys: new Set<string>(),
-        registerClientSafeEvents: () => {},
-        ensureClientSafeEventKey: (key: string) => key,
       } as unknown as typeof emailOtpRuntime.eventBus;
 
       const hash = await Bun.password.hash(PASSWORD);
@@ -1064,9 +1052,6 @@ describe('MFA routes', () => {
         on: () => {},
         off: () => {},
         shutdown: async () => {},
-        clientSafeKeys: new Set<string>(),
-        registerClientSafeEvents: () => {},
-        ensureClientSafeEventKey: (key: string) => key,
       } as unknown as typeof emailOtpRuntime.eventBus;
 
       const hash = await Bun.password.hash(PASSWORD);
@@ -1095,9 +1080,6 @@ describe('MFA routes', () => {
         on: () => {},
         off: () => {},
         shutdown: async () => {},
-        clientSafeKeys: new Set<string>(),
-        registerClientSafeEvents: () => {},
-        ensureClientSafeEventKey: (key: string) => key,
       } as unknown as typeof emailOtpRuntime.eventBus;
 
       const hash = await Bun.password.hash(PASSWORD);

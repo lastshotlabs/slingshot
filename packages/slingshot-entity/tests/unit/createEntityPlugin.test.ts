@@ -17,12 +17,19 @@ import type {
   StoreInfra,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
-import { PERMISSIONS_STATE_KEY, RESOLVE_ENTITY_FACTORIES } from '@lastshotlabs/slingshot-core';
+import {
+  PERMISSIONS_STATE_KEY,
+  RESOLVE_ENTITY_FACTORIES,
+  attachContext,
+  publishEntityAdaptersState,
+  requireEntityAdapter,
+} from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityPlugin } from '../../src/createEntityPlugin';
 import type { EntityPluginEntry } from '../../src/createEntityPlugin';
 import type { MultiEntityManifest } from '../../src/manifest/multiEntityManifest';
 import type { BareEntityAdapter } from '../../src/routing/buildBareEntityRoutes';
+import { defineEntityRoute } from '../../src/routing';
 
 // ---------------------------------------------------------------------------
 // Minimal mock entity config
@@ -40,7 +47,6 @@ const noteConfig: ResolvedEntityConfig = {
   routes: {
     create: { auth: 'userAuth' },
     list: {},
-    clientSafeEvents: ['note:created'],
   },
 };
 
@@ -63,14 +69,12 @@ function createMockAdapter(): BareEntityAdapter {
 // ---------------------------------------------------------------------------
 
 function createMockBus(): SlingshotEventBus & {
-  registeredClientSafe: string[][];
   emitted: Array<{ key: string; payload: unknown }>;
   subscriptions: Array<{
     event: string;
     handler: (p: Record<string, unknown>) => void | Promise<void>;
   }>;
 } {
-  const registeredClientSafe: string[][] = [];
   const emitted: Array<{ key: string; payload: unknown }> = [];
   const subscriptions: Array<{
     event: string;
@@ -78,11 +82,6 @@ function createMockBus(): SlingshotEventBus & {
   }> = [];
 
   return {
-    clientSafeKeys: new Set(),
-    registerClientSafeEvents: mock((keys: string[]) => {
-      registeredClientSafe.push(keys);
-    }),
-    ensureClientSafeEventKey: mock((k: string) => k),
     emit: mock((key: string, payload: unknown) => {
       emitted.push({ key, payload });
     }) as unknown as SlingshotEventBus['emit'],
@@ -93,7 +92,6 @@ function createMockBus(): SlingshotEventBus & {
       const idx = subscriptions.findIndex(s => s.event === event);
       if (idx !== -1) subscriptions.splice(idx, 1);
     }),
-    registeredClientSafe,
     emitted,
     subscriptions,
   };
@@ -255,6 +253,142 @@ describe('createEntityPlugin', () => {
       expect(fw.entityRegistry.registered[0].name).toBe('Note');
     });
 
+    it('publishes resolved adapters into plugin-owned state during setupRoutes', async () => {
+      const app = createMockApp();
+      const pluginState = new Map<string, unknown>();
+      attachContext(app, { pluginState } as never);
+      const bus = createMockBus();
+      const fw = createMockFrameworkConfig();
+      const entry = makeEntry(noteConfig);
+      const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
+
+      await plugin.setupRoutes!({ app, config: fw, bus });
+
+      expect(pluginState.get('p')).toMatchObject({
+        entityAdapters: {
+          Note: entry.adapter,
+        },
+      });
+    });
+
+    it('makes provider adapters available to dependent plugins during setupRoutes', async () => {
+      const app = createMockApp();
+      const pluginState = new Map<string, unknown>();
+      attachContext(app, { pluginState } as never);
+      const bus = createMockBus();
+      const fw = createMockFrameworkConfig();
+      const entry = makeEntry(noteConfig);
+      const provider = createEntityPlugin({ name: 'provider', entities: [entry] });
+
+      let resolved: BareEntityAdapter | null = null;
+      const dependent = {
+        name: 'dependent',
+        dependencies: ['provider'],
+        setupRoutes({ app: routeApp }: { app: object }) {
+          resolved = requireEntityAdapter<BareEntityAdapter>(routeApp, {
+            plugin: 'provider',
+            entity: 'Note',
+          });
+        },
+      };
+
+      await provider.setupRoutes!({ app, config: fw, bus });
+      await dependent.setupRoutes({ app });
+
+      expect(resolved).toBe(entry.adapter);
+    });
+
+    it('fails setupRoutes when the same entity name was published with a different adapter instance', async () => {
+      const app = createMockApp();
+      const pluginState = new Map<string, unknown>();
+      attachContext(app, { pluginState } as never);
+      publishEntityAdaptersState(pluginState, 'p', {
+        Note: createMockAdapter(),
+      });
+
+      const bus = createMockBus();
+      const fw = createMockFrameworkConfig();
+      const plugin = createEntityPlugin({
+        name: 'p',
+        entities: [makeEntry(noteConfig, createMockAdapter())],
+      });
+
+      await expect(plugin.setupRoutes!({ app, config: fw, bus })).rejects.toThrow(
+        "Entity adapter 'Note' for plugin 'p' was already published",
+      );
+    });
+
+    it('builds extra-route executors with published cross-entity adapter lookup helpers', async () => {
+      const app = createMockApp();
+      const pluginState = new Map<string, unknown>();
+      attachContext(app, { pluginState } as never);
+      const bus = createMockBus();
+      const fw = createMockFrameworkConfig();
+
+      const categoryConfig: ResolvedEntityConfig = {
+        ...noteConfig,
+        name: 'Category',
+        _storageName: 'categories',
+      };
+      const noteAdapter = createMockAdapter();
+      const categoryAdapter = createMockAdapter();
+      let resolvedCategory: BareEntityAdapter | null = null;
+
+      const plugin = createEntityPlugin({
+        name: 'p',
+        entities: [
+          {
+            config: noteConfig,
+            buildAdapter: () => noteAdapter,
+            extraRoutes: [
+              defineEntityRoute({
+                method: 'get',
+                path: '/tree',
+                buildExecutor(ctx) {
+                  resolvedCategory = ctx.getEntityAdapter({ plugin: 'p', entity: 'Category' });
+                  return async exec => exec.respond.json({ ok: true });
+                },
+              }),
+            ],
+          },
+          {
+            config: categoryConfig,
+            buildAdapter: () => categoryAdapter,
+          },
+        ],
+      });
+
+      await plugin.setupRoutes!({ app, config: fw, bus });
+
+      expect(resolvedCategory).toBe(categoryAdapter);
+    });
+
+    it('fails setupRoutes when an extra route collides with a generated route', async () => {
+      const app = createMockApp();
+      const bus = createMockBus();
+      const fw = createMockFrameworkConfig();
+      const plugin = createEntityPlugin({
+        name: 'p',
+        entities: [
+          {
+            config: noteConfig,
+            buildAdapter: () => createMockAdapter(),
+            extraRoutes: [
+              defineEntityRoute({
+                method: 'get',
+                path: '/:slug',
+                buildExecutor: () => async exec => exec.respond.json({ ok: true }),
+              }),
+            ],
+          },
+        ],
+      });
+
+      await expect(plugin.setupRoutes!({ app, config: fw, bus })).rejects.toThrow(
+        'Use overrides.get instead',
+      );
+    });
+
     it('does not throw when entity already registered', async () => {
       const app = createMockApp();
       const bus = createMockBus();
@@ -368,7 +502,7 @@ describe('createEntityPlugin', () => {
   });
 
   describe('setupPost', () => {
-    it('registers clientSafeEvents from all entities', async () => {
+    it('does not add subscriptions for entities without setupPost bus work', async () => {
       const bus = createMockBus();
       const fw = createMockFrameworkConfig();
       const app = createMockApp();
@@ -377,24 +511,23 @@ describe('createEntityPlugin', () => {
 
       await plugin.setupPost!({ app, config: fw, bus });
 
-      expect(bus.registeredClientSafe).toHaveLength(1);
-      expect(bus.registeredClientSafe[0]).toContain('note:created');
+      expect(bus.subscriptions).toHaveLength(0);
     });
 
-    it('skips clientSafeEvents registration when none declared', async () => {
-      const configNoClientSafe: ResolvedEntityConfig = {
+    it('keeps setupPost quiet when routes are minimal', async () => {
+      const configWithMinimalRoutes: ResolvedEntityConfig = {
         ...noteConfig,
         routes: { create: {} },
       };
       const bus = createMockBus();
       const fw = createMockFrameworkConfig();
       const app = createMockApp();
-      const entry = makeEntry(configNoClientSafe);
+      const entry = makeEntry(configWithMinimalRoutes);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
       await plugin.setupPost!({ app, config: fw, bus });
 
-      expect(bus.registeredClientSafe).toHaveLength(0);
+      expect(bus.subscriptions).toHaveLength(0);
     });
 
     it('registers permission resource types', async () => {

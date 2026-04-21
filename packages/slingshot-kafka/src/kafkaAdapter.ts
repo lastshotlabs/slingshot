@@ -8,16 +8,16 @@ import {
 } from 'kafkajs';
 import { z } from 'zod';
 import type {
-  ClientSafeEventKey,
+  EventEnvelope,
   EventBusSerializationOptions,
   SlingshotEventBus,
   SlingshotEventMap,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
 import {
-  BUILTIN_CLIENT_SAFE_KEYS,
-  FORBIDDEN_CLIENT_PREFIXES,
   JSON_SERIALIZER,
+  createRawEventEnvelope,
+  isEventEnvelope,
   validateEventPayload,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -181,6 +181,23 @@ function resolvePartitionKey(
   return value == null ? null : String(value);
 }
 
+function buildEnvelopeHeaders(
+  envelope: EventEnvelope,
+  serializerContentType: string,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    'slingshot.event': envelope.key,
+    'slingshot.event-id': envelope.meta.eventId,
+    'slingshot.owner-plugin': envelope.meta.ownerPlugin,
+    'slingshot.exposure': envelope.meta.exposure.join(','),
+    'slingshot.content-type': serializerContentType,
+  };
+  if (envelope.meta.scope?.tenantId) {
+    headers['slingshot.tenant-id'] = envelope.meta.scope.tenantId;
+  }
+  return headers;
+}
+
 function nextOffset(offset: string): string {
   return (BigInt(offset) + 1n).toString();
 }
@@ -268,14 +285,20 @@ export function createKafkaAdapter(
   }
 
   const eventSerializer = serializer ?? JSON_SERIALIZER;
-  const listeners = new Map<string, Set<(payload: unknown) => void | Promise<void>>>();
-  const durableListeners = new Map<string, Set<(payload: unknown) => void | Promise<void>>>();
+  const envelopeListeners = new Map<string, Set<(envelope: EventEnvelope) => void | Promise<void>>>();
+  const payloadListenerWrappers = new Map<
+    string,
+    Map<
+      (payload: unknown) => void | Promise<void>,
+      (envelope: EventEnvelope) => void | Promise<void>
+    >
+  >();
+  const durableListeners = new Map<string, Set<(envelope: EventEnvelope) => void | Promise<void>>>();
   const durableConsumers = new Map<string, DurableConsumerEntry>();
   const connectedConsumers = new Set<string>();
   const createdTopics = new Set<string>();
   const pendingHandlers = new Set<Promise<void>>();
   const pendingBuffer: PendingProduce[] = [];
-  const _clientSafeKeys: Set<string> = new Set(BUILTIN_CLIENT_SAFE_KEYS);
   let producer: Producer | null = null;
   let admin: Admin | null = null;
   let producerConnected = false;
@@ -452,11 +475,11 @@ export function createKafkaAdapter(
   async function processDurableMessage(
     entryKey: string,
     entry: DurableConsumerEntry,
-    listener: (payload: unknown) => void | Promise<void>,
+    listener: (envelope: EventEnvelope) => void | Promise<void>,
     payload: EachMessagePayload,
   ): Promise<void> {
     const { topic, partition, message, heartbeat } = payload;
-    let decodedPayload: unknown;
+    let decodedEnvelope: EventEnvelope;
 
     if (!message.value) {
       console.warn(
@@ -468,7 +491,14 @@ export function createKafkaAdapter(
     }
 
     try {
-      decodedPayload = eventSerializer.deserialize(entry.event, message.value);
+      const decoded = eventSerializer.deserialize(entry.event, message.value);
+      decodedEnvelope = isEventEnvelope(decoded, entry.event as never)
+        ? (decoded as EventEnvelope)
+        : createRawEventEnvelope(
+            entry.event as Extract<keyof SlingshotEventMap, string>,
+            validateEventPayload(entry.event, decoded, schemaRegistry, config.validation) as
+              SlingshotEventMap[Extract<keyof SlingshotEventMap, string>],
+          );
     } catch (deserializeErr) {
       console.error(
         `[KafkaAdapter] deserialization error on topic "${topic}" partition ${partition} ` +
@@ -479,26 +509,9 @@ export function createKafkaAdapter(
       return;
     }
 
-    try {
-      decodedPayload = validateEventPayload(
-        entry.event,
-        decodedPayload,
-        schemaRegistry,
-        config.validation,
-      );
-    } catch (validationErr) {
-      console.error(
-        `[KafkaAdapter] validation error on topic "${topic}" partition ${partition} ` +
-          `offset ${message.offset}:`,
-        validationErr,
-      );
-      await commitProcessedMessage(entry.consumer, topic, partition, message);
-      return;
-    }
-
     for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
       try {
-        await Promise.resolve(listener(decodedPayload));
+        await Promise.resolve(listener(decodedEnvelope));
         await commitProcessedMessage(entry.consumer, topic, partition, message);
         return;
       } catch (err) {
@@ -521,56 +534,26 @@ export function createKafkaAdapter(
     health(): KafkaAdapterHealth;
     _drainPendingBuffer(): Promise<void>;
   } = {
-    get clientSafeKeys(): ReadonlySet<string> {
-      return _clientSafeKeys;
-    },
-
-    registerClientSafeEvents(keys: string[]): void {
-      for (const key of keys) {
-        const forbidden = FORBIDDEN_CLIENT_PREFIXES.find(prefix => key.startsWith(prefix));
-        if (forbidden) {
-          throw new Error(
-            `Cannot register "${key}" as client-safe: "${forbidden}" namespace is forbidden`,
-          );
-        }
-        _clientSafeKeys.add(key);
-      }
-    },
-
-    ensureClientSafeEventKey(key: string, source = 'SSE config'): ClientSafeEventKey {
-      const forbidden = FORBIDDEN_CLIENT_PREFIXES.find(prefix => key.startsWith(prefix));
-      if (forbidden) {
-        throw new Error(
-          `[slingshot] ${source}: "${key}" cannot be streamed to clients because the "${forbidden}" namespace is forbidden`,
-        );
-      }
-      if (!_clientSafeKeys.has(key)) {
-        throw new Error(
-          `[slingshot] ${source}: "${key}" is not registered as client-safe. Call bus.registerClientSafeEvents([...]) before createServer().`,
-        );
-      }
-      return key;
-    },
-
     emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
       if (isShutdown) {
         console.warn('[KafkaAdapter] emit() called after shutdown, ignoring.');
         return;
       }
 
-      const validatedPayload = validateEventPayload(
-        event as string,
-        payload,
-        schemaRegistry,
-        config.validation,
-      );
+      const envelope = isEventEnvelope(payload, event)
+        ? payload
+        : createRawEventEnvelope(
+            event as Extract<keyof SlingshotEventMap, string>,
+            validateEventPayload(event as string, payload, schemaRegistry, config.validation) as
+              SlingshotEventMap[K],
+          );
 
-      const eventListeners = listeners.get(event as string);
+      const eventListeners = envelopeListeners.get(event as string);
       if (eventListeners) {
         for (const listener of Array.from(eventListeners)) {
           let result: void | Promise<void>;
           try {
-            result = listener(validatedPayload);
+            result = listener(envelope as EventEnvelope);
           } catch (err) {
             console.error(`[KafkaAdapter] listener error on event "${event}":`, err);
             continue;
@@ -591,17 +574,12 @@ export function createKafkaAdapter(
       if (!hasDurableSubscribersForTopic(topic)) return;
 
       void (async () => {
-        const timestamp = Date.now().toString();
         let key: string | null = null;
         let serialized: Uint8Array | null = null;
-        const headers = {
-          'slingshot.event': event as string,
-          'slingshot.timestamp': timestamp,
-          'slingshot.content-type': eventSerializer.contentType,
-        };
+        const headers = buildEnvelopeHeaders(envelope as EventEnvelope, eventSerializer.contentType);
         try {
-          key = resolvePartitionKey(config, event as string, validatedPayload);
-          serialized = eventSerializer.serialize(event as string, validatedPayload);
+          key = resolvePartitionKey(config, event as string, envelope.payload);
+          serialized = eventSerializer.serialize(event as string, envelope);
           await ensureTopic(topic);
           const ensuredProducer = await ensureProducer();
           await ensuredProducer.send({
@@ -653,6 +631,29 @@ export function createKafkaAdapter(
         return;
       }
 
+      const key = event as string;
+      const wrapper = (envelope: EventEnvelope): void | Promise<void> =>
+        listener(envelope.payload as SlingshotEventMap[K]);
+      let wrappers = payloadListenerWrappers.get(key);
+      if (!wrappers) {
+        wrappers = new Map();
+        payloadListenerWrappers.set(key, wrappers);
+      }
+      wrappers.set(listener as (payload: unknown) => void | Promise<void>, wrapper);
+      this.onEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void | Promise<void>, opts);
+    },
+
+    onEnvelope<K extends keyof SlingshotEventMap>(
+      event: K,
+      listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
+      opts?: SubscriptionOpts,
+    ): void {
+      const key = event as string;
+      if (isShutdown) {
+        console.warn('[KafkaAdapter] onEnvelope() called after shutdown, ignoring.');
+        return;
+      }
+
       if (opts?.durable) {
         if (!opts.name) {
           throw new Error('[KafkaAdapter] durable subscriptions require a name. Pass opts.name.');
@@ -686,7 +687,7 @@ export function createKafkaAdapter(
         }
         durableListeners
           .get(event as string)
-          ?.add(listener as (payload: unknown) => void | Promise<void>);
+          ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
 
         void (async () => {
           try {
@@ -705,7 +706,7 @@ export function createKafkaAdapter(
                 await processDurableMessage(
                   entryKey,
                   entry,
-                  listener as (payload: unknown) => void | Promise<void>,
+                  listener as (envelope: EventEnvelope) => void | Promise<void>,
                   payload,
                 );
               },
@@ -715,7 +716,7 @@ export function createKafkaAdapter(
             durableConsumers.delete(entryKey);
             durableListeners
               .get(event as string)
-              ?.delete(listener as (payload: unknown) => void | Promise<void>);
+              ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
             console.error(
               `[KafkaAdapter] durable consumer setup failed for event "${event}" group "${groupId}":`,
               err,
@@ -725,27 +726,44 @@ export function createKafkaAdapter(
         return;
       }
 
-      const key = event as string;
-      if (!listeners.has(key)) listeners.set(key, new Set());
-      listeners.get(key)?.add(listener as (payload: unknown) => void | Promise<void>);
+      if (!envelopeListeners.has(key)) envelopeListeners.set(key, new Set());
+      envelopeListeners
+        .get(key)
+        ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
     },
 
     off<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (payload: SlingshotEventMap[K]) => void,
     ): void {
+      const wrappers = payloadListenerWrappers.get(event as string);
+      const wrapper = wrappers?.get(listener as (payload: unknown) => void | Promise<void>);
+      if (!wrapper) {
+        return;
+      }
+      wrappers?.delete(listener as (payload: unknown) => void | Promise<void>);
+      if (wrappers?.size === 0) {
+        payloadListenerWrappers.delete(event as string);
+      }
+      this.offEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void);
+    },
+
+    offEnvelope<K extends keyof SlingshotEventMap>(
+      event: K,
+      listener: (envelope: EventEnvelope<K>) => void,
+    ): void {
       if (
         durableListeners
           .get(event as string)
-          ?.has(listener as (payload: unknown) => void | Promise<void>)
+          ?.has(listener as (envelope: EventEnvelope) => void | Promise<void>)
       ) {
         throw new Error(
           '[KafkaAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all consumers.',
         );
       }
-      listeners
+      envelopeListeners
         .get(event as string)
-        ?.delete(listener as (payload: unknown) => void | Promise<void>);
+        ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
     },
 
     async shutdown(): Promise<void> {
@@ -757,7 +775,8 @@ export function createKafkaAdapter(
         drainTimer = null;
       }
 
-      listeners.clear();
+      envelopeListeners.clear();
+      payloadListenerWrappers.clear();
       durableListeners.clear();
       await Promise.allSettled([...pendingHandlers]);
 

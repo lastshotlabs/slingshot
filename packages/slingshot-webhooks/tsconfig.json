@@ -9,7 +9,8 @@
     "paths": {
       "@lastshotlabs/slingshot-core": ["../slingshot-core/src/index.ts"],
       "@lastshotlabs/slingshot-core/testing": ["../slingshot-core/src/testing.ts"],
-      "@lastshotlabs/slingshot-entity": ["../slingshot-entity/src/index.ts"]
+      "@lastshotlabs/slingshot-entity": ["../slingshot-entity/src/index.ts"],
+      "@lastshotlabs/slingshot-auth": ["../slingshot-auth/src/index.ts"]
     }
   },
   "exclude": ["dist", "node_modules"]

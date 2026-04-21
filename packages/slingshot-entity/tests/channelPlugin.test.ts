@@ -66,9 +66,6 @@ function createMockBus(): MockBus {
 
   return {
     handlers,
-    clientSafeKeys: new Set(),
-    registerClientSafeEvents: mock(() => {}),
-    ensureClientSafeEventKey: mock((k: string) => k),
     emit: mock(() => {}) as unknown as SlingshotEventBus['emit'],
     on: mock((event: string, handler: (payload: Record<string, unknown>) => void) => {
       if (!handlers.has(event)) handlers.set(event, []);

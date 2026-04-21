@@ -185,7 +185,7 @@ export function resolveEntityManifest(
     tenant: manifest.tenant,
     ttl: manifest.ttl,
     storage: manifest.storage,
-    routes: manifest.routes,
+    routes: manifest.routes as ResolvedEntityConfig['routes'],
   });
 
   // Resolve operations

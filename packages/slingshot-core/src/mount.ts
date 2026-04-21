@@ -1,10 +1,10 @@
 import { createRoute } from '@hono/zod-openapi';
 import type { Context, MiddlewareHandler } from 'hono';
+import { getActor } from './actorContext';
 import type { AppEnv } from './context';
 import { getSlingshotCtx } from './context';
 import type { SlingshotHandler } from './handler';
 import { type GuardWithMetadata, HandlerError, type HandlerMeta } from './handler';
-import type { IdentityResolverInput } from './identity';
 
 type RouteMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'head';
 
@@ -141,17 +141,7 @@ export function toRouteHandler(
       ...(c.req.param() as Record<string, string>),
     };
 
-    const sCtx = getSlingshotCtx(c);
-    const resolverInput: IdentityResolverInput = {
-      authUserId: c.get('authUserId') ?? null,
-      sessionId: c.get('sessionId') ?? null,
-      roles: c.get('roles') ?? null,
-      authClientId: c.get('authClientId') ?? null,
-      bearerClientId: c.get('bearerClientId') ?? null,
-      tenantId: c.get('tenantId') ?? null,
-      tokenPayload: c.get('tokenPayload') ?? null,
-    };
-    const actor = sCtx.identityResolver.resolve(resolverInput);
+    const actor = getActor(c);
 
     const meta: Partial<HandlerMeta> = {
       requestId: c.get('requestId'),

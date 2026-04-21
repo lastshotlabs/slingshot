@@ -95,7 +95,8 @@ Switch to a shared event bus so app events cross instances. The built-in manifes
 With a shared event bus:
 
 - SSE clients on instance A receive events emitted on instance B
-- `setupPost()` event subscriptions in plugins fire on every instance
+- plugin event subscriptions still fire on every instance
+- the canonical `EventEnvelope` survives transport, so SSE and webhooks see the same scope/exposure metadata everywhere
 
 ## WebSockets across instances
 

@@ -27,6 +27,7 @@ import { csrfProtection } from './middleware/csrf';
 import { createIdentifyMiddleware } from './middleware/identify';
 import { requireMfaSetup } from './middleware/requireMfaSetup';
 import { requireRole } from './middleware/requireRole';
+import { registerAuthEventDefinitions } from './eventGovernance';
 import { userAuth } from './middleware/userAuth';
 import { AUTH_RUNTIME_KEY } from './runtime';
 import { assertLoginEmailVerified } from './services/auth';
@@ -119,16 +120,17 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
   return {
     name: 'slingshot-auth',
 
-    async setupMiddleware({ app, config: frameworkConfig, bus }: PluginSetupContext) {
+    async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       bootstrapStarted = true;
       try {
         const registrar = frameworkConfig.registrar;
+        registerAuthEventDefinitions(events);
 
         const resolved = frameworkConfig.resolvedStores;
         const redis = frameworkConfig.redis as FrameworkRedisClient | null | undefined;
         const mongo = frameworkConfig.mongo as FrameworkMongoConn | undefined;
         const resolvedPassword = frameworkConfig.password;
-        const result = await bootstrapAuth(config, bus, resolved, {
+        const result = await bootstrapAuth(config, bus, events, resolved, {
           signing: frameworkConfig.signing ?? config.security?.signing ?? null,
           logging: {
             verbose: frameworkConfig.logging.verbose,

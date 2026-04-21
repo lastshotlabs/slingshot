@@ -15,6 +15,8 @@ import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
   createEntityRegistry,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
@@ -159,6 +161,10 @@ async function createPostgresChatBlocksApp(): Promise<{
 
   const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
   const frameworkConfig = createFrameworkConfig(pool);
 
   const pluginState = new Map<string, unknown>([
@@ -199,16 +205,19 @@ async function createPostgresChatBlocksApp(): Promise<{
     app,
     config: frameworkConfig as never,
     bus,
+    events,
   });
   await plugin.setupRoutes?.({
     app,
     config: frameworkConfig as never,
     bus,
+    events,
   });
   await plugin.setupPost?.({
     app,
     config: frameworkConfig as never,
     bus,
+    events,
   });
 
   return { app, pool };

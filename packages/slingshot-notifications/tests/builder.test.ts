@@ -2,12 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
 import { createNotificationBuilder } from '../src/builder';
 import { createNoopRateLimitBackend } from '../src/rateLimit';
-import { createNotificationsTestAdapters } from '../src/testing';
+import { createNotificationsTestAdapters, createNotificationsTestEvents } from '../src/testing';
 
 describe('createNotificationBuilder', () => {
   test('uses configured default preferences when no preference rows exist', async () => {
     const adapters = createNotificationsTestAdapters();
     const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
     let createdEvent:
       | {
           notification: { userId: string; type: string };
@@ -28,6 +29,7 @@ describe('createNotificationBuilder', () => {
       notifications: adapters.notifications,
       preferences: adapters.preferences,
       bus,
+      events,
       rateLimitBackend: createNoopRateLimitBackend(),
       defaultPreferences: {
         pushEnabled: false,
@@ -81,11 +83,14 @@ describe('createNotificationBuilder', () => {
 
   test('urgent notifications bypass rate limiting and dedup collapse', async () => {
     const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
     const builder = createNotificationBuilder({
       source: 'community',
       notifications: adapters.notifications,
       preferences: adapters.preferences,
-      bus: new InProcessAdapter(),
+      bus,
+      events,
       rateLimitBackend: {
         check: async () => false,
       },

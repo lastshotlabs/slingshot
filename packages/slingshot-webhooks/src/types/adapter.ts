@@ -1,15 +1,20 @@
-import type { PaginatedResult } from '@lastshotlabs/slingshot-core';
+import type { EventKey, EventScope, PaginatedResult } from '@lastshotlabs/slingshot-core';
 import type { DeliveryStatus, WebhookAttempt, WebhookDelivery, WebhookEndpoint } from './models';
+import type { WebhookSubscriber } from './models';
 
 /**
  * Runtime persistence contract used by webhook orchestration.
  */
 export interface WebhookAdapter {
   getEndpoint(id: string): Promise<WebhookEndpoint | null>;
-  findEndpointsForEvent(event: string): Promise<WebhookEndpoint[]>;
+  listEnabledEndpoints(): Promise<WebhookEndpoint[]>;
   createDelivery(input: {
     endpointId: string;
-    event: string;
+    event: EventKey;
+    eventId: string;
+    occurredAt: string;
+    subscriber: WebhookSubscriber;
+    sourceScope: EventScope | null;
     payload: string;
     maxAttempts: number;
   }): Promise<WebhookDelivery>;

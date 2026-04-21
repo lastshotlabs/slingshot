@@ -36,7 +36,16 @@ export const ReadReceipt = defineEntity('ReadReceipt', {
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {
-      event: { key: 'chat:read.created', payload: ['id', 'messageId', 'userId', 'roomId'] },
+      event: {
+        key: 'chat:read.created',
+        payload: ['id', 'messageId', 'userId', 'roomId'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
     },
     update: { auth: 'none' },
     delete: { auth: 'none' },
@@ -45,7 +54,6 @@ export const ReadReceipt = defineEntity('ReadReceipt', {
       latestForUserInRoom: { auth: 'userAuth' },
       listByMessage: { auth: 'userAuth' },
     },
-    clientSafeEvents: ['chat:read.created'],
   },
 });
 

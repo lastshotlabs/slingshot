@@ -2,6 +2,7 @@ import type {
   PermissionsState,
   RateLimitAdapter,
   SlingshotEventBus,
+  SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import type { CompiledHandlerTable, Dispatcher } from './handlers/contracts';
@@ -20,6 +21,8 @@ export interface InteractionsPluginState {
   readonly permissions: PermissionsState;
   /** Event bus captured during setup. */
   readonly bus: SlingshotEventBus;
+  /** Registry-backed event publisher captured during setup. */
+  readonly events: SlingshotEvents;
   /** Rate-limit window for the dispatch endpoint. */
   readonly rateLimitWindowMs: number;
   /** Maximum dispatches allowed in the active window. */

@@ -187,18 +187,18 @@ export function createPollsPlugin(rawConfig: Partial<PollsPluginConfig> = {}): S
       registerEntityPolicy(ctx.app, POLL_SOURCE_POLICY_KEY, createPollSourcePolicy(sourceHandlers));
       registerEntityPolicy(ctx.app, POLL_VOTE_POLICY_KEY, createPollVotePolicy(voteHandlers));
 
-      await innerPlugin?.setupMiddleware?.(ctx);
-    },
-
-    async setupRoutes({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      innerPlugin = createEntityPlugin({
+      innerPlugin ??= createEntityPlugin({
         name: POLLS_PLUGIN_STATE_KEY,
         mountPath: config.mountPath,
         entities,
         middleware,
       });
 
-      await innerPlugin.setupRoutes?.({ app, config: frameworkConfig, bus });
+      await innerPlugin?.setupMiddleware?.(ctx);
+    },
+
+    async setupRoutes({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
       // Mount the results route manually - needs cross-entity access.
       if (
@@ -253,8 +253,8 @@ export function createPollsPlugin(rawConfig: Partial<PollsPluginConfig> = {}): S
       }
     },
 
-    async setupPost({ app, config: frameworkConfig, bus }: PluginSetupContext) {
-      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus });
+    async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
 
       if (!pollAdapter || !pollVoteAdapter) {
         throw new Error('[slingshot-polls] Adapters not resolved after entity plugin setup.');

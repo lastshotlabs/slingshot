@@ -21,6 +21,8 @@ import {
   InProcessAdapter,
   PERMISSIONS_STATE_KEY,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import { pollFactories, pollVoteFactories } from './entities/factories';
 import { createPollsPlugin } from './plugin';
@@ -193,6 +195,10 @@ export async function createPollsTestApp(
 
   const app = new Hono<AppEnv>();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
   const frameworkConfig = createTestFrameworkConfig();
 
   // Attach minimal SlingshotContext so getContext(app) works in plugin lifecycle
@@ -257,6 +263,7 @@ export async function createPollsTestApp(
     app,
     config: frameworkConfig as never,
     bus: bus as unknown as import('@lastshotlabs/slingshot-core').SlingshotEventBus,
+    events,
   };
   await plugin.setupMiddleware?.(ctx);
   await plugin.setupRoutes?.(ctx);

@@ -11,7 +11,11 @@ export const WebhookDeliveryEntity = defineEntity('WebhookDelivery', {
     tenantId: field.string({ optional: true }),
     endpointId: field.string(),
     event: field.string(),
-    payload: field.json(),
+    eventId: field.string(),
+    occurredAt: field.date(),
+    subscriber: field.json(),
+    sourceScope: field.json({ optional: true }),
+    projectedPayload: field.string(),
     status: field.enum(['pending', 'delivered', 'failed', 'dead'] as const, {
       default: 'pending',
     }),

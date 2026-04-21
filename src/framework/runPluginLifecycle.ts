@@ -7,7 +7,12 @@
 import { withSpan } from '@framework/otel/spans';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { Tracer } from '@opentelemetry/api';
-import type { AppEnv, SlingshotEventBus, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type {
+  AppEnv,
+  SlingshotEventBus,
+  SlingshotEvents,
+  SlingshotPlugin,
+} from '@lastshotlabs/slingshot-core';
 import type { FrameworkConfig } from './createInfrastructure';
 
 // ---------------------------------------------------------------------------
@@ -204,6 +209,7 @@ export async function runPluginMiddleware(
   app: OpenAPIHono<AppEnv>,
   frameworkConfig: FrameworkConfig,
   bus: SlingshotEventBus,
+  events: SlingshotEvents,
   tracer?: Tracer,
 ): Promise<void> {
   for (const plugin of sortedPlugins) {
@@ -214,10 +220,10 @@ export async function runPluginMiddleware(
           span.setAttribute('slingshot.plugin.name', plugin.name);
           span.setAttribute('slingshot.plugin.phase', 'setupMiddleware');
           span.setAttribute('slingshot.plugin.dependency_count', plugin.dependencies?.length ?? 0);
-          await setupMiddleware({ app, config: frameworkConfig, bus });
+          await setupMiddleware({ app, config: frameworkConfig, bus, events });
         });
       } else {
-        await setupMiddleware({ app, config: frameworkConfig, bus });
+        await setupMiddleware({ app, config: frameworkConfig, bus, events });
       }
     }
   }
@@ -246,6 +252,7 @@ export async function runPluginRoutes(
   app: OpenAPIHono<AppEnv>,
   frameworkConfig: FrameworkConfig,
   bus: SlingshotEventBus,
+  events: SlingshotEvents,
   tracer?: Tracer,
 ): Promise<void> {
   for (const plugin of sortedPlugins) {
@@ -256,10 +263,10 @@ export async function runPluginRoutes(
           span.setAttribute('slingshot.plugin.name', plugin.name);
           span.setAttribute('slingshot.plugin.phase', 'setupRoutes');
           span.setAttribute('slingshot.plugin.dependency_count', plugin.dependencies?.length ?? 0);
-          await setupRoutes({ app, config: frameworkConfig, bus });
+          await setupRoutes({ app, config: frameworkConfig, bus, events });
         });
       } else {
-        await setupRoutes({ app, config: frameworkConfig, bus });
+        await setupRoutes({ app, config: frameworkConfig, bus, events });
       }
     }
   }
@@ -288,6 +295,7 @@ export async function runPluginPost(
   app: OpenAPIHono<AppEnv>,
   frameworkConfig: FrameworkConfig,
   bus: SlingshotEventBus,
+  events: SlingshotEvents,
   tracer?: Tracer,
 ): Promise<void> {
   for (const plugin of sortedPlugins) {
@@ -298,10 +306,10 @@ export async function runPluginPost(
           span.setAttribute('slingshot.plugin.name', plugin.name);
           span.setAttribute('slingshot.plugin.phase', 'setupPost');
           span.setAttribute('slingshot.plugin.dependency_count', plugin.dependencies?.length ?? 0);
-          await setupPost({ app, config: frameworkConfig, bus });
+          await setupPost({ app, config: frameworkConfig, bus, events });
         });
       } else {
-        await setupPost({ app, config: frameworkConfig, bus });
+        await setupPost({ app, config: frameworkConfig, bus, events });
       }
     }
   }

@@ -106,7 +106,16 @@ export const Message = defineEntity('Message', {
         requires: 'chat:room.write',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
       },
-      event: { key: 'chat:message.created', payload: ['id', 'roomId', 'authorId', 'type', 'body'] },
+      event: {
+        key: 'chat:message.created',
+        payload: ['id', 'roomId', 'authorId', 'type', 'body'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:authorId',
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
       middleware: [
         'archiveGuard',
         'pollRequiredGuard',
@@ -122,14 +131,30 @@ export const Message = defineEntity('Message', {
         requires: 'chat:message.edit',
         scope: { resourceType: 'chat:message', resourceId: 'param:id' },
       },
-      event: { key: 'chat:message.updated', payload: ['id', 'roomId'] },
+      event: {
+        key: 'chat:message.updated',
+        payload: ['id', 'roomId'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
     },
     delete: {
       permission: {
         requires: 'chat:message.delete',
         scope: { resourceType: 'chat:message', resourceId: 'param:id' },
       },
-      event: { key: 'chat:message.deleted', payload: ['id', 'roomId', 'deletedAt'] },
+      event: {
+        key: 'chat:message.deleted',
+        payload: ['id', 'roomId', 'deletedAt'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
       middleware: ['replyCountDecrement'],
     },
     operations: {
@@ -166,14 +191,6 @@ export const Message = defineEntity('Message', {
       replyCountUpdate: true,
       replyCountDecrement: true,
     },
-    clientSafeEvents: [
-      'chat:message.created',
-      'chat:message.updated',
-      'chat:message.deleted',
-      'chat:message.embeds.resolved',
-      'chat:message.scheduled.created',
-      'chat:message.scheduled.delivered',
-    ],
     permissions: {
       resourceType: 'chat:message',
       scopeField: 'roomId',

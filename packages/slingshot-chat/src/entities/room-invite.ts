@@ -39,7 +39,15 @@ export const RoomInvite = defineEntity('RoomInvite', {
         requires: 'chat:room.invite',
         scope: { resourceType: 'chat:room', resourceId: 'body:roomId' },
       },
-      event: { key: 'chat:invite.created', payload: ['id', 'roomId', 'token'] },
+      event: {
+        key: 'chat:invite.created',
+        payload: ['id', 'roomId', 'token'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'chat:room',
+          resourceId: 'record:roomId',
+        },
+      },
     },
     delete: {
       permission: {
@@ -65,7 +73,6 @@ export const RoomInvite = defineEntity('RoomInvite', {
         },
       },
     },
-    clientSafeEvents: ['chat:invite.created'],
   },
 });
 

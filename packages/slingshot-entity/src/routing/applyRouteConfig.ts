@@ -15,11 +15,17 @@ import type {
   PolicyResolver,
   ResolvedEntityConfig,
   RouteIdempotencyConfig,
+  RouteEventConfig,
   RouteOperationConfig,
   SlingshotEventBus,
+  SlingshotEventMap,
+  SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
 import {
   HEADER_IDEMPOTENCY_KEY,
+  getActor,
+  getActorId,
+  getActorTenantId,
   getSlingshotCtx,
   hmacSign,
   resolveOpConfig,
@@ -29,6 +35,7 @@ import { entityToPath } from '../generators/routeHelpers';
 import { buildPolicyAction, policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
 import { safeReadJsonBody } from '../policy/safeReadJsonBody';
 import { evaluateRouteAuth } from './evaluateRouteAuth';
+import type { PlannedEntityRoute } from './entityRoutePlanning';
 import { resolveNamedOperationRoute } from './namedOperationRouting';
 import { getUserAuthAccountGuardFailure } from './userAuthAccountGuard';
 
@@ -124,8 +131,7 @@ function buildScopedIdempotencyKey(
   const signingSecret = signingConfig?.secret ?? null;
   const keyToken =
     signingConfig?.idempotencyKeys && signingSecret ? hmacSign(rawKey, signingSecret) : rawKey;
-  const tenantId = (c.get('tenantId' as never) as string | undefined) ?? null;
-  const authUserId = (c.get('authUserId' as never) as string | undefined) ?? null;
+  const actor = getActor(c);
 
   const parts = ['entity-idempotency', entityName, opName];
   switch (config.scope) {
@@ -133,16 +139,16 @@ function buildScopedIdempotencyKey(
       parts.push('global');
       break;
     case 'tenant':
-      parts.push(`tenant:${tenantId ?? 'none'}`);
+      parts.push(`tenant:${actor.tenantId ?? 'none'}`);
       break;
     case 'user':
-      if (!authUserId) {
+      if (!actor.id) {
         throw new Error(
-          `Entity route idempotency for ${entityName}.${opName} requires authUserId when scope is 'user'`,
+          `Entity route idempotency for ${entityName}.${opName} requires actor.id when scope is 'user'`,
         );
       }
-      if (tenantId) parts.push(`tenant:${tenantId}`);
-      parts.push(`user:${authUserId}`);
+      if (actor.tenantId) parts.push(`tenant:${actor.tenantId}`);
+      parts.push(`user:${actor.id}`);
       break;
   }
   parts.push(keyToken);
@@ -240,8 +246,10 @@ function createEntityIdempotencyMiddleware(
  * ```
  */
 export interface RouteConfigDeps {
-  /** Event bus for emitting operation events and registering client-safe events. */
+  /** Legacy fallback bus for operation events when no registry-backed publisher is supplied. */
   bus?: SlingshotEventBus;
+  /** Canonical registry-backed event publisher for operation events. */
+  events?: SlingshotEvents;
   /** Permission evaluator used when any operation declares a `permission` check. */
   permissionEvaluator?: PermissionEvaluator;
   /** Permission registry used to register the entity's resource type. */
@@ -300,6 +308,8 @@ export interface RouteConfigDeps {
    * with `buildBareEntityRoutes()`.
    */
   operationConfigs?: Record<string, OperationConfig>;
+  /** Shared planned route set for generated routes, overrides, and extra routes. */
+  plannedRoutes?: readonly PlannedEntityRoute[];
 }
 
 /**
@@ -351,18 +361,15 @@ export function applyRouteConfig(
   routeConfig: EntityRouteConfig,
   deps: RouteConfigDeps,
 ): void {
-  const { bus, permissionEvaluator, permissionRegistry, rateLimitFactory, middleware: mw } = deps;
+  const { bus, events, permissionEvaluator, permissionRegistry, rateLimitFactory, middleware: mw } =
+    deps;
+  const plannedRoutes = deps.plannedRoutes;
   const entitySegment = deps.routePath ?? entityToPath(entityConfig.name);
   const path = deps.parentPath
     ? `${deps.parentPath.replace(/^\//, '')}/${entitySegment}`
     : entitySegment;
 
-  // 1. Client-safe events
-  if (routeConfig.clientSafeEvents?.length && bus) {
-    bus.registerClientSafeEvents(routeConfig.clientSafeEvents);
-  }
-
-  // 2. Permission resource registration
+  // 1. Permission resource registration
   if (routeConfig.permissions && permissionRegistry) {
     try {
       permissionRegistry.register({
@@ -375,11 +382,170 @@ export function applyRouteConfig(
     }
   }
 
-  // 3. Webhook event key collection
+  // 2. Webhook event key collection
   if (routeConfig.webhooks && deps.webhookEventKeys) {
     for (const eventKey of Object.keys(routeConfig.webhooks)) {
       deps.webhookEventKeys.push(eventKey);
     }
+  }
+
+  if (plannedRoutes && plannedRoutes.length > 0) {
+    const eventMap = new Map<string, RouteEventConfig>();
+
+    for (const route of plannedRoutes) {
+      const opConfig = route.routeConfig;
+      if (!opConfig) continue;
+
+      const methods = new Set([route.method.toUpperCase()]);
+      const opPath = route.path;
+      const opName = route.opName;
+
+      if (opConfig.rateLimit && rateLimitFactory) {
+        router.use(opPath, methodGuard(methods, rateLimitFactory(opConfig.rateLimit)));
+      }
+
+      if (opConfig.auth || opConfig.permission) {
+        router.use(
+          opPath,
+          methodGuard(methods, async (c, next) => {
+            const slingshotCtx = getSlingshotCtx(
+              c as unknown as Parameters<typeof getSlingshotCtx>[0],
+            );
+            const authResult = await evaluateRouteAuth(c as Context<AppEnv, string>, opConfig, {
+              routeAuth: slingshotCtx.routeAuth,
+              permissionEvaluator,
+              adapter: deps.adapter,
+              parentAdapter: deps.parentAdapter,
+            });
+            if (!authResult.authorized) {
+              return authResult.response ?? c.json({ error: 'Forbidden' }, 403);
+            }
+
+            if (opConfig.auth === 'userAuth') {
+              const guardFailure = await getUserAuthAccountGuardFailure(
+                c as Context<AppEnv, string>,
+              );
+              if (guardFailure) {
+                return c.json({ error: guardFailure.error }, guardFailure.status);
+              }
+            }
+
+            const hasPostFetchPolicyPass =
+              route.generatedRouteKey === 'get' ||
+              route.generatedRouteKey === 'update' ||
+              route.generatedRouteKey === 'delete' ||
+              route.generatedRouteKey === 'list';
+            if (!hasPostFetchPolicyPass) {
+              const policyConfig = resolvePolicyConfig(opConfig, routeConfig);
+              if (policyConfig && deps.policyResolvers && policyAppliesToOp(policyConfig, opName)) {
+                const policyResolver = deps.policyResolvers.get(policyConfig.resolver);
+                if (policyResolver) {
+                  const input = await safeReadJsonBody(c);
+                  await resolvePolicy({
+                    c,
+                    config: policyConfig,
+                    resolver: policyResolver,
+                    action: buildPolicyAction(opName),
+                    record: null,
+                    input,
+                    bus,
+                  });
+                }
+              }
+            }
+
+            await next();
+          }),
+        );
+      }
+
+      const idempotency = normalizeIdempotencyConfig(opConfig.idempotency);
+      if (idempotency) {
+        router.use(
+          opPath,
+          methodGuard(
+            methods,
+            createEntityIdempotencyMiddleware(entityConfig.name, opName, idempotency),
+          ),
+        );
+      }
+
+      if (opConfig.middleware && mw) {
+        for (const name of opConfig.middleware) {
+          const handler = (mw as Record<string, MiddlewareHandler | undefined>)[name];
+          if (handler) router.use(opPath, methodGuard(methods, handler));
+        }
+      }
+
+      if (opConfig.event) {
+        const evt: RouteEventConfig =
+          typeof opConfig.event === 'string'
+            ? { key: opConfig.event, exposure: ['internal'] }
+            : { exposure: ['internal'], ...opConfig.event };
+        eventMap.set(route.routeKey, evt);
+      }
+    }
+
+    if (eventMap.size > 0 && (events || bus)) {
+      const capturedBus = bus;
+      const capturedEvents = events;
+      router.use('*', async (c, next) => {
+        await next();
+        if (c.res.status < 200 || c.res.status >= 300) return;
+
+        const routeKey = c.get('__routeKey' as never) as string | undefined;
+        const opName = c.get('__opName' as never) as string | undefined;
+        const result = c.get('__opResult' as never) as Record<string, unknown> | undefined;
+        if (!result) return;
+
+        const evt = (routeKey ? eventMap.get(routeKey) : undefined) ?? (opName ? eventMap.get(opName) : undefined);
+        if (!evt) return;
+
+        const payload: Record<string, unknown> = {};
+        if (evt.payload && evt.payload.length > 0) {
+          for (const f of evt.payload) payload[f] = result[f];
+        } else {
+          Object.assign(payload, result);
+        }
+        for (const includeField of evt.include ?? []) {
+          switch (includeField) {
+            case 'tenantId':
+              payload.tenantId = getActorTenantId(c);
+              break;
+            case 'actorId':
+              payload.actorId = getActorId(c);
+              break;
+            case 'requestId':
+              payload.requestId = c.get('requestId');
+              break;
+            case 'ip':
+              payload.ip = c.req.header('x-forwarded-for') ?? null;
+              break;
+          }
+        }
+        if (capturedEvents) {
+          const actor = getActor(c);
+          const actorId = actor.kind === 'anonymous' ? undefined : actor.id;
+          const tenantId =
+            actor.tenantId ?? ((c.get('tenantId') as string | null | undefined) ?? null);
+          capturedEvents.publish(evt.key as keyof SlingshotEventMap, payload, {
+            tenantId,
+            userId: actor.kind === 'user' ? actor.id : undefined,
+            actorId,
+            requestId: c.get('requestId') as string | undefined,
+            correlationId: c.get('requestId') as string | undefined,
+            source: 'http',
+          });
+          return;
+        }
+        (capturedBus as unknown as { emit(key: string, payload: unknown): void })?.emit(
+          evt.key,
+          payload,
+        );
+      });
+    }
+
+    return;
   }
 
   // 4. Per-operation wiring
@@ -392,7 +558,7 @@ export function applyRouteConfig(
     ...Object.keys(routeConfig.operations ?? {}),
   ];
   const disabledOps = new Set(routeConfig.disable ?? []);
-  const eventMap = new Map<string, { key: string; payload?: string[] }>();
+  const eventMap = new Map<string, RouteEventConfig>();
 
   for (const opName of allOpNames) {
     if (disabledOps.has(opName)) continue;
@@ -506,8 +672,9 @@ export function applyRouteConfig(
   }
 
   // 5. Event emission — after-response middleware
-  if (eventMap.size > 0 && bus) {
+  if (eventMap.size > 0 && (events || bus)) {
     const capturedBus = bus;
+    const capturedEvents = events;
     router.use('*', async (c, next) => {
       await next();
       if (c.res.status < 200 || c.res.status >= 300) return;
@@ -519,20 +686,44 @@ export function applyRouteConfig(
       const evt = eventMap.get(opName);
       if (!evt) return;
 
-      const payload: Record<string, unknown> = {
-        tenantId: c.get('tenantId' as never),
-        actorId: c.get('authUserId' as never),
-      };
+      const payload: Record<string, unknown> = {};
       if (evt.payload && evt.payload.length > 0) {
         for (const f of evt.payload) payload[f] = result[f];
       } else {
-        Object.assign(payload, { entity: result });
+        Object.assign(payload, result);
       }
-      // bus.emit() is typed against SlingshotEventMap which uses static keys.
-      // Config-driven event keys are dynamic strings not in the static map.
-      // The cast is safe: at runtime any string key is valid, type safety
-      // comes from the generated events.ts module augmentation.
-      (capturedBus as unknown as { emit(key: string, payload: unknown): void }).emit(
+      for (const includeField of evt.include ?? []) {
+        switch (includeField) {
+          case 'tenantId':
+            payload.tenantId = getActorTenantId(c);
+            break;
+          case 'actorId':
+            payload.actorId = getActorId(c);
+            break;
+          case 'requestId':
+            payload.requestId = c.get('requestId');
+            break;
+          case 'ip':
+            payload.ip = c.req.header('x-forwarded-for') ?? null;
+            break;
+        }
+      }
+      if (capturedEvents) {
+        const actor = getActor(c);
+        const actorId = actor.kind === 'anonymous' ? undefined : actor.id;
+        const tenantId =
+          actor.tenantId ?? ((c.get('tenantId') as string | null | undefined) ?? null);
+        capturedEvents.publish(evt.key as keyof SlingshotEventMap, payload, {
+          tenantId,
+          userId: actor.kind === 'user' ? actor.id : undefined,
+          actorId,
+          requestId: c.get('requestId') as string | undefined,
+          correlationId: c.get('requestId') as string | undefined,
+          source: 'http',
+        });
+        return;
+      }
+      (capturedBus as unknown as { emit(key: string, payload: unknown): void })?.emit(
         evt.key,
         payload,
       );
@@ -569,11 +760,14 @@ function resolvePolicyConfig(
 function collectOpEvent(
   opConfig: RouteOperationConfig,
   opName: string,
-  eventMap: Map<string, { key: string; payload?: string[] }>,
+  eventMap: Map<string, RouteEventConfig>,
 ): void {
   if (!opConfig.event) return;
-  const evt = typeof opConfig.event === 'string' ? { key: opConfig.event } : opConfig.event;
-  eventMap.set(opName, { key: evt.key, payload: 'payload' in evt ? evt.payload : undefined });
+  const evt: RouteEventConfig =
+    typeof opConfig.event === 'string'
+      ? { key: opConfig.event, exposure: ['internal'] }
+      : { exposure: ['internal'], ...opConfig.event };
+  eventMap.set(opName, evt);
 }
 
 /**

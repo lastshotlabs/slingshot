@@ -1,10 +1,10 @@
 import type {
-  DynamicEventBus,
   NotificationBuilder,
   NotificationCreatedEventPayload,
   NotificationRecord,
   NotifyInput,
   SlingshotEventBus,
+  SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
 import { freezeNotificationData } from './data';
 import { resolveEffectivePriority, resolvePreferences } from './preferences';
@@ -26,6 +26,7 @@ export interface CreateNotificationBuilderOptions {
   readonly notifications: NotificationAdapter;
   readonly preferences: NotificationPreferenceAdapter;
   readonly bus: SlingshotEventBus;
+  readonly events: SlingshotEvents;
   readonly rateLimitBackend: RateLimitBackend;
   readonly defaultPreferences: NotificationPreferenceDefaults;
   readonly rateLimit: {
@@ -43,8 +44,6 @@ export interface CreateNotificationBuilderOptions {
 export function createNotificationBuilder(
   options: CreateNotificationBuilderOptions,
 ): NotificationBuilder {
-  const dynamicBus = options.bus as unknown as Pick<DynamicEventBus, 'emit'>;
-
   async function notify(input: NotifyInput): Promise<NotificationRecord | null> {
     if (input.actorId === input.userId && !input.allowSelfNotify) {
       return null;
@@ -86,10 +85,16 @@ export function createNotificationBuilder(
           data: freezeNotificationData({ ...(existing.data ?? {}), count: nextCount }),
         });
         if (updated) {
-          dynamicBus.emit('notifications:notification.updated', {
+          options.events.publish('notifications:notification.updated', {
             id: existing.id,
             userId: input.userId,
+            tenantId: input.tenantId ?? null,
             changes: { count: nextCount },
+          }, {
+            tenantId: input.tenantId ?? null,
+            userId: input.userId,
+            actorId: input.actorId ?? input.userId,
+            source: 'system',
           });
         }
         return updated;
@@ -124,7 +129,12 @@ export function createNotificationBuilder(
         notification,
         preferences,
       };
-      dynamicBus.emit('notifications:notification.created', payload);
+      options.events.publish('notifications:notification.created', payload, {
+        tenantId: notification.tenantId ?? null,
+        userId: notification.userId,
+        actorId: notification.actorId ?? notification.userId,
+        source: 'system',
+      });
     }
 
     return notification;

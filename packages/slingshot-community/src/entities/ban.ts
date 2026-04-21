@@ -39,6 +39,12 @@ export const Ban = defineEntity('Ban', {
       event: {
         key: 'community:user.banned',
         payload: ['userId', 'containerId', 'bannedBy', 'reason', 'expiresAt'],
+        exposure: ['client-safe'],
+        scope: {
+          userId: 'record:userId',
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
       },
       middleware: ['auditLog', 'banNotify'],
     },
@@ -48,12 +54,19 @@ export const Ban = defineEntity('Ban', {
       getUserBan: { auth: 'userAuth' },
       removeBan: {
         permission: { requires: 'community:container.lift-ban' },
-        event: { key: 'community:user.unbanned', payload: ['userId', 'containerId'] },
+        event: {
+          key: 'community:user.unbanned',
+          payload: ['userId', 'containerId'],
+          exposure: ['client-safe'],
+          scope: {
+            userId: 'record:userId',
+            resourceType: 'community:container',
+            resourceId: 'record:containerId',
+          },
+        },
         middleware: ['auditLog'],
       },
     },
-
-    clientSafeEvents: ['community:user.banned', 'community:user.unbanned'],
 
     middleware: { auditLog: true, banNotify: true },
   },

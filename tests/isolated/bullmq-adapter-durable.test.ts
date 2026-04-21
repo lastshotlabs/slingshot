@@ -151,7 +151,16 @@ describe('BullMQ adapter — durable subscription setup (mocked bullmq)', () => 
 
     const q = createdQueues[before] as MockQueue;
     expect(q.addedJobs).toHaveLength(1);
-    expect(q.addedJobs[0]!.data).toEqual({ userId: 'u1', sessionId: 's1' });
+    expect(q.addedJobs[0]!.data).toMatchObject({
+      key: 'auth:login',
+      payload: { userId: 'u1', sessionId: 's1' },
+      meta: {
+        ownerPlugin: 'slingshot-raw-bus',
+        exposure: ['internal'],
+        scope: null,
+        source: 'system',
+      },
+    });
   });
 
   it('emit() routes to the correct queue (event prefix match)', async () => {
@@ -284,11 +293,18 @@ describe('BullMQ adapter — durable subscription setup (mocked bullmq)', () => 
     await new Promise(r => setTimeout(r, 10));
 
     const queue = createdQueues[beforeQueue] as MockQueue;
-    expect(queue.addedJobs[0]?.data).toEqual({
-      __slingshot_serialized: Buffer.from(
-        JSON.stringify({ wrapped: { userId: 'u1', sessionId: 's1' } }),
-      ).toString('base64'),
+    expect(queue.addedJobs[0]?.data).toMatchObject({
       __slingshot_content_type: 'application/x-test',
+    });
+    const decoded = JSON.parse(
+      Buffer.from(
+        (queue.addedJobs[0]?.data as { __slingshot_serialized: string }).__slingshot_serialized,
+        'base64',
+      ).toString(),
+    ) as { wrapped: { key: string; payload: { userId: string; sessionId: string } } };
+    expect(decoded.wrapped).toMatchObject({
+      key: 'auth:login',
+      payload: { userId: 'u1', sessionId: 's1' },
     });
 
     const worker = createdWorkers[beforeWorker] as MockWorker;

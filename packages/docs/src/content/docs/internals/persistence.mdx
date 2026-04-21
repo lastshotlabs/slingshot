@@ -41,6 +41,11 @@ instead of being injected through repository factories.
 `buildContext()` is the boundary where that app-level runtime draft is copied into context; adapter
 factories never receive it through `StoreInfra`.
 
+That same boundary now owns registry-backed events too. `buildContext()` attaches the canonical
+`ctx.events` publisher next to `ctx.bus`, and `ctx.destroy()` emits the framework `app:shutdown`
+event before teardown begins. Persistence factories still stay transport-agnostic; shutdown and
+external delivery policy live at the context layer, not in repository resolution.
+
 ## Writing a set of factories
 
 ```typescript

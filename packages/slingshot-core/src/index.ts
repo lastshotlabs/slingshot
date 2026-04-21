@@ -23,7 +23,6 @@ export type {
   DynamicEventBus,
   SecurityEventKey,
   SubscriptionOpts,
-  ClientSafeEventKey,
 } from './eventBus';
 export type {
   EventSerializer,
@@ -33,6 +32,30 @@ export type {
 export { JsonEventSerializer, JSON_SERIALIZER } from './eventSerializer';
 export type { EventSchemaRegistry, EventValidationResult } from './eventSchemaRegistry';
 export { createEventSchemaRegistry, validateEventPayload } from './eventSchemaRegistry';
+export type {
+  EventDefinition,
+  EventExposure,
+  EventKey,
+  EventPublishContext,
+  EventScope,
+  EventSubscriptionPrincipal,
+} from './eventDefinition';
+export {
+  createDefaultSubscriberAuthorizer,
+  defineEvent,
+  eventHasExternalExposure,
+  matchSubscriberToScope,
+  validateEventDefinition,
+} from './eventDefinition';
+export type { EventEnvelope, EventEnvelopeMeta } from './eventEnvelope';
+export { createEventEnvelope, createRawEventEnvelope, isEventEnvelope } from './eventEnvelope';
+export type {
+  EventDefinitionRegistry,
+  EventDefinitionRegistryOptions,
+} from './eventDefinitionRegistry';
+export { createEventDefinitionRegistry } from './eventDefinitionRegistry';
+export type { CreateEventPublisherOptions, SlingshotEvents } from './eventPublisher';
+export { authorizeEventSubscriber, createEventPublisher } from './eventPublisher';
 export type {
   KafkaConnectorHandle,
   KafkaConnectorHealth,
@@ -44,8 +67,6 @@ export {
   InProcessAdapter,
   createInProcessAdapter,
   SECURITY_EVENT_TYPES,
-  BUILTIN_CLIENT_SAFE_KEYS,
-  FORBIDDEN_CLIENT_PREFIXES,
 } from './eventBus';
 /** Adapter that normalizes router behavior across Slingshot runtimes. */
 export { createRouterAdapter } from './routerAdapter';
@@ -220,6 +241,8 @@ export {
 /** Actor-based identity abstraction for decoupling plugins from auth field names. */
 export type { Actor, ActorKind, IdentityResolver, IdentityResolverInput } from './identity';
 export { ANONYMOUS_ACTOR, createDefaultIdentityResolver } from './identity';
+/** Request-context actor helpers for Hono middleware and routes. */
+export { getActor, getActorId, getActorTenantId } from './actorContext';
 
 // --- authVariables ---
 /** Request-context variable typing for auth-aware Hono handlers. */
@@ -331,13 +354,16 @@ export type { PublishedInteractionsPeer } from './publishedInteractionsPeer';
 export { getPublishedInteractionsPeerOrNull } from './publishedInteractionsPeer';
 
 // --- pluginState ---
-export type { PluginStateCarrier, PluginStateMap } from './pluginState';
+export type { EntityAdapterLookup, PluginStateCarrier, PluginStateMap } from './pluginState';
 /** Shared `pluginState` helpers for cross-plugin runtime access without full context coupling. */
 export {
   getPluginState,
   getPluginStateOrNull,
   getPluginStateFromRequest,
   getPluginStateFromRequestOrNull,
+  maybeEntityAdapter,
+  publishEntityAdaptersState,
+  requireEntityAdapter,
   resolvePluginState,
 } from './pluginState';
 
@@ -604,3 +630,12 @@ export type {
   ContentSegment,
 } from './content';
 export { MAX_CONTENT_BODY_LENGTH, MAX_CONTENT_MENTIONS, MAX_CONTENT_ATTACHMENTS } from './content';
+export {
+  assetRefSchema,
+  quotePreviewSchema,
+  locationDataSchema,
+  contactDataSchema,
+  systemEventDataSchema,
+} from './content.schemas';
+export { generateFromSchema, generateMany, generateExample } from './faker';
+export type { GenerateOptions } from './faker';

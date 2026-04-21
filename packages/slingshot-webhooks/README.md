@@ -7,29 +7,33 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-webhooks
 
 ## Purpose
 
-@lastshotlabs/slingshot-webhooks is the feature package in the Slingshot workspace.
-
-Package documentation for this Slingshot workspace module.
+`@lastshotlabs/slingshot-webhooks` owns outbound webhook endpoint management, scoped delivery, and
+inbound provider intake. It does not own the event universe. Event owners define what is externally
+deliverable through the registry, and this package projects those definitions onto subscribers.
 
 ## Package Boundaries
 
-- Document which responsibilities this package owns.
-- Call out which contracts come from `slingshot-core` or neighboring packages.
-- Keep package-specific examples here instead of hiding them in the root docs.
+- Own endpoint persistence, delivery orchestration, retry state, and inbound provider hooks.
+- Consume `slingshot-core` event definitions, event envelopes, and subscriber authorization rules.
+- Stay policy-aware at the boundary but transport-light underneath. Queue implementations should carry projected payloads and subscriber metadata, not rebuild authorization later.
+- Do not reintroduce a webhook-owned default event universe, string allowlist API, or cross-tenant widening path.
 
 ## Operational Notes
 
-- Add startup requirements, debugging tips, and failure modes.
-- Record migrations when config shapes or lifecycle timing changes.
 - Webhook management routes now fail closed. Configure `adminGuard` unless you explicitly disable the endpoints route group.
 - Manifest mode can resolve the webhook adapter from `store` when you cannot pass a live adapter instance. Use handler refs for `adminGuard`, custom queues, and inbound providers.
 - Webhook endpoint URLs must use `http:` or `https:`. Non-HTTP schemes are rejected at validation time.
-- Webhook endpoints must always keep at least one subscribed event. To pause delivery, set `status: 'disabled'` instead of sending an empty `events` array on update.
+- Management writes use `subscriptions`, not legacy `events`. Each entry is either `{ event }` or `{ pattern }`, and patterns are normalized up front into concrete approved event keys.
+- Endpoint records now carry `ownerType`, `ownerId`, optional `tenantId`, and normalized `subscriptions`. Delivery records preserve `eventId`, `occurredAt`, subscriber identity, and source scope.
+- Existing legacy rows are normalized at startup. If stored subscriptions cannot be resolved safely, the endpoint is disabled rather than widened.
 
 ## Gotchas
 
-- Record edge cases that surprised us.
+- Plugin config still has an `events` field, but that is only the webhook plugin's own intake filter on the app bus. It is not the endpoint-management payload shape.
+- Future plugin event registrations do not silently expand existing endpoint subscriptions. Concrete event subscriptions stay frozen until an endpoint is updated explicitly.
 
 ## Key Files
 
 - `packages/slingshot-webhooks/src/index.ts`
+- `packages/slingshot-webhooks/src/manifest/runtime.ts`
+- `packages/slingshot-webhooks/src/lib/eventWiring.ts`

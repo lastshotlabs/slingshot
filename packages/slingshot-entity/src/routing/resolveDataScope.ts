@@ -3,10 +3,12 @@
  */
 import type { Context } from 'hono';
 import type {
+  AppEnv,
   EntityDataScopedCrudOp,
   EntityRouteDataScopeConfig,
   EntityRouteDataScopeSource,
 } from '@lastshotlabs/slingshot-core';
+import { getActor } from '@lastshotlabs/slingshot-core';
 
 /**
  * Outcome of resolving the active `dataScope` entries for a CRUD operation.
@@ -50,15 +52,35 @@ export function dataScopesFor(
  * @param c - The active Hono request context.
  * @returns The resolved value, or `undefined` when the source is absent.
  */
-export function resolveDataScopeValue(from: EntityRouteDataScopeSource, c: Context): unknown {
+function resolveDotPath(value: unknown, path: string): unknown {
+  let current: unknown = value;
+  for (const part of path.split('.')) {
+    if (current === null || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+export function resolveDataScopeValue(from: EntityRouteDataScopeSource, c: Context<AppEnv>): unknown {
   const colon = from.indexOf(':');
   if (colon < 0) return undefined;
 
   const prefix = from.slice(0, colon);
   const key = from.slice(colon + 1);
+  const getContextValue = c.get as (name: string) => unknown;
 
   if (prefix === 'ctx') {
-    const getContextValue = c.get as (name: string) => unknown;
+    const actor = getActor(c);
+    if (key === 'authUserId') return actor.id ?? getContextValue('authUserId') ?? undefined;
+    if (key === 'tenantId') return actor.tenantId ?? getContextValue('tenantId') ?? undefined;
+    if (key === 'sessionId') return actor.sessionId ?? getContextValue('sessionId') ?? undefined;
+    if (key === 'actor.id') return actor.id ?? undefined;
+    if (key === 'actor.tenantId') return actor.tenantId ?? undefined;
+    if (key === 'actor.kind') return actor.kind;
+    if (key === 'actor.sessionId') return actor.sessionId ?? undefined;
+    if (key.startsWith('actor.claims.')) {
+      return resolveDotPath(actor.claims, key.slice('actor.claims.'.length));
+    }
     const value = getContextValue(key);
     return value == null ? undefined : value;
   }
@@ -82,7 +104,7 @@ export function resolveDataScopeValue(from: EntityRouteDataScopeSource, c: Conte
 export function resolveDataScopes(
   scopes: readonly EntityRouteDataScopeConfig[],
   op: EntityDataScopedCrudOp,
-  c: Context,
+  c: Context<AppEnv>,
 ): DataScopeResolution {
   const applicable = dataScopesFor(scopes, op);
   const bindings: Record<string, unknown> = {};

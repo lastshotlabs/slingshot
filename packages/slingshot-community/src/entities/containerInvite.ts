@@ -51,7 +51,6 @@ export const ContainerInvite = defineEntity('ContainerInvite', {
     operations: {
       redeemInvite: { auth: 'userAuth' },
     },
-    clientSafeEvents: ['community:invite.redeemed'],
   },
 });
 

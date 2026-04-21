@@ -43,7 +43,6 @@ export const FavoriteRoom = defineEntity('FavoriteRoom', {
       unfavorite: { auth: 'userAuth' },
       updateOrder: { auth: 'userAuth' },
     },
-    clientSafeEvents: [],
   },
 });
 

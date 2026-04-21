@@ -34,6 +34,11 @@ export const ThreadTag = defineEntity('ThreadTag', {
       event: {
         key: 'community:thread.tagged',
         payload: ['threadId', 'tagId', 'containerId'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
       },
     },
     delete: {
@@ -44,13 +49,17 @@ export const ThreadTag = defineEntity('ThreadTag', {
       event: {
         key: 'community:thread.untagged',
         payload: ['threadId', 'tagId', 'containerId'],
+        exposure: ['client-safe'],
+        scope: {
+          resourceType: 'community:container',
+          resourceId: 'record:containerId',
+        },
       },
     },
     operations: {
       listByThread: { auth: 'none' },
       listByTag: { auth: 'none' },
     },
-    clientSafeEvents: ['community:thread.tagged', 'community:thread.untagged'],
   },
 });
 

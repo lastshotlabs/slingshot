@@ -19,6 +19,8 @@ import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
@@ -155,6 +157,10 @@ export async function createAssetsTestApp(
 
   const app = new Hono();
   const bus = new InProcessAdapter();
+  const events = createEventPublisher({
+    definitions: createEventDefinitionRegistry(),
+    bus,
+  });
   const frameworkConfig = createTestFrameworkConfig();
   const pluginState = new Map<string, unknown>();
   pluginState.set(PERMISSIONS_STATE_KEY, createOwnerOnlyPermissionsState());
@@ -164,6 +170,8 @@ export async function createAssetsTestApp(
     ws: null,
     wsEndpoints: {},
     wsPublish: null,
+    bus,
+    events,
   } as unknown as Parameters<typeof attachContext>[1]);
 
   const routeAuth = {
@@ -186,6 +194,7 @@ export async function createAssetsTestApp(
     app,
     config: frameworkConfig as never,
     bus: bus as unknown as import('@lastshotlabs/slingshot-core').SlingshotEventBus,
+    events,
   } as unknown as import('@lastshotlabs/slingshot-core').PluginSetupContext;
 
   await plugin.setupMiddleware?.(setupContext);

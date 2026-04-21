@@ -40,9 +40,6 @@ export function makeEventBus(onEmit?: (event: string) => void): SlingshotEventBu
     on: () => {},
     off: () => {},
     shutdown: async () => {},
-    clientSafeKeys: new Set<string>(),
-    registerClientSafeEvents: () => {},
-    ensureClientSafeEventKey: (key: string) => key,
   } as unknown as SlingshotEventBus;
 }
 

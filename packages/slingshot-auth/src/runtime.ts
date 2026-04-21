@@ -10,6 +10,7 @@ import type {
   RuntimePassword,
   SigningConfig,
   SlingshotEventBus,
+  SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
 import {
   AUTH_PLUGIN_STATE_KEY,
@@ -58,6 +59,7 @@ export interface AuthRuntimeContext {
     input: AuthUserAccessInput,
   ) => Promise<AuthUserAccessDecision | boolean | void>;
   readonly eventBus: SlingshotEventBus;
+  readonly events: SlingshotEvents;
   readonly config: AuthResolvedConfig;
   readonly stores: Readonly<ResolvedStores>;
   readonly password: RuntimePassword;

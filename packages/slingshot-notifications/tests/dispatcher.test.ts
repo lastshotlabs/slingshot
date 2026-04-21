@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
 import { createIntervalDispatcher } from '../src/dispatcher';
-import { createNotificationsTestAdapters } from '../src/testing';
+import { createNotificationsTestAdapters, createNotificationsTestEvents } from '../src/testing';
 
 describe('createIntervalDispatcher', () => {
   test('resolves stored preferences before emitting scheduled notifications', async () => {
     const adapters = createNotificationsTestAdapters();
     const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
     let createdEvent:
       | {
           notification: { id: string; userId: string };
@@ -45,6 +46,7 @@ describe('createIntervalDispatcher', () => {
       notifications: adapters.notifications,
       preferences: adapters.preferences,
       bus,
+      events,
       intervalMs: 1_000,
       maxPerTick: 10,
     });

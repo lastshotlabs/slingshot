@@ -1,14 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { SEARCH_CLIENT_SAFE_KEYS } from '../src/events';
 import * as entry from '../src/index';
 import { createSearchPlugin } from '../src/plugin';
 import { SEARCH_ROUTES } from '../src/routes/index';
 import { createTestSearchPlugin, createTestSearchProvider } from '../src/testing';
 
 describe('slingshot-search public api', () => {
-  test('entrypoint re-exports plugin, client-safe events, and route ids', () => {
+  test('entrypoint re-exports plugin and route ids', () => {
     expect(entry.createSearchPlugin).toBe(createSearchPlugin);
-    expect(entry.SEARCH_CLIENT_SAFE_KEYS).toBe(SEARCH_CLIENT_SAFE_KEYS);
     expect(entry.SEARCH_ROUTES).toBe(SEARCH_ROUTES);
   });
 

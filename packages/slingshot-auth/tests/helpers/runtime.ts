@@ -6,6 +6,8 @@ import type {
   ResolvedStores,
   SlingshotContext,
   SlingshotEventBus,
+  SlingshotEventMap,
+  SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryAuthAdapter } from '../../src/adapters/memoryAuth';
 import { createAuthResolvedConfig } from '../../src/config/authConfig';
@@ -57,12 +59,51 @@ export function makeEventBus(onEmit?: (event: string) => void): SlingshotEventBu
       onEmit?.(event);
     },
     on: () => {},
+    onEnvelope: () => {},
     off: () => {},
+    offEnvelope: () => {},
     shutdown: async () => {},
-    clientSafeKeys: new Set<string>(),
-    registerClientSafeEvents: () => {},
-    ensureClientSafeEventKey: (key: string) => key,
   } as unknown as SlingshotEventBus;
+}
+
+function makeEvents(getBus: () => SlingshotEventBus): SlingshotEvents {
+  return {
+    definitions: {
+      register() {},
+      get() {
+        return undefined;
+      },
+      has() {
+        return false;
+      },
+      list() {
+        return [];
+      },
+      freeze() {},
+      frozen: false,
+    },
+    register() {},
+    get() {
+      return undefined;
+    },
+    list() {
+      return [];
+    },
+    publish<K extends keyof SlingshotEventMap>(key: K, payload: SlingshotEventMap[K]) {
+      getBus().emit(key, payload);
+      return {
+        key,
+        payload,
+        meta: {
+          eventId: 'test-event-id',
+          occurredAt: new Date(0).toISOString(),
+          ownerPlugin: 'slingshot-auth-test',
+          exposure: ['internal'] as const,
+          scope: null,
+        },
+      };
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -86,6 +127,7 @@ export function makeTestRuntime(
     adapter,
     config: createAuthResolvedConfig(configOverrides),
     eventBus: makeEventBus(),
+    events: undefined as unknown as SlingshotEvents,
     password: passwordRuntime,
     getDummyHash: makeDummyHashGetter(passwordRuntime),
     signing: { secret: 'test-signing-secret-32-chars-ok!' },
@@ -120,6 +162,7 @@ export function makeTestRuntime(
   // The securityGate closures read from base.credentialStuffing/lockout, which
   // is the same slot tests mutate via runtime.credentialStuffing = ... .
   return Object.assign(base, {
+    events: makeEvents(() => base.eventBus),
     securityGate: createSecurityGate(
       rateLimitService,
       () => base.credentialStuffing,

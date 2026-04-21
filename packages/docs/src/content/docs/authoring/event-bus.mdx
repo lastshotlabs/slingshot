@@ -107,22 +107,56 @@ After this, `bus.emit('note.created', ...)` is fully typed and `bus.on('note.cre
 
 The SSE endpoint only forwards events you have explicitly flagged as client-safe. This is not opt-out - it is opt-in. Internal events such as auth tokens, security signals, and delivery internals never reach browser clients regardless of what you register.
 
-Register your safe events in `setupPost`:
+Register externally deliverable events before publishing them:
 
 ```typescript
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { defineEvent, type SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'note.created': { userId: string; noteId: string };
+    'note.updated': { userId: string; noteId: string };
+    'note.deleted': { userId: string; noteId: string };
+  }
+}
 
 const plugin: SlingshotPlugin = {
   name: 'notes',
-  setupPost({ bus }) {
-    bus.registerClientSafeEvents(['note.created', 'note.updated', 'note.deleted']);
+  setupMiddleware({ events }) {
+    events.register(
+      defineEvent('note.created', {
+        ownerPlugin: 'notes',
+        exposure: ['client-safe'],
+        resolveScope(payload) {
+          return { userId: payload.userId, actorId: payload.userId };
+        },
+      }),
+    );
+    events.register(
+      defineEvent('note.updated', {
+        ownerPlugin: 'notes',
+        exposure: ['client-safe'],
+        resolveScope(payload) {
+          return { userId: payload.userId, actorId: payload.userId };
+        },
+      }),
+    );
+    events.register(
+      defineEvent('note.deleted', {
+        ownerPlugin: 'notes',
+        exposure: ['client-safe'],
+        resolveScope(payload) {
+          return { userId: payload.userId, actorId: payload.userId };
+        },
+      }),
+    );
   },
 };
 
 void plugin;
 ```
 
-Forbidden namespaces are never forwarded regardless of registration:
+Forbidden namespaces are never forwarded regardless of event-definition exposure:
 
 | Namespace              | Reason                            |
 | ---------------------- | --------------------------------- |

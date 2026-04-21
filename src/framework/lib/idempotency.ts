@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { HEADER_IDEMPOTENCY_KEY, hmacSign, sha256 } from '@lastshotlabs/slingshot-core';
+import { HEADER_IDEMPOTENCY_KEY, getActorId, hmacSign, sha256 } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,7 +81,7 @@ export const idempotent =
 
     const ctx = c.get('slingshotCtx');
     const adapter = ctx.persistence.idempotency;
-    const userId = c.get('authUserId') ?? null;
+    const userId = getActorId(c);
     const signingConfig = ctx.signing as import('@lib/signingConfig').SigningConfig | null;
     const signingSecret = signingConfig?.secret ?? null;
     const key = deriveKey(rawKey, userId, { config: signingConfig, secret: signingSecret });

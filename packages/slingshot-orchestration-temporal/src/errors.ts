@@ -1,5 +1,5 @@
 import type { RunError } from '@lastshotlabs/slingshot-orchestration';
-import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration/errors';
+import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
 
 export function toRunError(error: unknown): RunError {
   if (error instanceof Error) {

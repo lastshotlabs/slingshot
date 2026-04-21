@@ -17,7 +17,7 @@ slingshot start
   ├── 5. Auto-load first-party plugins via builtinPlugins dispatch table
   │      └── Resolve built-in strategy strings in plugin configs
   ├── 6. Auto-register built-in manifest event-bus adapters when selected
-  │      └── Currently: BullMQ when manifest.eventBus selects "bullmq"
+  │      └── Currently: BullMQ and Kafka when manifest.eventBus selects them
   ├── 7. manifestToAppConfig() — convert manifest to CreateServerConfig
   │      ├── Resolve built-in strategy strings → runtime functions
   │      ├── Resolve { handler: "name" } references → actual functions
@@ -85,6 +85,20 @@ export async function onLog(entry: RequestLogEntry) {
 ```
 
 If a referenced handler isn't exported from the handlers file, `slingshot start` throws before serving any requests. Duplicate handler names, plugin names, event-bus names, secret-provider names, and hook names also throw during registration instead of silently overriding earlier entries.
+
+### Orchestration definition loading
+
+The same auto-loading pass also understands orchestration definitions.
+
+- A direct exported `ResolvedTask` is registered into the task bucket by its `name`.
+- A direct exported `ResolvedWorkflow` is registered into the workflow bucket by its `name`.
+- An exported `tasks` object is scanned for `ResolvedTask` values.
+- An exported `workflows` object is scanned for `ResolvedWorkflow` values.
+
+That matters for the built-in `slingshot-orchestration` plugin: its manifest config resolves task
+and workflow names through the same registry that already owns handlers, hooks, plugins, event
+buses, and secret providers. In manifest mode, code still lives in handler modules, but the
+manifest can stay declarative and refer to orchestration definitions by name.
 
 ### The `hooks` export
 
@@ -216,9 +230,20 @@ Third-party plugins register via `registry.registerPlugin()` before you call `cr
 
 ## Built-in event bus dispatch
 
-`createServerFromManifest()` applies the same pattern to selected manifest event-bus literals. Today, `eventBus: "bullmq"` and the object form `{ "type": "bullmq", "config": { ... } }` auto-register the BullMQ adapter if the caller has not already registered a `bullmq` event bus in the registry.
+`createServerFromManifest()` applies the same pattern to selected manifest event-bus literals. Today:
 
-That keeps BullMQ optional: the package is imported only when the manifest selects it. Custom buses such as Redis pub/sub, Kafka, RabbitMQ, or NATS still go through `registry.registerEventBus()`.
+- `eventBus: "bullmq"` and `{ "type": "bullmq", "config": { ... } }` auto-register the BullMQ adapter
+- `eventBus: "kafka"` and `{ "type": "kafka", "config": { ... } }` auto-register the Kafka adapter
+
+In both cases the built-in package stays optional and is loaded only when the manifest selects it.
+If the caller has already registered an event bus with the same name in the registry, the user
+registration wins and no built-in adapter is loaded.
+
+Custom buses such as Redis pub/sub, RabbitMQ, or NATS still go through `registry.registerEventBus()`.
+
+The same manifest bootstrap path also resolves `kafkaConnectors` after handlers are loaded, so
+inbound connector handler refs are validated and converted before `manifestToAppConfig()` builds the
+final `CreateServerConfig`.
 
 ## Environment variable interpolation
 

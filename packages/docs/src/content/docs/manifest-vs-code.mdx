@@ -42,9 +42,9 @@ Slingshot gives you two ways to configure your server. They produce identical ru
 slingshot start
 ```
 
-Built-in manifest conveniences live on top of the same runtime config surface. For example, `createServerFromManifest()` can auto-register the optional BullMQ event bus when you set `"eventBus": "bullmq"`, while custom buses still go through the handler registry.
+Built-in manifest conveniences live on top of the same runtime config surface. For example, `createServerFromManifest()` can auto-register the optional BullMQ or Kafka event bus when you set `"eventBus": "bullmq"` or `"eventBus": "kafka"`, while custom buses still go through the handler registry.
 
-Manifest startup also resolves built-in strategy strings and handler refs before plugin factories run. By the time a first-party plugin is instantiated, fields such as admin gates, search tenant resolution, SSR runtime adapters, and webhook handlers have already been converted into their runtime function or object forms.
+Manifest startup also resolves built-in strategy strings and handler refs before plugin factories run. By the time a first-party plugin is instantiated, fields such as admin gates, search tenant resolution, SSR runtime adapters, webhook handlers, and orchestration adapter config have already been converted into their runtime function or object forms.
 
 ## Code
 
@@ -125,7 +125,14 @@ export async function onLog(entry: RequestLogEntry) {
 
 The manifest references them by name. The framework loads the handlers file and calls the right export at runtime.
 
-The same registry mechanism also handles custom event buses, custom secret providers, and custom plugins when you need to go beyond the built-in manifest literals.
+The same registry mechanism also handles custom event buses, custom secret providers, custom plugins, and orchestration definitions when you need to go beyond the built-in manifest literals.
+
+For orchestration manifests, the handlers loader also scans for:
+
+- direct `ResolvedTask` and `ResolvedWorkflow` exports
+- collection exports named `tasks` and `workflows`
+
+Those definitions are registered before the built-in `slingshot-orchestration` plugin is created, so the manifest can refer to workflow and task names while still keeping the handlers file as the source of code.
 
 Manifest validation is not only schema-level. Slingshot also performs cross-field checks for admin page configs, including bad page references, invalid lookup operation names, and template fields that do not exist on the referenced entity, so these mistakes fail during startup instead of surfacing as broken UI routes later.
 

@@ -1,6 +1,6 @@
 ---
 title: Orchestration Adapters
-description: Choosing between memory, SQLite, and BullMQ for Slingshot orchestration
+description: Choosing between memory, SQLite, BullMQ, and Temporal for Slingshot orchestration
 ---
 
 Adapters decide where orchestration runs execute and how durable they are. Task and workflow
@@ -72,22 +72,58 @@ When used through `createOrchestrationPlugin()`, the plugin starts and shuts dow
 you. When used directly through `createOrchestrationRuntime()`, the adapter now lazily starts on
 first use, so `runTask()` / `runWorkflow()` do not require a separate manual `start()` call.
 
+## Temporal
+
+Use `createTemporalOrchestrationAdapter()` from
+`@lastshotlabs/slingshot-orchestration-temporal` when you want:
+
+- distributed workers across multiple machines
+- durable workflow history, timers, retries, and signals
+- Temporal-native scheduling and visibility
+- Slingshot task/workflow definitions running on a real Temporal cluster
+
+Tradeoffs:
+
+- requires an existing Temporal service or Temporal Cloud namespace
+- requires a separate Node-based worker process
+- operationally heavier than SQLite or BullMQ
+
+```typescript
+import { Connection, Client } from '@temporalio/client';
+import { createTemporalOrchestrationAdapter } from '@lastshotlabs/slingshot-orchestration-temporal';
+
+const connection = await Connection.connect({ address: 'localhost:7233' });
+const client = new Client({ connection, namespace: 'default' });
+
+const adapter = createTemporalOrchestrationAdapter({
+  client,
+  connection,
+  namespace: 'default',
+  workflowTaskQueue: 'slingshot-workflows',
+  defaultActivityTaskQueue: 'slingshot-activities',
+  ownsConnection: false,
+});
+```
+
+Temporal worker processes are separate from the HTTP server. For real deployments, pair the adapter
+with `createTemporalOrchestrationWorker()` or the `slingshot orchestration worker` CLI command so
+workflow code and activity handlers can poll the configured task queues.
+
 ## Capability matrix
 
-| Capability             | Memory | SQLite | BullMQ |
-| ---------------------- | ------ | ------ | ------ |
-| Core execution         | Yes    | Yes    | Yes    |
-| Scheduling             | No     | No     | Yes    |
-| Run listing            | Yes    | Yes    | Yes    |
-| Progress subscriptions | Yes    | Yes    | Yes    |
-| Signals                | No     | No     | No     |
+| Capability             | Memory | SQLite | BullMQ | Temporal |
+| ---------------------- | ------ | ------ | ------ | -------- |
+| Core execution         | Yes    | Yes    | Yes    | Yes      |
+| Scheduling             | No     | No     | Yes    | Yes      |
+| Run listing            | Yes    | Yes    | Yes    | Yes      |
+| Progress subscriptions | Yes    | Yes    | Yes    | Yes      |
+| Signals                | No     | No     | No     | Yes      |
 
 ## Not available yet
 
 These providers are planned but not shipped in the current worktree:
 
 - Trigger.dev
-- Temporal
 - Step Functions
 
 If you need those today, the answer is still "not implemented", not "hidden behind a flag".

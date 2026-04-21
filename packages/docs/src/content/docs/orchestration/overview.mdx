@@ -18,6 +18,7 @@ memory, SQLite, or BullMQ. You define the work once, then swap adapters as infra
 | `@lastshotlabs/slingshot-orchestration`        | Portable task/workflow definitions, runtime, memory adapter, SQLite adapter |
 | `@lastshotlabs/slingshot-orchestration-plugin` | Slingshot plugin integration, runtime lookup helpers, HTTP routes           |
 | `@lastshotlabs/slingshot-orchestration-bullmq` | BullMQ-backed adapter for Redis deployments                                 |
+| `@lastshotlabs/slingshot-orchestration-temporal` | Temporal-backed adapter and worker supervisor for distributed orchestration |
 
 ## Current support
 
@@ -26,12 +27,14 @@ memory, SQLite, or BullMQ. You define the work once, then swap adapters as infra
 | Memory             | Supported       | In-process, non-durable                   |
 | SQLite             | Supported       | Durable single-node execution             |
 | BullMQ             | Supported       | Redis-backed queues, scheduling, progress |
-| Manifest mode      | Not shipped yet | Planned as Phase 4                        |
+| Temporal           | Supported       | Distributed workers, schedules, signals   |
+| Manifest mode      | Supported       | Handlers-file task/workflow discovery     |
 | Trigger.dev        | Not shipped yet | Planned follow-up provider                |
-| Temporal           | Not shipped yet | Planned follow-up provider                |
+| Step Functions     | Not shipped yet | Planned follow-up provider                |
 
-So, no: Temporal and the other cloud-provider adapters are not available in this worktree yet.
-Current provider support stops at memory, SQLite, and BullMQ.
+Current provider support now includes `@lastshotlabs/slingshot-orchestration-temporal`.
+Trigger.dev and the other cloud-provider adapters are still follow-up work, but Temporal support
+is implemented in this worktree.
 
 ## Code-first today
 
@@ -98,14 +101,16 @@ safe.
 
 ## Handlers and manifest status
 
-The current orchestration implementation is code-first only.
+Manifest-driven orchestration is now supported.
 
-- You define tasks and workflows in TypeScript.
-- You pass those definitions directly into the runtime or plugin.
-- You pass route middleware directly as functions.
+- You can still define tasks and workflows directly in TypeScript and pass them into the runtime.
+- In manifest mode, `createServerFromManifest()` loads `ResolvedTask` and `ResolvedWorkflow`
+  exports from the handlers file or handlers directory.
+- The built-in `slingshot-orchestration` plugin resolves task and workflow names from that registry
+  before the plugin is instantiated.
 
-Manifest-driven orchestration and handlers-file export resolution are planned for Phase 4, but they
-are not shipped in this worktree yet.
+That means orchestration definitions stay in code, but the server and worker bootstrap path can
+remain manifest-first.
 
 ## Design boundary
 

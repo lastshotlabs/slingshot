@@ -2,12 +2,33 @@
  * Portable orchestration surface for tasks, workflows, and built-in adapters.
  */
 export { OrchestrationError } from './errors';
+/**
+ * Define a portable orchestration task with typed input, output, and handler logic.
+ */
 export { defineTask } from './defineTask';
+/**
+ * Define workflows and compose portable workflow steps, sleeps, and parallel branches.
+ */
 export { defineWorkflow, parallel, sleep, step, stepResult } from './defineWorkflow';
+/**
+ * Create the runtime wrapper that executes tasks and workflows against a selected adapter.
+ */
 export { createOrchestrationRuntime } from './runtime';
+/**
+ * Create the in-memory orchestration adapter for local development and tests.
+ */
 export { createMemoryAdapter } from './adapters/memory';
+/**
+ * Create the SQLite-backed orchestration adapter for durable single-node execution.
+ */
 export { createSqliteAdapter } from './adapters/sqlite';
+/**
+ * Shared run-handle helpers for adapter implementations and consumers.
+ */
 export { createCachedRunHandle, generateRunId } from './adapter';
+/**
+ * Public task, workflow, adapter, run, and capability types for the portable orchestration layer.
+ */
 export type {
   AnyResolvedTask,
   AnyResolvedWorkflow,

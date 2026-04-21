@@ -16,6 +16,10 @@ import type {
   SlingshotEventBus,
   ValidationMode,
 } from '@lastshotlabs/slingshot-core';
+import type {
+  AnyResolvedTask,
+  AnyResolvedWorkflow,
+} from '@lastshotlabs/slingshot-orchestration';
 import { getOrganizationsOrgServiceOrNull } from '@lastshotlabs/slingshot-organizations';
 import { type CreateServerConfig, createServer, getServerContext } from '../server';
 import { createBuiltinPluginFactory, loadBuiltinPlugin } from './builtinPlugins';
@@ -52,6 +56,67 @@ export interface ResolvedManifestConfig {
   registry: ManifestHandlerRegistry;
 }
 
+function isResolvedTask(value: unknown): value is AnyResolvedTask {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '_tag' in value &&
+    (value as { _tag?: string })._tag === 'ResolvedTask'
+  );
+}
+
+function isResolvedWorkflow(value: unknown): value is AnyResolvedWorkflow {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    '_tag' in value &&
+    (value as { _tag?: string })._tag === 'ResolvedWorkflow'
+  );
+}
+
+function registerOrchestrationCollection(
+  registry: ManifestHandlerRegistry,
+  kind: 'task' | 'workflow',
+  value: unknown,
+): void {
+  if (typeof value !== 'object' || value === null) return;
+  for (const item of Object.values(value as Record<string, unknown>)) {
+    if (kind === 'task' && isResolvedTask(item)) {
+      registry.registerTask(item.name, item);
+    }
+    if (kind === 'workflow' && isResolvedWorkflow(item)) {
+      registry.registerWorkflow(item.name, item);
+    }
+  }
+}
+
+export function resolveHandlersFileEntries(
+  handlersConfig: string | { dir: string } | false | undefined,
+  baseDir: string,
+): { mode: 'disabled' } | { mode: 'file'; filePath: string } | { mode: 'dir'; dirPath: string; files: string[] } {
+  if (handlersConfig === false) {
+    return { mode: 'disabled' };
+  }
+
+  if (typeof handlersConfig === 'object' && 'dir' in handlersConfig) {
+    const dirPath = resolve(baseDir, handlersConfig.dir);
+    if (!existsSync(dirPath)) {
+      return { mode: 'dir', dirPath, files: [] };
+    }
+    const files = readdirSync(dirPath)
+      .filter(f => /\.(ts|js)$/.test(f) && !f.endsWith('.d.ts'))
+      .sort()
+      .map(file => resolve(dirPath, file));
+    return { mode: 'dir', dirPath, files };
+  }
+
+  const filePath = resolve(
+    baseDir,
+    typeof handlersConfig === 'string' ? handlersConfig : 'slingshot.handlers.ts',
+  );
+  return { mode: 'file', filePath };
+}
+
 /**
  * Import a single module file and register its exports into the registry.
  *
@@ -69,6 +134,22 @@ async function registerModuleExports(
   const mod = (await import(filePath)) as Record<string, unknown>;
 
   for (const [name, value] of Object.entries(mod)) {
+    if (isResolvedTask(value)) {
+      registry.registerTask(value.name, value);
+      continue;
+    }
+    if (isResolvedWorkflow(value)) {
+      registry.registerWorkflow(value.name, value);
+      continue;
+    }
+    if (name === 'tasks') {
+      registerOrchestrationCollection(registry, 'task', value);
+      continue;
+    }
+    if (name === 'workflows') {
+      registerOrchestrationCollection(registry, 'workflow', value);
+      continue;
+    }
     if (name === 'hooks' && typeof value === 'object' && value !== null) {
       for (const [hookName, hookFn] of Object.entries(value as Record<string, unknown>)) {
         if (typeof hookFn === 'function') {
@@ -98,34 +179,21 @@ async function registerModuleExports(
  * @param handlersConfig - The resolved `handlers` manifest field value, or undefined for default.
  * @param baseDir - Base directory for resolving relative paths (manifest file's directory).
  */
-async function loadHandlersIntoRegistry(
+export async function loadHandlersIntoRegistry(
   registry: ManifestHandlerRegistry,
   handlersConfig: string | { dir: string } | false | undefined,
   baseDir: string,
 ): Promise<void> {
-  if (handlersConfig === false) return;
-
-  if (typeof handlersConfig === 'object' && 'dir' in handlersConfig) {
-    const dirPath = resolve(baseDir, handlersConfig.dir);
-    if (!existsSync(dirPath)) return;
-
-    const files = readdirSync(dirPath)
-      .filter(f => /\.(ts|js)$/.test(f) && !f.endsWith('.d.ts'))
-      .sort();
-
-    for (const file of files) {
-      await registerModuleExports(registry, resolve(dirPath, file));
+  const entries = resolveHandlersFileEntries(handlersConfig, baseDir);
+  if (entries.mode === 'disabled') return;
+  if (entries.mode === 'dir') {
+    for (const file of entries.files) {
+      await registerModuleExports(registry, file);
     }
     return;
   }
-
-  const filePath = resolve(
-    baseDir,
-    typeof handlersConfig === 'string' ? handlersConfig : 'slingshot.handlers.ts',
-  );
-
-  if (!existsSync(filePath)) return;
-  await registerModuleExports(registry, filePath);
+  if (!existsSync(entries.filePath)) return;
+  await registerModuleExports(registry, entries.filePath);
 }
 
 function addSyntheticManifestPlugins(manifest: AppManifest): AppManifest {
@@ -183,7 +251,7 @@ function addSyntheticManifestPlugins(manifest: AppManifest): AppManifest {
  *
  * @throws `Error` if a referenced environment variable is not set.
  */
-function interpolateEnvVars(value: unknown, path: string): unknown {
+export function interpolateEnvVars(value: unknown, path: string): unknown {
   if (typeof value === 'string') {
     return value.replace(/\$\{(?:env:)?([A-Z][A-Z0-9_]*)\}/g, (_match, name: string) => {
       const env = process.env[name];

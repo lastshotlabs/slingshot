@@ -26,6 +26,7 @@ describe('BUILTIN_PLUGINS', () => {
       'slingshot-notifications',
       'slingshot-oauth',
       'slingshot-oidc',
+      'slingshot-orchestration',
       'slingshot-organizations',
       'slingshot-permissions',
       'slingshot-polls',

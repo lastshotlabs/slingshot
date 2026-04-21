@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import type { Context } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import { resolve } from 'path';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import type { AppManifestHandlerRef } from './manifest';
@@ -249,6 +249,133 @@ export function resolveWebhookManifestConfig(
  * @param config - Raw search plugin config from the manifest.
  * @returns Resolved config with function-typed fields populated.
  */
+function resolveTemporalTlsConfig(config: Record<string, unknown>): Record<string, unknown> | undefined {
+  const tls = config['tls'];
+  if (!isRecord(tls)) return undefined;
+  const resolved: Record<string, unknown> = {};
+  if (typeof tls['serverNameOverride'] === 'string') {
+    resolved['serverNameOverride'] = tls['serverNameOverride'];
+  }
+  if (typeof tls['serverRootCACertificate'] === 'string') {
+    resolved['serverRootCACertificate'] = tls['serverRootCACertificate'];
+  }
+  if (isRecord(tls['clientCertPair'])) {
+    resolved['clientCertPair'] = {
+      crt: tls['clientCertPair']['crt'],
+      key: tls['clientCertPair']['key'],
+    };
+  }
+  return Object.keys(resolved).length === 0 ? undefined : resolved;
+}
+
+export function resolveOrchestrationManifestConfig(
+  config: Record<string, unknown>,
+  registry: ManifestHandlerRegistry | undefined,
+): Record<string, unknown> {
+  const requiredRegistry = requireRegistry(
+    registry,
+    'manifest.plugins["slingshot-orchestration"]',
+  );
+  const adapterRef = isRecord(config['adapter']) ? config['adapter'] : {};
+  const adapterType = typeof adapterRef['type'] === 'string' ? adapterRef['type'] : 'memory';
+  const adapterConfig = isRecord(adapterRef['config']) ? adapterRef['config'] : {};
+  const taskNames = Array.isArray(config['tasks']) ? config['tasks'] : [];
+  const workflowNames = Array.isArray(config['workflows']) ? config['workflows'] : [];
+
+  const tasks = taskNames.map((value, index) => {
+    if (typeof value !== 'string') {
+      throw new Error(
+        `[manifest builtin config] manifest.plugins["slingshot-orchestration"].config.tasks[${index}] must be a string.`,
+      );
+    }
+    return requiredRegistry.resolveTask(value);
+  });
+  const workflows = workflowNames.map((value, index) => {
+    if (typeof value !== 'string') {
+      throw new Error(
+        `[manifest builtin config] manifest.plugins["slingshot-orchestration"].config.workflows[${index}] must be a string.`,
+      );
+    }
+    return requiredRegistry.resolveWorkflow(value);
+  });
+
+  const routeMiddleware = Array.isArray(config['routeMiddleware'])
+    ? (config['routeMiddleware'] as unknown[]).map((value, index) => {
+        if (!isHandlerRefLike(value)) {
+          throw new Error(
+            `[manifest builtin config] manifest.plugins["slingshot-orchestration"].config.routeMiddleware[${index}] must be a handler reference.`,
+          );
+        }
+        return resolveHandlerRef(
+          value,
+          requiredRegistry,
+          `manifest.plugins["slingshot-orchestration"].config.routeMiddleware[${index}]`,
+        ) as MiddlewareHandler;
+      })
+    : undefined;
+
+  let adapter: unknown;
+  if (adapterType === 'memory') {
+    const { createMemoryAdapter } = require(
+      '@lastshotlabs/slingshot-orchestration',
+    ) as typeof import('@lastshotlabs/slingshot-orchestration');
+    adapter = createMemoryAdapter(adapterConfig as { concurrency?: number });
+  } else if (adapterType === 'sqlite') {
+    const { createSqliteAdapter } = require(
+      '@lastshotlabs/slingshot-orchestration',
+    ) as typeof import('@lastshotlabs/slingshot-orchestration');
+    adapter = createSqliteAdapter(adapterConfig as { path: string; concurrency?: number });
+  } else if (adapterType === 'bullmq') {
+    const { createBullMQOrchestrationAdapter } = require(
+      '@lastshotlabs/slingshot-orchestration-bullmq',
+    ) as typeof import('@lastshotlabs/slingshot-orchestration-bullmq');
+    adapter = createBullMQOrchestrationAdapter(adapterConfig as never);
+  } else if (adapterType === 'temporal') {
+    const temporalConfig = adapterConfig;
+    const { Connection, Client } = require('@temporalio/client') as typeof import('@temporalio/client');
+    const { createTemporalOrchestrationAdapter } = require(
+      '@lastshotlabs/slingshot-orchestration-temporal',
+    ) as typeof import('@lastshotlabs/slingshot-orchestration-temporal');
+    const namespace =
+      typeof temporalConfig['namespace'] === 'string' ? temporalConfig['namespace'] : undefined;
+    const tls = resolveTemporalTlsConfig(temporalConfig);
+    const connection = Connection.lazy({
+      address:
+        typeof temporalConfig['address'] === 'string'
+          ? temporalConfig['address']
+          : 'localhost:7233',
+      ...(tls ? { tls: tls as never } : {}),
+    });
+    const client = new Client({
+      connection,
+      ...(namespace ? { namespace } : {}),
+    });
+    adapter = createTemporalOrchestrationAdapter({
+      client,
+      connection,
+      namespace,
+      workflowTaskQueue: String(temporalConfig['workflowTaskQueue']),
+      ...(typeof temporalConfig['defaultActivityTaskQueue'] === 'string'
+        ? { defaultActivityTaskQueue: temporalConfig['defaultActivityTaskQueue'] }
+        : {}),
+      ownsConnection: true,
+    });
+  } else {
+    throw new Error(
+      `[manifest builtin config] Unsupported orchestration adapter type "${adapterType}".`,
+    );
+  }
+
+  return {
+    adapter,
+    tasks,
+    workflows,
+    ...(config['routes'] === undefined ? {} : { routes: config['routes'] }),
+    ...(typeof config['routePrefix'] === 'string' ? { routePrefix: config['routePrefix'] } : {}),
+    ...(routeMiddleware ? { routeMiddleware } : {}),
+  };
+}
+
 export function resolveSearchManifestConfig(
   config: Record<string, unknown>,
 ): Record<string, unknown> {

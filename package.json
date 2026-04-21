@@ -148,6 +148,10 @@
     "@lastshotlabs/slingshot-interactions": "workspace:*",
     "@lastshotlabs/slingshot-mail": "workspace:*",
     "@lastshotlabs/slingshot-notifications": "workspace:*",
+    "@lastshotlabs/slingshot-orchestration": "workspace:*",
+    "@lastshotlabs/slingshot-orchestration-bullmq": "workspace:*",
+    "@lastshotlabs/slingshot-orchestration-plugin": "workspace:*",
+    "@lastshotlabs/slingshot-orchestration-temporal": "workspace:*",
     "@lastshotlabs/slingshot-permissions": "workspace:*",
     "@lastshotlabs/slingshot-postgres": "workspace:*",
     "@lastshotlabs/slingshot-push": "workspace:*",
@@ -214,6 +218,18 @@
     "@lastshotlabs/slingshot-notifications": {
       "optional": true
     },
+    "@lastshotlabs/slingshot-orchestration": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-orchestration-bullmq": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-orchestration-plugin": {
+      "optional": true
+    },
+    "@lastshotlabs/slingshot-orchestration-temporal": {
+      "optional": true
+    },
     "@lastshotlabs/slingshot-permissions": {
       "optional": true
     },
@@ -232,8 +248,18 @@
     "@aws-sdk/client-ssm": "^3.1014.0",
     "@eslint/js": "^10.0.1",
     "@faker-js/faker": "^10.4.0",
+    "@lastshotlabs/slingshot-orchestration": "workspace:*",
+    "@lastshotlabs/slingshot-orchestration-bullmq": "workspace:*",
+    "@lastshotlabs/slingshot-orchestration-plugin": "workspace:*",
+    "@lastshotlabs/slingshot-orchestration-temporal": "workspace:*",
     "@react-email/render": "^2.0.4",
     "@simplewebauthn/server": "^13.1.1",
+    "@temporalio/activity": "^1.16.0",
+    "@temporalio/client": "^1.16.0",
+    "@temporalio/common": "^1.16.0",
+    "@temporalio/testing": "^1.16.0",
+    "@temporalio/worker": "^1.16.0",
+    "@temporalio/workflow": "^1.16.0",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/bun": "1.3.10",

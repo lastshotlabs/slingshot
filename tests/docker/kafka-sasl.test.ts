@@ -15,6 +15,7 @@ import { getServerContext } from '../../src/server';
 process.env.KAFKAJS_NO_PARTITIONER_WARNING = '1';
 
 const KAFKA_SASL_BROKER = 'localhost:29093';
+const SASL_TEST_TIMEOUT_MS = 30_000;
 type SupportedSaslConfig = {
   mechanism: 'plain' | 'scram-sha-256' | 'scram-sha-512';
   username: string;
@@ -71,6 +72,13 @@ function headersToStrings(headers: KafkaMessage['headers']): Record<string, stri
 
 async function sleep(ms: number): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function runCleanupWithTimeout(fn: () => Promise<void>, ms = 5_000): Promise<void> {
+  await Promise.race([
+    fn().catch(() => {}),
+    sleep(ms),
+  ]);
 }
 
 async function waitFor(
@@ -284,6 +292,7 @@ async function ensureSecureTopic(
   });
 
   await admin.createTopics({
+    waitForLeaders: true,
     topics: [{ topic, numPartitions, replicationFactor: 1 }],
   });
 }
@@ -342,10 +351,8 @@ async function createTempManifest(
 }
 
 afterEach(async () => {
-  while (cleanup.length > 0) {
-    const fn = cleanup.pop();
-    await fn?.().catch(() => {});
-  }
+  const pending = cleanup.splice(0, cleanup.length).reverse();
+  await Promise.allSettled(pending.map(fn => runCleanupWithTimeout(fn)));
 });
 
 describe('Kafka SASL runtime paths (Docker)', () => {
@@ -435,7 +442,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
     } finally {
       console.warn = originalWarn;
     }
-  });
+  }, SASL_TEST_TIMEOUT_MS);
 
   test('Kafka connectors bridge events through the SCRAM-enabled broker and warn when SSL is absent', async () => {
     const warned = mock((_message: unknown) => {});
@@ -490,7 +497,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
     } finally {
       console.warn = originalWarn;
     }
-  });
+  }, SASL_TEST_TIMEOUT_MS);
 
   test('Kafka adapter round-trips through the SASL-enabled broker using SCRAM-SHA-512', async () => {
     const topicPrefix = uniqueName('slingshot.sasl512.events');
@@ -575,7 +582,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
       userId: 'scram512-produce-user',
       sessionId: 'scram512-produce-session',
     });
-  });
+  }, SASL_TEST_TIMEOUT_MS);
 
   test('Kafka connectors bridge events through the SASL-enabled broker using PLAIN', async () => {
     await ensureExtraSaslCoverageConfigured();
@@ -621,7 +628,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
     );
 
     expect(received).toEqual([{ userId: 'plain-connector-user', email: 'plain@example.com' }]);
-  });
+  }, SASL_TEST_TIMEOUT_MS);
 
   test('Kafka connectors fail fast against the SCRAM-enabled broker when credentials are wrong', async () => {
     const connectors = createKafkaConnectors({
@@ -641,7 +648,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
     cleanup.push(() => connectors.stop());
 
     await expect(connectors.start(createInProcessAdapter())).rejects.toThrow();
-  });
+  }, SASL_TEST_TIMEOUT_MS);
 
   test('manifest bootstrap connects to the SCRAM-enabled broker using Kafka secret env vars', async () => {
     const previousEnv = {
@@ -794,5 +801,5 @@ describe('Kafka SASL runtime paths (Docker)', () => {
     } finally {
       console.warn = originalWarn;
     }
-  });
+  }, SASL_TEST_TIMEOUT_MS);
 });

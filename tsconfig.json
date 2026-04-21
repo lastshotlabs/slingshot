@@ -29,11 +29,20 @@
       "@lastshotlabs/slingshot-auth/testing": ["./packages/slingshot-auth/src/testing.ts"],
       "@lastshotlabs/slingshot-admin": ["./packages/slingshot-admin/src/index.ts"],
       "@lastshotlabs/slingshot-orchestration": ["./packages/slingshot-orchestration/src/index.ts"],
+      "@lastshotlabs/slingshot-orchestration/errors": [
+        "./packages/slingshot-orchestration/src/errors.ts"
+      ],
+      "@lastshotlabs/slingshot-orchestration/provider": [
+        "./packages/slingshot-orchestration/src/provider/index.ts"
+      ],
       "@lastshotlabs/slingshot-orchestration-plugin": [
         "./packages/slingshot-orchestration-plugin/src/index.ts"
       ],
       "@lastshotlabs/slingshot-orchestration-bullmq": [
         "./packages/slingshot-orchestration-bullmq/src/index.ts"
+      ],
+      "@lastshotlabs/slingshot-orchestration-temporal": [
+        "./packages/slingshot-orchestration-temporal/src/index.ts"
       ],
       "@lastshotlabs/slingshot-permissions": ["./packages/slingshot-permissions/src/index.ts"],
       "@lastshotlabs/slingshot-permissions/testing": [

@@ -21,6 +21,7 @@ import { getServerContext } from '../../src/server';
 process.env.KAFKAJS_NO_PARTITIONER_WARNING = '1';
 
 const KAFKA_BROKER = 'localhost:19092';
+const KAFKA_TEST_TIMEOUT_MS = 30_000;
 const RUN_ID = Date.now();
 
 type RunningServer = {
@@ -57,6 +58,13 @@ function headersToStrings(headers: KafkaMessage['headers']): Record<string, stri
 
 async function sleep(ms: number): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function runCleanupWithTimeout(fn: () => Promise<void>, ms = 5_000): Promise<void> {
+  await Promise.race([
+    fn().catch(() => {}),
+    sleep(ms),
+  ]);
 }
 
 async function waitFor(
@@ -102,6 +110,7 @@ async function createProducer() {
 async function ensureTopic(topic: string, numPartitions = 1): Promise<void> {
   const admin = await createAdmin();
   await admin.createTopics({
+    waitForLeaders: true,
     topics: [{ topic, numPartitions, replicationFactor: 1 }],
   });
 }
@@ -241,10 +250,8 @@ async function createKafkaProxy(): Promise<{
 }
 
 afterEach(async () => {
-  while (cleanup.length > 0) {
-    const fn = cleanup.pop();
-    await fn?.().catch(() => {});
-  }
+  const pending = cleanup.splice(0, cleanup.length).reverse();
+  await Promise.allSettled(pending.map(fn => runCleanupWithTimeout(fn)));
 });
 
 describe('Kafka runtime paths (Docker)', () => {
@@ -424,7 +431,7 @@ describe('Kafka runtime paths (Docker)', () => {
     expect(JSON.parse(dlqMessages[0]!.value ?? '{}')).toEqual({ id: 'invoice-1' });
     expect(dlqMessages[0]!.headers['slingshot.original-topic']).toBe(topic);
     expect(dlqMessages[0]!.headers['slingshot.original-offset']).toBeDefined();
-  });
+  }, KAFKA_TEST_TIMEOUT_MS);
 
   test('Kafka inbound connectors honor maxRetries: 0 and still process once before DLQ', async () => {
     const topic = uniqueName('incoming.once');
@@ -610,7 +617,7 @@ describe('Kafka runtime paths (Docker)', () => {
       userId: 'buffered-user',
       sessionId: 'buffered-session',
     });
-  });
+  }, KAFKA_TEST_TIMEOUT_MS);
 
   test('overlapping Kafka adapter and outbound connector routes warn and publish duplicate messages', async () => {
     const bus = createKafkaAdapter({
@@ -786,5 +793,5 @@ describe('Kafka runtime paths (Docker)', () => {
     );
     expect(inboundPayloads[0]?.payload).toEqual({ id: 'inbound-1' });
     expect(inboundPayloads[0]?.metadata['topic']).toBe(inboundTopic);
-  });
+  }, KAFKA_TEST_TIMEOUT_MS);
 });

@@ -9,6 +9,16 @@
       "bun": "./src/index.ts",
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
+    },
+    "./errors": {
+      "bun": "./src/errors.ts",
+      "types": "./dist/src/errors.d.ts",
+      "import": "./dist/src/errors.js"
+    },
+    "./provider": {
+      "bun": "./src/provider/index.ts",
+      "types": "./dist/src/provider/index.d.ts",
+      "import": "./dist/src/provider/index.js"
     }
   },
   "repository": {

@@ -101,7 +101,8 @@ function computeFingerprint(
 export const createIdentifyMiddleware =
   (authRuntime: AuthRuntimeContext): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
-    const { log, authTrace } = authRuntime.logger;
+    const log = authRuntime.logger?.log ?? (() => {});
+    const authTrace = authRuntime.logger?.authTrace ?? (() => {});
     const slingshotCtx =
       typeof (c as { get?: unknown }).get === 'function'
         ? ((c as { get(name: string): unknown }).get('slingshotCtx') as

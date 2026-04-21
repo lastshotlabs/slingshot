@@ -23,6 +23,14 @@ const TLS_CLIENT_CERT_PEM = readFileSync(TLS_CLIENT_CERT_PATH, 'utf-8');
 const TLS_CLIENT_KEY_PEM = readFileSync(TLS_CLIENT_KEY_PATH, 'utf-8');
 const RUN_ID = Date.now();
 const cleanup: Array<() => Promise<void>> = [];
+const KAFKA_SECURITY_ENV_KEYS = [
+  'KAFKA_BROKERS',
+  'KAFKA_CLIENT_ID',
+  'KAFKA_SSL',
+  'KAFKA_SASL_USERNAME',
+  'KAFKA_SASL_PASSWORD',
+  'KAFKA_SASL_MECHANISM',
+] as const;
 
 type KafkaSslConfig =
   | true
@@ -125,8 +133,30 @@ async function ensureTlsTopic(
 ): Promise<void> {
   const admin = await createTlsAdmin(ssl, broker);
   await admin.createTopics({
+    waitForLeaders: true,
     topics: [{ topic, numPartitions, replicationFactor: 1 }],
   });
+}
+
+function captureKafkaSecurityEnv(): Record<(typeof KAFKA_SECURITY_ENV_KEYS)[number], string | undefined> {
+  return {
+    KAFKA_BROKERS: process.env.KAFKA_BROKERS,
+    KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,
+    KAFKA_SSL: process.env.KAFKA_SSL,
+    KAFKA_SASL_USERNAME: process.env.KAFKA_SASL_USERNAME,
+    KAFKA_SASL_PASSWORD: process.env.KAFKA_SASL_PASSWORD,
+    KAFKA_SASL_MECHANISM: process.env.KAFKA_SASL_MECHANISM,
+  };
+}
+
+function restoreKafkaSecurityEnv(previousEnv: Record<string, string | undefined>): void {
+  for (const key of KAFKA_SECURITY_ENV_KEYS) {
+    if (previousEnv[key] !== undefined) {
+      process.env[key] = previousEnv[key];
+    } else {
+      delete process.env[key];
+    }
+  }
 }
 
 async function collectTlsMessages(
@@ -382,23 +412,15 @@ async function runConnectorsBridgeScenario(
 }
 
 async function runManifestBootstrapScenario(): Promise<void> {
-  const previousEnv = {
-    KAFKA_BROKERS: process.env.KAFKA_BROKERS,
-    KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,
-    KAFKA_SSL: process.env.KAFKA_SSL,
-  };
+  const previousEnv = captureKafkaSecurityEnv();
   process.env.KAFKA_BROKERS = KAFKA_TLS_BROKER;
   process.env.KAFKA_CLIENT_ID = uniqueName('manifest-tls');
   process.env.KAFKA_SSL = 'true';
+  delete process.env.KAFKA_SASL_USERNAME;
+  delete process.env.KAFKA_SASL_PASSWORD;
+  delete process.env.KAFKA_SASL_MECHANISM;
   cleanup.push(async () => {
-    if (previousEnv.KAFKA_BROKERS !== undefined)
-      process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
-    else delete process.env.KAFKA_BROKERS;
-    if (previousEnv.KAFKA_CLIENT_ID !== undefined)
-      process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
-    else delete process.env.KAFKA_CLIENT_ID;
-    if (previousEnv.KAFKA_SSL !== undefined) process.env.KAFKA_SSL = previousEnv.KAFKA_SSL;
-    else delete process.env.KAFKA_SSL;
+    restoreKafkaSecurityEnv(previousEnv);
   });
 
   const inboundTopic = uniqueName('manifest.tls.inbound');
@@ -496,23 +518,10 @@ async function runManifestBootstrapScenario(): Promise<void> {
 }
 
 async function runManifestMtlsScenario(): Promise<void> {
-  const previousEnv = {
-    KAFKA_BROKERS: process.env.KAFKA_BROKERS,
-    KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,
-    KAFKA_SSL: process.env.KAFKA_SSL,
-  };
-  delete process.env.KAFKA_BROKERS;
-  delete process.env.KAFKA_CLIENT_ID;
-  delete process.env.KAFKA_SSL;
+  const previousEnv = captureKafkaSecurityEnv();
+  restoreKafkaSecurityEnv({});
   cleanup.push(async () => {
-    if (previousEnv.KAFKA_BROKERS !== undefined)
-      process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
-    else delete process.env.KAFKA_BROKERS;
-    if (previousEnv.KAFKA_CLIENT_ID !== undefined)
-      process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
-    else delete process.env.KAFKA_CLIENT_ID;
-    if (previousEnv.KAFKA_SSL !== undefined) process.env.KAFKA_SSL = previousEnv.KAFKA_SSL;
-    else delete process.env.KAFKA_SSL;
+    restoreKafkaSecurityEnv(previousEnv);
   });
 
   const inboundTopic = uniqueName('manifest.mtls.inbound');

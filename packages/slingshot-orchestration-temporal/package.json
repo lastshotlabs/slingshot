@@ -1,0 +1,45 @@
+{
+  "name": "@lastshotlabs/slingshot-orchestration-temporal",
+  "version": "0.0.2",
+  "description": "Temporal-backed orchestration adapter and worker supervisor for Slingshot",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lastshotlabs/slingshot.git",
+    "directory": "packages/slingshot-orchestration-temporal"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/ --cache"
+  },
+  "dependencies": {
+    "@lastshotlabs/slingshot-orchestration": "workspace:*"
+  },
+  "peerDependencies": {
+    "@temporalio/activity": "^1.16.0",
+    "@temporalio/client": "^1.16.0",
+    "@temporalio/common": "^1.16.0",
+    "@temporalio/worker": "^1.16.0",
+    "@temporalio/workflow": "^1.16.0",
+    "zod": ">=4.0 <5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

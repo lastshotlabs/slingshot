@@ -84,6 +84,18 @@
       "path": "./packages/slingshot-organizations/tsconfig.typecheck.json"
     },
     {
+      "path": "./packages/slingshot-orchestration/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-orchestration-plugin/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-orchestration-bullmq/tsconfig.typecheck.json"
+    },
+    {
+      "path": "./packages/slingshot-orchestration-temporal/tsconfig.typecheck.json"
+    },
+    {
       "path": "./packages/slingshot-permissions/tsconfig.typecheck.json"
     },
     {

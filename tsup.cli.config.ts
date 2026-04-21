@@ -6,6 +6,7 @@ export default defineConfig({
     'cli/commands/init': 'src/cli/commands/init.ts',
     'cli/commands/deploy': 'src/cli/commands/deploy.ts',
     'cli/commands/start': 'src/cli/commands/start.ts',
+    'cli/commands/orchestration/worker': 'src/cli/commands/orchestration/worker.ts',
     'cli/commands/platform/init': 'src/cli/commands/platform/init.ts',
     'cli/commands/platform/deploy': 'src/cli/commands/platform/deploy.ts',
     'cli/commands/platform/sync': 'src/cli/commands/platform/sync.ts',
@@ -37,7 +38,15 @@ export default defineConfig({
   // which omits .js extensions — Node.js ESM cannot resolve those at runtime.
   noExternal: [/^@lastshotlabs\//],
   external: [
+    '@lastshotlabs/slingshot-orchestration-temporal',
     '@oclif/core',
+    '@temporalio/activity',
+    '@temporalio/client',
+    '@temporalio/common',
+    '@temporalio/worker',
+    '@temporalio/workflow',
+    '@swc/core',
+    '@swc/wasm',
     '@hono/zod-openapi',
     '@simplewebauthn/server',
     '@aws-sdk/client-s3',

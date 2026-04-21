@@ -299,6 +299,20 @@ export const PLUGIN_SCHEMA_ENTRIES = {
     loadSchema: () =>
       loadSchemaExport('@lastshotlabs/slingshot-webhooks', 'webhookPluginConfigSchema'),
   },
+  'slingshot-orchestration': {
+    name: 'slingshot-orchestration',
+    package: BUILTIN_PLUGINS['slingshot-orchestration'].pkg,
+    factory: BUILTIN_PLUGINS['slingshot-orchestration'].factory,
+    description:
+      'Portable orchestration plugin with task and workflow registration plus provider-backed adapters including Temporal.',
+    category: 'operations',
+    requires: [],
+    loadSchema: () =>
+      loadSchemaExport(
+        '@lastshotlabs/slingshot-orchestration-plugin',
+        'orchestrationPluginConfigSchema',
+      ),
+  },
 } as const satisfies Record<string, PluginSchemaEntry>;
 
 export function loadPluginSchema(name: string): Promise<SchemaLike | null> {

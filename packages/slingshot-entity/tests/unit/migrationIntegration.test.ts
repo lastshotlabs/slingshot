@@ -192,7 +192,7 @@ describe('second run with no changes', () => {
 });
 
 describe('snapshotDir without migration flag', () => {
-  it('saves snapshot but produces no migration files', () => {
+  it('preserves the last migrated snapshot and produces no migration files', () => {
     // Run once to create snapshot
     writeGenerated(OrderV1, { outDir: OUT_DIR, snapshotDir: SNAPSHOT_DIR });
 
@@ -207,9 +207,9 @@ describe('snapshotDir without migration flag', () => {
     const migrationFiles = Object.keys(files).filter(f => f.startsWith('migrations/'));
     expect(migrationFiles.length).toBe(0);
 
-    // Snapshot should still be updated
+    // Snapshot should remain on the last migrated shape until a migration run advances it.
     writeGenerated(OrderV2, { outDir: OUT_DIR, snapshotDir: SNAPSHOT_DIR });
     const snapshot = loadSnapshot(SNAPSHOT_DIR, OrderV2);
-    expect(Object.keys(snapshot!.entity.fields)).toContain('trackingCode');
+    expect(Object.keys(snapshot!.entity.fields)).not.toContain('trackingCode');
   });
 });

@@ -12,6 +12,10 @@ import type {
   SlingshotEventBus,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
+import type {
+  AnyResolvedTask,
+  AnyResolvedWorkflow,
+} from '@lastshotlabs/slingshot-orchestration';
 
 /** A named function handler resolved from an AppManifestHandlerRef. */
 export type HandlerFactory = (params?: Record<string, unknown>) => unknown;
@@ -57,6 +61,14 @@ export interface ManifestHandlerRegistry {
   resolveHook(name: string): HookFunction;
   /** Check whether a hook with the given name is registered. */
   hasHook(name: string): boolean;
+
+  registerTask(name: string, task: AnyResolvedTask): void;
+  resolveTask(name: string): AnyResolvedTask;
+  hasTask(name: string): boolean;
+
+  registerWorkflow(name: string, workflow: AnyResolvedWorkflow): void;
+  resolveWorkflow(name: string): AnyResolvedWorkflow;
+  hasWorkflow(name: string): boolean;
 }
 
 export function createManifestHandlerRegistry(): ManifestHandlerRegistry {
@@ -65,6 +77,8 @@ export function createManifestHandlerRegistry(): ManifestHandlerRegistry {
   const eventBuses = new Map<string, EventBusFactory>();
   const secretProviders = new Map<string, SecretProviderFactory>();
   const hooks = new Map<string, HookFunction>();
+  const tasks = new Map<string, AnyResolvedTask>();
+  const workflows = new Map<string, AnyResolvedWorkflow>();
 
   function require<T>(map: Map<string, T>, name: string, kind: string): T {
     const entry = map.get(name);
@@ -132,6 +146,26 @@ export function createManifestHandlerRegistry(): ManifestHandlerRegistry {
     },
     hasHook(name) {
       return hooks.has(name);
+    },
+
+    registerTask(name, task) {
+      registerUnique(tasks, name, task, 'task');
+    },
+    resolveTask(name) {
+      return require(tasks, name, 'task');
+    },
+    hasTask(name) {
+      return tasks.has(name);
+    },
+
+    registerWorkflow(name, workflow) {
+      registerUnique(workflows, name, workflow, 'workflow');
+    },
+    resolveWorkflow(name) {
+      return require(workflows, name, 'workflow');
+    },
+    hasWorkflow(name) {
+      return workflows.has(name);
     },
   };
 }

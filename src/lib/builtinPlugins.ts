@@ -1,5 +1,6 @@
 import {
   resolveAdminManifestConfig,
+  resolveOrchestrationManifestConfig,
   resolveSearchManifestConfig,
   resolveSsrManifestConfig,
   resolveWebhookManifestConfig,
@@ -89,6 +90,12 @@ export function createBuiltinPluginFactory(
       return plugin;
     }
 
+    if (name === 'slingshot-orchestration') {
+      return factory(
+        resolveOrchestrationManifestConfig(rawConfig, registry),
+      ) as ReturnType<PluginFactory>;
+    }
+
     return factory(rawConfig) as ReturnType<PluginFactory>;
   };
 }
@@ -146,6 +153,10 @@ export const BUILTIN_PLUGINS: Record<string, BuiltinPluginEntry> = {
   'slingshot-webhooks': {
     pkg: '@lastshotlabs/slingshot-webhooks',
     factory: 'createWebhookPlugin',
+  },
+  'slingshot-orchestration': {
+    pkg: '@lastshotlabs/slingshot-orchestration-plugin',
+    factory: 'createOrchestrationPlugin',
   },
 };
 

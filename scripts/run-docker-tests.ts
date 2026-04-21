@@ -7,6 +7,10 @@ export const dockerTestCommands: Array<{ label: string; command: string[] }> = [
     command: ['bun', 'test', '--config', 'bunfig.docker.toml', '--concurrency=1', 'tests/docker/'],
   },
   {
+    label: 'node docker tests',
+    command: ['bunx', 'vitest', 'run', '--config', 'vitest.docker.config.ts'],
+  },
+  {
     label: 'package postgres integration tests',
     command: [
       'bun',

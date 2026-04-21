@@ -17,7 +17,7 @@ import {
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { chatPluginConfigSchema } from './config.schema';
-import type { ChatEncryptionProvider } from './encryption/provider';
+import type { ChatEncryptionProvider } from './encryption/types';
 import { resolveChatEncryptionProvider } from './encryption/provider';
 import { buildEncryptionRouter } from './encryption/stub';
 import { registerChatPushFormatters } from './lib/pushFormatters';

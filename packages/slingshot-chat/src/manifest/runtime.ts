@@ -10,7 +10,7 @@ import {
   createEntityPluginHookRegistry,
 } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
-import type { ChatEncryptionProvider } from '../encryption/provider';
+import type { ChatEncryptionProvider } from '../encryption/types';
 import { getAuthUserId } from '../lib/ctx';
 import { createUnreadCountHandler } from '../lib/unreadCount';
 import { now } from '../lib/utils';

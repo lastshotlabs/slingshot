@@ -1,6 +1,6 @@
 import { webcrypto } from 'node:crypto';
 import type { ChatAesGcmEncryptionConfig } from '../../types';
-import type { ChatEncryptionProvider } from '../provider';
+import type { ChatEncryptionProvider } from '../types';
 
 const cryptoApi = webcrypto;
 const encoder = new TextEncoder();

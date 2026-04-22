@@ -10,14 +10,11 @@ import {
   defineCapability,
   definePackage,
   domain,
+  entityRef,
   inspectPackage,
   route,
 } from '@lastshotlabs/slingshot-core';
-import {
-  type BareEntityAdapter,
-  entity,
-  registerEntityPolicy,
-} from '@lastshotlabs/slingshot-entity';
+import { entity, registerEntityPolicy } from '@lastshotlabs/slingshot-entity';
 import { createApp } from '../../src/app';
 
 const baseConfig = {
@@ -116,10 +113,11 @@ describe('package-first authoring', () => {
 
   test('composes a package, installs it through createApp, and exposes package-owned domain routes', async () => {
     const noteCapability = defineCapability<{ label: string }>('notes:reporter');
+    const noteModule = entity({ config: NoteEntity });
 
     const notesPackage = definePackage({
       name: 'notes',
-      entities: [entity({ config: NoteEntity })],
+      entities: [noteModule],
       domains: [
         domain({
           name: 'insights',
@@ -139,7 +137,7 @@ describe('package-first authoring', () => {
               },
               async handler(ctx) {
                 const reporter = ctx.capabilities.require(noteCapability);
-                const adapter = ctx.entities.get<BareEntityAdapter>({ entity: 'Note' });
+                const adapter = ctx.entities.get(noteModule);
                 const list = await adapter.list({});
                 return ctx.respond.json({
                   packageName: ctx.packageName,
@@ -183,6 +181,53 @@ describe('package-first authoring', () => {
       capability: 'ready',
       count: 1,
     });
+  });
+
+  test('package routes resolve cross-package entities through typed entity refs', async () => {
+    const noteModule = entity({ config: NoteEntity });
+
+    const notesPackage = definePackage({
+      name: 'notes',
+      entities: [noteModule],
+    });
+
+    const reportingPackage = definePackage({
+      name: 'reporting',
+      dependencies: ['notes'],
+      domains: [
+        domain({
+          name: 'reports',
+          basePath: '/reports',
+          routes: [
+            route.get({
+              path: '/notes',
+              async handler(ctx) {
+                const notes = ctx.entities.get(entityRef(noteModule, { plugin: 'notes' }));
+                const list = await notes.list({});
+                return ctx.respond.json({ count: list.items.length });
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const result = await createApp({
+      ...baseConfig,
+      packages: [notesPackage, reportingPackage],
+    });
+    createdContexts.push(result.ctx);
+
+    const createResponse = await result.app.request('/notes', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'cross-package note' }),
+    });
+    expect(createResponse.status).toBe(201);
+
+    const summaryResponse = await result.app.request('/reports/notes');
+    expect(summaryResponse.status).toBe(200);
+    await expect(summaryResponse.json()).resolves.toEqual({ count: 1 });
   });
 
   test('package domain routes use actor-first context and idempotency without legacy auth keys', async () => {
@@ -429,6 +474,21 @@ describe('package-first authoring', () => {
     });
   });
 
+  test('package domain routes infer typed params on the default route builder', () => {
+    route.get({
+      path: '/notes/:id',
+      request: {
+        params: z.object({ id: z.string() }),
+      },
+      handler(ctx) {
+        const noteId: string = ctx.params.id;
+        return ctx.respond.json({ noteId });
+      },
+    });
+
+    expect(true).toBe(true);
+  });
+
   test('package domain route input merges object body with params and query', async () => {
     const notesPackage = definePackage({
       name: 'notes',
@@ -492,10 +552,10 @@ describe('package-first authoring', () => {
       },
     });
 
-    // @ts-expect-error domain services must satisfy the route.withServices contract
     domain({
       name: 'broken',
       services: {
+        // @ts-expect-error domain services must satisfy the route.withServices contract
         nope: () => 'missing clock',
       },
       routes: [serviceRouteDef],

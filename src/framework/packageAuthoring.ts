@@ -9,6 +9,7 @@ import {
   type PackageEntityRef,
   RESOLVE_ENTITY_FACTORIES,
   type SlingshotPackageDefinition,
+  type SlingshotPackageEntityModuleLike,
   type SlingshotPlugin,
   type TypedRouteRequestSpec,
   type TypedRouteResponseSpec,
@@ -304,10 +305,54 @@ function resolvePackageCapabilities(app: object, capabilityProviders: Capability
   };
 }
 
+function isPackageEntityModuleLike(
+  value: unknown,
+): value is SlingshotPackageEntityModuleLike<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    (value as { kind?: unknown }).kind === 'entity' &&
+    'entityName' in value &&
+    typeof (value as { entityName?: unknown }).entityName === 'string'
+  );
+}
+
+function isPackageEntityRef(value: unknown): value is PackageEntityRef<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    (value as { kind?: unknown }).kind === 'entity-ref' &&
+    'entity' in value &&
+    typeof (value as { entity?: unknown }).entity === 'string'
+  );
+}
+
 function buildPackageEntityReader(app: object, packageName: string) {
   return {
-    get<TValue = unknown>(args: { entity: string }): TValue {
-      return requireEntityAdapter(app, { plugin: packageName, entity: args.entity }) as TValue;
+    get<TValue = unknown>(
+      target:
+        | SlingshotPackageEntityModuleLike<TValue>
+        | PackageEntityRef<TValue>
+        | { entity: string; plugin?: string },
+    ): TValue {
+      if (isPackageEntityModuleLike(target)) {
+        return requireEntityAdapter(app, {
+          plugin: packageName,
+          entity: target.entityName,
+        }) as TValue;
+      }
+      if (isPackageEntityRef(target)) {
+        return requireEntityAdapter(app, {
+          plugin: target.plugin ?? packageName,
+          entity: target.entity,
+        }) as TValue;
+      }
+      return requireEntityAdapter(app, {
+        plugin: target.plugin ?? packageName,
+        entity: target.entity,
+      }) as TValue;
     },
   };
 }

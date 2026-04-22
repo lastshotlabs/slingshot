@@ -20,6 +20,25 @@ For read-heavy projections and reporting, use:
 - package domain routes when the response spans multiple entities
 - capabilities when one package depends on another package's service contract
 
+Inside package domain routes, the canonical entity access pattern is typed entity modules:
+
+```typescript
+const resumes = ctx.entities.get(ResumeEntity);
+const workExperiences = ctx.entities.get(WorkExperienceEntity);
+```
+
+If the entity lives in another package, make that explicit:
+
+```typescript
+const notes = ctx.entities.get(entityRef(NoteEntity, { plugin: 'notes' }));
+```
+
+Avoid this as the default authoring style:
+
+- `ctx.entities.get({ entity: 'Resume' })`
+- `ctx.entities.get<BareEntityAdapter>(...)`
+- `as any`
+
 If the endpoint is "analytics across notes and comments", that is usually a package domain route, not an entity-local CRUD handler.
 
 ## Transactions and orchestration
@@ -78,7 +97,7 @@ That keeps the public authoring model clear:
 Use this decision rule:
 
 - one entity, standard behavior: entity + operations
-- one entity, custom route semantics: entity + `extraRoutes` or `overrides`
+- one entity, custom route semantics that still belong to the entity shell: entity + `extraRoutes` or `overrides`
 - multiple entities or reporting: package `domain(...)`
 - storage-specific query logic: custom factories/manual adapter wiring
 - framework-level escape hatch: raw plugin

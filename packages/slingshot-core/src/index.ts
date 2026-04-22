@@ -128,6 +128,7 @@ export {
   defineCapability,
   definePackage,
   domain,
+  entityRef,
   inspectPackage,
   provideCapability,
   route,

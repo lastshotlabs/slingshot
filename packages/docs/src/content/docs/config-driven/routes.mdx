@@ -134,6 +134,23 @@ So yes: `route.get(...)` lives inside package creation, but specifically inside 
 
 This route form is auto-registered without `routesDir` because the package compiler owns the full route lifecycle.
 
+When a package domain route needs entity data, use the exported entity module as the lookup key:
+
+```typescript
+import { NoteEntity } from './packageEntities';
+
+route.get({
+  path: '/summary',
+  async handler(ctx) {
+    const notes = ctx.entities.get(NoteEntity);
+    const result = await notes.list({});
+    return ctx.respond.json({ count: result.items.length });
+  },
+});
+```
+
+If the entity belongs to another package, use `entityRef(...)` to make that dependency explicit.
+
 ## When to choose which
 
 Choose `entity(...)` when:
@@ -212,7 +229,7 @@ If a route still belongs to one entity but needs customization, use:
 - `extraRoutes` to add custom entity-local endpoints
 - `overrides` to replace generated executor behavior
 
-That preserves entity semantics and route ownership.
+That preserves entity semantics and route ownership, but it is not the default recommendation ahead of package domain routes. Reach for it when the route still clearly belongs to that entity shell.
 
 ## Escape hatches
 

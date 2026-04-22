@@ -14,7 +14,16 @@ type InferSchema<TSchema extends ZodTypeAny | undefined, TFallback> = TSchema ex
   : TFallback;
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
-type EmptyServices = Readonly<{}>;
+type EmptyServices = Readonly<Record<never, never>>;
+type AnyEntityModule = SlingshotPackageEntityModuleLike<unknown>;
+type AnyDomainRouteDefinition = DomainRouteDefinition<unknown, TypedRouteRequestSpec>;
+type AnyDomainModule = SlingshotPackageDomainModule<
+  AnyDomainRouteDefinition,
+  Readonly<Record<string, unknown>>
+>;
+type BivariantRouteHandler<TContext> = {
+  bivarianceHack(context: TContext): Response | Promise<Response>;
+}['bivarianceHack'];
 type UnionToIntersection<T> = (T extends unknown ? (value: T) => void : never) extends (
   value: infer TResult,
 ) => void
@@ -154,18 +163,42 @@ export interface PackageCapabilityReader {
   require<TValue>(capability: PackageCapabilityHandle<TValue>): TValue;
 }
 
-/** Lookup helper for framework-managed entity adapters owned by the app. */
-export interface PackageEntityReader {
-  /** Resolve an entity adapter by entity name. */
-  get<TValue = unknown>(args: { entity: string }): TValue;
-}
-
-/** Reference an entity adapter when a package route needs permission or parent semantics. */
-export interface PackageEntityRef {
+/** Lightweight typed entity handle used for package-local and cross-package adapter lookups. */
+export interface PackageEntityRef<TAdapter = unknown> {
+  /** Internal discriminator for typed entity lookup tokens. */
+  readonly kind: 'entity-ref';
   /** Optional plugin/package owner when the entity is not local to the current package. */
   readonly plugin?: string;
   /** Entity name as registered with the framework. */
   readonly entity: string;
+  /** Phantom generic marker so the entity adapter type flows through IntelliSense. */
+  readonly __adapter?: TAdapter;
+}
+
+/** Minimal entity module contract shared between `slingshot-core` and `slingshot-entity`. */
+export interface SlingshotPackageEntityModuleLike<TAdapter = unknown> {
+  /** Internal discriminator for package entity modules. */
+  readonly kind: 'entity';
+  /** Module name used for diagnostics and inspection. */
+  readonly name: string;
+  /** Entity config name registered with the framework. */
+  readonly entityName: string;
+  /** Optional path override relative to the package mount path. */
+  readonly path?: string;
+  /** Phantom generic marker so the entity adapter type flows through IntelliSense. */
+  readonly __adapter?: TAdapter;
+  /** Implementation details supplied by `slingshot-entity`. */
+  readonly implementation: unknown;
+}
+
+/** Lookup helper for framework-managed entity adapters owned by the app. */
+export interface PackageEntityReader {
+  /** Resolve an adapter from a typed package-owned entity module or typed entity ref. */
+  get<TAdapter>(
+    entity: SlingshotPackageEntityModuleLike<TAdapter> | PackageEntityRef<TAdapter>,
+  ): TAdapter;
+  /** Escape hatch: resolve an entity adapter by name. */
+  get<TValue = unknown>(args: { entity: string; plugin?: string }): TValue;
 }
 
 /** Full handler context available to package-authored domain routes. */
@@ -219,12 +252,12 @@ export interface DomainRouteDefinition<
   /** Optional typed response metadata for OpenAPI generation. */
   readonly responses?: TypedRouteResponses;
   /** Route handler executed after framework auth/permission/policy/idempotency middleware. */
-  readonly handler: (context: TContext) => Response | Promise<Response>;
+  readonly handler: BivariantRouteHandler<TContext>;
 }
 
 /** Non-entity route group owned by a package. */
 export interface SlingshotPackageDomainModule<
-  TRoute extends DomainRouteDefinition = DomainRouteDefinition,
+  TRoute extends AnyDomainRouteDefinition = AnyDomainRouteDefinition,
   TServices extends Readonly<Record<string, unknown>> = EmptyServices,
 > {
   /** Internal discriminator for package domain modules. */
@@ -239,24 +272,8 @@ export interface SlingshotPackageDomainModule<
   readonly services?: TServices;
 }
 
-/** Minimal entity module contract shared between `slingshot-core` and `slingshot-entity`. */
-export interface SlingshotPackageEntityModuleLike {
-  /** Internal discriminator for package entity modules. */
-  readonly kind: 'entity';
-  /** Module name used for diagnostics and inspection. */
-  readonly name: string;
-  /** Entity config name registered with the framework. */
-  readonly entityName: string;
-  /** Optional path override relative to the package mount path. */
-  readonly path?: string;
-  /** Implementation details supplied by `slingshot-entity`. */
-  readonly implementation: unknown;
-}
-
 /** Any module that can be owned by a package definition. */
-export type SlingshotPackageModule =
-  | SlingshotPackageEntityModuleLike
-  | SlingshotPackageDomainModule<any, any>;
+export type SlingshotPackageModule = AnyEntityModule | AnyDomainModule;
 
 /** Immutable package definition consumed by `createApp({ packages })`. */
 export interface SlingshotPackageDefinition {
@@ -269,9 +286,9 @@ export interface SlingshotPackageDefinition {
   /** Other plugins/packages that must be installed before this package. */
   readonly dependencies?: readonly string[];
   /** Entity modules owned by this package. */
-  readonly entities: readonly SlingshotPackageEntityModuleLike[];
+  readonly entities: readonly AnyEntityModule[];
   /** Domain modules owned by this package. */
-  readonly domains: readonly SlingshotPackageDomainModule<any, any>[];
+  readonly domains: readonly AnyDomainModule[];
   /** Named middleware available to entity and domain routes in this package. */
   readonly middleware?: Readonly<Record<string, MiddlewareHandler>>;
   /** Typed capability contracts published and required by the package. */
@@ -298,9 +315,9 @@ export interface DefinePackageInput {
   /** Other plugins/packages that must be installed before this package. */
   readonly dependencies?: readonly string[];
   /** Entity modules owned by the package. */
-  readonly entities?: readonly SlingshotPackageEntityModuleLike[];
+  readonly entities?: readonly AnyEntityModule[];
   /** Domain modules owned by the package. */
-  readonly domains?: readonly SlingshotPackageDomainModule<any, any>[];
+  readonly domains?: readonly AnyDomainModule[];
   /** Named middleware made available to package routes. */
   readonly middleware?: Readonly<Record<string, MiddlewareHandler>>;
   /** Capability contracts published and required by the package. */
@@ -432,6 +449,40 @@ function formatEntityRef(ref: PackageEntityRef | undefined): string | undefined 
   return ref.plugin ? `${ref.plugin}:${ref.entity}` : ref.entity;
 }
 
+/**
+ * Create a typed entity ref that can be used outside the owning package.
+ *
+ * Pass a local entity module for same-package typed lookups, or attach `plugin`
+ * when exporting a ref for another package to consume.
+ */
+export function entityRef<TAdapter>(
+  entity: SlingshotPackageEntityModuleLike<TAdapter>,
+  options?: { plugin?: string },
+): PackageEntityRef<TAdapter>;
+/** Create a typed entity ref directly from a package/entity name pair. */
+export function entityRef<TAdapter>(args: {
+  entity: string;
+  plugin?: string;
+}): PackageEntityRef<TAdapter>;
+export function entityRef<TAdapter>(
+  input: SlingshotPackageEntityModuleLike<TAdapter> | { entity: string; plugin?: string },
+  options?: { plugin?: string },
+): PackageEntityRef<TAdapter> {
+  if ('kind' in input && input.kind === 'entity') {
+    return Object.freeze({
+      kind: 'entity-ref' as const,
+      plugin: options?.plugin,
+      entity: input.entityName,
+    }) as PackageEntityRef<TAdapter>;
+  }
+  const args = input as { entity: string; plugin?: string };
+  return Object.freeze({
+    kind: 'entity-ref' as const,
+    plugin: args.plugin,
+    entity: args.entity,
+  }) as PackageEntityRef<TAdapter>;
+}
+
 function defineDomainRoute<
   TContext,
   const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
@@ -458,38 +509,38 @@ function defineDomainRoute<
 
 type PackageRouteBuilder = {
   get<
-    TContext = PackageDomainRouteContext,
     const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+    TContext = PackageDomainRouteContext<TRequest>,
   >(
     config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
   ): DomainRouteDefinition<TContext, TRequest>;
   post<
-    TContext = PackageDomainRouteContext,
     const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+    TContext = PackageDomainRouteContext<TRequest>,
   >(
     config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
   ): DomainRouteDefinition<TContext, TRequest>;
   put<
-    TContext = PackageDomainRouteContext,
     const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+    TContext = PackageDomainRouteContext<TRequest>,
   >(
     config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
   ): DomainRouteDefinition<TContext, TRequest>;
   patch<
-    TContext = PackageDomainRouteContext,
     const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+    TContext = PackageDomainRouteContext<TRequest>,
   >(
     config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
   ): DomainRouteDefinition<TContext, TRequest>;
   delete<
-    TContext = PackageDomainRouteContext,
     const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+    TContext = PackageDomainRouteContext<TRequest>,
   >(
     config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
   ): DomainRouteDefinition<TContext, TRequest>;
   head<
-    TContext = PackageDomainRouteContext,
     const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+    TContext = PackageDomainRouteContext<TRequest>,
   >(
     config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>,
   ): DomainRouteDefinition<TContext, TRequest>;
@@ -587,16 +638,19 @@ function createServiceAwareRouteBuilder<
   return createRouteBuilder() as ServiceAwareRouteBuilder<TServices>;
 }
 
-type DomainRouteServiceRequirements<TRoute extends DomainRouteDefinition<any, any>> = Simplify<
+type DomainRouteServiceRequirements<TRoute extends AnyDomainRouteDefinition> = Simplify<
   UnionToIntersection<
-    TRoute extends DomainRouteDefinition<PackageDomainRouteContext<any, infer TServices>, any>
+    TRoute extends DomainRouteDefinition<
+      PackageDomainRouteContext<TypedRouteRequestSpec, infer TServices>,
+      TypedRouteRequestSpec
+    >
       ? TServices
       : EmptyServices
   >
 >;
 
 type DomainDefinitionInput<
-  TRoute extends DomainRouteDefinition<any, any>,
+  TRoute extends AnyDomainRouteDefinition,
   TServices extends DomainRouteServiceRequirements<TRoute>,
 > = {
   readonly name: string;
@@ -646,7 +700,7 @@ export function provideCapability<TValue>(
 
 /** Declare a package-owned non-entity route group and optional domain-local services. */
 export function domain<
-  const TRoute extends DomainRouteDefinition<any, any> = DomainRouteDefinition,
+  const TRoute extends AnyDomainRouteDefinition = AnyDomainRouteDefinition,
   const TServices extends DomainRouteServiceRequirements<TRoute> =
     DomainRouteServiceRequirements<TRoute>,
 >(

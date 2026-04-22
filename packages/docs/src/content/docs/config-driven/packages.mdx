@@ -5,6 +5,13 @@ description: Define package boundaries, package-owned routes, and typed capabili
 
 Package-first authoring is the default code-first composition model in Slingshot.
 
+The canonical package lookup model is:
+
+- export package-owned entity modules like `const NoteEntity = entity({ ... })`
+- use `ctx.entities.get(NoteEntity)` inside package domain routes
+- use `entityRef(NoteEntity, { plugin: 'notes' })` only when another package needs that entity
+- keep string entity lookup as an escape hatch, not the default
+
 `definePackage(...)` is where you assemble:
 
 - entity modules declared with `entity(...)`
@@ -21,6 +28,7 @@ import {
   defineOperations,
   definePackage,
   domain,
+  entityRef,
   field,
   index,
   op,
@@ -51,28 +59,37 @@ const NoteOps = defineOperations(Note, {
   }),
 });
 
+export const NoteEntity = entity({
+  config: Note,
+  operations: NoteOps,
+});
+
 export const notesPackage = definePackage({
   name: 'notes',
   mountPath: '/community',
-  entities: [
-    entity({
-      config: Note,
-      operations: NoteOps,
-    }),
-  ],
+  entities: [NoteEntity],
   domains: [
     domain({
       name: 'analytics',
       basePath: '/analytics',
-      services: {},
       routes: [
         route.get({
           path: '/summary',
+          request: {
+            query: z.object({
+              authorId: z.string(),
+            }),
+          },
           async handler(ctx) {
-            return ctx.respond.json({ packageName: ctx.packageName });
+            const notes = ctx.entities.get(NoteEntity);
+            const result = await notes.byAuthor({ authorId: ctx.query.authorId });
+            return ctx.respond.json({
+              packageName: ctx.packageName,
+              count: result.items.length,
+            });
           },
         }),
-      ] as const,
+      ],
     }),
   ],
   capabilities: {
@@ -84,6 +101,56 @@ export const notesPackage = definePackage({
   },
 });
 ```
+
+## Canonical entity access in package routes
+
+Inside a package-owned `domain(...)` route, the default path is typed entity modules:
+
+```typescript
+import { domain, route } from '@lastshotlabs/slingshot';
+import { NoteEntity } from './note-package';
+
+domain({
+  name: 'analytics',
+  routes: [
+    route.get({
+      path: '/summary',
+      async handler(ctx) {
+        const notes = ctx.entities.get(NoteEntity);
+        const result = await notes.list({});
+        return ctx.respond.json({ count: result.items.length });
+      },
+    }),
+  ],
+});
+```
+
+That is the intended DX:
+
+- no stringly-typed entity names
+- no `BareEntityAdapter` casts
+- no `as any`
+- entity-specific adapter methods and record shapes flow through IntelliSense
+
+## Cross-package entity access
+
+When one package needs another package's entity adapter, make that dependency explicit:
+
+```typescript
+import { entityRef, route } from '@lastshotlabs/slingshot';
+import { NoteEntity } from '../notes/package';
+
+route.get({
+  path: '/notes',
+  async handler(ctx) {
+    const notes = ctx.entities.get(entityRef(NoteEntity, { plugin: 'notes' }));
+    const result = await notes.list({});
+    return ctx.respond.json({ count: result.items.length });
+  },
+});
+```
+
+Use cross-package entity refs when the dependency is fundamentally on entity data. Use capabilities when the dependency is on a service contract.
 
 ## Yes: package-owned raw routes live inside the package
 
@@ -97,7 +164,6 @@ definePackage({
     domain({
       name: 'analytics',
       basePath: '/analytics',
-      services: {},
       routes: [
         route.get({
           path: '/summary',
@@ -105,7 +171,7 @@ definePackage({
             return ctx.respond.json({ packageName: ctx.packageName });
           },
         }),
-      ] as const,
+      ],
     }),
   ],
 });
@@ -134,7 +200,6 @@ export const notesPackage = definePackage({
   domains: [
     domain({
       name: 'maintenance',
-      services: {},
       routes: [
         route.post({
           path: '/reindex/:id',
@@ -144,7 +209,7 @@ export const notesPackage = definePackage({
             return ctx.respond.noContent();
           },
         }),
-      ] as const,
+      ],
     }),
   ],
 });

@@ -1,5 +1,10 @@
 import type {
+  EntityAdapter,
   EntityChannelConfig,
+  InferCreateInput,
+  InferEntity,
+  InferOperationMethods,
+  InferUpdateInput,
   OperationConfig,
   RepoFactories,
   ResolvedEntityConfig,
@@ -43,6 +48,26 @@ export type EntityModuleWiring =
   | FactoriesEntityModuleWiring
   | ManualEntityModuleWiring;
 
+type NormalizeOperationsInput<TOperations extends EntityOperationsInput> =
+  TOperations extends ResolvedOperations<infer TOps>
+    ? TOps
+    : TOperations extends Record<string, OperationConfig>
+      ? TOperations
+      : undefined;
+
+/** Strongly typed adapter surface inferred from an entity config and optional operation map. */
+export type PackageEntityAdapterFor<
+  TConfig extends ResolvedEntityConfig = ResolvedEntityConfig,
+  TOperations extends Record<string, OperationConfig> | undefined = undefined,
+> = EntityAdapter<
+  InferEntity<TConfig['fields']>,
+  InferCreateInput<TConfig['fields']>,
+  InferUpdateInput<TConfig['fields']>
+> &
+  (TOperations extends Record<string, OperationConfig>
+    ? InferOperationMethods<TOperations, InferEntity<TConfig['fields']>>
+    : Record<string, never>);
+
 /** Normalized entity module implementation compiled into the framework plugin lifecycle. */
 export interface PackageEntityModuleImplementation {
   /** Resolved entity config used for route generation and adapter registration. */
@@ -64,7 +89,9 @@ export interface PackageEntityModuleImplementation {
 }
 
 /** Package-owned entity module returned by `entity(...)`. */
-export interface PackageEntityModule extends SlingshotPackageEntityModuleLike {
+export interface PackageEntityModule<
+  TAdapter = unknown,
+> extends SlingshotPackageEntityModuleLike<TAdapter> {
   /** `slingshot-entity` implementation details consumed by the runtime compiler. */
   readonly implementation: PackageEntityModuleImplementation;
 }
@@ -108,11 +135,14 @@ function freezeArray<TValue>(value: readonly TValue[] | undefined): readonly TVa
  * Standard wiring is the default and should cover the normal case where the framework can
  * resolve the adapter from the entity config and active persistence backend.
  */
-export function entity(config: {
+export function entity<
+  TConfig extends ResolvedEntityConfig,
+  TOperations extends EntityOperationsInput = undefined,
+>(config: {
   /** Resolved entity config to mount. */
-  readonly config: ResolvedEntityConfig;
+  readonly config: TConfig;
   /** Operation map or `defineOperations(...)` result used for generated routes. */
-  readonly operations?: EntityOperationsInput;
+  readonly operations?: TOperations;
   /** Additional custom routes mounted inside the entity route shell. */
   readonly extraRoutes?: readonly EntityExtraRoute[];
   /** Generated-route executor overrides. */
@@ -124,6 +154,16 @@ export function entity(config: {
   /** Optional parent path prefix for nested entity routes. */
   readonly parentPath?: string;
   /** Adapter wiring override. Defaults to `{ mode: 'standard' }`. */
+  readonly wiring?: EntityModuleWiring;
+}): PackageEntityModule<PackageEntityAdapterFor<TConfig, NormalizeOperationsInput<TOperations>>>;
+export function entity(config: {
+  readonly config: ResolvedEntityConfig;
+  readonly operations?: EntityOperationsInput;
+  readonly extraRoutes?: readonly EntityExtraRoute[];
+  readonly overrides?: EntityRouteExecutorOverrides;
+  readonly channels?: EntityChannelConfig;
+  readonly path?: string;
+  readonly parentPath?: string;
   readonly wiring?: EntityModuleWiring;
 }): PackageEntityModule {
   const operations = normalizeOperations(config.operations);

@@ -64,15 +64,15 @@ import { entity } from '@lastshotlabs/slingshot';
 import { Note } from './note-entity';
 import { NoteOps } from './note-operations';
 
+export const NoteEntity = entity({
+  config: Note,
+  operations: NoteOps,
+});
+
 export const notesPackage = definePackage({
   name: 'notes',
   mountPath: '/community',
-  entities: [
-    entity({
-      config: Note,
-      operations: NoteOps,
-    }),
-  ],
+  entities: [NoteEntity],
 });
 ```
 
@@ -81,6 +81,15 @@ By default:
 - the entity path is inferred from the entity name
 - the framework resolves the adapter using standard wiring
 - CRUD and named-operation routes mount through the managed entity shell
+
+Export the entity module you pass to `definePackage(...)`. That module is the canonical typed ref you use later from package domain routes:
+
+```typescript
+const notes = ctx.entities.get(NoteEntity);
+const note = await notes.getById(noteId);
+```
+
+That is the default path for same-package entity access. Do not fall back to string names and adapter casts unless you are deliberately using an escape hatch.
 
 ## What entity routes map to
 
@@ -113,6 +122,12 @@ Entity modules still support:
 - `overrides` for replacing generated route executors
 
 Use them when the route still semantically belongs to the entity. If the route is package-level orchestration or spans multiple entities, prefer a package `domain(...)` route instead.
+
+These are supported customization tools, not the first thing to reach for. The canonical order is:
+
+- entity CRUD and named operations first
+- package `domain(...)` routes for cross-entity/reporting/orchestration
+- `extraRoutes` or `overrides` when the route still belongs to the entity shell
 
 ## Channel declarations
 

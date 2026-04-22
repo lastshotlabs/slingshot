@@ -261,6 +261,7 @@ export type {
   EntityModuleWiring,
   FactoriesEntityModuleWiring,
   ManualEntityModuleWiring,
+  PackageEntityAdapterFor,
   PackageEntityModule,
   PackageEntityModuleImplementation,
   StandardEntityModuleWiring,

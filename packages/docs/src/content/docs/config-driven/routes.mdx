@@ -116,6 +116,7 @@ export const notesPackage = definePackage({
     domain({
       name: 'analytics',
       basePath: '/analytics',
+      services: {},
       routes: [
         route.get({
           path: '/summary',
@@ -123,7 +124,7 @@ export const notesPackage = definePackage({
             return ctx.respond.json({ packageName: ctx.packageName });
           },
         }),
-      ],
+      ] as const,
     }),
   ],
 });
@@ -156,15 +157,18 @@ Package domain routes can carry explicit request and response schemas:
 import { z } from 'zod';
 import { domain, route } from '@lastshotlabs/slingshot';
 
+const summaryBody = z.object({
+  noteId: z.string(),
+});
+
 domain({
   name: 'analytics',
+  services: {},
   routes: [
     route.post({
       path: '/summary',
       request: {
-        body: z.object({
-          noteId: z.string(),
-        }),
+        body: summaryBody,
       },
       responses: {
         200: {
@@ -175,10 +179,10 @@ domain({
         },
       },
       async handler(ctx) {
-        return ctx.respond.json({ summary: `summary for ${ctx.body.noteId}` });
+        return ctx.respond.json({ summary: 'summary queued' });
       },
     }),
-  ],
+  ] as const,
 });
 ```
 

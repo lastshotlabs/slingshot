@@ -14,7 +14,7 @@ type InferSchema<TSchema extends ZodTypeAny | undefined, TFallback> = TSchema ex
   : TFallback;
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
-type EmptyServices = Readonly<Record<string, never>>;
+type EmptyServices = Readonly<{}>;
 type UnionToIntersection<T> = (T extends unknown ? (value: T) => void : never) extends (
   value: infer TResult,
 ) => void
@@ -499,43 +499,43 @@ function createRouteBuilder(): PackageRouteBuilder {
   return {
     /** Declare a package-owned `GET` route. */
     get<
-      TContext = PackageDomainRouteContext,
       const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+      TContext = PackageDomainRouteContext<TRequest>,
     >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
       return defineDomainRoute<TContext, TRequest>('get', config);
     },
     /** Declare a package-owned `POST` route. */
     post<
-      TContext = PackageDomainRouteContext,
       const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+      TContext = PackageDomainRouteContext<TRequest>,
     >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
       return defineDomainRoute<TContext, TRequest>('post', config);
     },
     /** Declare a package-owned `PUT` route. */
     put<
-      TContext = PackageDomainRouteContext,
       const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+      TContext = PackageDomainRouteContext<TRequest>,
     >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
       return defineDomainRoute<TContext, TRequest>('put', config);
     },
     /** Declare a package-owned `PATCH` route. */
     patch<
-      TContext = PackageDomainRouteContext,
       const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+      TContext = PackageDomainRouteContext<TRequest>,
     >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
       return defineDomainRoute<TContext, TRequest>('patch', config);
     },
     /** Declare a package-owned `DELETE` route. */
     delete<
-      TContext = PackageDomainRouteContext,
       const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+      TContext = PackageDomainRouteContext<TRequest>,
     >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
       return defineDomainRoute<TContext, TRequest>('delete', config);
     },
     /** Declare a package-owned `HEAD` route. */
     head<
-      TContext = PackageDomainRouteContext,
       const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+      TContext = PackageDomainRouteContext<TRequest>,
     >(config: Omit<DomainRouteDefinition<TContext, TRequest>, 'kind' | 'method'>) {
       return defineDomainRoute<TContext, TRequest>('head', config);
     },

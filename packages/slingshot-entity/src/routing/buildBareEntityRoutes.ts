@@ -667,12 +667,10 @@ async function preparePlannedExecution(
     }
 
     default: {
-      let input: unknown = {};
-      try {
-        input = (await c.req.json()) as unknown;
-      } catch {
-        input = {};
-      }
+      const input = await c.req
+        .json()
+        .then(value => value as unknown)
+        .catch(() => ({}) as unknown);
       const rawBody = readJsonRecord(input);
       const pathParams = c.req.param() as Record<string, string>;
       const parsedParams = parseTypedSection(c, route.request?.params, pathParams);
@@ -691,13 +689,16 @@ async function preparePlannedExecution(
       const ctxOverrides: Record<string, unknown> = {};
       if (actor.id != null) {
         ctxOverrides['actor.id'] = actor.id;
+        ctxOverrides['authUserId'] = actor.id;
       }
       if (actor.tenantId != null) {
         ctxOverrides['actor.tenantId'] = actor.tenantId;
+        ctxOverrides['tenantId'] = actor.tenantId;
       }
       ctxOverrides['actor.kind'] = actor.kind;
       if (actor.sessionId != null) {
         ctxOverrides['actor.sessionId'] = actor.sessionId;
+        ctxOverrides['sessionId'] = actor.sessionId;
       }
       const mergedInput = {
         ...parsedQueryRecord,
@@ -1197,13 +1198,16 @@ export function buildBareEntityRoutes<
       const ctxOverrides: Record<string, unknown> = {};
       if (actor.id != null) {
         ctxOverrides['actor.id'] = actor.id;
+        ctxOverrides['authUserId'] = actor.id;
       }
       if (actor.tenantId != null) {
         ctxOverrides['actor.tenantId'] = actor.tenantId;
+        ctxOverrides['tenantId'] = actor.tenantId;
       }
       ctxOverrides['actor.kind'] = actor.kind;
       if (actor.sessionId != null) {
         ctxOverrides['actor.sessionId'] = actor.sessionId;
+        ctxOverrides['sessionId'] = actor.sessionId;
       }
       const params = { ...queryParams, ...bodyRecord, ...pathParams, ...ctxOverrides };
 

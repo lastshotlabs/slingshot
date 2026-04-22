@@ -14,7 +14,7 @@ This walkthrough uses the primary code-first path. Manifest-backed authoring sti
 
 ## 1. The entity carries the core model
 
-```typescript
+```typescript title="thread-entity.ts"
 import { defineEntity, field, index } from '@lastshotlabs/slingshot';
 
 export const Thread = defineEntity('Thread', {
@@ -26,6 +26,7 @@ export const Thread = defineEntity('Thread', {
     title: field.string(),
     body: field.string({ optional: true }),
     status: field.enum(['draft', 'published', 'deleted'] as const, { default: 'draft' }),
+    tags: field.stringArray({ optional: true }),
     locked: field.boolean({ default: false }),
     pinned: field.boolean({ default: false }),
     createdAt: field.date({ default: 'now' }),
@@ -69,8 +70,9 @@ One definition can carry:
 
 CRUD comes from the entity automatically. Operations are for behavior that should become typed adapter methods and managed HTTP routes.
 
-```typescript
+```typescript title="thread-operations.ts"
 import { defineOperations, op } from '@lastshotlabs/slingshot';
+import { Thread } from './thread-entity';
 
 export const threadOperations = defineOperations(Thread, {
   byContainer: op.lookup({
@@ -118,10 +120,11 @@ Each operation can produce:
 
 `definePackage(...)` is the default top-level authoring surface.
 
-```typescript
+```typescript title="threads-package.ts"
 import type { MiddlewareHandler } from 'hono';
-import { createApp, definePackage, domain, route } from '@lastshotlabs/slingshot';
-import { entity } from '@lastshotlabs/slingshot';
+import { createApp, definePackage, domain, entity, route } from '@lastshotlabs/slingshot';
+import { Thread } from './thread-entity';
+import { threadOperations } from './thread-operations';
 
 declare function createBanCheckMiddleware(): MiddlewareHandler;
 declare function createAutoModMiddleware(): MiddlewareHandler;
@@ -143,6 +146,7 @@ export const threadsPackage = definePackage({
     domain({
       name: 'analytics',
       basePath: '/analytics',
+      services: {},
       routes: [
         route.get({
           path: '/summary',
@@ -150,7 +154,7 @@ export const threadsPackage = definePackage({
             return ctx.respond.json({ packageName: ctx.packageName });
           },
         }),
-      ],
+      ] as const,
     }),
   ],
 });

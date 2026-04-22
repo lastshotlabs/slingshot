@@ -13,7 +13,7 @@ Entities are the core of the config-driven model. An entity declaration gives Sl
 
 ## Define an entity
 
-```typescript
+```typescript title="note-entity.ts"
 import { defineEntity, field, index } from '@lastshotlabs/slingshot';
 
 export const Note = defineEntity('Note', {
@@ -23,6 +23,7 @@ export const Note = defineEntity('Note', {
     title: field.string(),
     body: field.string(),
     authorId: field.string(),
+    status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
     createdAt: field.date({ default: 'now' }),
   },
   indexes: [index(['authorId', 'createdAt'], { direction: 'desc' })],
@@ -35,8 +36,9 @@ An entity defines persistence structure first. Routes and adapters are derived f
 
 Operations define the behavior that sits on top of the entity.
 
-```typescript
+```typescript title="note-operations.ts"
 import { defineOperations, op } from '@lastshotlabs/slingshot';
+import { Note } from './note-entity';
 
 export const NoteOps = defineOperations(Note, {
   byAuthor: op.lookup({
@@ -59,6 +61,8 @@ See [Operations Reference](/slingshot/config-driven/operations/) for the full op
 ```typescript
 import { definePackage } from '@lastshotlabs/slingshot';
 import { entity } from '@lastshotlabs/slingshot';
+import { Note } from './note-entity';
+import { NoteOps } from './note-operations';
 
 export const notesPackage = definePackage({
   name: 'notes',

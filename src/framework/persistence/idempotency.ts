@@ -181,6 +181,9 @@ export function createMongoIdempotencyAdapter(
   function getModel(): IdempotencyModel {
     if (appConn.models['Idempotency']) return appConn.models['Idempotency'] as IdempotencyModel;
     const { Schema } = mongoosePkg as typeof import('mongoose');
+    const mixedType =
+      (Schema as typeof import('mongoose').Schema & { Types?: { Mixed?: unknown } }).Types?.Mixed ??
+      Object;
     const schema = new Schema(
       {
         key: { type: String, required: true, unique: true },
@@ -189,7 +192,7 @@ export function createMongoIdempotencyAdapter(
         createdAt: { type: Date, required: true },
         expiresAt: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
         requestFingerprint: { type: String, required: false, default: null },
-        responseHeaders: { type: Schema.Types.Mixed, required: false, default: null },
+        responseHeaders: { type: mixedType, required: false, default: null },
         responseEncoding: { type: String, required: false, default: 'utf8' },
       },
       { collection: 'idempotency' },

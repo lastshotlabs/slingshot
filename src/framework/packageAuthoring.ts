@@ -322,8 +322,6 @@ function resolvePermissions(app: object) {
   };
 }
 
-type PackageDomainRouteDefinition = SlingshotPackageDefinition['domains'][number]['routes'][number];
-
 function normalizeRouteEventConfig(
   event: RouteEventConfig | string | undefined,
 ): RouteEventConfig | undefined {
@@ -899,29 +897,29 @@ function createPackagePlugin(
                 routeDefinition.request?.body !== undefined || rawBody !== null
                   ? parsedBody.data
                   : rawBody;
+              const actor = getActor(c);
+              const params = parsedParams.data as Record<string, string>;
+              const query = asObjectRecord(parsedQuery.data);
               const respond = createDomainRespond(c, routeKey);
               const requestContext = {
-                actor: getActor(c),
+                actor,
                 requestId: c.get('requestId' as never) as string | undefined,
               };
-              const response = await routeDefinition.handler({
+              const routeContext: PackageDomainRouteContext = {
                 request: c,
-                actor: getActor(c),
+                actor,
                 packageName: pkg.name,
-                params: parsedParams.data as Record<string, string>,
-                query: asObjectRecord(parsedQuery.data),
+                params,
+                query,
                 body,
-                input: normalizeRouteInput(
-                  parsedParams.data as Record<string, string>,
-                  asObjectRecord(parsedQuery.data),
-                  body,
-                ),
+                input: normalizeRouteInput(params, query, body),
                 requestContext,
                 respond,
                 capabilities: capabilityReaderFactory(ctx.app),
                 entities: buildPackageEntityReader(ctx.app, pkg.name),
                 services,
-              } as PackageDomainRouteContext);
+              };
+              const response = await routeDefinition.handler(routeContext);
               emitRouteEvent(c, routeDefinition.event);
               return response;
             },

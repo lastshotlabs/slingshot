@@ -14,17 +14,42 @@ Package-first authoring is the default code-first composition model in Slingshot
 
 ## The package shape
 
-```typescript
+```typescript title="notes-package.ts"
 import {
   defineCapability,
+  defineEntity,
+  defineOperations,
   definePackage,
   domain,
+  field,
+  index,
+  op,
   provideCapability,
   route,
 } from '@lastshotlabs/slingshot';
 import { entity } from '@lastshotlabs/slingshot';
 
 const notesApi = defineCapability<{ summarize(noteId: string): Promise<string> }>('notes.api');
+
+const Note = defineEntity('Note', {
+  namespace: 'community',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    authorId: field.string(),
+    status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  indexes: [index(['authorId', 'createdAt'], { direction: 'desc' })],
+});
+
+const NoteOps = defineOperations(Note, {
+  byAuthor: op.lookup({
+    fields: { authorId: 'param:authorId' },
+    returns: 'many',
+  }),
+});
 
 export const notesPackage = definePackage({
   name: 'notes',
@@ -39,6 +64,7 @@ export const notesPackage = definePackage({
     domain({
       name: 'analytics',
       basePath: '/analytics',
+      services: {},
       routes: [
         route.get({
           path: '/summary',
@@ -46,7 +72,7 @@ export const notesPackage = definePackage({
             return ctx.respond.json({ packageName: ctx.packageName });
           },
         }),
-      ],
+      ] as const,
     }),
   ],
   capabilities: {
@@ -71,6 +97,7 @@ definePackage({
     domain({
       name: 'analytics',
       basePath: '/analytics',
+      services: {},
       routes: [
         route.get({
           path: '/summary',
@@ -78,7 +105,7 @@ definePackage({
             return ctx.respond.json({ packageName: ctx.packageName });
           },
         }),
-      ],
+      ] as const,
     }),
   ],
 });
@@ -107,6 +134,7 @@ export const notesPackage = definePackage({
   domains: [
     domain({
       name: 'maintenance',
+      services: {},
       routes: [
         route.post({
           path: '/reindex/:id',
@@ -116,7 +144,7 @@ export const notesPackage = definePackage({
             return ctx.respond.noContent();
           },
         }),
-      ],
+      ] as const,
     }),
   ],
 });
@@ -163,6 +191,7 @@ Mount packages at the app root:
 
 ```typescript
 import { createApp } from '@lastshotlabs/slingshot';
+import { notesPackage } from './notes-package';
 
 const { app } = await createApp({
   packages: [notesPackage],
@@ -177,6 +206,7 @@ Use `inspectPackage(...)` to inspect the effective package graph without booting
 
 ```typescript
 import { inspectPackage } from '@lastshotlabs/slingshot';
+import { notesPackage } from './notes-package';
 
 const inspection = inspectPackage(notesPackage);
 ```

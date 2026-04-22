@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
@@ -9,8 +11,6 @@ import {
   type RunOptions,
   type RunStatus,
 } from '@lastshotlabs/slingshot-orchestration';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 
 const VALID_STATUSES = new Set<RunStatus>([
   'pending',
@@ -115,7 +115,7 @@ export function createOrchestrationRouter(options: {
   tasks: AnyResolvedTask[];
   workflows: AnyResolvedWorkflow[];
 }) {
-  const router = new Hono();
+  const router = new Hono<AppEnv>();
   router.use('*', ...options.routeMiddleware);
 
   router.post('/tasks/:name/runs', async c => {

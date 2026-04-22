@@ -120,10 +120,6 @@ function isSqliteUniqueConstraintError(error: unknown, columnName: string): bool
   );
 }
 
-function isLegacyIdempotencyKey(idempotencyKey: string): boolean {
-  return !idempotencyKey.startsWith('orch-idem:');
-}
-
 /**
  * Create the SQLite-backed orchestration adapter.
  *
@@ -192,51 +188,6 @@ export function createSqliteAdapter(options: {
       `Failed to initialize SQLite schema: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  const migrateLegacyIdempotencyKeys = db.transaction(() => {
-    const rows = db
-      .prepare(
-        `SELECT id, type, name, tenant_id, idempotency_key
-         FROM orchestration_runs
-         WHERE idempotency_key IS NOT NULL`,
-      )
-      .all() as Array<{
-      id: string;
-      type: 'task' | 'workflow';
-      name: string;
-      tenant_id: string | null;
-      idempotency_key: string;
-    }>;
-    const updateIdempotencyKey = db.prepare(
-      `UPDATE orchestration_runs SET idempotency_key = ? WHERE id = ?`,
-    );
-
-    for (const row of rows) {
-      if (!isLegacyIdempotencyKey(row.idempotency_key)) {
-        continue;
-      }
-      const scopedKey = createIdempotencyScope(
-        { type: row.type, name: row.name },
-        {
-          tenantId: row.tenant_id ?? undefined,
-          idempotencyKey: row.idempotency_key,
-        },
-      );
-      if (!scopedKey || scopedKey === row.idempotency_key) {
-        continue;
-      }
-      updateIdempotencyKey.run(scopedKey, row.id);
-    }
-  });
-  try {
-    migrateLegacyIdempotencyKeys();
-  } catch (error) {
-    db.close();
-    throw new OrchestrationError(
-      'ADAPTER_ERROR',
-      `Failed to migrate SQLite idempotency keys: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
   const taskRegistry = new Map<string, AnyResolvedTask>();
   const workflowRegistry = new Map<string, AnyResolvedWorkflow>();
   const resultPromises = new Map<string, Promise<unknown>>();
@@ -270,6 +221,19 @@ export function createSqliteAdapter(options: {
   const getRunByIdempotency = db.prepare(
     `SELECT id FROM orchestration_runs WHERE idempotency_key = ?`,
   ) as Database.Statement<[string], { id: string }>;
+  const getRunByLegacyIdempotency = db.prepare(
+    `SELECT id
+     FROM orchestration_runs
+     WHERE type = ?
+       AND name = ?
+       AND COALESCE(tenant_id, '') = COALESCE(?, '')
+       AND idempotency_key = ?
+     ORDER BY created_at ASC
+     LIMIT 1`,
+  ) as Database.Statement<
+    ['task' | 'workflow', string, string | null, string],
+    { id: string }
+  >;
   const upsertStep = db.prepare(`
     INSERT INTO orchestration_steps (run_id, name, task, status, output, error, attempts, started_at, completed_at)
     VALUES (@runId, @name, @task, @status, @output, @error, @attempts, @startedAt, @completedAt)
@@ -385,6 +349,28 @@ export function createSqliteAdapter(options: {
     const loader = promise ?? resultPromises.get(runId) ?? pollForResult(runId);
     resultPromises.set(runId, loader);
     return createCachedRunHandle(runId, () => loader);
+  }
+
+  function findExistingIdempotentRun(
+    target: { type: 'task' | 'workflow'; name: string },
+    opts: { tenantId?: string; idempotencyKey?: string },
+  ): { id: string } | undefined {
+    const scopedIdempotencyKey = createIdempotencyScope(target, opts);
+    if (!scopedIdempotencyKey) {
+      return undefined;
+    }
+
+    return (
+      getRunByIdempotency.get(scopedIdempotencyKey) ??
+      (opts.idempotencyKey
+        ? getRunByLegacyIdempotency.get(
+            target.type,
+            target.name,
+            opts.tenantId ?? null,
+            opts.idempotencyKey,
+          )
+        : undefined)
+    );
   }
 
   async function recoverRun(row: SqliteRunRow): Promise<void> {
@@ -569,7 +555,7 @@ export function createSqliteAdapter(options: {
       }
       const scopedIdempotencyKey = createIdempotencyScope({ type: 'task', name }, opts ?? {});
       if (scopedIdempotencyKey) {
-        const existing = getRunByIdempotency.get(scopedIdempotencyKey);
+        const existing = findExistingIdempotentRun({ type: 'task', name }, opts ?? {});
         if (existing) return createHandle(existing.id);
       }
       const runId = generateRunId();
@@ -628,7 +614,7 @@ export function createSqliteAdapter(options: {
         opts ?? {},
       );
       if (scopedIdempotencyKey) {
-        const existing = getRunByIdempotency.get(scopedIdempotencyKey);
+        const existing = findExistingIdempotentRun({ type: 'workflow', name }, opts ?? {});
         if (existing) return createHandle(existing.id);
       }
       const runId = generateRunId();

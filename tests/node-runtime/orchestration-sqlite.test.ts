@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
@@ -106,6 +107,7 @@ describe('orchestration sqlite adapter (node runtime)', () => {
 
   it('does not re-scope already migrated idempotency keys after restart', async () => {
     const dbPath = join(tempDir, 'idempotency-restart.sqlite');
+    const scopedKey = 'orch-idem:task:sqlite-restart-task:tenant-a:quote-123';
     const echoTask = defineTask({
       name: 'sqlite-restart-task',
       input: z.object({ value: z.string() }),
@@ -127,6 +129,15 @@ describe('orchestration sqlite adapter (node runtime)', () => {
       { tenantId: 'tenant-a', idempotencyKey: 'quote-123' },
     );
     await expect(first.result()).resolves.toEqual({ echoed: 'first' });
+
+    const beforeRestartDb = new Database(dbPath, { readonly: true });
+    expect(
+      beforeRestartDb
+        .prepare('select id, idempotency_key from orchestration_runs order by created_at asc')
+        .all(),
+    ).toEqual([{ id: first.id, idempotency_key: scopedKey }]);
+    beforeRestartDb.close();
+
     await adapterA.shutdown();
 
     const adapterB = createSqliteAdapter({ path: dbPath, concurrency: 1 });
@@ -135,13 +146,28 @@ describe('orchestration sqlite adapter (node runtime)', () => {
       tasks: [echoTask],
     });
 
+    const afterRestartDb = new Database(dbPath, { readonly: true });
+    expect(
+      afterRestartDb
+        .prepare('select id, idempotency_key from orchestration_runs order by created_at asc')
+        .all(),
+    ).toEqual([{ id: first.id, idempotency_key: scopedKey }]);
+    afterRestartDb.close();
+
     const replay = await runtimeB.runTask(
       echoTask,
       { value: 'ignored' },
       { tenantId: 'tenant-a', idempotencyKey: 'quote-123' },
     );
 
-    expect(replay.id).toBe(first.id);
+    const afterReplayDb = new Database(dbPath, { readonly: true });
+    expect(
+      afterReplayDb
+        .prepare('select id, idempotency_key from orchestration_runs order by created_at asc')
+        .all(),
+    ).toEqual([{ id: first.id, idempotency_key: scopedKey }]);
+    afterReplayDb.close();
+
     await expect(replay.result()).resolves.toEqual({ echoed: 'first' });
 
     await adapterB.shutdown();

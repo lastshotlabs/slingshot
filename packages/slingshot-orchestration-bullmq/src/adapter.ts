@@ -63,18 +63,38 @@ function serializeStepRun(step: StepRun): SerializedStepRun {
 }
 
 function serializeRunSnapshot(run: Run | WorkflowRun): SerializedRunSnapshot {
-  return {
-    ...run,
+  const base: SerializedRunSnapshot = {
+    id: run.id,
+    type: run.type,
+    name: run.name,
+    status: run.status,
+    input: run.input,
+    output: run.output,
+    error: run.error,
+    tenantId: run.tenantId,
+    priority: run.priority,
+    tags: run.tags,
+    metadata: run.metadata,
+    progress: run.progress,
     createdAt: run.createdAt.toISOString(),
     startedAt: run.startedAt?.toISOString(),
     completedAt: run.completedAt?.toISOString(),
-    ...(run.type === 'workflow' && run.steps
-      ? {
-          steps: Object.fromEntries(
-            Object.entries(run.steps).map(([stepName, step]) => [stepName, serializeStepRun(step)]),
-          ),
-        }
-      : {}),
+  };
+
+  if (run.type !== 'workflow') {
+    return base;
+  }
+
+  const workflowRun = run as WorkflowRun;
+  if (!workflowRun.steps) {
+    return base;
+  }
+
+  return {
+    ...base,
+    steps: Object.fromEntries(
+      Object.entries(workflowRun.steps).map(([stepName, step]) => [stepName, serializeStepRun(step)]),
+    ),
   };
 }
 

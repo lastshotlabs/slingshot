@@ -3,6 +3,7 @@ import { createCachedRunHandle, generateRunId } from '../adapter';
 import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
 import { OrchestrationError } from '../errors';
+import { createIdempotencyScope } from '../idempotency';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -12,7 +13,6 @@ import type {
   Run,
   RunFilter,
   RunHandle,
-  RunOptions,
   RunProgress,
   RunStatus,
   StepRun,
@@ -112,6 +112,18 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+function isSqliteUniqueConstraintError(error: unknown, columnName: string): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes('UNIQUE constraint failed') &&
+    error.message.includes(columnName)
+  );
+}
+
+function isLegacyIdempotencyKey(idempotencyKey: string): boolean {
+  return !idempotencyKey.startsWith('orch-idem:');
+}
+
 /**
  * Create the SQLite-backed orchestration adapter.
  *
@@ -178,6 +190,50 @@ export function createSqliteAdapter(options: {
     throw new OrchestrationError(
       'ADAPTER_ERROR',
       `Failed to initialize SQLite schema: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const migrateLegacyIdempotencyKeys = db.transaction(() => {
+    const rows = db
+      .prepare(
+        `SELECT id, type, name, tenant_id, idempotency_key
+         FROM orchestration_runs
+         WHERE idempotency_key IS NOT NULL`,
+      )
+      .all() as Array<{
+      id: string;
+      type: 'task' | 'workflow';
+      name: string;
+      tenant_id: string | null;
+      idempotency_key: string;
+    }>;
+    const updateIdempotencyKey = db.prepare(
+      `UPDATE orchestration_runs SET idempotency_key = ? WHERE id = ?`,
+    );
+
+    for (const row of rows) {
+      if (!isLegacyIdempotencyKey(row.idempotency_key)) {
+        continue;
+      }
+      const scopedKey = createIdempotencyScope(
+        { type: row.type, name: row.name },
+        {
+          tenantId: row.tenant_id ?? undefined,
+          idempotencyKey: row.idempotency_key,
+        },
+      );
+      if (!scopedKey || scopedKey === row.idempotency_key) {
+        continue;
+      }
+      updateIdempotencyKey.run(scopedKey, row.id);
+    }
+  });
+  try {
+    migrateLegacyIdempotencyKeys();
+  } catch (error) {
+    db.close();
+    throw new OrchestrationError(
+      'ADAPTER_ERROR',
+      `Failed to migrate SQLite idempotency keys: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
@@ -511,29 +567,40 @@ export function createSqliteAdapter(options: {
       if (!def) {
         throw new OrchestrationError('TASK_NOT_FOUND', `Task '${name}' not registered`);
       }
-      if (opts?.idempotencyKey) {
-        const existing = getRunByIdempotency.get(opts.idempotencyKey);
+      const scopedIdempotencyKey = createIdempotencyScope({ type: 'task', name }, opts ?? {});
+      if (scopedIdempotencyKey) {
+        const existing = getRunByIdempotency.get(scopedIdempotencyKey);
         if (existing) return createHandle(existing.id);
       }
       const runId = generateRunId();
-      insertRun.run({
-        id: runId,
-        type: 'task',
-        name,
-        status: 'pending',
-        input: json(input),
-        output: null,
-        error: null,
-        idempotencyKey: opts?.idempotencyKey ?? null,
-        tenantId: opts?.tenantId ?? null,
-        priority: opts?.priority ?? 0,
-        tags: opts?.tags ? json(opts.tags) : null,
-        metadata: opts?.metadata ? json(opts.metadata) : null,
-        progress: null,
-        createdAt: new Date().toISOString(),
-        startedAt: null,
-        completedAt: null,
-      });
+      try {
+        insertRun.run({
+          id: runId,
+          type: 'task',
+          name,
+          status: 'pending',
+          input: json(input),
+          output: null,
+          error: null,
+          idempotencyKey: scopedIdempotencyKey ?? null,
+          tenantId: opts?.tenantId ?? null,
+          priority: opts?.priority ?? 0,
+          tags: opts?.tags ? json(opts.tags) : null,
+          metadata: opts?.metadata ? json(opts.metadata) : null,
+          progress: null,
+          createdAt: new Date().toISOString(),
+          startedAt: null,
+          completedAt: null,
+        });
+      } catch (error) {
+        if (scopedIdempotencyKey && isSqliteUniqueConstraintError(error, 'idempotency_key')) {
+          const existing = getRunByIdempotency.get(scopedIdempotencyKey);
+          if (existing) {
+            return createHandle(existing.id);
+          }
+        }
+        throw error;
+      }
       const promise = taskRunner
         .submit(def, input, {
           runId,
@@ -556,29 +623,43 @@ export function createSqliteAdapter(options: {
       if (!def) {
         throw new OrchestrationError('WORKFLOW_NOT_FOUND', `Workflow '${name}' not registered`);
       }
-      if (opts?.idempotencyKey) {
-        const existing = getRunByIdempotency.get(opts.idempotencyKey);
+      const scopedIdempotencyKey = createIdempotencyScope(
+        { type: 'workflow', name },
+        opts ?? {},
+      );
+      if (scopedIdempotencyKey) {
+        const existing = getRunByIdempotency.get(scopedIdempotencyKey);
         if (existing) return createHandle(existing.id);
       }
       const runId = generateRunId();
-      insertRun.run({
-        id: runId,
-        type: 'workflow',
-        name,
-        status: 'pending',
-        input: json(input),
-        output: null,
-        error: null,
-        idempotencyKey: opts?.idempotencyKey ?? null,
-        tenantId: opts?.tenantId ?? null,
-        priority: opts?.priority ?? 0,
-        tags: opts?.tags ? json(opts.tags) : null,
-        metadata: opts?.metadata ? json(opts.metadata) : null,
-        progress: null,
-        createdAt: new Date().toISOString(),
-        startedAt: null,
-        completedAt: null,
-      });
+      try {
+        insertRun.run({
+          id: runId,
+          type: 'workflow',
+          name,
+          status: 'pending',
+          input: json(input),
+          output: null,
+          error: null,
+          idempotencyKey: scopedIdempotencyKey ?? null,
+          tenantId: opts?.tenantId ?? null,
+          priority: opts?.priority ?? 0,
+          tags: opts?.tags ? json(opts.tags) : null,
+          metadata: opts?.metadata ? json(opts.metadata) : null,
+          progress: null,
+          createdAt: new Date().toISOString(),
+          startedAt: null,
+          completedAt: null,
+        });
+      } catch (error) {
+        if (scopedIdempotencyKey && isSqliteUniqueConstraintError(error, 'idempotency_key')) {
+          const existing = getRunByIdempotency.get(scopedIdempotencyKey);
+          if (existing) {
+            return createHandle(existing.id);
+          }
+        }
+        throw error;
+      }
       const controller = new AbortController();
       workflowControllers.set(runId, controller);
       workflowChildren.set(runId, new Set());

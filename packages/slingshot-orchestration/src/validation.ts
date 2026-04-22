@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/**
+ * Validation schema for portable retry policies shared by tasks and workflow steps.
+ */
 export const retryPolicySchema = z
   .object({
     maxAttempts: z
@@ -32,6 +35,9 @@ export const retryPolicySchema = z
     { message: 'maxDelayMs must be >= delayMs when both are specified.' },
   );
 
+/**
+ * Validation schema for portable run options understood by every adapter.
+ */
 export const runOptionsSchema = z.object({
   idempotencyKey: z
     .string()
@@ -71,6 +77,9 @@ export const runOptionsSchema = z.object({
     .describe('Adapter-specific escape hatch options validated by the adapter itself.'),
 });
 
+/**
+ * Validation schema for the in-memory adapter factory options.
+ */
 export const memoryAdapterOptionsSchema = z.object({
   concurrency: z
     .number()
@@ -80,6 +89,9 @@ export const memoryAdapterOptionsSchema = z.object({
     .describe('Maximum concurrent task executions in the in-memory adapter.'),
 });
 
+/**
+ * Validation schema for the SQLite adapter factory options.
+ */
 export const sqliteAdapterOptionsSchema = z.object({
   path: z
     .string()
@@ -93,5 +105,11 @@ export const sqliteAdapterOptionsSchema = z.object({
     .describe('Maximum concurrent task executions in the SQLite adapter.'),
 });
 
+/**
+ * Typed options accepted by `createMemoryAdapter()`.
+ */
 export type MemoryAdapterOptions = z.infer<typeof memoryAdapterOptionsSchema>;
+/**
+ * Typed options accepted by `createSqliteAdapter()`.
+ */
 export type SqliteAdapterOptions = z.infer<typeof sqliteAdapterOptionsSchema>;

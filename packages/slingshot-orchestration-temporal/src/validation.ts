@@ -14,6 +14,9 @@ const temporalTlsSchema = z
   })
   .strict();
 
+/**
+ * Validation schema for manifest-style Temporal connection settings.
+ */
 export const temporalConnectionConfigSchema = z
   .object({
     address: z.string().min(1),
@@ -24,6 +27,9 @@ export const temporalConnectionConfigSchema = z
   })
   .strict();
 
+/**
+ * Validation schema for the server-side Temporal orchestration adapter options.
+ */
 export const temporalAdapterOptionsSchema = z.object({
   client: z.custom<object>(value => typeof value === 'object' && value !== null),
   connection: z.custom<object>(value => value === undefined || (typeof value === 'object' && value !== null)).optional(),
@@ -35,6 +41,9 @@ export const temporalAdapterOptionsSchema = z.object({
   ownsConnection: z.boolean().optional(),
 });
 
+/**
+ * Validation schema for the Temporal worker bootstrap options.
+ */
 export const temporalWorkerOptionsSchema = z.object({
   connection: z.custom<object>(value => typeof value === 'object' && value !== null),
   ownsConnection: z.boolean().optional(),
@@ -52,6 +61,15 @@ export const temporalWorkerOptionsSchema = z.object({
   maxConcurrentActivityTaskExecutions: z.number().int().positive().optional(),
 });
 
+/**
+ * Typed manifest-style Temporal connection settings.
+ */
 export type TemporalConnectionConfig = z.infer<typeof temporalConnectionConfigSchema>;
+/**
+ * Typed options accepted by `createTemporalOrchestrationAdapter()`.
+ */
 export type TemporalOrchestrationAdapterOptions = z.infer<typeof temporalAdapterOptionsSchema>;
+/**
+ * Typed options accepted by `createTemporalOrchestrationWorker()`.
+ */
 export type TemporalOrchestrationWorkerOptions = z.infer<typeof temporalWorkerOptionsSchema>;

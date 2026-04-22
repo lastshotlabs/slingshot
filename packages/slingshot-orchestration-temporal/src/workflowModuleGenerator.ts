@@ -145,6 +145,10 @@ export async function slingshotWorkflow(args) {
   return modulePath;
 }
 
+/**
+ * Generate a temporary definitions module that re-exports a set of handlers files so the
+ * Temporal worker can import them through a single module path.
+ */
 export async function generateDirectoryDefinitionsModule(options: {
   outDir: string;
   files: readonly string[];
@@ -164,6 +168,9 @@ export async function generateDirectoryDefinitionsModule(options: {
   return modulePath;
 }
 
+/**
+ * Resolve the bundled Temporal workflow implementation module shipped by this package.
+ */
 export function resolvePackageWorkflowsPath(): string {
   return resolve(import.meta.dirname, 'workflows.ts');
 }

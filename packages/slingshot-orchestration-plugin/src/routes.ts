@@ -7,10 +7,15 @@ import {
   type OrchestrationRuntime,
   type RunFilter,
   type RunOptions,
+  type Run,
   type RunStatus,
+  type WorkflowRun,
 } from '@lastshotlabs/slingshot-orchestration';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getActorTenantId } from '@lastshotlabs/slingshot-core';
+import type {
+  OrchestrationRequestContext,
+  OrchestrationRequestContextResolver,
+  OrchestrationRunAuthorizer,
+} from './types';
 
 const VALID_STATUSES = new Set<RunStatus>([
   'pending',
@@ -21,15 +26,36 @@ const VALID_STATUSES = new Set<RunStatus>([
   'skipped',
 ]);
 
-function getTenantId(c: Context<AppEnv>): string | undefined {
-  return getActorTenantId(c) ?? undefined;
+function defaultRequestContext(): OrchestrationRequestContext {
+  return {};
 }
 
-function parseRunOptions(body: Record<string, unknown>, tenantId?: string): RunOptions {
-  const opts: RunOptions = { tenantId };
+function defaultAuthorizeRun({
+  context,
+  run,
+}: {
+  context: OrchestrationRequestContext;
+  run: { tenantId?: string };
+}): boolean {
+  if (!run.tenantId) {
+    return true;
+  }
 
+  return run.tenantId === context.tenantId;
+}
+
+function parseRunOptions(
+  body: Record<string, unknown>,
+  requestContext: OrchestrationRequestContext,
+  c: Context,
+): RunOptions {
+  const opts: RunOptions = { tenantId: requestContext.tenantId };
+
+  const headerIdempotencyKey = c.req.header('idempotency-key');
   if (typeof body['idempotencyKey'] === 'string' && body['idempotencyKey'].length > 0) {
     opts.idempotencyKey = body['idempotencyKey'] as string;
+  } else if (typeof headerIdempotencyKey === 'string' && headerIdempotencyKey.length > 0) {
+    opts.idempotencyKey = headerIdempotencyKey;
   }
   if (typeof body['delay'] === 'number' && Number.isFinite(body['delay']) && body['delay'] >= 0) {
     opts.delay = Math.trunc(body['delay'] as number);
@@ -65,6 +91,24 @@ function parseRunOptions(body: Record<string, unknown>, tenantId?: string): RunO
     opts.adapterHints = body['adapterHints'] as Record<string, unknown>;
   }
 
+  if (requestContext.tags) {
+    opts.tags = {
+      ...(opts.tags ?? {}),
+      ...requestContext.tags,
+    };
+  }
+
+  const resolvedMetadata: Record<string, unknown> = {
+    ...(opts.metadata ?? {}),
+    ...(requestContext.metadata ?? {}),
+  };
+  if (requestContext.actorId) {
+    resolvedMetadata['actorId'] = requestContext.actorId;
+  }
+  if (Object.keys(resolvedMetadata).length > 0) {
+    opts.metadata = resolvedMetadata;
+  }
+
   return opts;
 }
 
@@ -86,6 +130,110 @@ function parseListRunsQuery(url: URL, tenantId?: string): RunFilter {
     tenantId,
     limit: Number.isFinite(limit) ? limit : undefined,
     offset: Number.isFinite(offset) ? offset : undefined,
+  };
+}
+
+async function resolveRequestContext(
+  c: Context,
+  resolver: OrchestrationRequestContextResolver | undefined,
+): Promise<OrchestrationRequestContext> {
+  const resolved = (await (resolver ?? defaultRequestContext)(c)) ?? {};
+  return {
+    tenantId:
+      typeof resolved.tenantId === 'string' && resolved.tenantId.length > 0
+        ? resolved.tenantId
+        : undefined,
+    actorId:
+      typeof resolved.actorId === 'string' && resolved.actorId.length > 0
+        ? resolved.actorId
+        : undefined,
+    tags: resolved.tags,
+    metadata: resolved.metadata,
+  };
+}
+
+function buildRunLink(c: Context, runId: string): string {
+  const url = new URL(c.req.url);
+  url.pathname = url.pathname.replace(
+    /\/(?:tasks|workflows)\/[^/]+\/runs$/,
+    `/runs/${encodeURIComponent(runId)}`,
+  );
+  url.search = '';
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+async function canAccessRun(
+  c: Context,
+  run: Run | WorkflowRun,
+  requestContext: OrchestrationRequestContext,
+  action: 'read' | 'cancel' | 'signal' | 'list',
+  authorizeRun: OrchestrationRunAuthorizer | undefined,
+): Promise<boolean> {
+  if (authorizeRun) {
+    return await authorizeRun({
+      action,
+      context: requestContext,
+      run,
+      request: c,
+    });
+  }
+
+  return defaultAuthorizeRun({ context: requestContext, run });
+}
+
+async function listAuthorizedRuns(
+  c: Context,
+  runtime: OrchestrationRuntime,
+  filter: RunFilter,
+  requestContext: OrchestrationRequestContext,
+  authorizeRun: OrchestrationRunAuthorizer | undefined,
+): Promise<{ runs: Array<Run | WorkflowRun>; total: number }> {
+  if (!authorizeRun && !requestContext.tenantId) {
+    return runtime.listRuns(filter);
+  }
+
+  const requestedOffset = filter.offset ?? 0;
+  const requestedLimit = filter.limit ?? 50;
+  const batchSize = Math.min(Math.max(requestedLimit * 2, 50), 200);
+  const baseFilter: RunFilter = {
+    ...filter,
+    ...(authorizeRun || !requestContext.tenantId ? {} : { tenantId: undefined }),
+    offset: 0,
+    limit: batchSize,
+  };
+
+  const authorizedRuns: Array<Run | WorkflowRun> = [];
+  let authorizedTotal = 0;
+  let scanOffset = 0;
+
+  while (true) {
+    const page = await runtime.listRuns({
+      ...baseFilter,
+      offset: scanOffset,
+    });
+    if (page.runs.length === 0) {
+      break;
+    }
+
+    for (const run of page.runs) {
+      if (!(await canAccessRun(c, run, requestContext, 'list', authorizeRun))) {
+        continue;
+      }
+      if (authorizedTotal >= requestedOffset && authorizedRuns.length < requestedLimit) {
+        authorizedRuns.push(run);
+      }
+      authorizedTotal += 1;
+    }
+
+    scanOffset += page.runs.length;
+    if (scanOffset >= page.total) {
+      break;
+    }
+  }
+
+  return {
+    runs: authorizedRuns,
+    total: authorizedTotal,
   };
 }
 
@@ -111,12 +259,36 @@ function mapErrorToStatus(error: unknown): 400 | 404 | 500 {
  */
 export function createOrchestrationRouter(options: {
   runtime: OrchestrationRuntime;
-  routeMiddleware: MiddlewareHandler[];
+  routeMiddleware?: MiddlewareHandler[];
   tasks: AnyResolvedTask[];
   workflows: AnyResolvedWorkflow[];
+  resolveRequestContext?: OrchestrationRequestContextResolver;
+  authorizeRun?: OrchestrationRunAuthorizer;
 }) {
-  const router = new Hono<AppEnv>();
-  router.use('*', ...options.routeMiddleware);
+  const router = new Hono();
+  if ((options.routeMiddleware ?? []).length > 0) {
+    router.use('*', ...(options.routeMiddleware ?? []));
+  }
+
+  router.get('/tasks', c =>
+    c.json(
+      options.tasks.map(task => ({
+        name: task.name,
+        description: task.description ?? null,
+      })),
+      200,
+    ),
+  );
+
+  router.get('/workflows', c =>
+    c.json(
+      options.workflows.map(workflow => ({
+        name: workflow.name,
+        description: workflow.description ?? null,
+      })),
+      200,
+    ),
+  );
 
   router.post('/tasks/:name/runs', async c => {
     let body: Record<string, unknown>;
@@ -126,18 +298,23 @@ export function createOrchestrationRouter(options: {
       body = {};
     }
     const input = body['input'];
-    const tenantId = getTenantId(c);
     try {
+      const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const handle = await options.runtime.runTask(
         c.req.param('name'),
         input,
-        parseRunOptions(body, tenantId),
+        parseRunOptions(body, requestContext, c),
       );
       const run = await options.runtime.getRun(handle.id);
       return c.json(
         {
           id: handle.id,
+          type: 'task',
+          name: c.req.param('name'),
           status: run?.status ?? 'pending',
+          links: {
+            run: buildRunLink(c, handle.id),
+          },
         },
         202,
       );
@@ -162,18 +339,23 @@ export function createOrchestrationRouter(options: {
       body = {};
     }
     const input = body['input'];
-    const tenantId = getTenantId(c);
     try {
+      const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const handle = await options.runtime.runWorkflow(
         c.req.param('name'),
         input,
-        parseRunOptions(body, tenantId),
+        parseRunOptions(body, requestContext, c),
       );
       const run = await options.runtime.getRun(handle.id);
       return c.json(
         {
           id: handle.id,
+          type: 'workflow',
+          name: c.req.param('name'),
           status: run?.status ?? 'pending',
+          links: {
+            run: buildRunLink(c, handle.id),
+          },
         },
         202,
       );
@@ -192,8 +374,12 @@ export function createOrchestrationRouter(options: {
 
   router.get('/runs/:id', async c => {
     try {
+      const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const run = await options.runtime.getRun(c.req.param('id'));
-      if (!run) {
+      if (
+        !run ||
+        !(await canAccessRun(c, run, requestContext, 'read', options.authorizeRun))
+      ) {
         return c.json(
           { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },
           404,
@@ -215,8 +401,12 @@ export function createOrchestrationRouter(options: {
 
   router.delete('/runs/:id', async c => {
     try {
+      const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const run = await options.runtime.getRun(c.req.param('id'));
-      if (!run) {
+      if (
+        !run ||
+        !(await canAccessRun(c, run, requestContext, 'cancel', options.authorizeRun))
+      ) {
         return c.json(
           { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },
           404,
@@ -245,10 +435,15 @@ export function createOrchestrationRouter(options: {
       );
     }
     try {
-      const tenantId = getTenantId(c);
-      return c.json(
-        await options.runtime.listRuns(parseListRunsQuery(new URL(c.req.url), tenantId)),
+      const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
+      const listed = await listAuthorizedRuns(
+        c,
+        options.runtime,
+        parseListRunsQuery(new URL(c.req.url), requestContext.tenantId),
+        requestContext,
+        options.authorizeRun,
       );
+      return c.json(listed);
     } catch (error) {
       const status = mapErrorToStatus(error);
       return c.json(
@@ -270,6 +465,17 @@ export function createOrchestrationRouter(options: {
       );
     }
     try {
+      const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
+      const run = await options.runtime.getRun(c.req.param('id'));
+      if (
+        !run ||
+        !(await canAccessRun(c, run, requestContext, 'signal', options.authorizeRun))
+      ) {
+        return c.json(
+          { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },
+          404,
+        );
+      }
       let body: Record<string, unknown>;
       try {
         body = (await c.req.json()) as Record<string, unknown>;

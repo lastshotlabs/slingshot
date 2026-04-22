@@ -93,12 +93,27 @@ export const cleanupPresence = (
   return departed;
 };
 
+/**
+ * Get the list of unique user IDs currently present in a room.
+ *
+ * @param state - Instance-scoped WebSocket state.
+ * @param endpoint - The WebSocket endpoint path.
+ * @param room - The room name.
+ * @returns An array of user IDs with at least one active socket in the room.
+ */
 export const getRoomPresence = (state: WsState, endpoint: string, room: string): string[] => {
   const roomMap = state.roomPresence.get(wsEndpointKey(endpoint, room));
   if (!roomMap) return [];
   return [...roomMap.keys()];
 };
 
+/**
+ * Get the list of rooms a specific user is currently present in (across all endpoints).
+ *
+ * @param state - Instance-scoped WebSocket state.
+ * @param userId - The user ID to look up.
+ * @returns An array of room names where the user has at least one active socket.
+ */
 export const getUserPresence = (state: WsState, userId: string): string[] => {
   const rooms: string[] = [];
   for (const [key, roomMap] of state.roomPresence) {

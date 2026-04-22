@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+/**
+ * Validation schema for the BullMQ orchestration adapter factory options.
+ */
 export const bullmqOrchestrationAdapterOptionsSchema = z.object({
   connection: z
     .object({
@@ -17,6 +20,9 @@ export const bullmqOrchestrationAdapterOptionsSchema = z.object({
     .describe('Maximum concurrent executions for the default task worker.'),
 });
 
+/**
+ * Typed options accepted by `createBullMQOrchestrationAdapter()`.
+ */
 export type BullMQOrchestrationAdapterOptions = z.infer<
   typeof bullmqOrchestrationAdapterOptionsSchema
 >;

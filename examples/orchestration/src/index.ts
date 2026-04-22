@@ -7,6 +7,7 @@ import {
   orchestrationTasks,
   orchestrationWorkflows,
   requireOperationsKey,
+  resolveOperationsRequestContext,
 } from './orchestration.ts';
 
 export function buildAppConfig(): CreateAppConfig {
@@ -29,6 +30,7 @@ export function buildAppConfig(): CreateAppConfig {
         routes: true,
         routePrefix: '/orchestration',
         routeMiddleware: [requireOperationsKey],
+        resolveRequestContext: resolveOperationsRequestContext,
       }),
       createBillingApiPlugin(),
     ],

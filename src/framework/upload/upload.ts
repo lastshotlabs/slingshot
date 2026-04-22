@@ -4,13 +4,23 @@ import type { StorageAdapter, UploadResult } from '@lastshotlabs/slingshot-core'
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { HttpError, getActor, resolveContext } from '@lastshotlabs/slingshot-core';
 
+/**
+ * Options for configuring file upload parsing and storage.
+ */
 export interface UploadOpts {
+  /** Form field name(s) to extract files from (default `'file'`). */
   field?: string | string[];
+  /** Maximum allowed file size in bytes (default `10 MB`). */
   maxFileSize?: number;
+  /** Maximum number of files accepted per request (default `10`). */
   maxFiles?: number;
+  /** Allowlist of MIME types or patterns (e.g. `'image/*'`). When empty, all types are accepted. */
   allowedMimeTypes?: string[];
+  /** Storage key prefix (default `'uploads/'`). */
   keyPrefix?: string;
+  /** Custom key generator. When provided, overrides the default UUID-based key. */
   generateKey?: (file: File, ctx: { userId?: string; tenantId?: string }) => string;
+  /** When `true`, storage keys are prefixed with the tenant ID for isolation. */
   tenantScopedKeys?: boolean;
 }
 
@@ -147,6 +157,19 @@ export const processUpload = async (
   };
 };
 
+/**
+ * Parse multipart file uploads from a Hono request context.
+ *
+ * Extracts files from the configured form fields, validates size and MIME type,
+ * stores each file via the configured storage adapter, and registers them in
+ * the upload registry.
+ *
+ * @param c - The Hono request context.
+ * @param opts - Optional upload configuration overrides.
+ * @returns An array of {@link UploadResult} objects for each stored file.
+ * @throws {HttpError} `400` when too many files are submitted or validation fails.
+ * @throws {HttpError} `500` when no storage adapter is configured.
+ */
 export const parseUpload = async (
   c: Context<AppEnv>,
   opts?: UploadOpts,

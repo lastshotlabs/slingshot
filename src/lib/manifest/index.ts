@@ -555,6 +555,14 @@ export const appManifestSchema = z
   .loose()
   .superRefine(validateManifestCrossFields);
 
+/**
+ * The fully typed app manifest shape, inferred from the {@link appManifestSchema}.
+ *
+ * This is the single source of truth for config-driven app generation.
+ * All values are plain JSON-serializable data — no functions, class instances,
+ * or imports. Function-typed config fields are referenced by name via the
+ * handler registry pattern.
+ */
 export type AppManifest = z.infer<typeof appManifestSchema>;
 /** First-class SSR manifest section. */
 export type AppManifestSsrSection = z.infer<typeof ssrSectionSchema>;
@@ -565,20 +573,34 @@ export type AppManifestSsgSection = z.infer<typeof ssgSectionSchema>;
 // Validation
 // ---------------------------------------------------------------------------
 
+/**
+ * Successful result from {@link validateAppManifest}.
+ */
 export interface AppManifestValidationResult {
+  /** Discriminator — always `true` for a successful validation. */
   success: true;
+  /** The validated and typed manifest object. */
   manifest: AppManifest;
+  /** Non-fatal warnings (e.g. mutually exclusive fields). */
   warnings: string[];
 }
 
+/**
+ * Failure result from {@link validateAppManifest}.
+ */
 export interface AppManifestValidationError {
+  /** Discriminator — always `false` for a failed validation. */
   success: false;
+  /** Human-readable error messages with JSON paths. */
   errors: string[];
 }
 
 /**
  * Parse and validate a raw app manifest object.
- * Returns typed manifest on success, structured errors on failure.
+ *
+ * @param raw - The untyped manifest object (typically parsed from JSON).
+ * @returns A discriminated union: {@link AppManifestValidationResult} on success,
+ *   {@link AppManifestValidationError} on failure.
  */
 export function validateAppManifest(
   raw: unknown,

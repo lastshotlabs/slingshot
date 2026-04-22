@@ -32,10 +32,16 @@ function quote(value: string): string {
   return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
 
+/**
+ * Encode a single Slingshot run tag into a Temporal-safe visibility token.
+ */
 export function encodeTag(key: string, value: string): string {
   return `${toBase64Url(key)}=${toBase64Url(value)}`;
 }
 
+/**
+ * Decode a tag token previously produced by `encodeTag()`.
+ */
 export function decodeTag(value: string): [string, string] {
   const delimiter = value.indexOf('=');
   if (delimiter === -1) {
@@ -44,6 +50,9 @@ export function decodeTag(value: string): [string, string] {
   return [fromBase64Url(value.slice(0, delimiter)), fromBase64Url(value.slice(delimiter + 1))];
 }
 
+/**
+ * Encode a tag map into stable, sorted Temporal visibility values.
+ */
 export function encodeTags(tags?: Record<string, string>): string[] {
   if (!tags) return [];
   return Object.entries(tags)
@@ -51,6 +60,9 @@ export function encodeTags(tags?: Record<string, string>): string[] {
     .map(([key, value]) => encodeTag(key, value));
 }
 
+/**
+ * Decode Temporal visibility values back into a plain tag object.
+ */
 export function decodeTags(values?: unknown): Record<string, string> | undefined {
   if (!Array.isArray(values)) return undefined;
   const tags: Record<string, string> = {};
@@ -62,6 +74,9 @@ export function decodeTags(values?: unknown): Record<string, string> | undefined
   return Object.keys(tags).length === 0 ? undefined : tags;
 }
 
+/**
+ * Build the Temporal search attributes written for a Slingshot run.
+ */
 export function buildSearchAttributes(
   kind: 'task' | 'workflow',
   name: string,
@@ -88,6 +103,9 @@ export function buildSearchAttributes(
   return attributes;
 }
 
+/**
+ * Translate a portable run filter into a Temporal visibility query string.
+ */
 export function buildVisibilityQuery(filter?: RunFilter): string | undefined {
   if (!filter) return undefined;
 
@@ -121,6 +139,10 @@ export function buildVisibilityQuery(filter?: RunFilter): string | undefined {
   return clauses.length === 0 ? undefined : clauses.join(' AND ');
 }
 
+/**
+ * Return simple probe queries that can be used to validate the required Temporal search
+ * attributes are registered and queryable.
+ */
 export function buildVisibilityValidationQueries(): string[] {
   return [
     `${SLINGSHOT_KIND_SEARCH_ATTRIBUTE} = 'task' OR ${SLINGSHOT_KIND_SEARCH_ATTRIBUTE} = 'workflow'`,

@@ -8,7 +8,7 @@ import {
 import { ORCHESTRATION_PLUGIN_KEY } from './context';
 import { createSlingshotEventSink } from './eventSink';
 import { createOrchestrationRouter } from './routes';
-import type { OrchestrationPluginOptions } from './types';
+import type { ConfigurableOrchestrationPluginOptions } from './types';
 
 /**
  * Create the Slingshot integration layer for the portable orchestration runtime.
@@ -17,7 +17,9 @@ import type { OrchestrationPluginOptions } from './types';
  * onto `ctx.bus`, optionally mounts HTTP routes, and manages adapter startup/shutdown
  * when an adapter instance is provided instead of a pre-built runtime.
  */
-export function createOrchestrationPlugin(options: OrchestrationPluginOptions): SlingshotPlugin {
+export function createOrchestrationPlugin(
+  options: ConfigurableOrchestrationPluginOptions,
+): SlingshotPlugin {
   const workflows = options.workflows ?? [];
   const routes = options.routes ?? true;
   const routePrefix = options.routePrefix ?? '/orchestration';
@@ -52,6 +54,8 @@ export function createOrchestrationPlugin(options: OrchestrationPluginOptions): 
         routeMiddleware,
         tasks: options.tasks,
         workflows,
+        resolveRequestContext: options.resolveRequestContext,
+        authorizeRun: options.authorizeRun,
       });
       app.route(routePrefix, router);
     },

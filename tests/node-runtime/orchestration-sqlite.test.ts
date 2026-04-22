@@ -9,7 +9,7 @@ import {
   defineTask,
   defineWorkflow,
   step,
-} from '../../packages/slingshot-orchestration/src/index';
+} from '../../packages/slingshot-orchestration/src/index.ts';
 
 let tempDir = '';
 
@@ -74,9 +74,19 @@ describe('orchestration sqlite adapter (node runtime)', () => {
         idempotencyKey: 'task:sqlite',
       },
     );
+    const otherTenant = await runtime.runTask(
+      echoTask,
+      { value: 'other-tenant' },
+      {
+        tenantId: 'tenant-other',
+        idempotencyKey: 'task:sqlite',
+      },
+    );
 
     expect(second.id).toBe(first.id);
+    expect(otherTenant.id).not.toBe(first.id);
     await expect(first.result()).resolves.toEqual({ echoed: 'sqlite' });
+    await expect(otherTenant.result()).resolves.toEqual({ echoed: 'other-tenant' });
 
     const run = await runtime.getRun(first.id);
     expect(run?.status).toBe('completed');
@@ -87,7 +97,54 @@ describe('orchestration sqlite adapter (node runtime)', () => {
     expect(listed.total).toBe(1);
     expect(listed.runs[0]?.id).toBe(first.id);
 
+    const otherTenantRuns = await runtime.listRuns({ tenantId: 'tenant-other' });
+    expect(otherTenantRuns.total).toBe(1);
+    expect(otherTenantRuns.runs[0]?.id).toBe(otherTenant.id);
+
     await adapter.shutdown();
+  });
+
+  it('does not re-scope already migrated idempotency keys after restart', async () => {
+    const dbPath = join(tempDir, 'idempotency-restart.sqlite');
+    const echoTask = defineTask({
+      name: 'sqlite-restart-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ echoed: z.string() }),
+      async handler(input) {
+        return { echoed: input.value };
+      },
+    });
+
+    const adapterA = createSqliteAdapter({ path: dbPath, concurrency: 1 });
+    const runtimeA = createOrchestrationRuntime({
+      adapter: adapterA,
+      tasks: [echoTask],
+    });
+
+    const first = await runtimeA.runTask(
+      echoTask,
+      { value: 'first' },
+      { tenantId: 'tenant-a', idempotencyKey: 'quote-123' },
+    );
+    await expect(first.result()).resolves.toEqual({ echoed: 'first' });
+    await adapterA.shutdown();
+
+    const adapterB = createSqliteAdapter({ path: dbPath, concurrency: 1 });
+    const runtimeB = createOrchestrationRuntime({
+      adapter: adapterB,
+      tasks: [echoTask],
+    });
+
+    const replay = await runtimeB.runTask(
+      echoTask,
+      { value: 'ignored' },
+      { tenantId: 'tenant-a', idempotencyKey: 'quote-123' },
+    );
+
+    expect(replay.id).toBe(first.id);
+    await expect(replay.result()).resolves.toEqual({ echoed: 'first' });
+
+    await adapterB.shutdown();
   });
 
   it('recovers delayed workflows after adapter restart', async () => {

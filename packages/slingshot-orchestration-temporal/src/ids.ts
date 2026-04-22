@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
 import { generateRunId } from '@lastshotlabs/slingshot-orchestration';
 
+/**
+ * Derive the Temporal workflow ID used for a portable run.
+ *
+ * When an idempotency key is present the result is deterministic across retries for the
+ * same task/workflow name and tenant. Without one, a fresh public run ID is generated.
+ */
 export function deriveTemporalRunId(options: {
   kind: 'task' | 'workflow';
   name: string;

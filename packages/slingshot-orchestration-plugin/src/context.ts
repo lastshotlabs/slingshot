@@ -2,6 +2,9 @@ import type { SlingshotContext } from '@lastshotlabs/slingshot-core';
 import type { OrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
 
+/**
+ * Plugin-state key used to publish the orchestration runtime on a Slingshot app instance.
+ */
 export const ORCHESTRATION_PLUGIN_KEY = 'slingshot-orchestration';
 
 /**

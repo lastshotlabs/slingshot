@@ -2,6 +2,7 @@ import { createCachedRunHandle, generateRunId } from '../adapter';
 import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
 import { OrchestrationError } from '../errors';
+import { createIdempotencyScope } from '../idempotency';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -10,8 +11,6 @@ import type {
   OrchestrationEventSink,
   Run,
   RunFilter,
-  RunHandle,
-  RunOptions,
   RunProgress,
   RunStatus,
   StepRun,
@@ -92,6 +91,29 @@ export function createMemoryAdapter(
     }
   }
 
+  function loadRunResult(runId: string): Promise<unknown> {
+    const activePromise = resultPromises.get(runId);
+    if (activePromise) {
+      return activePromise;
+    }
+
+    const run = runs.get(runId);
+    if (!run) {
+      return Promise.reject(new OrchestrationError('RUN_NOT_FOUND', `Run '${runId}' not found`));
+    }
+
+    if (run.status === 'completed') {
+      return Promise.resolve(run.output);
+    }
+    if (run.status === 'failed' || run.status === 'cancelled') {
+      return Promise.reject(new Error(run.error?.message ?? `Run '${runId}' ${run.status}.`));
+    }
+
+    return Promise.reject(
+      new OrchestrationError('ADAPTER_ERROR', `Run '${runId}' is not active in this process.`),
+    );
+  }
+
   const taskRunner = createTaskRunner({
     concurrency: parsed.concurrency ?? 10,
     eventSink: options.eventSink,
@@ -131,11 +153,6 @@ export function createMemoryAdapter(
     },
   });
 
-  function createTaskHandle(runId: string, promise: Promise<unknown>): RunHandle {
-    resultPromises.set(runId, promise);
-    return createCachedRunHandle(runId, () => promise);
-  }
-
   return {
     registerTask(def) {
       taskRegistry.set(def.name, def);
@@ -153,25 +170,18 @@ export function createMemoryAdapter(
         throw new OrchestrationError('TASK_NOT_FOUND', `Task '${name}' not registered`);
       }
 
-      if (opts?.idempotencyKey) {
-        const existingRunId = idempotencyKeys.get(opts.idempotencyKey);
+      const scopedIdempotencyKey = createIdempotencyScope({ type: 'task', name }, opts ?? {});
+      if (scopedIdempotencyKey) {
+        const existingRunId = idempotencyKeys.get(scopedIdempotencyKey);
         if (existingRunId) {
-          const existingPromise =
-            resultPromises.get(existingRunId) ??
-            Promise.reject(
-              new OrchestrationError(
-                'ADAPTER_ERROR',
-                `Run '${existingRunId}' is not active in this process.`,
-              ),
-            );
-          return createCachedRunHandle(existingRunId, () => existingPromise);
+          return createCachedRunHandle(existingRunId, () => loadRunResult(existingRunId));
         }
       }
 
       const runId = generateRunId();
       // Set idempotency key atomically before any async work to prevent races
-      if (opts?.idempotencyKey) {
-        idempotencyKeys.set(opts.idempotencyKey, runId);
+      if (scopedIdempotencyKey) {
+        idempotencyKeys.set(scopedIdempotencyKey, runId);
       }
       runs.set(runId, {
         id: runId,
@@ -205,25 +215,21 @@ export function createMemoryAdapter(
         throw new OrchestrationError('WORKFLOW_NOT_FOUND', `Workflow '${name}' not registered`);
       }
 
-      if (opts?.idempotencyKey) {
-        const existingRunId = idempotencyKeys.get(opts.idempotencyKey);
+      const scopedIdempotencyKey = createIdempotencyScope(
+        { type: 'workflow', name },
+        opts ?? {},
+      );
+      if (scopedIdempotencyKey) {
+        const existingRunId = idempotencyKeys.get(scopedIdempotencyKey);
         if (existingRunId) {
-          const existingPromise =
-            resultPromises.get(existingRunId) ??
-            Promise.reject(
-              new OrchestrationError(
-                'ADAPTER_ERROR',
-                `Run '${existingRunId}' is not active in this process.`,
-              ),
-            );
-          return createCachedRunHandle(existingRunId, () => existingPromise);
+          return createCachedRunHandle(existingRunId, () => loadRunResult(existingRunId));
         }
       }
 
       const runId = generateRunId();
       // Set idempotency key atomically before any async work to prevent races
-      if (opts?.idempotencyKey) {
-        idempotencyKeys.set(opts.idempotencyKey, runId);
+      if (scopedIdempotencyKey) {
+        idempotencyKeys.set(scopedIdempotencyKey, runId);
       }
       const workflowRun: WorkflowRun = {
         id: runId,

@@ -11,7 +11,67 @@ type MockJobState =
   | 'prioritized'
   | 'waiting-children';
 
+class MockRedisClient {
+  private values = new Map<string, string>();
+  private sortedSets = new Map<string, Map<string, number>>();
+
+  async get(key: string) {
+    return this.values.get(key) ?? null;
+  }
+
+  async set(key: string, value: string) {
+    this.values.set(key, value);
+  }
+
+  async mget(...keys: string[]) {
+    return keys.map(key => this.values.get(key) ?? null);
+  }
+
+  async zadd(key: string, score: number | string, member: string) {
+    const set = this.sortedSets.get(key) ?? new Map<string, number>();
+    set.set(member, Number(score));
+    this.sortedSets.set(key, set);
+  }
+
+  async zrange(key: string, start: number, end: number) {
+    const set = this.sortedSets.get(key);
+    if (!set) {
+      return [];
+    }
+    const members = [...set.entries()]
+      .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+      .map(([member]) => member);
+    const normalizedEnd = end < 0 ? members.length + end : end;
+    return members.slice(start, normalizedEnd + 1);
+  }
+
+  async zrem(key: string, ...members: string[]) {
+    const set = this.sortedSets.get(key);
+    if (!set) {
+      return;
+    }
+    for (const member of members) {
+      set.delete(member);
+    }
+  }
+
+  async del(...keys: string[]) {
+    for (const key of keys) {
+      this.values.delete(key);
+      this.sortedSets.delete(key);
+    }
+  }
+
+  reset() {
+    this.values.clear();
+    this.sortedSets.clear();
+  }
+}
+
+const mockRedis = new MockRedisClient();
+
 class MockJob {
+  queue: MockQueue;
   id: string;
   name: string;
   data: Record<string, unknown>;
@@ -20,9 +80,12 @@ class MockJob {
   returnvalue: unknown;
   timestamp: number;
   finishedOn?: number;
+  processedOn?: number;
+  failedReason = '';
   state: MockJobState;
 
   constructor(options: {
+    queue: MockQueue;
     id: string;
     name: string;
     data: Record<string, unknown>;
@@ -30,6 +93,7 @@ class MockJob {
     state?: MockJobState;
     returnvalue?: unknown;
   }) {
+    this.queue = options.queue;
     this.id = options.id;
     this.name = options.name;
     this.data = options.data;
@@ -52,10 +116,14 @@ class MockJob {
     return this.state;
   }
 
-  async remove() {}
+  async remove() {
+    this.queue.jobs = this.queue.jobs.filter(job => job !== this);
+  }
 
   async moveToFailed() {
     this.state = 'failed';
+    this.failedReason = 'Run cancelled';
+    this.finishedOn = Date.now();
   }
 }
 
@@ -72,6 +140,7 @@ class MockQueue {
 
   async add(name: string, data: Record<string, unknown>, opts?: Record<string, unknown>) {
     const job = new MockJob({
+      queue: this,
       id: String(data['runId'] ?? `${this.name}-${this.jobs.length + 1}`),
       name,
       data,
@@ -90,6 +159,10 @@ class MockQueue {
   }
 
   async removeJobScheduler() {}
+
+  get client() {
+    return Promise.resolve(mockRedis);
+  }
 
   async close() {}
 }
@@ -154,6 +227,7 @@ describe('bullmq orchestration adapter', () => {
     MockQueue.instances = [];
     MockQueueEvents.instances = [];
     MockWorker.instances = [];
+    mockRedis.reset();
   });
 
   test('auto-starts on first task run without explicit start()', async () => {
@@ -190,23 +264,29 @@ describe('bullmq orchestration adapter', () => {
     const taskQueue = MockQueue.instances.find(queue => queue.name === 'status-map:tasks');
     const workflowQueue = MockQueue.instances.find(queue => queue.name === 'status-map:workflows');
 
-    taskQueue?.jobs.push(
-      new MockJob({
-        id: 'run_task',
-        name: 'sync-user',
-        data: { taskName: 'sync-user', runId: 'run_task', input: { userId: 'u1' } },
-        state: 'active',
-      }),
-    );
-    workflowQueue?.jobs.push(
-      new MockJob({
-        id: 'run_workflow',
-        name: 'onboard-user',
-        data: { workflowName: 'onboard-user', runId: 'run_workflow', input: { userId: 'u1' } },
-        state: 'completed',
-        returnvalue: { ok: true },
-      }),
-    );
+    if (taskQueue) {
+      taskQueue.jobs.push(
+        new MockJob({
+          queue: taskQueue,
+          id: 'run_task',
+          name: 'sync-user',
+          data: { taskName: 'sync-user', runId: 'run_task', input: { userId: 'u1' } },
+          state: 'active',
+        }),
+      );
+    }
+    if (workflowQueue) {
+      workflowQueue.jobs.push(
+        new MockJob({
+          queue: workflowQueue,
+          id: 'run_workflow',
+          name: 'onboard-user',
+          data: { workflowName: 'onboard-user', runId: 'run_workflow', input: { userId: 'u1' } },
+          state: 'completed',
+          returnvalue: { ok: true },
+        }),
+      );
+    }
 
     const result = await adapter.listRuns();
     const statuses = Object.fromEntries(result.runs.map(run => [run.id, run.status]));
@@ -244,5 +324,107 @@ describe('bullmq orchestration adapter', () => {
         queueEvents => (queueEvents.listeners.get('progress')?.size ?? 0) === 0,
       ),
     ).toBe(true);
+  });
+
+  test('cancelled runs remain visible and reject their result handle', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'cancelled-runs',
+    });
+    const task = defineTask({
+      name: 'cancel-me',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+
+    const handle = await adapter.runTask(task.name, { value: 'pending' });
+    await adapter.cancelRun(handle.id);
+
+    await expect(handle.result()).rejects.toThrow('Run cancelled');
+
+    const run = await adapter.getRun(handle.id);
+    expect(run?.status).toBe('cancelled');
+    expect(run?.error?.message).toBe('Run cancelled');
+
+    const listed = await adapter.listRuns({ status: 'cancelled' });
+    expect(listed.total).toBe(1);
+    expect(listed.runs[0]?.id).toBe(handle.id);
+    expect(listed.runs[0]?.status).toBe('cancelled');
+  });
+
+  test('persisted cancelled snapshots survive adapter restart for removed pending jobs', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'cancelled-restart',
+    });
+    const task = defineTask({
+      name: 'cancel-persisted',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+
+    const handle = await adapter.runTask(task.name, { value: 'pending' });
+    await adapter.cancelRun(handle.id);
+    await adapter.shutdown();
+
+    const restartedAdapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'cancelled-restart',
+    });
+
+    const run = await restartedAdapter.getRun(handle.id);
+    expect(run?.status).toBe('cancelled');
+    expect(run?.error?.message).toBe('Run cancelled');
+
+    const listed = await restartedAdapter.listRuns({ status: 'cancelled' });
+    expect(listed.total).toBe(1);
+    expect(listed.runs[0]?.id).toBe(handle.id);
+
+    await restartedAdapter.shutdown();
+  });
+
+  test('does not report cancelled when active cancellation fails', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'cancelled-failure',
+    });
+    const task = defineTask({
+      name: 'cancel-active-failure',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+
+    const handle = await adapter.runTask(task.name, { value: 'active' });
+    const queue = MockQueue.instances.find(instance => instance.name === 'cancelled-failure:tasks');
+    const job = queue?.jobs[0];
+    expect(job).toBeDefined();
+    if (!job) {
+      return;
+    }
+
+    job.state = 'active';
+    job.moveToFailed = async () => {
+      throw new Error('missing lock token');
+    };
+
+    await expect(adapter.cancelRun(handle.id)).rejects.toThrow("Failed to cancel active run");
+
+    const run = await adapter.getRun(handle.id);
+    expect(run?.status).toBe('running');
+
+    const listed = await adapter.listRuns({});
+    expect(listed.runs.find(candidate => candidate.id === handle.id)?.status).toBe('running');
   });
 });

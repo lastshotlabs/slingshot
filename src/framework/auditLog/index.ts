@@ -15,9 +15,15 @@ export interface AuditLogProviderFactoryOptions {
   emitWarnings?: boolean;
 }
 
+/**
+ * Configuration for creating an audit log provider.
+ */
 export interface AuditLogOptions {
+  /** Persistence backend for audit log entries. */
   store: AuditLogStore;
+  /** SQLite database instance (required when `store` is `'sqlite'`). */
   db?: RuntimeSqliteDatabase;
+  /** MongoDB connection (required when `store` is `'mongo'`). */
   mongoConnection?: Connection | null;
   /** Retention in days. SQLite: prunes on write. MongoDB: sets expiresAt for the TTL index. */
   ttlDays?: number;
@@ -25,15 +31,31 @@ export interface AuditLogOptions {
   emitWarnings?: boolean;
 }
 
+/**
+ * Query parameters for retrieving audit log entries.
+ */
 export interface AuditLogQuery {
+  /** Filter entries by acting user ID. */
   userId?: string;
+  /** Filter entries by tenant ID. */
   tenantId?: string;
+  /** Return entries after this date. */
   after?: Date | string;
+  /** Return entries before this date. */
   before?: Date | string;
+  /** Maximum number of entries to return. */
   limit?: number;
+  /** Opaque cursor for pagination. */
   cursor?: string;
 }
 
+/**
+ * Create an {@link AuditLogProvider} for the configured storage backend.
+ *
+ * @param options - Storage backend selection and connection details.
+ * @returns An audit log provider instance.
+ * @throws When the required connection for the selected store is not provided.
+ */
 export function createAuditLogProvider(options: AuditLogOptions): AuditLogProvider {
   const providers: Record<AuditLogStore, () => AuditLogProvider> = {
     memory: () => createMemoryAuditLogProvider({ emitWarnings: options.emitWarnings }),

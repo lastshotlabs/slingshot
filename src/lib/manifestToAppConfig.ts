@@ -307,6 +307,19 @@ function resolveSseEndpoints(
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * Convert a validated {@link AppManifest} into a {@link CreateServerConfig}.
+ *
+ * Handles direct field copies, handler-ref resolution via the registry,
+ * plugin instantiation, TLS file loading, event bus / transport / secret
+ * provider resolution, storage adapter construction, and `${importMetaDir}`
+ * placeholder substitution.
+ *
+ * @param manifest - A validated app manifest (output of {@link validateAppManifest}).
+ * @param registry - Optional handler registry for resolving named references.
+ * @param options - Optional base directory and Kafka connector overrides.
+ * @returns A fully resolved server configuration ready for {@link createServer}.
+ */
 export function manifestToAppConfig(
   manifest: AppManifest,
   registry?: ManifestHandlerRegistry,

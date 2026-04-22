@@ -1,8 +1,16 @@
 import type { ServerWebSocket } from 'bun';
 import type { WsState } from '@lastshotlabs/slingshot-core';
 
+/**
+ * Per-endpoint WebSocket heartbeat configuration.
+ *
+ * The server sends periodic pings; sockets that fail to respond with a pong
+ * within the timeout window are closed automatically.
+ */
 export interface HeartbeatConfig {
+  /** Interval between ping frames in milliseconds (default `30000`). */
   intervalMs?: number;
+  /** Maximum time to wait for a pong response in milliseconds (default `10000`). */
   timeoutMs?: number;
 }
 

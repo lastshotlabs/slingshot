@@ -39,6 +39,9 @@ const temporalAdapterManifestConfigSchema = z
   })
   .strict();
 
+/**
+ * Manifest schema for the Slingshot orchestration plugin configuration.
+ */
 export const orchestrationPluginConfigSchema = z
   .object({
     adapter: z
@@ -52,6 +55,8 @@ export const orchestrationPluginConfigSchema = z
     routes: z.boolean().optional(),
     routePrefix: z.string().min(1).optional(),
     routeMiddleware: z.array(manifestHandlerRefSchema).optional(),
+    resolveRequestContext: manifestHandlerRefSchema.optional(),
+    authorizeRun: manifestHandlerRefSchema.optional(),
   })
   .superRefine((value, ctx) => {
     if (value.adapter.type === 'temporal') {
@@ -67,4 +72,7 @@ export const orchestrationPluginConfigSchema = z
     }
   });
 
+/**
+ * Typed manifest config accepted by the built-in orchestration plugin resolver.
+ */
 export type OrchestrationPluginManifestConfig = z.infer<typeof orchestrationPluginConfigSchema>;

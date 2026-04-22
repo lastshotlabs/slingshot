@@ -3,6 +3,14 @@ function isVerbose(): boolean {
   return v !== undefined ? v === 'true' : process.env.NODE_ENV !== 'production';
 }
 
+/**
+ * Verbose-mode console logger.
+ *
+ * Writes to `console.log` when `LOGGING_VERBOSE=true` or when `NODE_ENV` is
+ * not `'production'`. Silenced in production by default.
+ *
+ * @param args - Values forwarded to `console.log`.
+ */
 export const log = (...args: unknown[]) => {
   if (isVerbose()) console.log(...args);
 };

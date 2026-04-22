@@ -37,13 +37,54 @@ Typical composition:
 2. Create the BullMQ adapter in this package
 3. Pass that adapter into `createOrchestrationRuntime()` or `createOrchestrationPlugin()`
 
+## Minimal setup
+
+```ts
+import IORedis from 'ioredis';
+import { createOrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration';
+import { createBullMQOrchestrationAdapter } from '@lastshotlabs/slingshot-orchestration-bullmq';
+
+const redis = new IORedis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
+
+const adapter = createBullMQOrchestrationAdapter({
+  connection: redis,
+  prefix: 'orchestration',
+  concurrency: 20,
+});
+
+const runtime = createOrchestrationRuntime({
+  adapter,
+  tasks,
+  workflows,
+});
+```
+
+## When to choose BullMQ
+
+- Choose it when Redis is already operationally standard in the stack.
+- Choose it when you need queue-backed orchestration and repeatable schedules, but not Temporal-style signals and workflow history.
+- Do not treat it as the strongest audit system of record for active cancellation semantics; it is durable, but some stop behavior is still adapter-managed rather than natively modeled by BullMQ.
+
 Lifecycle notes:
 
 - `createOrchestrationPlugin()` starts and stops the adapter for you
 - direct `createOrchestrationRuntime()` usage now lazy-starts the adapter on first use
 - step-level retry and timeout overrides are carried into BullMQ child jobs so workflow behavior
   stays aligned with the portable runtime contract
+- idempotency keys are scoped by run type, definition name, and tenant to match the portable
+  orchestration adapters
 - workflow hook failures emit the portable `orchestration.workflow.hookError` event when an
   event sink is configured, and otherwise fall back to `console.error`
 - progress subscriptions are safe to register and unregister even while the adapter is still
   lazily starting
+- cancelled runs stay visible through `getRun()` and `listRuns()` even when a pending BullMQ job
+  had to be removed from the queue to stop execution
+- cancelling an active BullMQ job is still best-effort for the underlying worker code; if the
+  adapter cannot actually stop the job, the cancel call fails instead of falsely reporting
+  `cancelled`, and already-started side effects are not rolled back
+
+## Operational notes
+
+- Prefer explicit queue names on tasks when you need workload isolation by domain, such as quoting, binding, document generation, or downstream carrier synchronization.
+- Keep Redis persistence and retention settings aligned with how long you expect run observability data to remain useful.
+- If you need strong human-in-the-loop signaling or workflow query semantics, move to the Temporal provider instead of layering those expectations onto BullMQ.

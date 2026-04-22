@@ -244,8 +244,14 @@ export interface CreateAppConfig<T extends object = object> {
   permissions?: PermissionsConfig;
 }
 
+/**
+ * The result of {@link createApp}: the assembled Hono application and its
+ * frozen instance-scoped context.
+ */
 export interface CreateAppResult {
+  /** The OpenAPI-enabled Hono app with all middleware and routes mounted. */
   app: OpenAPIHono<AppEnv>;
+  /** The frozen, instance-scoped Slingshot context containing all resolved state. */
   ctx: SlingshotContext;
 }
 
@@ -735,6 +741,18 @@ async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
 // Public entry point
 // ---------------------------------------------------------------------------
 
+/**
+ * Create the Slingshot application instance.
+ *
+ * Runs the full bootstrap pipeline: config validation → secret resolution →
+ * infrastructure connection → context creation → plugin lifecycle → route
+ * mounting → OpenAPI docs → context finalization. On failure, all acquired
+ * resources (database connections, bus, secrets provider) are torn down before
+ * the error is re-thrown.
+ *
+ * @param config - Application configuration including database, auth, plugins, and middleware.
+ * @returns The assembled Hono app and the frozen {@link SlingshotContext}.
+ */
 export const createApp = async <T extends object = object>(
   config: CreateAppConfig<T>,
 ): Promise<CreateAppResult> => {

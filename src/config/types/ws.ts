@@ -9,6 +9,13 @@ type WsMessageStore = 'redis' | 'mongo' | 'sqlite' | 'memory';
 
 export type { WsRateLimitConfig, WsRecoveryConfig };
 
+/**
+ * Authentication level required for a WebSocket event or endpoint.
+ *
+ * - `'userAuth'` — requires an authenticated user session.
+ * - `'bearer'` — requires a valid bearer token.
+ * - `'none'` — no authentication required.
+ */
 export type WsAuthConfig = 'userAuth' | 'bearer' | 'none';
 
 /**

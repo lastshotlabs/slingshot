@@ -7,8 +7,20 @@ import { getClientIp } from '@lastshotlabs/slingshot-core';
 /**
  * Middleware factory that verifies a CAPTCHA token from the request body.
  *
+ * When no `config` is provided, falls back to the captcha configuration
+ * from the app's {@link SlingshotContext}. If neither is available, the
+ * middleware is a no-op (passes through to the next handler).
+ *
+ * @param config - Optional CAPTCHA provider configuration. When omitted,
+ *   uses the app-level captcha config from context.
+ * @returns A Hono middleware that extracts and verifies the CAPTCHA token.
+ * @throws {HttpError} `400 CAPTCHA_MISSING` when the token field is absent.
+ * @throws {HttpError} `400 CAPTCHA_FAILED` when provider verification fails.
+ *
  * @example
+ * ```ts
  * router.post("/contact", requireCaptcha({ provider: "turnstile", secretKey: "..." }), handler);
+ * ```
  */
 export const requireCaptcha =
   (config?: CaptchaConfig): MiddlewareHandler<AppEnv> =>

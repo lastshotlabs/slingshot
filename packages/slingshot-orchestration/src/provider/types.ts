@@ -8,6 +8,9 @@ import type {
   StepOptions,
 } from '../types';
 
+/**
+ * Provider-facing snapshot of task execution settings after normalization.
+ */
 export interface ProviderTaskManifest {
   readonly name: string;
   readonly retry: RetryPolicy;
@@ -16,12 +19,18 @@ export interface ProviderTaskManifest {
   readonly concurrency: number | undefined;
 }
 
+/**
+ * Workflow lifecycle hooks exposed separately from the structural manifest.
+ */
 export interface ProviderWorkflowHooks<TInput = unknown, TOutput = unknown> {
   readonly onStart?: ResolvedWorkflow<TInput, TOutput>['onStart'];
   readonly onComplete?: ResolvedWorkflow<TInput, TOutput>['onComplete'];
   readonly onFail?: ResolvedWorkflow<TInput, TOutput>['onFail'];
 }
 
+/**
+ * Provider-facing representation of a workflow task step.
+ */
 export interface ProviderStepManifest<TWorkflowInput = unknown> {
   readonly _tag: 'Step';
   readonly name: string;
@@ -29,22 +38,34 @@ export interface ProviderStepManifest<TWorkflowInput = unknown> {
   readonly options: StepOptions<TWorkflowInput>;
 }
 
+/**
+ * Provider-facing representation of a parallel step group.
+ */
 export interface ProviderParallelManifest<TWorkflowInput = unknown> {
   readonly _tag: 'Parallel';
   readonly steps: readonly ProviderStepManifest<TWorkflowInput>[];
 }
 
+/**
+ * Provider-facing representation of a workflow sleep entry.
+ */
 export interface ProviderSleepManifest<TWorkflowInput = unknown> {
   readonly _tag: 'Sleep';
   readonly name: string;
   readonly duration: number | ((ctx: StepInputContext<TWorkflowInput>) => number);
 }
 
+/**
+ * Any workflow entry shape exposed through the provider registry.
+ */
 export type ProviderWorkflowEntry<TWorkflowInput = unknown> =
   | ProviderStepManifest<TWorkflowInput>
   | ProviderParallelManifest<TWorkflowInput>
   | ProviderSleepManifest<TWorkflowInput>;
 
+/**
+ * Provider-facing normalized workflow manifest with referenced task manifests inlined.
+ */
 export interface ProviderWorkflowManifest<TInput = unknown, TOutput = unknown> {
   readonly name: string;
   readonly description: string | undefined;
@@ -61,6 +82,10 @@ export interface ProviderWorkflowManifest<TInput = unknown, TOutput = unknown> {
   };
 }
 
+/**
+ * Read-only registry used by provider adapters and worker bootstraps to inspect
+ * the normalized task and workflow catalog.
+ */
 export interface OrchestrationProviderRegistry {
   hasTask(name: string): boolean;
   getTask(name: string): AnyResolvedTask;

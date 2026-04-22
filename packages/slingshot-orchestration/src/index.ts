@@ -27,6 +27,10 @@ export { createSqliteAdapter } from './adapters/sqlite';
  */
 export { createCachedRunHandle, generateRunId } from './adapter';
 /**
+ * Shared idempotency key scoping helper used by adapter implementations.
+ */
+export { createIdempotencyScope } from './idempotency';
+/**
  * Public task, workflow, adapter, run, and capability types for the portable orchestration layer.
  */
 export type {

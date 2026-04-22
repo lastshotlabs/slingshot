@@ -126,6 +126,10 @@ function toWorkflowHooks(workflow: AnyResolvedWorkflow): ProviderWorkflowHooks {
   });
 }
 
+/**
+ * Build the provider registry used by adapter implementations that need a normalized,
+ * read-only view of task and workflow manifests.
+ */
 export function createOrchestrationProviderRegistry(options: {
   tasks: readonly AnyResolvedTask[];
   workflows: readonly AnyResolvedWorkflow[];

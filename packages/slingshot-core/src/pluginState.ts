@@ -1,13 +1,35 @@
 import { getContextOrNull } from './context/index';
 
+/**
+ * Instance-scoped map of plugin name → plugin-owned state.
+ *
+ * Each plugin stores its runtime state under its own {@link SlingshotPlugin.name}
+ * key. Values are opaque to the framework — plugins own the shape of their
+ * own entries and expose typed accessors for dependent plugins.
+ */
 export type PluginStateMap = Map<string, unknown>;
 
+/**
+ * Any object that carries a {@link PluginStateMap}.
+ *
+ * Used as an input type so callers can pass either a raw `PluginStateMap` or
+ * any container that embeds one (e.g. {@link SlingshotContext}).
+ */
 export interface PluginStateCarrier {
+  /** The instance-scoped plugin state map. */
   readonly pluginState: PluginStateMap;
 }
 
+/**
+ * Coordinates for locating an entity adapter within plugin state.
+ *
+ * Used by {@link maybeEntityAdapter} and {@link requireEntityAdapter} to look
+ * up a specific entity's adapter from the owning plugin's state entry.
+ */
 export interface EntityAdapterLookup {
+  /** Name of the plugin that owns the entity adapter. */
   readonly plugin: string;
+  /** Name of the entity whose adapter to retrieve. */
   readonly entity: string;
 }
 
@@ -67,6 +89,15 @@ function resolveEntityAdaptersState(
   return state as EntityAdaptersPluginState;
 }
 
+/**
+ * Extract a {@link PluginStateMap} from a raw map, a carrier object, or `null`.
+ *
+ * Returns `null` when the input is `null`, `undefined`, or not a recognised
+ * plugin-state container. Does **not** fall back to the ambient context.
+ *
+ * @param input - A raw `PluginStateMap`, a {@link PluginStateCarrier}, or nullish.
+ * @returns The resolved map, or `null` when unavailable.
+ */
 export function resolvePluginState(
   input: PluginStateMap | PluginStateCarrier | null | undefined,
 ): PluginStateMap | null {
@@ -79,6 +110,14 @@ export function resolvePluginState(
   return null;
 }
 
+/**
+ * Resolve a {@link PluginStateMap} from the given input, falling back to the
+ * ambient {@link SlingshotContext} when the input is a plain object that does
+ * not directly carry plugin state.
+ *
+ * @param input - A raw map, carrier, context-bearing object, or nullish.
+ * @returns The resolved map, or `null` when unavailable from any source.
+ */
 export function getPluginStateOrNull(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): PluginStateMap | null {
@@ -94,6 +133,16 @@ export function getPluginStateOrNull(
   return getContextOrNull(input)?.pluginState ?? null;
 }
 
+/**
+ * Resolve a {@link PluginStateMap} from the given input, throwing when unavailable.
+ *
+ * Behaves identically to {@link getPluginStateOrNull} but throws instead of
+ * returning `null`. Use this when plugin state is required for correct operation.
+ *
+ * @param input - A raw map, carrier, or context-bearing object.
+ * @returns The resolved plugin state map.
+ * @throws When plugin state cannot be resolved from any source.
+ */
 export function getPluginState(
   input: PluginStateMap | PluginStateCarrier | object,
 ): PluginStateMap {
@@ -104,12 +153,33 @@ export function getPluginState(
   return pluginState;
 }
 
+/**
+ * Read the {@link PluginStateMap} from a Hono request context variable.
+ *
+ * Looks up `c.get('slingshotCtx')` and resolves plugin state from the
+ * resulting carrier. Returns `null` when the context variable is absent.
+ *
+ * @param c - A Hono-style context with a `get` accessor.
+ * @returns The resolved map, or `null` when unavailable.
+ */
 export function getPluginStateFromRequestOrNull(c: {
   get(key: string): unknown;
 }): PluginStateMap | null {
   return getPluginStateOrNull(c.get('slingshotCtx') as PluginStateCarrier | null | undefined);
 }
 
+/**
+ * Read the {@link PluginStateMap} from a Hono request context variable, throwing
+ * when unavailable.
+ *
+ * Behaves identically to {@link getPluginStateFromRequestOrNull} but throws
+ * instead of returning `null`. Use this inside route handlers where plugin state
+ * is guaranteed to be present.
+ *
+ * @param c - A Hono-style context with a `get` accessor.
+ * @returns The resolved plugin state map.
+ * @throws When plugin state is not available on the request.
+ */
 export function getPluginStateFromRequest(c: { get(key: string): unknown }): PluginStateMap {
   const pluginState = getPluginStateFromRequestOrNull(c);
   if (!pluginState) {

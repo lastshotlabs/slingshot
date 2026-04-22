@@ -1,8 +1,9 @@
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import {
   defineTask,
   defineWorkflow,
+  OrchestrationError,
   parallel,
   step,
   stepResult,
@@ -181,7 +182,24 @@ export const requireOperationsKey: MiddlewareHandler = async (c, next) => {
   if (c.req.header('x-ops-key') !== 'dev-ops-key') {
     return c.json({ error: 'forbidden' }, 403);
   }
-
-  c.set('tenantId', 'tenant-demo');
   await next();
 };
+
+export function resolveOperationsRequestContext(c: Context) {
+  const tenantId = c.req.header('x-tenant-id');
+  if (!tenantId) {
+    throw new OrchestrationError('VALIDATION_FAILED', 'missing x-tenant-id');
+  }
+
+  const actorId = c.req.header('x-actor-id') ?? 'ops-automation';
+  return {
+    tenantId,
+    actorId,
+    metadata: {
+      source: 'operations-api',
+    },
+    tags: {
+      channel: 'ops',
+    },
+  };
+}

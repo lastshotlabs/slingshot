@@ -39,20 +39,39 @@ export type SecretProviderFactory = (config: Record<string, unknown>) => SecretR
  */
 export type HookFunction = (ctx: unknown) => void | Promise<void>;
 
+/**
+ * Registry for resolving named handler references in app manifests.
+ *
+ * Stores five categories of named registrations: function handlers, plugin
+ * factories, event bus factories, secret provider factories, and lifecycle hooks.
+ * Each `createManifestHandlerRegistry()` call produces a fresh, closure-scoped
+ * registry with no shared state between instances.
+ */
 export interface ManifestHandlerRegistry {
+  /** Register a named function handler. Throws on duplicate names. */
   registerHandler(name: string, factory: HandlerFactory): void;
+  /** Resolve a named handler and invoke its factory, returning the result. */
   resolveHandler(name: string, params?: Record<string, unknown>): unknown;
+  /** Check whether a handler with the given name is registered. */
   hasHandler(name: string): boolean;
 
+  /** Register a named plugin factory. Throws on duplicate names. */
   registerPlugin(name: string, factory: PluginFactory): void;
+  /** Resolve a named plugin factory and invoke it with optional config. */
   resolvePlugin(name: string, config?: Record<string, unknown>): SlingshotPlugin;
+  /** Check whether a plugin factory with the given name is registered. */
   hasPlugin(name: string): boolean;
 
+  /** Register a named event bus factory. Throws on duplicate names. */
   registerEventBus(name: string, factory: EventBusFactory): void;
+  /** Resolve a named event bus factory and invoke it with optional config. */
   resolveEventBus(name: string, config?: Record<string, unknown>): SlingshotEventBus;
+  /** Check whether an event bus factory with the given name is registered. */
   hasEventBus(name: string): boolean;
 
+  /** Register a named secret provider factory. Throws on duplicate names. */
   registerSecretProvider(name: string, factory: SecretProviderFactory): void;
+  /** Resolve a named secret provider factory and invoke it with config. */
   resolveSecretProvider(name: string, config: Record<string, unknown>): SecretRepository;
 
   /** Register a lifecycle hook by name. */
@@ -62,15 +81,26 @@ export interface ManifestHandlerRegistry {
   /** Check whether a hook with the given name is registered. */
   hasHook(name: string): boolean;
 
+  /** Register a named orchestration task definition. Throws on duplicate names. */
   registerTask(name: string, task: AnyResolvedTask): void;
+  /** Resolve a registered task definition by name. Throws if not found. */
   resolveTask(name: string): AnyResolvedTask;
+  /** Check whether a task with the given name is registered. */
   hasTask(name: string): boolean;
 
+  /** Register a named orchestration workflow definition. Throws on duplicate names. */
   registerWorkflow(name: string, workflow: AnyResolvedWorkflow): void;
+  /** Resolve a registered workflow definition by name. Throws if not found. */
   resolveWorkflow(name: string): AnyResolvedWorkflow;
+  /** Check whether a workflow with the given name is registered. */
   hasWorkflow(name: string): boolean;
 }
 
+/**
+ * Create a fresh {@link ManifestHandlerRegistry} with its own closure-scoped maps.
+ *
+ * @returns A new registry instance with no pre-registered entries.
+ */
 export function createManifestHandlerRegistry(): ManifestHandlerRegistry {
   const handlers = new Map<string, HandlerFactory>();
   const plugins = new Map<string, PluginFactory>();

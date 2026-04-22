@@ -143,6 +143,9 @@ async function storeDelPattern(app: object, store: CacheStore, fullPattern: stri
  * Delete a cached entry by exact key across ALL cache backends.
  *
  * Requires an app reference so cache invalidation uses the correct instance-owned adapters.
+ *
+ * @param key - The cache key to invalidate (without the `cache:<appName>:` prefix).
+ * @param app - The Hono app instance used to resolve cache adapters.
  */
 export const bustCache = async (key: string, app: object) => {
   const { getContext } = await import('@lastshotlabs/slingshot-core');
@@ -156,7 +159,8 @@ export const bustCache = async (key: string, app: object) => {
 /**
  * Delete cached entries matching a glob pattern across ALL cache backends.
  *
- * Same defense-in-depth rationale as `bustCache` — see comment above.
+ * @param pattern - A glob pattern to match cache keys (without the `cache:<appName>:` prefix).
+ * @param app - The Hono app instance used to resolve cache adapters.
  */
 export const bustCachePattern = async (pattern: string, app: object) => {
   const { getContext } = await import('@lastshotlabs/slingshot-core');

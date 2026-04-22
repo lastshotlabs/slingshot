@@ -81,6 +81,20 @@ export interface PublishOptions {
   trackDelivery?: boolean;
 }
 
+/**
+ * Publish a message to all subscribers of a WebSocket room.
+ *
+ * Uses Bun's native room broadcast for the fast path. Falls back to
+ * per-socket delivery when volatile mode, exclude sets, or delivery
+ * tracking are enabled. Also fans out to the cross-instance transport
+ * when configured.
+ *
+ * @param state - Instance-scoped WebSocket state.
+ * @param endpoint - The WebSocket endpoint path (e.g. `'/ws'`).
+ * @param room - The room name to publish to.
+ * @param data - The payload to send (serialised to JSON).
+ * @param options - Optional publish behaviour (volatile, exclude, tracking).
+ */
 export const publish = (
   state: WsState,
   endpoint: string,
@@ -142,6 +156,13 @@ export const publish = (
   }
 };
 
+/**
+ * List all rooms with at least one subscriber on a given endpoint.
+ *
+ * @param state - Instance-scoped WebSocket state.
+ * @param endpoint - The WebSocket endpoint path.
+ * @returns An array of room names.
+ */
 export const getRooms = (state: WsState, endpoint: string): string[] => {
   const prefix = encodeURIComponent(endpoint) + ':';
   const rooms: string[] = [];
@@ -154,6 +175,14 @@ export const getRooms = (state: WsState, endpoint: string): string[] => {
   return rooms;
 };
 
+/**
+ * List all socket IDs subscribed to a specific room.
+ *
+ * @param state - Instance-scoped WebSocket state.
+ * @param endpoint - The WebSocket endpoint path.
+ * @param room - The room name.
+ * @returns An array of socket IDs.
+ */
 export const getRoomSubscribers = (state: WsState, endpoint: string, room: string): string[] => [
   ...(state.roomRegistry.get(wsEndpointKey(endpoint, room)) ?? []),
 ];
@@ -308,6 +337,12 @@ export const unsubscribe = <T extends WithSocketId>(
   ws.unsubscribe(key);
 };
 
+/**
+ * Get the set of rooms a specific socket is currently subscribed to.
+ *
+ * @param ws - The server WebSocket instance.
+ * @returns An array of room names.
+ */
 export const getSubscriptions = <T extends WithRooms>(ws: ServerWebSocket<T>): string[] => [
   ...ws.data.rooms,
 ];

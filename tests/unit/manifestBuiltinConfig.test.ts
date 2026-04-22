@@ -75,6 +75,7 @@ let requireRegistry: ManifestBuiltinConfigModule['requireRegistry'];
 let resolveHandlerRef: ManifestBuiltinConfigModule['resolveHandlerRef'];
 let resolveBuiltinPath: ManifestBuiltinConfigModule['resolveBuiltinPath'];
 let resolveAdminManifestConfig: ManifestBuiltinConfigModule['resolveAdminManifestConfig'];
+let resolveOrchestrationManifestConfig: ManifestBuiltinConfigModule['resolveOrchestrationManifestConfig'];
 let resolveSearchManifestConfig: ManifestBuiltinConfigModule['resolveSearchManifestConfig'];
 let resolveSsrManifestConfig: ManifestBuiltinConfigModule['resolveSsrManifestConfig'];
 let resolveWebhookManifestConfig: ManifestBuiltinConfigModule['resolveWebhookManifestConfig'];
@@ -88,6 +89,7 @@ beforeEach(async () => {
     resolveHandlerRef,
     resolveBuiltinPath,
     resolveAdminManifestConfig,
+    resolveOrchestrationManifestConfig,
     resolveSearchManifestConfig,
     resolveSsrManifestConfig,
     resolveWebhookManifestConfig,
@@ -275,6 +277,52 @@ describe('resolveSearchManifestConfig', () => {
     });
     expect(result['mountPath']).toBe('/search');
     expect(result['indexPrefix']).toBe('test_');
+  });
+});
+
+describe('resolveOrchestrationManifestConfig', () => {
+  it('resolves request-context and run-authorization handlers for orchestration routes', () => {
+    const requestContextHandler = () => ({ tenantId: 'tenant-a', actorId: 'actor-a' });
+    const authorizeRunHandler = () => true;
+    const routeMiddlewareHandler = async () => {};
+    const registry = {
+      resolveTask(name: string) {
+        return { name, description: `${name} task` };
+      },
+      resolveWorkflow(name: string) {
+        return { name, description: `${name} workflow` };
+      },
+      resolveHandler(name: string) {
+        if (name === 'requireOps') return routeMiddlewareHandler;
+        if (name === 'resolveRequestContext') return requestContextHandler;
+        if (name === 'authorizeRun') return authorizeRunHandler;
+        throw new Error(`unexpected handler ${name}`);
+      },
+    } as any;
+
+    const result = resolveOrchestrationManifestConfig(
+      {
+        adapter: { type: 'memory', config: { concurrency: 2 } },
+        tasks: ['capture-quote'],
+        workflows: ['issue-policy'],
+        routes: true,
+        routePrefix: '/orchestration',
+        routeMiddleware: [{ handler: 'requireOps' }],
+        resolveRequestContext: { handler: 'resolveRequestContext' },
+        authorizeRun: { handler: 'authorizeRun' },
+      },
+      registry,
+    );
+
+    expect(result['tasks']).toHaveLength(1);
+    expect((result['tasks'] as Array<{ name: string }>)[0]?.name).toBe('capture-quote');
+    expect(result['workflows']).toHaveLength(1);
+    expect((result['workflows'] as Array<{ name: string }>)[0]?.name).toBe('issue-policy');
+    expect((result['routeMiddleware'] as unknown[])[0]).toBe(routeMiddlewareHandler);
+    expect(result['resolveRequestContext']).toBe(requestContextHandler);
+    expect(result['authorizeRun']).toBe(authorizeRunHandler);
+    expect(result['routePrefix']).toBe('/orchestration');
+    expect(typeof result['adapter']).toBe('object');
   });
 });
 

@@ -9,10 +9,11 @@ import {
   type Run,
   type RunFilter,
   type RunHandle,
-  type RunOptions,
   type ScheduleCapability,
   type ScheduleHandle,
+  type StepRun,
   type WorkflowRun,
+  createIdempotencyScope,
   createCachedRunHandle,
   generateRunId,
 } from '@lastshotlabs/slingshot-orchestration';
@@ -29,10 +30,100 @@ import {
 } from './validation';
 import { createBullMQWorkflowProcessor } from './workflowWorker';
 
+const CANCELLATION_ERROR_MESSAGE = 'Run cancelled';
+
+type SerializedStepRun = Omit<StepRun, 'startedAt' | 'completedAt'> & {
+  startedAt?: string;
+  completedAt?: string;
+};
+
+type SerializedRunSnapshot = Omit<Run, 'createdAt' | 'startedAt' | 'completedAt'> & {
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  steps?: Record<string, SerializedStepRun>;
+};
+
+interface CancellationSnapshotStoreClient {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string): Promise<unknown>;
+  mget(...keys: string[]): Promise<Array<string | null>>;
+  zadd(key: string, score: number | string, member: string): Promise<unknown>;
+  zrange(key: string, start: number, end: number): Promise<string[]>;
+  zrem(key: string, ...members: string[]): Promise<unknown>;
+  del(...keys: string[]): Promise<unknown>;
+}
+
+function serializeStepRun(step: StepRun): SerializedStepRun {
+  return {
+    ...step,
+    startedAt: step.startedAt?.toISOString(),
+    completedAt: step.completedAt?.toISOString(),
+  };
+}
+
+function serializeRunSnapshot(run: Run | WorkflowRun): SerializedRunSnapshot {
+  return {
+    ...run,
+    createdAt: run.createdAt.toISOString(),
+    startedAt: run.startedAt?.toISOString(),
+    completedAt: run.completedAt?.toISOString(),
+    ...(run.type === 'workflow' && run.steps
+      ? {
+          steps: Object.fromEntries(
+            Object.entries(run.steps).map(([stepName, step]) => [stepName, serializeStepRun(step)]),
+          ),
+        }
+      : {}),
+  };
+}
+
+function deserializeRunSnapshot(value: string): Run | WorkflowRun | null {
+  try {
+    const parsed = JSON.parse(value) as SerializedRunSnapshot;
+    const base: Run = {
+      ...parsed,
+      type: parsed.type,
+      createdAt: new Date(parsed.createdAt),
+      startedAt: parsed.startedAt ? new Date(parsed.startedAt) : undefined,
+      completedAt: parsed.completedAt ? new Date(parsed.completedAt) : undefined,
+    };
+    if (parsed.type === 'workflow') {
+      return {
+        ...base,
+        type: 'workflow',
+        steps: parsed.steps
+          ? Object.fromEntries(
+              Object.entries(parsed.steps).map(([stepName, step]) => [
+                stepName,
+                {
+                  ...step,
+                  startedAt: step.startedAt ? new Date(step.startedAt) : undefined,
+                  completedAt: step.completedAt ? new Date(step.completedAt) : undefined,
+                } satisfies StepRun,
+              ]),
+            )
+          : undefined,
+      };
+    }
+    return base;
+  } catch {
+    return null;
+  }
+}
+
+function getRunId(job: Job<Record<string, unknown>>): string {
+  const rawRunId = typeof job.data['runId'] === 'string' ? (job.data['runId'] as string) : '';
+  return rawRunId.length > 0 ? rawRunId : String(job.id);
+}
+
+function isCancelledFailedJob(job: Job<Record<string, unknown>>, state: JobType | 'unknown'): boolean {
+  return state === 'failed' && job.failedReason === CANCELLATION_ERROR_MESSAGE;
+}
+
 function toRun(job: Job<Record<string, unknown>>, type: 'task' | 'workflow'): Run | WorkflowRun {
   const progress = job.progress && typeof job.progress === 'object' ? job.progress : undefined;
-  const rawRunId = typeof job.data['runId'] === 'string' ? (job.data['runId'] as string) : '';
-  const runId = rawRunId.length > 0 ? rawRunId : String(job.id);
+  const runId = getRunId(job);
   return {
     id: runId,
     type,
@@ -40,6 +131,9 @@ function toRun(job: Job<Record<string, unknown>>, type: 'task' | 'workflow'): Ru
     status: 'pending',
     input: job.data['input'],
     output: job.returnvalue,
+    error: typeof job.failedReason === 'string' && job.failedReason.length > 0
+      ? { message: job.failedReason }
+      : undefined,
     tenantId:
       typeof job.data['tenantId'] === 'string' ? (job.data['tenantId'] as string) : undefined,
     priority: typeof job.opts.priority === 'number' ? job.opts.priority : undefined,
@@ -53,6 +147,7 @@ function toRun(job: Job<Record<string, unknown>>, type: 'task' | 'workflow'): Ru
         : undefined,
     progress: progress as Run['progress'],
     createdAt: new Date(job.timestamp),
+    startedAt: job.processedOn ? new Date(job.processedOn) : undefined,
     completedAt: job.finishedOn ? new Date(job.finishedOn) : undefined,
   };
 }
@@ -75,12 +170,12 @@ const lookupStates: JobType[] = [
   'waiting-children',
 ];
 
-function dedupeJobId(
-  target: { type: 'task' | 'workflow'; name: string },
-  tenantId: string | undefined,
-  idempotencyKey: string,
-): string {
-  return ['orch-idem', target.type, target.name, tenantId ?? 'global', idempotencyKey].join(':');
+interface RunRecord {
+  job: Job<Record<string, unknown>>;
+  queue: Queue;
+  queueEvents: QueueEvents;
+  type: 'task' | 'workflow';
+  name: string;
 }
 
 function mapStatuses(filterStatus: RunFilter['status']): JobType[] {
@@ -138,6 +233,8 @@ export function createBullMQOrchestrationAdapter(
   const namedWorkers = new Map<string, Worker>();
   const namedQueueEvents = new Map<string, QueueEvents>();
   const runIdToJobId = new Map<string, string>();
+  const cancelledRunSignals = new Map<string, string>();
+  const cancelledRunsIndexKey = `${prefix}:cancelled:runs`;
   let taskQueueEvents: QueueEvents | null = null;
   let workflowQueueEvents: QueueEvents | null = null;
   let taskWorker: Worker | null = null;
@@ -267,6 +364,253 @@ export function createBullMQOrchestrationAdapter(
     return createCachedRunHandle(id, jobPromiseLoader);
   }
 
+  function getCancelledRunKey(runId: string): string {
+    return `${prefix}:cancelled:run:${runId}`;
+  }
+
+  async function getCancellationSnapshotStore(): Promise<CancellationSnapshotStoreClient> {
+    return (await defaultTaskQueue.client) as CancellationSnapshotStoreClient;
+  }
+
+  async function getPersistedCancelledSnapshot(runId: string): Promise<(Run | WorkflowRun) | null> {
+    const client = await getCancellationSnapshotStore();
+    const payload = await client.get(getCancelledRunKey(runId));
+    if (!payload) {
+      return null;
+    }
+    const snapshot = deserializeRunSnapshot(payload);
+    if (snapshot) {
+      return snapshot;
+    }
+    await client.del(getCancelledRunKey(runId));
+    await client.zrem(cancelledRunsIndexKey, runId);
+    return null;
+  }
+
+  async function listPersistedCancelledSnapshots(): Promise<Array<Run | WorkflowRun>> {
+    const client = await getCancellationSnapshotStore();
+    const runIds = await client.zrange(cancelledRunsIndexKey, 0, -1);
+    if (runIds.length === 0) {
+      return [];
+    }
+
+    const payloads = await client.mget(...runIds.map(runId => getCancelledRunKey(runId)));
+    const snapshots: Array<Run | WorkflowRun> = [];
+    const staleRunIds: string[] = [];
+    for (const [index, payload] of payloads.entries()) {
+      const runId = runIds[index];
+      if (!runId || !payload) {
+        if (runId) {
+          staleRunIds.push(runId);
+        }
+        continue;
+      }
+      const snapshot = deserializeRunSnapshot(payload);
+      if (!snapshot) {
+        staleRunIds.push(runId);
+        continue;
+      }
+      snapshots.push(snapshot);
+    }
+
+    if (staleRunIds.length > 0) {
+      await client.zrem(cancelledRunsIndexKey, ...staleRunIds);
+      await client.del(...staleRunIds.map(runId => getCancelledRunKey(runId)));
+    }
+
+    return snapshots;
+  }
+
+  async function persistCancelledSnapshot(snapshot: Run | WorkflowRun): Promise<void> {
+    const client = await getCancellationSnapshotStore();
+    await client.set(getCancelledRunKey(snapshot.id), JSON.stringify(serializeRunSnapshot(snapshot)));
+    await client.zadd(cancelledRunsIndexKey, snapshot.createdAt.getTime(), snapshot.id);
+  }
+
+  async function deletePersistedCancelledSnapshot(runId: string): Promise<void> {
+    const client = await getCancellationSnapshotStore();
+    await client.del(getCancelledRunKey(runId));
+    await client.zrem(cancelledRunsIndexKey, runId);
+  }
+
+  function createCancelledSnapshot(
+    job: Job<Record<string, unknown>>,
+    type: 'task' | 'workflow',
+    now = new Date(),
+  ): Run | WorkflowRun {
+    return {
+      ...toRun(job, type),
+      status: 'cancelled',
+      output: undefined,
+      error: { message: CANCELLATION_ERROR_MESSAGE },
+      completedAt: now,
+    };
+  }
+
+  async function toVisibleRun(
+    job: Job<Record<string, unknown>>,
+    type: 'task' | 'workflow',
+  ): Promise<Run | WorkflowRun> {
+    const state = await job.getState();
+    if (isCancelledFailedJob(job, state)) {
+      return (
+        (await getPersistedCancelledSnapshot(getRunId(job))) ??
+        createCancelledSnapshot(job, type, job.finishedOn ? new Date(job.finishedOn) : new Date())
+      );
+    }
+
+    const run = toRun(job, type);
+    run.status = mapBullMQStatus(state);
+    return run;
+  }
+
+  async function findRunRecord(runId: string): Promise<RunRecord | null> {
+    let job = await findJobByRunId(defaultTaskQueue, runId);
+    if (job) {
+      if (!taskQueueEvents) {
+        throw new OrchestrationError('ADAPTER_ERROR', 'Task queue events are not started.');
+      }
+      return {
+        job,
+        queue: defaultTaskQueue,
+        queueEvents: taskQueueEvents,
+        type: 'task',
+        name: String(job.data['taskName'] ?? job.name),
+      };
+    }
+
+    job = await findJobByRunId(workflowQueue, runId);
+    if (job) {
+      if (!workflowQueueEvents) {
+        throw new OrchestrationError('ADAPTER_ERROR', 'Workflow queue events are not started.');
+      }
+      return {
+        job,
+        queue: workflowQueue,
+        queueEvents: workflowQueueEvents,
+        type: 'workflow',
+        name: String(job.data['workflowName'] ?? job.name),
+      };
+    }
+
+    for (const [queueName, queue] of namedQueues.entries()) {
+      job = await findJobByRunId(queue, runId);
+      if (!job) continue;
+      const queueEvents = namedQueueEvents.get(queueName);
+      if (!queueEvents) {
+        throw new OrchestrationError(
+          'ADAPTER_ERROR',
+          `Queue events for task queue '${queueName}' are not started.`,
+        );
+      }
+      return {
+        job,
+        queue,
+        queueEvents,
+        type: 'task',
+        name: String(job.data['taskName'] ?? job.name),
+      };
+    }
+
+    return null;
+  }
+
+  function createCancellationWatcher(runId: string): { promise: Promise<never>; stop(): void } {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    const stop = () => {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+    };
+
+    const promise = new Promise<never>((_, reject) => {
+      const poll = () => {
+        if (stopped) {
+          return;
+        }
+        const message = cancelledRunSignals.get(runId);
+        if (message) {
+          stop();
+          reject(new Error(message));
+          return;
+        }
+        timer = setTimeout(poll, 50);
+      };
+      poll();
+    });
+
+    return { promise, stop };
+  }
+
+  async function waitForRunResult(
+    runId: string,
+    job: Job<Record<string, unknown>>,
+    queueEvents: QueueEvents,
+  ): Promise<unknown> {
+    const cancellationMessage = cancelledRunSignals.get(runId);
+    if (cancellationMessage) {
+      throw new Error(cancellationMessage);
+    }
+
+    const cancellationWatcher = createCancellationWatcher(runId);
+    try {
+      return await Promise.race([
+        job.waitUntilFinished(queueEvents),
+        cancellationWatcher.promise,
+      ]);
+    } finally {
+      cancellationWatcher.stop();
+    }
+  }
+
+  async function cancelBullMQJob(
+    job: Job<Record<string, unknown>>,
+    type: 'task' | 'workflow',
+  ): Promise<void> {
+    const runId = getRunId(job);
+    const state = await job.getState();
+    if (state === 'completed' || state === 'failed') {
+      return;
+    }
+
+    if (
+      state === 'waiting' ||
+      state === 'delayed' ||
+      state === 'prioritized' ||
+      state === 'waiting-children'
+    ) {
+      const snapshot = createCancelledSnapshot(job, type);
+      await persistCancelledSnapshot(snapshot);
+      try {
+        await job.remove();
+      } catch (error) {
+        await deletePersistedCancelledSnapshot(runId);
+        throw error;
+      }
+      cancelledRunSignals.set(runId, snapshot.error?.message ?? CANCELLATION_ERROR_MESSAGE);
+      return;
+    }
+
+    if (state === 'active') {
+      try {
+        await (
+          job as unknown as {
+            moveToFailed(err: Error, token: string, fetchNext?: boolean): Promise<void>;
+          }
+        ).moveToFailed(new Error(CANCELLATION_ERROR_MESSAGE), '0', false);
+      } catch (error) {
+        throw new OrchestrationError(
+          'ADAPTER_ERROR',
+          `Failed to cancel active run '${runId}': ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      cancelledRunSignals.set(runId, CANCELLATION_ERROR_MESSAGE);
+    }
+  }
+
   async function findJobByRunId(
     queue: Queue,
     runId: string,
@@ -297,9 +641,7 @@ export function createBullMQOrchestrationAdapter(
       const taskRuntime = resolveTaskRuntimeConfig(task);
       const runId = generateRunId();
       const queue = getQueueForTaskName(name);
-      const jobId = opts?.idempotencyKey
-        ? dedupeJobId({ type: 'task', name }, opts.tenantId, opts.idempotencyKey)
-        : runId;
+      const jobId = createIdempotencyScope({ type: 'task', name }, opts ?? {}) ?? runId;
       let job = await Job.fromId(queue, jobId);
       if (job) {
         const existingJob = job;
@@ -309,7 +651,7 @@ export function createBullMQOrchestrationAdapter(
             : String(existingJob.id);
         runIdToJobId.set(existingRunId, String(existingJob.id));
         return createResultHandle(existingRunId, () =>
-          existingJob.waitUntilFinished(getQueueEventsForTaskName(name)),
+          waitForRunResult(existingRunId, existingJob, getQueueEventsForTaskName(name)),
         );
       }
       job = await queue.add(
@@ -335,7 +677,7 @@ export function createBullMQOrchestrationAdapter(
       );
       runIdToJobId.set(runId, String(job.id));
       return createResultHandle(runId, () =>
-        job.waitUntilFinished(getQueueEventsForTaskName(name)),
+        waitForRunResult(runId, job, getQueueEventsForTaskName(name)),
       );
     },
     async runWorkflow(name, input, opts) {
@@ -345,9 +687,7 @@ export function createBullMQOrchestrationAdapter(
         throw new OrchestrationError('WORKFLOW_NOT_FOUND', `Workflow '${name}' not registered`);
       }
       const runId = generateRunId();
-      const jobId = opts?.idempotencyKey
-        ? dedupeJobId({ type: 'workflow', name }, opts.tenantId, opts.idempotencyKey)
-        : runId;
+      const jobId = createIdempotencyScope({ type: 'workflow', name }, opts ?? {}) ?? runId;
       let job = await Job.fromId(workflowQueue, jobId);
       if (job) {
         const existingJob = job;
@@ -360,7 +700,7 @@ export function createBullMQOrchestrationAdapter(
           if (!workflowQueueEvents) {
             throw new OrchestrationError('ADAPTER_ERROR', 'Workflow queue events are not started.');
           }
-          return existingJob.waitUntilFinished(workflowQueueEvents);
+          return waitForRunResult(existingRunId, existingJob, workflowQueueEvents);
         });
       }
       job = await workflowQueue.add(
@@ -387,77 +727,36 @@ export function createBullMQOrchestrationAdapter(
         if (!workflowQueueEvents) {
           throw new OrchestrationError('ADAPTER_ERROR', 'Workflow queue events are not started.');
         }
-        return job.waitUntilFinished(workflowQueueEvents);
+        return waitForRunResult(runId, job, workflowQueueEvents);
       });
     },
     async getRun(runId) {
-      let job = await findJobByRunId(defaultTaskQueue, runId);
-      let type: 'task' | 'workflow' = 'task';
-      if (!job) {
-        job = await findJobByRunId(workflowQueue, runId);
-        type = 'workflow';
+      const record = await findRunRecord(runId);
+      if (record) {
+        return toVisibleRun(record.job, record.type);
       }
-      if (!job) {
-        for (const queue of namedQueues.values()) {
-          job = await findJobByRunId(queue, runId);
-          if (job) {
-            type = 'task';
-            break;
-          }
-        }
-      }
-      if (!job) return null;
-      const run = toRun(job, type);
-      run.status = mapBullMQStatus(await job.getState());
-      return run;
+      return getPersistedCancelledSnapshot(runId);
     },
     async cancelRun(runId) {
-      let job = await findJobByRunId(defaultTaskQueue, runId);
-      if (!job) {
-        job = await findJobByRunId(workflowQueue, runId);
-      }
-      if (!job) {
-        for (const queue of namedQueues.values()) {
-          job = await findJobByRunId(queue, runId);
-          if (job) break;
+      const record = await findRunRecord(runId);
+      if (!record) {
+        const persistedSnapshot = await getPersistedCancelledSnapshot(runId);
+        if (persistedSnapshot) {
+          return;
         }
-      }
-      if (!job) {
         throw new OrchestrationError('RUN_NOT_FOUND', `Run '${runId}' not found`);
       }
 
-      const state = await job.getState();
-      if (state === 'waiting' || state === 'delayed' || state === 'prioritized') {
-        await job.remove();
-      } else if (state === 'active') {
-        await (
-          job as unknown as {
-            moveToFailed(err: Error, token: string, fetchNext?: boolean): Promise<void>;
-          }
-        ).moveToFailed(new Error('Run cancelled'), '0', false);
-      }
+      await cancelBullMQJob(record.job, record.type);
 
-      const childIds = Array.isArray(job.data['_childJobIds'])
-        ? (job.data['_childJobIds'] as string[])
+      const childIds = Array.isArray(record.job.data['_childJobIds'])
+        ? (record.job.data['_childJobIds'] as string[])
         : [];
       for (const childId of childIds) {
         for (const queue of [defaultTaskQueue, ...namedQueues.values()]) {
           const childJob = await Job.fromId(queue, childId);
           if (!childJob) continue;
-          const childState = await childJob.getState();
-          if (
-            childState === 'waiting' ||
-            childState === 'delayed' ||
-            childState === 'prioritized'
-          ) {
-            await childJob.remove();
-          } else if (childState === 'active') {
-            await (
-              childJob as unknown as {
-                moveToFailed(err: Error, token: string, fetchNext?: boolean): Promise<void>;
-              }
-            ).moveToFailed(new Error('Run cancelled'), '0', false);
-          }
+          await cancelBullMQJob(childJob, 'task');
         }
       }
     },
@@ -466,6 +765,7 @@ export function createBullMQOrchestrationAdapter(
     },
     async shutdown() {
       closed = true;
+      cancelledRunSignals.clear();
       for (const worker of namedWorkers.values()) {
         await worker.close();
       }
@@ -503,16 +803,28 @@ export function createBullMQOrchestrationAdapter(
         [
           ...taskJobGroups.flat().map(job => ({ job, type: 'task' as const })),
           ...workflowJobs.map(job => ({ job, type: 'workflow' as const })),
-        ].map(async ({ job, type }) => {
-          const run = toRun(job, type);
-          run.status = mapBullMQStatus(await job.getState());
-          return run;
-        }),
+        ].map(({ job, type }) => toVisibleRun(job, type)),
       );
-      const filtered = merged
+      const visibleRuns = new Map<string, Run | WorkflowRun>();
+      for (const run of merged) {
+        visibleRuns.set(run.id, run);
+      }
+      if (!filter?.status || (Array.isArray(filter.status) ? filter.status : [filter.status]).includes('cancelled')) {
+        for (const snapshot of await listPersistedCancelledSnapshots()) {
+          const existing = visibleRuns.get(snapshot.id);
+          if (!existing || existing.status === 'failed') {
+            visibleRuns.set(snapshot.id, snapshot);
+          }
+        }
+      }
+      const filtered = [...visibleRuns.values()]
         .filter(run => {
           if (filter?.name && run.name !== filter.name) return false;
           if (filter?.tenantId && run.tenantId !== filter.tenantId) return false;
+          if (filter?.status) {
+            const statuses = Array.isArray(filter.status) ? filter.status : [filter.status];
+            if (!statuses.includes(run.status)) return false;
+          }
           if (filter?.tags && !matchesTags(run.tags, filter.tags)) return false;
           if (filter?.createdAfter && run.createdAt < filter.createdAfter) return false;
           if (filter?.createdBefore && run.createdAt > filter.createdBefore) return false;

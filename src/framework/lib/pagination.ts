@@ -10,22 +10,44 @@ export { offsetParams, parseOffsetParams, paginatedResponse } from '@lastshotlab
 export { cursorPaginatedResponse } from '@lastshotlabs/slingshot-core';
 export type { OffsetParamDefaults, ParsedOffsetParams } from '@lastshotlabs/slingshot-core';
 
+/**
+ * Default values for cursor-based pagination query parameters.
+ */
 export interface CursorParamDefaults {
+  /** Default number of items per page (default `50`). */
   limit?: number;
+  /** Maximum allowed `limit` value (default `200`). */
   maxLimit?: number;
 }
 
+/**
+ * Parsed and validated cursor pagination parameters ready for adapter consumption.
+ */
 export interface ParsedCursorParams {
+  /** Clamped page size. */
   limit: number;
+  /** Decoded opaque cursor, or `undefined` on the first page. */
   cursor: string | undefined;
 }
 
+/**
+ * A single page of cursor-paginated results.
+ */
 export interface CursorResult<T> {
+  /** The items in this page. */
   items: T[];
+  /** Opaque cursor for the next page, or `null` when this is the last page. */
   nextCursor: string | null;
+  /** `true` when more items exist beyond this page. */
   hasMore: boolean;
 }
 
+/**
+ * Build a Zod schema for cursor-based pagination query parameters (`limit`, `cursor`).
+ *
+ * @param defaults - Optional default and max limit values.
+ * @returns A Zod object schema suitable for use in route parameter validation.
+ */
 export function cursorParams(defaults?: CursorParamDefaults) {
   const defaultLimit = defaults?.limit ?? 50;
   const maxLimit = defaults?.maxLimit ?? 200;
@@ -41,6 +63,17 @@ export function cursorParams(defaults?: CursorParamDefaults) {
   });
 }
 
+/**
+ * Parse raw cursor pagination query strings into typed, clamped values.
+ *
+ * When cursor signing is configured, the incoming cursor is verified before
+ * use. An invalid signature sets `invalidCursor: true` and clears the cursor.
+ *
+ * @param raw - Raw query string values from the request.
+ * @param defaults - Optional default and max limit values.
+ * @param signing - Optional signing config for HMAC-verified cursors.
+ * @returns Parsed params with an optional `invalidCursor` flag.
+ */
 export function parseCursorParams(
   raw: { limit?: string; cursor?: string },
   defaults?: CursorParamDefaults,
@@ -63,6 +96,13 @@ export function parseCursorParams(
   return { limit, cursor: raw.cursor };
 }
 
+/**
+ * HMAC-sign a cursor string when cursor signing is enabled, otherwise return it unchanged.
+ *
+ * @param cursor - The raw cursor to sign, or `null`.
+ * @param signing - Optional signing config. When absent or disabled, the cursor is returned as-is.
+ * @returns The signed cursor string, or `null` if the input was `null`.
+ */
 export function maybeSignCursor(
   cursor: string | null,
   signing?: { config: SigningConfig | null; secret: string | string[] | null },
@@ -74,6 +114,14 @@ export function maybeSignCursor(
   return cursor;
 }
 
+/**
+ * Build a Zod schema for a cursor-paginated response and register it in the
+ * OpenAPI schema registry under the given `name`.
+ *
+ * @param itemSchema - Zod schema for individual items in the `items` array.
+ * @param name - Schema name used for OpenAPI `$ref` registration.
+ * @returns A Zod object schema with `items`, `nextCursor`, and `hasMore` fields.
+ */
 export function cursorResponse<T extends ZodType>(itemSchema: T, name: string) {
   const wrapper = z.object({
     items: z.array(itemSchema),

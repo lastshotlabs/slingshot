@@ -1,5 +1,8 @@
 import type { RunStatus } from '@lastshotlabs/slingshot-orchestration';
 
+/**
+ * Map Temporal workflow execution states onto the portable orchestration run status enum.
+ */
 export function mapTemporalStatus(statusName: string | undefined): RunStatus {
   switch (statusName) {
     case 'RUNNING':

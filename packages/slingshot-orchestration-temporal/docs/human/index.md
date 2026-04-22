@@ -88,6 +88,12 @@ void worker.run();
 - deterministic run ID derivation and Temporal search-attribute helpers
 - adapter and worker validation schemas for manifest/code-first setup
 
+## Enterprise fit
+
+- Choose Temporal when workflow state is a system of record, not just a job queue.
+- Choose Temporal when long-running quoting, underwriting, ordering, approval, or fulfillment flows need durable timers, signals, and queryable execution history.
+- Keep domain services outside the adapter. Temporal still runs the same portable task and workflow definitions from `@lastshotlabs/slingshot-orchestration`; your worker loads those definitions and task handlers call your real service layer.
+
 ## Common Customization
 
 - Choose separate `workflowTaskQueue` and `defaultActivityTaskQueue` values when workflow execution

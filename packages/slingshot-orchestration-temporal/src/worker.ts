@@ -13,6 +13,9 @@ import {
   type TemporalOrchestrationWorkerOptions,
 } from './validation';
 
+/**
+ * Running Temporal worker group created for a Slingshot orchestration definition set.
+ */
 export interface TemporalOrchestrationWorkerSupervisor {
   readonly workflowTaskQueue: string;
   readonly activityTaskQueues: readonly string[];
@@ -29,6 +32,10 @@ function assertNodeRuntime(): void {
   }
 }
 
+/**
+ * Create the Temporal worker supervisor that executes portable Slingshot tasks and
+ * workflows inside real Temporal workers.
+ */
 export async function createTemporalOrchestrationWorker(
   rawOptions: TemporalOrchestrationWorkerOptions,
 ): Promise<TemporalOrchestrationWorkerSupervisor> {

@@ -314,6 +314,20 @@ export function resolveOrchestrationManifestConfig(
         ) as MiddlewareHandler;
       })
     : undefined;
+  const resolveRequestContext = isHandlerRefLike(config['resolveRequestContext'])
+    ? (resolveHandlerRef(
+        config['resolveRequestContext'],
+        requiredRegistry,
+        'manifest.plugins["slingshot-orchestration"].config.resolveRequestContext',
+      ) as (c: Context) => unknown)
+    : undefined;
+  const authorizeRun = isHandlerRefLike(config['authorizeRun'])
+    ? (resolveHandlerRef(
+        config['authorizeRun'],
+        requiredRegistry,
+        'manifest.plugins["slingshot-orchestration"].config.authorizeRun',
+      ) as (input: unknown) => unknown)
+    : undefined;
 
   let adapter: unknown;
   if (adapterType === 'memory') {
@@ -374,6 +388,8 @@ export function resolveOrchestrationManifestConfig(
     ...(config['routes'] === undefined ? {} : { routes: config['routes'] }),
     ...(typeof config['routePrefix'] === 'string' ? { routePrefix: config['routePrefix'] } : {}),
     ...(routeMiddleware ? { routeMiddleware } : {}),
+    ...(resolveRequestContext ? { resolveRequestContext } : {}),
+    ...(authorizeRun ? { authorizeRun } : {}),
   };
 }
 

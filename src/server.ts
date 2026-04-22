@@ -171,6 +171,17 @@ export interface CreateServerConfig<T extends object = object> extends Omit<
 // createServer
 // ---------------------------------------------------------------------------
 
+/**
+ * Create and start a Slingshot HTTP/WebSocket server.
+ *
+ * Wraps {@link createApp} with server-level concerns: port binding, TLS,
+ * WebSocket transport, SSE endpoint registration, worker auto-loading, and
+ * graceful shutdown signal handling (SIGTERM/SIGINT). Multiple concurrent
+ * servers are supported — each registers its own shutdown callback.
+ *
+ * @param config - Full server configuration (app config + port, WS, SSE, TLS, workers).
+ * @returns The running Bun `Server` instance.
+ */
 export const createServer = async <T extends object = object>(
   config: CreateServerConfig<T>,
 ): Promise<Server<SocketData<T>>> => {

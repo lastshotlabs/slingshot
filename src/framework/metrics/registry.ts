@@ -24,6 +24,11 @@ export interface MetricsState {
   queues: Map<string, { close(): Promise<void> }> | null;
 }
 
+/**
+ * Create a fresh, instance-scoped metrics state container.
+ *
+ * @returns An empty {@link MetricsState} ready for counter, histogram, and gauge registration.
+ */
 export function createMetricsState(): MetricsState {
   return {
     counters: new Map(),
@@ -64,6 +69,14 @@ export function defaultNormalizePath(path: string): string {
     .join('/');
 }
 
+/**
+ * Increment a named counter metric.
+ *
+ * @param state - The metrics state container.
+ * @param name - Prometheus-compatible metric name (e.g. `http_requests_total`).
+ * @param labels - Label key-value pairs for this observation.
+ * @param amount - Increment amount (default `1`).
+ */
 export function incrementCounter(
   state: MetricsState,
   name: string,
@@ -86,6 +99,15 @@ export function incrementCounter(
 
 const DEFAULT_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 
+/**
+ * Record an observation in a named histogram metric.
+ *
+ * @param state - The metrics state container.
+ * @param name - Prometheus-compatible metric name (e.g. `http_request_duration_seconds`).
+ * @param labels - Label key-value pairs for this observation.
+ * @param value - The observed value to bucket.
+ * @param buckets - Upper-bound bucket boundaries (default: standard Prometheus buckets).
+ */
 export function observeHistogram(
   state: MetricsState,
   name: string,
@@ -119,10 +141,26 @@ export function observeHistogram(
   entry.count++;
 }
 
+/**
+ * Register an async callback that will be invoked at scrape time to produce gauge values.
+ *
+ * @param state - The metrics state container.
+ * @param name - Prometheus-compatible metric name.
+ * @param cb - Async function returning an array of `{ labels, value }` observations.
+ */
 export function registerGaugeCallback(state: MetricsState, name: string, cb: GaugeCallback): void {
   state.gaugeCallbacks.set(name, cb);
 }
 
+/**
+ * Serialize all collected metrics into Prometheus exposition format.
+ *
+ * Gauge callbacks are invoked at serialization time. Counter and histogram
+ * values are read from the in-memory state.
+ *
+ * @param state - The metrics state container.
+ * @returns A string in Prometheus text exposition format.
+ */
 export async function serializeMetrics(state: MetricsState): Promise<string> {
   const lines: string[] = [];
   const gaugeLines: string[] = [];
@@ -187,6 +225,11 @@ export function setMetricsQueues(
   state.queues = map;
 }
 
+/**
+ * Close all job queues tracked in the metrics state (best-effort).
+ *
+ * @param state - The metrics state container.
+ */
 export async function closeMetricsQueues(state: MetricsState): Promise<void> {
   if (!state.queues) return;
   for (const q of state.queues.values()) {

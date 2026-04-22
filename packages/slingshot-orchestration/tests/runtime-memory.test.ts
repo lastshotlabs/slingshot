@@ -22,6 +22,90 @@ function createEventCollector() {
 }
 
 describe('memory orchestration runtime', () => {
+  test('replays completed idempotent task results after completion', async () => {
+    let executions = 0;
+    const echoTask = defineTask({
+      name: 'idempotent-echo-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ echoed: z.string() }),
+      async handler(input) {
+        executions += 1;
+        return { echoed: input.value };
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [echoTask],
+    });
+
+    const first = await runtime.runTask(
+      echoTask,
+      { value: 'first' },
+      { tenantId: 'tenant-a', idempotencyKey: 'quote-123' },
+    );
+    await expect(first.result()).resolves.toEqual({ echoed: 'first' });
+
+    const replay = await runtime.runTask(
+      echoTask,
+      { value: 'ignored' },
+      { tenantId: 'tenant-a', idempotencyKey: 'quote-123' },
+    );
+
+    expect(replay.id).toBe(first.id);
+    await expect(replay.result()).resolves.toEqual({ echoed: 'first' });
+    expect(executions).toBe(1);
+  });
+
+  test('scopes idempotency by tenant and definition name', async () => {
+    const quoteTask = defineTask({
+      name: 'quote-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ echoed: z.string() }),
+      async handler(input) {
+        return { echoed: `quote:${input.value}` };
+      },
+    });
+    const orderTask = defineTask({
+      name: 'order-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ echoed: z.string() }),
+      async handler(input) {
+        return { echoed: `order:${input.value}` };
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [quoteTask, orderTask],
+    });
+
+    const tenantA = await runtime.runTask(
+      quoteTask,
+      { value: 'a' },
+      { tenantId: 'tenant-a', idempotencyKey: 'shared-key' },
+    );
+    const tenantAReplay = await runtime.runTask(
+      quoteTask,
+      { value: 'ignored' },
+      { tenantId: 'tenant-a', idempotencyKey: 'shared-key' },
+    );
+    const tenantB = await runtime.runTask(
+      quoteTask,
+      { value: 'b' },
+      { tenantId: 'tenant-b', idempotencyKey: 'shared-key' },
+    );
+    const otherDefinition = await runtime.runTask(
+      orderTask,
+      { value: 'c' },
+      { tenantId: 'tenant-a', idempotencyKey: 'shared-key' },
+    );
+
+    expect(tenantAReplay.id).toBe(tenantA.id);
+    expect(tenantB.id).not.toBe(tenantA.id);
+    expect(otherDefinition.id).not.toBe(tenantA.id);
+  });
+
   test('delays task execution and emits task lifecycle events', async () => {
     const { eventSink, events } = createEventCollector();
     const echoTask = defineTask({

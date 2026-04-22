@@ -116,6 +116,9 @@ export interface SleepEntry<TWorkflowInput = unknown> {
   readonly duration: number | ((ctx: StepInputContext<TWorkflowInput>) => number);
 }
 
+/**
+ * Any entry that can appear in a workflow step list.
+ */
 export type WorkflowEntry<TWorkflowInput = unknown> =
   | StepEntry<TWorkflowInput>
   | ParallelEntry<TWorkflowInput>
@@ -170,6 +173,9 @@ export interface ResolvedWorkflow<TInput = unknown, TOutput = unknown> {
  */
 export type AnyResolvedWorkflow = ResolvedWorkflow<any, any>;
 
+/**
+ * Portable run lifecycle states used across adapters and HTTP responses.
+ */
 export type RunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'skipped';
 
 /**
@@ -240,6 +246,9 @@ export interface RunHandle<TOutput = unknown> {
   result(): Promise<TOutput>;
 }
 
+/**
+ * Stable machine-readable orchestration error codes.
+ */
 export type OrchestrationErrorCode =
   | 'INVALID_CONFIG'
   | 'TASK_NOT_FOUND'
@@ -336,6 +345,10 @@ export interface ProgressCapability {
   onProgress(runId: string, callback: (data: Run['progress']) => void): () => void;
 }
 
+/**
+ * Full adapter contract made up of the required core surface plus any optional
+ * capabilities an implementation chooses to support.
+ */
 export type OrchestrationAdapter = CoreOrchestrationAdapter &
   Partial<SignalCapability> &
   Partial<ScheduleCapability> &
@@ -426,6 +439,9 @@ export interface OrchestrationEventSink {
   ): void | Promise<void>;
 }
 
+/**
+ * Feature flags checked with `runtime.supports(...)` before calling optional APIs.
+ */
 export type OrchestrationCapability = 'signals' | 'scheduling' | 'observability' | 'progress';
 
 /**

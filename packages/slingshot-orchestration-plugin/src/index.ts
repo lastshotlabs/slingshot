@@ -19,4 +19,12 @@ export { orchestrationPluginConfigSchema } from './validation';
 /**
  * Public plugin option types for Slingshot orchestration composition.
  */
-export type { OrchestrationPluginOptions } from './types';
+export type {
+  ConfigurableOrchestrationPluginOptions,
+  OrchestrationPluginOptions,
+  OrchestrationRequestContext,
+  OrchestrationRequestContextResolver,
+  OrchestrationRunAuthorizer,
+  OrchestrationRunAuthorizationInput,
+  ResolvedOrchestrationPluginOptions,
+} from './types';

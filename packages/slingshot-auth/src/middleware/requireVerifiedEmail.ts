@@ -6,11 +6,11 @@ import { getAuthRuntimeFromRequest } from '../runtime';
 /**
  * Middleware that blocks access for users whose email address has not been verified.
  *
- * Must run after `userAuth` (requires `authUserId` to be set on context). The adapter
- * must implement the optional `getEmailVerified` method for the check to succeed.
+ * Must run after `userAuth` (requires an authenticated actor). The adapter must implement
+ * the optional `getEmailVerified` method for the check to succeed.
  *
- * @throws Returns `401 Unauthorized` (JSON) — when `authUserId` is not set on the context
- *   (i.e., the user is not authenticated). This is a soft rejection, not an exception.
+ * @throws Returns `401 Unauthorized` (JSON) — when no authenticated actor is present
+ *   (i.e., `getActorId(c)` is null). This is a soft rejection, not an exception.
  * @throws `HttpError(500, 'Internal server error')` — when the auth adapter does not
  *   implement `getEmailVerified`. Configure an adapter that supports email verification
  *   (e.g., the built-in SQLite/Postgres/MongoDB adapters) before using this middleware.

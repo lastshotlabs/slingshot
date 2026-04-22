@@ -115,7 +115,7 @@ export function createOrchestrationRouter(options: {
   tasks: AnyResolvedTask[];
   workflows: AnyResolvedWorkflow[];
 }) {
-  const router = new Hono();
+  const router = new Hono<AppEnv>();
   router.use('*', ...options.routeMiddleware);
 
   router.post('/tasks/:name/runs', async c => {

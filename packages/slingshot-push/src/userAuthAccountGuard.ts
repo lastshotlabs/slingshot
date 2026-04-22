@@ -50,7 +50,7 @@ export async function getUserAuthAccountGuardFailure(
   const userId = getActorId(c);
   if (typeof userId !== 'string' || userId.length === 0) {
     throw new Error(
-      '[security] push userAuth account guard requires an authenticated authUserId context',
+      '[security] push userAuth account guard requires an authenticated actor',
     );
   }
 

@@ -47,8 +47,8 @@ async function runGuardMiddleware(
  * When the full framework context is available (auth plugin registered), it
  * delegates to `routeAuth.requireRole()` which resolves effective roles from the
  * adapter (respecting tenant scoping). When running standalone (no auth plugin),
- * it falls back to reading `c.get('roles')` directly — the host app is
- * responsible for populating roles on the context.
+ * it falls back to reading `getActor(c).roles` directly — the host app is
+ * responsible for populating the actor on the context.
  */
 function buildRoleGuard(role: string): MiddlewareHandler {
   return async (c, next) => {

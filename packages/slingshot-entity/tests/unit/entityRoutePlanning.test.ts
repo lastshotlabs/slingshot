@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { OperationConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
+import { z } from 'zod';
 import {
   defineEntityExecutor,
   defineEntityRoute,
@@ -88,5 +89,30 @@ describe('entity route planning', () => {
     expect(
       routes.find(route => route.generatedRouteKey === 'operations.archive')?.buildExecutor,
     ).toBeDefined();
+  });
+
+  it('threads override request and response metadata into planned generated routes', () => {
+    const routes = planEntityRoutes(noteConfig, undefined, {
+      overrides: {
+        get: defineEntityExecutor({
+          summary: 'Get note with package metadata',
+          request: {
+            params: z.object({ id: z.string().min(1) }),
+          },
+          responses: {
+            200: {
+              description: 'Resolved note',
+              schema: z.object({ id: z.string(), text: z.string() }),
+            },
+          },
+          build: () => async exec => exec.respond.json(exec.existingRecord ?? {}),
+        }),
+      },
+    });
+
+    const getRoute = routes.find(route => route.generatedRouteKey === 'get');
+    expect(getRoute?.summary).toBe('Get note with package metadata');
+    expect(getRoute?.request?.params).toBeDefined();
+    expect(getRoute?.responses?.[200]?.description).toBe('Resolved note');
   });
 });

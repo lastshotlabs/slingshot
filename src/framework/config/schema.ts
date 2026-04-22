@@ -144,6 +144,7 @@ export const appConfigSchema = z
     ws: wsSchema.loose().optional(),
     versioning: z.union([versioningObjectSchema.loose(), z.array(z.string())]).optional(),
     plugins: z.array(z.unknown()).optional(),
+    packages: z.array(z.unknown()).optional(),
     eventBus: z.unknown().optional(),
     kafkaConnectors: z.unknown().optional(),
     secrets: z.unknown().optional(),

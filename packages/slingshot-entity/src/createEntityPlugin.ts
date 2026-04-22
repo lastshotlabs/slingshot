@@ -769,6 +769,15 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
     ? resolveManifestEntries(pluginConfig.manifest, pluginConfig.manifestRuntime)
     : (pluginConfig.entities ?? []);
 
+  if (
+    pluginConfig.entities?.some(entry => entry.extraRoutes?.length || entry.overrides !== undefined)
+  ) {
+    console.warn(
+      `[EntityPlugin:${pluginConfig.name}] plugin-entry extraRoutes/overrides are compatibility-only. ` +
+        `Prefer package-level entity(...) authoring under definePackage(...).`,
+    );
+  }
+
   const unsubscribers: Array<() => void> = [];
   const resolvedAdapters: Record<string, BareEntityAdapter> = {};
   const resolvePermissions = createPermissionsResolver(pluginConfig.permissions);

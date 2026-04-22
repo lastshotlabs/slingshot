@@ -1,0 +1,123 @@
+---
+title: Entities
+description: Define entities, fields, indexes, and generated route surfaces in config-driven Slingshot packages.
+---
+
+Entities are the core of the config-driven model. An entity declaration gives Slingshot enough information to derive:
+
+- storage adapters
+- generated CRUD routes
+- named operation routes
+- validation schemas
+- OpenAPI metadata
+
+## Define an entity
+
+```typescript
+import { defineEntity, field, index } from '@lastshotlabs/slingshot';
+
+export const Note = defineEntity('Note', {
+  namespace: 'community',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    authorId: field.string(),
+    createdAt: field.date({ default: 'now' }),
+  },
+  indexes: [index(['authorId', 'createdAt'], { direction: 'desc' })],
+});
+```
+
+An entity defines persistence structure first. Routes and adapters are derived from that structure later.
+
+## Attach operations
+
+Operations define the behavior that sits on top of the entity.
+
+```typescript
+import { defineOperations, op } from '@lastshotlabs/slingshot';
+
+export const NoteOps = defineOperations(Note, {
+  byAuthor: op.lookup({
+    fields: { authorId: 'param:authorId' },
+    returns: 'many',
+  }),
+  publish: op.transition({
+    field: 'status',
+    from: 'draft',
+    to: 'published',
+    match: { id: 'param:id' },
+  }),
+});
+```
+
+See [Operations Reference](/slingshot/config-driven/operations/) for the full operation catalog.
+
+## Mount an entity in a package
+
+```typescript
+import { definePackage } from '@lastshotlabs/slingshot';
+import { entity } from '@lastshotlabs/slingshot';
+
+export const notesPackage = definePackage({
+  name: 'notes',
+  mountPath: '/community',
+  entities: [
+    entity({
+      config: Note,
+      operations: NoteOps,
+    }),
+  ],
+});
+```
+
+By default:
+
+- the entity path is inferred from the entity name
+- the framework resolves the adapter using standard wiring
+- CRUD and named-operation routes mount through the managed entity shell
+
+## What entity routes map to
+
+The entity shell owns the standard route surface:
+
+- CRUD routes like `create`, `list`, `get`, `update`, `delete`
+- named operation routes defined by `defineOperations(...)`
+- route auth, permission, policy, event, middleware, and rate-limit wiring
+
+Use the entity shell when the route maps to one entity and its adapter behavior.
+
+## Path overrides and nesting
+
+```typescript
+entity({
+  config: Note,
+  operations: NoteOps,
+  path: '/knowledge-base',
+  parentPath: '/orgs/:orgId',
+});
+```
+
+Use `path` when the inferred path is not what you want. Use `parentPath` when entity routes must mount beneath a parent resource prefix.
+
+## Extra routes and overrides
+
+Entity modules still support:
+
+- `extraRoutes` for custom routes inside the entity shell
+- `overrides` for replacing generated route executors
+
+Use them when the route still semantically belongs to the entity. If the route is package-level orchestration or spans multiple entities, prefer a package `domain(...)` route instead.
+
+## Channel declarations
+
+Entity modules can also own realtime declarations through `channels`.
+
+That keeps HTTP, adapter, and realtime behavior attached to the same entity definition rather than spreading it across multiple plugin files.
+
+## See also
+
+- [Routes](/slingshot/config-driven/routes/)
+- [Packages and Capabilities](/slingshot/config-driven/packages/)
+- [Adapters and Factories](/slingshot/config-driven/adapters/)

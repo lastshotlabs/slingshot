@@ -1,0 +1,107 @@
+---
+title: Adapters and Factories
+description: Choose between standard, factories, and manual wiring when package-owned entities need custom persistence behavior.
+---
+
+`entity(...)` defaults to standard wiring.
+
+That is the right choice when the framework can resolve the entity adapter from the entity config and active persistence backend.
+
+## Standard wiring
+
+```typescript
+entity({
+  config: Note,
+  operations: NoteOps,
+});
+```
+
+Use standard wiring when:
+
+- generated adapters are enough
+- you want the simplest package authoring path
+- you do not need a custom repo implementation
+
+## Factories wiring
+
+Use factories wiring when you already have repo factories or need store-specific adapter construction without fully dropping to manual wiring.
+
+```typescript
+entity({
+  config: Note,
+  operations: NoteOps,
+  wiring: {
+    mode: 'factories',
+    factories: noteFactories,
+    entityKey: 'Note',
+  },
+});
+```
+
+Factories wiring is the main bridge for:
+
+- custom repo implementations
+- store-specific behavior
+- advanced persistence logic that still fits the entity adapter contract
+
+## Manual wiring
+
+Use manual wiring when you need full control over adapter construction.
+
+```typescript
+entity({
+  config: Note,
+  operations: NoteOps,
+  wiring: {
+    mode: 'manual',
+    buildAdapter(storeType, infra) {
+      return createNoteAdapter(storeType, infra);
+    },
+  },
+});
+```
+
+This is where storage-specific logic, Drizzle integration, raw SQL access, or non-standard persistence composition typically belongs.
+
+## Raw SQL and database-specific queries
+
+Slingshot does not try to pretend raw SQL is part of the entity DSL.
+
+If you need:
+
+- hand-written SQL
+- database-specific joins
+- non-portable indexing tricks
+- specialized reporting queries
+
+put that logic in the adapter/repo layer, then expose it through:
+
+- entity operations
+- custom adapter methods
+- package domain routes
+
+## Drizzle
+
+Drizzle should be treated the same way as raw SQL here: an adapter/repo-layer escape hatch, not the public entity DSL.
+
+Use it behind:
+
+- factories wiring
+- manual adapter wiring
+- package-local services consumed by a domain route
+
+## Providers and services
+
+There are two common patterns:
+
+- package `capabilities` for cross-package public contracts
+- `domain({ services })` for route-group-local helpers
+
+Keep provider-style code near the package or domain that owns it. Do not use untyped global bags when a capability contract can make the dependency explicit.
+
+## See also
+
+- [Packages and Capabilities](/slingshot/config-driven/packages/)
+- [Cross-Entity and Transactions](/slingshot/config-driven/cross-entity/)
+- [Routes](/slingshot/config-driven/routes/)
+- [Escape Hatches](/slingshot/config-driven/escape-hatches/)

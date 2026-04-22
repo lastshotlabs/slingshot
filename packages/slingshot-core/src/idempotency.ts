@@ -29,6 +29,8 @@
  *           status,
  *           createdAt: Date.now(),
  *           requestFingerprint: meta?.requestFingerprint ?? null,
+ *           responseHeaders: meta?.responseHeaders ?? null,
+ *           responseEncoding: meta?.responseEncoding ?? 'utf8',
  *         }),
  *       );
  *     },
@@ -43,22 +45,23 @@ export interface IdempotencyAdapter {
    * @returns The stored record, or `null` on a cache miss (key not found or TTL expired).
    *
    * @remarks
-   * The returned `response` field is a raw JSON string — callers are responsible for
-   * deserialising it (e.g. `JSON.parse(record.response)`). On a cache hit, the middleware
-   * short-circuits the handler and replays the stored `response` and `status` directly to
-   * the client without executing the route handler again.
+   * The returned `response` field is the raw serialized response body. On a cache hit,
+   * middleware should replay the stored `response`, `status`, and `responseHeaders`
+   * directly to the client without executing the route handler again.
    */
   get(key: string): Promise<{
     response: string;
     status: number;
     createdAt: number;
     requestFingerprint?: string | null;
+    responseHeaders?: Record<string, string> | null;
+    responseEncoding?: 'base64' | 'utf8' | null;
   } | null>;
 
   /**
    * Cache a response for an idempotency key.
    * @param key - The idempotency key.
-   * @param response - The serialised response body (JSON string).
+   * @param response - The serialized response body.
    * @param status - The HTTP status code of the response.
    * @param ttlSeconds - How long to retain this record (seconds).
    * @param meta - Optional metadata associated with the original request.
@@ -74,7 +77,11 @@ export interface IdempotencyAdapter {
     response: string,
     status: number,
     ttlSeconds: number,
-    meta?: { requestFingerprint?: string | null },
+    meta?: {
+      requestFingerprint?: string | null;
+      responseHeaders?: Record<string, string> | null;
+      responseEncoding?: 'base64' | 'utf8' | null;
+    },
   ): Promise<void>;
 
   /**

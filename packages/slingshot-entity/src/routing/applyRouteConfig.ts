@@ -14,8 +14,8 @@ import type {
   PermissionRegistry,
   PolicyResolver,
   ResolvedEntityConfig,
-  RouteIdempotencyConfig,
   RouteEventConfig,
+  RouteIdempotencyConfig,
   RouteOperationConfig,
   SlingshotEventBus,
   SlingshotEventMap,
@@ -24,8 +24,6 @@ import type {
 import {
   HEADER_IDEMPOTENCY_KEY,
   getActor,
-  getActorId,
-  getActorTenantId,
   getSlingshotCtx,
   hmacSign,
   resolveOpConfig,
@@ -34,8 +32,8 @@ import {
 import { entityToPath } from '../generators/routeHelpers';
 import { buildPolicyAction, policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
 import { safeReadJsonBody } from '../policy/safeReadJsonBody';
-import { evaluateRouteAuth } from './evaluateRouteAuth';
 import type { PlannedEntityRoute } from './entityRoutePlanning';
+import { evaluateRouteAuth } from './evaluateRouteAuth';
 import { resolveNamedOperationRoute } from './namedOperationRouting';
 import { getUserAuthAccountGuardFailure } from './userAuthAccountGuard';
 
@@ -165,6 +163,39 @@ function idempotencyConflictResponse(c: Context<AppEnv, string>): Response {
   );
 }
 
+async function captureResponsePayload(
+  response: Response,
+): Promise<{ body: string; encoding: 'base64' | 'utf8' } | null> {
+  try {
+    const buffer = Buffer.from(await response.clone().arrayBuffer());
+    return {
+      body: buffer.toString('base64'),
+      encoding: 'base64',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function replayStoredResponse(record: {
+  response: string;
+  status: number;
+  responseHeaders?: Record<string, string> | null;
+  responseEncoding?: 'base64' | 'utf8' | null;
+}): Response {
+  const body =
+    record.responseEncoding === 'base64' ? Buffer.from(record.response, 'base64') : record.response;
+  return new Response(body, {
+    status: record.status,
+    headers: record.responseHeaders ?? undefined,
+  });
+}
+
+function captureResponseHeaders(response: Response): Record<string, string> | null {
+  const headers = Object.fromEntries(response.headers.entries());
+  return Object.keys(headers).length > 0 ? headers : null;
+}
+
 function createEntityIdempotencyMiddleware(
   entityName: string,
   opName: string,
@@ -188,35 +219,36 @@ function createEntityIdempotencyMiddleware(
         c.res = idempotencyConflictResponse(c);
         return;
       }
-      c.res = c.json(
-        JSON.parse(cached.response),
-        cached.status as import('hono/utils/http-status').ContentfulStatusCode,
-      );
+      c.res = replayStoredResponse(cached);
       return;
     }
 
     await next();
 
     const status = c.res.status;
-    let body: string;
-    try {
-      body = await c.res.clone().text();
-    } catch {
+    const payload = await captureResponsePayload(c.res);
+    if (!payload) {
       return;
     }
 
-    await adapter.set(derivedKey, body, status, config.ttl, { requestFingerprint });
+    const responseHeaders = captureResponseHeaders(c.res);
+    await adapter.set(derivedKey, payload.body, status, config.ttl, {
+      requestFingerprint,
+      responseHeaders,
+      responseEncoding: payload.encoding,
+    });
 
     const stored = await adapter.get(derivedKey);
     if (stored?.requestFingerprint && stored.requestFingerprint !== requestFingerprint) {
       c.res = idempotencyConflictResponse(c);
       return;
     }
-    if (stored && stored.response !== body) {
-      c.res = new Response(stored.response, {
-        status: stored.status,
-        headers: { 'content-type': 'application/json' },
-      });
+    if (
+      stored &&
+      (stored.response !== payload.body ||
+        JSON.stringify(stored.responseHeaders ?? null) !== JSON.stringify(responseHeaders))
+    ) {
+      c.res = replayStoredResponse(stored);
     }
   };
 }
@@ -361,8 +393,14 @@ export function applyRouteConfig(
   routeConfig: EntityRouteConfig,
   deps: RouteConfigDeps,
 ): void {
-  const { bus, events, permissionEvaluator, permissionRegistry, rateLimitFactory, middleware: mw } =
-    deps;
+  const {
+    bus,
+    events,
+    permissionEvaluator,
+    permissionRegistry,
+    rateLimitFactory,
+    middleware: mw,
+  } = deps;
   const plannedRoutes = deps.plannedRoutes;
   const entitySegment = deps.routePath ?? entityToPath(entityConfig.name);
   const path = deps.parentPath
@@ -498,7 +536,9 @@ export function applyRouteConfig(
         const result = c.get('__opResult' as never) as Record<string, unknown> | undefined;
         if (!result) return;
 
-        const evt = (routeKey ? eventMap.get(routeKey) : undefined) ?? (opName ? eventMap.get(opName) : undefined);
+        const evt =
+          (routeKey ? eventMap.get(routeKey) : undefined) ??
+          (opName ? eventMap.get(opName) : undefined);
         if (!evt) return;
 
         const payload: Record<string, unknown> = {};
@@ -508,12 +548,13 @@ export function applyRouteConfig(
           Object.assign(payload, result);
         }
         for (const includeField of evt.include ?? []) {
+          const actor = getActor(c);
           switch (includeField) {
             case 'tenantId':
-              payload.tenantId = getActorTenantId(c);
+              payload.tenantId = actor.tenantId;
               break;
             case 'actorId':
-              payload.actorId = getActorId(c);
+              payload.actorId = actor.id;
               break;
             case 'requestId':
               payload.requestId = c.get('requestId');
@@ -691,12 +732,13 @@ export function applyRouteConfig(
         Object.assign(payload, result);
       }
       for (const includeField of evt.include ?? []) {
+        const actor = getActor(c);
         switch (includeField) {
           case 'tenantId':
-            payload.tenantId = getActorTenantId(c);
+            payload.tenantId = actor.tenantId;
             break;
           case 'actorId':
-            payload.actorId = getActorId(c);
+            payload.actorId = actor.id;
             break;
           case 'requestId':
             payload.requestId = c.get('requestId');

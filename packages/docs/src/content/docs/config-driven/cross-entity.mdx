@@ -1,0 +1,91 @@
+---
+title: Cross-Entity and Transactions
+description: Model cross-entity reads, orchestration flows, and transaction-style behavior in config-driven Slingshot packages.
+---
+
+Most real applications do more than basic CRUD. They need:
+
+- cross-entity lookups
+- aggregates and reporting
+- multi-step flows
+- transaction-style writes
+
+Slingshot supports those cases, but not all of them belong in the same layer.
+
+## Cross-entity reads
+
+For read-heavy projections and reporting, use:
+
+- operation configs like `lookup`, `aggregate`, and computed variants
+- package domain routes when the response spans multiple entities
+- capabilities when one package depends on another package's service contract
+
+If the endpoint is "analytics across notes and comments", that is usually a package domain route, not an entity-local CRUD handler.
+
+## Transactions and orchestration
+
+For multi-step entity behavior, use the higher-order operation DSL first:
+
+- `transaction`
+- `pipe`
+- `derive`
+- `batch`
+- `upsert`
+
+Those operation kinds keep the workflow declarative and compatible with generated adapters and routes.
+
+See [Operations Reference](/slingshot/config-driven/operations/) for the exact shape of each operation.
+
+## When to move out of the entity DSL
+
+Move to a package domain route or raw plugin when:
+
+- the workflow spans multiple entities with custom branching
+- you need non-standard external I/O in the middle of the flow
+- the response shape is custom and not a natural entity result
+- the operation is better described as package orchestration than entity behavior
+
+## Cross-package calls
+
+Use capabilities for cross-package contracts:
+
+```typescript
+const commentsApi = defineCapability<{
+  countForNote(noteId: string): Promise<number>;
+}>('comments.api');
+```
+
+Then consume them from package domain routes or package-local services instead of reaching into random plugin state.
+
+## Can you write raw SQL?
+
+Yes, but not inside the entity DSL itself.
+
+The entity DSL is for declarative persistence and generated routing. If you need raw SQL or database-specific queries:
+
+- use `factories` wiring to plug in a custom repo-backed adapter
+- use `manual` wiring to build the adapter yourself
+- use a package domain route or raw plugin when the flow is not an entity adapter concern
+
+That keeps the public authoring model clear:
+
+- entity DSL for declarative domain behavior
+- custom adapter/repo code for storage-specific logic
+- package domain routes for orchestration and custom endpoints
+
+## Recommended split
+
+Use this decision rule:
+
+- one entity, standard behavior: entity + operations
+- one entity, custom route semantics: entity + `extraRoutes` or `overrides`
+- multiple entities or reporting: package `domain(...)`
+- storage-specific query logic: custom factories/manual adapter wiring
+- framework-level escape hatch: raw plugin
+
+## See also
+
+- [Operations Reference](/slingshot/config-driven/operations/)
+- [Adapters and Factories](/slingshot/config-driven/adapters/)
+- [Routes](/slingshot/config-driven/routes/)
+- [Escape Hatches](/slingshot/config-driven/escape-hatches/)

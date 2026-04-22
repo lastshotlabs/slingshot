@@ -1,15 +1,18 @@
 ---
 title: Config-Driven Walkthrough
-description: Define an entity once. Get routes, adapters, events, and permissions — without writing the wiring.
+description: Define an entity once. Get routes, adapters, events, and permissions without writing the wiring.
 ---
 
-The core Slingshot authoring pattern, end to end. The result is a domain package that works exactly like `slingshot-community` does internally.
+The core Slingshot authoring pattern is now:
 
-Entity and operation definitions are **JSON config objects** — the same data that lives in `app.manifest.json`. You can define entities entirely in JSON (see [Config-Driven Overview](/slingshot/config-driven/)), or use the TypeScript builders below when you need compile-time type safety, IDE autocomplete, or access to the latest operations not yet in the manifest schema.
+1. define an entity
+2. define operations
+3. mount them in a package
+4. compose the app
 
-The flow is linear: entity → operations → plugin → app.
+This walkthrough uses the primary code-first path. Manifest-backed authoring still exists, but it is not the default framing here.
 
-## 1. The entity carries everything
+## 1. The entity carries the core model
 
 ```typescript
 import { defineEntity, field, index } from '@lastshotlabs/slingshot';
@@ -25,16 +28,12 @@ export const Thread = defineEntity('Thread', {
     status: field.enum(['draft', 'published', 'deleted'] as const, { default: 'draft' }),
     locked: field.boolean({ default: false }),
     pinned: field.boolean({ default: false }),
-    tags: field.stringArray(),
-    viewCount: field.number({ default: 0 }),
-    replyCount: field.number({ default: 0 }),
     createdAt: field.date({ default: 'now' }),
     updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
   },
   indexes: [
     index(['containerId', 'createdAt'], { direction: 'desc' }),
     index(['authorId', 'createdAt'], { direction: 'desc' }),
-    index(['status', 'pinned', 'createdAt'], { direction: 'desc' }),
   ],
   routes: {
     defaults: { auth: 'userAuth' },
@@ -53,29 +52,27 @@ export const Thread = defineEntity('Thread', {
       },
       middleware: ['banCheck', 'autoMod'],
     },
-    permissions: {
-      resourceType: 'community:container',
-      scopeField: 'containerId',
-      actions: ['read', 'write', 'pin', 'lock'],
-      roles: { owner: ['*'], moderator: ['pin', 'lock'] },
-    },
   },
 });
 ```
 
-One definition carries the data model, index strategy, auth defaults, permission scope, event emission, registry exposure, and named middleware references — all in one place. Nothing drifts from anything else.
+One definition can carry:
+
+- field structure
+- indexes
+- generated route defaults
+- auth and permission config
+- event emission metadata
+- named middleware references
 
 ## 2. Operations express domain behavior
 
-Standard CRUD comes from the entity definition automatically. Operations are for domain-specific behavior that doesn't fit a generic `PUT`:
+CRUD comes from the entity automatically. Operations are for behavior that should become typed adapter methods and managed HTTP routes.
 
 ```typescript
 import { defineOperations, op } from '@lastshotlabs/slingshot';
 
-declare const Thread: Parameters<typeof defineOperations>[0];
-
 export const threadOperations = defineOperations(Thread, {
-  // ─── Lookups ────────────────────────────────────────────────────
   byContainer: op.lookup({
     fields: { containerId: 'param:containerId' },
     filter: { status: { $ne: 'deleted' } },
@@ -85,349 +82,164 @@ export const threadOperations = defineOperations(Thread, {
     paginate: true,
   }),
 
-  byAuthor: op.lookup({
-    fields: { authorId: 'param:authorId' },
-    returns: 'many',
-    paginate: true,
-  }),
-
-  // ─── State transitions ──────────────────────────────────────────
   publish: op.transition({
     field: 'status',
     from: 'draft',
     to: 'published',
     match: { id: 'param:id' },
-    set: { publishedAt: 'now' },
     returns: 'entity',
   }),
 
-  delete: op.transition({
-    field: 'status',
-    from: ['draft', 'published'],
-    to: 'deleted',
-    match: { id: 'param:id' },
-    returns: 'boolean',
-  }),
-
-  // ─── Field mutations ─────────────────────────────────────────────
   lock: op.fieldUpdate({
     match: { id: 'param:id' },
     set: ['locked'],
   }),
 
-  pin: op.fieldUpdate({
-    match: { id: 'param:id' },
-    set: ['pinned'],
-  }),
-
-  editContent: op.fieldUpdate({
-    match: { id: 'param:id' },
-    set: ['title', 'body'],
-    partial: true,
-  }),
-
-  // ─── Array mutations ─────────────────────────────────────────────
   addTag: op.arrayPush({
     field: 'tags',
     value: 'input:tag',
   }),
 
-  removeTag: op.arrayPull({
-    field: 'tags',
-    value: 'input:tag',
-  }),
-
-  setTags: op.arraySet({
-    field: 'tags',
-    value: 'input:tags',
-  }),
-
-  // ─── Aggregation ─────────────────────────────────────────────────
   countByContainer: op.aggregate({
     groupBy: 'containerId',
     compute: { total: 'count' },
     filter: { status: 'published' },
   }),
-
-  syncReplyCount: op.computedAggregate({
-    source: 'replies',
-    target: 'threads',
-    sourceFilter: { threadId: 'param:threadId' },
-    compute: { replyCount: 'count' },
-    materializeTo: 'replyCount',
-    targetMatch: { id: 'param:threadId' },
-  }),
-
-  // ─── Search ──────────────────────────────────────────────────────
-  search: op.search({
-    fields: ['title', 'body'],
-    filter: { containerId: 'param:containerId', status: 'published' },
-    paginate: true,
-  }),
-
-  // ─── Existence check ─────────────────────────────────────────────
-  exists: op.exists({
-    fields: { id: 'param:id' },
-    check: { status: 'published' },
-  }),
-
-  // ─── Bulk operations ─────────────────────────────────────────────
-  deleteAllByAuthor: op.batch({
-    action: 'update',
-    filter: { authorId: 'param:authorId', status: { $ne: 'deleted' } },
-    set: { status: 'deleted', deletedAt: 'now' },
-    atomic: true,
-  }),
 });
 ```
 
-Each operation generates:
+Each operation can produce:
 
-- A **typed adapter method** on every backend adapter
-- An **HTTP route** mounted automatically by `createEntityPlugin()`
-- A **Zod schema** for input validation and OpenAPI
+- a typed adapter method
+- an auto-mounted route in the managed entity shell
+- validation and OpenAPI metadata
 
-## 3. The plugin is orchestration
+## 3. The package owns assembly
 
-With entities and operations defined, the plugin mostly becomes assembly:
+`definePackage(...)` is the default top-level authoring surface.
 
 ```typescript
 import type { MiddlewareHandler } from 'hono';
-import { createEntityFactories } from '@lastshotlabs/slingshot';
-import {
-  type OperationConfig,
-  type ResolvedEntityConfig,
-  type SlingshotEventMap,
-  resolveRepo,
-} from '@lastshotlabs/slingshot-core';
-import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
+import { createApp, definePackage, domain, route } from '@lastshotlabs/slingshot';
+import { entity } from '@lastshotlabs/slingshot';
 
 declare function createBanCheckMiddleware(): MiddlewareHandler;
 declare function createAutoModMiddleware(): MiddlewareHandler;
-declare const Thread: ResolvedEntityConfig;
-declare const threadOperations: { operations: Record<string, OperationConfig> };
 
-interface ThreadPluginConfig {
-  mountPath?: string;
-}
-
-export function createThreadsPlugin(config: ThreadPluginConfig = {}) {
-  return createEntityPlugin({
-    name: 'threads',
-    dependencies: ['slingshot-auth'],
-    mountPath: config.mountPath ?? '/community',
-    entities: [
-      {
-        config: Thread,
-        operations: threadOperations.operations,
-        buildAdapter: (storeType, infra) =>
-          resolveRepo(
-            createEntityFactories(Thread, threadOperations.operations),
-            storeType,
-            infra,
-          ) as unknown as BareEntityAdapter,
-      },
-    ],
-    middleware: {
-      banCheck: createBanCheckMiddleware(),
-      autoMod: createAutoModMiddleware(),
-    },
-    setupPost: async ({ bus }) => {
-      bus.on('community:reply.created' as keyof SlingshotEventMap, async () => {
-        // cross-entity event: recompute reply count on the parent thread
-      });
-    },
-  });
-}
-```
-
-`createEntityPlugin()` mounts the routes. `applyRouteConfig()` wires auth, permissions, events, rate limits, and middleware. Cross-entity subscriptions still belong in `setupPost()`, but route customization now has first-class hooks inside the framework-owned entity shell.
-
-### Route composition and overrides
-
-Use the entity shell first, not a manual router.
-
-```typescript
-import type { OperationConfig, ResolvedEntityConfig, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
-import {
-  type BareEntityAdapter,
-  createEntityPlugin,
-  defineEntityExecutor,
-  defineEntityRoute,
-} from '@lastshotlabs/slingshot-entity';
-
-declare const Thread: ResolvedEntityConfig;
-declare const threadOperations: { operations: Record<string, OperationConfig> };
-declare function resolveThreadAdapter(storeType: StoreType, infra: StoreInfra): BareEntityAdapter;
-
-type ThreadRecord = { id: string };
-type ThreadAdapter = {
-  getById(id: string): Promise<ThreadRecord | null>;
-  publish(id: string): Promise<ThreadRecord>;
-};
-
-type ReplyAdapter = {
-  list(input: { filter: { containerId: string } }): Promise<unknown[]>;
-};
-
-export function createThreadsPlugin() {
-  return createEntityPlugin({
-    name: 'threads',
-    dependencies: ['slingshot-auth', 'replies'],
-    entities: [
-      {
-        config: Thread,
-        operations: threadOperations.operations,
-        buildAdapter: resolveThreadAdapter,
-        extraRoutes: [
-          defineEntityRoute({
-            key: 'preview',
-            method: 'get',
-            path: '/:id/preview',
-            auth: 'userAuth',
-            buildExecutor: defineEntityExecutor(({ entityAdapter }) => {
-              const threadAdapter = entityAdapter as unknown as ThreadAdapter;
-              return async ({ params, respond }) => {
-                const record = await threadAdapter.getById(params.id);
-                return record ? respond.json({ id: params.id, preview: record }) : respond.notFound();
-              };
-            }),
-          }),
-          defineEntityRoute({
-            key: 'feed',
-            method: 'get',
-            path: '/container/:containerId/feed',
-            auth: 'userAuth',
-            buildExecutor: defineEntityExecutor(({ getEntityAdapter }) => {
-              const replyAdapter = getEntityAdapter({
-                plugin: 'replies',
-                entity: 'Reply',
-              }) as unknown as ReplyAdapter;
-              return async ({ params, respond }) => {
-                const replies = await replyAdapter.list({
-                  filter: { containerId: params.containerId },
-                });
-                return respond.json({ replies });
-              };
-            }),
-          }),
-        ],
-        overrides: {
-          operations: {
-            publish: defineEntityExecutor(({ entityAdapter }) => {
-              const threadAdapter = entityAdapter as unknown as ThreadAdapter;
-              return async ({ params, respond }) => {
-                const result = await threadAdapter.publish(params.id);
-                return respond.json({ thread: result, audited: true });
-              };
-            }),
-          },
-        },
-      },
-    ],
-  });
-}
-```
-
-Collision rules are strict:
-
-- `/stats` can coexist with generated `/:id` because the static route is more specific
-- `/:id/preview` can coexist with generated `/:id`
-- `/:slug` collides with generated `/:id` and fails at startup
-- an extra route that matches a generated named-op shape must become an override instead
-
-Reach for a manual router in `setupRoutes()` only when the endpoint does not belong under one
-entity base path or when the response model is no longer an entity-route concern.
-
-## Row-level isolation with `dataScope`
-
-Standard CRUD routes are not row-scoped by default. If an entity is readable or writable by any authenticated user, add `routes.dataScope` to bind each request to the current user or tenant at the data layer.
-
-```jsonc
-"LedgerItem": {
-  "fields": {
-    "id": { "type": "string", "primary": true, "immutable": true },
-    "userId": { "type": "string" },
-    "amount": { "type": "number" }
-  },
-  "routes": {
-    "defaults": { "auth": "userAuth" },
-    "dataScope": { "field": "userId", "from": "ctx:authUserId" }
-  }
-}
-```
-
-With `dataScope` declared:
-
-- `POST /items` injects the scoped field on the server before create.
-- `GET /items` and `GET /items/:id` only see matching rows.
-- `PATCH /items/:id` and `DELETE /items/:id` return `404` when the row is out of scope.
-- If a client includes the scoped field in an update body, the handler rejects it with `400 { error: 'scoped_field_immutable', field }`.
-
-Use `ctx:<key>` sources for Hono context values like `authUserId` or `tenantId`, and `param:<name>` sources when the scope value comes from the route path itself.
-
-## 4. The app layer composes packages
-
-```typescript
-import { createServer } from '@lastshotlabs/slingshot';
-import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
-
-await createServer({
-  port: 3000,
-  plugins: [
-    createAuthPlugin({
-      auth: { roles: ['user'], defaultRole: 'user' },
-      db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+export const threadsPackage = definePackage({
+  name: 'threads',
+  mountPath: '/community',
+  entities: [
+    entity({
+      config: Thread,
+      operations: threadOperations,
     }),
-    createCommunityPlugin({
-      containerCreation: 'user',
+  ],
+  middleware: {
+    banCheck: createBanCheckMiddleware(),
+    autoMod: createAutoModMiddleware(),
+  },
+  domains: [
+    domain({
+      name: 'analytics',
+      basePath: '/analytics',
+      routes: [
+        route.get({
+          path: '/summary',
+          async handler(ctx) {
+            return ctx.respond.json({ packageName: ctx.packageName });
+          },
+        }),
+      ],
     }),
   ],
 });
+
+await createApp({
+  packages: [threadsPackage],
+});
 ```
 
-## What gets generated
+That package now owns:
 
-From those definitions, `createEntityPlugin()` mounts:
+- entity-backed CRUD and operation routes
+- package-owned custom routes under `domain(...).routes`
+- named middleware usable by those routes
+- mount path and dependency composition
 
-| Method   | Path                                      | Notes                                   |
-| -------- | ----------------------------------------- | --------------------------------------- |
-| `GET`    | `/community/threads`                      | List                                    |
-| `POST`   | `/community/threads`                      | Create — checks permission, fires event |
-| `GET`    | `/community/threads/:id`                  | Get                                     |
-| `PUT`    | `/community/threads/:id`                  | Full update                             |
-| `DELETE` | `/community/threads/:id`                  | Delete                                  |
-| `GET`    | `/community/threads/by-container`         | `byContainer` lookup                    |
-| `GET`    | `/community/threads/by-author`            | `byAuthor` lookup                       |
-| `POST`   | `/community/threads/:id/publish`          | `publish` transition                    |
-| `POST`   | `/community/threads/:id/delete`           | `delete` transition                     |
-| `PATCH`  | `/community/threads/:id/lock`             | `lock` field update                     |
-| `PATCH`  | `/community/threads/:id/pin`              | `pin` field update                      |
-| `PATCH`  | `/community/threads/:id/edit-content`     | `editContent` field update              |
-| `POST`   | `/community/threads/:id/add-tag`          | `addTag` array push                     |
-| `DELETE` | `/community/threads/:id/remove-tag`       | `removeTag` array pull                  |
-| `PUT`    | `/community/threads/:id/set-tags`         | `setTags` array set                     |
-| `GET`    | `/community/threads/count-by-container`   | `countByContainer` aggregate            |
-| `GET`    | `/community/threads/search`               | `search`                                |
-| `GET`    | `/community/threads/exists`               | `exists` check                          |
-| `POST`   | `/community/threads/delete-all-by-author` | `deleteAllByAuthor` batch               |
+## 4. Use the entity shell before a manual router
 
-No route files. No adapter boilerplate. No event wiring by hand.
+If a route still belongs to one entity, prefer the entity shell first.
 
-## The practical order
+Use:
 
-When building with Slingshot, reach for tools in this order:
+- generated CRUD routes
+- generated operation routes
+- `extraRoutes`
+- generated route `overrides`
 
-1. **Existing feature packages** — auth, community, organizations, search
-2. **Your own config-driven package** — entities, operations, `createEntityPlugin()`
-3. **Hand-written routes** — for endpoints that genuinely don't fit a domain model
+Only drop lower when the route no longer belongs to one entity or no longer fits the managed route shell.
+
+## 5. Actor-first request context
+
+The public identity model is actor-first.
+
+Use bindings like:
+
+- `ctx:actor.id`
+- `ctx:actor.tenantId`
+- `ctx:actor.claims.orgId`
+
+Example:
+
+```jsonc
+{
+  "routes": {
+    "defaults": { "auth": "userAuth" },
+    "dataScope": { "field": "authorId", "from": "ctx:actor.id" },
+  },
+}
+```
+
+Legacy aliases such as `ctx:authUserId` and `ctx:tenantId` still resolve for compatibility, but they are not the default authoring model.
+
+## 6. What gets generated
+
+From one entity plus operations, the managed layer can mount:
+
+- `GET /threads`
+- `POST /threads`
+- `GET /threads/:id`
+- `PATCH /threads/:id`
+- `DELETE /threads/:id`
+- named operation routes like `/threads/by-container` or `/threads/:id/publish`
+
+The exact shape depends on your operations and route config, but the point is that the framework owns the repetitive wiring.
+
+## 7. Reach for tools in this order
+
+1. Existing feature packages
+2. Your own package-first entity/domain authoring
+3. Package domain routes for orchestration and custom endpoints
+4. Escape hatches like `routesDir`, raw Hono, manual adapters, raw SQL/Drizzle, or raw plugins
+
+## Manifest note
+
+Manifest-backed authoring still exists for teams that need declarative bootstrap artifacts, but it is intentionally not the primary framing here.
+
+If you need that path, see:
+
+- [Manifest vs Code](/slingshot/manifest-vs-code/)
+- [Config-Driven Overview](/slingshot/config-driven/)
+- [Config-Driven Infrastructure](/slingshot/config-driven/infra/)
 
 ## Go deeper
 
-- [Operations Reference](/slingshot/config-driven/operations/) — all 17 operation kinds with full config options
-- [Config-Driven Overview](/slingshot/config-driven/) — the full system: app layer + infrastructure layer
-- [Config-Driven Infrastructure](/slingshot/config-driven/infra/) — `definePlatform`, `defineInfra`, the deploy pipeline
-- [Config-Driven Domain Example](/slingshot/examples/config-driven-domain/) — step-by-step from a blank file
-- [slingshot-entity](/slingshot/packages/slingshot-entity/) — full API reference for `defineEntity`, `defineOperations`, `createEntityPlugin`
+- [Entities](/slingshot/config-driven/entities/)
+- [Routes](/slingshot/config-driven/routes/)
+- [Packages and Capabilities](/slingshot/config-driven/packages/)
+- [Cross-Entity and Transactions](/slingshot/config-driven/cross-entity/)
+- [Adapters and Factories](/slingshot/config-driven/adapters/)
+- [Auth, Policies, and Middleware](/slingshot/config-driven/auth-and-middleware/)
+- [Escape Hatches](/slingshot/config-driven/escape-hatches/)
+- [Operations Reference](/slingshot/config-driven/operations/)

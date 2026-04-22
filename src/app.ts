@@ -4,6 +4,7 @@ import type { InfrastructureResult } from '@framework/createInfrastructure';
 import { createInfrastructure } from '@framework/createInfrastructure';
 import type { CaptchaConfig, CaptchaProvider } from '@framework/lib/captcha';
 import { createMetricsState } from '@framework/metrics/registry';
+import { createActorResolutionMiddleware } from '@framework/middleware/resolveActor';
 import {
   mountCors,
   mountFrameworkMiddleware,
@@ -11,9 +12,9 @@ import {
 } from '@framework/mountMiddleware';
 import { mountOptionalEndpoints } from '@framework/mountOptionalEndpoints';
 import { mountOpenApiDocs, mountRoutes } from '@framework/mountRoutes';
-import { createActorResolutionMiddleware } from '@framework/middleware/resolveActor';
 import { withSpan } from '@framework/otel/spans';
 import { getTracer } from '@framework/otel/tracer';
+import { compilePackages } from '@framework/packageAuthoring';
 import { ModelSchemasConfig, preloadModelSchemas } from '@framework/preloadSchemas';
 import { registerBoundaryAdapters } from '@framework/registerBoundaryAdapters';
 import { router as healthRouter } from '@framework/routes/health';
@@ -30,6 +31,7 @@ import { OpenAPIHono } from '@hono/zod-openapi';
 import type { SigningConfig } from '@lib/signingConfig';
 import type { MiddlewareHandler } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import { z } from 'zod';
 import type {
   AccountDeletionConfig,
   AuthCookieConfig,
@@ -57,10 +59,10 @@ import {
   HttpError,
   ValidationError,
   attachContext,
+  createCoreRegistrar,
   createEventDefinitionRegistry,
   createEventPublisher,
   createEventSchemaRegistry,
-  createCoreRegistrar,
   defaultValidationErrorFormatter,
   defineEvent,
 } from '@lastshotlabs/slingshot-core';
@@ -73,11 +75,11 @@ import type {
   SlingshotContext,
   SlingshotEventBus,
   SlingshotEvents,
+  SlingshotPackageDefinition,
   SlingshotPlugin,
   SlingshotRuntime,
 } from '@lastshotlabs/slingshot-core';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
-import { z } from 'zod';
 import type { DbConfig } from './config/types/db';
 import type { JobsConfig } from './config/types/jobs';
 import type { LoggingConfig } from './config/types/logging';
@@ -187,6 +189,17 @@ export interface CreateAppConfig<T extends object = object> {
    */
   plugins?: PluginsConfig;
   /**
+   * Canonical package-first composition surface for code-first packages.
+   *
+   * Packages compile down to framework plugins internally, but app roots compose
+   * them directly so entity/domain/capability wiring stays package-owned.
+   *
+   * Use this as the default entrypoint for `definePackage(...)`, `entity(...)`, and
+   * package-owned `domain(...)` routes. Raw `plugins` remain available for lower-level
+   * lifecycle control and escape-hatch integration work.
+   */
+  packages?: readonly SlingshotPackageDefinition[];
+  /**
    * Event bus for cross-plugin communication. Defaults to an in-process EventEmitter adapter.
    */
   eventBus?: SlingshotEventBus;
@@ -245,7 +258,9 @@ export interface CreateAppConfig<T extends object = object> {
 }
 
 export interface CreateAppResult {
+  /** Fully configured Hono app with framework and package/plugin routes mounted. */
   app: OpenAPIHono<AppEnv>;
+  /** Shared runtime context attached to the app instance. */
   ctx: SlingshotContext;
 }
 
@@ -425,7 +440,8 @@ async function prepareBootstrap<T extends object>(
     signing: securityInput.signing ? { ...securityInput.signing } : undefined,
   };
 
-  const plugins = config.plugins ?? [];
+  const compiledPackages = config.packages?.length ? compilePackages(config.packages) : null;
+  const plugins = [...(compiledPackages?.plugins ?? []), ...(config.plugins ?? [])];
   const eventSchemaRegistry = createEventSchemaRegistry();
   const bus =
     config.eventBus ??
@@ -694,8 +710,17 @@ async function mountAppRoutes<T extends object>(
 // ---------------------------------------------------------------------------
 
 async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
-  const { app, ctx, sortedPlugins, bus, events, kafkaConnectors, drain, tenantCacheCarrier, infra } =
-    assembly;
+  const {
+    app,
+    ctx,
+    sortedPlugins,
+    bus,
+    events,
+    kafkaConnectors,
+    drain,
+    tenantCacheCarrier,
+    infra,
+  } = assembly;
   const tracer = getTracer(assembly.tracingConfig);
   const activeFrameworkPlugins = sortedPlugins.filter(
     plugin => plugin.setupMiddleware || plugin.setupRoutes || plugin.setupPost,

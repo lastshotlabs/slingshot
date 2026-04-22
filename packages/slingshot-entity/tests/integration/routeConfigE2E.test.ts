@@ -4,11 +4,12 @@
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import { describe, expect, it, mock } from 'bun:test';
 import type { Context, Next } from 'hono';
+import { z } from 'zod';
 import {
-  getActorId,
   type AppEnv,
   type ResolvedEntityConfig,
   type SlingshotContext,
+  getActorId,
 } from '@lastshotlabs/slingshot-core';
 import { applyRouteConfig } from '../../src/routing/applyRouteConfig';
 import { buildBareEntityRoutes } from '../../src/routing/buildBareEntityRoutes';
@@ -143,6 +144,8 @@ function attachSlingshotCtx(
       createdAt: number;
       expiresAt: number;
       requestFingerprint?: string | null;
+      responseHeaders?: Record<string, string> | null;
+      responseEncoding?: 'base64' | 'utf8' | null;
     }
   >();
   router.use('*', async (_c: Context, next: Next) => {
@@ -174,6 +177,8 @@ function attachSlingshotCtx(
               status: record.status,
               createdAt: record.createdAt,
               requestFingerprint: record.requestFingerprint ?? null,
+              responseHeaders: record.responseHeaders ?? null,
+              responseEncoding: record.responseEncoding ?? 'utf8',
             };
           },
           async set(
@@ -181,7 +186,11 @@ function attachSlingshotCtx(
             response: string,
             status: number,
             ttlSeconds: number,
-            meta?: { requestFingerprint?: string | null },
+            meta?: {
+              requestFingerprint?: string | null;
+              responseHeaders?: Record<string, string> | null;
+              responseEncoding?: 'base64' | 'utf8' | null;
+            },
           ) {
             if (idempotencyStore.has(key)) return;
             idempotencyStore.set(key, {
@@ -190,6 +199,8 @@ function attachSlingshotCtx(
               createdAt: Date.now(),
               expiresAt: Date.now() + ttlSeconds * 1000,
               requestFingerprint: meta?.requestFingerprint ?? null,
+              responseHeaders: meta?.responseHeaders ?? null,
+              responseEncoding: meta?.responseEncoding ?? 'utf8',
             });
           },
         },
@@ -518,6 +529,48 @@ describe('planned entity routes — HTTP round-trip', () => {
       id: created.id,
       text: 'hello',
       enriched: true,
+    });
+  });
+
+  it('merges object bodies with params and query for generated overrides', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const plannedEntityConfig: ResolvedEntityConfig = { ...testEntityConfig, routes: {} };
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    const plannedRoutes = planEntityRoutes(plannedEntityConfig, undefined, {
+      overrides: {
+        update: defineEntityExecutor({
+          request: {
+            params: z.object({ id: z.string() }),
+            query: z.object({ mode: z.string() }),
+            body: z.object({ label: z.string() }),
+          },
+          build: () => async exec =>
+            exec.respond.json(exec.input as { id: string; mode: string; label: string }),
+        }),
+      },
+    });
+
+    applyRouteConfig(router, plannedEntityConfig, {}, { plannedRoutes });
+    buildBareEntityRoutes(plannedEntityConfig, undefined, adapter, router, { plannedRoutes });
+
+    const created = (await adapter.create({ text: 'hello' })) as Record<string, unknown>;
+
+    const res = await router.fetch(
+      new Request(`http://localhost/notes/${created.id as string}?mode=edit`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ label: 'updated' }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      id: created.id,
+      mode: 'edit',
+      label: 'updated',
     });
   });
 });
@@ -1033,6 +1086,67 @@ describe('named operation inference — HTTP round-trip', () => {
     expect(await second.json()).toMatchObject({
       code: 'idempotency_key_conflict',
     });
+  });
+
+  it('replays binary entity responses when first-class idempotency is enabled', async () => {
+    records.clear();
+    idCounter = 0;
+    const adapter = createMemoryAdapter();
+    const plannedEntityConfig: ResolvedEntityConfig = { ...testEntityConfig, routes: {} };
+    const bytes = new Uint8Array([5, 10, 15, 20]);
+    let executions = 0;
+    const { OpenAPIHono } = await import('@hono/zod-openapi');
+    const router = new OpenAPIHono<AppEnv>();
+    attachSlingshotCtx(router);
+
+    const plannedRoutes = planEntityRoutes(plannedEntityConfig, undefined, {
+      overrides: {
+        create: defineEntityExecutor(() => async exec => {
+          executions += 1;
+          return exec.respond.body(bytes, 201, {
+            'content-type': 'application/octet-stream',
+            'x-execution-count': String(executions),
+          });
+        }),
+      },
+    });
+
+    applyRouteConfig(
+      router,
+      plannedEntityConfig,
+      {
+        create: {
+          auth: 'userAuth',
+          idempotency: true,
+        },
+      },
+      { plannedRoutes },
+    );
+    buildBareEntityRoutes(plannedEntityConfig, undefined, adapter, router, { plannedRoutes });
+
+    const request = () =>
+      router.fetch(
+        new Request('http://localhost/notes', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'idempotency-key': 'note-create-bin-1',
+          },
+          body: JSON.stringify({ text: 'hello' }),
+        }),
+      );
+
+    const first = await request();
+    const second = await request();
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(first.headers.get('content-type')).toContain('application/octet-stream');
+    expect(second.headers.get('content-type')).toContain('application/octet-stream');
+    expect(first.headers.get('x-execution-count')).toBe('1');
+    expect(second.headers.get('x-execution-count')).toBe('1');
+    expect(new Uint8Array(await first.arrayBuffer())).toEqual(bytes);
+    expect(new Uint8Array(await second.arrayBuffer())).toEqual(bytes);
   });
 });
 

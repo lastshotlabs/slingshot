@@ -63,11 +63,7 @@ export type {
   KafkaOutboundConnectorHealth,
 } from './kafkaConnectors';
 /** In-process event bus primitives and the built-in client-safe event allowlist. */
-export {
-  InProcessAdapter,
-  createInProcessAdapter,
-  SECURITY_EVENT_TYPES,
-} from './eventBus';
+export { InProcessAdapter, createInProcessAdapter, SECURITY_EVENT_TYPES } from './eventBus';
 /** Adapter that normalizes router behavior across Slingshot runtimes. */
 export { createRouterAdapter } from './routerAdapter';
 export type { RouterAdapterOptions } from './routerAdapter';
@@ -127,6 +123,39 @@ export {
   registerSchemas,
   maybeAutoRegister,
 } from './createRoute';
+/** Package-first authoring contracts for capabilities, domains, and typed route builders. */
+export {
+  defineCapability,
+  definePackage,
+  domain,
+  inspectPackage,
+  provideCapability,
+  route,
+} from './packageAuthoring';
+export type {
+  DefinePackageInput,
+  DomainRouteDefinition,
+  PackageCapabilityHandle,
+  PackageCapabilityProviderContext,
+  PackageCapabilityReader,
+  PackageDomainRouteContext,
+  PackageEntityRef,
+  PackageEntityReader,
+  PackageInspection,
+  PackageRouteRequestContext,
+  PublishedPackageCapability,
+  SlingshotPackageDefinition,
+  SlingshotPackageDomainModule,
+  SlingshotPackageEntityModuleLike,
+  SlingshotPackageModule,
+  TypedRouteContext,
+  TypedRouteInput,
+  TypedRouteRequestSpec,
+  TypedRouteRespond,
+  TypedRouteResponseSpec,
+  TypedRouteResponses,
+  TypedRouteValidation,
+} from './packageAuthoring';
 /** Offset and cursor pagination helpers shared by generated and handwritten routes. */
 export { offsetParams, parseOffsetParams, paginatedResponse } from './pagination';
 export { cursorParams, parseCursorParams, cursorPaginatedResponse } from './pagination';

@@ -8,20 +8,24 @@
  * - Sets c.set('__opName', ...) and c.set('__opResult', ...) so the event
  *   emission middleware registered by applyRouteConfig can read the result.
  */
-import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
+import { OpenAPIHono } from '@hono/zod-openapi';
 import type { Context, Handler } from 'hono';
-import { z } from 'zod';
+import { type ZodTypeAny, z } from 'zod';
 import type {
   AppEnv,
   EntityRouteDataScopeConfig,
   EntityRoutePolicyConfig,
   NamedOpHttpMethod,
   OperationConfig,
+  PackageRouteRequestContext,
   PolicyResolver,
   ResolvedEntityConfig,
   SlingshotEventBus,
+  TypedRouteRequestSpec,
+  TypedRouteResponseSpec,
+  TypedRouteResponses,
 } from '@lastshotlabs/slingshot-core';
-import { getActor } from '@lastshotlabs/slingshot-core';
+import { createRoute, getActor } from '@lastshotlabs/slingshot-core';
 import { entityToPath } from '../generators/routeHelpers';
 import { buildEntityZodSchemas } from '../lib/entityZodSchemas';
 import { policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
@@ -175,7 +179,12 @@ function resolveOperationValue(
   if (value === undefined) return undefined;
   const prefixes = ['param:', 'input:', 'ctx:'];
   for (const prefix of prefixes) {
-    if (value.startsWith(prefix)) return params[value.slice(prefix.length)];
+    if (!value.startsWith(prefix)) continue;
+    const key = value.slice(prefix.length);
+    if (key === 'authUserId') return params['actor.id'];
+    if (key === 'tenantId') return params['actor.tenantId'];
+    if (key === 'sessionId') return params['actor.sessionId'];
+    return params[key];
   }
   return value;
 }
@@ -238,26 +247,128 @@ type PlannedRouteOptions = {
 type PlannedExecutionPrep = {
   params: Record<string, string>;
   query: Record<string, unknown>;
-  body: Record<string, unknown> | null;
+  body: unknown;
   input: unknown;
-  requestContext: Record<string, unknown>;
+  requestContext: PackageRouteRequestContext;
   filter?: Record<string, unknown>;
   dataScopeBindings?: Record<string, unknown>;
   existingRecord?: unknown;
 };
 
 function readJsonRecord(input: unknown): Record<string, unknown> {
-  return typeof input === 'object' && input !== null ? { ...(input as Record<string, unknown>) } : {};
+  return typeof input === 'object' && input !== null
+    ? { ...(input as Record<string, unknown>) }
+    : {};
 }
 
-function buildRequestContext(c: Context<AppEnv>): Record<string, unknown> {
+function buildRequestContext(c: Context<AppEnv>): PackageRouteRequestContext {
   const actor = getActor(c);
   return {
     actor,
-    // Actor-derived — legacy aliases for ctx:authUserId / ctx:tenantId bindings
-    authUserId: actor.id,
-    tenantId: actor.tenantId,
     requestId: c.get('requestId' as never) as string | undefined,
+  };
+}
+
+function normalizeTypedInput(
+  body: unknown,
+  query: Record<string, unknown>,
+  params: Record<string, string>,
+): unknown {
+  if (body === null || body === undefined) {
+    const merged = { ...query, ...params };
+    return Object.keys(merged).length > 0 ? merged : null;
+  }
+  if (typeof body !== 'object') {
+    return body;
+  }
+  if (Array.isArray(body)) {
+    return body;
+  }
+  const merged = { ...query, ...params, ...asObjectRecord(body) };
+  return Object.keys(merged).length > 0 ? merged : null;
+}
+
+function asObjectRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
+}
+
+function validationErrorResponse(c: Context<AppEnv>, error: z.ZodError): Response {
+  return c.json(
+    {
+      success: false,
+      error: { name: 'ZodError', message: error.message },
+    },
+    400,
+  );
+}
+
+function parseTypedSection(
+  c: Context<AppEnv>,
+  schema: ZodTypeAny | undefined,
+  input: unknown,
+): { success: true; data: unknown } | { success: false; response: Response } {
+  if (!schema) {
+    return {
+      success: true,
+      data: input,
+    };
+  }
+  const parsed = schema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, response: validationErrorResponse(c, parsed.error) };
+  }
+  return {
+    success: true,
+    data: parsed.data,
+  };
+}
+
+function buildTypedRouteRequest(
+  request: TypedRouteRequestSpec | undefined,
+): Parameters<typeof createRoute>[0]['request'] | undefined {
+  if (!request) return undefined;
+  const built: NonNullable<Parameters<typeof createRoute>[0]['request']> = {};
+  if (request.params) {
+    built.params = request.params as never;
+  }
+  if (request.query) {
+    built.query = request.query as never;
+  }
+  if (request.body) {
+    built.body = { content: { 'application/json': { schema: request.body } } };
+  }
+  return Object.keys(built).length > 0 ? built : undefined;
+}
+
+function buildTypedRouteResponses(
+  responses: TypedRouteResponses | undefined,
+  fallback: Parameters<typeof createRoute>[0]['responses'],
+): Parameters<typeof createRoute>[0]['responses'] {
+  if (!responses || Object.keys(responses).length === 0) {
+    return fallback;
+  }
+  const built = Object.fromEntries(
+    Object.entries(responses).map(([status, response]) => [status, buildTypedResponse(response)]),
+  );
+  return built as Parameters<typeof createRoute>[0]['responses'];
+}
+
+function buildTypedResponse(
+  response: TypedRouteResponseSpec,
+): NonNullable<Parameters<typeof createRoute>[0]['responses']>[number] {
+  const contentType = response.contentType ?? 'application/json';
+  if (!response.schema) {
+    return { description: response.description };
+  }
+  return {
+    description: response.description,
+    content: {
+      [contentType]: {
+        schema: response.schema,
+      },
+    },
   };
 }
 
@@ -268,6 +379,15 @@ function createResponseHelpers(
   return {
     json(data: unknown, status = 200) {
       return c.json(data, status as import('hono/utils/http-status').ContentfulStatusCode);
+    },
+    text(data: string, status = 200) {
+      return c.text(data, status as import('hono/utils/http-status').ContentfulStatusCode);
+    },
+    html(data: string, status = 200) {
+      return c.html(data, status as import('hono/utils/http-status').ContentfulStatusCode);
+    },
+    body(data: BodyInit | null | undefined, status = 200, headers?: HeadersInit) {
+      return new Response(data ?? null, { status, headers });
     },
     notFound() {
       return c.json({ error: 'Not found' }, 404);
@@ -325,7 +445,7 @@ function defaultGeneratedExecutor(
 
   if (route.generatedRouteKey === 'update') {
     return async exec => {
-      const id = exec.params.id;
+      const id = (exec.params as Record<string, string>).id;
       if (!id) {
         return exec.respond.notFound();
       }
@@ -340,7 +460,7 @@ function defaultGeneratedExecutor(
 
   if (route.generatedRouteKey === 'delete') {
     return async exec => {
-      const id = exec.params.id;
+      const id = (exec.params as Record<string, string>).id;
       if (!id) {
         return exec.respond.notFound();
       }
@@ -358,7 +478,11 @@ function defaultGeneratedExecutor(
     if (typeof opFn !== 'function' || !route.operationConfig) {
       return exec.respond.notFound();
     }
-    const result = await invokeNamedOperation(route.operationConfig, opFn as OperationFunction, exec.input as Record<string, unknown>);
+    const result = await invokeNamedOperation(
+      route.operationConfig,
+      opFn as OperationFunction,
+      exec.input as Record<string, unknown>,
+    );
     exec.setOpResult(route.opName, result);
     if (route.operationConfig.kind === 'lookup' && route.operationConfig.returns === 'one') {
       if (!result) {
@@ -385,26 +509,40 @@ async function preparePlannedExecution(
   const requestContext = buildRequestContext(c);
 
   if (route.kind === 'extra') {
-    let body: Record<string, unknown> | null = null;
+    let rawBody: Record<string, unknown> | null = null;
     if (route.method !== 'get' && route.method !== 'head' && route.method !== 'delete') {
       try {
-        body = readJsonRecord((await c.req.json()) as unknown);
+        rawBody = readJsonRecord((await c.req.json()) as unknown);
       } catch {
-        body = null;
+        rawBody = null;
       }
     }
+    const parsedParams = parseTypedSection(c, route.request?.params, params);
+    if (!parsedParams.success) return parsedParams.response;
+    const parsedQuery = parseTypedSection(c, route.request?.query, query);
+    if (!parsedQuery.success) return parsedQuery.response;
+    const parsedBody = parseTypedSection(c, route.request?.body, rawBody ?? {});
+    if (!parsedBody.success) return parsedBody.response;
+    const body = route.request?.body !== undefined || rawBody !== null ? parsedBody.data : rawBody;
     return {
-      params,
-      query,
+      params: parsedParams.data as Record<string, string>,
+      query: asObjectRecord(parsedQuery.data),
       body,
-      input: body ?? query,
+      input: normalizeTypedInput(
+        body,
+        asObjectRecord(parsedQuery.data),
+        parsedParams.data as Record<string, string>,
+      ),
       requestContext,
     };
   }
 
   switch (route.generatedRouteKey) {
     case 'create': {
-      const body = readJsonRecord((await c.req.json()) as unknown);
+      const rawBody = readJsonRecord((await c.req.json()) as unknown);
+      const parsedBody = parseTypedSection(c, route.request?.body, rawBody);
+      if (!parsedBody.success) return parsedBody.response;
+      const body = asObjectRecord(parsedBody.data);
       let dataScopeBindings: Record<string, unknown> | undefined;
       if (dataScopes.length > 0) {
         const resolution = resolveDataScopes(dataScopes, 'create', c);
@@ -421,23 +559,16 @@ async function preparePlannedExecution(
         params,
         query,
         body,
-        input: body,
+        input: normalizeTypedInput(body, query, params),
         requestContext,
         dataScopeBindings,
       };
     }
 
     case 'list': {
-      const parsedQuery = schemas.listOptions.safeParse(query);
-      if (!parsedQuery.success) {
-        return c.json(
-          {
-            success: false,
-            error: { name: 'ZodError', message: parsedQuery.error.message },
-          },
-          400,
-        );
-      }
+      const querySchema = route.request?.query ?? schemas.listOptions;
+      const parsedQuery = querySchema.safeParse(query);
+      if (!parsedQuery.success) return validationErrorResponse(c, parsedQuery.error);
 
       const { limit, cursor, sortDir, ...validatedFilters } = parsedQuery.data as Record<
         string,
@@ -464,7 +595,12 @@ async function preparePlannedExecution(
         params,
         query,
         body: null,
-        input: { ...validatedFilters, limit, cursor, sortDir },
+        input: {
+          ...validatedFilters,
+          ...(limit !== undefined ? { limit } : {}),
+          ...(cursor !== undefined ? { cursor } : {}),
+          ...(sortDir !== undefined ? { sortDir } : {}),
+        },
         requestContext,
         filter,
         dataScopeBindings,
@@ -474,10 +610,20 @@ async function preparePlannedExecution(
     case 'get':
     case 'update':
     case 'delete': {
-      const id = readRequiredParam(c, 'id');
+      const rawParams = c.req.param() as Record<string, string>;
+      const parsedParams = parseTypedSection(c, route.request?.params, rawParams);
+      if (!parsedParams.success) return parsedParams.response;
+      const parsedParamsRecord = asObjectRecord(parsedParams.data);
+      const id =
+        typeof parsedParamsRecord.id === 'string'
+          ? parsedParamsRecord.id
+          : readRequiredParam(c, 'id');
       let body: Record<string, unknown> | null = null;
       if (route.generatedRouteKey === 'update') {
-        body = readJsonRecord((await c.req.json()) as unknown);
+        const rawBody = readJsonRecord((await c.req.json()) as unknown);
+        const parsedBody = parseTypedSection(c, route.request?.body, rawBody);
+        if (!parsedBody.success) return parsedBody.response;
+        body = asObjectRecord(parsedBody.data);
         if (dataScopes.length > 0) {
           const offending = findScopedFieldInBody(dataScopes, body);
           if (offending !== null) {
@@ -506,10 +652,13 @@ async function preparePlannedExecution(
       }
 
       return {
-        params,
+        params: parsedParams.data as Record<string, string>,
         query,
         body,
-        input: route.generatedRouteKey === 'update' ? (body ?? {}) : null,
+        input:
+          route.generatedRouteKey === 'update'
+            ? normalizeTypedInput(body, query, parsedParamsRecord as Record<string, string>)
+            : null,
         requestContext,
         filter,
         dataScopeBindings,
@@ -524,25 +673,43 @@ async function preparePlannedExecution(
       } catch {
         input = {};
       }
-      const body = readJsonRecord(input);
+      const rawBody = readJsonRecord(input);
       const pathParams = c.req.param() as Record<string, string>;
+      const parsedParams = parseTypedSection(c, route.request?.params, pathParams);
+      if (!parsedParams.success) return parsedParams.response;
+      const parsedQuery = parseTypedSection(c, route.request?.query, query);
+      if (!parsedQuery.success) return parsedQuery.response;
+      const parsedBody = parseTypedSection(c, route.request?.body, rawBody);
+      if (!parsedBody.success) return parsedBody.response;
+      const parsedQueryRecord = asObjectRecord(parsedQuery.data);
+      const parsedParamsRecord = parsedParams.data as Record<string, string>;
+      const body =
+        route.request?.body !== undefined || Object.keys(rawBody).length > 0
+          ? parsedBody.data
+          : null;
       const actor = getActor(c);
       const ctxOverrides: Record<string, unknown> = {};
       if (actor.id != null) {
         ctxOverrides['actor.id'] = actor.id;
-        ctxOverrides.authUserId = actor.id;
       }
       if (actor.tenantId != null) {
         ctxOverrides['actor.tenantId'] = actor.tenantId;
-        ctxOverrides.tenantId = actor.tenantId;
       }
       ctxOverrides['actor.kind'] = actor.kind;
-      const mergedInput = { ...query, ...body, ...pathParams, ...ctxOverrides };
+      if (actor.sessionId != null) {
+        ctxOverrides['actor.sessionId'] = actor.sessionId;
+      }
+      const mergedInput = {
+        ...parsedQueryRecord,
+        ...asObjectRecord(body),
+        ...parsedParamsRecord,
+        ...ctxOverrides,
+      };
       return {
-        params,
-        query,
+        params: parsedParamsRecord,
+        query: parsedQueryRecord,
         body,
-        input: mergedInput,
+        input: Object.keys(mergedInput).length > 0 ? mergedInput : null,
         requestContext,
       };
     }
@@ -600,89 +767,129 @@ function createPlannedRouteDefinition(
   const errorSchema = z.object({ error: z.string() });
 
   if (route.kind === 'extra') {
+    const request = buildTypedRouteRequest(route.request);
     return createRoute({
       method: route.method,
       path: route.path,
       tags: [tag],
       summary: route.summary ?? route.opName,
-      responses: {
+      ...(route.description ? { description: route.description } : {}),
+      ...(request ? { request } : {}),
+      responses: buildTypedRouteResponses(route.responses, {
         200: {
           content: { 'application/json': { schema: z.unknown() } },
           description: 'OK',
         },
-      },
+      }),
     });
   }
 
   switch (route.generatedRouteKey) {
-    case 'create':
+    case 'create': {
+      const request = buildTypedRouteRequest(route.request) ?? {
+        body: { content: { 'application/json': { schema: schemas.create } } },
+      };
       return createRoute({
         method: 'post',
         path: route.path,
         tags: [tag],
-        summary: `Create ${config.name}`,
-        request: { body: { content: { 'application/json': { schema: schemas.create } } } },
-        responses: {
+        summary: route.summary ?? `Create ${config.name}`,
+        ...(route.description ? { description: route.description } : {}),
+        request,
+        responses: buildTypedRouteResponses(route.responses, {
           201: {
             content: { 'application/json': { schema: schemas.entity } },
             description: 'Created',
           },
-        },
+        }),
       });
-    case 'list':
+    }
+    case 'list': {
+      const request = buildTypedRouteRequest(route.request) ?? { query: schemas.listOptions };
       return createRoute({
         method: 'get',
         path: route.path,
         tags: [tag],
-        summary: `List ${config.name}`,
-        request: { query: schemas.listOptions },
-        responses: {
+        summary: route.summary ?? `List ${config.name}`,
+        ...(route.description ? { description: route.description } : {}),
+        request,
+        responses: buildTypedRouteResponses(route.responses, {
           200: { content: { 'application/json': { schema: schemas.list } }, description: 'OK' },
-        },
+        }),
       });
-    case 'get':
+    }
+    case 'get': {
+      const request =
+        buildTypedRouteRequest(route.request) ??
+        ({
+          params: z.object({ id: z.string() }),
+        } satisfies NonNullable<Parameters<typeof createRoute>[0]['request']>);
       return createRoute({
         method: 'get',
         path: route.path,
         tags: [tag],
-        summary: `Get ${config.name} by ID`,
-        responses: {
+        summary: route.summary ?? `Get ${config.name} by ID`,
+        ...(route.description ? { description: route.description } : {}),
+        request,
+        responses: buildTypedRouteResponses(route.responses, {
           200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
-          404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not found' },
-        },
+          404: {
+            content: { 'application/json': { schema: errorSchema } },
+            description: 'Not found',
+          },
+        }),
       });
-    case 'update':
+    }
+    case 'update': {
+      const request = buildTypedRouteRequest(route.request) ?? {
+        params: z.object({ id: z.string() }),
+        body: { content: { 'application/json': { schema: schemas.update } } },
+      };
       return createRoute({
         method: 'patch',
         path: route.path,
         tags: [tag],
-        summary: `Update ${config.name}`,
-        request: { body: { content: { 'application/json': { schema: schemas.update } } } },
-        responses: {
+        summary: route.summary ?? `Update ${config.name}`,
+        ...(route.description ? { description: route.description } : {}),
+        request,
+        responses: buildTypedRouteResponses(route.responses, {
           200: { content: { 'application/json': { schema: schemas.entity } }, description: 'OK' },
-          404: { content: { 'application/json': { schema: errorSchema } }, description: 'Not found' },
-        },
+          404: {
+            content: { 'application/json': { schema: errorSchema } },
+            description: 'Not found',
+          },
+        }),
       });
-    case 'delete':
+    }
+    case 'delete': {
+      const request =
+        buildTypedRouteRequest(route.request) ??
+        ({
+          params: z.object({ id: z.string() }),
+        } satisfies NonNullable<Parameters<typeof createRoute>[0]['request']>);
       return createRoute({
         method: 'delete',
         path: route.path,
         tags: [tag],
-        summary: `Delete ${config.name}`,
-        responses: { 204: { description: 'Deleted' } },
+        summary: route.summary ?? `Delete ${config.name}`,
+        ...(route.description ? { description: route.description } : {}),
+        request,
+        responses: buildTypedRouteResponses(route.responses, { 204: { description: 'Deleted' } }),
       });
+    }
     default: {
       const operationConfig = route.operationConfig;
       const routeParams =
         operationConfig?.kind === 'lookup' || operationConfig?.kind === 'exists'
           ? [...new Set(route.path.match(/:([A-Za-z]\w*)/g)?.map(param => param.slice(1)) ?? [])]
           : [];
-      const request =
+      const defaultRequest =
         routeParams.length > 0
-          ? {
+          ? ({
               params: z.object(Object.fromEntries(routeParams.map(param => [param, z.string()]))),
-            }
+            } satisfies NonNullable<Parameters<typeof createRoute>[0]['request']>)
           : undefined;
+      const request = buildTypedRouteRequest(route.request) ?? defaultRequest;
       const responses: Parameters<typeof createRoute>[0]['responses'] =
         operationConfig?.kind === 'lookup'
           ? operationConfig.returns === 'one'
@@ -718,9 +925,10 @@ function createPlannedRouteDefinition(
         method: route.method,
         path: route.path,
         tags: [tag],
-        summary: route.opName,
+        summary: route.summary ?? route.opName,
+        ...(route.description ? { description: route.description } : {}),
         ...(request ? { request } : {}),
-        responses,
+        responses: buildTypedRouteResponses(route.responses, responses),
       });
     }
   }
@@ -775,8 +983,7 @@ function createPlannedRouteDefinition(
  * is body < path params < context overrides:
  * - Body fields — from the parsed JSON request body (lowest priority)
  * - Path params — from URL path parameters (e.g. `:id` in `operationPaths` or `op.custom http.path`)
- * - `actor.id` / `actor.tenantId` / `actor.kind` — projected from the canonical request actor
- * - `tenantId` / `authUserId` — legacy aliases projected from the same actor
+ * - `actor.id` / `actor.tenantId` / `actor.kind` / `actor.sessionId` — projected from the canonical request actor
  *
  * This allows transaction step bindings like `'param:actor.id'`, `'param:actor.tenantId'`,
  * `'param:authUserId'`, `'param:tenantId'`, and `'param:id'` to resolve from server-side
@@ -882,6 +1089,7 @@ export function buildBareEntityRoutes<
         const helpers = createResponseHelpers(c, route);
         const execContext: EntityRouteExecutionContext = {
           request: c,
+          actor: getActor(c),
           entity: config,
           routeKey: route.routeKey,
           generatedRouteKey: route.generatedRouteKey,
@@ -989,13 +1197,14 @@ export function buildBareEntityRoutes<
       const ctxOverrides: Record<string, unknown> = {};
       if (actor.id != null) {
         ctxOverrides['actor.id'] = actor.id;
-        ctxOverrides.authUserId = actor.id;
       }
       if (actor.tenantId != null) {
         ctxOverrides['actor.tenantId'] = actor.tenantId;
-        ctxOverrides.tenantId = actor.tenantId;
       }
       ctxOverrides['actor.kind'] = actor.kind;
+      if (actor.sessionId != null) {
+        ctxOverrides['actor.sessionId'] = actor.sessionId;
+      }
       const params = { ...queryParams, ...bodyRecord, ...pathParams, ...ctxOverrides };
 
       const opFn = adapter[opName];

@@ -6,7 +6,7 @@ import { SuccessResponse } from '@auth/schemas/success';
 import * as AuthService from '@auth/services/auth';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { createRoute, errorResponse, withSecurity } from '@lastshotlabs/slingshot-core';
+import { createRoute, errorResponse, getActor, getActorId, withSecurity } from '@lastshotlabs/slingshot-core';
 import { createRouter, getClientIp } from '@lastshotlabs/slingshot-core';
 import type { AuthRateLimitConfig } from '../config/authConfig';
 import { publishAuthEvent } from '../eventGovernance';
@@ -113,7 +113,7 @@ export const createSessionsRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const sessions = await runtime.repos.session.getUserSessions(userId, runtime.config);
       return c.json({ sessions }, 200);
@@ -156,7 +156,7 @@ export const createSessionsRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const blocked = await assertSensitiveSessionMutationAllowed(c, userId);
       if (blocked) return blocked;
@@ -235,9 +235,9 @@ export const createSessionsRouter = (
         return errorResponse(c, 'Too many reauth attempts. Try again later.', 429);
       }
 
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
-      const sessionId = c.get('sessionId');
+      const sessionId = getActor(c).sessionId;
       if (!sessionId) return errorResponse(c, 'Unauthorized', 401);
       const suspensionStatus = await getSuspended(runtime.adapter, userId);
       if (suspensionStatus.suspended) {

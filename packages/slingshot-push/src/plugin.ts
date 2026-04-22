@@ -3,6 +3,8 @@ import type { MiddlewareHandler } from 'hono';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
+  getActorId,
+  getActorTenantId,
   getNotificationsStateOrNull,
   getPluginState,
   validatePluginConfig,
@@ -109,7 +111,7 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
           return c.json({ error: 'Unauthorized' }, 401);
         }
         return userAuth(c, async () => {
-          const authUserId = c.get('authUserId');
+          const authUserId = getActorId(c);
           if (typeof authUserId !== 'string' || authUserId.length === 0) {
             c.res = c.json({ error: 'Unauthorized' }, 401);
             return;
@@ -124,11 +126,11 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
       };
 
       app.post(`${config.mountPath}/topics/:topicName/subscribe`, requireUserAuth, async c => {
-        const authUserId = c.get('authUserId');
+        const authUserId = getActorId(c);
         if (typeof authUserId !== 'string' || !subscriptionsRef || !topicsRef || !membershipsRef) {
           return c.json({ error: 'Unauthorized' }, 401);
         }
-        const tenantId = (c.get('tenantId') as string | undefined) ?? '';
+        const tenantId = getActorTenantId(c) ?? '';
         const body = (await c.req.json().catch(() => null)) as { deviceId?: string } | null;
         if (!body?.deviceId) return c.json({ error: 'deviceId is required' }, 400);
 
@@ -154,11 +156,11 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
       });
 
       app.post(`${config.mountPath}/topics/:topicName/unsubscribe`, requireUserAuth, async c => {
-        const authUserId = c.get('authUserId');
+        const authUserId = getActorId(c);
         if (typeof authUserId !== 'string' || !subscriptionsRef || !topicsRef || !membershipsRef) {
           return c.json({ error: 'Unauthorized' }, 401);
         }
-        const tenantId = (c.get('tenantId') as string | undefined) ?? '';
+        const tenantId = getActorTenantId(c) ?? '';
         const body = (await c.req.json().catch(() => null)) as { deviceId?: string } | null;
         if (!body?.deviceId) return c.json({ error: 'deviceId is required' }, 400);
 
@@ -183,7 +185,7 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
       });
 
       app.post(`${config.mountPath}/ack/:deliveryId`, requireUserAuth, async c => {
-        const authUserId = c.get('authUserId');
+        const authUserId = getActorId(c);
         if (typeof authUserId !== 'string' || !deliveriesRef) {
           return c.json({ error: 'Unauthorized' }, 401);
         }

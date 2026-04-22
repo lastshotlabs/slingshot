@@ -1,6 +1,7 @@
 // packages/slingshot-chat/src/middleware/roomCreatorGrant.ts
 import type { MiddlewareHandler } from 'hono';
 import type { PermissionsAdapter } from '@lastshotlabs/slingshot-core';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 import type { RoomMemberAdapter } from '../types';
 
 /**
@@ -27,7 +28,7 @@ export function createRoomCreatorGrantMiddleware(deps: {
 
     if (c.res.status < 200 || c.res.status >= 300) return;
 
-    const userId = c.get('authUserId') as string | undefined;
+    const userId = getActorId(c);
     if (!userId) return;
 
     const cloned = c.res.clone();

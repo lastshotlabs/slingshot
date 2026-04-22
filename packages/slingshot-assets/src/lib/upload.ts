@@ -1,7 +1,7 @@
 import { extname } from 'node:path';
 import type { Context } from 'hono';
 import type { AppEnv, StorageAdapter, UploadResult } from '@lastshotlabs/slingshot-core';
-import { HttpError, resolveContext } from '@lastshotlabs/slingshot-core';
+import { HttpError, getActorId, getActorTenantId, resolveContext } from '@lastshotlabs/slingshot-core';
 
 /**
  * Options for multipart and direct upload helpers.
@@ -215,8 +215,8 @@ export async function parseUpload(c: Context<AppEnv>, opts?: UploadOpts): Promis
   const body = await c.req.parseBody({ all: true });
   const results: UploadResult[] = [];
 
-  const userId = c.get('authUserId') ?? undefined;
-  const tenantId = c.get('tenantId') ?? undefined;
+  const userId = getActorId(c) ?? undefined;
+  const tenantId = getActorTenantId(c) ?? undefined;
   const bucket = c.get('uploadBucket');
 
   for (const field of fields) {

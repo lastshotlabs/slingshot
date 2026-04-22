@@ -9,6 +9,8 @@
  */
 import type { Context, Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 import { GameError, GameErrorCode } from '../errors';
 import type { GameDefinition } from '../types/models';
 import { SessionCreateInputSchema } from '../validation/session';
@@ -34,7 +36,7 @@ function generateJoinCode(length: number): string {
  * Registered under `'sessionCreateGuard'` in `RouteConfigDeps.middleware`.
  */
 export function buildSessionCreateGuard({ getRegistry }: SessionCreateGuardDeps) {
-  return async (c: Context, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     const rawBody: unknown = await c.req.json();
 
     const result = SessionCreateInputSchema.safeParse(rawBody);
@@ -90,7 +92,7 @@ export function buildSessionCreateGuard({ getRegistry }: SessionCreateGuardDeps)
     const body = rawBody as Record<string, unknown>;
     body.rules = Object.freeze(rulesResult.data);
     body.joinCode = joinCode;
-    body.hostUserId = c.get('authUserId') as string;
+    body.hostUserId = getActorId(c) as string;
     body.contentConfig = content ?? null;
 
     await next();

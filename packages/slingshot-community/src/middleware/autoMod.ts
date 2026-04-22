@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
+import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 import type { ModerationDecision, ModerationTarget } from '../types/config';
 import type { CommunityPrincipal } from '../types/env';
 import type { Report } from '../types/models';
@@ -57,7 +58,7 @@ export function createAutoModMiddleware(deps: {
       id: '', // pre-creation
       authorId: principal.subject,
       body: bodyText,
-      tenantId: c.get('tenantId') as string | undefined,
+      tenantId: getActorTenantId(c) ?? undefined,
     });
     if (decision === 'reject') {
       return c.json({ error: 'Content rejected by moderation' }, 403);

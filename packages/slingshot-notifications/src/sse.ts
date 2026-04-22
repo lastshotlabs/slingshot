@@ -1,5 +1,5 @@
 import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
-import { createRouter } from '@lastshotlabs/slingshot-core';
+import { createRouter, getActorId } from '@lastshotlabs/slingshot-core';
 import type { NotificationCreatedEventPayload } from './types';
 
 type DynamicBus = {
@@ -23,7 +23,7 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
   const dynamicBus = bus as unknown as DynamicBus;
 
   router.get(path, c => {
-    const userId = c.get('authUserId');
+    const userId = getActorId(c);
     if (!userId) {
       return c.json({ error: 'Unauthorized' }, 401);
     }

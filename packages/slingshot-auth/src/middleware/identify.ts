@@ -4,8 +4,9 @@ import { verifyToken } from '@auth/lib/jwt';
 import { getSuspended } from '@auth/lib/suspension';
 import type { MiddlewareHandler } from 'hono';
 import { getCookie } from 'hono/cookie';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import type { Actor, AppEnv } from '@lastshotlabs/slingshot-core';
 import {
+  ANONYMOUS_ACTOR,
   COOKIE_TOKEN,
   HEADER_USER_TOKEN,
   HttpError,
@@ -33,8 +34,10 @@ function computeFingerprint(
  *
  * On every request this middleware reads the session token (from the `session` cookie or the
  * `x-user-token` header for non-browser clients) and resolves the authenticated user identity.
- * The result is stored in the Hono context variables so downstream middleware and route handlers
- * can read `c.get('authUserId')`, `c.get('sessionId')`, etc.
+ * The result is published as a frozen `Actor` object on the Hono context (`c.get('actor')`)
+ * and can be read via `getActor(c)`, `getActorId(c)`, or `getActorTenantId(c)` from
+ * `@lastshotlabs/slingshot-core`. Legacy context variables (`authUserId`, `sessionId`, etc.)
+ * are still set as intermediate state during resolution.
  *
  * Processing steps (in order):
  * 1. **Token extraction** — checks `COOKIE_TOKEN` first, falls back to `HEADER_USER_TOKEN`.
@@ -42,7 +45,7 @@ function computeFingerprint(
  * 2. **JWT verification** — verifies the token's signature and expiry using the configured
  *    signing secret (supports rotating secrets via `string[]`).
  * 3. **M2M token detection** — if the JWT contains a `scope` claim but no `sid` claim, the
- *    caller is treated as a machine-to-machine client and `authClientId` is set to `sub`.
+ *    caller is treated as a machine-to-machine client (`actor.kind = 'service-account'`).
  * 4. **Session lookup** — retrieves the stored token from the session repository and performs
  *    a timing-safe comparison to ensure the token has not been superseded (e.g., by a logout
  *    or session rotation on another device).
@@ -51,13 +54,16 @@ function computeFingerprint(
  *    - On the first authenticated request the fingerprint is stored.
  *    - On subsequent requests the fingerprint is compared. Mismatch handling is controlled
  *      by `onMismatch`: `'unauthenticate'` (default), `'reject'` (throws `HttpError 401`),
- *      or `'log-only'` (sets `authUserId` but emits a log warning).
+ *      or `'log-only'` (sets identity but emits a log warning).
  * 6. **Suspension check** — unless `auth.checkSuspensionOnIdentify` is explicitly set to
  *    `false`, the adapter's `getSuspended` is called. Suspended users are treated as
- *    unauthenticated (`authUserId` and `sessionId` reset to `null`).
+ *    unauthenticated (actor reverts to anonymous).
  * 7. **Idle timeout tracking** — when `auth.trackLastActive` or `auth.sessionPolicy.idleTimeout`
  *    is configured, `sessionRepo.updateSessionLastActive` is called asynchronously (fire-and-
  *    forget, errors are logged but not propagated).
+ * 8. **Actor construction** — builds a frozen `Actor` from the resolved identity variables
+ *    and publishes it via `c.set('actor', ...)`. The actor captures `id`, `kind`, `tenantId`,
+ *    `sessionId`, `roles`, and `claims` at resolution time.
  *
  * This middleware never rejects a request on its own — it only sets or clears the identity
  * context variables. Use `userAuth` (or `requireStepUp`, `requireVerifiedEmail`) after
@@ -65,8 +71,8 @@ function computeFingerprint(
  *
  * @param authRuntime - The auth runtime context providing config, session repo, adapter, and
  *   signing config. Obtained from `getAuthRuntimeFromRequest(c)` or injected during plugin setup.
- * @returns A Hono `MiddlewareHandler<AppEnv>` that populates `authUserId`, `sessionId`,
- *   `authClientId`, `tokenPayload`, and `roles` on the context, then calls `next()`.
+ * @returns A Hono `MiddlewareHandler<AppEnv>` that publishes a frozen `Actor` on the context
+ *   and calls `next()`.
  *
  * @remarks
  * **Timing-safe token handling**: all comparisons that involve a secret or stored value
@@ -83,17 +89,18 @@ function computeFingerprint(
  * `onMismatch: 'reject'` fingerprint violations produce a proper 401 response.
  *
  * The middleware never short-circuits (it always calls `next()`). Downstream handlers
- * must check `c.get('authUserId')` and reject requests themselves if authentication is
- * required. Use the `userAuth` middleware (which wraps `identify`) for protected routes.
+ * should use `getActorId(c)` to check authentication status. Use the `userAuth` middleware
+ * (which wraps `identify`) for protected routes.
  *
  * @example
  * import { createIdentifyMiddleware } from '@lastshotlabs/slingshot-auth/plugin';
+ * import { getActorId } from '@lastshotlabs/slingshot-core';
  *
  * // Applied automatically by createAuthPlugin — manual usage example:
  * const identify = createIdentifyMiddleware(authRuntime);
  * app.use('/api/*', identify);
  * app.get('/api/me', (c) => {
- *   const userId = c.get('authUserId');
+ *   const userId = getActorId(c);
  *   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
  *   return c.json({ userId });
  * });
@@ -116,6 +123,8 @@ export const createIdentifyMiddleware =
       c.set('sessionId', null);
       c.set('authClientId', null);
       c.set('tokenPayload', null);
+      const tenantId = (c.get('tenantId') as string | null | undefined) ?? null;
+      c.set('actor', Object.freeze({ ...ANONYMOUS_ACTOR, tenantId }) as Actor);
       await next();
       return;
     }
@@ -239,6 +248,31 @@ export const createIdentifyMiddleware =
     } else {
       log('[identify] no token — unauthenticated');
     }
+
+    // Construct and publish the resolved actor so downstream code can use getActor(c).
+    const resolvedUserId = c.get('authUserId');
+    const resolvedClientId = c.get('authClientId');
+    const resolvedTenantId = (c.get('tenantId') as string | null | undefined) ?? null;
+    const actor: Actor = resolvedUserId
+      ? {
+          id: resolvedUserId,
+          kind: 'user',
+          tenantId: resolvedTenantId,
+          sessionId: c.get('sessionId') ?? null,
+          roles: c.get('roles') ?? null,
+          claims: {},
+        }
+      : resolvedClientId
+        ? {
+            id: resolvedClientId,
+            kind: 'service-account',
+            tenantId: resolvedTenantId,
+            sessionId: null,
+            roles: c.get('roles') ?? null,
+            claims: {},
+          }
+        : { ...ANONYMOUS_ACTOR, tenantId: resolvedTenantId };
+    c.set('actor', Object.freeze(actor) as Actor);
 
     await next();
   };

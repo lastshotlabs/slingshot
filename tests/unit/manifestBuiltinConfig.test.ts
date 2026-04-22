@@ -228,9 +228,23 @@ describe('resolveSearchManifestConfig', () => {
     const result = resolveSearchManifestConfig({ adminGate: 'superAdmin' });
     const gate = result['adminGate'] as { verifyRequest(c: unknown): Promise<boolean> };
 
-    const adminCtx = { get: (k: string) => (k === 'roles' ? ['super-admin'] : null) };
-    const userCtx = { get: (k: string) => (k === 'roles' ? ['member'] : null) };
-    const anonCtx = { get: () => null };
+    const adminCtx = {
+      get: (k: string) => {
+        if (k === 'roles') return ['super-admin'];
+        if (k === 'authUserId') return 'admin_1';
+        return null;
+      },
+      set: () => {},
+    };
+    const userCtx = {
+      get: (k: string) => {
+        if (k === 'roles') return ['member'];
+        if (k === 'authUserId') return 'user_1';
+        return null;
+      },
+      set: () => {},
+    };
+    const anonCtx = { get: () => null, set: () => {} };
 
     expect(await gate.verifyRequest(adminCtx)).toBe(true);
     expect(await gate.verifyRequest(userCtx)).toBe(false);
@@ -241,8 +255,8 @@ describe('resolveSearchManifestConfig', () => {
     const result = resolveSearchManifestConfig({ adminGate: 'authenticated' });
     const gate = result['adminGate'] as { verifyRequest(c: unknown): Promise<boolean> };
 
-    const authCtx = { get: (k: string) => (k === 'authUserId' ? 'usr_1' : null) };
-    const anonCtx = { get: () => null };
+    const authCtx = { get: (k: string) => (k === 'authUserId' ? 'usr_1' : null), set: () => {} };
+    const anonCtx = { get: () => null, set: () => {} };
 
     expect(await gate.verifyRequest(authCtx)).toBe(true);
     expect(await gate.verifyRequest(anonCtx)).toBe(false);

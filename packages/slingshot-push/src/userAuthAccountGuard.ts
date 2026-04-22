@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { AppEnv, AuthRuntimePeer } from '@lastshotlabs/slingshot-core';
 import {
+  getActorId,
   getAuthRuntimePeerOrNull,
   getPluginStateFromRequestOrNull,
 } from '@lastshotlabs/slingshot-core';
@@ -46,7 +47,7 @@ function getAuthRuntime(c: Context<AppEnv, string>): AuthRuntimeLike | null {
 export async function getUserAuthAccountGuardFailure(
   c: Context<AppEnv, string>,
 ): Promise<AccountGuardFailure | null> {
-  const userId = c.get('authUserId' as never) as unknown;
+  const userId = getActorId(c);
   if (typeof userId !== 'string' || userId.length === 0) {
     throw new Error(
       '[security] push userAuth account guard requires an authenticated authUserId context',

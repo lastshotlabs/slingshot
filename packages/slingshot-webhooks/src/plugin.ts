@@ -6,6 +6,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
+  getActor,
   getPluginState,
   getRouteAuthOrNull,
   validatePluginConfig,
@@ -60,8 +61,8 @@ function buildRoleGuard(role: string): MiddlewareHandler {
         return next();
       }
     }
-    // Standalone: roles already on context from host app middleware
-    const roles = c.get('roles') as string[] | null | undefined;
+    // Standalone: roles from actor context
+    const roles = getActor(c).roles;
     if (!roles || !roles.includes(role)) {
       return c.json({ error: 'Forbidden' }, 403);
     }

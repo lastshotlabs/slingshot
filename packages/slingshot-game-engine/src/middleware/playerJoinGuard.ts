@@ -10,6 +10,8 @@
  */
 import type { Context, Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 import { GameError, GameErrorCode } from '../errors';
 import { listAdapterRecords } from '../lib/adapterQuery';
 import type { GameDefinition } from '../types/models';
@@ -35,9 +37,9 @@ export function buildPlayerJoinGuard({
   getPlayerAdapter,
   getRegistry,
 }: PlayerJoinGuardDeps) {
-  return async (c: Context, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     const sessionId = c.req.param('id');
-    const userId = c.get('authUserId') as string | undefined;
+    const userId = getActorId(c) ?? undefined;
 
     if (!sessionId || !userId) {
       throw new HTTPException(400, { message: 'Missing session ID or auth.' });

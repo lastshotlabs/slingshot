@@ -1,6 +1,6 @@
 // packages/slingshot-chat/src/middleware/messagePostCreate.ts
 import type { MiddlewareHandler } from 'hono';
-import { getSlingshotCtx, type PermissionsAdapter } from '@lastshotlabs/slingshot-core';
+import { getActorId, getSlingshotCtx, type PermissionsAdapter } from '@lastshotlabs/slingshot-core';
 import type { RoomAdapter } from '../types';
 
 /**
@@ -28,7 +28,7 @@ export function createMessagePostCreateMiddleware(deps: {
 
     if (c.res.status < 200 || c.res.status >= 300) return;
 
-    const userId = c.get('authUserId') as string | undefined;
+    const userId = getActorId(c);
     if (!userId) return;
 
     const cloned = c.res.clone();

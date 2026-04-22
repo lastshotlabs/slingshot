@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
 import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
@@ -9,6 +9,8 @@ import {
   type RunOptions,
   type RunStatus,
 } from '@lastshotlabs/slingshot-orchestration';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 
 const VALID_STATUSES = new Set<RunStatus>([
   'pending',
@@ -19,9 +21,8 @@ const VALID_STATUSES = new Set<RunStatus>([
   'skipped',
 ]);
 
-function getTenantId(c: { get(name: string): unknown }): string | undefined {
-  const value = c.get('tenantId');
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
+function getTenantId(c: Context<AppEnv>): string | undefined {
+  return getActorTenantId(c) ?? undefined;
 }
 
 function parseRunOptions(body: Record<string, unknown>, tenantId?: string): RunOptions {

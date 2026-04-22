@@ -30,7 +30,7 @@ import type {
   PermissionsState,
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
-import { SUPER_ADMIN_ROLE, getPermissionsStateOrNull } from '@lastshotlabs/slingshot-core';
+import { SUPER_ADMIN_ROLE, getActor, getActorId, getPermissionsStateOrNull } from '@lastshotlabs/slingshot-core';
 
 /**
  * Create deferred admin providers that resolve real implementations lazily.
@@ -79,10 +79,10 @@ export function createDeferredAdminProviders(config: Record<string, unknown>): {
     result.accessProvider = {
       name: 'slingshot-auth',
       verifyRequest(c: Context<AppEnv>): Promise<AdminPrincipal | null> {
-        const userId = c.get('authUserId');
-        const rolesValue = c.get('roles');
-        const roles = Array.isArray(rolesValue)
-          ? rolesValue.filter((role): role is string => typeof role === 'string')
+        const actor = getActor(c);
+        const userId = actor.id;
+        const roles = Array.isArray(actor.roles)
+          ? actor.roles.filter((role): role is string => typeof role === 'string')
           : [];
         if (typeof userId !== 'string' || !roles.includes(SUPER_ADMIN_ROLE)) {
           return Promise.resolve(null);

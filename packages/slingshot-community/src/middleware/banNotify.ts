@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { NotificationBuilder } from '@lastshotlabs/slingshot-core';
+import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 
 /**
  * Create a Hono after-middleware that sends a ban notification when a ban is
@@ -38,7 +39,7 @@ export function createBanNotifyMiddleware(deps: {
     if (!ban.userId || !ban.id) return;
 
     await deps.builder.notify({
-      tenantId: c.get('tenantId') as string | undefined,
+      tenantId: getActorTenantId(c) ?? undefined,
       userId: ban.userId,
       type: 'community:ban',
       actorId: ban.bannedBy,

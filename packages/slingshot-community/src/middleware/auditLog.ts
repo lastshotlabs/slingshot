@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 import type { CommunityAdminGate } from '../types/config';
 import type { CommunityPrincipal } from '../types/env';
 
@@ -33,7 +34,7 @@ export function createAuditLogMiddleware(deps: {
         resource: 'community',
         actorId: principal?.subject ?? 'unknown',
         targetId: c.req.param('id') ?? c.req.param('reportId'),
-        meta: { tenantId: c.get('tenantId') as string | undefined },
+        meta: { tenantId: getActorTenantId(c) ?? undefined },
       });
     }
   };

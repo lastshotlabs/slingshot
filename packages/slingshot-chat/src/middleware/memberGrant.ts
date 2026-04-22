@@ -1,6 +1,7 @@
 // packages/slingshot-chat/src/middleware/memberGrant.ts
 import type { MiddlewareHandler } from 'hono';
 import type { PermissionsAdapter } from '@lastshotlabs/slingshot-core';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 
 /**
  * After-middleware for RoomMember create: issue a member-level RBAC grant.
@@ -24,7 +25,7 @@ export function createMemberGrantMiddleware(deps: {
 
     if (c.res.status < 200 || c.res.status >= 300) return;
 
-    const grantedBy = c.get('authUserId') as string | undefined;
+    const grantedBy = getActorId(c);
     if (!grantedBy) return;
 
     const cloned = c.res.clone();

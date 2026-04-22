@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { NotificationBuilder } from '@lastshotlabs/slingshot-core';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 import type { RoomAdapter } from '../types';
 
 /**
@@ -21,7 +22,7 @@ export function createMemberInviteNotifyMiddleware(deps: {
 
     if (c.res.status < 200 || c.res.status >= 300) return;
 
-    const actorId = c.get('authUserId') as string | undefined;
+    const actorId = getActorId(c);
     const result = (await c.res.clone().json()) as {
       roomId?: string;
       userId?: string;

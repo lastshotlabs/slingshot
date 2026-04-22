@@ -10,6 +10,8 @@
  */
 import type { Context, Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 import { listAdapterRecords } from '../lib/adapterQuery';
 
 interface PlayerLeaveGuardDeps {
@@ -33,9 +35,9 @@ export function buildPlayerLeaveGuard({
   getSessionAdapter,
   getPlayerAdapter,
 }: PlayerLeaveGuardDeps) {
-  return async (c: Context, next: Next) => {
+  return async (c: Context<AppEnv>, next: Next) => {
     const sessionId = c.req.param('id') ?? c.req.param('sessionId');
-    const targetUserId = c.req.param('userId') ?? (c.get('authUserId') as string | undefined);
+    const targetUserId = c.req.param('userId') ?? (getActorId(c) ?? undefined);
 
     if (!sessionId || !targetUserId) {
       throw new HTTPException(400, { message: 'Missing session or user ID.' });

@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { HttpError, getActorId } from '@lastshotlabs/slingshot-core';
 import { getAuthRuntimeFromRequest } from '../runtime';
 
 const EXEMPT_PREFIXES = ['/auth/', '/health', '/docs', '/openapi.json'];
@@ -30,7 +30,7 @@ export const requireMfaSetup: MiddlewareHandler<AppEnv> = async (c, next) => {
   }
 
   // Only applies to authenticated users — unauthenticated requests pass through
-  const userId = c.get('authUserId');
+  const userId = getActorId(c);
   if (!userId) {
     return next();
   }

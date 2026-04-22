@@ -42,7 +42,7 @@ export type { BreachedPasswordConfig };
  * const result = await checkBreachedPassword(
  *   newPassword,
  *   { timeout: 2000, minBreachCount: 5, onApiFailure: 'allow' },
- *   { userId: c.get('authUserId') ?? undefined, ip: getClientIp(c) ?? undefined },
+ *   { userId: getActorId(c) ?? undefined, ip: getClientIp(c) ?? undefined },
  *   runtime.eventBus,
  * );
  * if (result.breached) {

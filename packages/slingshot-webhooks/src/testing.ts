@@ -11,11 +11,15 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
+  type Actor,
+  ANONYMOUS_ACTOR,
   InProcessAdapter,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  getActorId,
+  getActor,
 } from '@lastshotlabs/slingshot-core';
 import { registerAuthEventDefinitions } from '@lastshotlabs/slingshot-auth';
 import { createMemoryWebhookAdapter } from './adapters/memory';
@@ -146,23 +150,32 @@ export async function createWebhooksTestApp(
   app.use('*', (async (c, next) => {
     const userId = c.req.header('x-user-id');
     if (userId) {
-      c.set('authUserId', userId);
-      c.set('tenantId', c.req.header('x-tenant-id') ?? null);
-      c.set('roles', [c.req.header('x-role') ?? 'admin']);
+      const tenantId = c.req.header('x-tenant-id') ?? null;
+      const roles = [c.req.header('x-role') ?? 'admin'];
+      c.set('actor', Object.freeze({
+        id: userId,
+        kind: 'user',
+        tenantId,
+        sessionId: null,
+        roles,
+        claims: {},
+      }) as Actor);
+    } else {
+      c.set('actor', ANONYMOUS_ACTOR);
     }
     await next();
   }) as MiddlewareHandler);
 
   const routeAuth = {
     userAuth: (async (c, next) => {
-      if (!c.get('authUserId')) {
+      if (!getActorId(c)) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
       await next();
     }) as MiddlewareHandler,
     requireRole: (...roles: string[]) =>
       (async (c, next) => {
-        const activeRoles = (c.get('roles') as string[] | undefined) ?? [];
+        const activeRoles = getActor(c).roles ?? [];
         if (!roles.some(role => activeRoles.includes(role))) {
           return c.json({ error: 'Forbidden' }, 403);
         }

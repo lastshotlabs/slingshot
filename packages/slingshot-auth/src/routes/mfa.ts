@@ -17,6 +17,8 @@ import {
   COOKIE_TOKEN,
   HttpError,
   createRouter,
+  getActor,
+  getActorId,
 } from '@lastshotlabs/slingshot-core';
 import { getClientIp } from '@lastshotlabs/slingshot-core';
 import type { HookContext } from '../config/authConfig';
@@ -226,7 +228,7 @@ export const createMfaRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const blocked = await assertSensitiveMfaMutationAllowed(c, userId);
       if (blocked) return blocked;
@@ -306,7 +308,7 @@ export const createMfaRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const blocked = await assertSensitiveMfaMutationAllowed(c, userId);
       if (blocked) return blocked;
@@ -574,9 +576,9 @@ export const createMfaRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
-      const sessionId = c.get('sessionId');
+      const sessionId = getActor(c).sessionId;
       if (!sessionId) return errorResponse(c, 'Unauthorized', 401);
       const body = c.req.valid('json');
 
@@ -675,7 +677,7 @@ export const createMfaRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const blocked = await assertSensitiveMfaMutationAllowed(c, userId);
       if (blocked) return blocked;
@@ -732,7 +734,7 @@ export const createMfaRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const blocked = await assertSensitiveMfaMutationAllowed(c, userId);
       if (blocked) return blocked;
@@ -807,7 +809,7 @@ export const createMfaRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const blocked = await assertSensitiveMfaMutationAllowed(c, userId);
       if (blocked) return blocked;
@@ -870,9 +872,9 @@ export const createMfaRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
-      const sessionId = c.get('sessionId');
+      const sessionId = getActor(c).sessionId;
       if (!sessionId) return errorResponse(c, 'Unauthorized', 401);
       const body = c.req.valid('json');
       const blocked = await assertSensitiveMfaMutationAllowed(c, userId);
@@ -1015,7 +1017,7 @@ export const createMfaRouter = (
       { userToken: [] },
     ),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const methods = await MfaService.getMfaMethods(userId, runtime);
       return c.json({ methods }, 200);
@@ -1079,7 +1081,7 @@ export const createMfaRouter = (
         { userToken: [] },
       ),
       async c => {
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
         if (!userId) return errorResponse(c, 'Unauthorized', 401);
         const blocked = await assertSensitiveMfaMutationAllowed(c, userId);
         if (blocked) return blocked;
@@ -1150,7 +1152,7 @@ export const createMfaRouter = (
         { userToken: [] },
       ),
       async c => {
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
         if (!userId) return errorResponse(c, 'Unauthorized', 401);
         const blocked = await assertSensitiveMfaMutationAllowed(c, userId);
         if (blocked) return blocked;
@@ -1209,7 +1211,7 @@ export const createMfaRouter = (
         { userToken: [] },
       ),
       async c => {
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
         if (!userId) return errorResponse(c, 'Unauthorized', 401);
         const creds = adapter.getWebAuthnCredentials
           ? await adapter.getWebAuthnCredentials(userId)
@@ -1303,9 +1305,9 @@ export const createMfaRouter = (
         { userToken: [] },
       ),
       async c => {
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
         if (!userId) return errorResponse(c, 'Unauthorized', 401);
-        const sessionId = c.get('sessionId');
+        const sessionId = getActor(c).sessionId;
         if (!sessionId) return errorResponse(c, 'Unauthorized', 401);
         const { credentialId } = c.req.valid('param');
         const { method, code, password, reauthToken, webauthnResponse } = c.req.valid('json');
@@ -1400,9 +1402,9 @@ export const createMfaRouter = (
         { userToken: [] },
       ),
       async c => {
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
         if (!userId) return errorResponse(c, 'Unauthorized', 401);
-        const sessionId = c.get('sessionId');
+        const sessionId = getActor(c).sessionId;
         if (!sessionId) return errorResponse(c, 'Unauthorized', 401);
         const body = c.req.valid('json');
         const blocked = await assertSensitiveMfaMutationAllowed(c, userId);

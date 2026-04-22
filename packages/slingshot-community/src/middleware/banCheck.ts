@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { EntityAdapter } from '@lastshotlabs/slingshot-core';
+import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 import type { CommunityPrincipal } from '../types/env';
 import type { Ban } from '../types/models';
 
@@ -65,7 +66,7 @@ export function createBanCheckMiddleware(deps: {
       c.req.param('containerId') ??
       (typeof bodyJson?.containerId === 'string' ? bodyJson.containerId : undefined);
     if (!containerId) return next();
-    const tenantId = c.get('tenantId') as string | undefined;
+    const tenantId = getActorTenantId(c);
 
     const { items } = await deps.banAdapter.list({
       filter: {

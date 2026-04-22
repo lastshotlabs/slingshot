@@ -174,10 +174,11 @@ export function getAuthRuntimeContextOrNull(
  *
  * @example
  * import { getAuthRuntimeFromRequest } from '@lastshotlabs/slingshot-auth';
+ * import { getActorId } from '@lastshotlabs/slingshot-core';
  *
  * app.get('/profile', userAuth, async (c) => {
  *   const runtime = getAuthRuntimeFromRequest(c);
- *   const userId = c.get('authUserId')!;
+ *   const userId = getActorId(c)!;
  *   const user = await runtime.adapter.getUser?.(userId);
  *   return c.json(user);
  * });

@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { getActorId, getActorTenantId } from '@lastshotlabs/slingshot-core';
 
 type MembershipCreateInput = Record<string, unknown> & {
   userId?: unknown;
@@ -20,7 +21,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function createMemberJoinGuardMiddleware(): MiddlewareHandler {
   return async (c, next) => {
-    const authUserId = c.get('authUserId' as never) as string | null | undefined;
+    const authUserId = getActorId(c);
     if (!authUserId) return c.json({ error: 'Unauthorized' }, 401);
 
     let body: MembershipCreateInput;
@@ -40,7 +41,7 @@ export function createMemberJoinGuardMiddleware(): MiddlewareHandler {
       return c.json({ error: 'Forbidden' }, 403);
     }
 
-    const tenantId = (c.get('tenantId' as never) as string | null | undefined) ?? null;
+    const tenantId = getActorTenantId(c);
     if (body.tenantId !== undefined && body.tenantId !== tenantId) {
       return c.json({ error: 'Forbidden' }, 403);
     }

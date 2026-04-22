@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import type { AdminAccessProvider, AdminPrincipal, AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 import { getAuthRuntimeFromRequest } from '../runtime';
 
 /**
@@ -32,7 +33,7 @@ export function createSlingshotAuthAccessProvider(): AdminAccessProvider {
     name: 'slingshot-auth',
 
     async verifyRequest(c: Context<AppEnv>): Promise<AdminPrincipal | null> {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return null;
 
       const adapter = getAuthRuntimeFromRequest(c).adapter;

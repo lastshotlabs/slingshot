@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { PermissionsAdapter } from '@lastshotlabs/slingshot-core';
+import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 import type { CommunityPrincipal } from '../types/env';
 
 type ContainerMemberSnapshot = {
@@ -51,7 +52,7 @@ export function createGrantManagerMiddleware(deps: {
     const opName = (c.get('__opName' as never) as string | undefined) ?? opNameBefore ?? '';
     const principal = c.get('communityPrincipal') as CommunityPrincipal | undefined;
     const grantedBy = principal?.subject ?? 'system';
-    const tenantId = (c.get('tenantId') as string | undefined) ?? null;
+    const tenantId = getActorTenantId(c);
 
     const member =
       opName === 'delete' ? memberBeforeDelete : await readMemberFromResponse(c.res.clone());

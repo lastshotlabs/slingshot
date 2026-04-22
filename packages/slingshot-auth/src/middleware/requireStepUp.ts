@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { HttpError, getActor } from '@lastshotlabs/slingshot-core';
 import { getAuthRuntimeFromRequest } from '../runtime';
 
 /**
@@ -58,7 +58,7 @@ export interface StepUpOptions {
 export const requireStepUp =
   (opts?: StepUpOptions): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
-    const sessionId = c.get('sessionId');
+    const sessionId = getActor(c).sessionId;
     if (!sessionId) {
       throw new HttpError(401, 'Authentication required');
     }

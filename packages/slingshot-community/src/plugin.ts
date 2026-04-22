@@ -10,6 +10,7 @@ import {
   PERMISSIONS_STATE_KEY,
   defineEvent,
   deepFreeze,
+  getActor,
   getContextOrNull,
   getNotificationsStateOrNull,
   getPermissionsStateOrNull,
@@ -300,17 +301,17 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       if (config.authBridge === 'auto') {
         const mountPath = config.mountPath ?? '/community';
         app.use(`${mountPath}/*`, async (c, next) => {
-          const userId = c.get('authUserId');
-          const rolesValue = c.get('roles');
+          const actor = getActor(c);
+          const rolesValue = actor.roles;
           const roles = Array.isArray(rolesValue)
             ? rolesValue.filter((role): role is string => typeof role === 'string')
             : [];
-          if (typeof userId === 'string') {
+          if (actor.id) {
             // Opaque boundary: AppEnv doesn't include CommunityEnv variables.
             // The communityPrincipal context variable is consumed by community
             // routes which are typed with CommunityEnv.
             (c as unknown as { set(key: string, value: unknown): void }).set('communityPrincipal', {
-              subject: userId,
+              subject: actor.id,
               roles,
             });
           }

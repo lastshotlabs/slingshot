@@ -3,7 +3,7 @@ import { userAuth } from '@auth/middleware/userAuth';
 import { ErrorResponse } from '@auth/schemas/error';
 import * as AuthService from '@auth/services/auth';
 import { z } from 'zod';
-import { createRoute, errorResponse, withSecurity } from '@lastshotlabs/slingshot-core';
+import { createRoute, errorResponse, getActor, getActorId, withSecurity } from '@lastshotlabs/slingshot-core';
 import { createRouter, getClientIp } from '@lastshotlabs/slingshot-core';
 import type { AuthRateLimitConfig, StepUpConfig } from '../config/authConfig';
 import type { AuthRuntimeContext } from '../runtime';
@@ -133,9 +133,9 @@ export const createStepUpRouter = (
       if (await runtime.rateLimit.trackAttempt(`step-up:${ip}`, stepUpOpts)) {
         return errorResponse(c, 'Too many step-up attempts. Try again later.', 429);
       }
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
-      const sessionId = c.get('sessionId');
+      const sessionId = getActor(c).sessionId;
       if (!sessionId) return errorResponse(c, 'Unauthorized', 401);
       const body = c.req.valid('json');
 

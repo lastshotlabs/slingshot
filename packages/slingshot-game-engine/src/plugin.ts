@@ -23,6 +23,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
+  getActorId,
   getContext,
   getPluginState,
   resolveRepo,
@@ -380,7 +381,7 @@ export function createGameEnginePlugin(
       // POST /game/sessions/join/:code — join by code
       sessionRoutes.post('/join/:code', async c => {
         const code = c.req.param('code');
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
 
         if (!userId) {
           return c.json(
@@ -527,7 +528,7 @@ export function createGameEnginePlugin(
       // GET /game/sessions/:id/state — runtime state view
       sessionRoutes.get('/:id/state', async c => {
         const sessionId = c.req.param('id');
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
 
         if (!userId) {
           return c.json(
@@ -599,7 +600,7 @@ export function createGameEnginePlugin(
       // GET /game/sessions/:id/replay — replay log
       sessionRoutes.get('/:id/replay', async c => {
         const sessionId = c.req.param('id');
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
 
         if (!userId) {
           return c.json(

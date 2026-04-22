@@ -526,10 +526,8 @@ export function applyRouteConfig(
         if (capturedEvents) {
           const actor = getActor(c);
           const actorId = actor.kind === 'anonymous' ? undefined : actor.id;
-          const tenantId =
-            actor.tenantId ?? ((c.get('tenantId') as string | null | undefined) ?? null);
           capturedEvents.publish(evt.key as keyof SlingshotEventMap, payload, {
-            tenantId,
+            tenantId: actor.tenantId ?? null,
             userId: actor.kind === 'user' ? actor.id : undefined,
             actorId,
             requestId: c.get('requestId') as string | undefined,
@@ -711,10 +709,8 @@ export function applyRouteConfig(
       if (capturedEvents) {
         const actor = getActor(c);
         const actorId = actor.kind === 'anonymous' ? undefined : actor.id;
-        const tenantId =
-          actor.tenantId ?? ((c.get('tenantId') as string | null | undefined) ?? null);
         capturedEvents.publish(evt.key as keyof SlingshotEventMap, payload, {
-          tenantId,
+          tenantId: actor.tenantId ?? null,
           userId: actor.kind === 'user' ? actor.id : undefined,
           actorId,
           requestId: c.get('requestId') as string | undefined,

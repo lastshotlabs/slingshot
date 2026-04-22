@@ -1,6 +1,7 @@
 // packages/slingshot-chat/src/middleware/broadcastGuard.ts
 import type { MiddlewareHandler } from 'hono';
 import type { PermissionEvaluator } from '@lastshotlabs/slingshot-core';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 import type { RoomAdapter } from '../types';
 
 /**
@@ -30,7 +31,7 @@ export function createBroadcastGuardMiddleware(deps: {
     const room = await roomAdapter.getById(roomId);
     if (!room || room.type !== 'broadcast') return next();
 
-    const userId = c.get('authUserId') as string | undefined;
+    const userId = getActorId(c);
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     const canManage = await evaluator.can({ subjectId: userId, subjectType: 'user' }, 'manage', {

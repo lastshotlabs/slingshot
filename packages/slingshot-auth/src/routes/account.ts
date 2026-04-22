@@ -18,6 +18,8 @@ import {
   HEADER_USER_TOKEN,
   HttpError,
   createRouter,
+  getActor,
+  getActorId,
   getClientIp,
 } from '@lastshotlabs/slingshot-core';
 import type {
@@ -193,7 +195,7 @@ export const createAccountRouter = (
       { userToken: [] },
     ),
     async c => {
-      const authUserId = c.get('authUserId');
+      const authUserId = getActorId(c);
       if (!authUserId) return errorResponse(c, 'Unauthorized', 401);
       const user = adapter.getUser ? await adapter.getUser(authUserId) : null;
       const googleLinked = user?.providerIds?.some(id => id.startsWith('google:')) ?? false;
@@ -262,7 +264,7 @@ export const createAccountRouter = (
       { userToken: [] },
     ),
     async c => {
-      const authUserId = c.get('authUserId');
+      const authUserId = getActorId(c);
       if (!authUserId) return errorResponse(c, 'Unauthorized', 401);
       const blocked = await assertSensitiveAccountMutationAllowed(c, authUserId);
       if (blocked) return blocked;
@@ -351,9 +353,9 @@ export const createAccountRouter = (
       { userToken: [] },
     ),
     async c => {
-      const authUserId = c.get('authUserId');
+      const authUserId = getActorId(c);
       if (!authUserId) return errorResponse(c, 'Unauthorized', 401);
-      const sessionId = c.get('sessionId');
+      const sessionId = getActor(c).sessionId;
       if (!sessionId) return errorResponse(c, 'Unauthorized', 401);
       if (await runtime.rateLimit.trackAttempt(`deleteaccount:${authUserId}`, deleteAccountOpts)) {
         return errorResponse(c, 'Too many deletion attempts. Try again later.', 429);
@@ -588,9 +590,9 @@ export const createAccountRouter = (
         return errorResponse(c, 'Auth adapter does not support setPassword', 501);
       }
       const { password, currentPassword } = c.req.valid('json');
-      const authUserId = c.get('authUserId');
+      const authUserId = getActorId(c);
       if (!authUserId) return errorResponse(c, 'Unauthorized', 401);
-      const currentSessionId = c.get('sessionId');
+      const currentSessionId = getActor(c).sessionId;
       if (!currentSessionId) return errorResponse(c, 'Unauthorized', 401);
 
       const blocked = await assertSensitiveAccountMutationAllowed(c, authUserId);

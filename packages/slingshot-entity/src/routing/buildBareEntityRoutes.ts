@@ -254,8 +254,9 @@ function buildRequestContext(c: Context<AppEnv>): Record<string, unknown> {
   const actor = getActor(c);
   return {
     actor,
-    authUserId: c.get('authUserId' as never) as string | null | undefined,
-    tenantId: c.get('tenantId' as never) as string | null | undefined,
+    // Actor-derived — legacy aliases for ctx:authUserId / ctx:tenantId bindings
+    authUserId: actor.id,
+    tenantId: actor.tenantId,
     requestId: c.get('requestId' as never) as string | undefined,
   };
 }

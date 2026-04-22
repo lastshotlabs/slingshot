@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import type { Context, MiddlewareHandler } from 'hono';
 import { resolve } from 'path';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActor, getActorId } from '@lastshotlabs/slingshot-core';
 import type { AppManifestHandlerRef } from './manifest';
 import { createDeferredAdminProviders } from './manifestAdminProviders';
 import type { ManifestHandlerRegistry } from './manifestHandlerRegistry';
@@ -401,7 +402,7 @@ function resolveSearchAdminGateStrategy(strategy: string): {
     case 'superAdmin':
       return {
         verifyRequest(c: Context<AppEnv>): Promise<boolean> {
-          const rolesValue = c.get('roles');
+          const rolesValue = getActor(c).roles;
           const roles = Array.isArray(rolesValue)
             ? rolesValue.filter((role): role is string => typeof role === 'string')
             : [];
@@ -411,7 +412,7 @@ function resolveSearchAdminGateStrategy(strategy: string): {
     case 'authenticated':
       return {
         verifyRequest(c: Context<AppEnv>): Promise<boolean> {
-          return Promise.resolve(c.get('authUserId') != null);
+          return Promise.resolve(getActorId(c) != null);
         },
       };
     default:

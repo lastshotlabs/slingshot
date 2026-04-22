@@ -7,6 +7,7 @@
  * @module
  */
 import type { MiddlewareHandler } from 'hono';
+import { getActorId, getActorTenantId } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
 // Backend interface
@@ -153,7 +154,7 @@ export function buildRateLimitMiddleware(
   return async (c, next) => {
     // Check per-user limit first (tighter scope).
     if (perUser) {
-      const userId = c.get('authUserId' as never) as string | undefined;
+      const userId = getActorId(c) ?? undefined;
       if (userId) {
         const result = await backend.check(
           `${opName}:user:${userId}`,
@@ -168,7 +169,7 @@ export function buildRateLimitMiddleware(
 
     // Check per-tenant limit.
     if (perTenant) {
-      const tenantId = c.get('tenantId' as never) as string | undefined;
+      const tenantId = getActorTenantId(c) ?? undefined;
       if (tenantId) {
         const result = await backend.check(
           `${opName}:tenant:${tenantId}`,

@@ -1,23 +1,23 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { HttpError, getActor } from '@lastshotlabs/slingshot-core';
 
 /**
  * Hono middleware factory that enforces OAuth 2.0 scope requirements on a route.
  *
- * Only machine-to-machine access tokens are eligible: the caller must have
- * `authClientId` set by the `identify` middleware from `slingshot-auth`. The
- * middleware then reads the `scope` claim from `tokenPayload`. All
- * `requiredScopes` must be present in the space-delimited scope string; if any
- * is missing the request is rejected.
+ * Only machine-to-machine access tokens are eligible: the actor must have
+ * `kind: 'service-account'` as resolved by the `identify` middleware from
+ * `slingshot-auth`. The middleware then reads the `scope` claim from
+ * `tokenPayload`. All `requiredScopes` must be present in the space-delimited
+ * scope string; if any is missing the request is rejected.
  *
  * @param requiredScopes - One or more scope strings that the token must contain.
  * @returns A Hono `MiddlewareHandler` that rejects requests missing any
  *   required scope.
  *
- * @throws {HttpError} 401 if no `tokenPayload` is present (unauthenticated).
- * @throws {HttpError} 403 with code `M2M_REQUIRED` if the token is not an M2M
- *   token.
+ * @throws {HttpError} 401 if the actor is anonymous (unauthenticated).
+ * @throws {HttpError} 403 with code `M2M_REQUIRED` if the actor is not a
+ *   service-account (i.e., not an M2M token).
  * @throws {HttpError} 403 with code `INSUFFICIENT_SCOPE` if the token is
  *   missing the `scope` claim or does not include all required scopes.
  *
@@ -39,13 +39,15 @@ import { HttpError } from '@lastshotlabs/slingshot-core';
 export const requireScope =
   (...requiredScopes: string[]): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
-    const payload = c.get('tokenPayload');
-    if (!payload) {
+    const actor = getActor(c);
+    if (actor.kind === 'anonymous') {
       throw new HttpError(401, 'Authentication required');
     }
-    if (!c.get('authClientId')) {
+    if (actor.kind !== 'service-account') {
       throw new HttpError(403, 'M2M token required', 'M2M_REQUIRED');
     }
+    // Read raw JWT payload for scope verification
+    const payload = c.get('tokenPayload');
 
     const rawScope = (payload as Record<string, unknown>).scope;
     if (!rawScope || typeof rawScope !== 'string') {

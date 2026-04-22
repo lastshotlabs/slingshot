@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { HttpError, getActorId } from '@lastshotlabs/slingshot-core';
 import { getAuthRuntimeFromRequest } from '../runtime';
 
 /**
@@ -25,7 +25,7 @@ import { getAuthRuntimeFromRequest } from '../runtime';
  * router.post('/posts', userAuth, requireVerifiedEmail, createPostHandler);
  */
 export const requireVerifiedEmail: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const userId = c.get('authUserId');
+  const userId = getActorId(c);
   if (!userId) {
     return c.json({ error: 'Unauthorized' }, 401);
   }

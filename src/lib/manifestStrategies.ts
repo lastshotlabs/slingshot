@@ -9,7 +9,7 @@
  * strategy is a new case in the switch, never a refactor.
  */
 import type { Context } from 'hono';
-import { getClientIp } from '@lastshotlabs/slingshot-core';
+import { getActorId, getClientIp } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
@@ -34,12 +34,12 @@ export function resolveRateLimitKeyStrategy(
       return c => getClientIp(c);
     case 'user':
       return c => {
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
         return typeof userId === 'string' && userId.length > 0 ? userId : getClientIp(c);
       };
     case 'ip+user':
       return c => {
-        const userId = c.get('authUserId');
+        const userId = getActorId(c);
         return typeof userId === 'string' && userId.length > 0
           ? `u:${userId}`
           : `ip:${getClientIp(c)}`;
@@ -61,7 +61,7 @@ export function resolveRateLimitSkipStrategy(
   strategy: 'authenticated',
 ): (c: Context<AppEnv>) => boolean {
   void strategy;
-  return c => c.get('authUserId') != null;
+  return c => getActorId(c) != null;
 }
 
 // ---------------------------------------------------------------------------

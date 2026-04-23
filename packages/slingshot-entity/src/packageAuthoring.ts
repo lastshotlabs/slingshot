@@ -136,8 +136,8 @@ function freezeArray<TValue>(value: readonly TValue[] | undefined): readonly TVa
  * resolve the adapter from the entity config and active persistence backend.
  */
 export function entity<
-  TConfig extends ResolvedEntityConfig,
-  TOperations extends EntityOperationsInput = undefined,
+  const TConfig extends ResolvedEntityConfig,
+  const TOperations extends EntityOperationsInput = undefined,
 >(config: {
   /** Resolved entity config to mount. */
   readonly config: TConfig;
@@ -172,6 +172,7 @@ export function entity(config: {
     name: config.config.name,
     entityName: config.config.name,
     path: config.path,
+    __adapter: undefined,
     implementation: Object.freeze({
       config: config.config,
       operations,

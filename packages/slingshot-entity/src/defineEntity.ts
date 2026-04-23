@@ -69,7 +69,7 @@ export { index, relation } from './builders/entityHelpers';
  * // Message._storageName === 'chat_messages'
  * ```
  */
-export function defineEntity<F extends Record<string, FieldDef>>(
+export function defineEntity<const F extends Record<string, FieldDef>>(
   name: string,
   config: Omit<EntityConfig<F>, 'name'>,
 ): ResolvedEntityConfig<F> {

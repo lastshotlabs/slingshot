@@ -14,7 +14,14 @@ import {
   inspectPackage,
   route,
 } from '@lastshotlabs/slingshot-core';
-import { entity, registerEntityPolicy } from '@lastshotlabs/slingshot-entity';
+import {
+  defineEntity,
+  defineOperations,
+  entity,
+  field,
+  op,
+  registerEntityPolicy,
+} from '@lastshotlabs/slingshot-entity';
 import { createApp } from '../../src/app';
 
 const baseConfig = {
@@ -483,6 +490,43 @@ describe('package-first authoring', () => {
       handler(ctx) {
         const noteId: string = ctx.params.id;
         return ctx.respond.json({ noteId });
+      },
+    });
+
+    expect(true).toBe(true);
+  });
+
+  test('package entity modules preserve optional null update inputs and named operation IntelliSense', () => {
+    const ContactEntity = defineEntity('Contact', {
+      fields: {
+        id: field.string({ primary: true, default: 'uuid' }),
+        email: field.string(),
+        parentId: field.string({ optional: true }),
+      },
+      routes: {},
+    });
+
+    const ContactOps = defineOperations(ContactEntity, {
+      byEmail: op.lookup({ fields: { email: 'param:email' }, returns: 'one' }),
+    });
+
+    const contactModule = entity({
+      config: ContactEntity,
+      operations: ContactOps,
+    });
+
+    type ContactAdapter = Exclude<typeof contactModule['__adapter'], undefined>;
+    type ContactUpdateInput = Parameters<ContactAdapter['update']>[1];
+
+    const clearParent: ContactUpdateInput = { parentId: null };
+    void clearParent;
+
+    route.get({
+      path: '/contacts/by-email',
+      handler(ctx) {
+        const contacts = ctx.entities.get(contactModule);
+        void contacts.byEmail({ email: 'person@example.com' });
+        return ctx.respond.noContent();
       },
     });
 

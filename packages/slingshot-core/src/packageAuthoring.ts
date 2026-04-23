@@ -36,7 +36,7 @@ export interface PackageCapabilityHandle<TValue> {
   /** Stable capability name used for publication, lookup, and diagnostics. */
   readonly name: string;
   /** Phantom generic marker so the capability's value type flows through IntelliSense. */
-  readonly __value?: TValue;
+  readonly __value: TValue | undefined;
 }
 
 /** Publish and consume a typed cross-package contract without adapter bags or singleton registries. */
@@ -172,7 +172,7 @@ export interface PackageEntityRef<TAdapter = unknown> {
   /** Entity name as registered with the framework. */
   readonly entity: string;
   /** Phantom generic marker so the entity adapter type flows through IntelliSense. */
-  readonly __adapter?: TAdapter;
+  readonly __adapter: TAdapter | undefined;
 }
 
 /** Minimal entity module contract shared between `slingshot-core` and `slingshot-entity`. */
@@ -186,7 +186,7 @@ export interface SlingshotPackageEntityModuleLike<TAdapter = unknown> {
   /** Optional path override relative to the package mount path. */
   readonly path?: string;
   /** Phantom generic marker so the entity adapter type flows through IntelliSense. */
-  readonly __adapter?: TAdapter;
+  readonly __adapter: TAdapter | undefined;
   /** Implementation details supplied by `slingshot-entity`. */
   readonly implementation: unknown;
 }
@@ -194,9 +194,13 @@ export interface SlingshotPackageEntityModuleLike<TAdapter = unknown> {
 /** Lookup helper for framework-managed entity adapters owned by the app. */
 export interface PackageEntityReader {
   /** Resolve an adapter from a typed package-owned entity module or typed entity ref. */
-  get<TAdapter>(
-    entity: SlingshotPackageEntityModuleLike<TAdapter> | PackageEntityRef<TAdapter>,
-  ): TAdapter;
+  get<TEntity extends SlingshotPackageEntityModuleLike<unknown>>(
+    entity: TEntity,
+  ): Exclude<TEntity['__adapter'], undefined>;
+  /** Resolve an adapter from a typed cross-package entity ref. */
+  get<TEntity extends PackageEntityRef<unknown>>(
+    entity: TEntity,
+  ): Exclude<TEntity['__adapter'], undefined>;
   /** Escape hatch: resolve an entity adapter by name. */
   get<TValue = unknown>(args: { entity: string; plugin?: string }): TValue;
 }
@@ -473,6 +477,7 @@ export function entityRef<TAdapter>(
       kind: 'entity-ref' as const,
       plugin: options?.plugin,
       entity: input.entityName,
+      __adapter: undefined,
     }) as PackageEntityRef<TAdapter>;
   }
   const args = input as { entity: string; plugin?: string };
@@ -480,6 +485,7 @@ export function entityRef<TAdapter>(
     kind: 'entity-ref' as const,
     plugin: args.plugin,
     entity: args.entity,
+    __adapter: undefined,
   }) as PackageEntityRef<TAdapter>;
 }
 
@@ -684,6 +690,7 @@ export function defineCapability<TValue>(name: string): PackageCapabilityHandle<
   return Object.freeze({
     kind: 'capability' as const,
     name,
+    __value: undefined,
   }) as PackageCapabilityHandle<TValue>;
 }
 

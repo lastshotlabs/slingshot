@@ -289,6 +289,35 @@ export type {
   ResolvedOperations,
   OperationConfig,
 } from '@lastshotlabs/slingshot-entity';
+export {
+  defineCapability,
+  definePackage,
+  domain,
+  entityRef,
+  inspectPackage,
+  provideCapability,
+  route,
+} from '@lastshotlabs/slingshot-core';
+export type {
+  DefinePackageInput,
+  DomainRouteDefinition,
+  PackageCapabilityHandle,
+  PackageCapabilityReader,
+  PackageDomainRouteContext,
+  PackageEntityRef,
+  PackageEntityReader,
+  PackageInspection,
+  PackageRouteRequestContext,
+  PublishedPackageCapability,
+  SlingshotPackageDefinition,
+  TypedRouteContext,
+  TypedRouteInput,
+  TypedRouteRequestSpec,
+  TypedRouteResponseSpec,
+  TypedRouteResponses,
+} from '@lastshotlabs/slingshot-core';
+export { entity } from '@lastshotlabs/slingshot-entity';
+export type { EntityModuleWiring, PackageEntityModule } from '@lastshotlabs/slingshot-entity';
 
 // Manifest-driven server bootstrap
 export { createServerFromManifest } from './lib/createServerFromManifest';

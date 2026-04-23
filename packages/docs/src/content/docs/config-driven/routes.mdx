@@ -1,0 +1,258 @@
+---
+title: Routes
+description: Understand where routes come from in config-driven Slingshot packages and when to use entity routes versus package domain routes.
+---
+
+There are two primary route surfaces in package-first Slingshot authoring:
+
+- entity-managed routes generated from `entity(...)`
+- package-owned routes declared in `domain({ routes: [...] })`
+
+There is also the lower-level file/router path used by `routesDir` and raw routers.
+
+## Which route API should I use?
+
+Use this decision rule:
+
+| If you are doing...                      | Use                                             | Auto-registered?                   |
+| ---------------------------------------- | ----------------------------------------------- | ---------------------------------- |
+| A normal route file under `routesDir`    | `createRoute(...)` inside `router.openapi(...)` | Yes, by `routesDir`                |
+| A route you mount yourself in code       | `createRoute(...)` inside `router.openapi(...)` | No, you mount the router           |
+| An entity-backed CRUD or operation route | `entity(...)` + `defineOperations(...)`         | Yes, by package/entity compilation |
+| A package-owned custom endpoint          | `domain({ routes: [route.get(...)] })`          | Yes, by package compilation        |
+| A low-level plugin-controlled route      | raw `SlingshotPlugin` + router/app mounting     | No, plugin lifecycle mounts it     |
+
+The important distinction is that `createRoute(...)` defines the route contract, but something else still needs to own registration:
+
+- a discovered route module via `routesDir`
+- a router you mounted manually
+- a package/domain compiler
+- a plugin lifecycle hook
+
+## `createRoute(...)` vs `route.get(...)`
+
+These are not the same layer.
+
+- `createRoute(...)` is a lower-level OpenAPI route definition helper
+- `route.get(...)`, `route.post(...)`, and friends are package-authoring declarations compiled and mounted by the framework
+
+`createRoute(...)` does not auto-register itself just because you called it. It still needs to be mounted through the router/app layer.
+
+By contrast:
+
+- entity operations are auto-mounted through the entity shell
+- package `domain(...).routes` entries are auto-mounted through package compilation
+
+## File-based routes with `routesDir`
+
+If you use `routesDir`, route modules are auto-discovered and mounted by the framework.
+
+That means this is auto-registered:
+
+```typescript
+import { z } from 'zod';
+import { createRoute, createRouter } from '@lastshotlabs/slingshot';
+
+const router = createRouter();
+
+const summaryRoute = createRoute({
+  method: 'get',
+  path: '/summary',
+  responses: {
+    200: {
+      description: 'Summary payload',
+      content: {
+        'application/json': {
+          schema: z.object({
+            ok: z.boolean(),
+          }),
+        },
+      },
+    },
+  },
+});
+
+router.openapi(summaryRoute, async c => {
+  return c.json({ ok: true });
+});
+
+export { router };
+```
+
+Why it is auto-registered:
+
+- the file lives under `routesDir`
+- the framework imports the module
+- it finds the exported `router`
+- it mounts that router on the app
+
+So the auto-registration belongs to the route module discovery system, not to `createRoute(...)` alone.
+
+## Entity routes
+
+Entity routes are the default.
+
+They come from:
+
+- generated CRUD handlers
+- named operations declared with `defineOperations(...)`
+- entity `extraRoutes`
+- generated route `overrides`
+
+Use entity routes when the endpoint maps to one entity and its adapter behavior.
+
+## Package domain routes
+
+Package domain routes are for custom endpoints that do not belong to a single entity.
+
+They are declared inside the package, under `domain(...)`:
+
+```typescript
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+export const notesPackage = definePackage({
+  name: 'notes',
+  domains: [
+    domain({
+      name: 'analytics',
+      basePath: '/analytics',
+      services: {},
+      routes: [
+        route.get({
+          path: '/summary',
+          async handler(ctx) {
+            return ctx.respond.json({ packageName: ctx.packageName });
+          },
+        }),
+      ] as const,
+    }),
+  ],
+});
+```
+
+So yes: `route.get(...)` lives inside package creation, but specifically inside a domain module owned by that package.
+
+This route form is auto-registered without `routesDir` because the package compiler owns the full route lifecycle.
+
+When a package domain route needs entity data, use the exported entity module as the lookup key:
+
+```typescript
+import { NoteEntity } from './packageEntities';
+
+route.get({
+  path: '/summary',
+  async handler(ctx) {
+    const notes = ctx.entities.get(NoteEntity);
+    const result = await notes.list({});
+    return ctx.respond.json({ count: result.items.length });
+  },
+});
+```
+
+If the entity belongs to another package, use `entityRef(...)` to make that dependency explicit.
+
+## When to choose which
+
+Choose `entity(...)` when:
+
+- the route reads or mutates one entity
+- the route should participate in the managed CRUD/operation shell
+- auth, permission, policy, or event semantics are entity-centric
+
+Choose `domain(...)` when:
+
+- the route is reporting, orchestration, or aggregation
+- the route spans multiple entities
+- the route is a custom webhook or package-specific endpoint
+- the route is not a natural CRUD or named-operation route
+
+## Typed request and response metadata
+
+Package domain routes can carry explicit request and response schemas:
+
+```typescript
+import { z } from 'zod';
+import { domain, route } from '@lastshotlabs/slingshot';
+
+const summaryBody = z.object({
+  noteId: z.string(),
+});
+
+domain({
+  name: 'analytics',
+  services: {},
+  routes: [
+    route.post({
+      path: '/summary',
+      request: {
+        body: summaryBody,
+      },
+      responses: {
+        200: {
+          description: 'Summary payload',
+          schema: z.object({
+            summary: z.string(),
+          }),
+        },
+      },
+      async handler(ctx) {
+        return ctx.respond.json({ summary: 'summary queued' });
+      },
+    }),
+  ] as const,
+});
+```
+
+That drives:
+
+- runtime validation
+- inferred handler input types
+- OpenAPI metadata
+
+## Route middleware, auth, and idempotency
+
+Package domain routes support the same major framework concerns as entity routes:
+
+- `auth`
+- `permission`
+- `rateLimit`
+- `idempotency`
+- `event`
+- named `middleware`
+
+Those concerns are compiled into the framework-owned route shell so package domain routes do not drift into a separate ad hoc stack.
+
+## Entity-shell customization
+
+If a route still belongs to one entity but needs customization, use:
+
+- `extraRoutes` to add custom entity-local endpoints
+- `overrides` to replace generated executor behavior
+
+That preserves entity semantics and route ownership, but it is not the default recommendation ahead of package domain routes. Reach for it when the route still clearly belongs to that entity shell.
+
+## Escape hatches
+
+If you need complete lifecycle control or a route system outside the package/entity shells, use a raw `SlingshotPlugin`.
+
+If you need app-level file-based routes, use `routesDir` with `createRoute(...)` and `router.openapi(...)`.
+
+If you need raw Hono middleware or router behavior, mount that directly through the lower-level router/plugin path.
+
+Those are all escape hatches, not the default path.
+
+## Recommended default
+
+For most teams:
+
+- use `routesDir` + `createRoute(...)` for app-local file-based routes
+- use `entity(...)` for entity-backed package features
+- use `domain(...).routes` for package-owned custom endpoints
+- use raw plugins only when you need lower-level lifecycle control
+
+## See also
+
+- [Entities](/slingshot/config-driven/entities/)
+- [Auth, Policies, and Middleware](/slingshot/config-driven/auth-and-middleware/)
+- [Packages and Capabilities](/slingshot/config-driven/packages/)
+- [Escape Hatches](/slingshot/config-driven/escape-hatches/)

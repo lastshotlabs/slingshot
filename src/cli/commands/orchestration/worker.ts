@@ -57,6 +57,9 @@ export default class OrchestrationWorker extends Command {
     this.log(`[slingshot] workflow queue: ${plan.workflowTaskQueue}`);
     this.log(`[slingshot] activity queues: ${plan.activityTaskQueues.join(', ')}`);
     this.log(`[slingshot] buildId: ${plan.buildId}`);
-    await plan.worker!.run();
+    if (!plan.worker) {
+      this.error('Temporal worker plan did not include a worker instance.');
+    }
+    await plan.worker.run();
   }
 }

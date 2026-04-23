@@ -5,7 +5,12 @@ description: Add new routes, middleware, and event handling to a Slingshot app u
 
 import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
 
-Plugins extend Slingshot with your own routes, state, and event behavior. Use them when you need something outside an entity definition — custom middleware, cross-plugin coordination, external integrations. The example below builds a product catalog plugin from scratch.
+Plugins extend Slingshot with your own routes, state, and event behavior. They are now the
+advanced/escape-hatch authoring surface. For standard code-first packages, prefer
+`definePackage(...)`, `entity(...)`, `domain(...)`, and typed capabilities first. Use a raw plugin
+when you need framework-lifecycle control, external integration bootstrapping, or behavior that
+does not fit the package/domain/entity shell. The example below builds a product catalog plugin
+from scratch.
 
 ## What you're building
 
@@ -69,7 +74,7 @@ export type ProductStore = ReturnType<typeof createProductStore>;
 The router receives the store and registry-backed event publisher — no globals, no imports from outer scope:
 
 ```typescript title="src/plugins/catalog/router.ts"
-import { createRoute, createRouter, errorResponse } from '@lastshotlabs/slingshot-core';
+import { createRoute, createRouter, errorResponse, getActorId } from '@lastshotlabs/slingshot-core';
 import type { SlingshotEvents } from '@lastshotlabs/slingshot-core';
 import type { Product, ProductStore } from './store';
 
@@ -164,7 +169,7 @@ export function createCatalogRouter(store: ProductStore, events: SlingshotEvents
       },
     }),
     async c => {
-      const userId = c.get('authUserId');
+      const userId = getActorId(c);
       if (!userId) return errorResponse(c, 'Unauthorized', 401);
 
       const body = (await c.req.json()) as { name: string; price: number };
@@ -187,10 +192,10 @@ export function createCatalogRouter(store: ProductStore, events: SlingshotEvents
 
 ## Step 3: Implement the plugin lifecycle
 
-A plugin runs in four phases. `setupMiddleware` fires first (before tenant middleware). `setupRoutes` fires after tenant middleware — handlers can read `tenantId` and other context values. `setupPost` fires last, after all routes register — use it for subscriptions and other true post-assembly work. `pluginState` is not a `setupPost`-only concept: publish it in the earliest phase where the state is actually canonical.
+A plugin runs in four phases. `setupMiddleware` fires first (before tenant middleware). `setupRoutes` fires after tenant middleware — handlers can read the resolved `actor` and other request context values. `setupPost` fires last, after all routes register — use it for subscriptions and other true post-assembly work. `pluginState` is not a `setupPost`-only concept: publish it in the earliest phase where the state is actually canonical.
 
 ```typescript title="src/plugins/catalog/index.ts"
-import { defineEvent, getContext, type SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { type SlingshotPlugin, defineEvent, getContext } from '@lastshotlabs/slingshot-core';
 import { createCatalogRouter } from './router';
 import { createProductStore } from './store';
 
@@ -207,13 +212,16 @@ export function createCatalogPlugin(): SlingshotPlugin {
         defineEvent('entity:products.created', {
           ownerPlugin: 'catalog',
           exposure: ['client-safe'],
-          resolveScope: (_payload, ctx) => ({ userId: ctx.userId ?? null, actorId: ctx.actorId ?? null }),
+          resolveScope: (_payload, ctx) => ({
+            userId: ctx.userId ?? null,
+            actorId: ctx.actorId ?? null,
+          }),
         }),
       );
     },
 
     async setupRoutes({ app, events }) {
-      // Routes are mounted after tenant middleware — they get tenantId on context
+      // Routes are mounted after tenant middleware — they get the resolved actor on context
       const ctx = getContext(app);
       ctx.pluginState.set('catalog', { store });
 

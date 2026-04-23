@@ -1,4 +1,12 @@
-export type { FieldType, FieldDef, FieldOptions, AutoDefault } from './fields';
+export type {
+  AutoDefault,
+  FieldDef,
+  FieldOptions,
+  FieldType,
+  ResolveDflt,
+  ResolveOpt,
+  ResolveUpd,
+} from './fields';
 
 export type {
   IndexDef,

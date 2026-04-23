@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
@@ -26,8 +28,10 @@ const VALID_STATUSES = new Set<RunStatus>([
   'skipped',
 ]);
 
-function defaultRequestContext(): OrchestrationRequestContext {
-  return {};
+function defaultRequestContext(c: Context<AppEnv>): OrchestrationRequestContext {
+  return {
+    tenantId: getActorTenantId(c) ?? undefined,
+  };
 }
 
 function defaultAuthorizeRun({
@@ -134,7 +138,7 @@ function parseListRunsQuery(url: URL, tenantId?: string): RunFilter {
 }
 
 async function resolveRequestContext(
-  c: Context,
+  c: Context<AppEnv>,
   resolver: OrchestrationRequestContextResolver | undefined,
 ): Promise<OrchestrationRequestContext> {
   const resolved = (await (resolver ?? defaultRequestContext)(c)) ?? {};
@@ -152,7 +156,7 @@ async function resolveRequestContext(
   };
 }
 
-function buildRunLink(c: Context, runId: string): string {
+function buildRunLink(c: Context<AppEnv>, runId: string): string {
   const url = new URL(c.req.url);
   url.pathname = url.pathname.replace(
     /\/(?:tasks|workflows)\/[^/]+\/runs$/,
@@ -163,7 +167,7 @@ function buildRunLink(c: Context, runId: string): string {
 }
 
 async function canAccessRun(
-  c: Context,
+  c: Context<AppEnv>,
   run: Run | WorkflowRun,
   requestContext: OrchestrationRequestContext,
   action: 'read' | 'cancel' | 'signal' | 'list',
@@ -182,7 +186,7 @@ async function canAccessRun(
 }
 
 async function listAuthorizedRuns(
-  c: Context,
+  c: Context<AppEnv>,
   runtime: OrchestrationRuntime,
   filter: RunFilter,
   requestContext: OrchestrationRequestContext,
@@ -265,7 +269,7 @@ export function createOrchestrationRouter(options: {
   resolveRequestContext?: OrchestrationRequestContextResolver;
   authorizeRun?: OrchestrationRunAuthorizer;
 }) {
-  const router = new Hono();
+  const router = new Hono<AppEnv>();
   if ((options.routeMiddleware ?? []).length > 0) {
     router.use('*', ...(options.routeMiddleware ?? []));
   }

@@ -235,6 +235,7 @@ export {
   defineEntityExecutor,
   defineEntityRoute,
   evaluateRouteAuth,
+  getUserAuthAccountGuardFailure,
   normalizeEntityRouteShape,
   planEntityRoutes,
   scoreEntityRouteSpecificity,
@@ -245,6 +246,7 @@ export type {
   RouteAuthResult,
   BareEntityAdapter,
   EntityExtraRoute,
+  EntityRouteExecutorDefinition,
   EntityGeneratedRouteKey,
   EntityRouteExecutionContext,
   EntityRouteExecutor,
@@ -253,6 +255,17 @@ export type {
   EntityRouteExecutorOverrides,
   PlannedEntityRoute,
 } from './routing';
+/** Package-first entity authoring builder and standard/custom wiring contracts. */
+export { entity } from './packageAuthoring';
+export type {
+  EntityModuleWiring,
+  FactoriesEntityModuleWiring,
+  ManualEntityModuleWiring,
+  PackageEntityAdapterFor,
+  PackageEntityModule,
+  PackageEntityModuleImplementation,
+  StandardEntityModuleWiring,
+} from './packageAuthoring';
 
 // Policy hooks
 /** Register and resolve entity policy hooks used by config-driven permission dispatch. */
@@ -261,7 +274,7 @@ export {
   getEntityPolicyResolver,
   freezeEntityPolicyRegistry,
 } from './policy';
-export { resolvePolicy, policyAppliesToOp, buildPolicyAction } from './policy';
+export { resolvePolicy, policyAppliesToOp, buildPolicyAction, safeReadJsonBody } from './policy';
 export { definePolicyDispatch } from './policy';
 /** Entity policy resolution and dispatch contracts used by permission-aware routes. */
 export type { ResolvePolicyArgs, PolicyDispatchConfig } from './policy';

@@ -216,7 +216,9 @@ describe('createSqliteIdempotencyAdapter', () => {
       body      TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
       expiresAt INTEGER NOT NULL,
-      requestFingerprint TEXT
+      requestFingerprint TEXT,
+      responseHeaders TEXT,
+      responseEncoding TEXT
     )`,
     );
     const adapter = createSqliteIdempotencyAdapter(db as never);
@@ -357,7 +359,7 @@ describe('createPostgresIdempotencyAdapter', () => {
   test('rolls back failed bootstrap work and retries', async () => {
     const pool = makePgPool();
     pool.failOn(
-      'CREATE TABLE IF NOT EXISTS slingshot_idempotency ( key TEXT PRIMARY KEY, status INTEGER NOT NULL, body TEXT NOT NULL, created_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, request_fingerprint TEXT )',
+      'CREATE TABLE IF NOT EXISTS slingshot_idempotency ( key TEXT PRIMARY KEY, status INTEGER NOT NULL, body TEXT NOT NULL, created_at BIGINT NOT NULL, expires_at BIGINT NOT NULL, request_fingerprint TEXT, response_headers JSONB, response_encoding TEXT )',
     );
     const adapter = createPostgresIdempotencyAdapter(pool);
 

@@ -4,6 +4,9 @@ import type {
   ResolvedEntityConfig,
   RouteEventConfig,
   RouteOperationConfig,
+  TypedRouteContext,
+  TypedRouteRequestSpec,
+  TypedRouteResponses,
 } from '@lastshotlabs/slingshot-core';
 import { resolveOpConfig } from '@lastshotlabs/slingshot-core';
 import { entityToPath } from '../generators/routeHelpers';
@@ -18,26 +21,18 @@ export type EntityGeneratedRouteKey =
   | 'delete'
   | `operations.${string}`;
 
-export interface EntityRouteExecutionContext {
+export interface EntityRouteExecutionContext<
+  TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+> extends TypedRouteContext<TRequest> {
   request: import('hono').Context;
   entity: ResolvedEntityConfig;
   routeKey: string;
   generatedRouteKey?: EntityGeneratedRouteKey;
   entityAdapter: BareEntityAdapter;
-  params: Record<string, string>;
-  query: Record<string, unknown>;
-  body: Record<string, unknown> | null;
-  input: unknown;
-  requestContext: Record<string, unknown>;
   filter?: Record<string, unknown>;
   dataScopeBindings?: Record<string, unknown>;
   existingRecord?: unknown;
   getEntityAdapter(args: { plugin: string; entity: string }): BareEntityAdapter;
-  respond: {
-    json(data: unknown, status?: number): Response;
-    notFound(): Response;
-    noContent(): Response;
-  };
   setOpResult(opName: string, result: unknown): void;
 }
 
@@ -49,13 +44,29 @@ export interface EntityRouteExecutorBuilderContext {
   getEntityAdapter(args: { plugin: string; entity: string }): BareEntityAdapter;
 }
 
-export type EntityRouteExecutor = (ctx: EntityRouteExecutionContext) => Response | Promise<Response>;
+export type EntityRouteExecutor<
+  TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+> = (ctx: EntityRouteExecutionContext<TRequest>) => Response | Promise<Response>;
 
-export type EntityRouteExecutorBuilder = (
+export type EntityRouteExecutorBuilder<
+  TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+> = (
   ctx: EntityRouteExecutorBuilderContext,
-) => EntityRouteExecutor;
+) => EntityRouteExecutor<TRequest>;
 
-export interface EntityExtraRoute {
+export interface EntityRouteExecutorDefinition<
+  TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+> {
+  request?: TRequest;
+  responses?: TypedRouteResponses;
+  summary?: string;
+  description?: string;
+  build: EntityRouteExecutorBuilder<TRequest>;
+}
+
+export interface EntityExtraRoute<
+  TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+> {
   key?: string;
   method: Lowercase<NamedOpHttpMethod> | 'delete' | 'patch';
   path: string;
@@ -65,16 +76,19 @@ export interface EntityExtraRoute {
   middleware?: readonly string[];
   event?: RouteOperationConfig['event'];
   summary?: string;
-  buildExecutor: EntityRouteExecutorBuilder;
+  description?: string;
+  request?: TRequest;
+  responses?: TypedRouteResponses;
+  buildExecutor: EntityRouteExecutorBuilder<TRequest>;
 }
 
 export interface EntityRouteExecutorOverrides {
-  create?: EntityRouteExecutorBuilder;
-  list?: EntityRouteExecutorBuilder;
-  get?: EntityRouteExecutorBuilder;
-  update?: EntityRouteExecutorBuilder;
-  delete?: EntityRouteExecutorBuilder;
-  operations?: Record<string, EntityRouteExecutorBuilder>;
+  create?: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition;
+  list?: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition;
+  get?: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition;
+  update?: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition;
+  delete?: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition;
+  operations?: Record<string, EntityRouteExecutorBuilder | EntityRouteExecutorDefinition>;
 }
 
 export interface PlannedEntityRoute {
@@ -91,19 +105,41 @@ export interface PlannedEntityRoute {
   operationConfig?: OperationConfig;
   buildExecutor?: EntityRouteExecutorBuilder;
   summary?: string;
+  description?: string;
+  request?: TypedRouteRequestSpec;
+  responses?: TypedRouteResponses;
 }
 
-export function defineEntityRoute(route: EntityExtraRoute): EntityExtraRoute {
+export function defineEntityRoute<
+  const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+>(route: EntityExtraRoute<TRequest>): EntityExtraRoute<TRequest> {
   return Object.freeze({
     ...route,
     middleware: route.middleware ? Object.freeze([...route.middleware]) : undefined,
+    responses: route.responses ? Object.freeze({ ...route.responses }) : undefined,
   });
 }
 
 export function defineEntityExecutor(
   builder: EntityRouteExecutorBuilder,
-): EntityRouteExecutorBuilder {
-  return builder;
+): EntityRouteExecutorBuilder;
+export function defineEntityExecutor<
+  const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
+>(
+  definition: EntityRouteExecutorDefinition<TRequest>,
+): EntityRouteExecutorDefinition<TRequest>;
+export function defineEntityExecutor(
+  builderOrDefinition: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition,
+): EntityRouteExecutorBuilder | EntityRouteExecutorDefinition {
+  if (typeof builderOrDefinition === 'function') {
+    return builderOrDefinition;
+  }
+  return Object.freeze({
+    ...builderOrDefinition,
+    responses: builderOrDefinition.responses
+      ? Object.freeze({ ...builderOrDefinition.responses })
+      : undefined,
+  });
 }
 
 export function normalizeEntityRouteShape(path: string): string {
@@ -190,6 +226,7 @@ export function planEntityRoutes(
     if (routeDisabled(disabled, opName, method.toUpperCase(), fullPath)) {
       return;
     }
+    const override = resolveGeneratedOverride(options?.overrides, generatedRouteKey, opName);
     addRoute({
       kind: 'generated',
       routeKey: generatedRouteKey,
@@ -202,7 +239,11 @@ export function planEntityRoutes(
       specificity: scoreEntityRouteSpecificity(fullPath),
       routeConfig: entity.routes ? resolveOpConfig(entity.routes, opName) : undefined,
       operationConfig,
-      buildExecutor: resolveGeneratedOverride(options?.overrides, generatedRouteKey, opName),
+      buildExecutor: getEntityExecutorBuilder(override),
+      summary: getEntityExecutorSummary(override),
+      description: getEntityExecutorDescription(override),
+      request: getEntityExecutorRequest(override),
+      responses: getEntityExecutorResponses(override),
     });
   };
 
@@ -244,6 +285,9 @@ export function planEntityRoutes(
       routeConfig: buildExtraRouteConfig(extraRoute),
       buildExecutor: extraRoute.buildExecutor,
       summary: extraRoute.summary,
+      description: extraRoute.description,
+      request: extraRoute.request,
+      responses: extraRoute.responses,
     });
   }
 
@@ -272,7 +316,7 @@ function resolveGeneratedOverride(
   overrides: EntityRouteExecutorOverrides | undefined,
   routeKey: EntityGeneratedRouteKey,
   opName: string,
-): EntityRouteExecutorBuilder | undefined {
+): EntityRouteExecutorBuilder | EntityRouteExecutorDefinition | undefined {
   switch (routeKey) {
     case 'create':
       return overrides?.create;
@@ -287,6 +331,37 @@ function resolveGeneratedOverride(
     default:
       return overrides?.operations?.[opName];
   }
+}
+
+function getEntityExecutorBuilder(
+  override: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition | undefined,
+): EntityRouteExecutorBuilder | undefined {
+  if (!override) return undefined;
+  return typeof override === 'function' ? override : override.build;
+}
+
+function getEntityExecutorSummary(
+  override: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition | undefined,
+): string | undefined {
+  return typeof override === 'object' ? override.summary : undefined;
+}
+
+function getEntityExecutorDescription(
+  override: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition | undefined,
+): string | undefined {
+  return typeof override === 'object' ? override.description : undefined;
+}
+
+function getEntityExecutorRequest(
+  override: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition | undefined,
+): TypedRouteRequestSpec | undefined {
+  return typeof override === 'object' ? override.request : undefined;
+}
+
+function getEntityExecutorResponses(
+  override: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition | undefined,
+): TypedRouteResponses | undefined {
+  return typeof override === 'object' ? override.responses : undefined;
 }
 
 function normalizeRoutePath(path: string): string {

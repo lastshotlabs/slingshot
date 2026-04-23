@@ -1,22 +1,33 @@
 /**
  * field.*() builder API for entity field definitions.
  */
-import type { FieldDef, FieldOptions, FieldType } from '../types';
+import type {
+  FieldDef,
+  FieldOptions,
+  FieldType,
+  ResolveDflt,
+  ResolveOpt,
+  ResolveUpd,
+} from '../types';
 
-function makeField<T extends FieldType, EV extends readonly string[] = readonly string[]>(
+function makeField<
+  T extends FieldType,
+  O extends FieldOptions | undefined,
+  EV extends readonly string[] = readonly string[],
+>(
   type: T,
-  opts: FieldOptions = {},
+  opts?: O,
   enumValues?: EV,
-): FieldDef<T, EV> {
-  const result: FieldDef<T, EV> = {
+): FieldDef<T, ResolveOpt<O>, ResolveDflt<O>, ResolveUpd<O>, EV> {
+  const result: FieldDef<T, ResolveOpt<O>, ResolveDflt<O>, ResolveUpd<O>, EV> = {
     type,
-    optional: opts.optional ?? false,
-    primary: opts.primary ?? false,
-    immutable: opts.immutable ?? opts.primary ?? false,
-    format: opts.format,
-    default: opts.default,
-    onUpdate: opts.onUpdate,
-    enumValues: enumValues,
+    optional: (opts?.optional ?? false) as ResolveOpt<O>,
+    primary: opts?.primary ?? false,
+    immutable: opts?.immutable ?? opts?.primary ?? false,
+    format: opts?.format,
+    default: opts?.default as ResolveDflt<O>,
+    onUpdate: opts?.onUpdate as ResolveUpd<O>,
+    enumValues,
   };
   return result;
 }
@@ -69,7 +80,7 @@ export const field = {
    * field.string({ format: 'email' })                 // validated email address
    * ```
    */
-  string: (opts?: FieldOptions) => makeField('string', opts),
+  string: <const O extends FieldOptions | undefined = undefined>(opts?: O) => makeField('string', opts),
 
   /**
    * A floating-point number field.
@@ -85,7 +96,7 @@ export const field = {
    * field.number({ default: 0.0 })
    * ```
    */
-  number: (opts?: FieldOptions) => makeField('number', opts),
+  number: <const O extends FieldOptions | undefined = undefined>(opts?: O) => makeField('number', opts),
 
   /**
    * A whole-number (integer) field.
@@ -102,7 +113,8 @@ export const field = {
    * field.integer({ default: 0 })
    * ```
    */
-  integer: (opts?: FieldOptions) => makeField('integer', opts),
+  integer: <const O extends FieldOptions | undefined = undefined>(opts?: O) =>
+    makeField('integer', opts),
 
   /**
    * A boolean field.
@@ -118,7 +130,8 @@ export const field = {
    * field.boolean({ default: true })
    * ```
    */
-  boolean: (opts?: FieldOptions) => makeField('boolean', opts),
+  boolean: <const O extends FieldOptions | undefined = undefined>(opts?: O) =>
+    makeField('boolean', opts),
 
   /**
    * A date/timestamp field.
@@ -136,7 +149,7 @@ export const field = {
    * field.date({ default: 'now', onUpdate: 'now' }) // updated_at
    * ```
    */
-  date: (opts?: FieldOptions) => makeField('date', opts),
+  date: <const O extends FieldOptions | undefined = undefined>(opts?: O) => makeField('date', opts),
 
   /**
    * An enumerated string field.
@@ -154,7 +167,10 @@ export const field = {
    * field.enum(['draft', 'published', 'archived'] as const)
    * ```
    */
-  enum: <const V extends readonly string[]>(values: V, opts?: FieldOptions) =>
+  enum: <const V extends readonly string[], const O extends FieldOptions | undefined = undefined>(
+    values: V,
+    opts?: O,
+  ) =>
     makeField('enum', opts, values),
 
   /**
@@ -171,7 +187,7 @@ export const field = {
    * field.json({ optional: true }) // metadata?: unknown
    * ```
    */
-  json: (opts?: FieldOptions) => makeField('json', opts),
+  json: <const O extends FieldOptions | undefined = undefined>(opts?: O) => makeField('json', opts),
 
   /**
    * An array-of-strings field.
@@ -188,5 +204,6 @@ export const field = {
    * field.stringArray({ optional: true }) // tags?: string[]
    * ```
    */
-  stringArray: (opts?: FieldOptions) => makeField('string[]', opts),
+  stringArray: <const O extends FieldOptions | undefined = undefined>(opts?: O) =>
+    makeField('string[]', opts),
 } as const;

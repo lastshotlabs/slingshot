@@ -1,189 +1,94 @@
 ---
 title: Config-Driven Overview
-description: Entities and operations are JSON. Declare your domain as data — Slingshot generates routes, adapters, and infrastructure from those declarations.
+description: Build Slingshot apps with package-first entity, route, capability, and policy authoring.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+The primary Slingshot authoring path is now package-first and code-first.
 
-The config-driven system is built on one idea: **your domain model is data, not code**. Entities, operations, permissions, events, and infrastructure are all plain JSON-shaped objects. The framework reads those objects and generates everything else — routes, backend adapters, validation schemas, and deployment configs.
+You define:
 
-This is the path to low-code and no-code. Once your domain lives in a manifest, tools — visual editors, AI assistants, CLI scaffolders — can read, modify, and generate it without touching TypeScript. That's the direction.
+- entities with `defineEntity(...)`
+- domain behavior with `defineOperations(...)`
+- package composition with `definePackage(...)`
+- package-owned custom endpoints with `domain(...)` and `route.*(...)`
 
----
+From those declarations, Slingshot derives adapters, routes, validation, OpenAPI, and runtime wiring without forcing you down to raw plugins or ad hoc router glue.
 
-## Everything is a JSON object
+## Authoring map
 
-An entity definition is a plain object. An operation config is a plain object with a `kind` field. The TypeScript builder functions (`defineEntity()`, `op.lookup()`) just stamp a discriminant onto the config and freeze it — what they return is pure JSON-serializable data:
+The package-first authoring surface is split by concern:
 
-```json
-{
-  "name": "Message",
-  "namespace": "chat",
-  "fields": {
-    "id": { "type": "string", "primary": true, "default": "uuid" },
-    "roomId": { "type": "string" },
-    "body": { "type": "string" },
-    "status": { "type": "enum", "values": ["sent", "delivered", "read"], "default": "sent" },
-    "createdAt": { "type": "date", "default": "now" }
-  },
-  "indexes": [["roomId", "createdAt"]],
-  "operations": {
-    "byRoom": {
-      "kind": "lookup",
-      "fields": { "roomId": "param:roomId" },
-      "returns": "many"
-    },
-    "markDelivered": {
-      "kind": "transition",
-      "field": "status",
-      "from": "sent",
-      "to": "delivered",
-      "match": { "id": "param:id" }
-    },
-    "roomCount": {
-      "kind": "aggregate",
-      "groupBy": "roomId",
-      "compute": { "total": "count" }
-    },
-    "addTag": {
-      "kind": "arrayPush",
-      "field": "tags",
-      "value": "input:tag"
-    }
-  }
-}
-```
+- [Packages and Capabilities](/slingshot/config-driven/packages/) — `definePackage(...)`, `domain(...)`, `route.*(...)`, and typed capabilities
+- [Entities](/slingshot/config-driven/entities/) — `defineEntity(...)`, `entity(...)`, fields, indexes, generated CRUD, and path ownership
+- [Routes](/slingshot/config-driven/routes/) — when routes come from entities, when they live in package domains, and how typed request/response metadata works
+- [Cross-Entity and Transactions](/slingshot/config-driven/cross-entity/) — orchestration, reporting, transactions, and where cross-entity logic belongs
+- [Adapters and Factories](/slingshot/config-driven/adapters/) — standard wiring, custom factories, manual adapters, Drizzle/raw SQL integration, and persistence escape hatches
+- [Auth, Policies, and Middleware](/slingshot/config-driven/auth-and-middleware/) — actor-first auth, permissions, policies, and package middleware
+- [Escape Hatches](/slingshot/config-driven/escape-hatches/) — raw Hono, raw plugins, custom middleware, manual adapters, and lower-level integration points
+- [Operations Reference](/slingshot/config-driven/operations/) — the built-in operation DSL
+- [Workflow](/slingshot/config-driven/workflow/) — the end-to-end build/test/docs loop
 
-From that object, the framework generates:
+## The default stack
 
-- **Five backend adapters** — memory, SQLite, Postgres, MongoDB, Redis — all wired automatically
-- **HTTP routes** — one per operation, mounted via `createEntityPlugin()`
-- **Zod schemas** — input validation and OpenAPI specs
-- **Typed adapter methods** — `adapter.byRoom(...)`, `adapter.markDelivered(...)`, etc.
+For most teams, the intended path is:
 
-No adapter files. No route files. No event wiring. The data is the source of truth.
+1. Define entities with `defineEntity(...)`
+2. Define domain behavior with `defineOperations(...)`
+3. Mount them in packages with `entity(...)`
+4. Add package-owned custom endpoints with `domain({ routes: [...] })`
+5. Compose the app with `createApp({ packages })`
 
----
+That gives you a managed route shell, actor-first request identity, generated OpenAPI metadata, and a package boundary that stays coherent as the app grows.
 
-## Define entities in JSON
+## What gets generated
 
-The `entities` section in `app.manifest.json` lets you define your entire domain — fields, indexes, operations, route policies — without any TypeScript. `slingshot start` reads the manifest and the whole app runs:
+From those declarations, Slingshot can generate or assemble:
 
-```json title="app.manifest.json"
-{
-  "manifestVersion": 1,
-  "db": { "postgres": "${env:DATABASE_URL}" },
-  "plugins": [{ "plugin": "slingshot-auth" }],
-  "entities": {
-    "Message": {
-      "namespace": "chat",
-      "fields": {
-        "id": { "type": "string", "primary": true, "default": "uuid" },
-        "roomId": { "type": "string" },
-        "body": { "type": "string" },
-        "status": { "type": "enum", "values": ["sent", "delivered", "read"], "default": "sent" },
-        "createdAt": { "type": "date", "default": "now" }
-      },
-      "indexes": [{ "fields": ["roomId", "createdAt"], "direction": "desc" }],
-      "operations": {
-        "byRoom": {
-          "kind": "lookup",
-          "fields": { "roomId": "param:roomId" },
-          "returns": "many"
-        },
-        "markDelivered": {
-          "kind": "transition",
-          "field": "status",
-          "from": "sent",
-          "to": "delivered",
-          "match": { "id": "param:id" }
-        }
-      }
-    }
-  }
-}
-```
+- storage adapters
+- CRUD and operation-backed HTTP routes
+- route validation and OpenAPI metadata
+- policy, auth, middleware, and event wiring
+- typed package capability contracts
 
-A visual editor or AI tool can read this manifest, show the entity graph, add an operation, and write back valid JSON. No TypeScript, no compile step, no entry point file.
+The goal is not “everything is magic.” The goal is that the repetitive wiring is framework-owned and the domain decisions stay in one place.
 
----
+## Where escape hatches start
 
-## TypeScript builders: typed JSON authoring
+The config-driven stack is the default, not the only option.
 
-The TypeScript builder functions (`defineEntity()`, `op.*`) produce the same JSON-shaped objects the manifest accepts. They add IDE autocomplete, compile-time validation, and type inference for adapter methods over the identical data structure:
+When you need lower-level control, you can drop to:
 
-```typescript
-import { defineEntity, field, index } from '@lastshotlabs/slingshot';
-import { defineOperations, op } from '@lastshotlabs/slingshot';
+- `routesDir` + `createRoute(...)` + `router.openapi(...)`
+- custom factories or manual adapter wiring
+- raw SQL or Drizzle-backed repo code
+- package domain routes for orchestration or reporting
+- raw `SlingshotPlugin` lifecycle hooks
 
-// This produces the same JSON object shown above — just with TypeScript types
-const Message = defineEntity('Message', {
-  namespace: 'chat',
-  fields: {
-    id: field.string({ primary: true, default: 'uuid' }),
-    roomId: field.string(),
-    body: field.string(),
-    status: field.enum(['sent', 'delivered', 'read'] as const, { default: 'sent' }),
-    createdAt: field.date({ default: 'now' }),
-  },
-  indexes: [index(['roomId', 'createdAt'], { direction: 'desc' })],
-});
+Those escape hatches are documented explicitly in [Escape Hatches](/slingshot/config-driven/escape-hatches/).
 
-const MessageOps = defineOperations(Message, {
-  // op.lookup() returns: { kind: 'lookup', fields: {...}, returns: 'many' }
-  byRoom: op.lookup({ fields: { roomId: 'param:roomId' }, returns: 'many' }),
-  markDelivered: op.transition({
-    field: 'status',
-    from: 'sent',
-    to: 'delivered',
-    match: { id: 'param:id' },
-  }),
-  roomCount: op.aggregate({ groupBy: 'roomId', compute: { total: 'count' } }),
-  addTag: op.arrayPush({ field: 'tags', value: 'input:tag' }),
-});
-```
+## Manifest support
 
-The underlying data structure is identical to the JSON manifest form. Think of it as a strongly-typed JSON editor — use JSON in the manifest for zero-TypeScript apps, use the builders when you want compile-time guarantees or advanced IDE support.
+Manifest and JSON-backed authoring still exist, but they are no longer the primary mental model for this section.
 
----
+Use the manifest path when:
 
-## Infrastructure follows the same pattern
+- you are working with manifest-driven server bootstrap
+- you need a machine-editable declarative artifact
+- you are integrating with tooling that emits manifest config directly
 
-Infrastructure config is the same: plain JSON-shaped objects frozen at definition time.
+If you need that path, start here:
 
-```json title="Infra config as data"
-{
-  "stacks": ["main"],
-  "domain": "api",
-  "port": 3000,
-  "size": "medium",
-  "uses": ["db", "cache"],
-  "healthCheck": "/health"
-}
-```
-
-Today this is authored as TypeScript (`defineInfra()`, `definePlatform()`) with the same frozen-object approach. `slingshot deploy --stage prod` reads the config and generates Dockerfiles, cloud configs, CI workflows, and provisions real infrastructure. See [Config-Driven Infrastructure](/slingshot/config-driven/infra/).
-
----
-
-## The three config layers
-
-```
-entities + operations   → data model, routes, adapters, schemas
-                            (manifest entities section — today: TypeScript builders)
-
-slingshot.infra.ts        → how the app deploys (containers, scaling, domains)
-slingshot.platform.ts     → org infrastructure (databases, caches, secrets, registry)
-```
-
-All three layers are data. All three are consumed by the same CLI. All three are on a path toward full JSON manifest authoring.
-
----
+- [Manifest vs Code](/slingshot/manifest-vs-code/)
+- [Config-Driven Infrastructure](/slingshot/config-driven/infra/)
 
 ## Where to go next
 
-- [Operations Reference](/slingshot/config-driven/operations/) — every operation kind, its JSON config shape, and examples
-- [Config-Driven Walkthrough](/slingshot/config-driven-walkthrough/) — entity → operations → plugin → app, using the TypeScript builders
-- [Config-Driven Infrastructure](/slingshot/config-driven/infra/) — `definePlatform`, `defineInfra`, and the deploy pipeline
-- [Manifest vs Code](/slingshot/manifest-vs-code/) — current manifest capabilities and the handlers file pattern
-- [slingshot-entity](/slingshot/packages/slingshot-entity/) — `defineEntity`, `defineOperations`, `createEntityPlugin` API reference
+- [Packages and Capabilities](/slingshot/config-driven/packages/) — the top-level package composition surface
+- [Entities](/slingshot/config-driven/entities/) — entity structure, generated routes, and path ownership
+- [Routes](/slingshot/config-driven/routes/) — entity routes versus package-owned domain routes
+- [Cross-Entity and Transactions](/slingshot/config-driven/cross-entity/) — orchestration, reporting, and transaction-style behavior
+- [Adapters and Factories](/slingshot/config-driven/adapters/) — custom persistence and Drizzle/raw SQL integration
+- [Auth, Policies, and Middleware](/slingshot/config-driven/auth-and-middleware/) — actor-first auth and package middleware wiring
+- [Escape Hatches](/slingshot/config-driven/escape-hatches/) — raw Hono, manual adapters, and raw plugin integration
+- [Operations Reference](/slingshot/config-driven/operations/) — every operation kind, its config shape, and examples
+- [Config-Driven Walkthrough](/slingshot/config-driven-walkthrough/) — entity -> operations -> package -> app, using the TypeScript builders

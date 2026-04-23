@@ -1,0 +1,100 @@
+---
+title: Auth, Policies, and Middleware
+description: Apply actor-first auth, permission, policy, and middleware behavior across entity and package routes.
+---
+
+The public auth model is actor-first.
+
+That means route handlers and config-driven bindings should treat `actor` as canonical:
+
+- `actor.id`
+- `actor.tenantId`
+- `actor.kind`
+- `actor.claims.*`
+
+Legacy aliases like `authUserId` and `tenantId` still exist for compatibility in some bindings, but they are not the documented authoring model.
+
+## Entity route auth
+
+Entity route config supports:
+
+- `auth`
+- `permission`
+- `rateLimit`
+- `event`
+- `dataScope`
+- policy-aware permission dispatch
+
+Example:
+
+```json
+{
+  "routes": {
+    "defaults": { "auth": "userAuth" },
+    "dataScope": { "field": "authorId", "from": "ctx:actor.id" }
+  }
+}
+```
+
+## Package domain route auth
+
+Package domain routes support the same major route concerns:
+
+```typescript
+route.post({
+  path: '/summary',
+  auth: 'userAuth',
+  permission: { action: 'notes:read' },
+  rateLimit: { limit: 20, windowMs: 60000 },
+  idempotency: true,
+  middleware: ['banCheck'],
+  async handler(ctx) {
+    return ctx.respond.json({ actorId: ctx.actor.id });
+  },
+});
+```
+
+## Permission-aware entity references
+
+When a package domain route needs entity-aware permission or parent checks, use:
+
+- `permissionAdapter`
+- `parentAdapter`
+
+Those references tell the framework which entity adapter should back the permission check rather than forcing the route into a custom plugin shell.
+
+## Middleware
+
+Package middleware is declared on the package:
+
+```typescript
+definePackage({
+  middleware: {
+    banCheck: createBanCheckMiddleware(),
+  },
+});
+```
+
+Then referenced by name from entity or domain route config:
+
+```typescript
+route.get({
+  path: '/summary',
+  middleware: ['banCheck'],
+  async handler(ctx) {
+    return ctx.respond.json({ ok: true });
+  },
+});
+```
+
+## Policies
+
+When permission logic needs request-aware policy evaluation, register entity policies and reference them from route config.
+
+That keeps auth, policy, and routing in the managed route shell rather than scattering custom checks through ad hoc handlers.
+
+## See also
+
+- [Routes](/slingshot/config-driven/routes/)
+- [Packages and Capabilities](/slingshot/config-driven/packages/)
+- [Config-Driven Walkthrough](/slingshot/config-driven-walkthrough/)

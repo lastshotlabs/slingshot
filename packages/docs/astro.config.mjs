@@ -57,6 +57,13 @@ export default defineConfig({
           label: 'Config-Driven',
           items: [
             { label: 'Overview', slug: 'config-driven' },
+            { label: 'Packages and Capabilities', slug: 'config-driven/packages' },
+            { label: 'Entities', slug: 'config-driven/entities' },
+            { label: 'Routes', slug: 'config-driven/routes' },
+            { label: 'Cross-Entity and Transactions', slug: 'config-driven/cross-entity' },
+            { label: 'Adapters and Factories', slug: 'config-driven/adapters' },
+            { label: 'Auth, Policies, and Middleware', slug: 'config-driven/auth-and-middleware' },
+            { label: 'Escape Hatches', slug: 'config-driven/escape-hatches' },
             { label: 'Workflow', slug: 'config-driven/workflow' },
             { label: 'Operations Reference', slug: 'config-driven/operations' },
             { label: 'Infrastructure', slug: 'config-driven/infra' },

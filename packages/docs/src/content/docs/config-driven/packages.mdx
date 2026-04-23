@@ -1,0 +1,293 @@
+---
+title: Packages and Capabilities
+description: Define package boundaries, package-owned routes, and typed capabilities for config-driven Slingshot apps.
+---
+
+Package-first authoring is the default code-first composition model in Slingshot.
+
+The canonical package lookup model is:
+
+- export package-owned entity modules like `const NoteEntity = entity({ ... })`
+- use `ctx.entities.get(NoteEntity)` inside package domain routes
+- use `entityRef(NoteEntity, { plugin: 'notes' })` only when another package needs that entity
+- keep string entity lookup as an escape hatch, not the default
+
+`definePackage(...)` is where you assemble:
+
+- entity modules declared with `entity(...)`
+- package-owned route groups declared with `domain(...)`
+- named middleware shared by those routes
+- typed capabilities published to or required from other packages
+
+## The package shape
+
+```typescript title="notes-package.ts"
+import {
+  defineCapability,
+  defineEntity,
+  defineOperations,
+  definePackage,
+  domain,
+  entityRef,
+  field,
+  index,
+  op,
+  provideCapability,
+  route,
+} from '@lastshotlabs/slingshot';
+import { entity } from '@lastshotlabs/slingshot';
+
+const notesApi = defineCapability<{ summarize(noteId: string): Promise<string> }>('notes.api');
+
+const Note = defineEntity('Note', {
+  namespace: 'community',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    authorId: field.string(),
+    status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  indexes: [index(['authorId', 'createdAt'], { direction: 'desc' })],
+});
+
+const NoteOps = defineOperations(Note, {
+  byAuthor: op.lookup({
+    fields: { authorId: 'param:authorId' },
+    returns: 'many',
+  }),
+});
+
+export const NoteEntity = entity({
+  config: Note,
+  operations: NoteOps,
+});
+
+export const notesPackage = definePackage({
+  name: 'notes',
+  mountPath: '/community',
+  entities: [NoteEntity],
+  domains: [
+    domain({
+      name: 'analytics',
+      basePath: '/analytics',
+      routes: [
+        route.get({
+          path: '/summary',
+          request: {
+            query: z.object({
+              authorId: z.string(),
+            }),
+          },
+          async handler(ctx) {
+            const notes = ctx.entities.get(NoteEntity);
+            const result = await notes.byAuthor({ authorId: ctx.query.authorId });
+            return ctx.respond.json({
+              packageName: ctx.packageName,
+              count: result.items.length,
+            });
+          },
+        }),
+      ],
+    }),
+  ],
+  capabilities: {
+    provides: [
+      provideCapability(notesApi, () => ({
+        summarize: async noteId => `summary for ${noteId}`,
+      })),
+    ],
+  },
+});
+```
+
+## Canonical entity access in package routes
+
+Inside a package-owned `domain(...)` route, the default path is typed entity modules:
+
+```typescript
+import { domain, route } from '@lastshotlabs/slingshot';
+import { NoteEntity } from './note-package';
+
+domain({
+  name: 'analytics',
+  routes: [
+    route.get({
+      path: '/summary',
+      async handler(ctx) {
+        const notes = ctx.entities.get(NoteEntity);
+        const result = await notes.list({});
+        return ctx.respond.json({ count: result.items.length });
+      },
+    }),
+  ],
+});
+```
+
+That is the intended DX:
+
+- no stringly-typed entity names
+- no `BareEntityAdapter` casts
+- no `as any`
+- entity-specific adapter methods and record shapes flow through IntelliSense
+
+## Cross-package entity access
+
+When one package needs another package's entity adapter, make that dependency explicit:
+
+```typescript
+import { entityRef, route } from '@lastshotlabs/slingshot';
+import { NoteEntity } from '../notes/package';
+
+route.get({
+  path: '/notes',
+  async handler(ctx) {
+    const notes = ctx.entities.get(entityRef(NoteEntity, { plugin: 'notes' }));
+    const result = await notes.list({});
+    return ctx.respond.json({ count: result.items.length });
+  },
+});
+```
+
+Use cross-package entity refs when the dependency is fundamentally on entity data. Use capabilities when the dependency is on a service contract.
+
+## Yes: package-owned raw routes live inside the package
+
+The `route.get(...)` / `route.post(...)` APIs are for package-owned non-entity routes.
+
+They do live inside `definePackage(...)`, under a `domain(...)` module:
+
+```typescript
+definePackage({
+  domains: [
+    domain({
+      name: 'analytics',
+      basePath: '/analytics',
+      routes: [
+        route.get({
+          path: '/summary',
+          async handler(ctx) {
+            return ctx.respond.json({ packageName: ctx.packageName });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+That is intentional:
+
+- `entity(...)` owns standard CRUD and operation-backed routes
+- `domain(...)` owns package-level custom endpoints that do not map cleanly to one entity
+- raw plugins are the escape hatch when you need lower-level lifecycle control
+
+If a route is fundamentally "about one entity", prefer the entity shell first. If it is orchestration, reporting, cross-entity coordination, custom webhooks, or a package-specific endpoint, put it in a package domain.
+
+## Typed capabilities
+
+Capabilities replace loose adapter bags with named typed contracts.
+
+```typescript
+const notesSearch = defineCapability<{ indexNote(noteId: string): Promise<void> }>('notes.search');
+
+export const notesPackage = definePackage({
+  name: 'notes',
+  capabilities: {
+    requires: [notesSearch],
+  },
+  domains: [
+    domain({
+      name: 'maintenance',
+      routes: [
+        route.post({
+          path: '/reindex/:id',
+          async handler(ctx) {
+            const search = ctx.capabilities.require(notesSearch);
+            await search.indexNote(ctx.params.id);
+            return ctx.respond.noContent();
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+Use capabilities when:
+
+- one package depends on a service owned by another package
+- the interaction is not a CRUD adapter concern
+- you want a stable public contract with good IntelliSense
+
+## Domain-local services
+
+`domain({ services })` is for values local to that route group.
+
+```typescript
+const serviceRoute = route.withServices<{
+  clock: () => Date;
+}>();
+
+domain({
+  name: 'analytics',
+  services: {
+    clock: () => new Date(),
+  },
+  routes: [
+    serviceRoute.get({
+      path: '/health',
+      async handler(ctx) {
+        return ctx.respond.json({ now: ctx.services.clock() });
+      },
+    }),
+  ],
+});
+```
+
+Use `route.withServices<...>()` when you want `ctx.services` to be strongly typed inside handlers.
+
+Use `services` for domain-local helpers. Use capabilities for cross-package contracts.
+
+## App composition
+
+Mount packages at the app root:
+
+```typescript
+import { createApp } from '@lastshotlabs/slingshot';
+import { notesPackage } from './notes-package';
+
+const { app } = await createApp({
+  packages: [notesPackage],
+});
+```
+
+Packages compile into framework plugins internally, but the public authoring surface stays package-first.
+
+## Inspection
+
+Use `inspectPackage(...)` to inspect the effective package graph without booting the full app:
+
+```typescript
+import { inspectPackage } from '@lastshotlabs/slingshot';
+import { notesPackage } from './notes-package';
+
+const inspection = inspectPackage(notesPackage);
+```
+
+Inspection includes:
+
+- resolved entity paths
+- domain base paths
+- resolved route paths
+- middleware names
+- capability names
+- wiring mode for each entity module
+
+## See also
+
+- [Entities](/slingshot/config-driven/entities/)
+- [Routes](/slingshot/config-driven/routes/)
+- [Cross-Entity and Transactions](/slingshot/config-driven/cross-entity/)
+- [Adapters and Factories](/slingshot/config-driven/adapters/)

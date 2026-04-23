@@ -116,6 +116,20 @@ export interface FieldOptions {
   immutable?: boolean;
 }
 
+type ResolveOpt<O> = O extends { optional: true }
+  ? true
+  : O extends undefined
+    ? false
+    : O extends { optional?: false | undefined }
+      ? false
+      : boolean;
+
+type ResolveDflt<O> = O extends { default: infer D extends string | number | boolean }
+  ? D
+  : undefined;
+
+type ResolveUpd<O> = O extends { onUpdate: 'now' } ? 'now' : undefined;
+
 /**
  * The resolved, frozen description of a single entity field.
  *
@@ -135,15 +149,24 @@ export interface FieldOptions {
  */
 export interface FieldDef<
   T extends FieldType = FieldType,
+  IsOptional extends boolean = boolean,
+  Default extends string | number | boolean | undefined = string | number | boolean | undefined,
+  OnUpdate extends 'now' | undefined = 'now' | undefined,
   EnumValues extends readonly string[] = readonly string[],
 > {
   readonly type: T;
-  readonly optional: boolean;
+  readonly optional: IsOptional;
   readonly primary: boolean;
   readonly immutable: boolean;
   readonly format?: string;
-  readonly default?: string | number | boolean;
-  readonly onUpdate?: 'now';
+  readonly default?: Default;
+  readonly onUpdate?: OnUpdate;
   /** Allowed values for `type === 'enum'` fields. */
   readonly enumValues?: EnumValues;
 }
+
+export type {
+  ResolveDflt,
+  ResolveOpt,
+  ResolveUpd,
+};

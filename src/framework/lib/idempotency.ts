@@ -36,6 +36,40 @@ function fingerprintConflictResponse(c: Parameters<MiddlewareHandler<AppEnv>>[0]
   );
 }
 
+function replayStoredResponse(
+  record: Awaited<
+    ReturnType<import('@lastshotlabs/slingshot-core').IdempotencyAdapter['get']>
+  > extends infer TRecord
+    ? Exclude<TRecord, null>
+    : never,
+): Response {
+  const body =
+    record.responseEncoding === 'base64' ? Buffer.from(record.response, 'base64') : record.response;
+  return new Response(body, {
+    status: record.status,
+    headers: record.responseHeaders ?? undefined,
+  });
+}
+
+function captureResponseHeaders(response: Response): Record<string, string> | null {
+  const headers = Object.fromEntries(response.headers.entries());
+  return Object.keys(headers).length > 0 ? headers : null;
+}
+
+async function captureResponsePayload(
+  response: Response,
+): Promise<{ body: string; encoding: 'base64' | 'utf8' } | null> {
+  try {
+    const buffer = Buffer.from(await response.clone().arrayBuffer());
+    return {
+      body: buffer.toString('base64'),
+      encoding: 'base64',
+    };
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Key derivation
 // ---------------------------------------------------------------------------
@@ -94,26 +128,24 @@ export const idempotent =
       if (cached.requestFingerprint && cached.requestFingerprint !== requestFingerprint) {
         return fingerprintConflictResponse(c);
       }
-      return c.json(
-        JSON.parse(cached.response),
-        cached.status as import('hono/utils/http-status').ContentfulStatusCode,
-      );
+      return replayStoredResponse(cached);
     }
 
     // Cache miss - call handler
     await next();
 
-    // Capture the response body by reading it
     const status = c.res.status;
-    let body: string;
-    try {
-      body = await c.res.clone().text();
-    } catch {
-      // Non-text/non-json response - skip caching
+    const payload = await captureResponsePayload(c.res);
+    if (!payload) {
       return;
     }
 
-    await adapter.set(key, body, status, ttl, { requestFingerprint });
+    const responseHeaders = captureResponseHeaders(c.res);
+    await adapter.set(key, payload.body, status, ttl, {
+      requestFingerprint,
+      responseHeaders,
+      responseEncoding: payload.encoding,
+    });
 
     // Re-read to handle write collision (NX semantics - set() may have been a no-op)
     const stored = await adapter.get(key);
@@ -121,10 +153,11 @@ export const idempotent =
       c.res = fingerprintConflictResponse(c);
       return;
     }
-    if (stored && stored.response !== body) {
-      c.res = new Response(stored.response, {
-        status: stored.status,
-        headers: { 'content-type': 'application/json' },
-      });
+    if (
+      stored &&
+      (stored.response !== payload.body ||
+        JSON.stringify(stored.responseHeaders ?? null) !== JSON.stringify(responseHeaders))
+    ) {
+      c.res = replayStoredResponse(stored);
     }
   };

@@ -12,6 +12,8 @@ interface IdempotencyRecord {
   body: string;
   createdAt: number;
   requestFingerprint?: string | null;
+  responseHeaders?: Record<string, string> | null;
+  responseEncoding?: 'base64' | 'utf8' | null;
 }
 
 type SqliteIdempotencyDatabase = Pick<RuntimeSqliteDatabase, 'query'> & {
@@ -50,6 +52,8 @@ export function createMemoryIdempotencyAdapter(): IdempotencyAdapter {
         status: record.status,
         createdAt: record.createdAt,
         requestFingerprint: record.requestFingerprint ?? null,
+        responseHeaders: record.responseHeaders ?? null,
+        responseEncoding: record.responseEncoding ?? 'utf8',
       });
     },
     set(key, response, status, ttlSeconds, meta) {
@@ -60,6 +64,8 @@ export function createMemoryIdempotencyAdapter(): IdempotencyAdapter {
         body: response,
         createdAt: Date.now(),
         requestFingerprint: meta?.requestFingerprint ?? null,
+        responseHeaders: meta?.responseHeaders ?? null,
+        responseEncoding: meta?.responseEncoding ?? 'utf8',
         expiresAt: Date.now() + ttlSeconds * 1000,
       });
       return Promise.resolve();
@@ -110,6 +116,8 @@ export function createRedisIdempotencyAdapter(
         status: record.status,
         createdAt: record.createdAt,
         requestFingerprint: record.requestFingerprint ?? null,
+        responseHeaders: record.responseHeaders ?? null,
+        responseEncoding: record.responseEncoding ?? 'utf8',
       };
     },
     async set(key, response, status, ttlSeconds, meta) {
@@ -118,6 +126,8 @@ export function createRedisIdempotencyAdapter(
         body: response,
         createdAt: Date.now(),
         requestFingerprint: meta?.requestFingerprint ?? null,
+        responseHeaders: meta?.responseHeaders ?? null,
+        responseEncoding: meta?.responseEncoding ?? 'utf8',
       });
       await redis.set(rkey(key), value, 'EX', ttlSeconds, 'NX');
     },
@@ -139,6 +149,8 @@ interface IdempotencyModel {
       body: string;
       createdAt: { getTime(): number };
       requestFingerprint?: string | null;
+      responseHeaders?: Record<string, string> | null;
+      responseEncoding?: 'base64' | 'utf8' | null;
     } | null>;
   };
   create(doc: object): Promise<unknown>;
@@ -169,6 +181,9 @@ export function createMongoIdempotencyAdapter(
   function getModel(): IdempotencyModel {
     if (appConn.models['Idempotency']) return appConn.models['Idempotency'] as IdempotencyModel;
     const { Schema } = mongoosePkg as typeof import('mongoose');
+    const mixedType =
+      (Schema as typeof import('mongoose').Schema & { Types?: { Mixed?: unknown } }).Types?.Mixed ??
+      Object;
     const schema = new Schema(
       {
         key: { type: String, required: true, unique: true },
@@ -177,6 +192,8 @@ export function createMongoIdempotencyAdapter(
         createdAt: { type: Date, required: true },
         expiresAt: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
         requestFingerprint: { type: String, required: false, default: null },
+        responseHeaders: { type: mixedType, required: false, default: null },
+        responseEncoding: { type: String, required: false, default: 'utf8' },
       },
       { collection: 'idempotency' },
     );
@@ -188,7 +205,7 @@ export function createMongoIdempotencyAdapter(
       const doc = await getModel()
         .findOne(
           { key, expiresAt: { $gt: new Date() } },
-          'status body createdAt requestFingerprint',
+          'status body createdAt requestFingerprint responseHeaders responseEncoding',
         )
         .lean();
       if (!doc) return null;
@@ -198,6 +215,10 @@ export function createMongoIdempotencyAdapter(
         createdAt: doc.createdAt.getTime(),
         requestFingerprint:
           (doc as { requestFingerprint?: string | null }).requestFingerprint ?? null,
+        responseHeaders:
+          (doc as { responseHeaders?: Record<string, string> | null }).responseHeaders ?? null,
+        responseEncoding:
+          (doc as { responseEncoding?: 'base64' | 'utf8' | null }).responseEncoding ?? 'utf8',
       };
     },
     async set(key, response, status, ttlSeconds, meta) {
@@ -210,6 +231,8 @@ export function createMongoIdempotencyAdapter(
           createdAt: now,
           expiresAt: new Date(now.getTime() + ttlSeconds * 1000),
           requestFingerprint: meta?.requestFingerprint ?? null,
+          responseHeaders: meta?.responseHeaders ?? null,
+          responseEncoding: meta?.responseEncoding ?? 'utf8',
         });
       } catch (err: unknown) {
         // Duplicate key — NX semantics: ignore
@@ -245,7 +268,9 @@ export function createSqliteIdempotencyAdapter(db: SqliteIdempotencyDatabase): I
       body      TEXT NOT NULL,
       createdAt INTEGER NOT NULL,
       expiresAt INTEGER NOT NULL,
-      requestFingerprint TEXT
+      requestFingerprint TEXT,
+      responseHeaders TEXT,
+      responseEncoding TEXT
     )`);
     const columns = db
       .query<{ name: string }>('PRAGMA table_info(idempotency)')
@@ -253,6 +278,12 @@ export function createSqliteIdempotencyAdapter(db: SqliteIdempotencyDatabase): I
       .map(row => row.name);
     if (!columns.includes('requestFingerprint')) {
       db.run('ALTER TABLE idempotency ADD COLUMN requestFingerprint TEXT');
+    }
+    if (!columns.includes('responseHeaders')) {
+      db.run('ALTER TABLE idempotency ADD COLUMN responseHeaders TEXT');
+    }
+    if (!columns.includes('responseEncoding')) {
+      db.run('ALTER TABLE idempotency ADD COLUMN responseEncoding TEXT');
     }
   });
 
@@ -265,8 +296,10 @@ export function createSqliteIdempotencyAdapter(db: SqliteIdempotencyDatabase): I
           body: string;
           createdAt: number;
           requestFingerprint: string | null;
+          responseHeaders: string | null;
+          responseEncoding: 'base64' | 'utf8' | null;
         }>(
-          'SELECT status, body, createdAt, requestFingerprint FROM idempotency WHERE key = ? AND expiresAt > ?',
+          'SELECT status, body, createdAt, requestFingerprint, responseHeaders, responseEncoding FROM idempotency WHERE key = ? AND expiresAt > ?',
         )
         .get(key, Date.now());
       if (!row) return Promise.resolve(null);
@@ -275,14 +308,25 @@ export function createSqliteIdempotencyAdapter(db: SqliteIdempotencyDatabase): I
         response: row.body,
         createdAt: row.createdAt,
         requestFingerprint: row.requestFingerprint ?? null,
+        responseHeaders: row.responseHeaders ? JSON.parse(row.responseHeaders) : null,
+        responseEncoding: row.responseEncoding ?? 'utf8',
       });
     },
     set(key, response, status, ttlSeconds, meta) {
       ensureTable();
       const now = Date.now();
       db.run(
-        'INSERT OR IGNORE INTO idempotency (key, status, body, createdAt, expiresAt, requestFingerprint) VALUES (?, ?, ?, ?, ?, ?)',
-        [key, status, response, now, now + ttlSeconds * 1000, meta?.requestFingerprint ?? null],
+        'INSERT OR IGNORE INTO idempotency (key, status, body, createdAt, expiresAt, requestFingerprint, responseHeaders, responseEncoding) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          key,
+          status,
+          response,
+          now,
+          now + ttlSeconds * 1000,
+          meta?.requestFingerprint ?? null,
+          meta?.responseHeaders ? JSON.stringify(meta.responseHeaders) : null,
+          meta?.responseEncoding ?? 'utf8',
+        ],
       );
       return Promise.resolve();
     },
@@ -329,11 +373,19 @@ export function createPostgresIdempotencyAdapter(pool: PgPool): IdempotencyAdapt
         body       TEXT NOT NULL,
         created_at BIGINT NOT NULL,
         expires_at BIGINT NOT NULL,
-        request_fingerprint TEXT
+        request_fingerprint TEXT,
+        response_headers JSONB,
+        response_encoding TEXT
       )
     `);
     await client.query(
       'ALTER TABLE slingshot_idempotency ADD COLUMN IF NOT EXISTS request_fingerprint TEXT',
+    );
+    await client.query(
+      'ALTER TABLE slingshot_idempotency ADD COLUMN IF NOT EXISTS response_headers JSONB',
+    );
+    await client.query(
+      'ALTER TABLE slingshot_idempotency ADD COLUMN IF NOT EXISTS response_encoding TEXT',
     );
   });
 
@@ -341,7 +393,7 @@ export function createPostgresIdempotencyAdapter(pool: PgPool): IdempotencyAdapt
     async get(key) {
       await ensureTable();
       const result = await pool.query(
-        'SELECT status, body, created_at, request_fingerprint FROM slingshot_idempotency WHERE key = $1 AND expires_at > $2',
+        'SELECT status, body, created_at, request_fingerprint, response_headers, response_encoding FROM slingshot_idempotency WHERE key = $1 AND expires_at > $2',
         [key, Date.now()],
       );
       const row = result.rows.at(0);
@@ -351,16 +403,29 @@ export function createPostgresIdempotencyAdapter(pool: PgPool): IdempotencyAdapt
         response: row['body'] as string,
         createdAt: row['created_at'] as number,
         requestFingerprint: (row['request_fingerprint'] as string | null | undefined) ?? null,
+        responseHeaders:
+          (row['response_headers'] as Record<string, string> | null | undefined) ?? null,
+        responseEncoding:
+          (row['response_encoding'] as 'base64' | 'utf8' | null | undefined) ?? 'utf8',
       };
     },
     async set(key, response, status, ttlSeconds, meta) {
       await ensureTable();
       const now = Date.now();
       await pool.query(
-        `INSERT INTO slingshot_idempotency (key, status, body, created_at, expires_at, request_fingerprint)
-         VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO slingshot_idempotency (key, status, body, created_at, expires_at, request_fingerprint, response_headers, response_encoding)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (key) DO NOTHING`,
-        [key, status, response, now, now + ttlSeconds * 1000, meta?.requestFingerprint ?? null],
+        [
+          key,
+          status,
+          response,
+          now,
+          now + ttlSeconds * 1000,
+          meta?.requestFingerprint ?? null,
+          meta?.responseHeaders ?? null,
+          meta?.responseEncoding ?? 'utf8',
+        ],
       );
     },
   };

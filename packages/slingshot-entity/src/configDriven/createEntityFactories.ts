@@ -20,6 +20,7 @@ import type {
   StoreInfra,
   TestableRepoFactories,
 } from '@lastshotlabs/slingshot-core';
+import type { ResolvedOperations } from '../types';
 import { createMemoryEntityAdapter } from './memoryAdapter';
 import { createMongoEntityAdapter } from './mongoAdapter';
 import type { SqliteDb } from './operationExecutors/dbInterfaces';
@@ -31,6 +32,19 @@ import { createSqliteEntityAdapter } from './sqliteAdapter';
 const REGISTER_ENTITY = Symbol.for('slingshot.registerEntity');
 const RESOLVE_SEARCH_SYNC = Symbol.for('slingshot.resolveSearchSync');
 const RESOLVE_SEARCH_CLIENT = Symbol.for('slingshot.resolveSearchClient');
+
+type OperationsInput<Ops extends Record<string, OperationConfig>> = Ops | ResolvedOperations<Ops>;
+
+function isResolvedOperations<Ops extends Record<string, OperationConfig>>(
+  operations: OperationsInput<Ops>,
+): operations is ResolvedOperations<Ops> {
+  return (
+    'entityConfig' in operations &&
+    'operations' in operations &&
+    typeof operations.operations === 'object' &&
+    operations.operations !== null
+  );
+}
 
 /** Typed wrapper for Reflect.get that returns unknown instead of any. */
 function reflectGet(target: object, key: string | symbol): unknown {
@@ -384,7 +398,7 @@ export function createEntityFactories<
   Ops extends Record<string, OperationConfig>,
 >(
   config: ResolvedEntityConfig<F>,
-  operations: Ops,
+  operations: OperationsInput<Ops>,
 ): TestableRepoFactories<
   EntityAdapter<InferEntity<F>, InferCreateInput<F>, InferUpdateInput<F>> &
     InferOperationMethods<Ops, InferEntity<F>>
@@ -395,11 +409,12 @@ export function createEntityFactories<
   Ops extends Record<string, OperationConfig>,
 >(
   config: ResolvedEntityConfig<F>,
-  operations?: Ops,
+  operations?: OperationsInput<Ops>,
 ): TestableRepoFactories<EntityAdapter<InferEntity<F>, InferCreateInput<F>, InferUpdateInput<F>>> {
   type E = InferEntity<F> & Record<string, unknown>;
   type CI = InferCreateInput<F>;
   type UI = InferUpdateInput<F>;
+  const normalizedOperations = resolveOperations(operations);
 
   function maybeWrap<
     AdapterT extends EntityAdapter<InferEntity<F>, InferCreateInput<F>, InferUpdateInput<F>>,
@@ -411,10 +426,8 @@ export function createEntityFactories<
       ? wrapWithSearchSync(adapter, config, resolveSearchSync)
       : adapter;
 
-    if (infra && (operations || config.search)) {
-      const searchOps =
-        (operations as Record<string, OperationConfig> | undefined) ??
-        deriveSearchOpsFromConfig(config);
+    if (infra && (normalizedOperations || config.search)) {
+      const searchOps = normalizedOperations ?? deriveSearchOpsFromConfig(config);
       if (searchOps) {
         wrapped = wrapWithSearchProviderDelegation(wrapped, config, searchOps, infra);
       }
@@ -425,11 +438,16 @@ export function createEntityFactories<
 
   return {
     memory: (infra?: StoreInfra) =>
-      maybeWrap(createMemoryEntityAdapter<E, CI, UI>(config, operations), infra),
+      maybeWrap(createMemoryEntityAdapter<E, CI, UI>(config, normalizedOperations), infra),
 
     redis: (infra: StoreInfra) =>
       maybeWrap(
-        createRedisEntityAdapter<E, CI, UI>(infra.getRedis(), infra.appName, config, operations),
+        createRedisEntityAdapter<E, CI, UI>(
+          infra.getRedis(),
+          infra.appName,
+          config,
+          normalizedOperations,
+        ),
         infra,
       ),
 
@@ -438,7 +456,7 @@ export function createEntityFactories<
         createSqliteEntityAdapter<E, CI, UI>(
           adaptRuntimeSqliteToEntityDb(infra.getSqliteDb()),
           config,
-          operations,
+          normalizedOperations,
         ),
         infra,
       ),
@@ -455,15 +473,26 @@ export function createEntityFactories<
             return mg;
           })(),
           config,
-          operations,
+          normalizedOperations,
         ),
         infra,
       ),
 
     postgres: (infra: StoreInfra) =>
       maybeWrap(
-        createPostgresEntityAdapter<E, CI, UI>(infra.getPostgres().pool, config, operations),
+        createPostgresEntityAdapter<E, CI, UI>(
+          infra.getPostgres().pool,
+          config,
+          normalizedOperations,
+        ),
         infra,
       ),
   };
+}
+
+function resolveOperations<Ops extends Record<string, OperationConfig>>(
+  operations: OperationsInput<Ops> | undefined,
+): Ops | undefined {
+  if (!operations) return undefined;
+  return isResolvedOperations(operations) ? operations.operations : operations;
 }

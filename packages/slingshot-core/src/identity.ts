@@ -2,8 +2,8 @@
  * Actor-based identity abstraction.
  *
  * Decouples all framework consumers (guards, permissions, data scoping, audit,
- * entity routes) from the specific auth-provider field names (`authUserId`,
- * `tenantId`, `sessionId`, `roles`).
+ * entity routes) from specific auth-provider field names by mapping them into
+ * the canonical `Actor` shape.
  *
  * Custom auth integrations implement `IdentityResolver` to map their own
  * identity representation into the canonical `Actor` shape.

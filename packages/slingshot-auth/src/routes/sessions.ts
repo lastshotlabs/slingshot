@@ -6,7 +6,13 @@ import { SuccessResponse } from '@auth/schemas/success';
 import * as AuthService from '@auth/services/auth';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { createRoute, errorResponse, getActor, getActorId, withSecurity } from '@lastshotlabs/slingshot-core';
+import {
+  createRoute,
+  errorResponse,
+  getActor,
+  getActorId,
+  withSecurity,
+} from '@lastshotlabs/slingshot-core';
 import { createRouter, getClientIp } from '@lastshotlabs/slingshot-core';
 import type { AuthRateLimitConfig } from '../config/authConfig';
 import { publishAuthEvent } from '../eventGovernance';
@@ -283,7 +289,10 @@ export const createSessionsRouter = (
           emailOtpHash = hash;
           const user = adapter.getUser ? await adapter.getUser(userId) : null;
           if (user?.email) {
-            publishAuthEvent(runtime.events, 'auth:delivery.email_otp', { email: user.email, code });
+            publishAuthEvent(runtime.events, 'auth:delivery.email_otp', {
+              email: user.email,
+              code,
+            });
           }
         }
       }

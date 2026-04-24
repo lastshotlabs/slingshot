@@ -1,0 +1,73 @@
+---
+title: Packages and Plugins
+description: Why packages are the canonical app-builder surface and where plugins still fit
+---
+
+`packages` are the canonical code-first composition surface for Slingshot apps.
+
+`plugins` still exist, but they are the lower-level lifecycle contract.
+
+## Prefer packages at the app root
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+import { blogPackage } from './blog/package';
+
+await createServer({
+  packages: [blogPackage],
+});
+```
+
+Packages let the app root compose higher-level domain modules directly:
+
+- entity modules
+- package-owned domain routes
+- package middleware
+- typed capabilities
+- package dependency ordering
+
+## What happens under the hood
+
+`createApp()` compiles packages into framework plugins internally.
+
+That is an implementation detail, but it matters because it explains the split:
+
+- author packages for the normal code-first path
+- use raw plugins when you need direct lifecycle work
+
+## When raw plugins are still correct
+
+Use `plugins` when you need:
+
+- direct lifecycle hooks like `setupMiddleware`, `setupRoutes`, or `setupPost`
+- compatibility with older plugin-only surfaces
+- low-level integration work that does not fit the package authoring contracts
+
+## Packages vs plugins
+
+| Use case | Prefer |
+| --- | --- |
+| Build an app from domain modules | `packages` |
+| Author entity- or route-centric product modules | `definePackage(...)` |
+| Register low-level lifecycle behavior directly | `plugins` |
+| Escape hatch for framework integrations | `plugins` |
+
+## Why the docs lead with packages
+
+Packages keep the public authoring surface aligned with the framework's DX work:
+
+- `definePackage(...)`
+- `domain(...)`
+- `route.*(...)`
+- `entity(...)`
+- `defineCapability(...)`
+- `provideCapability(...)`
+- `entityRef(...)`
+
+That is the surface app builders should learn first.
+
+## Next
+
+- [Package-First Authoring](/slingshot/package-first/)
+- [Entity System](/slingshot/entity-system/)
+- [Plugin Interface](/slingshot/authoring/plugin-interface/)

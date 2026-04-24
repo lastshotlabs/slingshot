@@ -8,8 +8,8 @@ import {
 } from 'kafkajs';
 import { z } from 'zod';
 import type {
-  EventEnvelope,
   EventBusSerializationOptions,
+  EventEnvelope,
   SlingshotEventBus,
   SlingshotEventMap,
   SubscriptionOpts,
@@ -285,7 +285,10 @@ export function createKafkaAdapter(
   }
 
   const eventSerializer = serializer ?? JSON_SERIALIZER;
-  const envelopeListeners = new Map<string, Set<(envelope: EventEnvelope) => void | Promise<void>>>();
+  const envelopeListeners = new Map<
+    string,
+    Set<(envelope: EventEnvelope) => void | Promise<void>>
+  >();
   const payloadListenerWrappers = new Map<
     string,
     Map<
@@ -293,7 +296,10 @@ export function createKafkaAdapter(
       (envelope: EventEnvelope) => void | Promise<void>
     >
   >();
-  const durableListeners = new Map<string, Set<(envelope: EventEnvelope) => void | Promise<void>>>();
+  const durableListeners = new Map<
+    string,
+    Set<(envelope: EventEnvelope) => void | Promise<void>>
+  >();
   const durableConsumers = new Map<string, DurableConsumerEntry>();
   const connectedConsumers = new Set<string>();
   const createdTopics = new Set<string>();
@@ -496,8 +502,12 @@ export function createKafkaAdapter(
         ? (decoded as EventEnvelope)
         : createRawEventEnvelope(
             entry.event as Extract<keyof SlingshotEventMap, string>,
-            validateEventPayload(entry.event, decoded, schemaRegistry, config.validation) as
-              SlingshotEventMap[Extract<keyof SlingshotEventMap, string>],
+            validateEventPayload(
+              entry.event,
+              decoded,
+              schemaRegistry,
+              config.validation,
+            ) as SlingshotEventMap[Extract<keyof SlingshotEventMap, string>],
           );
     } catch (deserializeErr) {
       console.error(
@@ -544,8 +554,12 @@ export function createKafkaAdapter(
         ? payload
         : createRawEventEnvelope(
             event as Extract<keyof SlingshotEventMap, string>,
-            validateEventPayload(event as string, payload, schemaRegistry, config.validation) as
-              SlingshotEventMap[K],
+            validateEventPayload(
+              event as string,
+              payload,
+              schemaRegistry,
+              config.validation,
+            ) as SlingshotEventMap[K],
           );
 
       const eventListeners = envelopeListeners.get(event as string);
@@ -576,7 +590,10 @@ export function createKafkaAdapter(
       void (async () => {
         let key: string | null = null;
         let serialized: Uint8Array | null = null;
-        const headers = buildEnvelopeHeaders(envelope as EventEnvelope, eventSerializer.contentType);
+        const headers = buildEnvelopeHeaders(
+          envelope as EventEnvelope,
+          eventSerializer.contentType,
+        );
         try {
           key = resolvePartitionKey(config, event as string, envelope.payload);
           serialized = eventSerializer.serialize(event as string, envelope);

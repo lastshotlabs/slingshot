@@ -85,20 +85,20 @@ export interface PostAuthGuardFailure {
 export type PostAuthGuard = (c: Context<any, any>) => Promise<PostAuthGuardFailure | null>;
 
 /**
- * Resolves the authenticated user ID from a raw HTTP request.
+ * Resolves the authenticated actor ID from a raw HTTP request.
  *
- * Used by framework WebSocket and SSE upgrade handlers to identify the connecting user
+ * Used by framework WebSocket and SSE upgrade handlers to identify the connecting actor
  * without depending on the auth plugin. Registered by the auth plugin during `setupPost`.
  */
-export interface UserResolver {
+export interface RequestActorResolver {
   /**
-   * Extract the authenticated user ID from the request.
+   * Extract the authenticated actor ID from the request.
    *
    * @param req - The raw inbound `Request`. Implementations inspect whichever
    *   credential source is appropriate for the auth plugin's configuration —
    *   typically a signed session cookie, a `Cookie` header containing a session
    *   token, or an `Authorization: Bearer` header for token-based setups.
-   * @returns The authenticated user's ID string if a valid credential is found,
+   * @returns The authenticated actor's ID string if a valid credential is found,
    *   or `null` if the request is unauthenticated, the credential is expired, or
    *   the session cannot be verified.
    * @remarks
@@ -107,7 +107,7 @@ export interface UserResolver {
    * the connection. Implementations must not throw on invalid/missing credentials —
    * only on unexpected infrastructure errors (e.g., a Redis connection failure).
    */
-  resolveUserId(req: Request): Promise<string | null>;
+  resolveActorId(req: Request): Promise<string | null>;
 }
 
 /**
@@ -295,7 +295,7 @@ export interface EmailTemplate {
 export interface CoreRegistrarSnapshot {
   readonly identityResolver: IdentityResolver | null;
   readonly routeAuth: RouteAuthRegistry | null;
-  readonly userResolver: UserResolver | null;
+  readonly actorResolver: RequestActorResolver | null;
   readonly rateLimitAdapter: RateLimitAdapter | null;
   readonly fingerprintBuilder: FingerprintBuilder | null;
   readonly cacheAdapters: ReadonlyMap<CacheStoreName, CacheAdapter>;
@@ -306,7 +306,7 @@ export interface CoreRegistrarSnapshot {
  * Mutable registration interface passed to plugins during their `setupPost` phase.
  *
  * The auth plugin calls these methods to register the framework's auth-boundary
- * dependencies (auth middleware, user resolver, rate limiter, cache adapters, email templates).
+ * dependencies (auth middleware, request actor resolver, rate limiter, cache adapters, email templates).
  * `createApp()` drains the registrar after all plugins run to commit the values to the context.
  *
  * @remarks
@@ -324,7 +324,7 @@ export interface CoreRegistrar {
    * @remarks
    * Called by auth plugins during `setupPost`. When no resolver is registered the
    * framework falls back to `createDefaultIdentityResolver()` which preserves
-   * existing `authUserId`/`tenantId` behavior. Custom auth integrations (gateway
+   * existing identity-to-actor mapping behavior. Custom auth integrations (gateway
    * auth, external IdP, Lambda authorizer bridges) register their own resolver so
    * framework consumers get a consistent identity shape without conforming to
    * hardcoded field names. Calling this a second time replaces the previous resolver.
@@ -343,16 +343,16 @@ export interface CoreRegistrar {
    */
   setRouteAuth(registry: RouteAuthRegistry): void;
   /**
-   * Register the user resolver used by WebSocket and SSE upgrade handlers.
+   * Register the request actor resolver used by WebSocket and SSE upgrade handlers.
    *
-   * @param resolver - A `UserResolver` whose `resolveUserId` extracts the
-   *   authenticated user ID from a raw `Request`.
+   * @param resolver - A `RequestActorResolver` whose `resolveActorId` extracts the
+   *   authenticated actor ID from a raw `Request`.
    * @remarks
    * Called by the auth plugin during `setupPost`. The framework's WebSocket and
-   * SSE upgrade paths call `resolveUserId()` to identify the connecting user before
+   * SSE upgrade paths call `resolveActorId()` to identify the connecting actor before
    * upgrading the connection. Calling this a second time replaces the previous resolver.
    */
-  setUserResolver(resolver: UserResolver): void;
+  setRequestActorResolver(resolver: RequestActorResolver): void;
   /**
    * Replace the default in-memory rate limit adapter with a distributed implementation.
    *

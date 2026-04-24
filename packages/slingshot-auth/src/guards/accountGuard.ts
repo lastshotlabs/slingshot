@@ -1,4 +1,8 @@
-import type { AuthAdapter, PostAuthGuard, PostAuthGuardFailure } from '@lastshotlabs/slingshot-core';
+import type {
+  AuthAdapter,
+  PostAuthGuard,
+  PostAuthGuardFailure,
+} from '@lastshotlabs/slingshot-core';
 import { getActor } from '@lastshotlabs/slingshot-core';
 
 interface AccountGuardDeps {

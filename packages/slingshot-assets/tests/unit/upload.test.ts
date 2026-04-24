@@ -44,10 +44,15 @@ function makeContext(fields: Record<string, unknown>, adapter: StorageAdapter = 
       switch (key) {
         case 'slingshotCtx':
           return slingshotCtx;
-        case 'authUserId':
-          return 'user-1';
         case 'actor':
-          return { id: 'user-1', kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} };
+          return {
+            id: 'user-1',
+            kind: 'user',
+            tenantId: null,
+            sessionId: null,
+            roles: null,
+            claims: {},
+          };
         case 'tenantId':
           return null;
         case 'uploadBucket':

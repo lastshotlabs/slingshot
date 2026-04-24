@@ -28,8 +28,8 @@ import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityPlugin } from '../../src/createEntityPlugin';
 import type { EntityPluginEntry } from '../../src/createEntityPlugin';
 import type { MultiEntityManifest } from '../../src/manifest/multiEntityManifest';
-import type { BareEntityAdapter } from '../../src/routing/buildBareEntityRoutes';
 import { defineEntityRoute } from '../../src/routing';
+import type { BareEntityAdapter } from '../../src/routing/buildBareEntityRoutes';
 
 // ---------------------------------------------------------------------------
 // Minimal mock entity config

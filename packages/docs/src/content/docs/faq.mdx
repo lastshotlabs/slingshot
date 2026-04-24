@@ -277,7 +277,7 @@ import { createApp } from '@lastshotlabs/slingshot';
 declare const mySchema: object;
 declare function createGraphQLHandler(options: {
   schema: object;
-  context: (req: { raw: Request }) => { userId: string | null };
+  context: (req: { raw: Request }) => { userId: string | null }; // user-defined context shape
 }): MiddlewareHandler;
 
 const { app } = await createApp({

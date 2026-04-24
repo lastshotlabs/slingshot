@@ -13,6 +13,12 @@ export type {
 } from '@lastshotlabs/slingshot-core';
 export type { UploadRegistryRepository, WsMessageRepository } from '@lastshotlabs/slingshot-core';
 export type { IdempotencyAdapter } from '@lastshotlabs/slingshot-core';
+export {
+  getActor,
+  getActorId,
+  getActorTenantId,
+  getRequestTenantId,
+} from '@lastshotlabs/slingshot-core';
 export { getContext, getContextOrNull } from '@lastshotlabs/slingshot-core';
 export { getRedisFromApp } from './lib/redis';
 export type { RedisCredentials } from './lib/redis';

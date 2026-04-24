@@ -17,7 +17,7 @@ import {
   requireUserAuth,
 } from '../../src/guards';
 import { defineHandler } from '../../src/handler';
-import { ANONYMOUS_ACTOR, createDefaultIdentityResolver, type Actor } from '../../src/identity';
+import { ANONYMOUS_ACTOR, type Actor, createDefaultIdentityResolver } from '../../src/identity';
 import { mount, toRoute, toRouteHandler } from '../../src/mount';
 
 function createContextFixture(overrides: Record<string, unknown> = {}) {
@@ -57,17 +57,19 @@ function createArgs(
   ctx: unknown,
   input: Record<string, unknown> = {},
   overrides: Partial<{
-    authUserId: string | null;
+    actorId: string | null;
     tenantId: string | null;
     idempotencyKey: string | undefined;
     actor: Actor;
   }> = {},
 ) {
-  const authUserId = 'authUserId' in overrides ? (overrides.authUserId ?? null) : 'user-1';
+  const actorId = 'actorId' in overrides ? (overrides.actorId ?? null) : 'user-1';
   const tenantId = overrides.tenantId ?? 'tenant-1';
-  const actor: Actor = overrides.actor ?? (authUserId
-    ? { id: authUserId, kind: 'user', tenantId, sessionId: null, roles: null, claims: {} }
-    : ANONYMOUS_ACTOR);
+  const actor: Actor =
+    overrides.actor ??
+    (actorId
+      ? { id: actorId, kind: 'user', tenantId, sessionId: null, roles: null, claims: {} }
+      : ANONYMOUS_ACTOR);
   return {
     ctx,
     input,
@@ -76,8 +78,6 @@ function createArgs(
       requestId: 'req-1',
       actor,
       requestTenantId: tenantId,
-      tenantId,
-      authUserId,
       correlationId: 'corr-1',
       ip: '127.0.0.1',
       ...(overrides.idempotencyKey ? { idempotencyKey: overrides.idempotencyKey } : {}),
@@ -106,7 +106,7 @@ describe('entity policy, guards, and mounting', () => {
     const { ctx } = createContextFixture();
 
     await expect(
-      requireAuth()(createArgs(ctx, {}, { authUserId: null }) as never),
+      requireAuth()(createArgs(ctx, {}, { actorId: null }) as never),
     ).rejects.toMatchObject({ status: 401 });
 
     const createInput: Record<string, unknown> = { title: 'Hello' };
@@ -156,7 +156,17 @@ describe('entity policy, guards, and mounting', () => {
   test('toRoute and toRouteHandler build real HTTP surfaces for handlers', async () => {
     const routeAuth = {
       userAuth: async (c: Context<AppEnv>, next: () => Promise<void>) => {
-        c.set('authUserId', 'user-1');
+        c.set(
+          'actor',
+          Object.freeze({
+            id: 'user-1',
+            kind: 'user' as const,
+            tenantId: null,
+            sessionId: null,
+            roles: null,
+            claims: {},
+          }),
+        );
         await next();
       },
       bearerAuth: async (c: Context<AppEnv>, next: () => Promise<void>) => {
@@ -185,7 +195,7 @@ describe('entity policy, guards, and mounting', () => {
       guards: [requireUserAuth()],
       handle: async ({ input, meta }) => ({
         id: input.id,
-        actor: meta.authUserId,
+        actor: meta.actor.id,
         note: input.note ?? null,
         search: input.search ?? null,
       }),

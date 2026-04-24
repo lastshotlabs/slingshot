@@ -85,7 +85,7 @@ Enabling OAuth, MFA, or passkeys adds additional routes (see below).
 Import `userAuth` and `requireRole` from `slingshot-auth` and apply them as Hono middleware before your handler.
 
 ```typescript title="src/routes/account.ts"
-import { createRoute, createRouter } from '@lastshotlabs/slingshot';
+import { createRoute, createRouter, getActor } from '@lastshotlabs/slingshot';
 import { requireRole, userAuth } from '@lastshotlabs/slingshot-auth';
 
 declare function getUserCount(): Promise<number>;
@@ -120,12 +120,8 @@ router.openapi(
       },
     },
   }),
-  c => {
-    return c.json({
-      userId: c.get('authUserId')!,
-      roles: c.get('roles') ?? [],
-    }) as never;
-  },
+  // @ts-expect-error -- simplified doc example, handler type is narrower than openapi expects
+  c => c.json({ userId: getActor(c).id!, roles: (c.get('roles') as string[]) ?? [] }),
 );
 
 // Require a specific role — returns 403 if the user doesn't have it
@@ -159,7 +155,7 @@ router.openapi(
 );
 ```
 
-`userAuth` verifies the JWT from the `Authorization: Bearer` header or the `x-user-token` header and sets `authUserId` and `roles` on the context. `requireRole` checks the `roles` value — always mount it after `userAuth`.
+`userAuth` verifies the JWT from the `Authorization: Bearer` header or the `x-user-token` header and sets the actor on the context. `requireRole` checks the actor's `roles` value — always mount it after `userAuth`.
 
 ## Using the token
 

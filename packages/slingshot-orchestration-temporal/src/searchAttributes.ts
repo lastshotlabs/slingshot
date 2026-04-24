@@ -154,7 +154,11 @@ export function buildVisibilityValidationQueries(): string[] {
 }
 
 function toTemporalStatus(
-  status: NonNullable<RunFilter['status']> extends infer T ? (T extends readonly unknown[] ? never : T) : never,
+  status: NonNullable<RunFilter['status']> extends infer T
+    ? T extends readonly unknown[]
+      ? never
+      : T
+    : never,
 ): string {
   switch (status) {
     case 'pending':

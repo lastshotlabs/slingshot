@@ -17,7 +17,13 @@ The framework currently emits OpenAPI `3.0.0`, not `3.1`, and the docs UI is Sca
 Use `createRoute()` to declare request and response schemas, then mount the route with `router.openapi()`. Slingshot registers the route with Hono, validates the request at runtime, and includes the route in the generated spec.
 
 ```typescript title="src/routes/products.ts"
-import { createRoute, createRouter, cursorParams, withSecurity } from '@lastshotlabs/slingshot';
+import {
+  createRoute,
+  createRouter,
+  cursorParams,
+  getActor,
+  withSecurity,
+} from '@lastshotlabs/slingshot';
 
 export const router = createRouter();
 
@@ -93,7 +99,7 @@ router.openapi(
     { cookieAuth: [] },
     { userToken: [] },
   ),
-  c => c.json({ userId: c.get('authUserId') ?? 'anonymous' }, 200) as never,
+  c => c.json({ userId: getActor(c).id ?? 'anonymous' }, 200) as never,
 );
 ```
 

@@ -56,6 +56,30 @@ If these responsibilities move between phases, treat that as an architectural ch
 - SAML login creates a normal authenticated session, but it must not automatically mark the session as locally MFA-fresh unless Slingshot has explicit proof of the required authentication context.
 - Magic-link delivery throttling must protect both the requester IP and the submitted identifier so the route cannot be used for distributed inbox flooding.
 
+## Actor Identity Model
+
+The `identify` middleware constructs a frozen `Actor` object on every request and publishes it
+via `c.set('actor', ...)`. The `Actor` is the canonical identity representation for the
+request lifecycle. It captures `id`, `kind`, `tenantId`, `sessionId`, `roles`, and `claims`
+at resolution time.
+
+Downstream code should read identity through the actor helpers in `@lastshotlabs/slingshot-core`:
+
+- `getActor(c)` — full `Actor` object (never null; returns `ANONYMOUS_ACTOR` for unauthenticated requests)
+- `getActorId(c)` — `string | null` shorthand for the actor's ID
+- `getActorTenantId(c)` — `string | null` shorthand for the actor's tenant scope
+
+Actor kinds:
+
+- `'user'` — authenticated end-user (has `sessionId`)
+- `'service-account'` — M2M client credentials token (no session)
+- `'api-key'` — bearer API key (no session)
+- `'anonymous'` — unauthenticated request
+
+The actor is frozen (`Object.freeze`) at construction time. Route-level middleware that sets
+`tenantId` after identify runs will not update the actor's `tenantId`; in those cases,
+middleware like `requireRole` falls back to reading `c.get('tenantId')` directly.
+
 ## Integration Model
 
 Auth should prefer publishing capabilities through core instead of exposing deep internal modules to sibling packages.
@@ -66,6 +90,7 @@ Today that includes:
 - rate limit tracking
 - fingerprint building
 - user resolution
+- actor identity publication
 - built-in email templates
 
 This pattern is important because it keeps packages like admin, community, and mail loosely coupled.

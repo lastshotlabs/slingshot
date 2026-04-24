@@ -7,7 +7,7 @@ import type {
 } from './eventDefinition';
 import { createDefaultSubscriberAuthorizer, eventHasExternalExposure } from './eventDefinition';
 import type { EventDefinitionRegistry } from './eventDefinitionRegistry';
-import { createEventEnvelope, type EventEnvelope } from './eventEnvelope';
+import { type EventEnvelope, createEventEnvelope } from './eventEnvelope';
 
 export interface SlingshotEvents {
   readonly definitions: EventDefinitionRegistry;
@@ -105,7 +105,10 @@ export function createEventPublisher(options: CreateEventPublisherOptions): Slin
       });
 
       const busWithEnvelopeEmit = options.bus as SlingshotEventBus & {
-        emit<K2 extends EventKey>(key: K2, payload: SlingshotEventMap[K2] | EventEnvelope<K2>): void;
+        emit<K2 extends EventKey>(
+          key: K2,
+          payload: SlingshotEventMap[K2] | EventEnvelope<K2>,
+        ): void;
       };
       busWithEnvelopeEmit.emit(key, envelope);
       return envelope;
@@ -118,6 +121,7 @@ export function authorizeEventSubscriber<K extends EventKey>(
   principal: EventSubscriptionPrincipal,
   envelope: EventEnvelope<K>,
 ): boolean {
-  const authorizer = definition.authorizeSubscriber ?? createDefaultSubscriberAuthorizer(definition);
+  const authorizer =
+    definition.authorizeSubscriber ?? createDefaultSubscriberAuthorizer(definition);
   return authorizer?.(principal, envelope) ?? false;
 }

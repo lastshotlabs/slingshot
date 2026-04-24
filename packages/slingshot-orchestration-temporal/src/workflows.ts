@@ -1,11 +1,11 @@
 import { ApplicationFailure } from '@temporalio/common';
 import {
-  proxyActivities,
   defineQuery,
   defineSignal,
+  proxyActivities,
   setHandler,
-  sleep as workflowSleep,
   workflowInfo,
+  sleep as workflowSleep,
 } from '@temporalio/workflow';
 import type {
   AnyResolvedWorkflow,
@@ -26,9 +26,8 @@ import { toRunError } from './errors';
 const stateQuery = defineQuery<{ progress?: RunProgress; steps?: Record<string, StepRun> }>(
   'slingshot-state',
 );
-const progressSignal = defineSignal<[payload: { stepName?: string; data: RunProgress }]>(
-  'slingshot-progress',
-);
+const progressSignal =
+  defineSignal<[payload: { stepName?: string; data: RunProgress }]>('slingshot-progress');
 const userSignal = defineSignal<[payload: { name: string; payload?: unknown }]>('slingshot-signal');
 
 interface TemporalTaskResultEnvelope {
@@ -188,10 +187,14 @@ export async function slingshotTaskWorkflowImpl(
       progress,
     };
   } catch (error) {
-    throw ApplicationFailure.nonRetryable('Slingshot task workflow failed', 'SlingshotTaskFailure', {
-      error: toRunError(error),
-      progress,
-    } satisfies TemporalFailureDetails);
+    throw ApplicationFailure.nonRetryable(
+      'Slingshot task workflow failed',
+      'SlingshotTaskFailure',
+      {
+        error: toRunError(error),
+        progress,
+      } satisfies TemporalFailureDetails,
+    );
   }
 }
 
@@ -223,11 +226,15 @@ export async function slingshotWorkflowImpl(
   setHandler(userSignal, payload => {
     bufferedSignals.push(payload);
   });
-  setHandler(stateQuery, () => ({
-    progress,
-    steps,
-    bufferedSignals,
-  }) as unknown as { progress?: RunProgress; steps?: Record<string, StepRun> });
+  setHandler(
+    stateQuery,
+    () =>
+      ({
+        progress,
+        steps,
+        bufferedSignals,
+      }) as unknown as { progress?: RunProgress; steps?: Record<string, StepRun> },
+  );
 
   await eventActivity({
     name: 'orchestration.workflow.started',
@@ -525,15 +532,11 @@ export async function slingshotWorkflowImpl(
       },
     });
 
-    throw ApplicationFailure.nonRetryable(
-      'Slingshot workflow failed',
-      'SlingshotWorkflowFailure',
-      {
-        error: toRunError(error),
-        failedStep,
-        steps,
-        progress,
-      } satisfies TemporalFailureDetails,
-    );
+    throw ApplicationFailure.nonRetryable('Slingshot workflow failed', 'SlingshotWorkflowFailure', {
+      error: toRunError(error),
+      failedStep,
+      steps,
+      progress,
+    } satisfies TemporalFailureDetails);
   }
 }

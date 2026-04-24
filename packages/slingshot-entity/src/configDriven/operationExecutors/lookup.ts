@@ -241,7 +241,7 @@ export function lookupMongo(
   function buildQuery(params: Record<string, unknown>): Record<string, unknown> {
     const query: Record<string, unknown> = {};
     for (const [field, value] of fieldEntries) {
-      const mongoField = config.fields[field].primary ? '_id' : field;
+      const mongoField = config.fields[field].primary ? config._storageFields.mongoPkField : field;
       query[mongoField] = isParamRef(value) ? params[value.slice(6)] : value;
     }
     return query;

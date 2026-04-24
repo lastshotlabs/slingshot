@@ -39,13 +39,6 @@ export interface HandlerMeta {
    */
   requestTenantId: string | null;
 
-  /** @deprecated Use `meta.actor.tenantId` or `meta.requestTenantId`. */
-  tenantId: string | null;
-  /** @deprecated Use `meta.actor.id`. */
-  authUserId: string | null;
-  /** @deprecated Use `meta.actor.roles`. */
-  roles?: string[] | null;
-
   /**
    * Distributed-tracing correlation identifier.
    *
@@ -63,10 +56,6 @@ export interface HandlerMeta {
    */
   idempotencyKey?: string;
 
-  /** @deprecated Use `meta.actor.kind === 'service-account'` and `meta.actor.id`. */
-  authClientId?: string | null;
-  /** @deprecated Use `meta.actor.kind === 'api-key'` and `meta.actor.id`. */
-  bearerClientId?: string | null;
   /** Whether the request was authenticated via a bearer token. */
   bearerAuthenticated?: boolean;
   /** HTTP method of the originating request (e.g. `'GET'`, `'POST'`). */
@@ -289,15 +278,9 @@ function defaultMeta(meta: Partial<HandlerMeta> | undefined): HandlerMeta {
     requestId,
     actor,
     requestTenantId: meta?.requestTenantId ?? actor.tenantId,
-    // Legacy aliases — kept for downstream compat, will be removed.
-    tenantId: meta?.requestTenantId ?? actor.tenantId,
-    authUserId: actor.kind === 'user' ? actor.id : null,
-    roles: actor.roles,
     correlationId: meta?.correlationId ?? requestId,
     ip: meta?.ip ?? null,
     ...(meta?.idempotencyKey ? { idempotencyKey: meta.idempotencyKey } : {}),
-    authClientId: actor.kind === 'service-account' ? actor.id : null,
-    bearerClientId: actor.kind === 'api-key' ? actor.id : null,
     bearerAuthenticated: meta?.bearerAuthenticated ?? false,
     method: meta?.method,
     path: meta?.path,

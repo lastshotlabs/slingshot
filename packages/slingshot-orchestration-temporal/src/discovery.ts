@@ -1,4 +1,8 @@
-import { OrchestrationError, type AnyResolvedTask, type AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
+import {
+  type AnyResolvedTask,
+  type AnyResolvedWorkflow,
+  OrchestrationError,
+} from '@lastshotlabs/slingshot-orchestration';
 
 export interface DiscoveredOrchestrationDefinitions {
   tasks: AnyResolvedTask[];
@@ -23,7 +27,11 @@ function isResolvedWorkflow(value: unknown): value is AnyResolvedWorkflow {
   );
 }
 
-function registerUnique<T extends { name: string }>(bucket: Map<string, T>, value: T, kind: string): void {
+function registerUnique<T extends { name: string }>(
+  bucket: Map<string, T>,
+  value: T,
+  kind: string,
+): void {
   if (bucket.has(value.name)) {
     throw new OrchestrationError(
       'INVALID_CONFIG',
@@ -33,7 +41,11 @@ function registerUnique<T extends { name: string }>(bucket: Map<string, T>, valu
   bucket.set(value.name, value);
 }
 
-function collectNamedValues(bucket: Map<string, AnyResolvedTask | AnyResolvedWorkflow>, value: unknown, kind: 'task' | 'workflow'): void {
+function collectNamedValues(
+  bucket: Map<string, AnyResolvedTask | AnyResolvedWorkflow>,
+  value: unknown,
+  kind: 'task' | 'workflow',
+): void {
   if (typeof value !== 'object' || value === null) return;
   for (const item of Object.values(value as Record<string, unknown>)) {
     if (kind === 'task' && isResolvedTask(item)) {
@@ -61,7 +73,11 @@ export function discoverOrchestrationDefinitions(
       continue;
     }
     if (name === 'tasks') {
-      collectNamedValues(tasks as Map<string, AnyResolvedTask | AnyResolvedWorkflow>, value, 'task');
+      collectNamedValues(
+        tasks as Map<string, AnyResolvedTask | AnyResolvedWorkflow>,
+        value,
+        'task',
+      );
       continue;
     }
     if (name === 'workflows') {
@@ -102,14 +118,19 @@ export function selectOrchestrationDefinitions(
   options: { taskNames?: readonly string[]; workflowNames?: readonly string[] },
 ): DiscoveredOrchestrationDefinitions {
   const taskMap = new Map(discovered.tasks.map(task => [task.name, task] as const));
-  const workflowMap = new Map(discovered.workflows.map(workflow => [workflow.name, workflow] as const));
+  const workflowMap = new Map(
+    discovered.workflows.map(workflow => [workflow.name, workflow] as const),
+  );
 
   const selectedWorkflows =
     options.workflowNames && options.workflowNames.length > 0
       ? options.workflowNames.map(name => {
           const workflow = workflowMap.get(name);
           if (!workflow) {
-            throw new OrchestrationError('INVALID_CONFIG', `Workflow '${name}' not found in definitions module.`);
+            throw new OrchestrationError(
+              'INVALID_CONFIG',
+              `Workflow '${name}' not found in definitions module.`,
+            );
           }
           return workflow;
         })
@@ -132,7 +153,10 @@ export function selectOrchestrationDefinitions(
     for (const taskName of options.taskNames) {
       const task = taskMap.get(taskName);
       if (!task) {
-        throw new OrchestrationError('INVALID_CONFIG', `Task '${taskName}' not found in definitions module.`);
+        throw new OrchestrationError(
+          'INVALID_CONFIG',
+          `Task '${taskName}' not found in definitions module.`,
+        );
       }
       selectedTasks.set(task.name, task);
     }

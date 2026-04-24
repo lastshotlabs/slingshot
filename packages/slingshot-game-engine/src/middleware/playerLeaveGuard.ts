@@ -37,7 +37,7 @@ export function buildPlayerLeaveGuard({
 }: PlayerLeaveGuardDeps) {
   return async (c: Context<AppEnv>, next: Next) => {
     const sessionId = c.req.param('id') ?? c.req.param('sessionId');
-    const targetUserId = c.req.param('userId') ?? (getActorId(c) ?? undefined);
+    const targetUserId = c.req.param('userId') ?? getActorId(c) ?? undefined;
 
     if (!sessionId || !targetUserId) {
       throw new HTTPException(400, { message: 'Missing session or user ID.' });

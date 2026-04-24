@@ -515,7 +515,7 @@ describe('package-first authoring', () => {
       operations: ContactOps,
     });
 
-    type ContactAdapter = Exclude<typeof contactModule['__adapter'], undefined>;
+    type ContactAdapter = Exclude<(typeof contactModule)['__adapter'], undefined>;
     type ContactUpdateInput = Parameters<ContactAdapter['update']>[1];
 
     const clearParent: ContactUpdateInput = { parentId: null };

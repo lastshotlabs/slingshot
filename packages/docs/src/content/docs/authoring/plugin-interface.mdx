@@ -34,7 +34,12 @@ void (0 as unknown as StandaloneApp);
 ## A complete plugin example
 
 ```typescript title="src/notes-plugin.ts"
-import { defineEvent, getContext, type SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import {
+  type SlingshotPlugin,
+  defineEvent,
+  getActor,
+  getContext,
+} from '@lastshotlabs/slingshot-core';
 
 type Note = {
   id: string;
@@ -71,8 +76,8 @@ export function createNotesPlugin(config: NotesPluginConfig): SlingshotPlugin {
           return c.json({ error: 'Notes adapter not initialized' }, 500);
         }
 
-        const authUserId = c.get('authUserId');
-        const notes = await adapter.list(authUserId ?? null);
+        const actor = getActor(c);
+        const notes = await adapter.list(actor.kind !== 'anonymous' ? actor.id : null);
         return c.json(notes, 200);
       });
     },
@@ -135,7 +140,7 @@ Runs after `setupMiddleware` finishes on all plugins, and after tenant middlewar
 <Aside type="caution">
   Do not mount routes in `setupPost`. Routes registered there may miss middleware that another
   plugin's `setupMiddleware` phase established, including the auth middleware that makes
-  `c.get('authUserId')` work.
+  `getActor(c)` work.
 </Aside>
 
 ### `setupPost` - wire up the fully assembled app
@@ -219,10 +224,10 @@ The framework never calls `setup()`. It exists for packages that also support a 
 ```typescript
 import { Hono } from 'hono';
 import {
-  createEventDefinitionRegistry,
-  createEventPublisher,
   type PluginSetupContext,
   type SlingshotPlugin,
+  createEventDefinitionRegistry,
+  createEventPublisher,
   createInProcessAdapter,
 } from '@lastshotlabs/slingshot-core';
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import type { OperationConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { z } from 'zod';
+import type { OperationConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import {
   defineEntityExecutor,
   defineEntityRoute,
@@ -84,7 +84,9 @@ describe('entity route planning', () => {
     });
 
     expect(routes.filter(route => route.generatedRouteKey === 'get')).toHaveLength(1);
-    expect(routes.filter(route => route.generatedRouteKey === 'operations.archive')).toHaveLength(1);
+    expect(routes.filter(route => route.generatedRouteKey === 'operations.archive')).toHaveLength(
+      1,
+    );
     expect(routes.find(route => route.generatedRouteKey === 'get')?.buildExecutor).toBeDefined();
     expect(
       routes.find(route => route.generatedRouteKey === 'operations.archive')?.buildExecutor,

@@ -108,8 +108,8 @@ app.post('/notifications', async c => {
 When `presence: true`, the server tracks who's connected to each room and broadcasts join/leave events:
 
 ```json
-{ "type": "presence_join", "room": "chat-room-1", "userId": "user-abc" }
-{ "type": "presence_leave", "room": "chat-room-1", "userId": "user-abc" }
+{ "type": "presence_join", "room": "chat-room-1", "actorId": "user-abc" }
+{ "type": "presence_leave", "room": "chat-room-1", "actorId": "user-abc" }
 ```
 
 ### Authentication

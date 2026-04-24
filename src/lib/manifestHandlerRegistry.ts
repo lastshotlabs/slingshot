@@ -12,10 +12,7 @@ import type {
   SlingshotEventBus,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
-import type {
-  AnyResolvedTask,
-  AnyResolvedWorkflow,
-} from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 
 /** A named function handler resolved from an AppManifestHandlerRef. */
 export type HandlerFactory = (params?: Record<string, unknown>) => unknown;

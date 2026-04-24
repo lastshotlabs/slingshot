@@ -24,10 +24,7 @@ import type {
   SlingshotEvents,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
-import {
-  createDefaultIdentityResolver,
-  deepFreeze,
-} from '@lastshotlabs/slingshot-core';
+import { createDefaultIdentityResolver, deepFreeze } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
@@ -247,7 +244,7 @@ export function publishAppShutdownOnce(
  * phases have completed.
  *
  * This is the single, controlled mutation point for the otherwise-frozen context
- * object.  It writes `routeAuth`, `userResolver`, `rateLimitAdapter`,
+ * object.  It writes `routeAuth`, `actorResolver`, `rateLimitAdapter`,
  * `fingerprintBuilder`, `cacheAdapters`, and `emailTemplates` from the drained
  * registrar snapshot into the context.
  *
@@ -260,7 +257,7 @@ export function finalizeContext(ctx: SlingshotContext, snapshot: CoreRegistrarSn
   const mutable = ctx as unknown as {
     identityResolver: CoreRegistrarSnapshot['identityResolver'];
     routeAuth: CoreRegistrarSnapshot['routeAuth'];
-    userResolver: CoreRegistrarSnapshot['userResolver'];
+    actorResolver: CoreRegistrarSnapshot['actorResolver'];
     rateLimitAdapter: CoreRegistrarSnapshot['rateLimitAdapter'];
     fingerprintBuilder: CoreRegistrarSnapshot['fingerprintBuilder'];
     [INTERNAL_CACHE_ADAPTERS]?: Map<unknown, unknown>;
@@ -272,8 +269,8 @@ export function finalizeContext(ctx: SlingshotContext, snapshot: CoreRegistrarSn
     mutable.identityResolver = freezePublishedContract(snapshot.identityResolver);
   }
   mutable.routeAuth = snapshot.routeAuth ? freezePublishedContract(snapshot.routeAuth) : null;
-  mutable.userResolver = snapshot.userResolver
-    ? freezePublishedContract(snapshot.userResolver)
+  mutable.actorResolver = snapshot.actorResolver
+    ? freezePublishedContract(snapshot.actorResolver)
     : null;
   mutable.rateLimitAdapter = snapshot.rateLimitAdapter
     ? freezePublishedContract(snapshot.rateLimitAdapter)
@@ -404,7 +401,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     kafkaConnectors: kafkaConnectors ?? null,
     identityResolver: createDefaultIdentityResolver(),
     routeAuth: null,
-    userResolver: null,
+    actorResolver: null,
     rateLimitAdapter: null,
     fingerprintBuilder: null,
     cacheAdapters: createReadonlyMapView(cacheAdaptersBacking) as SlingshotContext['cacheAdapters'],

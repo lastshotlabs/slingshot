@@ -1,0 +1,76 @@
+---
+title: Entity System
+description: The canonical authoring path for data-shaped domains in Slingshot
+---
+
+The entity system is how you author data-shaped domains the same way the framework's own packages
+do.
+
+It is code-first, package-friendly, and designed around generated behavior with explicit
+customization seams.
+
+## The canonical flow
+
+```typescript
+import { defineOperations, definePackage, defineEntity, entity, field, op } from '@lastshotlabs/slingshot';
+
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    authorId: field.string(),
+    title: field.string(),
+    status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' },
+    list: { auth: 'none' },
+  },
+});
+
+const PostOps = defineOperations(Post, {
+  publish: op.transition({
+    field: 'status',
+    from: 'draft',
+    to: 'published',
+    match: { id: 'param:id' },
+  }),
+});
+
+export const blogPackage = definePackage({
+  name: 'blog',
+  entities: [
+    entity({
+      config: Post,
+      operations: PostOps,
+    }),
+  ],
+});
+```
+
+## What the entity system gives you
+
+- one canonical entity definition
+- generated CRUD routes
+- named operations beyond CRUD
+- route policy for auth, permissions, rate limiting, idempotency, and events
+- swappable storage backends
+- customization seams for overrides and extra routes
+- WebSocket channel declarations and other advanced wiring when needed
+
+## The docs contract for this section
+
+Every important entity topic should answer four questions:
+
+1. what you get by default
+2. how to customize it
+3. what escape hatches exist
+4. when to stop using the generated path and drop lower
+
+## Learn this section in order
+
+- [defineEntity](/slingshot/entity-system/define-entity/)
+- [Route Policy](/slingshot/entity-system/route-policy/)
+- [Operations](/slingshot/entity-system/operations/)
+- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/)
+- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/)

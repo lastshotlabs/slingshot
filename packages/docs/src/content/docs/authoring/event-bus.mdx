@@ -110,7 +110,7 @@ The SSE endpoint only forwards events you have explicitly flagged as client-safe
 Register externally deliverable events before publishing them:
 
 ```typescript
-import { defineEvent, type SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { type SlingshotPlugin, defineEvent } from '@lastshotlabs/slingshot-core';
 
 declare module '@lastshotlabs/slingshot-core' {
   interface SlingshotEventMap {

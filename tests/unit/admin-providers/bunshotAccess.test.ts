@@ -17,9 +17,26 @@ function makeContext(adapter: AuthAdapter, userId?: string): any {
       ],
     ]),
   };
+  const actor = userId
+    ? Object.freeze({
+        id: userId,
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: null,
+        claims: {},
+      })
+    : Object.freeze({
+        id: null,
+        kind: 'anonymous' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: null,
+        claims: {},
+      });
   return {
     get: (key: string) => {
-      if (key === 'authUserId') return userId;
+      if (key === 'actor') return actor;
       if (key === 'slingshotCtx') return slingshotCtx;
       return undefined;
     },
@@ -42,7 +59,7 @@ beforeEach(() => {
 });
 
 describe('createSlingshotAuthAccessProvider — verifyRequest', () => {
-  test('returns null when authUserId is absent from context', async () => {
+  test('returns null when actor is anonymous', async () => {
     const provider = createSlingshotAuthAccessProvider();
     const result = await provider.verifyRequest(makeContext(mockAdapter as AuthAdapter, undefined));
     expect(result).toBeNull();

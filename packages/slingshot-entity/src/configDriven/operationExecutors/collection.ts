@@ -516,10 +516,13 @@ export function collectionMongo(
   const result: CollectionResult = {};
   const idField = op.identifyBy ?? 'id';
   const arrayField = opName;
+  const pkField = config._storageFields.mongoPkField;
 
   if (op.operations.includes('list')) {
     result.list = async parentId => {
-      const doc = await getModel().findOne({ _id: parentId }).lean();
+      const doc = await getModel()
+        .findOne({ [pkField]: parentId })
+        .lean();
       if (!doc) return [];
       const arr = doc[arrayField];
       return Array.isArray(arr) ? (arr as Array<Record<string, unknown>>) : [];
@@ -530,14 +533,14 @@ export function collectionMongo(
       const Model = getModel();
       if (op.maxItems) {
         const max = typeof op.maxItems === 'number' ? op.maxItems : Number(op.maxItems);
-        const doc = await Model.findOne({ _id: parentId }).lean();
+        const doc = await Model.findOne({ [pkField]: parentId }).lean();
         const arr = doc && Array.isArray(doc[arrayField]) ? doc[arrayField] : [];
         if (arr.length >= max) {
-          await Model.updateOne({ _id: parentId }, { $pop: { [arrayField]: -1 } });
+          await Model.updateOne({ [pkField]: parentId }, { $pop: { [arrayField]: -1 } });
         }
       }
       const pushOp: Record<string, unknown> = { $push: { [arrayField]: item } };
-      await Model.updateOne({ _id: parentId }, pushOp);
+      await Model.updateOne({ [pkField]: parentId }, pushOp);
       return { ...item };
     };
   }
@@ -546,7 +549,7 @@ export function collectionMongo(
       const pullOp: Record<string, unknown> = {
         $pull: { [arrayField]: { [idField]: identifyValue } },
       };
-      await getModel().updateOne({ _id: parentId }, pullOp);
+      await getModel().updateOne({ [pkField]: parentId }, pullOp);
     };
   }
   if (op.operations.includes('update')) {
@@ -556,11 +559,13 @@ export function collectionMongo(
         setFields[`${arrayField}.$[elem].${k}`] = v;
       }
       await getModel().updateOne(
-        { _id: parentId },
+        { [pkField]: parentId },
         { $set: setFields },
         { arrayFilters: [{ [`elem.${idField}`]: identifyValue }] },
       );
-      const doc = await getModel().findOne({ _id: parentId }).lean();
+      const doc = await getModel()
+        .findOne({ [pkField]: parentId })
+        .lean();
       const arr =
         doc && Array.isArray(doc[arrayField])
           ? (doc[arrayField] as Array<Record<string, unknown>>)
@@ -572,7 +577,7 @@ export function collectionMongo(
   }
   if (op.operations.includes('set')) {
     result.set = async (parentId, items) => {
-      await getModel().updateOne({ _id: parentId }, { $set: { [arrayField]: items } });
+      await getModel().updateOne({ [pkField]: parentId }, { $set: { [arrayField]: items } });
     };
   }
 

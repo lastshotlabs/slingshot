@@ -25,8 +25,17 @@ function buildApp(
 ) {
   const app = wrapWithRuntime(runtime);
   app.use('*', async (c, next) => {
-    c.set('authUserId', userId);
-    c.set('sessionId', 'test-session');
+    c.set(
+      'actor',
+      Object.freeze({
+        id: userId,
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: 'test-session',
+        roles: null,
+        claims: {},
+      }),
+    );
     await next();
   });
   // Handle HttpError thrown by the route (e.g. 501 for unconfigured OTP).

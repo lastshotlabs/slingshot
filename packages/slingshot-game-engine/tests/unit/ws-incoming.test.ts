@@ -80,7 +80,7 @@ function findHandler(event: string) {
   return handler.handler;
 }
 
-function makeWsContext(userId = 'host-user') {
+function makeWsContext(actorId = 'host-user') {
   const acknowledgements: unknown[] = [];
   const publications: Array<{ room: string; data: unknown }> = [];
   const subscriptions: string[] = [];
@@ -88,7 +88,7 @@ function makeWsContext(userId = 'host-user') {
 
   return {
     ctx: {
-      userId,
+      actorId,
       socketId: 'socket-1',
       payload: null,
       ack(data: unknown) {

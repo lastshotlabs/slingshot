@@ -147,15 +147,9 @@ export function toRouteHandler(
       requestId: c.get('requestId'),
       actor,
       requestTenantId: getRequestTenantId(c),
-      // Legacy aliases projected from actor.
-      tenantId: actor.tenantId,
-      authUserId: actor.kind === 'user' ? actor.id : null,
-      roles: actor.roles,
       correlationId: c.get('requestId'),
       ip: readClientIp(c),
       idempotencyKey: c.req.header('idempotency-key') ?? undefined,
-      authClientId: actor.kind === 'service-account' ? actor.id : (c.get('authClientId') ?? null),
-      bearerClientId: actor.kind === 'api-key' ? actor.id : (c.get('bearerClientId') ?? null),
     };
 
     const output = await handler.invoke(raw, { ctx: getSlingshotCtx(c), meta });

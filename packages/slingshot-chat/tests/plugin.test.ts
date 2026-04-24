@@ -15,9 +15,9 @@ import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEntityRegistry,
   createEventDefinitionRegistry,
   createEventPublisher,
-  createEntityRegistry,
   getContext,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';

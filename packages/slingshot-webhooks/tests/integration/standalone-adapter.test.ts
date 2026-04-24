@@ -169,9 +169,9 @@ describe('standalone adapter mode', () => {
 
     await adapter.updateDelivery(delivery.id, { status: 'delivered' });
 
-    await expect(
-      adapter.updateDelivery(delivery.id, { status: 'pending' }),
-    ).rejects.toThrow("Invalid delivery transition from 'delivered' to 'pending'");
+    await expect(adapter.updateDelivery(delivery.id, { status: 'pending' })).rejects.toThrow(
+      "Invalid delivery transition from 'delivered' to 'pending'",
+    );
   });
 
   test('memory adapter lists only enabled endpoints', async () => {

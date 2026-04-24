@@ -235,7 +235,7 @@ When using `slingshot-organizations`, organizations are a natural tenant boundar
 
 ```typescript
 tenantResolver: c => {
-  // After auth middleware sets authUserId, resolve the user's current org
+  // After auth middleware sets the actor, resolve the user's current org
   const orgId = c.req.header('x-organization-id');
   return orgId ?? undefined;
 };

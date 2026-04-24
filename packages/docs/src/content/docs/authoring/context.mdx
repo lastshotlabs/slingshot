@@ -46,6 +46,10 @@ interface SlingshotContext {
   sqlite: string | null; // path to the SQLite file
   sqliteDb: RuntimeSqliteDatabase | null; // open SQLite handle
 
+  // Identity
+  identityResolver: IdentityResolver; // maps raw auth context to Actor
+  actorResolver: RequestActorResolver | null; // resolves actor ID from raw HTTP (WS/SSE upgrades)
+
   // WS — populated by createServer() after boot, null during plugin phases
   ws: WsState | null;
   wsEndpoints: Record<string, unknown> | null; // bootstrap endpoint draft when ws config is supplied

@@ -1,7 +1,12 @@
 import { extname } from 'node:path';
 import type { Context } from 'hono';
 import type { AppEnv, StorageAdapter, UploadResult } from '@lastshotlabs/slingshot-core';
-import { HttpError, getActorId, getActorTenantId, resolveContext } from '@lastshotlabs/slingshot-core';
+import {
+  HttpError,
+  getActorId,
+  getActorTenantId,
+  resolveContext,
+} from '@lastshotlabs/slingshot-core';
 
 /**
  * Options for multipart and direct upload helpers.

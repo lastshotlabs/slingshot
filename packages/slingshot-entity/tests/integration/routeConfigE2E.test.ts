@@ -161,14 +161,22 @@ function attachSlingshotCtx(
             const rt = options.authRuntime!;
             const suspensionStatus = await rt.adapter.getSuspended(actorId);
             if (suspensionStatus?.suspended) {
-              return { error: 'ACCOUNT_SUSPENDED', message: 'Account is suspended', status: 403 as const };
+              return {
+                error: 'ACCOUNT_SUSPENDED',
+                message: 'Account is suspended',
+                status: 403 as const,
+              };
             }
             const requiresVerifiedEmail =
               rt.config?.primaryField === 'email' && rt.config.emailVerification?.required === true;
             if (requiresVerifiedEmail && rt.adapter.getEmailVerified) {
               const verified = await rt.adapter.getEmailVerified(actorId);
               if (!verified) {
-                return { error: 'EMAIL_NOT_VERIFIED', message: 'Email not verified', status: 403 as const };
+                return {
+                  error: 'EMAIL_NOT_VERIFIED',
+                  message: 'Email not verified',
+                  status: 403 as const,
+                };
               }
             }
             return null;
@@ -180,7 +188,17 @@ function attachSlingshotCtx(
       pluginState,
       routeAuth: {
         userAuth: async (_c: Context, nextAuth: Next) => {
-          _c.set('authUserId', 'user-1');
+          _c.set(
+            'actor',
+            Object.freeze({
+              id: 'user-1',
+              kind: 'user' as const,
+              tenantId: options.tenantId ?? null,
+              sessionId: null,
+              roles: null,
+              claims: {},
+            }),
+          );
           await nextAuth();
         },
         requireRole: () => async (_c: Context, nextAuth: Next) => nextAuth(),
@@ -845,7 +863,7 @@ describe('named operation inference — HTTP round-trip', () => {
     expect(middlewareCalled).toBe(true);
   });
 
-  it('runs custom middleware after auth so authUserId is available', async () => {
+  it('runs custom middleware after auth so actor is available', async () => {
     records.clear();
     idCounter = 0;
     const adapter = createMemoryAdapter();
@@ -975,7 +993,10 @@ describe('named operation inference — HTTP round-trip', () => {
     );
 
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: 'ACCOUNT_SUSPENDED', message: 'Account is suspended' });
+    expect(await res.json()).toEqual({
+      error: 'ACCOUNT_SUSPENDED',
+      message: 'Account is suspended',
+    });
     expect(records.size).toBe(0);
   });
 
@@ -1013,7 +1034,10 @@ describe('named operation inference — HTTP round-trip', () => {
     );
 
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: 'EMAIL_NOT_VERIFIED', message: 'Email not verified' });
+    expect(await res.json()).toEqual({
+      error: 'EMAIL_NOT_VERIFIED',
+      message: 'Email not verified',
+    });
     expect(records.size).toBe(0);
   });
 

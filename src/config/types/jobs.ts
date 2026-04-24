@@ -19,7 +19,7 @@ export interface JobsConfig {
   allowedQueues?: string[];
   /**
    * Restrict job visibility to the authenticated user who created it.
-   * Requires `auth: "userAuth"` so the framework can trust `authUserId`.
+   * Requires `auth: "userAuth"` so the framework can trust the actor identity.
    * Default: false.
    */
   scopeToUser?: boolean;

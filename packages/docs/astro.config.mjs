@@ -38,35 +38,73 @@ export default defineConfig({
         {
           label: 'Get Started',
           items: [
+            { label: 'Overview', slug: '' },
             { label: 'Start Here', slug: 'start-here' },
             { label: 'Introduction', slug: 'getting-started' },
             { label: 'Quick Start', slug: 'quick-start' },
             { label: 'Installation', slug: 'installation' },
-            { label: 'Manifest vs Code', slug: 'manifest-vs-code' },
             { label: 'FAQ', slug: 'faq' },
           ],
         },
         {
-          label: 'Agent Flows',
+          label: 'App Authoring',
           items: [
-            { label: 'Framework Contributor', slug: 'agent-flows/framework-contributor' },
-            { label: 'App Builder', slug: 'agent-flows/app-builder' },
+            { label: 'Overview', slug: 'app-authoring' },
+            {
+              label: 'createServer and createApp',
+              slug: 'app-authoring/create-server-and-create-app',
+            },
+            { label: 'App Config', slug: 'app-authoring/app-config' },
+            {
+              label: 'Context and Request Model',
+              slug: 'app-authoring/context-and-request-model',
+            },
+            { label: 'Middleware', slug: 'app-authoring/middleware' },
+            {
+              label: 'Events and the Event Bus',
+              slug: 'app-authoring/events-and-the-event-bus',
+            },
+            { label: 'WebSockets', slug: 'app-authoring/websockets' },
+            { label: 'Server-Sent Events', slug: 'app-authoring/server-sent-events' },
+            { label: 'Packages and Plugins', slug: 'app-authoring/packages-and-plugins' },
+            {
+              label: 'OpenAPI and Validation',
+              slug: 'app-authoring/openapi-and-validation',
+            },
+            {
+              label: 'Runtime and Infrastructure',
+              slug: 'app-authoring/runtime-and-infrastructure',
+            },
           ],
         },
         {
-          label: 'Config-Driven',
+          label: 'Package-First Authoring',
           items: [
-            { label: 'Overview', slug: 'config-driven' },
-            { label: 'Packages and Capabilities', slug: 'config-driven/packages' },
-            { label: 'Entities', slug: 'config-driven/entities' },
-            { label: 'Routes', slug: 'config-driven/routes' },
-            { label: 'Cross-Entity and Transactions', slug: 'config-driven/cross-entity' },
-            { label: 'Adapters and Factories', slug: 'config-driven/adapters' },
-            { label: 'Auth, Policies, and Middleware', slug: 'config-driven/auth-and-middleware' },
-            { label: 'Escape Hatches', slug: 'config-driven/escape-hatches' },
-            { label: 'Workflow', slug: 'config-driven/workflow' },
-            { label: 'Operations Reference', slug: 'config-driven/operations' },
-            { label: 'Infrastructure', slug: 'config-driven/infra' },
+            { label: 'Overview', slug: 'package-first' },
+            { label: 'definePackage', slug: 'package-first/define-package' },
+            { label: 'domain and route', slug: 'package-first/domain-and-route' },
+            {
+              label: 'Capabilities and entityRef',
+              slug: 'package-first/capabilities-and-entity-ref',
+            },
+            { label: 'Escape Hatches', slug: 'package-first/escape-hatches' },
+          ],
+        },
+        {
+          label: 'Entity System',
+          items: [
+            { label: 'Overview', slug: 'entity-system' },
+            { label: 'defineEntity', slug: 'entity-system/define-entity' },
+            { label: 'Route Policy', slug: 'entity-system/route-policy' },
+            { label: 'Operations', slug: 'entity-system/operations' },
+            {
+              label: 'Storage and Adapter Wiring',
+              slug: 'entity-system/storage-and-adapter-wiring',
+            },
+            {
+              label: 'Generated Routes, Overrides, and Extra Routes',
+              slug: 'entity-system/generated-routes-overrides-and-extra-routes',
+            },
           ],
         },
         {
@@ -102,33 +140,18 @@ export default defineConfig({
         {
           label: 'Guides',
           items: [
-            {
-              label: 'Core',
-              items: [
-                { label: 'OpenAPI', slug: 'guides/openapi' },
-                { label: 'Error Handling', slug: 'guides/error-handling' },
-                { label: 'File Uploads', slug: 'guides/file-uploads' },
-                { label: 'Realtime', slug: 'realtime' },
-                { label: 'WebSockets', slug: 'guides/websockets' },
-                { label: 'Multi-Tenancy', slug: 'guides/multi-tenancy' },
-              ],
-            },
-            {
-              label: 'Production',
-              items: [
-                { label: 'Security', slug: 'guides/security' },
-                { label: 'Secrets', slug: 'guides/secrets' },
-                { label: 'Testing', slug: 'guides/testing' },
-                { label: 'Monitoring', slug: 'guides/monitoring' },
-                { label: 'Deployment', slug: 'guides/deployment' },
-                { label: 'Horizontal Scaling', slug: 'guides/horizontal-scaling' },
-                { label: 'Runtime', slug: 'guides/runtime' },
-              ],
-            },
-            {
-              label: 'Troubleshooting',
-              items: [{ label: 'Common Problems', slug: 'guides/troubleshooting' }],
-            },
+            { label: 'Security', slug: 'guides/security' },
+            { label: 'Multi-Tenancy', slug: 'guides/multi-tenancy' },
+            { label: 'Permissions', slug: 'guides/permissions' },
+            { label: 'Uploads', slug: 'guides/file-uploads' },
+            { label: 'Runtime', slug: 'guides/runtime' },
+            { label: 'Secrets', slug: 'guides/secrets' },
+            { label: 'Observability', slug: 'guides/observability' },
+            { label: 'Monitoring', slug: 'guides/monitoring' },
+            { label: 'Testing', slug: 'guides/testing' },
+            { label: 'Deployment', slug: 'guides/deployment' },
+            { label: 'Horizontal Scaling', slug: 'guides/horizontal-scaling' },
+            { label: 'Troubleshooting', slug: 'guides/troubleshooting' },
           ],
         },
         {
@@ -137,20 +160,33 @@ export default defineConfig({
           autogenerate: { directory: 'packages' },
         },
         {
-          label: 'Build a Plugin',
+          label: 'Alternate Paths',
+          items: [
+            { label: 'Overview', slug: 'alternate-paths' },
+            { label: 'Manifest Authoring', slug: 'alternate-paths/manifest-authoring' },
+            { label: 'Manifest vs Code', slug: 'manifest-vs-code' },
+          ],
+        },
+        {
+          label: 'Contributor Flows',
           collapsed: true,
           items: [
-            { label: 'How It Works', slug: 'plugins/overview' },
-            { label: 'Workflow', slug: 'config-driven/workflow' },
-            { label: 'Config-Driven Walkthrough', slug: 'config-driven-walkthrough' },
-            { label: 'Operations Reference', slug: 'config-driven/operations' },
-            { label: 'Step-by-Step Example', slug: 'examples/config-driven-domain' },
+            { label: 'Framework Contributor', slug: 'agent-flows/framework-contributor' },
+            { label: 'App Builder', slug: 'agent-flows/app-builder' },
+          ],
+        },
+        {
+          label: 'Plugin and Authoring Reference',
+          collapsed: true,
+          items: [
+            { label: 'Plugin Overview', slug: 'plugins/overview' },
             { label: 'Plugin Interface', slug: 'authoring/plugin-interface' },
             { label: 'SlingshotContext', slug: 'authoring/context' },
             { label: 'CoreRegistrar', slug: 'authoring/registrar' },
             { label: 'Event Bus', slug: 'authoring/event-bus' },
             { label: 'Testing Plugins', slug: 'authoring/testing-plugins' },
             { label: 'Publishing', slug: 'authoring/publishing' },
+            { label: 'Config-Driven Walkthrough', slug: 'config-driven-walkthrough' },
           ],
         },
         {

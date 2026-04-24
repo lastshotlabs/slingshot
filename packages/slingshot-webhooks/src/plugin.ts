@@ -13,6 +13,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { deliverWebhook } from './lib/dispatcher';
 import { wireEventSubscriptions } from './lib/eventWiring';
+import type { GovernedWebhookRuntime } from './manifest/runtime';
 import { createWebhookMemoryQueue } from './queues/memory';
 import { createInboundRouter } from './routes/inbound';
 import { WEBHOOK_ROUTES } from './routes/index';
@@ -23,7 +24,6 @@ import type { InboundProvider } from './types/inbound';
 import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
-import type { GovernedWebhookRuntime } from './manifest/runtime';
 
 /**
  * Runs a Hono middleware and returns its response if it blocked (did not call
@@ -52,7 +52,9 @@ async function runGuardMiddleware(
  */
 function buildRoleGuard(role: string): MiddlewareHandler {
   return async (c, next) => {
-    const slingshotCtx = c.get('slingshotCtx') as Parameters<typeof getRouteAuthOrNull>[0] | undefined;
+    const slingshotCtx = c.get('slingshotCtx') as
+      | Parameters<typeof getRouteAuthOrNull>[0]
+      | undefined;
     if (slingshotCtx) {
       const routeAuth = getRouteAuthOrNull(slingshotCtx);
       if (routeAuth) {

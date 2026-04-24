@@ -42,7 +42,7 @@ Runs after framework core middleware, before tenant resolution. Use it for:
 - Request guards that intercept before any route matches
 - Security fingerprinting and rate limit state
 
-`slingshot-auth` uses this phase — it has to. Downstream packages call `c.get('authUserId')` from their route handlers, so auth must run first.
+`slingshot-auth` uses this phase — it has to. Downstream packages call `getActor(c)` from their route handlers, so auth must run first.
 
 ### `setupRoutes` — mount routes after tenant context is available
 

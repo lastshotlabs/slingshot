@@ -2,24 +2,21 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Client, Connection } from '@temporalio/client';
 import { NativeConnection } from '@temporalio/worker';
-import {
-  createOrchestrationRuntime,
-  type AnyResolvedTask,
-  type AnyResolvedWorkflow,
-} from '../../packages/slingshot-orchestration/src/index';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createTemporalOrchestrationAdapter } from '../../packages/slingshot-orchestration-temporal/src/adapter';
 import { createTemporalOrchestrationWorker } from '../../packages/slingshot-orchestration-temporal/src/worker';
+import {
+  type AnyResolvedTask,
+  type AnyResolvedWorkflow,
+  createOrchestrationRuntime,
+} from '../../packages/slingshot-orchestration/src/index';
 import { createTemporalOrchestrationWorkerFromManifest } from '../../src/lib/createTemporalOrchestrationWorkerFromManifest';
 
 const TEMPORAL_ADDRESS = process.env.TEST_TEMPORAL_ADDRESS ?? 'localhost:7233';
 const TEMPORAL_NAMESPACE = process.env.TEST_TEMPORAL_NAMESPACE ?? 'default';
-const FIXTURE_PATH = resolve(
-  process.cwd(),
-  'tests/node-docker/fixtures/temporal-definitions.ts',
-);
+const FIXTURE_PATH = resolve(process.cwd(), 'tests/node-docker/fixtures/temporal-definitions.ts');
 const MANIFEST_FIXTURE_PATH = resolve(
   process.cwd(),
   'tests/node-docker/fixtures/temporal-manifest-handlers.ts',
@@ -29,7 +26,11 @@ function uniqueName(label: string): string {
   return `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-async function waitFor<T>(callback: () => Promise<T>, predicate: (value: T) => boolean, timeoutMs = 15_000): Promise<T> {
+async function waitFor<T>(
+  callback: () => Promise<T>,
+  predicate: (value: T) => boolean,
+  timeoutMs = 15_000,
+): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   while (true) {
     const value = await callback();
@@ -56,12 +57,10 @@ async function importFixtureModule(): Promise<TemporalFixtureModule> {
   return (await import(pathToFileURL(FIXTURE_PATH).href)) as TemporalFixtureModule;
 }
 
-async function startSupervisor(
-  supervisor: {
-    run(): Promise<void>;
-    shutdown(): Promise<void>;
-  },
-): Promise<() => Promise<void>> {
+async function startSupervisor(supervisor: {
+  run(): Promise<void>;
+  shutdown(): Promise<void>;
+}): Promise<() => Promise<void>> {
   let failure: unknown;
   const runPromise = supervisor.run().catch(error => {
     failure = error;
@@ -218,7 +217,9 @@ describe('Temporal orchestration integration (docker)', () => {
         workflowProgress.push(progress as Record<string, unknown> | undefined);
       });
 
-      await expect(runtime.signal(workflowHandle.id, 'user-approval', { approved: true })).resolves.toBeUndefined();
+      await expect(
+        runtime.signal(workflowHandle.id, 'user-approval', { approved: true }),
+      ).resolves.toBeUndefined();
       await expect(workflowHandle.result()).resolves.toEqual({
         emailAttempt: 2,
         fullName: 'Ada Lovelace',

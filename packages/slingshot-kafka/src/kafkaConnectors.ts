@@ -336,10 +336,7 @@ function resolveMessageId(
   return envelope.meta.eventId || randomUUID();
 }
 
-function createOutboundEnvelope(
-  envelope: OutboundEnvelope,
-  payload: unknown,
-): OutboundEnvelope {
+function createOutboundEnvelope(envelope: OutboundEnvelope, payload: unknown): OutboundEnvelope {
   return Object.freeze({
     key: envelope.key,
     payload,
@@ -659,7 +656,11 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
       const key = resolvePartitionKey(config, envelope, transformed);
       const serialized = serializer.serialize(config.event, outboundEnvelope);
 
-      let messageHeaders = buildOutboundHeaders(outboundEnvelope, serializer.contentType, messageId);
+      let messageHeaders = buildOutboundHeaders(
+        outboundEnvelope,
+        serializer.contentType,
+        messageId,
+      );
       if (config.headers) {
         messageHeaders = config.headers(messageHeaders, outboundEnvelope);
       }

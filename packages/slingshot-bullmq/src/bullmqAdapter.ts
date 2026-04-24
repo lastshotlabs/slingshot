@@ -2,8 +2,8 @@ import { Queue, Worker } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
 import { z } from 'zod';
 import type {
-  EventEnvelope,
   EventBusSerializationOptions,
+  EventEnvelope,
   SlingshotEventBus,
   SlingshotEventMap,
   SubscriptionOpts,
@@ -202,7 +202,10 @@ export function createBullMQAdapter(
   const attempts = opts.attempts ?? 3;
   const eventSerializer = serializer ?? JSON_SERIALIZER;
   const validationMode = opts.validation ?? 'off';
-  const envelopeListeners = new Map<string, Set<(envelope: EventEnvelope) => void | Promise<void>>>();
+  const envelopeListeners = new Map<
+    string,
+    Set<(envelope: EventEnvelope) => void | Promise<void>>
+  >();
   const payloadListenerWrappers = new Map<
     string,
     Map<
@@ -212,7 +215,10 @@ export function createBullMQAdapter(
   >();
 
   // Track durable listeners so off() can detect and reject them
-  const durableListeners = new Map<string, Set<(envelope: EventEnvelope) => void | Promise<void>>>();
+  const durableListeners = new Map<
+    string,
+    Set<(envelope: EventEnvelope) => void | Promise<void>>
+  >();
 
   // Track all created queues and workers for graceful shutdown
   const queues: Queue[] = [];
@@ -315,8 +321,12 @@ export function createBullMQAdapter(
         ? payload
         : createRawEventEnvelope(
             event as Extract<keyof SlingshotEventMap, string>,
-            validateEventPayload(event as string, payload, schemaRegistry, validationMode) as
-              SlingshotEventMap[K],
+            validateEventPayload(
+              event as string,
+              payload,
+              schemaRegistry,
+              validationMode,
+            ) as SlingshotEventMap[K],
           );
 
       // Fire local (non-durable) listeners synchronously via fire-and-forget.
@@ -385,7 +395,11 @@ export function createBullMQAdapter(
         payloadListenerWrappers.set(key, wrappers);
       }
       wrappers.set(listener as (payload: unknown) => void | Promise<void>, wrapper);
-      this.onEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void | Promise<void>, subscriptionOpts);
+      this.onEnvelope(
+        event,
+        wrapper as (envelope: EventEnvelope<K>) => void | Promise<void>,
+        subscriptionOpts,
+      );
     },
 
     onEnvelope<K extends keyof SlingshotEventMap>(
@@ -431,8 +445,12 @@ export function createBullMQAdapter(
               ? decoded
               : createRawEventEnvelope(
                   event as Extract<keyof SlingshotEventMap, string>,
-                  validateEventPayload(event as string, decoded, schemaRegistry, validationMode) as
-                    SlingshotEventMap[K],
+                  validateEventPayload(
+                    event as string,
+                    decoded,
+                    schemaRegistry,
+                    validationMode,
+                  ) as SlingshotEventMap[K],
                 );
             await Promise.resolve(listener(envelope as EventEnvelope<K>));
           },
@@ -457,7 +475,9 @@ export function createBullMQAdapter(
 
         // Track durable listener so off() can detect and reject it
         if (!durableListeners.has(key)) durableListeners.set(key, new Set());
-        durableListeners.get(key)?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
+        durableListeners
+          .get(key)
+          ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
       } else {
         if (!envelopeListeners.has(key)) envelopeListeners.set(key, new Set());
         envelopeListeners

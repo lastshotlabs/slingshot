@@ -69,7 +69,7 @@ describe('finalizeContext — edge cases', () => {
     // it unchanged — covers the `return value` branch at line 44.
     const ctx = {
       routeAuth: null,
-      userResolver: null,
+      actorResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map(),
@@ -78,7 +78,7 @@ describe('finalizeContext — edge cases', () => {
 
     const snapshot = {
       routeAuth: null,
-      userResolver: null,
+      actorResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map(),
@@ -148,7 +148,7 @@ describe('freezePublishedContract — non-object path', () => {
     // freezePublishedContract returns it without calling Object.freeze.
     const ctx = {
       routeAuth: null,
-      userResolver: null,
+      actorResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map(),
@@ -157,7 +157,7 @@ describe('freezePublishedContract — non-object path', () => {
 
     const snapshot = {
       routeAuth: null,
-      userResolver: null,
+      actorResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map(),
@@ -172,7 +172,7 @@ describe('freezePublishedContract — non-object path', () => {
   test('freezes null/falsy values through the ternary (line 44)', () => {
     const ctx = {
       routeAuth: null,
-      userResolver: null,
+      actorResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map(),
@@ -185,7 +185,7 @@ describe('freezePublishedContract — non-object path', () => {
     // is false -> falls to line 45 return value
     const snapshot = {
       routeAuth: null,
-      userResolver: null,
+      actorResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map(),
@@ -267,7 +267,7 @@ describe('finalizeContext', () => {
   test('replaces registrar-owned fields and refreshes mutable maps from the snapshot', () => {
     const ctx = {
       routeAuth: 'stale-route-auth',
-      userResolver: 'stale-user-resolver',
+      actorResolver: 'stale-actor-resolver',
       rateLimitAdapter: 'stale-rate-limit-adapter',
       fingerprintBuilder: 'stale-fingerprint-builder',
       cacheAdapters: new Map([[Symbol.for('old-store'), 'old-adapter']]),
@@ -276,7 +276,7 @@ describe('finalizeContext', () => {
 
     const snapshot = {
       routeAuth: { userAuth: async () => {} },
-      userResolver: { resolveUserId: async () => 'user-1' },
+      actorResolver: { resolveActorId: async () => 'user-1' },
       rateLimitAdapter: {
         trackAttempt: async () => false,
         resetAttempts: async () => {},
@@ -289,11 +289,11 @@ describe('finalizeContext', () => {
     finalizeContext(ctx, snapshot);
 
     expect(ctx.routeAuth).toBe(snapshot.routeAuth);
-    expect(ctx.userResolver).toBe(snapshot.userResolver);
+    expect(ctx.actorResolver).toBe(snapshot.actorResolver);
     expect(ctx.rateLimitAdapter).toBe(snapshot.rateLimitAdapter);
     expect(ctx.fingerprintBuilder).toBe(snapshot.fingerprintBuilder);
     expect(Object.isFrozen(ctx.routeAuth)).toBe(true);
-    expect(Object.isFrozen(ctx.userResolver)).toBe(true);
+    expect(Object.isFrozen(ctx.actorResolver)).toBe(true);
     expect(Object.isFrozen(ctx.rateLimitAdapter)).toBe(true);
     expect(Object.isFrozen(ctx.fingerprintBuilder)).toBe(true);
     expect([...ctx.cacheAdapters.entries()]).toEqual([...snapshot.cacheAdapters.entries()]);
@@ -507,7 +507,7 @@ describe('buildContext lifecycle', () => {
     finalizeContext(ctx, {
       identityResolver: null,
       routeAuth: null,
-      userResolver: null,
+      actorResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map([['memory', cacheAdapter]]),
@@ -726,7 +726,7 @@ describe('buildContext lifecycle', () => {
     finalizeContext(ctx, {
       identityResolver: null,
       routeAuth: null,
-      userResolver: null,
+      actorResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map([
@@ -819,7 +819,7 @@ describe('buildContext lifecycle', () => {
     finalizeContext(ctx, {
       identityResolver: null,
       routeAuth: null,
-      userResolver: null,
+      actorResolver: null,
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map([

@@ -5,8 +5,8 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
-  defineEvent,
   deepFreeze,
+  defineEvent,
   getPluginState,
   resolveRepo,
   validatePluginConfig,

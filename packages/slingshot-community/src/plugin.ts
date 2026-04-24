@@ -8,8 +8,8 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   PERMISSIONS_STATE_KEY,
-  defineEvent,
   deepFreeze,
+  defineEvent,
   getActor,
   getContextOrNull,
   getNotificationsStateOrNull,

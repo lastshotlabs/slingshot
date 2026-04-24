@@ -75,10 +75,7 @@ async function sleep(ms: number): Promise<void> {
 }
 
 async function runCleanupWithTimeout(fn: () => Promise<void>, ms = 5_000): Promise<void> {
-  await Promise.race([
-    fn().catch(() => {}),
-    sleep(ms),
-  ]);
+  await Promise.race([fn().catch(() => {}), sleep(ms)]);
 }
 
 async function waitFor(
@@ -356,17 +353,172 @@ afterEach(async () => {
 });
 
 describe('Kafka SASL runtime paths (Docker)', () => {
-  test('Kafka adapter round-trips through the SCRAM-enabled broker and warns when SSL is absent', async () => {
-    const warned = mock((_message: unknown) => {});
-    const originalWarn = console.warn;
-    console.warn = warned;
+  test(
+    'Kafka adapter round-trips through the SCRAM-enabled broker and warns when SSL is absent',
+    async () => {
+      const warned = mock((_message: unknown) => {});
+      const originalWarn = console.warn;
+      console.warn = warned;
 
-    try {
+      try {
+        const bus = createKafkaAdapter({
+          brokers: [KAFKA_SASL_BROKER],
+          sasl: KAFKA_SASL,
+          topicPrefix: uniqueName('slingshot.sasl.events'),
+          groupPrefix: uniqueName('slingshot.sasl.groups'),
+          startFromBeginning: true,
+        });
+        cleanup.push(() => bus.shutdown?.() ?? Promise.resolve());
+
+        const introspection = getKafkaAdapterIntrospectionOrNull(bus);
+        if (!introspection) {
+          throw new Error('Kafka adapter introspection missing');
+        }
+
+        const topic = introspection.topicNameForEvent('auth:login');
+        await ensureSecureTopic(topic);
+        const received: Array<{ userId: string; sessionId: string }> = [];
+
+        bus.on(
+          'auth:login',
+          payload => {
+            received.push(payload);
+          },
+          { durable: true, name: uniqueName('scram-worker') },
+        );
+
+        await waitFor(
+          () => bus.health().consumers[0]?.connected === true,
+          15_000,
+          'SCRAM adapter durable consumer did not connect',
+        );
+        await sleep(1_500);
+
+        const producer = await createSecureProducer();
+        await producer.send({
+          topic,
+          messages: [
+            {
+              key: 'secure-consume',
+              value: Buffer.from(
+                JSON.stringify({
+                  userId: 'secure-consume-user',
+                  sessionId: 'secure-consume-session',
+                }),
+              ),
+            },
+          ],
+        });
+
+        await waitFor(
+          () => received.length === 1,
+          15_000,
+          'SCRAM adapter durable consume did not complete',
+        );
+        expect(received).toEqual([
+          { userId: 'secure-consume-user', sessionId: 'secure-consume-session' },
+        ]);
+
+        const brokerMessages = await collectSecureMessages(topic);
+        bus.emit('auth:login', {
+          userId: 'secure-produce-user',
+          sessionId: 'secure-produce-session',
+        });
+
+        await waitFor(
+          () => brokerMessages.length === 1,
+          15_000,
+          'SCRAM adapter publish did not reach Kafka',
+        );
+
+        expect(JSON.parse(brokerMessages[0]!.value ?? '{}')).toEqual({
+          userId: 'secure-produce-user',
+          sessionId: 'secure-produce-session',
+        });
+        expect(
+          warned.mock.calls.some(call => String(call[0]).includes('SASL configured without SSL')),
+        ).toBe(true);
+      } finally {
+        console.warn = originalWarn;
+      }
+    },
+    SASL_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    'Kafka connectors bridge events through the SCRAM-enabled broker and warn when SSL is absent',
+    async () => {
+      const warned = mock((_message: unknown) => {});
+      const originalWarn = console.warn;
+      console.warn = warned;
+
+      try {
+        const bus = createInProcessAdapter();
+        const topic = uniqueName('external.secure.users');
+        const received: Array<{ userId: string; email?: string }> = [];
+
+        const connectors = createKafkaConnectors({
+          brokers: [KAFKA_SASL_BROKER],
+          sasl: KAFKA_SASL,
+          inbound: [
+            {
+              topic,
+              groupId: uniqueName('secure-sync'),
+              handler: payload => {
+                received.push(payload as { userId: string; email?: string });
+              },
+            },
+          ],
+          outbound: [
+            {
+              event: 'auth:user.created',
+              topic,
+              autoCreateTopic: true,
+            },
+          ],
+        });
+        cleanup.push(() => connectors.stop());
+
+        await connectors.start(bus);
+        await sleep(500);
+
+        bus.emit('auth:user.created', {
+          userId: 'secure-connector-user',
+          email: 'secure@example.com',
+        });
+
+        await waitFor(
+          () => received.length === 1,
+          15_000,
+          'SCRAM connectors did not bridge the event through Kafka',
+        );
+
+        expect(received).toEqual([
+          { userId: 'secure-connector-user', email: 'secure@example.com' },
+        ]);
+        expect(
+          warned.mock.calls.some(call => String(call[0]).includes('SASL configured without SSL')),
+        ).toBe(true);
+      } finally {
+        console.warn = originalWarn;
+      }
+    },
+    SASL_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    'Kafka adapter round-trips through the SASL-enabled broker using SCRAM-SHA-512',
+    async () => {
+      const topicPrefix = uniqueName('slingshot.sasl512.events');
+      const groupPrefix = uniqueName('slingshot.sasl512.groups');
+      await grantScram512RoundTripAcl({ topicPrefix, groupPrefix });
+
       const bus = createKafkaAdapter({
         brokers: [KAFKA_SASL_BROKER],
-        sasl: KAFKA_SASL,
-        topicPrefix: uniqueName('slingshot.sasl.events'),
-        groupPrefix: uniqueName('slingshot.sasl.groups'),
+        sasl: KAFKA_SASL_SCRAM_512,
+        topicPrefix,
+        groupPrefix,
+        autoCreateTopics: false,
         startFromBeginning: true,
       });
       cleanup.push(() => bus.shutdown?.() ?? Promise.resolve());
@@ -377,7 +529,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
       }
 
       const topic = introspection.topicNameForEvent('auth:login');
-      await ensureSecureTopic(topic);
+      await ensureSecureTopic(topic, 1, KAFKA_SASL);
       const received: Array<{ userId: string; sessionId: string }> = [];
 
       bus.on(
@@ -385,26 +537,26 @@ describe('Kafka SASL runtime paths (Docker)', () => {
         payload => {
           received.push(payload);
         },
-        { durable: true, name: uniqueName('scram-worker') },
+        { durable: true, name: uniqueName('scram512-worker') },
       );
 
       await waitFor(
         () => bus.health().consumers[0]?.connected === true,
         15_000,
-        'SCRAM adapter durable consumer did not connect',
+        'SCRAM-SHA-512 adapter durable consumer did not connect',
       );
       await sleep(1_500);
 
-      const producer = await createSecureProducer();
+      const producer = await createSecureProducer(KAFKA_SASL_SCRAM_512);
       await producer.send({
         topic,
         messages: [
           {
-            key: 'secure-consume',
+            key: 'scram512-consume',
             value: Buffer.from(
               JSON.stringify({
-                userId: 'secure-consume-user',
-                sessionId: 'secure-consume-session',
+                userId: 'scram512-consume-user',
+                sessionId: 'scram512-consume-session',
               }),
             ),
           },
@@ -414,53 +566,51 @@ describe('Kafka SASL runtime paths (Docker)', () => {
       await waitFor(
         () => received.length === 1,
         15_000,
-        'SCRAM adapter durable consume did not complete',
+        'SCRAM-SHA-512 adapter durable consume did not complete',
       );
       expect(received).toEqual([
-        { userId: 'secure-consume-user', sessionId: 'secure-consume-session' },
+        { userId: 'scram512-consume-user', sessionId: 'scram512-consume-session' },
       ]);
 
-      const brokerMessages = await collectSecureMessages(topic);
+      const brokerMessages = await collectSecureMessages(topic, {
+        sasl: KAFKA_SASL_SCRAM_512,
+        groupId: `${groupPrefix}.collector`,
+      });
       bus.emit('auth:login', {
-        userId: 'secure-produce-user',
-        sessionId: 'secure-produce-session',
+        userId: 'scram512-produce-user',
+        sessionId: 'scram512-produce-session',
       });
 
       await waitFor(
         () => brokerMessages.length === 1,
         15_000,
-        'SCRAM adapter publish did not reach Kafka',
+        'SCRAM-SHA-512 adapter publish did not reach Kafka',
       );
 
       expect(JSON.parse(brokerMessages[0]!.value ?? '{}')).toEqual({
-        userId: 'secure-produce-user',
-        sessionId: 'secure-produce-session',
+        userId: 'scram512-produce-user',
+        sessionId: 'scram512-produce-session',
       });
-      expect(
-        warned.mock.calls.some(call => String(call[0]).includes('SASL configured without SSL')),
-      ).toBe(true);
-    } finally {
-      console.warn = originalWarn;
-    }
-  }, SASL_TEST_TIMEOUT_MS);
+    },
+    SASL_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka connectors bridge events through the SCRAM-enabled broker and warn when SSL is absent', async () => {
-    const warned = mock((_message: unknown) => {});
-    const originalWarn = console.warn;
-    console.warn = warned;
+  test(
+    'Kafka connectors bridge events through the SASL-enabled broker using PLAIN',
+    async () => {
+      await ensureExtraSaslCoverageConfigured();
 
-    try {
       const bus = createInProcessAdapter();
-      const topic = uniqueName('external.secure.users');
+      const topic = uniqueName('external.plain.users');
       const received: Array<{ userId: string; email?: string }> = [];
 
       const connectors = createKafkaConnectors({
         brokers: [KAFKA_SASL_BROKER],
-        sasl: KAFKA_SASL,
+        sasl: KAFKA_SASL_PLAIN,
         inbound: [
           {
             topic,
-            groupId: uniqueName('secure-sync'),
+            groupId: uniqueName('plain-sync'),
             handler: payload => {
               received.push(payload as { userId: string; email?: string });
             },
@@ -480,326 +630,199 @@ describe('Kafka SASL runtime paths (Docker)', () => {
       await sleep(500);
 
       bus.emit('auth:user.created', {
-        userId: 'secure-connector-user',
-        email: 'secure@example.com',
+        userId: 'plain-connector-user',
+        email: 'plain@example.com',
       });
 
       await waitFor(
         () => received.length === 1,
         15_000,
-        'SCRAM connectors did not bridge the event through Kafka',
+        'PLAIN connectors did not bridge the event through Kafka',
       );
 
-      expect(received).toEqual([{ userId: 'secure-connector-user', email: 'secure@example.com' }]);
-      expect(
-        warned.mock.calls.some(call => String(call[0]).includes('SASL configured without SSL')),
-      ).toBe(true);
-    } finally {
-      console.warn = originalWarn;
-    }
-  }, SASL_TEST_TIMEOUT_MS);
+      expect(received).toEqual([{ userId: 'plain-connector-user', email: 'plain@example.com' }]);
+    },
+    SASL_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka adapter round-trips through the SASL-enabled broker using SCRAM-SHA-512', async () => {
-    const topicPrefix = uniqueName('slingshot.sasl512.events');
-    const groupPrefix = uniqueName('slingshot.sasl512.groups');
-    await grantScram512RoundTripAcl({ topicPrefix, groupPrefix });
-
-    const bus = createKafkaAdapter({
-      brokers: [KAFKA_SASL_BROKER],
-      sasl: KAFKA_SASL_SCRAM_512,
-      topicPrefix,
-      groupPrefix,
-      autoCreateTopics: false,
-      startFromBeginning: true,
-    });
-    cleanup.push(() => bus.shutdown?.() ?? Promise.resolve());
-
-    const introspection = getKafkaAdapterIntrospectionOrNull(bus);
-    if (!introspection) {
-      throw new Error('Kafka adapter introspection missing');
-    }
-
-    const topic = introspection.topicNameForEvent('auth:login');
-    await ensureSecureTopic(topic, 1, KAFKA_SASL);
-    const received: Array<{ userId: string; sessionId: string }> = [];
-
-    bus.on(
-      'auth:login',
-      payload => {
-        received.push(payload);
-      },
-      { durable: true, name: uniqueName('scram512-worker') },
-    );
-
-    await waitFor(
-      () => bus.health().consumers[0]?.connected === true,
-      15_000,
-      'SCRAM-SHA-512 adapter durable consumer did not connect',
-    );
-    await sleep(1_500);
-
-    const producer = await createSecureProducer(KAFKA_SASL_SCRAM_512);
-    await producer.send({
-      topic,
-      messages: [
-        {
-          key: 'scram512-consume',
-          value: Buffer.from(
-            JSON.stringify({
-              userId: 'scram512-consume-user',
-              sessionId: 'scram512-consume-session',
-            }),
-          ),
+  test(
+    'Kafka connectors fail fast against the SCRAM-enabled broker when credentials are wrong',
+    async () => {
+      const connectors = createKafkaConnectors({
+        brokers: [KAFKA_SASL_BROKER],
+        sasl: {
+          mechanism: 'scram-sha-256',
+          username: 'superuser',
+          password: 'wrong-password',
         },
-      ],
-    });
-
-    await waitFor(
-      () => received.length === 1,
-      15_000,
-      'SCRAM-SHA-512 adapter durable consume did not complete',
-    );
-    expect(received).toEqual([
-      { userId: 'scram512-consume-user', sessionId: 'scram512-consume-session' },
-    ]);
-
-    const brokerMessages = await collectSecureMessages(topic, {
-      sasl: KAFKA_SASL_SCRAM_512,
-      groupId: `${groupPrefix}.collector`,
-    });
-    bus.emit('auth:login', {
-      userId: 'scram512-produce-user',
-      sessionId: 'scram512-produce-session',
-    });
-
-    await waitFor(
-      () => brokerMessages.length === 1,
-      15_000,
-      'SCRAM-SHA-512 adapter publish did not reach Kafka',
-    );
-
-    expect(JSON.parse(brokerMessages[0]!.value ?? '{}')).toEqual({
-      userId: 'scram512-produce-user',
-      sessionId: 'scram512-produce-session',
-    });
-  }, SASL_TEST_TIMEOUT_MS);
-
-  test('Kafka connectors bridge events through the SASL-enabled broker using PLAIN', async () => {
-    await ensureExtraSaslCoverageConfigured();
-
-    const bus = createInProcessAdapter();
-    const topic = uniqueName('external.plain.users');
-    const received: Array<{ userId: string; email?: string }> = [];
-
-    const connectors = createKafkaConnectors({
-      brokers: [KAFKA_SASL_BROKER],
-      sasl: KAFKA_SASL_PLAIN,
-      inbound: [
-        {
-          topic,
-          groupId: uniqueName('plain-sync'),
-          handler: payload => {
-            received.push(payload as { userId: string; email?: string });
-          },
-        },
-      ],
-      outbound: [
-        {
-          event: 'auth:user.created',
-          topic,
-          autoCreateTopic: true,
-        },
-      ],
-    });
-    cleanup.push(() => connectors.stop());
-
-    await connectors.start(bus);
-    await sleep(500);
-
-    bus.emit('auth:user.created', {
-      userId: 'plain-connector-user',
-      email: 'plain@example.com',
-    });
-
-    await waitFor(
-      () => received.length === 1,
-      15_000,
-      'PLAIN connectors did not bridge the event through Kafka',
-    );
-
-    expect(received).toEqual([{ userId: 'plain-connector-user', email: 'plain@example.com' }]);
-  }, SASL_TEST_TIMEOUT_MS);
-
-  test('Kafka connectors fail fast against the SCRAM-enabled broker when credentials are wrong', async () => {
-    const connectors = createKafkaConnectors({
-      brokers: [KAFKA_SASL_BROKER],
-      sasl: {
-        mechanism: 'scram-sha-256',
-        username: 'superuser',
-        password: 'wrong-password',
-      },
-      outbound: [
-        {
-          event: 'auth:user.created',
-          topic: uniqueName('external.badcreds'),
-        },
-      ],
-    });
-    cleanup.push(() => connectors.stop());
-
-    await expect(connectors.start(createInProcessAdapter())).rejects.toThrow();
-  }, SASL_TEST_TIMEOUT_MS);
-
-  test('manifest bootstrap connects to the SCRAM-enabled broker using Kafka secret env vars', async () => {
-    const previousEnv = {
-      KAFKA_BROKERS: process.env.KAFKA_BROKERS,
-      KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,
-      KAFKA_SASL_USERNAME: process.env.KAFKA_SASL_USERNAME,
-      KAFKA_SASL_PASSWORD: process.env.KAFKA_SASL_PASSWORD,
-      KAFKA_SASL_MECHANISM: process.env.KAFKA_SASL_MECHANISM,
-      KAFKA_SSL: process.env.KAFKA_SSL,
-    };
-    process.env.KAFKA_BROKERS = KAFKA_SASL_BROKER;
-    process.env.KAFKA_CLIENT_ID = uniqueName('manifest-sasl');
-    process.env.KAFKA_SASL_USERNAME = KAFKA_SASL.username;
-    process.env.KAFKA_SASL_PASSWORD = KAFKA_SASL.password;
-    process.env.KAFKA_SASL_MECHANISM = KAFKA_SASL.mechanism;
-    delete process.env.KAFKA_SSL;
-
-    cleanup.push(async () => {
-      if (previousEnv.KAFKA_BROKERS !== undefined)
-        process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
-      else delete process.env.KAFKA_BROKERS;
-      if (previousEnv.KAFKA_CLIENT_ID !== undefined)
-        process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
-      else delete process.env.KAFKA_CLIENT_ID;
-      if (previousEnv.KAFKA_SASL_USERNAME !== undefined)
-        process.env.KAFKA_SASL_USERNAME = previousEnv.KAFKA_SASL_USERNAME;
-      else delete process.env.KAFKA_SASL_USERNAME;
-      if (previousEnv.KAFKA_SASL_PASSWORD !== undefined)
-        process.env.KAFKA_SASL_PASSWORD = previousEnv.KAFKA_SASL_PASSWORD;
-      else delete process.env.KAFKA_SASL_PASSWORD;
-      if (previousEnv.KAFKA_SASL_MECHANISM !== undefined)
-        process.env.KAFKA_SASL_MECHANISM = previousEnv.KAFKA_SASL_MECHANISM;
-      else delete process.env.KAFKA_SASL_MECHANISM;
-      if (previousEnv.KAFKA_SSL !== undefined) process.env.KAFKA_SSL = previousEnv.KAFKA_SSL;
-      else delete process.env.KAFKA_SSL;
-    });
-
-    const inboundTopic = uniqueName('manifest.sasl.inbound');
-    const outboundTopic = uniqueName('manifest.sasl.outbound');
-    await ensureSecureTopic(inboundTopic);
-    await ensureSecureTopic(outboundTopic);
-    const inboundPayloads: Array<{
-      payload: unknown;
-      metadata: Record<string, unknown>;
-    }> = [];
-
-    const registry = createManifestHandlerRegistry();
-    registry.registerHandler('captureKafkaInbound', () => {
-      return async (payload: unknown, metadata: Record<string, unknown>) => {
-        inboundPayloads.push({ payload, metadata });
-      };
-    });
-
-    const warned = mock((_message: unknown) => {});
-    const originalWarn = console.warn;
-    console.warn = warned;
-
-    try {
-      const manifest = await createTempManifest({
-        manifestVersion: 1,
-        handlers: false,
-        port: 0,
-        meta: { name: 'Kafka SASL Docker Manifest', version: '1.0.0' },
-        security: { rateLimit: false },
-        db: {
-          sqlite: `${process.cwd().replaceAll('\\', '/')}/.tmp/${uniqueName('manifest-sasl-db')}.sqlite`,
-          auth: 'sqlite',
-          sessions: 'sqlite',
-          redis: false,
-        },
-        eventBus: {
-          type: 'kafka',
-          config: {
-            topicPrefix: uniqueName('manifest.sasl.events'),
-            groupPrefix: uniqueName('manifest.sasl.groups'),
-          },
-        },
-        kafkaConnectors: {
-          inbound: [
-            {
-              topic: inboundTopic,
-              groupId: uniqueName('manifest-sasl-inbound'),
-              handler: 'captureKafkaInbound',
-            },
-          ],
-          outbound: [
-            {
-              event: 'auth:user.created',
-              topic: outboundTopic,
-            },
-          ],
-        },
-      });
-
-      const server = (await createServerFromManifest(
-        manifest.path,
-        registry,
-      )) as unknown as RunningServer;
-      cleanup.push(async () => {
-        const ctx = getServerContext(server);
-        await server.stop(true);
-        await ctx?.destroy?.();
-      });
-
-      const ctx = getServerContext(server);
-      if (!ctx) {
-        throw new Error('Server context missing');
-      }
-
-      const outboundMessages = await collectSecureMessages(outboundTopic);
-
-      ctx.bus.emit('auth:user.created', {
-        userId: 'manifest-sasl-user',
-        email: 'manifest-sasl@example.com',
-      } as never);
-
-      await waitFor(
-        () => outboundMessages.length === 1,
-        15_000,
-        'Manifest SASL outbound connector did not publish to Kafka',
-      );
-      expect(JSON.parse(outboundMessages[0]!.value ?? '{}')).toEqual({
-        userId: 'manifest-sasl-user',
-        email: 'manifest-sasl@example.com',
-      });
-
-      const producer = await createSecureProducer();
-      await producer.send({
-        topic: inboundTopic,
-        messages: [
+        outbound: [
           {
-            key: 'secure-inbound-1',
-            value: Buffer.from(JSON.stringify({ id: 'secure-inbound-1' })),
+            event: 'auth:user.created',
+            topic: uniqueName('external.badcreds'),
           },
         ],
       });
+      cleanup.push(() => connectors.stop());
 
-      await waitFor(
-        () => inboundPayloads.length === 1,
-        15_000,
-        'Manifest SASL inbound connector did not receive the Kafka message',
-      );
-      expect(inboundPayloads[0]?.payload).toEqual({ id: 'secure-inbound-1' });
-      expect(inboundPayloads[0]?.metadata['topic']).toBe(inboundTopic);
-      expect(
-        warned.mock.calls.some(call =>
-          String(call[0]).includes('Kafka SASL credentials configured without SSL'),
-        ),
-      ).toBe(true);
-    } finally {
-      console.warn = originalWarn;
-    }
-  }, SASL_TEST_TIMEOUT_MS);
+      await expect(connectors.start(createInProcessAdapter())).rejects.toThrow();
+    },
+    SASL_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    'manifest bootstrap connects to the SCRAM-enabled broker using Kafka secret env vars',
+    async () => {
+      const previousEnv = {
+        KAFKA_BROKERS: process.env.KAFKA_BROKERS,
+        KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,
+        KAFKA_SASL_USERNAME: process.env.KAFKA_SASL_USERNAME,
+        KAFKA_SASL_PASSWORD: process.env.KAFKA_SASL_PASSWORD,
+        KAFKA_SASL_MECHANISM: process.env.KAFKA_SASL_MECHANISM,
+        KAFKA_SSL: process.env.KAFKA_SSL,
+      };
+      process.env.KAFKA_BROKERS = KAFKA_SASL_BROKER;
+      process.env.KAFKA_CLIENT_ID = uniqueName('manifest-sasl');
+      process.env.KAFKA_SASL_USERNAME = KAFKA_SASL.username;
+      process.env.KAFKA_SASL_PASSWORD = KAFKA_SASL.password;
+      process.env.KAFKA_SASL_MECHANISM = KAFKA_SASL.mechanism;
+      delete process.env.KAFKA_SSL;
+
+      cleanup.push(async () => {
+        if (previousEnv.KAFKA_BROKERS !== undefined)
+          process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
+        else delete process.env.KAFKA_BROKERS;
+        if (previousEnv.KAFKA_CLIENT_ID !== undefined)
+          process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
+        else delete process.env.KAFKA_CLIENT_ID;
+        if (previousEnv.KAFKA_SASL_USERNAME !== undefined)
+          process.env.KAFKA_SASL_USERNAME = previousEnv.KAFKA_SASL_USERNAME;
+        else delete process.env.KAFKA_SASL_USERNAME;
+        if (previousEnv.KAFKA_SASL_PASSWORD !== undefined)
+          process.env.KAFKA_SASL_PASSWORD = previousEnv.KAFKA_SASL_PASSWORD;
+        else delete process.env.KAFKA_SASL_PASSWORD;
+        if (previousEnv.KAFKA_SASL_MECHANISM !== undefined)
+          process.env.KAFKA_SASL_MECHANISM = previousEnv.KAFKA_SASL_MECHANISM;
+        else delete process.env.KAFKA_SASL_MECHANISM;
+        if (previousEnv.KAFKA_SSL !== undefined) process.env.KAFKA_SSL = previousEnv.KAFKA_SSL;
+        else delete process.env.KAFKA_SSL;
+      });
+
+      const inboundTopic = uniqueName('manifest.sasl.inbound');
+      const outboundTopic = uniqueName('manifest.sasl.outbound');
+      await ensureSecureTopic(inboundTopic);
+      await ensureSecureTopic(outboundTopic);
+      const inboundPayloads: Array<{
+        payload: unknown;
+        metadata: Record<string, unknown>;
+      }> = [];
+
+      const registry = createManifestHandlerRegistry();
+      registry.registerHandler('captureKafkaInbound', () => {
+        return async (payload: unknown, metadata: Record<string, unknown>) => {
+          inboundPayloads.push({ payload, metadata });
+        };
+      });
+
+      const warned = mock((_message: unknown) => {});
+      const originalWarn = console.warn;
+      console.warn = warned;
+
+      try {
+        const manifest = await createTempManifest({
+          manifestVersion: 1,
+          handlers: false,
+          port: 0,
+          meta: { name: 'Kafka SASL Docker Manifest', version: '1.0.0' },
+          security: { rateLimit: false },
+          db: {
+            sqlite: `${process.cwd().replaceAll('\\', '/')}/.tmp/${uniqueName('manifest-sasl-db')}.sqlite`,
+            auth: 'sqlite',
+            sessions: 'sqlite',
+            redis: false,
+          },
+          eventBus: {
+            type: 'kafka',
+            config: {
+              topicPrefix: uniqueName('manifest.sasl.events'),
+              groupPrefix: uniqueName('manifest.sasl.groups'),
+            },
+          },
+          kafkaConnectors: {
+            inbound: [
+              {
+                topic: inboundTopic,
+                groupId: uniqueName('manifest-sasl-inbound'),
+                handler: 'captureKafkaInbound',
+              },
+            ],
+            outbound: [
+              {
+                event: 'auth:user.created',
+                topic: outboundTopic,
+              },
+            ],
+          },
+        });
+
+        const server = (await createServerFromManifest(
+          manifest.path,
+          registry,
+        )) as unknown as RunningServer;
+        cleanup.push(async () => {
+          const ctx = getServerContext(server);
+          await server.stop(true);
+          await ctx?.destroy?.();
+        });
+
+        const ctx = getServerContext(server);
+        if (!ctx) {
+          throw new Error('Server context missing');
+        }
+
+        const outboundMessages = await collectSecureMessages(outboundTopic);
+
+        ctx.bus.emit('auth:user.created', {
+          userId: 'manifest-sasl-user',
+          email: 'manifest-sasl@example.com',
+        } as never);
+
+        await waitFor(
+          () => outboundMessages.length === 1,
+          15_000,
+          'Manifest SASL outbound connector did not publish to Kafka',
+        );
+        expect(JSON.parse(outboundMessages[0]!.value ?? '{}')).toEqual({
+          userId: 'manifest-sasl-user',
+          email: 'manifest-sasl@example.com',
+        });
+
+        const producer = await createSecureProducer();
+        await producer.send({
+          topic: inboundTopic,
+          messages: [
+            {
+              key: 'secure-inbound-1',
+              value: Buffer.from(JSON.stringify({ id: 'secure-inbound-1' })),
+            },
+          ],
+        });
+
+        await waitFor(
+          () => inboundPayloads.length === 1,
+          15_000,
+          'Manifest SASL inbound connector did not receive the Kafka message',
+        );
+        expect(inboundPayloads[0]?.payload).toEqual({ id: 'secure-inbound-1' });
+        expect(inboundPayloads[0]?.metadata['topic']).toBe(inboundTopic);
+        expect(
+          warned.mock.calls.some(call =>
+            String(call[0]).includes('Kafka SASL credentials configured without SSL'),
+          ),
+        ).toBe(true);
+      } finally {
+        console.warn = originalWarn;
+      }
+    },
+    SASL_TEST_TIMEOUT_MS,
+  );
 });

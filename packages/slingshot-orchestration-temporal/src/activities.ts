@@ -7,9 +7,9 @@ import type {
   Run,
   TaskContext,
 } from '@lastshotlabs/slingshot-orchestration';
+import { withTaskConcurrency } from './concurrency';
 import { toRunError } from './errors';
 import { getRegisteredTask, getRegisteredWorkflowHooks } from './workerRegistry';
-import { withTaskConcurrency } from './concurrency';
 
 export interface ExecuteSlingshotTaskArgs {
   taskName: string;

@@ -315,10 +315,15 @@ export const createMfaRouter = (
       const { code } = c.req.valid('json');
       const recoveryCodes = await MfaService.verifySetup(userId, code, runtime);
       eventBus.emit('security.auth.mfa.setup', { userId });
-      publishAuthEvent(runtime.events, 'auth:mfa.enabled', { userId, method: 'totp' }, {
-        userId,
-        actorId: userId,
-      });
+      publishAuthEvent(
+        runtime.events,
+        'auth:mfa.enabled',
+        { userId, method: 'totp' },
+        {
+          userId,
+          actorId: userId,
+        },
+      );
       return c.json({ ok: true as const, recoveryCodes }, 200);
     },
   );
@@ -617,10 +622,15 @@ export const createMfaRouter = (
       if (adapter.setMfaMethods) {
         await adapter.setMfaMethods(userId, []);
       }
-      publishAuthEvent(runtime.events, 'auth:mfa.disabled', { userId }, {
-        userId,
-        actorId: userId,
-      });
+      publishAuthEvent(
+        runtime.events,
+        'auth:mfa.disabled',
+        { userId },
+        {
+          userId,
+          actorId: userId,
+        },
+      );
       return c.json({ ok: true as const }, 200);
     },
   );
@@ -816,10 +826,15 @@ export const createMfaRouter = (
       const { setupToken, code } = c.req.valid('json');
       const recoveryCodes = await MfaService.confirmEmailOtp(userId, setupToken, code, runtime);
       eventBus.emit('security.auth.mfa.setup', { userId });
-      publishAuthEvent(runtime.events, 'auth:mfa.enabled', { userId, method: 'email-otp' }, {
-        userId,
-        actorId: userId,
-      });
+      publishAuthEvent(
+        runtime.events,
+        'auth:mfa.enabled',
+        { userId, method: 'email-otp' },
+        {
+          userId,
+          actorId: userId,
+        },
+      );
       return c.json({ ok: true as const, recoveryCodes: recoveryCodes ?? undefined }, 200);
     },
   );
@@ -906,10 +921,15 @@ export const createMfaRouter = (
           if (adapter.setRecoveryCodes) await adapter.setRecoveryCodes(userId, []);
         }
       }
-      publishAuthEvent(runtime.events, 'auth:mfa.disabled', { userId, method: 'email-otp' }, {
-        userId,
-        actorId: userId,
-      });
+      publishAuthEvent(
+        runtime.events,
+        'auth:mfa.disabled',
+        { userId, method: 'email-otp' },
+        {
+          userId,
+          actorId: userId,
+        },
+      );
       return c.json({ ok: true as const }, 200);
     },
   );
@@ -1165,10 +1185,15 @@ export const createMfaRouter = (
           name,
         );
         eventBus.emit('security.auth.mfa.setup', { userId });
-        publishAuthEvent(runtime.events, 'auth:mfa.enabled', { userId, method: 'webauthn' }, {
-          userId,
-          actorId: userId,
-        });
+        publishAuthEvent(
+          runtime.events,
+          'auth:mfa.enabled',
+          { userId, method: 'webauthn' },
+          {
+            userId,
+            actorId: userId,
+          },
+        );
         return c.json({ ok: true as const, ...result }, 200);
       },
     );

@@ -188,7 +188,7 @@ describe('otelRequestMiddleware', () => {
     const { span, attrs } = createMockSpan();
     const tracer = createMockTracer(span);
     const app = new Hono();
-    // No middleware setting requestId/authUserId/tenantId
+    // No middleware setting requestId/actor/tenantId
     app.use('/*', otelRequestMiddleware({ tracer }));
     app.get('/test', c => c.json({ ok: true }));
 

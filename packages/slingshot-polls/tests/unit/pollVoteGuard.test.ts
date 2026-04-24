@@ -58,9 +58,19 @@ function createTestApp(
   });
 
   const app = new Hono();
-  // Simulate auth middleware setting authUserId.
+  // Simulate auth middleware setting actor.
   app.use('*', async (c, next) => {
-    c.set('authUserId', 'user-1');
+    c.set(
+      'actor',
+      Object.freeze({
+        id: 'user-1',
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: null,
+        claims: {},
+      }),
+    );
     await next();
   });
   app.post('/vote', guard, c => c.json({ ok: true }));

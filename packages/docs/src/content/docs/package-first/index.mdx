@@ -1,0 +1,68 @@
+---
+title: Package-First Authoring
+description: The canonical code-first authoring surface for Slingshot packages
+---
+
+Package-first authoring is the main code-first surface for composing product modules in Slingshot.
+
+This is the layer between the app root and the lower-level plugin lifecycle.
+
+## The core pieces
+
+```typescript
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+export const healthPackage = definePackage({
+  name: 'health',
+  domains: [
+    domain({
+      name: 'health',
+      basePath: '/health',
+      routes: [
+        route.get({
+          path: '/',
+          auth: 'none',
+          handler: ({ respond }) => respond.json({ ok: true }),
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+Package-first authoring is built around:
+
+- `definePackage(...)`
+- `domain(...)`
+- `route.*(...)`
+- `entity(...)`
+- `defineCapability(...)`
+- `provideCapability(...)`
+- `entityRef(...)`
+
+## What a package owns
+
+A package can own:
+
+- entity modules
+- non-entity domain routes
+- package-local middleware
+- capability publication and requirements
+- mount path and dependency metadata
+- public, tenant-exempt, and CSRF-exempt paths
+
+That is why packages are the right public abstraction for app builders.
+
+## Learn this section in order
+
+- [definePackage](/slingshot/package-first/define-package/)
+- [domain and route](/slingshot/package-first/domain-and-route/)
+- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/)
+- [Escape Hatches](/slingshot/package-first/escape-hatches/)
+
+## Where entities fit
+
+The entity system plugs directly into package authoring through `entity(...)`. If a package owns a
+data-shaped domain, the entity system is usually the canonical way to express it.
+
+See [Entity System](/slingshot/entity-system/) next.

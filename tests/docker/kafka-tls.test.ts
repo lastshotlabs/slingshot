@@ -60,58 +60,102 @@ function runTlsScenario(
 }
 
 describe('Kafka TLS runtime paths (Docker)', () => {
-  test('the external TLS listener rejects plaintext clients', () => {
-    const stdout = runTlsScenario('plaintext-rejected');
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'the external TLS listener rejects plaintext clients',
+    () => {
+      const stdout = runTlsScenario('plaintext-rejected');
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka adapter round-trips through the TLS-enabled broker using ssl: true', () => {
-    const stdout = runTlsScenario('adapter-roundtrip', { trustCa: true });
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'Kafka adapter round-trips through the TLS-enabled broker using ssl: true',
+    () => {
+      const stdout = runTlsScenario('adapter-roundtrip', { trustCa: true });
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka adapter round-trips through the TLS-enabled broker using an explicit CA bundle', () => {
-    const stdout = runTlsScenario('adapter-roundtrip-explicit-ca');
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'Kafka adapter round-trips through the TLS-enabled broker using an explicit CA bundle',
+    () => {
+      const stdout = runTlsScenario('adapter-roundtrip-explicit-ca');
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka adapter round-trips through the mTLS listener using a client certificate bundle', () => {
-    const stdout = runTlsScenario('adapter-roundtrip-mtls');
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'Kafka adapter round-trips through the mTLS listener using a client certificate bundle',
+    () => {
+      const stdout = runTlsScenario('adapter-roundtrip-mtls');
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka connectors bridge events through the TLS-enabled broker using ssl: true', () => {
-    const stdout = runTlsScenario('connectors-bridge', { trustCa: true });
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'Kafka connectors bridge events through the TLS-enabled broker using ssl: true',
+    () => {
+      const stdout = runTlsScenario('connectors-bridge', { trustCa: true });
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka connectors bridge events through the TLS-enabled broker using an explicit CA bundle', () => {
-    const stdout = runTlsScenario('connectors-bridge-explicit-ca');
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'Kafka connectors bridge events through the TLS-enabled broker using an explicit CA bundle',
+    () => {
+      const stdout = runTlsScenario('connectors-bridge-explicit-ca');
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka clients reject the TLS listener when the configured CA is wrong', () => {
-    const stdout = runTlsScenario('bad-ca-rejected');
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'Kafka clients reject the TLS listener when the configured CA is wrong',
+    () => {
+      const stdout = runTlsScenario('bad-ca-rejected');
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka clients reject the mTLS listener when no client certificate is configured', () => {
-    const stdout = runTlsScenario('mtls-rejected-without-client-cert');
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'Kafka clients reject the mTLS listener when no client certificate is configured',
+    () => {
+      const stdout = runTlsScenario('mtls-rejected-without-client-cert');
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('Kafka connectors bridge events through the mTLS listener using a client certificate bundle', () => {
-    const stdout = runTlsScenario('connectors-bridge-mtls');
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'Kafka connectors bridge events through the mTLS listener using a client certificate bundle',
+    () => {
+      const stdout = runTlsScenario('connectors-bridge-mtls');
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('manifest bootstrap connects to the TLS-enabled broker when KAFKA_SSL=true', () => {
-    const stdout = runTlsScenario('manifest-bootstrap', { trustCa: true });
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'manifest bootstrap connects to the TLS-enabled broker when KAFKA_SSL=true',
+    () => {
+      const stdout = runTlsScenario('manifest-bootstrap', { trustCa: true });
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 
-  test('manifest bootstrap connects to the mTLS listener using Kafka ssl cert/key config', () => {
-    const stdout = runTlsScenario('manifest-bootstrap-mtls');
-    expect(stdout).toContain('"ok":true');
-  }, TLS_TEST_TIMEOUT_MS);
+  test(
+    'manifest bootstrap connects to the mTLS listener using Kafka ssl cert/key config',
+    () => {
+      const stdout = runTlsScenario('manifest-bootstrap-mtls');
+      expect(stdout).toContain('"ok":true');
+    },
+    TLS_TEST_TIMEOUT_MS,
+  );
 });

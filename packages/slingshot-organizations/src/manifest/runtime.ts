@@ -121,7 +121,7 @@ function requireInviteRuntimeAdapter(value: BareEntityAdapter): InviteRuntimeAda
   return value;
 }
 
-function getAuthUserId(params: Record<string, unknown>): string {
+function getActorUserId(params: Record<string, unknown>): string {
   const userId = params['actor.id'];
   if (typeof userId !== 'string' || userId.length === 0) {
     throw new HTTPException(401, { message: 'Unauthorized' });
@@ -273,7 +273,7 @@ export function createOrganizationsManifestRuntime(args: {
     'organizations.organization.listMine',
     () => () => async (input: unknown) => {
       const params = (input ?? {}) as Record<string, unknown>;
-      const userId = getAuthUserId(params);
+      const userId = getActorUserId(params);
       const memberAdapter = refs.members;
       const organizationAdapter = refs.organizations;
       if (!memberAdapter || !organizationAdapter) {
@@ -319,7 +319,7 @@ export function createOrganizationsManifestRuntime(args: {
   customHandlers.register('organizations.invite.redeem', () => () => async (input: unknown) => {
     const params = (input ?? {}) as Record<string, unknown>;
     const token = typeof params.token === 'string' ? params.token : '';
-    const authUserId = getAuthUserId(params);
+    const actorUserId = getActorUserId(params);
     const inviteAdapter = refs.invites;
     const memberAdapter = refs.members;
     const organizationAdapter = refs.organizations;
@@ -336,7 +336,7 @@ export function createOrganizationsManifestRuntime(args: {
       throw new HTTPException(404, { message: 'Invite not found' });
     }
 
-    if (invite.userId && invite.userId !== authUserId) {
+    if (invite.userId && invite.userId !== actorUserId) {
       throw new HTTPException(403, { message: 'This invitation belongs to a different user' });
     }
     if (invite.email) {
@@ -345,8 +345,8 @@ export function createOrganizationsManifestRuntime(args: {
           message: 'This invitation requires an account with a verified matching email address',
         });
       }
-      const authUser = await authRuntime.adapter.getUser(authUserId);
-      const verified = await authRuntime.adapter.getEmailVerified(authUserId);
+      const authUser = await authRuntime.adapter.getUser(actorUserId);
+      const verified = await authRuntime.adapter.getEmailVerified(actorUserId);
       const inviteEmail = invite.email.trim().toLowerCase();
       const currentEmail = authUser?.email?.trim().toLowerCase();
       if (!verified || !currentEmail || inviteEmail !== currentEmail) {
@@ -360,7 +360,7 @@ export function createOrganizationsManifestRuntime(args: {
       memberAdapter,
       'orgId',
       invite.orgId,
-      authUserId,
+      actorUserId,
     )) as OrganizationMemberRecord | null;
     if (existing) {
       const organization = (await organizationAdapter.getById(
@@ -371,7 +371,7 @@ export function createOrganizationsManifestRuntime(args: {
 
     const membership = (await memberAdapter.create({
       orgId: invite.orgId,
-      userId: authUserId,
+      userId: actorUserId,
       role: invite.role,
       invitedBy: invite.invitedBy,
     })) as OrganizationMemberRecord;

@@ -56,12 +56,13 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
     ```
 
     ```typescript title="slingshot.handlers.ts"
+    import { getActor } from '@lastshotlabs/slingshot-core';
     import type { Context, Next } from 'hono';
 
     export async function communityAuthBridge(c: Context, next: Next) {
-      const userId = c.get('authUserId');
+      const actor = getActor(c);
       const roles = c.get('roles') ?? [];
-      if (userId) c.set('communityPrincipal', { subject: userId, roles });
+      if (actor.kind !== 'anonymous') c.set('communityPrincipal', { subject: actor.id, roles });
       await next();
     }
     ```
@@ -69,7 +70,7 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
   </TabItem>
   <TabItem label="Code">
     ```typescript title="src/index.ts"
-    import { createServer } from '@lastshotlabs/slingshot';
+    import { createServer, getActor } from '@lastshotlabs/slingshot';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
     import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
     import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
@@ -77,9 +78,9 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
     import type { Context, Next } from 'hono';
 
     const communityAuthBridge = async (c: Context, next: Next) => {
-      const userId = c.get('authUserId');
+      const actor = getActor(c);
       const roles = c.get('roles') ?? [];
-      if (userId) c.set('communityPrincipal', { subject: userId, roles });
+      if (actor.kind !== 'anonymous') c.set('communityPrincipal', { subject: actor.id, roles });
       await next();
     };
 
@@ -122,7 +123,7 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
 
 ## The auth bridge
 
-Community middleware reads `communityPrincipal` — not raw auth state. The bridge maps `authUserId` and `roles` (set by `slingshot-auth`) into that shape. This keeps the packages independent: community doesn't depend on auth internals, and auth doesn't know about community.
+Community middleware reads `communityPrincipal` — not raw auth state. The bridge maps the authenticated actor and `roles` (set by `slingshot-auth`) into that shape. This keeps the packages independent: community doesn't depend on auth internals, and auth doesn't know about community.
 
 <Aside type="caution">
   If the bridge is missing, all community routes treat requests as unauthenticated. Protected

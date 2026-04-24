@@ -90,7 +90,7 @@ Use the real auth flow in tests: register or log in, then pass the returned toke
 
 ```typescript title="tests/protected-routes.test.ts"
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { createApp, createRouter } from '@lastshotlabs/slingshot';
+import { createApp, createRouter, getActor } from '@lastshotlabs/slingshot';
 import { createAuthPlugin, userAuth } from '@lastshotlabs/slingshot-auth';
 
 async function buildApp() {
@@ -108,7 +108,7 @@ async function buildApp() {
 
   const router = createRouter();
   router.use('/me/profile', userAuth);
-  router.get('/me/profile', c => c.json({ userId: c.get('authUserId')! }, 200));
+  router.get('/me/profile', c => c.json({ userId: getActor(c).id }, 200));
 
   app.route('/', router);
   return app;

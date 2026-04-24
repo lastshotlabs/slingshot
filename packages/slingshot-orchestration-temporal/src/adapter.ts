@@ -1,10 +1,10 @@
 import {
   ApplicationFailure,
   Client,
+  type Connection,
   ScheduleNotFoundError,
   WorkflowFailedError,
   isGrpcServiceError,
-  type Connection,
 } from '@temporalio/client';
 import type {
   AnyResolvedTask,
@@ -17,11 +17,9 @@ import type {
   ScheduleHandle,
   WorkflowRun,
 } from '@lastshotlabs/slingshot-orchestration';
-import {
-  OrchestrationError,
-  createCachedRunHandle,
-} from '@lastshotlabs/slingshot-orchestration';
+import { OrchestrationError, createCachedRunHandle } from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationProviderRegistry } from '@lastshotlabs/slingshot-orchestration/provider';
+import { toRunError, wrapTemporalError } from './errors';
 import { deriveTemporalRunId } from './ids';
 import {
   buildSearchAttributes,
@@ -31,10 +29,9 @@ import {
 } from './searchAttributes';
 import { mapTemporalStatus } from './statusMap';
 import {
-  temporalAdapterOptionsSchema,
   type TemporalOrchestrationAdapterOptions,
+  temporalAdapterOptionsSchema,
 } from './validation';
-import { toRunError, wrapTemporalError } from './errors';
 
 const TASK_WORKFLOW_TYPE = 'slingshotTaskWorkflow';
 const WORKFLOW_WORKFLOW_TYPE = 'slingshotWorkflow';
@@ -91,7 +88,9 @@ function getMemo(description: { memo?: Record<string, unknown> }): TemporalMemo 
   };
 }
 
-function getSearchAttributePriority(searchAttributes?: Record<string, unknown>): number | undefined {
+function getSearchAttributePriority(
+  searchAttributes?: Record<string, unknown>,
+): number | undefined {
   const raw = searchAttributes?.SlingshotPriority;
   if (typeof raw === 'number') {
     return raw;
@@ -168,37 +167,42 @@ export function createTemporalOrchestrationAdapter(
       tenantId: opts?.tenantId,
       idempotencyKey: opts?.idempotencyKey,
     });
-    const handle = await client.workflow.start(kind === 'task' ? TASK_WORKFLOW_TYPE : WORKFLOW_WORKFLOW_TYPE, {
-      taskQueue: options.workflowTaskQueue,
-      workflowId: runId,
-      workflowIdConflictPolicy: 'USE_EXISTING',
-      args: [
-        {
-          [`${kind}Name`]: name,
+    const handle = await client.workflow.start(
+      kind === 'task' ? TASK_WORKFLOW_TYPE : WORKFLOW_WORKFLOW_TYPE,
+      {
+        taskQueue: options.workflowTaskQueue,
+        workflowId: runId,
+        workflowIdConflictPolicy: 'USE_EXISTING',
+        args: [
+          {
+            [`${kind}Name`]: name,
+            input,
+            runId,
+            tenantId: opts?.tenantId,
+            ...(kind === 'workflow' ? { workflowName: name } : { taskName: name }),
+          },
+        ],
+        ...(opts?.delay ? { startDelay: opts.delay } : {}),
+        memo: {
+          kind,
+          name,
           input,
-          runId,
           tenantId: opts?.tenantId,
-          ...(kind === 'workflow' ? { workflowName: name } : { taskName: name }),
+          priority: opts?.priority,
+          tags: opts?.tags,
+          metadata: opts?.metadata,
         },
-      ],
-      ...(opts?.delay ? { startDelay: opts.delay } : {}),
-      memo: {
-        kind,
-        name,
-        input,
-        tenantId: opts?.tenantId,
-        priority: opts?.priority,
-        tags: opts?.tags,
-        metadata: opts?.metadata,
+        searchAttributes: buildSearchAttributes(kind, name, opts) as never,
+        ...(kind === 'workflow' && definition.timeout
+          ? { workflowExecutionTimeout: definition.timeout }
+          : {}),
       },
-      searchAttributes: buildSearchAttributes(kind, name, opts) as never,
-      ...(kind === 'workflow' && definition.timeout
-        ? { workflowExecutionTimeout: definition.timeout }
-        : {}),
-    });
+    );
 
     return createCachedRunHandle(runId, async () => {
-      const result = (await handle.result()) as TemporalTaskResultEnvelope | TemporalWorkflowResultEnvelope;
+      const result = (await handle.result()) as
+        | TemporalTaskResultEnvelope
+        | TemporalWorkflowResultEnvelope;
       return result.output;
     });
   }
@@ -253,7 +257,9 @@ export function createTemporalOrchestrationAdapter(
         tenantId: memo.tenantId,
         priority:
           memo.priority ??
-          getSearchAttributePriority(description.searchAttributes as Record<string, unknown> | undefined),
+          getSearchAttributePriority(
+            description.searchAttributes as Record<string, unknown> | undefined,
+          ),
         tags: memo.tags,
         metadata: memo.metadata,
         progress: state?.progress,
@@ -268,7 +274,9 @@ export function createTemporalOrchestrationAdapter(
       }
 
       try {
-        const result = (await handle.result()) as TemporalTaskResultEnvelope | TemporalWorkflowResultEnvelope;
+        const result = (await handle.result()) as
+          | TemporalTaskResultEnvelope
+          | TemporalWorkflowResultEnvelope;
         run.output = result.output;
         run.progress = result.progress ?? run.progress;
         if (memo.kind === 'workflow' && 'steps' in result) {
@@ -371,7 +379,11 @@ export function createTemporalOrchestrationAdapter(
     async listSchedules() {
       const schedules: ScheduleHandle[] = [];
       for await (const schedule of client.schedule.list()) {
-        const memo = schedule.memo as { target?: ScheduleHandle['target']; cron?: string; input?: unknown };
+        const memo = schedule.memo as {
+          target?: ScheduleHandle['target'];
+          cron?: string;
+          input?: unknown;
+        };
         if (!memo?.target || !memo.cron) continue;
         schedules.push({
           id: schedule.scheduleId,
@@ -416,7 +428,9 @@ export function createTemporalOrchestrationAdapter(
             ),
           tags:
             memo.tags ??
-            decodeTags((execution.searchAttributes as Record<string, unknown> | undefined)?.SlingshotTags),
+            decodeTags(
+              (execution.searchAttributes as Record<string, unknown> | undefined)?.SlingshotTags,
+            ),
           metadata: memo.metadata,
           createdAt: execution.startTime,
           startedAt: execution.executionTime ?? execution.startTime,

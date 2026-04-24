@@ -6,8 +6,8 @@ import type {
   EmailTemplate,
   FingerprintBuilder,
   RateLimitAdapter,
+  RequestActorResolver,
   RouteAuthRegistry,
-  UserResolver,
 } from './coreContracts';
 import type { IdentityResolver } from './identity';
 
@@ -27,7 +27,7 @@ export type { CoreRegistrar, CoreRegistrarSnapshot };
  *     `CoreRegistrarSnapshot`. See drain remarks below.
  *
  * @remarks
- * **Closure semantics:** all mutable state (`routeAuth`, `userResolver`, etc.) is owned
+ * **Closure semantics:** all mutable state (`routeAuth`, `actorResolver`, etc.) is owned
  * by the closure created by `createCoreRegistrar()`. The `registrar` object holds
  * references to setter functions that mutate this closure state. This is intentional —
  * no module-level singletons, no shared state between app instances.
@@ -56,7 +56,7 @@ export type { CoreRegistrar, CoreRegistrarSnapshot };
  *
  * // After all plugins have registered their deps, drain once to commit to context:
  * const snapshot = drain();
- * // snapshot.routeAuth, snapshot.userResolver, snapshot.rateLimitAdapter, etc.
+ * // snapshot.routeAuth, snapshot.actorResolver, snapshot.rateLimitAdapter, etc.
  * ```
  *
  * @example
@@ -74,7 +74,7 @@ export type { CoreRegistrar, CoreRegistrarSnapshot };
  *
  *   const snapshot = drain();
  *   expect(snapshot.routeAuth).not.toBeNull();
- *   expect(snapshot.userResolver).not.toBeNull();
+ *   expect(snapshot.actorResolver).not.toBeNull();
  * });
  * ```
  */
@@ -85,7 +85,7 @@ export function createCoreRegistrar(): {
   let sealed = false;
   let identityResolver: IdentityResolver | null = null;
   let routeAuth: RouteAuthRegistry | null = null;
-  let userResolver: UserResolver | null = null;
+  let actorResolver: RequestActorResolver | null = null;
   let rateLimitAdapter: RateLimitAdapter | null = null;
   let fingerprintBuilder: FingerprintBuilder | null = null;
   const cacheAdapters = new Map<CacheStoreName, CacheAdapter>();
@@ -108,9 +108,9 @@ export function createCoreRegistrar(): {
       assertWritable('setRouteAuth');
       routeAuth = registry;
     },
-    setUserResolver(resolver) {
-      assertWritable('setUserResolver');
-      userResolver = resolver;
+    setRequestActorResolver(resolver) {
+      assertWritable('setRequestActorResolver');
+      actorResolver = resolver;
     },
     setRateLimitAdapter(adapter) {
       assertWritable('setRateLimitAdapter');
@@ -139,7 +139,7 @@ export function createCoreRegistrar(): {
       return {
         identityResolver,
         routeAuth,
-        userResolver,
+        actorResolver,
         rateLimitAdapter,
         fingerprintBuilder,
         cacheAdapters: new Map(cacheAdapters),

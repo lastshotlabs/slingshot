@@ -1,0 +1,54 @@
+---
+title: Manifest Authoring
+description: Supported, but secondary to the code-first docs path
+---
+
+Manifest authoring is still supported. It is just no longer the primary docs story.
+
+## The role of the manifest
+
+The manifest is useful when you want:
+
+- zero- or low-code app assembly
+- declarative package selection and infrastructure wiring
+- a serialized app root that maps cleanly to deployment tooling
+
+## A minimal manifest
+
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "port": 3000,
+  "security": {
+    "signing": { "secret": "${secret:JWT_SECRET}" }
+  },
+  "plugins": [
+    { "plugin": "slingshot-auth" }
+  ]
+}
+```
+
+## Why the main docs do not start here anymore
+
+The manifest is not the best way to teach:
+
+- package-first authoring
+- typed routes
+- the entity system
+- event definitions
+- package-owned capabilities
+- code-level escape hatches
+
+Those are easier to understand from the code surfaces directly.
+
+## When to use it
+
+Use the manifest when the app is mostly assembly and configuration.
+
+Switch to the code-first app root when the app needs substantial custom authoring, stronger typing,
+or package/entity work that deserves to be expressed directly in code.
+
+## Related pages
+
+- [Manifest vs Code](/slingshot/manifest-vs-code/)
+- [Quick Start](/slingshot/quick-start/)

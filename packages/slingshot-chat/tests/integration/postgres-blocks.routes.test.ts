@@ -15,9 +15,9 @@ import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEntityRegistry,
   createEventDefinitionRegistry,
   createEventPublisher,
-  createEntityRegistry,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { createNotificationsTestAdapters } from '@lastshotlabs/slingshot-notifications/testing';
@@ -186,7 +186,15 @@ async function createPostgresChatBlocksApp(): Promise<{
       if (!userId) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      (c as typeof c & { set(key: string, value: unknown): void }).set('authUserId', userId);
+      const actor = Object.freeze({
+        id: userId,
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: null,
+        claims: {},
+      });
+      (c as typeof c & { set(key: string, value: unknown): void }).set('actor', actor);
       await next();
     }) as MiddlewareHandler,
     requireRole: () => (async (_c, next) => next()) as MiddlewareHandler,
@@ -195,7 +203,15 @@ async function createPostgresChatBlocksApp(): Promise<{
   app.use('*', async (c, next) => {
     const userId = c.req.header('x-user-id');
     if (userId) {
-      (c as typeof c & { set(key: string, value: unknown): void }).set('authUserId', userId);
+      const actor = Object.freeze({
+        id: userId,
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: null,
+        claims: {},
+      });
+      (c as typeof c & { set(key: string, value: unknown): void }).set('actor', actor);
     }
     (c as typeof c & { set(key: string, value: unknown): void }).set('slingshotCtx', { routeAuth });
     await next();

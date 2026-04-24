@@ -481,10 +481,7 @@ async function prepareBootstrap<T extends object>(
   const drain = () => coreReg.drain();
   // Auto-synthesize permissions plugin when config.permissions is set
   // but no explicit permissions plugin is registered.
-  if (
-    config.permissions &&
-    !plugins.some(p => p.name === 'slingshot-permissions')
-  ) {
+  if (config.permissions && !plugins.some(p => p.name === 'slingshot-permissions')) {
     const { createPermissionsPlugin } = await import('@lastshotlabs/slingshot-permissions');
     plugins = [createPermissionsPlugin({ adapter: config.permissions.adapter }), ...plugins];
   }

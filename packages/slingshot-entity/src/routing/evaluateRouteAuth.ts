@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono';
-import { getActor, getActorId, getActorTenantId, type AppEnv } from '@lastshotlabs/slingshot-core';
+import { type AppEnv, getActor, getActorId, getActorTenantId } from '@lastshotlabs/slingshot-core';
 import type {
   PermissionEvaluator,
   RouteAuthRegistry,

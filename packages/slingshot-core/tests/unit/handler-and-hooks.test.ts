@@ -42,8 +42,6 @@ const baseMeta = {
     claims: {},
   },
   requestTenantId: 'tenant-1',
-  tenantId: 'tenant-1',
-  authUserId: 'user-1',
   correlationId: 'corr-1',
   ip: '127.0.0.1',
 };

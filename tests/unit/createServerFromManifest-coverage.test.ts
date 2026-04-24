@@ -218,7 +218,11 @@ describe('manifest seed', () => {
     ];
 
     const app = {} as any;
-    const bus = { publish: async () => {}, emit: () => {}, subscribe: () => ({ unsubscribe: () => {} }) } as any;
+    const bus = {
+      publish: async () => {},
+      emit: () => {},
+      subscribe: () => ({ unsubscribe: () => {} }),
+    } as any;
     const events = { publish: () => ({}) } as any;
 
     await runPluginSeed(plugins, app, bus, events, { users: [] });
@@ -227,12 +231,14 @@ describe('manifest seed', () => {
 
   it('skips plugins without seed()', async () => {
     const { runPluginSeed } = await import('../../src/framework/runPluginLifecycle');
-    const plugins: SlingshotPlugin[] = [
-      { name: 'no-seed', setupMiddleware: async () => {} },
-    ];
+    const plugins: SlingshotPlugin[] = [{ name: 'no-seed', setupMiddleware: async () => {} }];
 
     const app = {} as any;
-    const bus = { publish: async () => {}, emit: () => {}, subscribe: () => ({ unsubscribe: () => {} }) } as any;
+    const bus = {
+      publish: async () => {},
+      emit: () => {},
+      subscribe: () => ({ unsubscribe: () => {} }),
+    } as any;
     const events = { publish: () => ({}) } as any;
 
     // Should not throw
@@ -263,7 +269,11 @@ describe('manifest seed', () => {
     ];
 
     const app = {} as any;
-    const bus = { publish: async () => {}, emit: () => {}, subscribe: () => ({ unsubscribe: () => {} }) } as any;
+    const bus = {
+      publish: async () => {},
+      emit: () => {},
+      subscribe: () => ({ unsubscribe: () => {} }),
+    } as any;
     const events = { publish: () => ({}) } as any;
 
     await runPluginSeed(plugins, app, bus, events, {
@@ -296,7 +306,11 @@ describe('manifest seed', () => {
     const ctx = {
       plugins: [fakePlugin],
       app: {},
-      bus: { publish: async () => {}, emit: () => {}, subscribe: () => ({ unsubscribe: () => {} }) },
+      bus: {
+        publish: async () => {},
+        emit: () => {},
+        subscribe: () => ({ unsubscribe: () => {} }),
+      },
       events: { publish: () => ({}) },
     };
 
@@ -535,4 +549,3 @@ describe('entity handler and hook registration into entity plugin', () => {
     }
   });
 });
-

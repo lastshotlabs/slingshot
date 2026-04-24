@@ -35,26 +35,26 @@ describe('identify middleware — /me-raw (no auth gate)', () => {
     app = await createTestApp();
   });
 
-  it('sets authUserId=null when no token is provided', async () => {
+  it('sets actorId=null when no token is provided', async () => {
     const res = await app.request('/me-raw');
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
     expect(body.sessionId).toBeNull();
   });
 
-  it('sets authUserId when x-user-token header is valid', async () => {
+  it('sets actorId when x-user-token header is valid', async () => {
     const { token, userId } = await registerAndLogin(app);
     const res = await app.request('/me-raw', {
       headers: { 'x-user-token': token },
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.authUserId).toBe(userId);
+    expect(body.actorId).toBe(userId);
     expect(body.sessionId).toBeTruthy();
   });
 
-  it('sets authUserId=null when token has no sid claim', async () => {
+  it('sets actorId=null when token has no sid claim', async () => {
     const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
     const tokenNoSid = await new SignJWT({ sub: 'test-user' })
       .setProtectedHeader({ alg: 'HS256' })
@@ -66,20 +66,20 @@ describe('identify middleware — /me-raw (no auth gate)', () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
     expect(body.sessionId).toBeNull();
   });
 
-  it('sets authUserId=null for an invalid/garbage token', async () => {
+  it('sets actorId=null for an invalid/garbage token', async () => {
     const res = await app.request('/me-raw', {
       headers: { 'x-user-token': 'not.a.valid.jwt' },
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
   });
 
-  it('sets authUserId=null when session is revoked (after logout)', async () => {
+  it('sets actorId=null when session is revoked (after logout)', async () => {
     const { token } = await registerAndLogin(app);
 
     // Logout revokes the session
@@ -93,7 +93,7 @@ describe('identify middleware — /me-raw (no auth gate)', () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
   });
 });
 

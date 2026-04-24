@@ -120,7 +120,17 @@ function attachInteractionsContext(app: Hono, bus: InProcessAdapter, withPermiss
   app.use('*', async (c, next) => {
     const user = c.req.header('x-test-user');
     if (user) {
-      c.set('authUserId' as never, user as never);
+      c.set(
+        'actor' as never,
+        Object.freeze({
+          id: user,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }) as never,
+      );
     }
     await next();
   });

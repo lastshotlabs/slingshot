@@ -47,8 +47,17 @@ function makeUploadApp(options?: {
     userAuth: async (c: any, next: () => Promise<void>) => {
       const token = c.req.header('authorization');
       if (!token) return c.json({ error: 'Unauthorized' }, 401);
-      c.set('authUserId', c.req.header('x-user-id') ?? 'user-1');
-      c.set('tenantId', c.req.header('x-tenant-id') ?? 'tenant-1');
+      c.set(
+        'actor',
+        Object.freeze({
+          id: c.req.header('x-user-id') ?? 'user-1',
+          kind: 'user' as const,
+          tenantId: c.req.header('x-tenant-id') ?? 'tenant-1',
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     },
     requireRole: () => async (_c: any, next: () => Promise<void>) => {

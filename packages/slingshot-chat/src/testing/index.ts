@@ -440,7 +440,17 @@ export async function createChatTestApp(
     userAuth: (async (c, next) => {
       const uid = c.req.header('x-user-id') ?? c.req.header('x-test-user');
       if (!uid) return c.json({ error: 'Unauthorized' }, 401);
-      (c as typeof c & { set(key: string, value: unknown): void }).set('authUserId', uid);
+      (c as typeof c & { set(key: string, value: unknown): void }).set(
+        'actor',
+        Object.freeze({
+          id: uid,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     }) as MiddlewareHandler,
     requireRole: () => (async (_c, next) => next()) as MiddlewareHandler,
@@ -452,8 +462,17 @@ export async function createChatTestApp(
     const uid = c.req.header('x-user-id') ?? c.req.header('x-test-user');
     if (uid) {
       const setter = c as typeof c & { set(key: string, value: unknown): void };
-      setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
-      setter.set('authUserId', uid);
+      setter.set(
+        'actor',
+        Object.freeze({
+          id: uid,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
     }
     (c as typeof c & { set(key: string, value: unknown): void }).set('slingshotCtx', {
       routeAuth,

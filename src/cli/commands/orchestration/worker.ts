@@ -1,7 +1,7 @@
+import { createTemporalOrchestrationWorkerFromManifest } from '@lib/createTemporalOrchestrationWorkerFromManifest';
+import { Command, Flags } from '@oclif/core';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
-import { Command, Flags } from '@oclif/core';
-import { createTemporalOrchestrationWorkerFromManifest } from '@lib/createTemporalOrchestrationWorkerFromManifest';
 
 export default class OrchestrationWorker extends Command {
   static override description =

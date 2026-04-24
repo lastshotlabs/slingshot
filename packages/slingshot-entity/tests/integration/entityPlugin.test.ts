@@ -622,7 +622,17 @@ describe('createEntityPlugin — manifest intake', () => {
     const app = new OpenAPIHono<AppEnv>();
     app.use('*', async (c, next) => {
       const setContext = c as unknown as { set: (key: string, value: unknown) => void };
-      setContext.set('authUserId', c.req.header('x-auth-user-id') ?? 'user-a');
+      setContext.set(
+        'actor',
+        Object.freeze({
+          id: c.req.header('x-auth-user-id') ?? 'user-a',
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       setContext.set('slingshotCtx', {
         tenantId: 'tenant-1',
         pluginState: new Map<string, unknown>(),
@@ -649,7 +659,7 @@ describe('createEntityPlugin — manifest intake', () => {
               defaults: { auth: 'userAuth' },
               create: { auth: 'userAuth' },
               get: { auth: 'userAuth' },
-              dataScope: { field: 'userId', from: 'ctx:authUserId' },
+              dataScope: { field: 'userId', from: 'ctx:actor.id' },
             },
           },
         },

@@ -230,20 +230,20 @@ describe('SSE endpoints', () => {
 
 describe('SSE validation errors', () => {
   test('rejects :param in SSE path', async () => {
-      const plugin: SlingshotPlugin = {
-        name: 'sse-p1',
-        setupPost({ events }) {
-          events.register(
-            defineEvent('test:x', {
-              ownerPlugin: 'sse-p1',
-              exposure: ['client-safe'],
-              resolveScope() {
-                return { resourceType: 'test', resourceId: 'x' };
-              },
-            }),
-          );
-        },
-      };
+    const plugin: SlingshotPlugin = {
+      name: 'sse-p1',
+      setupPost({ events }) {
+        events.register(
+          defineEvent('test:x', {
+            ownerPlugin: 'sse-p1',
+            exposure: ['client-safe'],
+            resolveScope() {
+              return { resourceType: 'test', resourceId: 'x' };
+            },
+          }),
+        );
+      },
+    };
     await expect(
       createServer({
         ...baseConfig,
@@ -254,20 +254,20 @@ describe('SSE validation errors', () => {
   });
 
   test('rejects path not under /__sse/', async () => {
-      const plugin: SlingshotPlugin = {
-        name: 'sse-p2',
-        setupPost({ events }) {
-          events.register(
-            defineEvent('test:x', {
-              ownerPlugin: 'sse-p2',
-              exposure: ['client-safe'],
-              resolveScope() {
-                return { resourceType: 'test', resourceId: 'x' };
-              },
-            }),
-          );
-        },
-      };
+    const plugin: SlingshotPlugin = {
+      name: 'sse-p2',
+      setupPost({ events }) {
+        events.register(
+          defineEvent('test:x', {
+            ownerPlugin: 'sse-p2',
+            exposure: ['client-safe'],
+            resolveScope() {
+              return { resourceType: 'test', resourceId: 'x' };
+            },
+          }),
+        );
+      },
+    };
     await expect(
       createServer({
         ...baseConfig,
@@ -278,20 +278,20 @@ describe('SSE validation errors', () => {
   });
 
   test('rejects collision with WS endpoint', async () => {
-      const plugin: SlingshotPlugin = {
-        name: 'sse-p3',
-        setupPost({ events }) {
-          events.register(
-            defineEvent('test:x', {
-              ownerPlugin: 'sse-p3',
-              exposure: ['client-safe'],
-              resolveScope() {
-                return { resourceType: 'test', resourceId: 'x' };
-              },
-            }),
-          );
-        },
-      };
+    const plugin: SlingshotPlugin = {
+      name: 'sse-p3',
+      setupPost({ events }) {
+        events.register(
+          defineEvent('test:x', {
+            ownerPlugin: 'sse-p3',
+            exposure: ['client-safe'],
+            resolveScope() {
+              return { resourceType: 'test', resourceId: 'x' };
+            },
+          }),
+        );
+      },
+    };
     await expect(
       createServer({
         ...baseConfig,
@@ -305,21 +305,21 @@ describe('SSE validation errors', () => {
   test('rejects collision with Hono GET route', async () => {
     const plugin: SlingshotPlugin = {
       name: 'sse-p4',
-        setupRoutes({ app }) {
-          app.get('/__sse/items', c => c.text('x'));
-        },
-        setupPost({ events }) {
-          events.register(
-            defineEvent('test:x', {
-              ownerPlugin: 'sse-p4',
-              exposure: ['client-safe'],
-              resolveScope() {
-                return { resourceType: 'test', resourceId: 'x' };
-              },
-            }),
-          );
-        },
-      };
+      setupRoutes({ app }) {
+        app.get('/__sse/items', c => c.text('x'));
+      },
+      setupPost({ events }) {
+        events.register(
+          defineEvent('test:x', {
+            ownerPlugin: 'sse-p4',
+            exposure: ['client-safe'],
+            resolveScope() {
+              return { resourceType: 'test', resourceId: 'x' };
+            },
+          }),
+        );
+      },
+    };
     await expect(
       createServer({
         ...baseConfig,
@@ -434,9 +434,11 @@ describe('graceful shutdown', () => {
     const originalPublish = ctx.events.publish.bind(ctx.events);
     const shutdownSignals: string[] = [];
 
-    (ctx.events as typeof ctx.events & {
-      publish: typeof ctx.events.publish;
-    }).publish = ((key, payload, publishContext) => {
+    (
+      ctx.events as typeof ctx.events & {
+        publish: typeof ctx.events.publish;
+      }
+    ).publish = ((key, payload, publishContext) => {
       if (key === 'app:shutdown') {
         shutdownSignals.push((payload as { signal: string }).signal);
       }

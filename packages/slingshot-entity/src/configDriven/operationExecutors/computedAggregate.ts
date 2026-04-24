@@ -314,7 +314,7 @@ export function computedAggregateMongo(
     // Write to target
     const targetQuery: Record<string, unknown> = {};
     for (const [field, value] of Object.entries(op.targetMatch)) {
-      targetQuery[config.fields[field].primary ? '_id' : field] =
+      targetQuery[config.fields[field].primary ? config._storageFields.mongoPkField : field] =
         typeof value === 'string' && value.startsWith('param:') ? params[value.slice(6)] : value;
     }
     await Model.updateOne(targetQuery, { $set: { [op.materializeTo]: computed } });

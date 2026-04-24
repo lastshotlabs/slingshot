@@ -187,7 +187,7 @@ export function existsMongo(
   return async params => {
     const query: Record<string, unknown> = {};
     for (const [field, value] of fieldEntries) {
-      const mongoField = config.fields[field].primary ? '_id' : field;
+      const mongoField = config.fields[field].primary ? config._storageFields.mongoPkField : field;
       query[mongoField] = value.startsWith('param:') ? params[value.slice(6)] : value;
     }
     if (op.check) {

@@ -10,8 +10,8 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { resolveOpConfig } from '@lastshotlabs/slingshot-core';
 import { entityToPath } from '../generators/routeHelpers';
-import { resolveNamedOperationRoute } from './namedOperationRouting';
 import type { BareEntityAdapter } from './buildBareEntityRoutes';
+import { resolveNamedOperationRoute } from './namedOperationRouting';
 
 export type EntityGeneratedRouteKey =
   | 'create'
@@ -44,15 +44,13 @@ export interface EntityRouteExecutorBuilderContext {
   getEntityAdapter(args: { plugin: string; entity: string }): BareEntityAdapter;
 }
 
-export type EntityRouteExecutor<
-  TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-> = (ctx: EntityRouteExecutionContext<TRequest>) => Response | Promise<Response>;
+export type EntityRouteExecutor<TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec> = (
+  ctx: EntityRouteExecutionContext<TRequest>,
+) => Response | Promise<Response>;
 
 export type EntityRouteExecutorBuilder<
   TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-> = (
-  ctx: EntityRouteExecutorBuilderContext,
-) => EntityRouteExecutor<TRequest>;
+> = (ctx: EntityRouteExecutorBuilderContext) => EntityRouteExecutor<TRequest>;
 
 export interface EntityRouteExecutorDefinition<
   TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
@@ -64,9 +62,7 @@ export interface EntityRouteExecutorDefinition<
   build: EntityRouteExecutorBuilder<TRequest>;
 }
 
-export interface EntityExtraRoute<
-  TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
-> {
+export interface EntityExtraRoute<TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec> {
   key?: string;
   method: Lowercase<NamedOpHttpMethod> | 'delete' | 'patch';
   path: string;
@@ -125,9 +121,7 @@ export function defineEntityExecutor(
 ): EntityRouteExecutorBuilder;
 export function defineEntityExecutor<
   const TRequest extends TypedRouteRequestSpec = TypedRouteRequestSpec,
->(
-  definition: EntityRouteExecutorDefinition<TRequest>,
-): EntityRouteExecutorDefinition<TRequest>;
+>(definition: EntityRouteExecutorDefinition<TRequest>): EntityRouteExecutorDefinition<TRequest>;
 export function defineEntityExecutor(
   builderOrDefinition: EntityRouteExecutorBuilder | EntityRouteExecutorDefinition,
 ): EntityRouteExecutorBuilder | EntityRouteExecutorDefinition {
@@ -151,10 +145,11 @@ export function normalizeEntityRouteShape(path: string): string {
 }
 
 export function scoreEntityRouteSpecificity(path: string): number {
-  const segments = normalizeRoutePath(path)
-    .split('/')
-    .filter(Boolean);
-  return segments.reduce((score, segment) => score + (segment.startsWith(':') ? -10 : 1000), 0) + segments.length;
+  const segments = normalizeRoutePath(path).split('/').filter(Boolean);
+  return (
+    segments.reduce((score, segment) => score + (segment.startsWith(':') ? -10 : 1000), 0) +
+    segments.length
+  );
 }
 
 export function planEntityRoutes(
@@ -169,7 +164,10 @@ export function planEntityRoutes(
 ): PlannedEntityRoute[] {
   const routes: PlannedEntityRoute[] = [];
   const disabled = new Set(entity.routes?.disable ?? []);
-  const segment = joinEntitySegment(options?.parentPath, options?.routePath ?? entityToPath(entity.name));
+  const segment = joinEntitySegment(
+    options?.parentPath,
+    options?.routePath ?? entityToPath(entity.name),
+  );
   const collisions = new Map<string, PlannedEntityRoute>();
   const extraRoutes = options?.extraRoutes ?? [];
   const includeGeneratedRoutes = Boolean(entity.routes);

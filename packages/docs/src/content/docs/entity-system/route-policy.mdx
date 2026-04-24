@@ -1,0 +1,85 @@
+---
+title: Route Policy
+description: Auth, permissions, rate limits, idempotency, events, and per-route customization
+---
+
+Entity route policy is where the generated route shell becomes real application behavior.
+
+## A representative route policy block
+
+```typescript
+routes: {
+  defaults: {
+    auth: 'userAuth',
+    rateLimit: { windowMs: 60_000, max: 60 },
+  },
+  list: {
+    auth: 'none',
+  },
+  create: {
+    permission: { requires: 'post:write' },
+    event: {
+      key: 'blog:post.created',
+      payload: ['id', 'authorId', 'title'],
+    },
+  },
+  update: {
+    permission: {
+      requires: 'post:write',
+      ownerField: 'authorId',
+      or: 'post:moderate',
+    },
+    idempotency: { scope: 'tenant' },
+  },
+  operations: {
+    publish: {
+      method: 'post',
+      path: '/:id/publish',
+      permission: { requires: 'post:publish' },
+    },
+  },
+}
+```
+
+## What the generated shell can enforce
+
+Entity routes can declare:
+
+- `auth`
+- `permission`
+- `rateLimit`
+- `idempotency`
+- `middleware`
+- `event`
+- per-operation method and path overrides
+
+That applies both to generated CRUD routes and named operations.
+
+## Defaults first, then overrides
+
+`routes.defaults` is the canonical way to set the base policy once and only override where needed.
+
+That is usually the right pattern for:
+
+- private-by-default entities with public `list` or `get`
+- shared rate limiting with a few stricter mutations
+- common middleware with a few operation-specific additions
+
+## Policy resolvers
+
+The route policy surface also supports richer policy evaluation than simple permission strings.
+
+Use policy resolvers when you need record-aware or operation-aware authorization decisions that are
+too complex for a simple `requires` check.
+
+## Events are part of route policy
+
+Generated route events are not incidental. They are one of the main ways entity routes participate
+in the wider app event model.
+
+That is why event publication belongs in route policy docs rather than only in the event bus docs.
+
+## Next
+
+- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)
+- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/)

@@ -89,7 +89,7 @@ Tradeoffs:
 - operationally heavier than SQLite or BullMQ
 
 ```typescript
-import { Connection, Client } from '@temporalio/client';
+import { Client, Connection } from '@temporalio/client';
 import { createTemporalOrchestrationAdapter } from '@lastshotlabs/slingshot-orchestration-temporal';
 
 const connection = await Connection.connect({ address: 'localhost:7233' });

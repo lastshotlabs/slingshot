@@ -30,7 +30,7 @@ function makeMockRegistrar() {
   const registrar: CoreRegistrar = {
     setIdentityResolver: mock(() => {}),
     setRouteAuth: mock(() => {}),
-    setUserResolver: mock(() => {}),
+    setRequestActorResolver: mock(() => {}),
     addEmailTemplates: mock(() => {}),
     setRateLimitAdapter: mock((adapter: RateLimitAdapter) => {
       registeredRateLimitAdapter.value = adapter;

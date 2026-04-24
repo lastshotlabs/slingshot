@@ -46,14 +46,12 @@ function baseMeta(overrides: Partial<HandlerMeta> = {}): HandlerMeta {
   return {
     requestId: 'req-1',
     actor: ANONYMOUS_ACTOR,
-    tenantId: null,
-    authUserId: null,
+    requestTenantId: null,
     correlationId: 'req-1',
     ip: null,
     ...overrides,
   };
 }
-
 
 // ---------------------------------------------------------------------------
 // resolveActor with explicit actor
@@ -81,11 +79,10 @@ describe('resolveActor', () => {
       expect(resolveActor(baseMeta({ actor: ANONYMOUS_ACTOR }))).toBe(ANONYMOUS_ACTOR);
     });
 
-    test('actor takes precedence over conflicting legacy fields', () => {
+    test('resolves to the explicit actor unchanged', () => {
       const meta = baseMeta({
         actor: userActor,
-        authUserId: 'different-user',
-        tenantId: 'different-tenant',
+        requestTenantId: 'different-tenant',
       });
       const resolved = resolveActor(meta);
       expect(resolved).toBe(userActor);
@@ -110,7 +107,6 @@ describe('resolveActor', () => {
       });
     });
   });
-
 
   // ---------------------------------------------------------------------------
   // Edge cases

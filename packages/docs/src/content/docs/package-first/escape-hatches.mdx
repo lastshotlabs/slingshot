@@ -1,0 +1,46 @@
+---
+title: Escape Hatches
+description: Raw plugins, lower-level lifecycle work, and when to drop below the package surface
+---
+
+Package-first authoring is the default. Escape hatches still matter.
+
+## Raw plugins
+
+Use `plugins` when you need direct lifecycle control:
+
+- `setupMiddleware`
+- `setupRoutes`
+- `setupPost`
+- `teardown`
+
+That is still the right layer for some infrastructure integrations and lower-level framework work.
+
+## Entity-level escape hatches
+
+Inside the entity system, the main escape hatches are:
+
+- manual adapter wiring
+- factory-backed adapter wiring
+- generated-route executor overrides
+- extra routes
+- `createEntityPlugin()` for lower-level orchestration work
+
+Those are documented in the entity-system section because they are part of the normal advanced
+authoring path, not just internals.
+
+## `inspectPackage(...)`
+
+When a package gets large, `inspectPackage(...)` is a useful structural escape hatch. It lets you
+reason about the effective package graph without reading framework internals directly.
+
+## The rule
+
+Stay on the package-first surface until you have a concrete reason to leave it.
+
+Do not drop to raw plugins just because the plugin lifecycle existed first.
+
+## Next
+
+- [Plugin Interface](/slingshot/authoring/plugin-interface/)
+- [Internals: Plugin Lifecycle](/slingshot/internals/plugin-lifecycle/)

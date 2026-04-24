@@ -45,10 +45,7 @@ export interface EventDefinition<K extends EventKey = EventKey> {
   exposure: readonly EventExposure[];
   schema?: z.ZodType<SlingshotEventMap[K]>;
   resolveScope(payload: SlingshotEventMap[K], ctx: EventPublishContext): EventScope | null;
-  authorizeSubscriber?(
-    principal: EventSubscriptionPrincipal,
-    envelope: EventEnvelope<K>,
-  ): boolean;
+  authorizeSubscriber?(principal: EventSubscriptionPrincipal, envelope: EventEnvelope<K>): boolean;
   projectPayload?(
     payload: SlingshotEventMap[K],
     principal: EventSubscriptionPrincipal,

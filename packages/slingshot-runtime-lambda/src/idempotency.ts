@@ -1,4 +1,9 @@
-import { type HandlerMeta, type SlingshotContext, sha256 } from '@lastshotlabs/slingshot-core';
+import {
+  type HandlerMeta,
+  type SlingshotContext,
+  resolveActor,
+  sha256,
+} from '@lastshotlabs/slingshot-core';
 
 export interface RuntimeIdempotencyConfig {
   ttl?: number;
@@ -30,16 +35,16 @@ function deriveKey(
   meta: HandlerMeta,
   scope: 'global' | 'tenant' | 'user',
 ): string {
+  const actor = resolveActor(meta);
   const parts = ['functions-idempotency', handlerName];
   if (scope === 'tenant') {
-    parts.push(`tenant:${meta.tenantId ?? 'none'}`);
+    parts.push(`tenant:${meta.requestTenantId ?? actor.tenantId ?? 'none'}`);
   } else if (scope === 'user') {
-    const subject = meta.authUserId ?? meta.authClientId ?? meta.bearerClientId;
-    if (!subject) {
+    if (!actor.id) {
       throw new Error(`Idempotency scope 'user' requires an authenticated subject`);
     }
-    parts.push(`tenant:${meta.tenantId ?? 'none'}`);
-    parts.push(`subject:${subject}`);
+    parts.push(`tenant:${meta.requestTenantId ?? actor.tenantId ?? 'none'}`);
+    parts.push(`subject:${actor.id}`);
   }
   parts.push(rawKey);
   return parts.join(':');

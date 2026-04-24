@@ -31,6 +31,7 @@ import {
   type SlingshotResolvedConfig,
   attachContext,
   createEntityRegistry,
+  getActor,
 } from '@lastshotlabs/slingshot-core';
 import type {
   AppEnv,
@@ -78,7 +79,7 @@ function createFrameworkConfig(): SlingshotFrameworkConfig & {
     registrar: {
       setIdentityResolver() {},
       setRouteAuth() {},
-      setUserResolver() {},
+      setRequestActorResolver() {},
       setRateLimitAdapter() {},
       setFingerprintBuilder() {},
       addCacheAdapter() {},
@@ -174,18 +175,27 @@ function createRouteAuth(adminId: string): RouteAuthRegistry {
       if (!userId) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      c.set('authUserId', userId);
-      c.set('tenantId', c.req.header('x-tenant-id') ?? null);
-      c.set('roles', userId === adminId ? ['admin'] : ['member']);
+      const roles = userId === adminId ? ['admin'] : ['member'];
+      c.set(
+        'actor',
+        Object.freeze({
+          id: userId,
+          kind: 'user' as const,
+          tenantId: c.req.header('x-tenant-id') ?? null,
+          sessionId: null,
+          roles,
+          claims: {},
+        }),
+      );
       return next();
     },
     bearerAuth: undefined,
     requireRole:
       (...requiredRoles: string[]) =>
       async (c, next) => {
-        const rolesValue = c.get('roles');
-        const roles = Array.isArray(rolesValue)
-          ? rolesValue.filter((role): role is string => typeof role === 'string')
+        const actor = getActor(c);
+        const roles = Array.isArray(actor.roles)
+          ? actor.roles.filter((role): role is string => typeof role === 'string')
           : [];
         if (requiredRoles.some(role => roles.includes(role))) {
           return next();

@@ -1,0 +1,88 @@
+---
+title: App Config
+description: The top-level config surface every Slingshot app is built from
+---
+
+The root config is large because it owns real application concerns, not just route registration.
+
+## A representative app root
+
+```typescript title="src/index.ts"
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  port: 3000,
+  routesDir: new URL('./routes', import.meta.url).pathname,
+  modelSchemas: new URL('./schemas', import.meta.url).pathname,
+  meta: { name: 'Acme', version: '1.0.0' },
+  security: {
+    signing: { secret: process.env.JWT_SECRET! },
+    cors: ['http://localhost:4321'],
+  },
+  db: {
+    sqlite: './data/app.db',
+    redis: process.env.REDIS_URL,
+  },
+  packages: [],
+  ws: { endpoints: {} },
+  sse: { endpoints: {} },
+  secrets: { provider: 'env' },
+});
+```
+
+## The config categories
+
+| Category | Keys | What it controls |
+| --- | --- | --- |
+| App metadata | `meta`, `routesDir`, `modelSchemas`, `versioning` | Route discovery, docs metadata, schema preload, versioned APIs |
+| Request pipeline | `security`, `middleware`, `validation` | CORS, signing, rate limiting, request middleware, validation output |
+| Infrastructure | `db`, `upload`, `jobs`, `runtime`, `secrets` | Databases, uploads, job endpoints, runtime abstraction, secret resolution |
+| Composition | `packages`, `plugins`, `permissions` | Package-first app structure, raw plugins, shared permissions bootstrap |
+| Events and realtime | `eventBus`, `kafkaConnectors`, `ws`, `sse` | Cross-package events, Kafka bridge, WebSockets, SSE |
+| Operations | `logging`, `metrics`, `observability`, `tenancy` | Logging, `/metrics`, tracing, tenant resolution |
+
+## The keys that matter first
+
+### `packages`
+
+The canonical code-first composition surface. Prefer this for app roots.
+
+### `plugins`
+
+Still supported, but lower-level. Use it when you need direct lifecycle hooks or compatibility with
+older/plugin-only surfaces.
+
+### `eventBus`
+
+Every app has one. Omit it and Slingshot creates a default in-process bus. Supply your own when you
+need shared multi-instance event delivery or custom transport behavior.
+
+### `ws` and `sse`
+
+These are separate transport surfaces. They are both core and both documented separately because
+they solve different problems.
+
+### `secrets` and `runtime`
+
+These are bootstrap concerns, not package-level details. They belong at the app root because the
+framework resolves them before most of the app is assembled.
+
+## Do not treat the root config as a dump
+
+The app root should answer a few clear questions:
+
+- how the app is composed
+- how identity and security work
+- where state is stored
+- how events are transported
+- what realtime surfaces exist
+- what runtime and operational features are turned on
+
+If those concerns are scattered across multiple ad hoc entry files, the app becomes harder to
+operate.
+
+## Next
+
+- [Middleware](/slingshot/app-authoring/middleware/)
+- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)
+- [Runtime and Infrastructure](/slingshot/app-authoring/runtime-and-infrastructure/)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { Hono } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { attachContext } from '@lastshotlabs/slingshot-core';
+import { attachContext, getActor } from '@lastshotlabs/slingshot-core';
 import { csrfProtection } from '../../packages/slingshot-auth/src/middleware/csrf';
 import { createIdentifyMiddleware } from '../../packages/slingshot-auth/src/middleware/identify';
 
@@ -17,20 +17,21 @@ describe('public path aware auth middleware', () => {
     const emptyRuntimeData = {};
     const emptyRuntime = emptyRuntimeData as unknown as never;
     app.use(createIdentifyMiddleware(emptyRuntime));
-    app.get('/.well-known/apple-app-site-association', c =>
-      c.json({
-        authUserId: c.get('authUserId'),
-        roles: c.get('roles'),
-        sessionId: c.get('sessionId'),
-      }),
-    );
+    app.get('/.well-known/apple-app-site-association', c => {
+      const actor = getActor(c);
+      return c.json({
+        kind: actor.kind,
+        id: actor.id,
+        sessionId: actor.sessionId,
+      });
+    });
 
     const response = await app.request('/.well-known/apple-app-site-association');
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      authUserId: null,
-      roles: null,
+      kind: 'anonymous',
+      id: null,
       sessionId: null,
     });
   });

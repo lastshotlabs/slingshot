@@ -6,7 +6,20 @@ import { setVar } from './_helpers';
 function buildApp(userId?: string) {
   const app = new Hono();
   app.use('*', async (c, next) => {
-    if (userId) setVar(c, 'authUserId', userId);
+    if (userId) {
+      setVar(
+        c,
+        'actor',
+        Object.freeze({
+          id: userId,
+          kind: 'user',
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
+    }
     await next();
   });
   app.use('*', createMemberJoinGuardMiddleware());
@@ -71,7 +84,18 @@ describe('memberJoinGuard middleware', () => {
   test('rejects tenant spoofing when tenantId context is set', async () => {
     const app = new Hono();
     app.use('*', async (c, next) => {
-      setVar(c, 'authUserId', 'user-1');
+      setVar(
+        c,
+        'actor',
+        Object.freeze({
+          id: 'user-1',
+          kind: 'user',
+          tenantId: 'tenant-a',
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       setVar(c, 'tenantId', 'tenant-a');
       await next();
     });

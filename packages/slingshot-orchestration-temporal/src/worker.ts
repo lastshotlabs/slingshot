@@ -1,17 +1,24 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { resolve } from 'node:path';
-import { Worker, type NativeConnection } from '@temporalio/worker';
-import { OrchestrationError, type OrchestrationEventSink } from '@lastshotlabs/slingshot-orchestration';
+import { type NativeConnection, Worker } from '@temporalio/worker';
+import {
+  OrchestrationError,
+  type OrchestrationEventSink,
+} from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationProviderRegistry } from '@lastshotlabs/slingshot-orchestration/provider';
 import { createTemporalActivities } from './activities';
 import { discoverOrchestrationDefinitions, selectOrchestrationDefinitions } from './discovery';
-import { generateTemporalWorkflowModule, resolvePackageWorkflowsPath } from './workflowModuleGenerator';
-import { clearWorkerRegistries, installWorkerRegistries, isWorkerRegistryInstalled } from './workerRegistry';
+import { type TemporalOrchestrationWorkerOptions, temporalWorkerOptionsSchema } from './validation';
 import {
-  temporalWorkerOptionsSchema,
-  type TemporalOrchestrationWorkerOptions,
-} from './validation';
+  clearWorkerRegistries,
+  installWorkerRegistries,
+  isWorkerRegistryInstalled,
+} from './workerRegistry';
+import {
+  generateTemporalWorkflowModule,
+  resolvePackageWorkflowsPath,
+} from './workflowModuleGenerator';
 
 /**
  * Running Temporal worker group created for a Slingshot orchestration definition set.
@@ -112,23 +119,21 @@ export async function createTemporalOrchestrationWorker(
         maxConcurrentWorkflowTaskExecutions: options.maxConcurrentWorkflowTaskExecutions,
         maxConcurrentActivityTaskExecutions: options.maxConcurrentActivityTaskExecutions,
       }),
-      ...(
-        await Promise.all(
-          [...queues]
-            .filter(queue => queue !== options.workflowTaskQueue)
-            .map(queue =>
-              Worker.create({
-                connection: options.connection as NativeConnection,
-                namespace,
-                taskQueue: queue,
-                activities,
-                identity,
-                buildId: options.buildId,
-                maxConcurrentActivityTaskExecutions: options.maxConcurrentActivityTaskExecutions,
-              }),
-            ),
-        )
-      ),
+      ...(await Promise.all(
+        [...queues]
+          .filter(queue => queue !== options.workflowTaskQueue)
+          .map(queue =>
+            Worker.create({
+              connection: options.connection as NativeConnection,
+              namespace,
+              taskQueue: queue,
+              activities,
+              identity,
+              buildId: options.buildId,
+              maxConcurrentActivityTaskExecutions: options.maxConcurrentActivityTaskExecutions,
+            }),
+          ),
+      )),
     ];
   } catch (error) {
     clearWorkerRegistries();

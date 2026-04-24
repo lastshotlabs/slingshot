@@ -255,7 +255,7 @@ manage transaction strategy for this operation.
 {
   "kind": "arrayPush",
   "field": "watchers",
-  "value": "ctx:authUserId",
+  "value": "ctx:actor.id",
   "dedupe": true
 }
 ```
@@ -270,7 +270,7 @@ manage transaction strategy for this operation.
 **Generated route:** `POST /{entity}/:id/{op-kebab}`
 
 ```typescript
-watch: op.arrayPush({ field: 'watchers', value: 'ctx:authUserId' });
+watch: op.arrayPush({ field: 'watchers', value: 'ctx:actor.id' });
 addTag: op.arrayPush({ field: 'tags', value: 'input:tag' });
 addRole: op.arrayPush({ field: 'roles', value: 'input:role', dedupe: false });
 ```
@@ -288,7 +288,7 @@ manage transaction strategy for this operation.
 {
   "kind": "arrayPull",
   "field": "watchers",
-  "value": "ctx:authUserId"
+  "value": "ctx:actor.id"
 }
 ```
 
@@ -301,7 +301,7 @@ manage transaction strategy for this operation.
 **Generated route:** `DELETE /{entity}/:id/{op-kebab}`
 
 ```typescript
-unwatch: op.arrayPull({ field: 'watchers', value: 'ctx:authUserId' });
+unwatch: op.arrayPull({ field: 'watchers', value: 'ctx:actor.id' });
 removeTag: op.arrayPull({ field: 'tags', value: 'input:tag' });
 ```
 

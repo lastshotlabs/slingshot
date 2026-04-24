@@ -36,8 +36,17 @@ async function runPolicy(
 ) {
   const app = new Hono();
   app.post('/test', async c => {
-    c.set('authUserId' as never, (opts?.userId ?? 'user-1') as never);
-    c.set('tenantId' as never, 'tenant-1' as never);
+    c.set(
+      'actor' as never,
+      Object.freeze({
+        id: opts?.userId ?? 'user-1',
+        kind: 'user' as const,
+        tenantId: 'tenant-1',
+        sessionId: null,
+        roles: null,
+        claims: {},
+      }) as never,
+    );
     await resolvePolicy({
       c,
       config: makeConfig(config),
@@ -92,7 +101,7 @@ describe('resolvePolicy', () => {
   test('missing userId → 500', async () => {
     const app = new Hono();
     app.post('/test', async c => {
-      // deliberately do NOT set authUserId
+      // deliberately do NOT set actor
       await resolvePolicy({
         c,
         config: makeConfig(),

@@ -4,7 +4,6 @@
 // Consumed by applyRouteConfig() at runtime to wire auth, permissions,
 // rate limits, events, and custom middleware onto a Hono router.
 // ============================================================================
-
 import type { EventExposure } from './eventDefinition';
 
 /**

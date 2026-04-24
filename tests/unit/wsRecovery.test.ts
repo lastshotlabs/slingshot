@@ -48,7 +48,7 @@ function createMockWs(id: string, endpoint = '/ws') {
     subscribe(channel: string) {
       subscribed.push(channel);
     },
-    data: { id, endpoint, rooms: new Set<string>(), userId: null },
+    data: { id, endpoint, rooms: new Set<string>(), actorId: null },
     sent,
     subscribed,
   };

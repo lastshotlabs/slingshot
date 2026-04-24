@@ -61,7 +61,10 @@ function resolveDotPath(value: unknown, path: string): unknown {
   return current;
 }
 
-export function resolveDataScopeValue(from: EntityRouteDataScopeSource, c: Context<AppEnv>): unknown {
+export function resolveDataScopeValue(
+  from: EntityRouteDataScopeSource,
+  c: Context<AppEnv>,
+): unknown {
   const colon = from.indexOf(':');
   if (colon < 0) return undefined;
 

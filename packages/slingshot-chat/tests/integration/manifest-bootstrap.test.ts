@@ -40,7 +40,7 @@ describe('manifest-safe bootstrap', () => {
       { ts: 123 },
       {
         socketId: 'sock-ping',
-        userId: null,
+        actorId: null,
         endpoint: '/chat',
         publish() {},
         subscribe() {},
@@ -62,7 +62,7 @@ describe('manifest-safe bootstrap', () => {
       { roomId: room.id },
       {
         socketId: 'sock-typing',
-        userId: 'user-1',
+        actorId: 'user-1',
         endpoint: '/chat',
         publish(roomName, data) {
           published.push({ room: roomName, data });

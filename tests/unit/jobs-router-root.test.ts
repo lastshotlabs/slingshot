@@ -84,7 +84,17 @@ function makeApp(
       userAuth: async (c: any, next: () => Promise<void>) => {
         const token = c.req.header('authorization') ?? c.req.header('x-user-token');
         if (!token) return c.json({ error: 'Unauthorized' }, 401);
-        c.set('authUserId', 'user-abc');
+        c.set(
+          'actor',
+          Object.freeze({
+            id: 'user-abc',
+            kind: 'user' as const,
+            tenantId: null,
+            sessionId: null,
+            roles: null,
+            claims: {},
+          }),
+        );
         await next();
       },
       requireRole:

@@ -126,8 +126,9 @@ export function arrayPullMongo(
 ): (id: unknown, value: unknown) => Promise<Record<string, unknown>> {
   return async (id, value) => {
     const Model = getModel();
-    await Model.updateOne({ _id: id }, { $pull: { [op.field]: value } });
-    const doc = await Model.findOne({ _id: id }).lean();
+    const pkField = config._storageFields.mongoPkField;
+    await Model.updateOne({ [pkField]: id }, { $pull: { [op.field]: value } });
+    const doc = await Model.findOne({ [pkField]: id }).lean();
     if (!doc) throw new Error(`[${config.name}] Not found`);
     return fromDoc(doc);
   };

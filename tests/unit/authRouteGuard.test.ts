@@ -2,7 +2,7 @@
  * Unit tests for getAuthenticatedAccountGuardFailure.
  *
  * Targets the uncovered lines:
- * - lines 19-21: throws when authUserId is not a non-empty string
+ * - lines 19-21: throws when actor is missing or anonymous
  */
 import { AUTH_RUNTIME_KEY } from '@auth/runtime';
 import type { AuthRuntimeContext } from '@auth/runtime';
@@ -38,26 +38,25 @@ function makeAuthRuntime(overrides?: {
 
 /**
  * Build a minimal Hono-like context object that satisfies:
- * - c.get('authUserId') → authUserId value
+ * - c.get('actor') → Actor object (or null for invalid cases)
  * - c.get('slingshotCtx') → a ctx with pluginState containing AUTH_RUNTIME_KEY
  */
-function makeContext(authUserId: unknown, opts?: { suspended?: boolean; emailVerified?: boolean }) {
+function makeContext(actorId: unknown, opts?: { suspended?: boolean; emailVerified?: boolean }) {
   const pluginState = new Map([[AUTH_RUNTIME_KEY, makeAuthRuntime(opts)]]);
   const slingshotCtx = { pluginState };
   const actor =
-    typeof authUserId === 'string' && authUserId.length > 0
-      ? {
-          id: authUserId,
-          kind: 'user',
+    typeof actorId === 'string' && actorId.length > 0
+      ? Object.freeze({
+          id: actorId,
+          kind: 'user' as const,
           tenantId: null,
           sessionId: null,
           roles: null,
           claims: {},
-        }
+        })
       : null;
 
   const store = new Map<string, unknown>([
-    ['authUserId', authUserId],
     ['actor', actor],
     ['slingshotCtx', slingshotCtx],
   ]);
@@ -70,28 +69,28 @@ function makeContext(authUserId: unknown, opts?: { suspended?: boolean; emailVer
 }
 
 describe('getAuthenticatedAccountGuardFailure', () => {
-  test('throws when authUserId is null (lines 19-21)', async () => {
+  test('throws when actor is null (lines 19-21)', async () => {
     const ctx = makeContext(null);
     await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
       /authenticated user actor/,
     );
   });
 
-  test('throws when authUserId is undefined (lines 19-21)', async () => {
+  test('throws when actor is undefined (lines 19-21)', async () => {
     const ctx = makeContext(undefined);
     await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
       /authenticated user actor/,
     );
   });
 
-  test('throws when authUserId is empty string (lines 19-21)', async () => {
+  test('throws when actor id is empty string (lines 19-21)', async () => {
     const ctx = makeContext('');
     await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
       /authenticated user actor/,
     );
   });
 
-  test('throws when authUserId is a number', async () => {
+  test('throws when actor id is a number', async () => {
     const ctx = makeContext(42);
     await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
       /authenticated user actor/,
@@ -126,8 +125,16 @@ describe('getAuthenticatedAccountGuardFailure', () => {
 
     const pluginState = new Map([[AUTH_RUNTIME_KEY, runtime]]);
     const slingshotCtx = { pluginState };
+    const actor = Object.freeze({
+      id: 'user-456',
+      kind: 'user' as const,
+      tenantId: null,
+      sessionId: null,
+      roles: null,
+      claims: {},
+    });
     const store = new Map<string, unknown>([
-      ['authUserId', 'user-456'],
+      ['actor', actor],
       ['slingshotCtx', slingshotCtx],
     ]);
     const ctx = { get: (key: string) => store.get(key) };
@@ -153,8 +160,16 @@ describe('getAuthenticatedAccountGuardFailure', () => {
 
     const pluginState = new Map([[AUTH_RUNTIME_KEY, runtime]]);
     const slingshotCtx = { pluginState };
+    const actor = Object.freeze({
+      id: 'user-789',
+      kind: 'user' as const,
+      tenantId: null,
+      sessionId: null,
+      roles: null,
+      claims: {},
+    });
     const store = new Map<string, unknown>([
-      ['authUserId', 'user-789'],
+      ['actor', actor],
       ['slingshotCtx', slingshotCtx],
     ]);
     const ctx = { get: (key: string) => store.get(key) };
@@ -178,8 +193,16 @@ describe('getAuthenticatedAccountGuardFailure', () => {
       ],
     ]);
     const slingshotCtx = { pluginState };
+    const actor = Object.freeze({
+      id: 'user-999',
+      kind: 'user' as const,
+      tenantId: null,
+      sessionId: null,
+      roles: null,
+      claims: {},
+    });
     const store = new Map<string, unknown>([
-      ['authUserId', 'user-999'],
+      ['actor', actor],
       ['slingshotCtx', slingshotCtx],
     ]);
     const ctx = { get: (key: string) => store.get(key) };

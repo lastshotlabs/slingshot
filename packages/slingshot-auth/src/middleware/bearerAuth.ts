@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import type { Actor, AppEnv } from '@lastshotlabs/slingshot-core';
 import { timingSafeEqual } from '@lastshotlabs/slingshot-core';
 import type { BearerAuthClient, BearerAuthConfig } from '../config/authConfig';
 
@@ -34,14 +35,14 @@ import type { BearerAuthClient, BearerAuthConfig } from '../config/authConfig';
  * app.use('/api/*', createBearerAuth(['new-secret', 'old-secret']));
  *
  * @example
- * // Named clients — downstream handlers can read c.get('bearerClientId')
+ * // Named clients — downstream handlers can read the actor via getActor(c)
  * app.use('/api/*', createBearerAuth([
  *   { clientId: 'service-a', token: 'token-a' },
  *   { clientId: 'service-b', token: 'token-b', revoked: false },
  *   { clientId: 'legacy',    token: 'old-token', revoked: true }, // blocked
  * ]));
  */
-export function createBearerAuth(config: BearerAuthConfig): MiddlewareHandler {
+export function createBearerAuth(config: BearerAuthConfig): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const header = c.req.header('Authorization');
     const token = header?.startsWith('Bearer ') ? header.slice(7) : null;
@@ -91,7 +92,16 @@ export function createBearerAuth(config: BearerAuthConfig): MiddlewareHandler {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    c.set('bearerClientId', matchedClient.clientId);
+    const tenantId = (c.get('tenantId') as string | null | undefined) ?? null;
+    const actor: Actor = {
+      id: matchedClient.clientId,
+      kind: 'api-key',
+      tenantId,
+      sessionId: null,
+      roles: null,
+      claims: {},
+    };
+    c.set('actor', Object.freeze(actor) as Actor);
     await next();
   };
 }

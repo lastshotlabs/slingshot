@@ -1,0 +1,70 @@
+---
+title: Permissions
+description: Server-level permissions bootstrap and how route and entity policy use it
+---
+
+Permissions are a core app concern because the framework can bootstrap shared permissions state for
+the whole application.
+
+## Server-level bootstrap
+
+Use the root `permissions` config when you want a shared adapter, registry, and evaluator available
+to the rest of the app.
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  permissions: {
+    enabled: true,
+  },
+});
+```
+
+That shared runtime is published into app context so packages and routes can use the same evaluator
+instead of each package inventing its own permissions bootstrap.
+
+## Where permissions show up
+
+Permissions are then consumed by higher-level authoring surfaces:
+
+- package-owned routes
+- entity route config
+- WebSocket subscribe guards
+- package capabilities and integrations that need subject checks
+
+## Package and entity policy
+
+A typical entity route config might require a permission directly:
+
+```typescript
+routes: {
+  defaults: { auth: 'userAuth' },
+  create: {
+    permission: { requires: 'post:write' },
+  },
+  update: {
+    permission: {
+      requires: 'post:write',
+      ownerField: 'authorId',
+      or: 'post:moderate',
+    },
+  },
+}
+```
+
+That works because the app has a shared permission model available at runtime.
+
+## Separate concerns
+
+Keep these concerns separate when writing docs or app code:
+
+- bootstrap the shared permissions system at the app root
+- declare route or entity permissions where the behavior lives
+
+Do not collapse those into one vague "auth" story.
+
+## Next
+
+- [App Config](/slingshot/app-authoring/app-config/)
+- [Entity System: Route Policy](/slingshot/entity-system/route-policy/)

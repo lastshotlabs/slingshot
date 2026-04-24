@@ -27,8 +27,8 @@ export interface IncomingHandler {
 
 /** Context passed to each incoming handler. */
 export interface IncomingHandlerContext {
-  /** Authenticated user ID. */
-  userId: string;
+  /** Authenticated actor ID. */
+  actorId: string;
   /** Socket ID for sender identification. */
   socketId: string;
   /** Raw event payload from the client. */
@@ -126,7 +126,7 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
         }
 
         const { session, players } = resolved;
-        const player = players.find(p => p.userId === ctx.userId);
+        const player = players.find(p => p.userId === ctx.actorId);
 
         if (!player) {
           ctx.ack({
@@ -197,7 +197,7 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
         }
 
         const { session, players } = resolved;
-        const player = players.find(p => p.userId === ctx.userId);
+        const player = players.find(p => p.userId === ctx.actorId);
 
         if (!player) {
           ctx.ack({
@@ -225,7 +225,7 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
 
         await deps.handleReconnect(
           sessionId,
-          ctx.userId,
+          ctx.actorId,
           (room: string) => ctx.subscribe(room),
           (data: unknown) => ctx.ack(data),
           (room: string, data: unknown) => ctx.publish(room, data),
@@ -244,7 +244,7 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
 
         // Unsubscribe from all session rooms
         ctx.unsubscribe(sessionRoom(sessionId));
-        ctx.unsubscribe(playerRoom(sessionId, ctx.userId));
+        ctx.unsubscribe(playerRoom(sessionId, ctx.actorId));
       },
     },
 
@@ -268,7 +268,7 @@ export function buildIncomingDispatch(deps: IncomingDispatchDeps): IncomingHandl
 
         const { sessionId, channel, data, sequence } = parsed.data;
 
-        const result = await deps.processInput(sessionId, channel, ctx.userId, data, sequence);
+        const result = await deps.processInput(sessionId, channel, ctx.actorId, data, sequence);
 
         // Send input ack to the sender
         ctx.ack({

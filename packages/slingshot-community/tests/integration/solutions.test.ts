@@ -4,7 +4,7 @@
  * Phase 5 — verifies that `markAsSolution` sets `solutionReplyId` and
  * `solutionMarkedAt`, and `unmarkAsSolution` clears them.
  *
- * Note: Thread GET (`auth: 'none'`) requires authUserId via dataScope even on
+ * Note: Thread GET (`auth: 'none'`) requires actor identity via dataScope even on
  * auth:none routes, so we verify state from the operation response body
  * (fieldUpdate ops return the updated record) instead of a separate GET.
  */

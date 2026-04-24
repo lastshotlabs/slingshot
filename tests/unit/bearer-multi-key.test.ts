@@ -11,7 +11,9 @@ function makeApp(config: Parameters<typeof createBearerAuth>[0]) {
   const app = new OpenAPIHono<any>();
   app.use(createBearerAuth(config));
   app.get('/check', c => {
-    return c.json({ ok: true, bearerClientId: c.get('bearerClientId') ?? null });
+    const actor = c.get('actor') as { kind: string; id: string | null } | undefined;
+    const bearerClientId = actor?.kind === 'api-key' ? actor.id : null;
+    return c.json({ ok: true, bearerClientId });
   });
   return app;
 }

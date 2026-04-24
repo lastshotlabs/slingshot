@@ -29,7 +29,7 @@ function createMockWs(id: string, endpoint = '/ws') {
     send(msg: string) {
       sent.push(msg);
     },
-    data: { id, endpoint, rooms: new Set<string>(), userId: null },
+    data: { id, endpoint, rooms: new Set<string>(), actorId: null },
     sent,
   };
 }
@@ -150,7 +150,7 @@ describe('wsDispatch — handleIncomingEvent', () => {
     expect(consumed).toBe(false);
   });
 
-  it('auth: userAuth, userId present — handler called', async () => {
+  it('auth: userAuth, actorId present — handler called', async () => {
     state.socketUsers.set('s1', 'user-1');
     const handler = mock(() => 'ok');
     const ws = createMockWs('s1');
@@ -164,7 +164,7 @@ describe('wsDispatch — handleIncomingEvent', () => {
     expect(JSON.parse(ws.sent[0]).result).toBe('ok');
   });
 
-  it('auth: userAuth, no userId — ack error unauthenticated (ackId)', async () => {
+  it('auth: userAuth, no actorId — ack error unauthenticated (ackId)', async () => {
     const handler = mock(() => 'ok');
     const ws = createMockWs('s1');
     const msg = JSON.stringify({ action: 'event', event: 'secure', ackId: 'a5' });
@@ -177,7 +177,7 @@ describe('wsDispatch — handleIncomingEvent', () => {
     expect(JSON.parse(ws.sent[0])).toEqual({ event: 'ack', ackId: 'a5', error: 'unauthenticated' });
   });
 
-  it('auth: userAuth, no userId, no ackId — silent drop', async () => {
+  it('auth: userAuth, no actorId, no ackId — silent drop', async () => {
     const handler = mock(() => 'ok');
     const ws = createMockWs('s1');
     const msg = JSON.stringify({ action: 'event', event: 'secure' });
@@ -190,8 +190,10 @@ describe('wsDispatch — handleIncomingEvent', () => {
     expect(ws.sent).toHaveLength(0);
   });
 
-  it('auth: none (default), no userId — handler called, context.userId is null', async () => {
-    const handler = mock((_ws: unknown, _p: unknown, ctx: { userId: string | null }) => ctx.userId);
+  it('auth: none (default), no actorId — handler called, context.actorId is null', async () => {
+    const handler = mock(
+      (_ws: unknown, _p: unknown, ctx: { actorId: string | null }) => ctx.actorId,
+    );
     const ws = createMockWs('s1');
     const msg = JSON.stringify({ action: 'event', event: 'open', ackId: 'a6' });
 
@@ -270,7 +272,7 @@ describe('wsDispatch — handleIncomingEvent', () => {
     expect(JSON.parse(ws.sent[0])).toEqual({ event: 'ack', ackId: 'a-throw', error: 'forbidden' });
   });
 
-  it('auth: bearer, no userId — ack error unauthenticated', async () => {
+  it('auth: bearer, no actorId — ack error unauthenticated', async () => {
     const handler = mock(() => 'ok');
     const ws = createMockWs('s1');
     const msg = JSON.stringify({ action: 'event', event: 'secure', ackId: 'a-bearer' });

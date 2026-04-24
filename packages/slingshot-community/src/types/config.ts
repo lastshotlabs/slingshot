@@ -220,7 +220,7 @@ export const communityPluginConfigSchema = z.object({
   /**
    * Auth context bridging strategy.
    *
-   * - `"auto"` registers middleware that reads `authUserId` and `roles` from the auth plugin
+   * - `"auto"` registers middleware that reads the actor identity and roles from the auth plugin
    *   and sets `communityPrincipal` on the request context. Use when `slingshot-auth` is the
    *   identity provider.
    * - `"none"` requires the caller to provide `communityPrincipal` via external middleware.
@@ -231,7 +231,7 @@ export const communityPluginConfigSchema = z.object({
     .optional()
     .describe(
       'Auth context bridging strategy. ' +
-        '"auto" registers middleware that reads authUserId and roles from the auth plugin ' +
+        '"auto" registers middleware that reads the actor identity and roles from the auth plugin ' +
         'and sets communityPrincipal on the request context. ' +
         '"none" requires the caller to provide communityPrincipal via external middleware. ' +
         'Use "auto" when slingshot-auth is the identity provider. ' +

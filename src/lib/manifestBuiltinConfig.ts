@@ -250,7 +250,9 @@ export function resolveWebhookManifestConfig(
  * @param config - Raw search plugin config from the manifest.
  * @returns Resolved config with function-typed fields populated.
  */
-function resolveTemporalTlsConfig(config: Record<string, unknown>): Record<string, unknown> | undefined {
+function resolveTemporalTlsConfig(
+  config: Record<string, unknown>,
+): Record<string, unknown> | undefined {
   const tls = config['tls'];
   if (!isRecord(tls)) return undefined;
   const resolved: Record<string, unknown> = {};
@@ -273,10 +275,7 @@ export function resolveOrchestrationManifestConfig(
   config: Record<string, unknown>,
   registry: ManifestHandlerRegistry | undefined,
 ): Record<string, unknown> {
-  const requiredRegistry = requireRegistry(
-    registry,
-    'manifest.plugins["slingshot-orchestration"]',
-  );
+  const requiredRegistry = requireRegistry(registry, 'manifest.plugins["slingshot-orchestration"]');
   const adapterRef = isRecord(config['adapter']) ? config['adapter'] : {};
   const adapterType = typeof adapterRef['type'] === 'string' ? adapterRef['type'] : 'memory';
   const adapterConfig = isRecord(adapterRef['config']) ? adapterRef['config'] : {};
@@ -331,26 +330,23 @@ export function resolveOrchestrationManifestConfig(
 
   let adapter: unknown;
   if (adapterType === 'memory') {
-    const { createMemoryAdapter } = require(
-      '@lastshotlabs/slingshot-orchestration',
-    ) as typeof import('@lastshotlabs/slingshot-orchestration');
+    const { createMemoryAdapter } =
+      require('@lastshotlabs/slingshot-orchestration') as typeof import('@lastshotlabs/slingshot-orchestration');
     adapter = createMemoryAdapter(adapterConfig as { concurrency?: number });
   } else if (adapterType === 'sqlite') {
-    const { createSqliteAdapter } = require(
-      '@lastshotlabs/slingshot-orchestration',
-    ) as typeof import('@lastshotlabs/slingshot-orchestration');
+    const { createSqliteAdapter } =
+      require('@lastshotlabs/slingshot-orchestration') as typeof import('@lastshotlabs/slingshot-orchestration');
     adapter = createSqliteAdapter(adapterConfig as { path: string; concurrency?: number });
   } else if (adapterType === 'bullmq') {
-    const { createBullMQOrchestrationAdapter } = require(
-      '@lastshotlabs/slingshot-orchestration-bullmq',
-    ) as typeof import('@lastshotlabs/slingshot-orchestration-bullmq');
+    const { createBullMQOrchestrationAdapter } =
+      require('@lastshotlabs/slingshot-orchestration-bullmq') as typeof import('@lastshotlabs/slingshot-orchestration-bullmq');
     adapter = createBullMQOrchestrationAdapter(adapterConfig as never);
   } else if (adapterType === 'temporal') {
     const temporalConfig = adapterConfig;
-    const { Connection, Client } = require('@temporalio/client') as typeof import('@temporalio/client');
-    const { createTemporalOrchestrationAdapter } = require(
-      '@lastshotlabs/slingshot-orchestration-temporal',
-    ) as typeof import('@lastshotlabs/slingshot-orchestration-temporal');
+    const { Connection, Client } =
+      require('@temporalio/client') as typeof import('@temporalio/client');
+    const { createTemporalOrchestrationAdapter } =
+      require('@lastshotlabs/slingshot-orchestration-temporal') as typeof import('@lastshotlabs/slingshot-orchestration-temporal');
     const namespace =
       typeof temporalConfig['namespace'] === 'string' ? temporalConfig['namespace'] : undefined;
     const tls = resolveTemporalTlsConfig(temporalConfig);

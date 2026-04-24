@@ -5,15 +5,15 @@ import type { EventKey } from './eventDefinition';
  *
  * The generic parameter `T` allows endpoint-specific metadata to be added at
  * upgrade time (e.g., tenant scope, subscription filters). The base fields
- * (`id`, `userId`, `endpoint`) are always present.
+ * (`id`, `actorId`, `endpoint`) are always present.
  *
  * @template T - Additional per-connection metadata attached during upgrade.
  */
 export type SseClientData<T extends object = object> = {
   /** Unique connection identifier (nanoid). */
   id: string;
-  /** Authenticated user ID, or `null` for unauthenticated connections. */
-  userId: string | null;
+  /** Authenticated actor ID, or `null` for unauthenticated connections. */
+  actorId: string | null;
   /** The SSE endpoint name this connection belongs to. */
   endpoint: string;
 } & T;
@@ -51,7 +51,7 @@ export type SseFilter<T extends object = object> = (
  *   events: ['community:notification.created'],
  *   heartbeat: 30_000,
  *   filter: (client, _event, payload) => {
- *     return (payload as any).userId === client.userId;
+ *     return (payload as any).userId === client.actorId;
  *   },
  * };
  * ```
@@ -62,8 +62,8 @@ export interface SseEndpointConfig<T extends object = object> {
   /**
    * Auth hook called when a client opens an SSE connection.
    * Return `SseClientData<T>` to accept the connection; return a `Response` to reject.
-   * When omitted, the framework resolves `userId` from the session cookie/token
-   * (permissive — `userId: null` on auth failure, connection still accepted).
+   * When omitted, the framework resolves `actorId` from the session cookie/token
+   * (permissive — `actorId: null` on auth failure, connection still accepted).
    */
   upgrade?: (req: Request) => Promise<SseClientData<T> | Response>;
   /**

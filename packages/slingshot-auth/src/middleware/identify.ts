@@ -36,8 +36,7 @@ function computeFingerprint(
  * `x-user-token` header for non-browser clients) and resolves the authenticated user identity.
  * The result is published as a frozen `Actor` object on the Hono context (`c.get('actor')`)
  * and can be read via `getActor(c)`, `getActorId(c)`, or `getActorTenantId(c)` from
- * `@lastshotlabs/slingshot-core`. Legacy context variables (`authUserId`, `sessionId`, etc.)
- * are still set as intermediate state during resolution.
+ * `@lastshotlabs/slingshot-core`.
  *
  * Processing steps (in order):
  * 1. **Token extraction** — checks `COOKIE_TOKEN` first, falls back to `HEADER_USER_TOKEN`.
@@ -118,10 +117,6 @@ export const createIdentifyMiddleware =
         : undefined;
 
     if (isPublicPath(c.req.path, slingshotCtx?.publicPaths)) {
-      c.set('authUserId', null);
-      c.set('roles', null);
-      c.set('sessionId', null);
-      c.set('authClientId', null);
       c.set('tokenPayload', null);
       const tenantId = (c.get('tenantId') as string | null | undefined) ?? null;
       c.set('actor', Object.freeze({ ...ANONYMOUS_ACTOR, tenantId }) as Actor);
@@ -274,12 +269,6 @@ export const createIdentifyMiddleware =
           }
         : { ...ANONYMOUS_ACTOR, tenantId: resolvedTenantId };
     c.set('actor', Object.freeze(actor) as Actor);
-
-    // Project legacy context variables from the actor for backward compatibility.
-    c.set('authUserId', resolvedUserId);
-    c.set('roles', resolvedRoles);
-    c.set('sessionId', resolvedSessionId);
-    c.set('authClientId', resolvedClientId);
     c.set('tokenPayload', resolvedTokenPayload);
 
     await next();

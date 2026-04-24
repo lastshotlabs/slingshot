@@ -104,7 +104,17 @@ async function buildTestApp(plugin: ReturnType<typeof createPollsPlugin>) {
     userAuth: (async (c, next) => {
       const uid = c.req.header('x-user-id');
       if (!uid) return c.json({ error: 'Unauthorized' }, 401);
-      (c as typeof c & { set(key: string, value: unknown): void }).set('authUserId', uid);
+      (c as typeof c & { set(key: string, value: unknown): void }).set(
+        'actor',
+        Object.freeze({
+          id: uid,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     }) as MiddlewareHandler,
     requireRole: () => ((_c, next) => next()) as MiddlewareHandler,
@@ -113,7 +123,17 @@ async function buildTestApp(plugin: ReturnType<typeof createPollsPlugin>) {
   app.use('*', async (c, next) => {
     const uid = c.req.header('x-user-id');
     if (uid) {
-      (c as typeof c & { set(key: string, value: unknown): void }).set('authUserId', uid);
+      (c as typeof c & { set(key: string, value: unknown): void }).set(
+        'actor',
+        Object.freeze({
+          id: uid,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
     }
     const tid = c.req.header('x-tenant-id');
     if (tid) {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { HttpError, getActor } from '@lastshotlabs/slingshot-core';
 import { requireMfaSetup } from '../../src/middleware/requireMfaSetup';
 import { requireStepUp } from '../../src/middleware/requireStepUp';
 import { requireVerifiedEmail } from '../../src/middleware/requireVerifiedEmail';
@@ -26,13 +26,36 @@ function buildApp(runtime: MutableTestRuntime) {
 }
 
 /**
- * Middleware to simulate an authenticated user by injecting `authUserId` and
- * `sessionId` into the Hono context (normally done by the `identify` middleware).
+ * Middleware to simulate an authenticated user by injecting `actor` into the
+ * Hono context (normally done by the `identify` middleware).
  */
 function simulateAuth(userId: string | null, sessionId: string | null = 'test-session') {
   return async (c: { set(key: string, value: unknown): void }, next: () => Promise<void>) => {
-    c.set('authUserId', userId);
-    c.set('sessionId', sessionId);
+    if (userId) {
+      c.set(
+        'actor',
+        Object.freeze({
+          id: userId,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId,
+          roles: null,
+          claims: {},
+        }),
+      );
+    } else {
+      c.set(
+        'actor',
+        Object.freeze({
+          id: null,
+          kind: 'anonymous' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
+    }
     await next();
   };
 }
@@ -59,7 +82,7 @@ describe('userAuth', () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 
-  test('unauthenticated user (authUserId = null) receives 401', async () => {
+  test('unauthenticated user (anonymous actor) receives 401', async () => {
     app.use('/protected', simulateAuth(null), userAuth);
     app.get('/protected', c => c.json({ ok: true }));
 
@@ -67,7 +90,7 @@ describe('userAuth', () => {
     expect(res.status).toBe(401);
   });
 
-  test('empty string authUserId is treated as unauthenticated (401)', async () => {
+  test('empty string actor id is treated as unauthenticated (401)', async () => {
     app.use('/protected', simulateAuth(''), userAuth);
     app.get('/protected', c => c.json({ ok: true }));
 
@@ -98,7 +121,7 @@ describe('userAuth', () => {
 
   test('works with different user IDs', async () => {
     app.use('/protected', simulateAuth('abc-different-user'), userAuth);
-    app.get('/protected', c => c.json({ userId: c.get('authUserId') }));
+    app.get('/protected', c => c.json({ userId: getActor(c).id }));
 
     const res = await app.request('/protected');
     expect(res.status).toBe(200);

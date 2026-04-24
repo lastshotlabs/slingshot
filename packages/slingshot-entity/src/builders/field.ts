@@ -80,7 +80,8 @@ export const field = {
    * field.string({ format: 'email' })                 // validated email address
    * ```
    */
-  string: <const O extends FieldOptions | undefined = undefined>(opts?: O) => makeField('string', opts),
+  string: <const O extends FieldOptions | undefined = undefined>(opts?: O) =>
+    makeField('string', opts),
 
   /**
    * A floating-point number field.
@@ -96,7 +97,8 @@ export const field = {
    * field.number({ default: 0.0 })
    * ```
    */
-  number: <const O extends FieldOptions | undefined = undefined>(opts?: O) => makeField('number', opts),
+  number: <const O extends FieldOptions | undefined = undefined>(opts?: O) =>
+    makeField('number', opts),
 
   /**
    * A whole-number (integer) field.
@@ -170,8 +172,7 @@ export const field = {
   enum: <const V extends readonly string[], const O extends FieldOptions | undefined = undefined>(
     values: V,
     opts?: O,
-  ) =>
-    makeField('enum', opts, values),
+  ) => makeField('enum', opts, values),
 
   /**
    * An arbitrary JSON field.

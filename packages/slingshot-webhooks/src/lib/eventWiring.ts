@@ -4,10 +4,10 @@ import type {
   SlingshotEvents,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
+import { resolveWebhookDeliveries } from '../manifest/runtime';
 import type { WebhookAdapter } from '../types/adapter';
 import type { WebhookPluginConfig } from '../types/config';
 import type { WebhookQueue } from '../types/queue';
-import { resolveWebhookDeliveries } from '../manifest/runtime';
 import { matchGlob } from './globMatch';
 
 /**
@@ -25,10 +25,11 @@ export function wireEventSubscriptions(
   const subscribedKeys = events
     .list()
     .filter(definition =>
-      definition.exposure.some(exposure =>
-        exposure === 'tenant-webhook' ||
-        exposure === 'user-webhook' ||
-        exposure === 'app-webhook',
+      definition.exposure.some(
+        exposure =>
+          exposure === 'tenant-webhook' ||
+          exposure === 'user-webhook' ||
+          exposure === 'app-webhook',
       ),
     )
     .map(definition => definition.key)
@@ -73,11 +74,7 @@ export function wireEventSubscriptions(
         }
       }
     };
-    bus.onEnvelope(
-      key,
-      handler,
-      subscriptionOpts,
-    );
+    bus.onEnvelope(key, handler, subscriptionOpts);
     if (subscriptionOpts?.durable) {
       return () => {};
     }

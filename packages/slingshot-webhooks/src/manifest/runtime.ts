@@ -323,9 +323,7 @@ function listDefinitionsForOwner(
     .filter(definition => selectExposureForOwner(definition, ownerType) !== null);
 }
 
-function parseSubscriptionInput(
-  value: unknown,
-): WebhookEndpointSubscriptionInput {
+function parseSubscriptionInput(value: unknown): WebhookEndpointSubscriptionInput {
   if (typeof value !== 'object' || value === null) {
     throw new HTTPException(400, { message: 'subscriptions entries must be objects' });
   }
@@ -397,7 +395,9 @@ export function normalizeWebhookSubscriptions(
       continue;
     }
 
-    const matches = visibleDefinitions.filter(definition => matchGlob(request.pattern, definition.key));
+    const matches = visibleDefinitions.filter(definition =>
+      matchGlob(request.pattern, definition.key),
+    );
     if (matches.length === 0) {
       throw new HTTPException(400, {
         message: `subscription pattern "${request.pattern}" did not match any approved events`,
@@ -429,8 +429,7 @@ function inferCreateOwner(input: Record<string, unknown>): WebhookSubscriber {
   const tenantId =
     input.tenantId === undefined || input.tenantId === null ? null : String(input.tenantId);
 
-  const resolvedOwnerType =
-    ownerType === undefined ? (tenantId ? 'tenant' : undefined) : ownerType;
+  const resolvedOwnerType = ownerType === undefined ? (tenantId ? 'tenant' : undefined) : ownerType;
   if (
     resolvedOwnerType !== 'tenant' &&
     resolvedOwnerType !== 'user' &&
@@ -539,7 +538,9 @@ function normalizeEndpointUpdateInput(
   return normalized;
 }
 
-function endpointToSubscriber(endpoint: Pick<WebhookEndpoint, 'ownerType' | 'ownerId' | 'tenantId'>): WebhookSubscriber {
+function endpointToSubscriber(
+  endpoint: Pick<WebhookEndpoint, 'ownerType' | 'ownerId' | 'tenantId'>,
+): WebhookSubscriber {
   return {
     ownerType: endpoint.ownerType,
     ownerId: endpoint.ownerId,
@@ -602,7 +603,8 @@ async function migrateLegacyEndpointRows(
     for (const record of page.items) {
       const patch: Record<string, unknown> = {};
       const ownerType = record.ownerType ?? (record.tenantId ? 'tenant' : undefined);
-      const ownerId = record.ownerId ?? (ownerType === 'tenant' ? record.tenantId ?? undefined : undefined);
+      const ownerId =
+        record.ownerId ?? (ownerType === 'tenant' ? (record.tenantId ?? undefined) : undefined);
 
       if (!ownerType || !ownerId) {
         await endpoints.applyRawUpdate(record.id, {
@@ -652,7 +654,11 @@ async function migrateLegacyEndpointRows(
       return;
     }
 
-    cursor = requireNextCursor('webhook endpoint migration pagination', page.nextCursor, seenCursors);
+    cursor = requireNextCursor(
+      'webhook endpoint migration pagination',
+      page.nextCursor,
+      seenCursors,
+    );
   }
 }
 
@@ -720,7 +726,11 @@ function buildRuntimeAdapter(
           return items;
         }
 
-        cursor = requireNextCursor('webhook endpoint discovery pagination', page.nextCursor, seenCursors);
+        cursor = requireNextCursor(
+          'webhook endpoint discovery pagination',
+          page.nextCursor,
+          seenCursors,
+        );
       }
     },
 
@@ -953,7 +963,9 @@ export function createWebhooksManifestRuntime(
       ...adapter,
       create: async (input: unknown) => {
         if (!definitionsRef) {
-          throw new Error('[slingshot-webhooks] event definitions are not ready for endpoint writes');
+          throw new Error(
+            '[slingshot-webhooks] event definitions are not ready for endpoint writes',
+          );
         }
         const created = (await base.create(
           normalizeEndpointCreateInput(input as Record<string, unknown>, definitionsRef),
@@ -973,7 +985,9 @@ export function createWebhooksManifestRuntime(
       },
       update: async (id: string, input: unknown, filter?: Record<string, unknown>) => {
         if (!definitionsRef) {
-          throw new Error('[slingshot-webhooks] event definitions are not ready for endpoint writes');
+          throw new Error(
+            '[slingshot-webhooks] event definitions are not ready for endpoint writes',
+          );
         }
         const existing = (await base.getById(id)) as EndpointRecord | null;
         if (!existing) {

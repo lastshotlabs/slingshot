@@ -32,6 +32,7 @@ This package is intentionally broad in surface area but narrow in behavior. It s
 
 - Type contracts shared by more than one package.
 - Registry and context helpers that support cross-package discovery.
+- Package-first authoring contracts such as `definePackage(...)`, `defineCapability(...)`, `domain(...)`, and typed route metadata.
 - Framework-agnostic defaults such as in-process event transport and memory adapters.
 - Config schemas and type families that multiple packages must agree on.
 - Runtime interfaces that abstract Bun-specific or Node-specific capabilities.
@@ -76,6 +77,30 @@ state fix, not as a reason to move arbitrary mutable state earlier.
 state here, it must stay mergeable, frozen at publication boundaries, and keyed by the plugin that
 owns it. Cross-plugin reads should go through the helper APIs instead of reaching into ad hoc shapes.
 
+Package-first authoring builds on the same seam. Capabilities are declared in core, published by the
+owning package during bootstrap finalization, and consumed through typed handles instead of mutable
+adapter bags or module-global registries.
+
+### Actor-first identity
+
+Core owns the canonical identity model for all framework consumers:
+
+- `Actor` — frozen identity shape with `id`, `kind`, `tenantId`, `sessionId`, `roles`, and `claims`.
+  Five kinds: `'user'`, `'service-account'`, `'api-key'`, `'system'`, `'anonymous'`.
+- `ANONYMOUS_ACTOR` — frozen singleton for unauthenticated requests.
+- `getActor(c)` — reads `c.get('actor')`, falls back to `ANONYMOUS_ACTOR`. Never returns `null`.
+- `getActorId(c)` — shorthand for the actor's primary ID, `null` when anonymous.
+- `getActorTenantId(c)` — actor-scoped tenant, `null` when tenantless.
+- `getRequestTenantId(c)` — request-scoped tenant from tenant-resolution middleware (distinct from
+  actor tenant — they usually match but diverge for cross-tenant operations).
+
+Guards, permissions, data scoping, audit, entity routes, and transport helpers all read identity
+through the actor shape. Auth middleware (`identify`) publishes the frozen actor on the Hono context;
+downstream consumers read it via the helpers above.
+
+`RequestActorResolver` (registered via `CoreRegistrar.setRequestActorResolver()`) resolves an actor
+ID from raw HTTP requests for WS/SSE upgrade paths where full middleware hasn't run.
+
 ### Event governance
 
 Core now owns the registry-backed event contract:
@@ -91,6 +116,24 @@ publish path should go through `ctx.events`, not raw `bus.emit(...)` plus sideca
 ### Config-driven platform
 
 Core owns the types for entity definitions, operations, route configs, and channel configs. Those types are consumed by `@lastshotlabs/slingshot-entity`, by runtime route wiring, and by real feature packages such as community.
+
+### Consumer shape hardening
+
+Core now owns configurable entity field mapping and storage convention types:
+
+- `EntitySystemFields` / `ResolvedEntitySystemFields` — consumer-configurable names for audit,
+  ownership, tenant, and version fields. Defaults match first-party conventions.
+- `EntityStorageFieldMap` / `ResolvedEntityStorageFieldMap` — consumer-configurable Mongo PK
+  field and SQL TTL column names.
+- `EntityStorageConventions` / `ResolvedEntityStorageConventions` — consumer-configurable Redis
+  key format (default: `${storageName}:${appName}:${pk}`), custom auto-default resolvers
+  (beyond `uuid`/`cuid`/`now`), and custom on-update resolvers (beyond `now`).
+- `CustomAutoDefaultResolver` / `CustomOnUpdateResolver` — function type aliases for the
+  convention hooks. Return `undefined` to fall through to the built-in handler.
+
+These types are declared in `src/entityConfig.ts` and resolved at `defineEntity()` time. All
+adapters consume the resolved shapes — consumers never need to fork an adapter to change field
+names or ID generation strategy.
 
 ## Practical Advice
 

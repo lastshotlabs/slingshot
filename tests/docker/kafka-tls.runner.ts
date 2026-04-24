@@ -138,7 +138,10 @@ async function ensureTlsTopic(
   });
 }
 
-function captureKafkaSecurityEnv(): Record<(typeof KAFKA_SECURITY_ENV_KEYS)[number], string | undefined> {
+function captureKafkaSecurityEnv(): Record<
+  (typeof KAFKA_SECURITY_ENV_KEYS)[number],
+  string | undefined
+> {
   return {
     KAFKA_BROKERS: process.env.KAFKA_BROKERS,
     KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,

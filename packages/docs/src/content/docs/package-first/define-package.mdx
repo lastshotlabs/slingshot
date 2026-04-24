@@ -1,0 +1,74 @@
+---
+title: definePackage
+description: The top-level package contract for code-first app modules
+---
+
+`definePackage(...)` is the canonical package boundary.
+
+## A representative package
+
+```typescript
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+export const blogPackage = definePackage({
+  name: 'blog',
+  mountPath: '/blog',
+  dependencies: ['slingshot-auth'],
+  middleware: {
+    auditRequest: async (_c, next) => {
+      await next();
+    },
+  },
+  domains: [
+    domain({
+      name: 'health',
+      basePath: '/health',
+      routes: [
+        route.get({
+          path: '/',
+          auth: 'none',
+          handler: ({ respond }) => respond.json({ ok: true }),
+        }),
+      ],
+    }),
+  ],
+  publicPaths: ['/blog/health'],
+});
+```
+
+## What it declares
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Stable package identity for ordering and diagnostics |
+| `mountPath` | Base path shared by the package's entities and domains |
+| `dependencies` | Other packages or plugins that must be installed first |
+| `entities` | Package-owned entity modules |
+| `domains` | Package-owned non-entity route groups |
+| `middleware` | Named middleware available to package routes |
+| `capabilities` | Published and required typed capabilities |
+| `tenantExemptPaths` | Paths that bypass tenant resolution |
+| `csrfExemptPaths` | Paths that bypass CSRF enforcement |
+| `publicPaths` | Paths the package exposes publicly |
+
+## Why this exists instead of "just plugins"
+
+Packages give the framework a stronger authoring contract:
+
+- package-owned entities stay package-owned
+- route and middleware naming stays package-owned
+- capability wiring is explicit and typed
+- apps compose product modules directly instead of hand-wiring lifecycle code
+
+## Inspecting a package
+
+Use `inspectPackage(...)` when you want the effective route and module graph without dropping into
+framework internals.
+
+That is useful for docs tooling, tests, and sanity checks when a package is large enough to need a
+structural overview.
+
+## Next
+
+- [domain and route](/slingshot/package-first/domain-and-route/)
+- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/)

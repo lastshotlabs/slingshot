@@ -58,10 +58,10 @@ For a custom event stream, define your own SSE endpoint:
       if (!userId) return new Response('Unauthorized', { status: 401 });
 
       // Return client data — available to the filter function
-      return { userId };
+      return { actorId: userId };
     }
 
-    export async function sseFilter(message: unknown, clientData: { userId: string }) {
+    export async function sseFilter(message: unknown, clientData: { actorId: string }) {
       // Return true to send this event to this client, false to skip
       // message.key is the event key, message.payload is the event payload
       return true; // send all client-safe events
@@ -82,7 +82,7 @@ For a custom event stream, define your own SSE endpoint:
               if (!token) return new Response('Unauthorized', { status: 401 });
               const userId = verifyToken(token);
               if (!userId) return new Response('Unauthorized', { status: 401 });
-              return { userId };
+              return { actorId: userId };
             },
 
             filter: async (message, clientData) => {
@@ -151,7 +151,7 @@ export async function sseUpgrade(req: Request) {
   if (!token) return new Response('Unauthorized', { status: 401 });
   const userId = verifyToken(token);
   if (!userId) return new Response('Unauthorized', { status: 401 });
-  return { userId };
+  return { actorId: userId };
 }
 ```
 
@@ -162,12 +162,12 @@ Cookie-based sessions work without the query param — browsers send cookies aut
 Use the `filter` function to implement per-client filtering — only send events the specific user should see:
 
 ```typescript
-filter: async (message, clientData: { userId: string }) => {
+filter: async (message, clientData: { actorId: string }) => {
   const { key, payload } = message;
 
   // Only send thread events to users in that container
   if (key === 'community:thread.created') {
-    const isMember = await checkContainerMembership(clientData.userId, payload.containerId);
+    const isMember = await checkContainerMembership(clientData.actorId, payload.containerId);
     return isMember;
   }
 

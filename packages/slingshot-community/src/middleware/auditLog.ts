@@ -14,7 +14,7 @@ import type { CommunityPrincipal } from '../types/env';
  * - `resource`: `'community'`.
  * - `actorId`: the `communityPrincipal.subject` from context, or `'unknown'`.
  * - `targetId`: the `:id` or `:reportId` route parameter (whichever is set).
- * - `meta.tenantId`: the `tenantId` context value if present.
+ * - `meta.tenantId`: the actor's tenant ID if present.
  *
  * @param deps.adminGate - Optional `CommunityAdminGate` implementation. When
  *   absent the returned middleware calls `next()` with no side effects.

@@ -93,7 +93,7 @@ curl http://localhost:3000/auth/me \
 Import `userAuth` from `@lastshotlabs/slingshot-auth` and apply it as middleware. `userAuth` rejects unauthenticated requests automatically - no manual check needed.
 
 ```typescript title="src/routes/dashboard.ts"
-import { createRouter } from '@lastshotlabs/slingshot';
+import { createRouter, getActor } from '@lastshotlabs/slingshot';
 import { userAuth } from '@lastshotlabs/slingshot-auth';
 
 export const router = createRouter();
@@ -102,8 +102,9 @@ export const router = createRouter();
 router.use('*', userAuth);
 
 router.get('/dashboard', c => {
-  // authUserId is guaranteed after userAuth validates the token.
-  return c.json({ userId: c.get('authUserId')! });
+  // actor is guaranteed after userAuth validates the token.
+  const actor = getActor(c);
+  return c.json({ userId: actor.id });
 });
 ```
 

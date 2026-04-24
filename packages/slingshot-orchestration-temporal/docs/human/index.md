@@ -24,7 +24,7 @@ execution, timers, retries, schedules, visibility, and worker coordination to Te
 - `@lastshotlabs/slingshot-orchestration` for the portable task/workflow definitions
 
 ```ts
-import { Connection, Client } from '@temporalio/client';
+import { Client, Connection } from '@temporalio/client';
 import { z } from 'zod';
 import {
   defineTask,

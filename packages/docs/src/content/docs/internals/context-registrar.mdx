@@ -22,7 +22,7 @@ interface SlingshotContext {
 
   // Capabilities — drained from CoreRegistrar after setupPost
   routeAuth: RouteAuthRegistry | null;
-  userResolver: UserResolver | null;
+  actorResolver: RequestActorResolver | null;
   rateLimitAdapter: RateLimitAdapter | null;
   fingerprintBuilder: FingerprintBuilder | null;
   cacheAdapters: ReadonlyMap<CacheStoreName, CacheAdapter>;
@@ -73,7 +73,7 @@ The registrar lets packages share capabilities without direct import dependencie
 ```typescript
 interface CoreRegistrar {
   setRouteAuth(registry: RouteAuthRegistry): void;
-  setUserResolver(resolver: UserResolver): void;
+  setRequestActorResolver(resolver: RequestActorResolver): void;
   setRateLimitAdapter(adapter: RateLimitAdapter): void;
   setFingerprintBuilder(builder: FingerprintBuilder): void;
   addCacheAdapter(store: CacheStoreName, adapter: CacheAdapter): void;
@@ -81,7 +81,7 @@ interface CoreRegistrar {
 }
 ```
 
-`slingshot-auth` calls `config.registrar.setUserResolver(...)` in its `setupPost`. After all `setupPost` hooks complete, `createApp()` drains the registrar and writes its values immutably into `SlingshotContext`. `slingshot-community` reads `ctx.userResolver` (or calls `getUserResolver(ctx)`) to resolve user identity for community-specific operations.
+`slingshot-auth` calls `config.registrar.setRequestActorResolver(...)` in its `setupPost`. After all `setupPost` hooks complete, `createApp()` drains the registrar and writes its values immutably into `SlingshotContext`. `slingshot-community` reads `ctx.actorResolver` (or calls `getRequestActorResolver(ctx)`) to resolve user identity for community-specific operations.
 
 Neither package imports the other. They share a contract through the registrar.
 

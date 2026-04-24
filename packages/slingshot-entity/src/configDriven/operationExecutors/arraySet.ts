@@ -197,9 +197,10 @@ export function arraySetMongo(
     const incoming = ensureArray(value, config.name);
     const deduped = applyDedupe(incoming, dedupe);
     const Model = getModel();
-    const result = await Model.updateOne({ _id: id }, { $set: { [op.field]: deduped } });
+    const pkField = config._storageFields.mongoPkField;
+    const result = await Model.updateOne({ [pkField]: id }, { $set: { [op.field]: deduped } });
     if (result.matchedCount === 0) throw new Error(`[${config.name}] Not found`);
-    const doc = await Model.findOne({ _id: id }).lean();
+    const doc = await Model.findOne({ [pkField]: id }).lean();
     if (!doc) throw new Error(`[${config.name}] Not found`);
     return fromDoc(doc);
   };

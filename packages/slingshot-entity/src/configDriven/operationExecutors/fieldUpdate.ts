@@ -246,7 +246,7 @@ export function fieldUpdateMongo(
     const resolved = resolveParams(op.match, params);
     const query: Record<string, unknown> = {};
     for (const [field, target] of Object.entries(resolved)) {
-      query[config.fields[field].primary ? '_id' : field] = target;
+      query[config.fields[field].primary ? config._storageFields.mongoPkField : field] = target;
     }
     const $set: Record<string, unknown> = {};
     for (const f of op.set) {

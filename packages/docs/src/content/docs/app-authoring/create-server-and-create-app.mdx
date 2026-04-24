@@ -1,0 +1,69 @@
+---
+title: createServer and createApp
+description: App assembly first, server startup second
+---
+
+`createApp()` is the assembly step. `createServer()` is the normal production entrypoint that wraps
+that assembly in a running HTTP server.
+
+## Use `createServer()` by default
+
+```typescript title="src/index.ts"
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  port: 3000,
+  routesDir: new URL('./routes', import.meta.url).pathname,
+  packages: [],
+});
+```
+
+This is the normal app entrypoint. It validates config, assembles the app, starts Bun's server,
+registers SSE and WebSocket transports, auto-loads workers, and wires graceful shutdown.
+
+## Use `createApp()` when you need the assembled app without the network server
+
+```typescript title="test/setup.ts"
+import { createApp } from '@lastshotlabs/slingshot';
+
+const { app, ctx } = await createApp({
+  packages: [],
+});
+
+const response = await app.request('/health');
+await ctx.clear();
+await ctx.destroy();
+```
+
+This is the right choice for tests, custom hosting, or any case where you need the built app and
+its `SlingshotContext` directly.
+
+## What `createApp()` owns
+
+- validates app-level config
+- compiles `packages` into framework plugins
+- resolves secrets and infrastructure
+- creates the app-scoped `SlingshotContext`
+- registers middleware, routes, OpenAPI docs, and package/plugin post hooks
+- creates the default in-process event bus when you did not supply one
+
+## What `createServer()` adds
+
+- Bun server startup and port binding
+- WebSocket endpoint startup and transport fan-out
+- SSE endpoint startup and registry fan-out
+- worker auto-loading
+- shutdown handling and context teardown
+
+## Rule of thumb
+
+- App code should normally start at `createServer()`.
+- Tests and custom hosts should normally start at `createApp()`.
+- If you are reasoning about framework architecture, think in terms of `createApp()` first and
+  `createServer()` second.
+
+## Next
+
+- [App Config](/slingshot/app-authoring/app-config/)
+- [Packages and Plugins](/slingshot/app-authoring/packages-and-plugins/)
+- [Context and Request Model](/slingshot/app-authoring/context-and-request-model/)

@@ -7,7 +7,7 @@
  * bindings and toRouteHandler identity resolution via custom resolvers.
  */
 import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { Hono, type Context } from 'hono';
+import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { auditLog, emitEvent } from '../../src/afterHooks';
 import type { AppEnv } from '../../src/context';
@@ -22,18 +22,13 @@ import {
   requireUserAuth,
 } from '../../src/guards';
 import {
-  defineHandler,
-  HandlerError,
-  resolveActor,
   type HandlerArgs,
+  HandlerError,
   type HandlerMeta,
+  defineHandler,
+  resolveActor,
 } from '../../src/handler';
-import {
-  ANONYMOUS_ACTOR,
-  createDefaultIdentityResolver,
-  type Actor,
-  type IdentityResolver,
-} from '../../src/identity';
+import { ANONYMOUS_ACTOR, type Actor, createDefaultIdentityResolver } from '../../src/identity';
 import { toRouteHandler } from '../../src/mount';
 
 // ---------------------------------------------------------------------------
@@ -123,21 +118,17 @@ function metaWith(actor: Actor, extra: Partial<HandlerMeta> = {}): Partial<Handl
   return {
     requestId: 'req-test',
     actor,
-    tenantId: actor.tenantId,
-    authUserId: actor.kind === 'user' ? actor.id : null,
+    requestTenantId: actor.tenantId,
     correlationId: 'corr-test',
     ip: '10.0.0.1',
     ...extra,
   };
 }
 
-function legacyMeta(
-  overrides: Record<string, unknown> = {},
-): Partial<HandlerMeta> {
+function legacyMeta(overrides: Record<string, unknown> = {}): Partial<HandlerMeta> {
   return {
     requestId: 'req-legacy',
-    tenantId: 'tenant-1',
-    authUserId: 'user-1',
+    requestTenantId: 'tenant-1',
     correlationId: 'corr-legacy',
     ip: '10.0.0.1',
     ...overrides,
@@ -171,8 +162,8 @@ describe('defaultMeta actor construction via defineHandler.invoke', () => {
       actorTenantId: meta.actor.tenantId,
       actorSessionId: meta.actor.sessionId,
       actorRoles: meta.actor.roles,
-      legacyAuthUserId: meta.authUserId,
-      legacyTenantId: meta.tenantId,
+      legacyAuthUserId: meta.actor.kind === 'user' ? meta.actor.id : null,
+      legacyTenantId: meta.requestTenantId,
     }),
   });
 
@@ -195,7 +186,7 @@ describe('defaultMeta actor construction via defineHandler.invoke', () => {
     expect(result.legacyTenantId).toBe('tenant-1');
   });
 
-  test('api-key actor projects null authUserId', async () => {
+  test('api-key actor projects null for legacy user fields', async () => {
     const { ctx } = createContextFixture();
     const result = await echoHandler.invoke({}, { ctx, meta: metaWith(apiKeyActor) });
 
@@ -205,7 +196,7 @@ describe('defaultMeta actor construction via defineHandler.invoke', () => {
     expect(result.legacyTenantId).toBe('tenant-2');
   });
 
-  test('service-account actor projects null authUserId', async () => {
+  test('service-account actor projects null for legacy user fields', async () => {
     const { ctx } = createContextFixture();
     const result = await echoHandler.invoke({}, { ctx, meta: metaWith(serviceActor) });
 
@@ -214,7 +205,7 @@ describe('defaultMeta actor construction via defineHandler.invoke', () => {
     expect(result.legacyAuthUserId).toBeNull();
   });
 
-  test('system actor projects null authUserId', async () => {
+  test('system actor projects null for legacy user fields', async () => {
     const { ctx } = createContextFixture();
     const result = await echoHandler.invoke({}, { ctx, meta: metaWith(systemActor) });
 
@@ -225,10 +216,7 @@ describe('defaultMeta actor construction via defineHandler.invoke', () => {
 
   test('anonymous actor projects null everything', async () => {
     const { ctx } = createContextFixture();
-    const result = await echoHandler.invoke(
-      {},
-      { ctx, meta: metaWith(ANONYMOUS_ACTOR) },
-    );
+    const result = await echoHandler.invoke({}, { ctx, meta: metaWith(ANONYMOUS_ACTOR) });
 
     expect(result.actorId).toBeNull();
     expect(result.actorKind).toBe('anonymous');
@@ -271,15 +259,17 @@ describe('enforceDataScope with actor bindings', () => {
   test('ctx:actor.id resolves from explicit actor', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
-    await enforceDataScope({ field: 'ownerId', from: 'ctx:actor.id' }, { op: 'create' })({
+    await enforceDataScope(
+      { field: 'ownerId', from: 'ctx:actor.id' },
+      { op: 'create' },
+    )({
       ctx,
       input,
       handlerName: 'test',
       meta: {
         requestId: 'req-1',
         actor: userActor,
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'corr-1',
         ip: null,
       },
@@ -290,15 +280,17 @@ describe('enforceDataScope with actor bindings', () => {
   test('ctx:actor.tenantId resolves from explicit actor', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
-    await enforceDataScope({ field: 'tenantId', from: 'ctx:actor.tenantId' }, { op: 'create' })({
+    await enforceDataScope(
+      { field: 'tenantId', from: 'ctx:actor.tenantId' },
+      { op: 'create' },
+    )({
       ctx,
       input,
       handlerName: 'test',
       meta: {
         requestId: 'req-1',
         actor: userActor,
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'corr-1',
         ip: null,
       },
@@ -309,15 +301,17 @@ describe('enforceDataScope with actor bindings', () => {
   test('ctx:actor.kind resolves the discriminator', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
-    await enforceDataScope({ field: 'actorKind', from: 'ctx:actor.kind' }, { op: 'create' })({
+    await enforceDataScope(
+      { field: 'actorKind', from: 'ctx:actor.kind' },
+      { op: 'create' },
+    )({
       ctx,
       input,
       handlerName: 'test',
       meta: {
         requestId: 'req-1',
         actor: serviceActor,
-        tenantId: null,
-        authUserId: null,
+        requestTenantId: null,
         correlationId: 'corr-1',
         ip: null,
       },
@@ -328,15 +322,17 @@ describe('enforceDataScope with actor bindings', () => {
   test('ctx:actor.sessionId resolves from actor', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
-    await enforceDataScope({ field: 'sessionId', from: 'ctx:actor.sessionId' }, { op: 'create' })({
+    await enforceDataScope(
+      { field: 'sessionId', from: 'ctx:actor.sessionId' },
+      { op: 'create' },
+    )({
       ctx,
       input,
       handlerName: 'test',
       meta: {
         requestId: 'req-1',
         actor: userActor,
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'corr-1',
         ip: null,
       },
@@ -357,8 +353,7 @@ describe('enforceDataScope with actor bindings', () => {
       meta: {
         requestId: 'req-1',
         actor: userActor,
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'corr-1',
         ip: null,
       },
@@ -379,8 +374,7 @@ describe('enforceDataScope with actor bindings', () => {
       meta: {
         requestId: 'req-1',
         actor: userActor,
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'corr-1',
         ip: null,
       },
@@ -402,8 +396,7 @@ describe('enforceDataScope with actor bindings', () => {
         meta: {
           requestId: 'req-1',
           actor: userActor,
-          tenantId: 'tenant-1',
-          authUserId: 'user-1',
+          requestTenantId: 'tenant-1',
           correlationId: 'corr-1',
           ip: null,
         },
@@ -428,8 +421,7 @@ describe('enforceDataScope with actor bindings', () => {
       meta: {
         requestId: 'req-1',
         actor: actorWithNumericClaim,
-        tenantId: null,
-        authUserId: 'user-1',
+        requestTenantId: null,
         correlationId: 'corr-1',
         ip: null,
       },
@@ -440,15 +432,17 @@ describe('enforceDataScope with actor bindings', () => {
   test('legacy ctx:authUserId still works with explicit actor', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
-    await enforceDataScope({ field: 'userId', from: 'ctx:authUserId' }, { op: 'create' })({
+    await enforceDataScope(
+      { field: 'userId', from: 'ctx:authUserId' },
+      { op: 'create' },
+    )({
       ctx,
       input,
       handlerName: 'test',
       meta: {
         requestId: 'req-1',
         actor: userActor,
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'corr-1',
         ip: null,
       },
@@ -459,7 +453,10 @@ describe('enforceDataScope with actor bindings', () => {
   test('legacy ctx:tenantId still works with explicit actor', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
-    await enforceDataScope({ field: 'tenantId', from: 'ctx:tenantId' }, { op: 'create' })({
+    await enforceDataScope(
+      { field: 'tenantId', from: 'ctx:tenantId' },
+      { op: 'create' },
+    )({
       ctx,
       input,
       handlerName: 'test',
@@ -467,8 +464,6 @@ describe('enforceDataScope with actor bindings', () => {
         requestId: 'req-1',
         actor: userActor,
         requestTenantId: 'tenant-1',
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
         correlationId: 'corr-1',
         ip: null,
       },
@@ -483,15 +478,17 @@ describe('enforceDataScope with actor bindings', () => {
     };
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
-    await enforceDataScope({ field: 'userId', from: 'ctx:authUserId' }, { op: 'create' })({
+    await enforceDataScope(
+      { field: 'userId', from: 'ctx:authUserId' },
+      { op: 'create' },
+    )({
       ctx,
       input,
       handlerName: 'test',
       meta: {
         requestId: 'req-1',
         actor: actorWithDifferentId,
-        tenantId: 'tenant-1',
-        authUserId: 'legacy-id',
+        requestTenantId: 'tenant-1',
         correlationId: 'corr-1',
         ip: null,
       },
@@ -504,7 +501,10 @@ describe('enforceDataScope with actor bindings', () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
     await expect(
-      enforceDataScope({ field: 'x', from: 'ctx:actor.id' }, { op: 'create' })({
+      enforceDataScope(
+        { field: 'x', from: 'ctx:actor.id' },
+        { op: 'create' },
+      )({
         ctx,
         input,
         handlerName: 'test',
@@ -512,8 +512,6 @@ describe('enforceDataScope with actor bindings', () => {
           requestId: 'req-1',
           actor: ANONYMOUS_ACTOR,
           requestTenantId: null,
-          tenantId: null,
-          authUserId: null,
           correlationId: 'corr-1',
           ip: null,
         },
@@ -524,15 +522,17 @@ describe('enforceDataScope with actor bindings', () => {
   test('list op applies _scopeFilter with actor bindings', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
-    await enforceDataScope({ field: 'tenantId', from: 'ctx:actor.tenantId' }, { op: 'list' })({
+    await enforceDataScope(
+      { field: 'tenantId', from: 'ctx:actor.tenantId' },
+      { op: 'list' },
+    )({
       ctx,
       input,
       handlerName: 'test',
       meta: {
         requestId: 'req-1',
         actor: userActor,
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'corr-1',
         ip: null,
       },
@@ -554,7 +554,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: userActor, tenantId: 'tenant-1', authUserId: 'user-1', correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: userActor,
+          requestTenantId: 'tenant-1',
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -566,7 +572,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: apiKeyActor, tenantId: null, authUserId: null, correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: apiKeyActor,
+          requestTenantId: null,
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -578,7 +590,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: serviceActor, tenantId: null, authUserId: null, correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: serviceActor,
+          requestTenantId: null,
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -590,7 +608,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: systemActor, tenantId: null, authUserId: null, correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: systemActor,
+          requestTenantId: null,
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -602,7 +626,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: ANONYMOUS_ACTOR, tenantId: null, authUserId: null, correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: ANONYMOUS_ACTOR,
+          requestTenantId: null,
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).rejects.toMatchObject({ status: 401 });
   });
@@ -614,7 +644,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: userActor, requestTenantId: null, tenantId: null, authUserId: 'user-1', correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: userActor,
+          requestTenantId: null,
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -626,7 +662,14 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: ANONYMOUS_ACTOR, requestTenantId: null, tenantId: null, authUserId: null, correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: ANONYMOUS_ACTOR,
+          requestTenantId: null,
+          requestTenantId: null,
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).rejects.toMatchObject({ status: 401 });
   });
@@ -638,7 +681,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: apiKeyActor, tenantId: null, authUserId: null, correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: apiKeyActor,
+          requestTenantId: null,
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -650,7 +699,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: serviceActor, tenantId: null, authUserId: null, correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: serviceActor,
+          requestTenantId: null,
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -665,12 +720,9 @@ describe('guards with explicit actor', () => {
         meta: {
           requestId: 'r',
           actor: userActor,
-          tenantId: 'tenant-1',
-          authUserId: 'user-1',
+          requestTenantId: 'tenant-1',
           correlationId: 'r',
           ip: null,
-          bearerClientId: null,
-          authClientId: null,
         },
       } as never),
     ).rejects.toMatchObject({ status: 401 });
@@ -683,7 +735,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: userActor, tenantId: 'tenant-1', authUserId: 'user-1', correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: userActor,
+          requestTenantId: 'tenant-1',
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -695,7 +753,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: serviceActor, tenantId: null, authUserId: null, correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: serviceActor,
+          requestTenantId: null,
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).rejects.toMatchObject({ status: 400 });
   });
@@ -708,7 +772,13 @@ describe('guards with explicit actor', () => {
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', actor: anonWithTenant, requestTenantId: 'tenant-1', tenantId: 'tenant-1', authUserId: null, correlationId: 'r', ip: null },
+        meta: {
+          requestId: 'r',
+          actor: anonWithTenant,
+          requestTenantId: 'tenant-1',
+          correlationId: 'r',
+          ip: null,
+        },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -722,7 +792,13 @@ describe('guards with explicit actor', () => {
       ctx,
       input: {},
       handlerName: 'things.list',
-      meta: { requestId: 'r', actor: apiKeyActor, tenantId: null, authUserId: null, correlationId: 'r', ip: '1.2.3.4' },
+      meta: {
+        requestId: 'r',
+        actor: apiKeyActor,
+        requestTenantId: null,
+        correlationId: 'r',
+        ip: '1.2.3.4',
+      },
     } as never);
     expect(trackAttempt).toHaveBeenCalledTimes(1);
     const key = trackAttempt.mock.calls[0]![0] as string;
@@ -739,7 +815,13 @@ describe('guards with explicit actor', () => {
       ctx,
       input: {},
       handlerName: 'things.list',
-      meta: { requestId: 'r', actor: ANONYMOUS_ACTOR, tenantId: null, authUserId: null, correlationId: 'r', ip: '8.8.8.8' },
+      meta: {
+        requestId: 'r',
+        actor: ANONYMOUS_ACTOR,
+        requestTenantId: null,
+        correlationId: 'r',
+        ip: '8.8.8.8',
+      },
     } as never);
     const key = trackAttempt.mock.calls[0]![0] as string;
     expect(key).toContain('ip:8.8.8.8');
@@ -755,8 +837,7 @@ describe('guards with explicit actor', () => {
       meta: {
         requestId: 'r',
         actor: userActor,
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'r',
         ip: null,
         idempotencyKey: 'idem-1',
@@ -779,8 +860,7 @@ describe('guards with explicit actor', () => {
       meta: {
         requestId: 'r',
         actor: apiKeyActor,
-        tenantId: 'tenant-2',
-        authUserId: null,
+        requestTenantId: 'tenant-2',
         correlationId: 'r',
         ip: null,
         idempotencyKey: 'idem-2',
@@ -803,8 +883,7 @@ describe('guards with explicit actor', () => {
         meta: {
           requestId: 'r',
           actor: ANONYMOUS_ACTOR,
-          tenantId: null,
-          authUserId: null,
+          requestTenantId: null,
           correlationId: 'r',
           ip: null,
           idempotencyKey: 'idem-3',
@@ -833,8 +912,7 @@ describe('after hooks with actor', () => {
       meta: {
         requestId: 'r',
         actor: apiKeyActor,
-        tenantId: 'tenant-2',
-        authUserId: null,
+        requestTenantId: 'tenant-2',
         correlationId: 'r',
         ip: null,
       },
@@ -864,8 +942,7 @@ describe('after hooks with actor', () => {
         requestId: 'r',
         actor: userActor,
         requestTenantId: 'tenant-1',
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'r',
         ip: null,
       },
@@ -888,8 +965,7 @@ describe('after hooks with actor', () => {
       meta: {
         requestId: 'req-audit',
         actor: userActor,
-        tenantId: 'tenant-1',
-        authUserId: 'user-1',
+        requestTenantId: 'tenant-1',
         correlationId: 'corr-audit',
         ip: '10.0.0.1',
       },
@@ -905,7 +981,14 @@ describe('after hooks with actor', () => {
 
   test('auditLog with user actor without session', async () => {
     const { ctx, auditEntries } = createContextFixture();
-    const actorNoSession: Actor = { id: 'user-2', kind: 'user', tenantId: 'tenant-2', sessionId: null, roles: null, claims: {} };
+    const actorNoSession: Actor = {
+      id: 'user-2',
+      kind: 'user',
+      tenantId: 'tenant-2',
+      sessionId: null,
+      roles: null,
+      claims: {},
+    };
     const hook = auditLog('item.deleted');
     await hook({
       ctx,
@@ -916,8 +999,6 @@ describe('after hooks with actor', () => {
         requestId: 'req-audit-2',
         actor: actorNoSession,
         requestTenantId: 'tenant-2',
-        tenantId: 'tenant-2',
-        authUserId: 'user-2',
         correlationId: 'corr-2',
         ip: '10.0.0.2',
       },
@@ -940,8 +1021,7 @@ describe('after hooks with actor', () => {
       meta: {
         requestId: 'r',
         actor: serviceActor,
-        tenantId: null,
-        authUserId: null,
+        requestTenantId: null,
         correlationId: 'r',
         ip: null,
       },
@@ -979,9 +1059,17 @@ describe('toRouteHandler identity resolution', () => {
 
     app.use('*', async (c, next) => {
       c.set('requestId', 'req-http');
-      c.set('authUserId', 'http-user');
-      c.set('tenantId', 'http-tenant');
-      c.set('sessionId', 'http-sess');
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'http-user',
+          kind: 'user' as const,
+          tenantId: 'http-tenant',
+          sessionId: 'http-sess',
+          roles: null,
+          claims: {},
+        }),
+      );
       c.set('slingshotCtx', ctx);
       await next();
     });
@@ -1012,8 +1100,17 @@ describe('toRouteHandler identity resolution', () => {
 
     app.use('*', async (c, next) => {
       c.set('requestId', 'req-http');
-      c.set('bearerClientId', 'bearer-key-1');
-      c.set('tenantId', 'org-x');
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'bearer-key-1',
+          kind: 'api-key' as const,
+          tenantId: 'org-x',
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       c.set('slingshotCtx', ctx);
       await next();
     });
@@ -1053,26 +1150,8 @@ describe('toRouteHandler identity resolution', () => {
     expect(body.actorKind).toBe('anonymous');
   });
 
-  test('custom identity resolver maps context to custom actor', async () => {
-    // A custom resolver that maps bearerClientId to a system actor with claims.
-    const customResolver: IdentityResolver = {
-      resolve(input) {
-        if (input.tokenPayload && typeof input.tokenPayload === 'object') {
-          const payload = input.tokenPayload as Record<string, unknown>;
-          return {
-            id: String(payload.sub ?? input.authUserId),
-            kind: 'user',
-            tenantId: String(payload.orgId ?? input.tenantId ?? ''),
-            sessionId: input.sessionId,
-            roles: input.roles,
-            claims: { department: payload.department ?? null },
-          };
-        }
-        return ANONYMOUS_ACTOR;
-      },
-    };
-
-    const { app, ctx } = createContextFixture({ identityResolver: customResolver });
+  test('custom actor with claims is visible to handler via toRouteHandler', async () => {
+    const { app, ctx } = createContextFixture();
 
     const handler = defineHandler({
       name: 'test.custom',
@@ -1093,7 +1172,17 @@ describe('toRouteHandler identity resolution', () => {
 
     app.use('*', async (c, next) => {
       c.set('requestId', 'req-http');
-      c.set('tokenPayload', { sub: 'gateway-user', orgId: 'org-99', department: 'engineering' });
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'gateway-user',
+          kind: 'user' as const,
+          tenantId: 'org-99',
+          sessionId: null,
+          roles: null,
+          claims: { department: 'engineering' },
+        }),
+      );
       c.set('slingshotCtx', ctx);
       await next();
     });
@@ -1107,27 +1196,37 @@ describe('toRouteHandler identity resolution', () => {
     expect(body.department).toBe('engineering');
   });
 
-  test('legacy fields on HandlerMeta are projected from resolved actor', async () => {
+  test('actor fields are projected onto HandlerMeta via toRouteHandler', async () => {
     const { app, ctx } = createContextFixture();
 
     const handler = defineHandler({
-      name: 'test.legacy-compat',
+      name: 'test.actor-compat',
       input: z.object({}),
       output: z.object({
         actorId: z.string().nullable(),
-        legacyAuthUserId: z.string().nullable(),
-        legacyTenantId: z.string().nullable(),
+        actorKind: z.string(),
+        requestTenantId: z.string().nullable(),
       }),
       handle: async ({ meta }) => ({
         actorId: meta.actor.id,
-        legacyAuthUserId: meta.authUserId,
-        legacyTenantId: meta.tenantId,
+        actorKind: meta.actor.kind,
+        requestTenantId: meta.requestTenantId,
       }),
     });
 
     app.use('*', async (c, next) => {
       c.set('requestId', 'req-http');
-      c.set('authUserId', 'usr-42');
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'usr-42',
+          kind: 'user' as const,
+          tenantId: 'ten-7',
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       c.set('tenantId', 'ten-7');
       c.set('slingshotCtx', ctx);
       await next();
@@ -1137,8 +1236,8 @@ describe('toRouteHandler identity resolution', () => {
     const res = await app.request('/test');
     const body = await res.json();
     expect(body.actorId).toBe('usr-42');
-    expect(body.legacyAuthUserId).toBe('usr-42');
-    expect(body.legacyTenantId).toBe('ten-7');
+    expect(body.actorKind).toBe('user');
+    expect(body.requestTenantId).toBe('ten-7');
   });
 });
 
@@ -1176,7 +1275,7 @@ describe('handler.invoke actor round-trip', () => {
       input: z.object({}),
       output: z.object({ ok: z.boolean() }),
       after: [
-        async (args) => {
+        async args => {
           seenActors.push(resolveActor(args.meta));
         },
       ],
@@ -1227,9 +1326,15 @@ describe('handler.invoke actor round-trip', () => {
       input: z.object({}),
       output: z.object({ ok: z.boolean() }),
       guards: [
-        async (args) => { seenActors.push(resolveActor(args.meta)); },
-        async (args) => { seenActors.push(resolveActor(args.meta)); },
-        async (args) => { seenActors.push(resolveActor(args.meta)); },
+        async args => {
+          seenActors.push(resolveActor(args.meta));
+        },
+        async args => {
+          seenActors.push(resolveActor(args.meta));
+        },
+        async args => {
+          seenActors.push(resolveActor(args.meta));
+        },
       ],
       handle: async () => ({ ok: true }),
     });

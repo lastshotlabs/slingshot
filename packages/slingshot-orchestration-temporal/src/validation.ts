@@ -32,7 +32,9 @@ export const temporalConnectionConfigSchema = z
  */
 export const temporalAdapterOptionsSchema = z.object({
   client: z.custom<object>(value => typeof value === 'object' && value !== null),
-  connection: z.custom<object>(value => value === undefined || (typeof value === 'object' && value !== null)).optional(),
+  connection: z
+    .custom<object>(value => value === undefined || (typeof value === 'object' && value !== null))
+    .optional(),
   namespace: z.string().min(1).optional(),
   workflowTaskQueue: z.string().min(1),
   defaultActivityTaskQueue: z.string().min(1).optional(),
@@ -55,7 +57,9 @@ export const temporalWorkerOptionsSchema = z.object({
   taskNames: z.array(z.string().trim().min(1)).optional(),
   workflowNames: z.array(z.string().trim().min(1)).optional(),
   generatedWorkflowsDir: z.string().trim().min(1).optional(),
-  eventSink: z.custom<object>(value => value === undefined || (typeof value === 'object' && value !== null)).optional(),
+  eventSink: z
+    .custom<object>(value => value === undefined || (typeof value === 'object' && value !== null))
+    .optional(),
   identity: z.string().trim().min(1).optional(),
   maxConcurrentWorkflowTaskExecutions: z.number().int().positive().optional(),
   maxConcurrentActivityTaskExecutions: z.number().int().positive().optional(),

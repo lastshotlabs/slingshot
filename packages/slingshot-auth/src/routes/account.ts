@@ -455,11 +455,16 @@ export const createAccountRouter = (
             jobId,
             accountDeletion.gracePeriod,
           );
-          publishAuthEvent(runtime.events, 'auth:account.deletion.scheduled', {
-            userId: userId,
-            cancelToken,
-            gracePeriodSeconds: accountDeletion.gracePeriod ?? 0,
-          }, { userId: userId, actorId: userId });
+          publishAuthEvent(
+            runtime.events,
+            'auth:account.deletion.scheduled',
+            {
+              userId: userId,
+              cancelToken,
+              gracePeriodSeconds: accountDeletion.gracePeriod ?? 0,
+            },
+            { userId: userId, actorId: userId },
+          );
           const user = adapter.getUser ? await adapter.getUser(userId) : null;
           const email = user?.email ?? '';
           if (email) {
@@ -474,10 +479,15 @@ export const createAccountRouter = (
           // No grace period — deletion is immediate via the queue (delay=0).
           // Emit the same events as the synchronous path so listeners are notified.
           eventBus.emit('security.auth.account.deleted', { userId: userId });
-          publishAuthEvent(runtime.events, 'auth:user.deleted', { userId: userId }, {
-            userId: userId,
-            actorId: userId,
-          });
+          publishAuthEvent(
+            runtime.events,
+            'auth:user.deleted',
+            { userId: userId },
+            {
+              userId: userId,
+              actorId: userId,
+            },
+          );
         }
 
         clearAuthCookie(c, COOKIE_TOKEN, isProd(), runtime.config);
@@ -498,10 +508,15 @@ export const createAccountRouter = (
       await adapter.deleteUser(userId);
 
       eventBus.emit('security.auth.account.deleted', { userId: userId });
-      publishAuthEvent(runtime.events, 'auth:user.deleted', { userId: userId }, {
-        userId: userId,
-        actorId: userId,
-      });
+      publishAuthEvent(
+        runtime.events,
+        'auth:user.deleted',
+        { userId: userId },
+        {
+          userId: userId,
+          actorId: userId,
+        },
+      );
 
       if (accountDeletion?.onAfterDelete) {
         await accountDeletion.onAfterDelete(userId);
@@ -604,9 +619,7 @@ export const createAccountRouter = (
       }
 
       // If the user already has a password, require currentPassword to change it
-      const hasExistingPassword = adapter.hasPassword
-        ? await adapter.hasPassword(userId)
-        : false;
+      const hasExistingPassword = adapter.hasPassword ? await adapter.hasPassword(userId) : false;
       if (hasExistingPassword) {
         if (!currentPassword) {
           return c.json(
@@ -661,8 +674,7 @@ export const createAccountRouter = (
       }
 
       await adapter.setPassword(userId, passwordHash);
-      if (preventReuse > 0)
-        await recordPasswordChange(adapter, userId, passwordHash, preventReuse);
+      if (preventReuse > 0) await recordPasswordChange(adapter, userId, passwordHash, preventReuse);
       eventBus.emit('security.auth.password.change', { userId: userId });
       if (hooks.postPasswordChange) {
         const postPwHook = hooks.postPasswordChange;

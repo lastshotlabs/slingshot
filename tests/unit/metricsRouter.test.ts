@@ -124,7 +124,17 @@ describe('createMetricsRouter — array middleware auth', () => {
 describe('createMetricsRouter — userAuth', () => {
   test('mounts userAuth middleware chain on /metrics (lines 81, 83-86)', async () => {
     const userAuthMw = mock(async (c: any, next: () => Promise<void>) => {
-      c.set('authUserId', 'user-1');
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'user-1',
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     });
 

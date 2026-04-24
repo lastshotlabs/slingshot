@@ -1,27 +1,27 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import type { MiddlewareHandler } from 'hono';
+import { registerAuthEventDefinitions } from '@lastshotlabs/slingshot-auth';
 import type {
   AppEnv,
   CoreRegistrar,
   EntityRegistry,
-  SlingshotEvents,
   PluginSetupContext,
   ResolvedEntityConfig,
+  SlingshotEvents,
   StoreInfra,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
-  type Actor,
   ANONYMOUS_ACTOR,
+  type Actor,
   InProcessAdapter,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
-  getActorId,
   getActor,
+  getActorId,
 } from '@lastshotlabs/slingshot-core';
-import { registerAuthEventDefinitions } from '@lastshotlabs/slingshot-auth';
 import { createMemoryWebhookAdapter } from './adapters/memory';
 import { createWebhookPlugin } from './plugin';
 import type { WebhookAdapter } from './types/adapter';
@@ -68,7 +68,7 @@ function createTestFrameworkConfig(options: WebhooksTestFrameworkOptions = {}) {
   const registrar: CoreRegistrar = {
     setIdentityResolver() {},
     setRouteAuth() {},
-    setUserResolver() {},
+    setRequestActorResolver() {},
     setRateLimitAdapter() {},
     setFingerprintBuilder() {},
     addCacheAdapter() {},
@@ -155,14 +155,17 @@ export async function createWebhooksTestApp(
     }
     if (userId) {
       const roles = [c.req.header('x-role') ?? 'admin'];
-      c.set('actor', Object.freeze({
-        id: userId,
-        kind: 'user',
-        tenantId,
-        sessionId: null,
-        roles,
-        claims: {},
-      }) as Actor);
+      c.set(
+        'actor',
+        Object.freeze({
+          id: userId,
+          kind: 'user',
+          tenantId,
+          sessionId: null,
+          roles,
+          claims: {},
+        }) as Actor,
+      );
     } else {
       c.set('actor', ANONYMOUS_ACTOR);
     }

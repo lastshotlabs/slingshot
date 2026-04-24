@@ -4,7 +4,7 @@ import type { SlingshotContext } from './slingshotContext';
 /**
  * A value that either IS a `SlingshotContext` or is an app instance that HAS one attached.
  *
- * Used as the parameter type for all context-accessor helpers (`getUserResolver`,
+ * Used as the parameter type for all context-accessor helpers (`getRequestActorResolver`,
  * `getRateLimitAdapter`, `getCacheAdapter`, etc.) so callers can pass either
  * the raw context or the app without ceremony.
  *
@@ -39,7 +39,7 @@ export type ContextCarrier = SlingshotContext | object;
  * bootstrap.
  *
  * This is an internal helper used by all context-accessor exports in `slingshot-core`.
- * Plugin code should use the typed accessor helpers (`getUserResolver`, etc.) instead of
+ * Plugin code should use the typed accessor helpers (`getRequestActorResolver`, etc.) instead of
  * calling `resolveContext` directly.
  */
 export function resolveContext(input: ContextCarrier): SlingshotContext {

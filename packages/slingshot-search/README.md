@@ -44,13 +44,17 @@ sees the string values.
   missing entity config rather than provider failure.
 - Transform functions must be registered when the plugin is created. They are copied into the
   plugin's internal registry before discovery and indexing begin.
+- Search sync is now registry-backed. When `syncMode: "event-bus"` is enabled, the plugin relies on
+  canonical event definitions and `ctx.events.publish(...)` envelopes rather than legacy
+  `clientSafeEvents` registration or raw bus payload assumptions.
 
 ## Gotchas
 
 - `setupMiddleware()` is intentionally almost empty today. That is not dead code; it preserves room
   for future request-level search concerns without overloading route or post-setup phases.
-- `setupPost()` both registers client-safe events and initializes indexes. If this phase is skipped
-  in a custom integration, the routes may mount but the search runtime will not be complete.
+- `setupPost()` initializes indexes and wires event-sync subscriptions after entity discovery. If
+  this phase is skipped in a custom integration, the routes may mount but the search runtime will
+  not be complete.
 - The package can target external providers or the DB-native provider. Docs should be careful not
   to imply one deployment shape when the plugin is designed to support several.
 

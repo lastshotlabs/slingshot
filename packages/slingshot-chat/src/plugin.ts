@@ -7,8 +7,8 @@ import type {
   WsPluginEndpoint,
 } from '@lastshotlabs/slingshot-core';
 import {
-  defineEvent,
   deepFreeze,
+  defineEvent,
   getContext,
   getNotificationsState,
   getPermissionsState,
@@ -18,9 +18,9 @@ import {
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { chatPluginConfigSchema } from './config.schema';
-import type { ChatEncryptionProvider } from './encryption/types';
 import { resolveChatEncryptionProvider } from './encryption/provider';
 import { buildEncryptionRouter } from './encryption/stub';
+import type { ChatEncryptionProvider } from './encryption/types';
 import { registerChatPushFormatters } from './lib/pushFormatters';
 import { chatManifest } from './manifest/chatManifest';
 import { createChatManifestRuntime } from './manifest/runtime';
@@ -363,7 +363,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
                 let ackResult: unknown = null;
 
                 await handler.handler({
-                  userId: context.userId ?? '',
+                  actorId: context.actorId ?? '',
                   socketId: context.socketId,
                   roomId:
                     typeof payload === 'object' &&

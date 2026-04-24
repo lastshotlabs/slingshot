@@ -192,6 +192,7 @@ export type {
   TriggerRecord,
   RecordOutcome,
   TriggerAdapter,
+  TriggerExtractedMeta,
   FunctionsHooks,
   BeforeInvokeArgs,
   AfterInvokeArgs,
@@ -279,9 +280,7 @@ export { ANONYMOUS_ACTOR, createDefaultIdentityResolver } from './identity';
 /** Request-context actor helpers for Hono middleware and routes. */
 export { getActor, getActorId, getActorTenantId, getRequestTenantId } from './actorContext';
 
-// --- authVariables ---
-/** Request-context variable typing for auth-aware Hono handlers. */
-export type { AuthVariables } from './authVariables';
+// --- auth peer ---
 export type { AuthRuntimePeer, AuthUserAccessDecision, AuthUserAccessInput } from './authPeer';
 export {
   AUTH_PLUGIN_STATE_KEY,
@@ -344,9 +343,9 @@ export {
 } from './memoryEviction';
 
 // --- Auth boundary contracts ---
-export type { UserResolver } from './userResolver';
-/** Access the auth-published user resolver from Slingshot context. */
-export { getUserResolver, getUserResolverOrNull } from './userResolver';
+export type { RequestActorResolver } from './requestActorResolver';
+/** Access the auth-published request actor resolver from Slingshot context. */
+export { getRequestActorResolver, getRequestActorResolverOrNull } from './requestActorResolver';
 
 export type { PostAuthGuard, PostAuthGuardFailure, RouteAuthRegistry } from './routeAuth';
 /** Access route-auth helpers published through the Slingshot registrar. */

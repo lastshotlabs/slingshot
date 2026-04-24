@@ -85,17 +85,21 @@ export function createNotificationBuilder(
           data: freezeNotificationData({ ...(existing.data ?? {}), count: nextCount }),
         });
         if (updated) {
-          options.events.publish('notifications:notification.updated', {
-            id: existing.id,
-            userId: input.userId,
-            tenantId: input.tenantId ?? null,
-            changes: { count: nextCount },
-          }, {
-            tenantId: input.tenantId ?? null,
-            userId: input.userId,
-            actorId: input.actorId ?? input.userId,
-            source: 'system',
-          });
+          options.events.publish(
+            'notifications:notification.updated',
+            {
+              id: existing.id,
+              userId: input.userId,
+              tenantId: input.tenantId ?? null,
+              changes: { count: nextCount },
+            },
+            {
+              tenantId: input.tenantId ?? null,
+              userId: input.userId,
+              actorId: input.actorId ?? input.userId,
+              source: 'system',
+            },
+          );
         }
         return updated;
       }

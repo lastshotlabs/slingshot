@@ -1,0 +1,109 @@
+---
+title: Middleware
+description: Framework middleware, app middleware, package middleware, and route policy
+---
+
+Middleware in Slingshot is layered. That is deliberate.
+
+The framework owns core request processing. Packages own package-local middleware names. Apps can
+still add global middleware at the root.
+
+## App-level middleware
+
+Use the root `middleware` array for cross-cutting behavior that should run across the app.
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  middleware: [
+    async (c, next) => {
+      c.set('requestStartedAt', Date.now());
+      await next();
+    },
+  ],
+});
+```
+
+## Framework-owned request processing
+
+The framework also mounts behavior from top-level config:
+
+- `security` for CORS, signing, rate limiting, CSRF, headers, and related concerns
+- `tenancy` for tenant resolution
+- `validation` for request/response validation behavior
+- `versioning` for versioned route trees and docs
+
+These are not ad hoc middleware hooks. They are documented framework surfaces.
+
+## Package and entity middleware
+
+Package-authored routes can reference named middleware declared on the package.
+
+Entity routes can also inherit middleware through route policy.
+
+```typescript
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+const auditPackage = definePackage({
+  name: 'audit',
+  middleware: {
+    requireInternalHeader: async (c, next) => {
+      if (c.req.header('x-internal-secret') !== process.env.INTERNAL_SECRET) {
+        return c.json({ error: 'forbidden' }, 403);
+      }
+      await next();
+    },
+  },
+  domains: [
+    domain({
+      name: 'admin',
+      routes: [
+        route.get({
+          path: '/admin/audit',
+          middleware: ['requireInternalHeader'],
+          handler: ({ respond }) => respond.json({ ok: true }),
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+## Route policy is more than middleware
+
+For package and entity routes, the real request shell is a combination of:
+
+- auth
+- permission checks
+- rate limiting
+- idempotency
+- middleware
+- optional event publication after successful execution
+
+That is why the docs split route policy into package-first authoring and entity-system pages instead
+of treating everything as a generic middleware story.
+
+## Relevant helpers
+
+The root package also exports request helpers and middleware such as:
+
+- `withSecurity`
+- `idempotent`
+- `rateLimit`
+- `cacheResponse`
+- `requestId`
+- `requestLogger`
+- `metricsCollector`
+- `auditLog`
+- `requireSignedRequest`
+- `webhookAuth`
+- `handleUpload`
+
+Use them when you are building custom route surfaces outside the package/entity shells.
+
+## Next
+
+- [OpenAPI and Validation](/slingshot/app-authoring/openapi-and-validation/)
+- [Package-First Authoring](/slingshot/package-first/)
+- [Entity System: Route Policy](/slingshot/entity-system/route-policy/)

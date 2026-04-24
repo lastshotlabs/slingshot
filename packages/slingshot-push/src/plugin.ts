@@ -9,6 +9,7 @@ import {
   getPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { createPushDeliveryAdapter } from './deliveryAdapter';
@@ -26,7 +27,6 @@ import {
   type PushPluginConfig,
   pushPluginConfigSchema,
 } from './types/config';
-import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
 
 function parseServiceAccount(value: FirebaseServiceAccount | string): FirebaseServiceAccount {
   if (typeof value !== 'string') return value;
@@ -103,9 +103,7 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
       await innerPlugin?.setupRoutes?.({ app, config: frameworkConfig, bus, events });
 
       const requireUserAuth: MiddlewareHandler = async (c, next) => {
-        const slingshotCtx = c.get('slingshotCtx') as
-          | { routeAuth?: RouteAuthRegistry }
-          | undefined;
+        const slingshotCtx = c.get('slingshotCtx') as { routeAuth?: RouteAuthRegistry } | undefined;
         const routeAuth = slingshotCtx?.routeAuth;
         if (!routeAuth?.userAuth) {
           return c.json({ error: 'Unauthorized' }, 401);
@@ -120,10 +118,7 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
             for (const guard of routeAuth.postGuards) {
               const failure = await guard(c);
               if (failure) {
-                c.res = c.json(
-                  { error: failure.error, message: failure.message },
-                  failure.status,
-                );
+                c.res = c.json({ error: failure.error, message: failure.message }, failure.status);
                 return;
               }
             }

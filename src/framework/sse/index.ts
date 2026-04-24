@@ -1,9 +1,9 @@
-import { resolveUserId } from '@framework/lib/resolveUserId';
+import { resolveActorId } from '@framework/lib/resolveActorId';
 import type {
   EventKey,
+  RequestActorResolver,
   SseClientData,
   SseFilter,
-  UserResolver,
 } from '@lastshotlabs/slingshot-core';
 
 export type { SseClientData, SseFilter };
@@ -40,7 +40,7 @@ export interface SseRegistry {
    * @param endpoint - The route path this client connected on (e.g., `"/events"`).
    *   Used as the fanout routing key — only clients on the same endpoint receive
    *   events sent to that endpoint.
-   * @param client - Client metadata including `id`, `userId`, and any custom fields.
+   * @param client - Client metadata including `id`, `actorId`, and any custom fields.
    *   The `id` must be unique within the endpoint.
    * @param heartbeatMs - Heartbeat interval in milliseconds, or `false` to disable.
    *   30 000 ms (30 s) is a reasonable default for most production deployments.
@@ -83,12 +83,7 @@ export interface SseRegistry {
    * @param filter - Optional async predicate `(client, key, payload) => boolean`.
    *   Called per-client; delivery is skipped when it resolves to `false`.
    */
-  fanout(
-    endpoint: string,
-    key: EventKey,
-    payload: unknown,
-    filter: SseFilter | undefined,
-  ): void;
+  fanout(endpoint: string, key: EventKey, payload: unknown, filter: SseFilter | undefined): void;
 
   /**
    * Close all open SSE streams and clear the registry.
@@ -224,21 +219,21 @@ export function createSseRegistry(): SseRegistry {
 /**
  * Create the default SSE upgrade handler for an endpoint.
  *
- * Mirrors `createWsUpgradeHandler` in its auth semantics: resolves `userId` from
- * the request's session cookie or bearer token via the optional `userResolver`, then
+ * Mirrors `createWsUpgradeHandler` in its auth semantics: resolves `actorId` from
+ * the request's session cookie or bearer token via the optional `actorResolver`, then
  * returns a populated {@link SseClientData} object. The upgrade never rejects on auth
- * failure — unauthenticated connections receive `userId: null` and proceed normally.
+ * failure — unauthenticated connections receive `actorId: null` and proceed normally.
  * Gate access in a middleware layer or inside your own upgrade wrapper if you need
  * hard rejection.
  *
  * The generic `T` parameter extends the base `SseClientData` shape so you can carry
  * custom fields (e.g., `tenantId`, `roomId`) through the client lifecycle. Those
  * fields must be populated by a wrapping upgrade function — this factory only fills
- * `id`, `userId`, and `endpoint`.
+ * `id`, `actorId`, and `endpoint`.
  *
  * @param endpoint - The route path this upgrade handler is mounted on (e.g., `"/events"`).
  *   Stored on `SseClientData.endpoint` and used as the fanout routing key.
- * @param userResolver - Optional custom resolver for extracting the authenticated user ID
+ * @param actorResolver - Optional custom resolver for extracting the authenticated user ID
  *   from the request. Defaults to the framework's built-in cookie/token resolver when
  *   `null` or omitted.
  * @returns An async upgrade function `(req: Request) => Promise<SseClientData<T>>`.
@@ -258,11 +253,11 @@ export function createSseRegistry(): SseRegistry {
  */
 export function createSseUpgradeHandler<T extends object = object>(
   endpoint: string,
-  userResolver?: UserResolver | null,
+  actorResolver?: RequestActorResolver | null,
 ): (req: Request) => Promise<SseClientData<T>> {
   return async (req: Request) => {
-    const userId = await resolveUserId(req, userResolver ?? null);
-    const data: SseClientData = { id: crypto.randomUUID(), userId, endpoint };
+    const actorId = await resolveActorId(req, actorResolver ?? null);
+    const data: SseClientData = { id: crypto.randomUUID(), actorId, endpoint };
     return data as unknown as SseClientData<T>;
   };
 }

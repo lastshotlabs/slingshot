@@ -7,9 +7,9 @@ import {
   type AnyResolvedWorkflow,
   OrchestrationError,
   type OrchestrationRuntime,
+  type Run,
   type RunFilter,
   type RunOptions,
-  type Run,
   type RunStatus,
   type WorkflowRun,
 } from '@lastshotlabs/slingshot-orchestration';
@@ -28,9 +28,9 @@ const VALID_STATUSES = new Set<RunStatus>([
   'skipped',
 ]);
 
-function defaultRequestContext(c: Context<AppEnv>): OrchestrationRequestContext {
+function defaultRequestContext(c: Context): OrchestrationRequestContext {
   return {
-    tenantId: getActorTenantId(c) ?? undefined,
+    tenantId: getActorTenantId(c as Context<AppEnv>) ?? undefined,
   };
 }
 
@@ -380,10 +380,7 @@ export function createOrchestrationRouter(options: {
     try {
       const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const run = await options.runtime.getRun(c.req.param('id'));
-      if (
-        !run ||
-        !(await canAccessRun(c, run, requestContext, 'read', options.authorizeRun))
-      ) {
+      if (!run || !(await canAccessRun(c, run, requestContext, 'read', options.authorizeRun))) {
         return c.json(
           { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },
           404,
@@ -407,10 +404,7 @@ export function createOrchestrationRouter(options: {
     try {
       const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const run = await options.runtime.getRun(c.req.param('id'));
-      if (
-        !run ||
-        !(await canAccessRun(c, run, requestContext, 'cancel', options.authorizeRun))
-      ) {
+      if (!run || !(await canAccessRun(c, run, requestContext, 'cancel', options.authorizeRun))) {
         return c.json(
           { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },
           404,
@@ -471,10 +465,7 @@ export function createOrchestrationRouter(options: {
     try {
       const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const run = await options.runtime.getRun(c.req.param('id'));
-      if (
-        !run ||
-        !(await canAccessRun(c, run, requestContext, 'signal', options.authorizeRun))
-      ) {
+      if (!run || !(await canAccessRun(c, run, requestContext, 'signal', options.authorizeRun))) {
         return c.json(
           { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },
           404,

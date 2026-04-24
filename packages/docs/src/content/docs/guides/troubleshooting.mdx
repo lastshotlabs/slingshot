@@ -206,18 +206,18 @@ curl https://api.example.com/me \
 
 ```ts
 import { userAuth } from '@lastshotlabs/slingshot-auth';
-import { createRouter } from '@lastshotlabs/slingshot-core';
+import { createRouter, getActor } from '@lastshotlabs/slingshot-core';
 
 const router = createRouter();
 
 // Wrong — no auth gate
 router.get('/profile', async c => {
-  const userId = c.get('authUserId'); // may be null
+  const actor = getActor(c); // may be anonymous
 });
 
-// Correct — gate first, then access the variable
+// Correct — gate first, then access the actor
 router.get('/profile', userAuth, async c => {
-  const userId = c.get('authUserId')!; // guaranteed non-null
+  const actor = getActor(c); // guaranteed authenticated
 });
 ```
 
@@ -356,19 +356,19 @@ router.get('/protected', handler);
 
 ---
 
-## `authUserId` is `null` in a handler for authenticated users
+## Actor is anonymous in a handler for authenticated users
 
 The `identify` middleware resolves identity but `userAuth` gates the route. Without `userAuth`, the handler runs regardless of auth status.
 
 ```ts
 import { userAuth } from '@lastshotlabs/slingshot-auth';
-import { createRouter } from '@lastshotlabs/slingshot-core';
+import { createRouter, getActor } from '@lastshotlabs/slingshot-core';
 
 const router = createRouter();
 
 router.get('/me', userAuth, async c => {
-  const userId = c.get('authUserId')!; // safe — userAuth guarantees non-null
-  return c.json({ userId });
+  const actor = getActor(c); // safe — userAuth guarantees authenticated actor
+  return c.json({ userId: actor.id });
 });
 ```
 
@@ -760,7 +760,7 @@ Outputs lines like:
 ```
 [identify] token=present
 [identify] token verified, checking session...
-[identify] authUserId=usr_abc123 sessionId=sess_xyz
+[identify] actor.id=usr_abc123 sessionId=sess_xyz
 ```
 
 For general Hono request logging:

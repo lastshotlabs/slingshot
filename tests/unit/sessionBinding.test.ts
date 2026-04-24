@@ -10,7 +10,7 @@ import {
 import { createIdentifyMiddleware } from '@auth/middleware/identify';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { HttpError, getActor } from '@lastshotlabs/slingshot-core';
 
 type SessionBindingConfig = {
   fields?: Array<'ip' | 'ua' | 'accept-language'>;
@@ -97,7 +97,8 @@ async function buildApp(signing?: SigningFixture | null | undefined) {
   });
   app.use('/*', createIdentifyMiddleware(runtime as any));
   app.get('/me', c => {
-    const userId = (c as any).get('authUserId');
+    const actor = getActor(c as any);
+    const userId = actor.kind === 'anonymous' ? null : actor.id;
     return c.json({ userId });
   });
   return app;

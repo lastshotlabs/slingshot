@@ -61,10 +61,7 @@ async function sleep(ms: number): Promise<void> {
 }
 
 async function runCleanupWithTimeout(fn: () => Promise<void>, ms = 5_000): Promise<void> {
-  await Promise.race([
-    fn().catch(() => {}),
-    sleep(ms),
-  ]);
+  await Promise.race([fn().catch(() => {}), sleep(ms)]);
 }
 
 async function waitFor(
@@ -382,56 +379,60 @@ describe('Kafka runtime paths (Docker)', () => {
     expect(connectors.health().outbound[0]?.messagesProduced).toBe(1);
   });
 
-  test('Kafka inbound connectors send exhausted failures to an auto-created DLQ', async () => {
-    const topic = uniqueName('incoming.billing.failures');
-    const dlqTopic = `${topic}.dlq`;
-    await ensureTopic(topic);
+  test(
+    'Kafka inbound connectors send exhausted failures to an auto-created DLQ',
+    async () => {
+      const topic = uniqueName('incoming.billing.failures');
+      const dlqTopic = `${topic}.dlq`;
+      await ensureTopic(topic);
 
-    const handler = mock(async () => {
-      throw new Error('handler failed');
-    });
-    const connectors = createKafkaConnectors({
-      brokers: [KAFKA_BROKER],
-      inbound: [
-        {
-          topic,
-          groupId: uniqueName('billing-sync'),
-          maxRetries: 1,
-          errorStrategy: 'dlq',
-          autoCreateDLQ: true,
-          handler,
-        },
-      ],
-    });
-    cleanup.push(() => connectors.stop());
+      const handler = mock(async () => {
+        throw new Error('handler failed');
+      });
+      const connectors = createKafkaConnectors({
+        brokers: [KAFKA_BROKER],
+        inbound: [
+          {
+            topic,
+            groupId: uniqueName('billing-sync'),
+            maxRetries: 1,
+            errorStrategy: 'dlq',
+            autoCreateDLQ: true,
+            handler,
+          },
+        ],
+      });
+      cleanup.push(() => connectors.stop());
 
-    await connectors.start(createInProcessAdapter());
-    await waitFor(
-      () => connectors.health().inbound[0]?.status === 'active',
-      15_000,
-      'Inbound connector did not become active',
-    );
+      await connectors.start(createInProcessAdapter());
+      await waitFor(
+        () => connectors.health().inbound[0]?.status === 'active',
+        15_000,
+        'Inbound connector did not become active',
+      );
 
-    const producer = await createProducer();
-    await producer.send({
-      topic,
-      messages: [{ key: 'invoice-1', value: Buffer.from(JSON.stringify({ id: 'invoice-1' })) }],
-    });
+      const producer = await createProducer();
+      await producer.send({
+        topic,
+        messages: [{ key: 'invoice-1', value: Buffer.from(JSON.stringify({ id: 'invoice-1' })) }],
+      });
 
-    await waitFor(
-      () => connectors.health().inbound[0]?.messagesDLQ === 1,
-      15_000,
-      'Inbound connector did not route the exhausted message to DLQ',
-    );
+      await waitFor(
+        () => connectors.health().inbound[0]?.messagesDLQ === 1,
+        15_000,
+        'Inbound connector did not route the exhausted message to DLQ',
+      );
 
-    const dlqMessages = await collectKafkaMessages(dlqTopic, { fromBeginning: true });
-    await waitFor(() => dlqMessages.length === 1, 15_000, 'DLQ message was not written to Kafka');
+      const dlqMessages = await collectKafkaMessages(dlqTopic, { fromBeginning: true });
+      await waitFor(() => dlqMessages.length === 1, 15_000, 'DLQ message was not written to Kafka');
 
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(dlqMessages[0]!.value ?? '{}')).toEqual({ id: 'invoice-1' });
-    expect(dlqMessages[0]!.headers['slingshot.original-topic']).toBe(topic);
-    expect(dlqMessages[0]!.headers['slingshot.original-offset']).toBeDefined();
-  }, KAFKA_TEST_TIMEOUT_MS);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(dlqMessages[0]!.value ?? '{}')).toEqual({ id: 'invoice-1' });
+      expect(dlqMessages[0]!.headers['slingshot.original-topic']).toBe(topic);
+      expect(dlqMessages[0]!.headers['slingshot.original-offset']).toBeDefined();
+    },
+    KAFKA_TEST_TIMEOUT_MS,
+  );
 
   test('Kafka inbound connectors honor maxRetries: 0 and still process once before DLQ', async () => {
     const topic = uniqueName('incoming.once');
@@ -564,60 +565,64 @@ describe('Kafka runtime paths (Docker)', () => {
     );
   });
 
-  test('Kafka adapter buffers publishes across a broker disconnect and drains after reconnect', async () => {
-    const proxy = await createKafkaProxy();
-    cleanup.push(() => proxy.close());
+  test(
+    'Kafka adapter buffers publishes across a broker disconnect and drains after reconnect',
+    async () => {
+      const proxy = await createKafkaProxy();
+      cleanup.push(() => proxy.close());
 
-    const bus = createKafkaAdapter({
-      brokers: [proxy.broker],
-      topicPrefix: uniqueName('slingshot.runtime.buffer'),
-      groupPrefix: uniqueName('slingshot.runtime.group'),
-    });
-    cleanup.push(() => bus.shutdown?.() ?? Promise.resolve());
+      const bus = createKafkaAdapter({
+        brokers: [proxy.broker],
+        topicPrefix: uniqueName('slingshot.runtime.buffer'),
+        groupPrefix: uniqueName('slingshot.runtime.group'),
+      });
+      cleanup.push(() => bus.shutdown?.() ?? Promise.resolve());
 
-    const introspection = getKafkaAdapterIntrospectionOrNull(bus);
-    if (!introspection) {
-      throw new Error('Kafka adapter introspection missing');
-    }
+      const introspection = getKafkaAdapterIntrospectionOrNull(bus);
+      if (!introspection) {
+        throw new Error('Kafka adapter introspection missing');
+      }
 
-    const topic = introspection.topicNameForEvent('auth:login');
-    const collector = await collectKafkaMessages(topic);
-    bus.on('auth:login', () => {}, { durable: true, name: uniqueName('buffer-worker') });
+      const topic = introspection.topicNameForEvent('auth:login');
+      const collector = await collectKafkaMessages(topic);
+      bus.on('auth:login', () => {}, { durable: true, name: uniqueName('buffer-worker') });
 
-    await waitFor(
-      () => bus.health().consumers[0]?.connected === true,
-      15_000,
-      'Kafka adapter durable consumer did not connect',
-    );
+      await waitFor(
+        () => bus.health().consumers[0]?.connected === true,
+        15_000,
+        'Kafka adapter durable consumer did not connect',
+      );
 
-    proxy.pause();
-    bus.emit('auth:login', { userId: 'buffered-user', sessionId: 'buffered-session' });
+      proxy.pause();
+      bus.emit('auth:login', { userId: 'buffered-user', sessionId: 'buffered-session' });
 
-    await waitFor(
-      () => bus.health().pendingBufferSize === 1,
-      15_000,
-      'Kafka adapter did not buffer the failed publish',
-    );
+      await waitFor(
+        () => bus.health().pendingBufferSize === 1,
+        15_000,
+        'Kafka adapter did not buffer the failed publish',
+      );
 
-    proxy.resume();
-    await bus._drainPendingBuffer();
+      proxy.resume();
+      await bus._drainPendingBuffer();
 
-    await waitFor(
-      () => bus.health().pendingBufferSize === 0,
-      15_000,
-      'Kafka adapter pending buffer did not drain after reconnect',
-    );
-    await waitFor(
-      () => collector.length === 1,
-      15_000,
-      'Buffered Kafka adapter publish did not reach the broker after reconnect',
-    );
+      await waitFor(
+        () => bus.health().pendingBufferSize === 0,
+        15_000,
+        'Kafka adapter pending buffer did not drain after reconnect',
+      );
+      await waitFor(
+        () => collector.length === 1,
+        15_000,
+        'Buffered Kafka adapter publish did not reach the broker after reconnect',
+      );
 
-    expect(JSON.parse(collector[0]!.value ?? '{}')).toEqual({
-      userId: 'buffered-user',
-      sessionId: 'buffered-session',
-    });
-  }, KAFKA_TEST_TIMEOUT_MS);
+      expect(JSON.parse(collector[0]!.value ?? '{}')).toEqual({
+        userId: 'buffered-user',
+        sessionId: 'buffered-session',
+      });
+    },
+    KAFKA_TEST_TIMEOUT_MS,
+  );
 
   test('overlapping Kafka adapter and outbound connector routes warn and publish duplicate messages', async () => {
     const bus = createKafkaAdapter({
@@ -676,122 +681,126 @@ describe('Kafka runtime paths (Docker)', () => {
     }
   });
 
-  test('manifest bootstrap wires Kafka event bus and connectors against the live broker', async () => {
-    const previousEnv = {
-      KAFKA_BROKERS: process.env.KAFKA_BROKERS,
-      KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,
-    };
-    process.env.KAFKA_BROKERS = KAFKA_BROKER;
-    process.env.KAFKA_CLIENT_ID = uniqueName('manifest-kafka');
-    cleanup.push(async () => {
-      if (previousEnv.KAFKA_BROKERS !== undefined) {
-        process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
-      } else {
-        delete process.env.KAFKA_BROKERS;
-      }
-      if (previousEnv.KAFKA_CLIENT_ID !== undefined) {
-        process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
-      } else {
-        delete process.env.KAFKA_CLIENT_ID;
-      }
-    });
-
-    const inboundTopic = uniqueName('manifest.inbound');
-    const outboundTopic = uniqueName('manifest.outbound');
-    await ensureTopic(inboundTopic);
-    await ensureTopic(outboundTopic);
-
-    const registry = createManifestHandlerRegistry();
-    const inboundPayloads: Array<{
-      payload: unknown;
-      metadata: Record<string, unknown>;
-    }> = [];
-    registry.registerHandler('captureKafkaInbound', () => {
-      return async (payload: unknown, metadata: Record<string, unknown>) => {
-        inboundPayloads.push({ payload, metadata });
+  test(
+    'manifest bootstrap wires Kafka event bus and connectors against the live broker',
+    async () => {
+      const previousEnv = {
+        KAFKA_BROKERS: process.env.KAFKA_BROKERS,
+        KAFKA_CLIENT_ID: process.env.KAFKA_CLIENT_ID,
       };
-    });
+      process.env.KAFKA_BROKERS = KAFKA_BROKER;
+      process.env.KAFKA_CLIENT_ID = uniqueName('manifest-kafka');
+      cleanup.push(async () => {
+        if (previousEnv.KAFKA_BROKERS !== undefined) {
+          process.env.KAFKA_BROKERS = previousEnv.KAFKA_BROKERS;
+        } else {
+          delete process.env.KAFKA_BROKERS;
+        }
+        if (previousEnv.KAFKA_CLIENT_ID !== undefined) {
+          process.env.KAFKA_CLIENT_ID = previousEnv.KAFKA_CLIENT_ID;
+        } else {
+          delete process.env.KAFKA_CLIENT_ID;
+        }
+      });
 
-    const manifest = await createTempKafkaManifest({
-      manifestVersion: 1,
-      handlers: false,
-      port: 0,
-      meta: { name: 'Kafka Docker Manifest', version: '1.0.0' },
-      security: { rateLimit: false },
-      db: {
-        sqlite: `${process.cwd().replaceAll('\\', '/')}/.tmp/${uniqueName('manifest-db')}.sqlite`,
-        auth: 'sqlite',
-        sessions: 'sqlite',
-        redis: false,
-      },
-      eventBus: {
-        type: 'kafka',
-        config: {
-          topicPrefix: uniqueName('manifest.events'),
-          groupPrefix: uniqueName('manifest.groups'),
+      const inboundTopic = uniqueName('manifest.inbound');
+      const outboundTopic = uniqueName('manifest.outbound');
+      await ensureTopic(inboundTopic);
+      await ensureTopic(outboundTopic);
+
+      const registry = createManifestHandlerRegistry();
+      const inboundPayloads: Array<{
+        payload: unknown;
+        metadata: Record<string, unknown>;
+      }> = [];
+      registry.registerHandler('captureKafkaInbound', () => {
+        return async (payload: unknown, metadata: Record<string, unknown>) => {
+          inboundPayloads.push({ payload, metadata });
+        };
+      });
+
+      const manifest = await createTempKafkaManifest({
+        manifestVersion: 1,
+        handlers: false,
+        port: 0,
+        meta: { name: 'Kafka Docker Manifest', version: '1.0.0' },
+        security: { rateLimit: false },
+        db: {
+          sqlite: `${process.cwd().replaceAll('\\', '/')}/.tmp/${uniqueName('manifest-db')}.sqlite`,
+          auth: 'sqlite',
+          sessions: 'sqlite',
+          redis: false,
         },
-      },
-      kafkaConnectors: {
-        inbound: [
-          {
-            topic: inboundTopic,
-            groupId: uniqueName('manifest-inbound'),
-            handler: 'captureKafkaInbound',
+        eventBus: {
+          type: 'kafka',
+          config: {
+            topicPrefix: uniqueName('manifest.events'),
+            groupPrefix: uniqueName('manifest.groups'),
           },
-        ],
-        outbound: [
-          {
-            event: 'auth:user.created',
-            topic: outboundTopic,
-          },
-        ],
-      },
-    });
+        },
+        kafkaConnectors: {
+          inbound: [
+            {
+              topic: inboundTopic,
+              groupId: uniqueName('manifest-inbound'),
+              handler: 'captureKafkaInbound',
+            },
+          ],
+          outbound: [
+            {
+              event: 'auth:user.created',
+              topic: outboundTopic,
+            },
+          ],
+        },
+      });
 
-    const server = (await createServerFromManifest(
-      manifest.path,
-      registry,
-    )) as unknown as RunningServer;
-    cleanup.push(async () => {
+      const server = (await createServerFromManifest(
+        manifest.path,
+        registry,
+      )) as unknown as RunningServer;
+      cleanup.push(async () => {
+        const ctx = getServerContext(server);
+        await server.stop(true);
+        await ctx?.destroy?.();
+      });
+
       const ctx = getServerContext(server);
-      await server.stop(true);
-      await ctx?.destroy?.();
-    });
+      if (!ctx) {
+        throw new Error('Server context missing');
+      }
 
-    const ctx = getServerContext(server);
-    if (!ctx) {
-      throw new Error('Server context missing');
-    }
+      const outboundMessages = await collectKafkaMessages(outboundTopic);
 
-    const outboundMessages = await collectKafkaMessages(outboundTopic);
+      ctx.bus.emit('auth:user.created', {
+        userId: 'manifest-user',
+        email: 'manifest@example.com',
+      } as never);
 
-    ctx.bus.emit('auth:user.created', {
-      userId: 'manifest-user',
-      email: 'manifest@example.com',
-    } as never);
+      await waitFor(
+        () => outboundMessages.length === 1,
+        15_000,
+        'Manifest outbound connector did not publish to Kafka',
+      );
+      expect(JSON.parse(outboundMessages[0]!.value ?? '{}')).toEqual({
+        userId: 'manifest-user',
+        email: 'manifest@example.com',
+      });
 
-    await waitFor(
-      () => outboundMessages.length === 1,
-      15_000,
-      'Manifest outbound connector did not publish to Kafka',
-    );
-    expect(JSON.parse(outboundMessages[0]!.value ?? '{}')).toEqual({
-      userId: 'manifest-user',
-      email: 'manifest@example.com',
-    });
+      const producer = await createProducer();
+      await producer.send({
+        topic: inboundTopic,
+        messages: [{ key: 'inbound-1', value: Buffer.from(JSON.stringify({ id: 'inbound-1' })) }],
+      });
 
-    const producer = await createProducer();
-    await producer.send({
-      topic: inboundTopic,
-      messages: [{ key: 'inbound-1', value: Buffer.from(JSON.stringify({ id: 'inbound-1' })) }],
-    });
-
-    await waitFor(
-      () => inboundPayloads.length === 1,
-      15_000,
-      'Manifest inbound connector did not receive the Kafka message',
-    );
-    expect(inboundPayloads[0]?.payload).toEqual({ id: 'inbound-1' });
-    expect(inboundPayloads[0]?.metadata['topic']).toBe(inboundTopic);
-  }, KAFKA_TEST_TIMEOUT_MS);
+      await waitFor(
+        () => inboundPayloads.length === 1,
+        15_000,
+        'Manifest inbound connector did not receive the Kafka message',
+      );
+      expect(inboundPayloads[0]?.payload).toEqual({ id: 'inbound-1' });
+      expect(inboundPayloads[0]?.metadata['topic']).toBe(inboundTopic);
+    },
+    KAFKA_TEST_TIMEOUT_MS,
+  );
 });

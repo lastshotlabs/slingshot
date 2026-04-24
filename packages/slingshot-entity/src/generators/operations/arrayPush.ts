@@ -5,7 +5,7 @@
  * the value is only appended when it does not already exist in the array.
  *
  * The `value` binding syntax mirrors `param:x` used in other ops:
- * - `'ctx:key'`   → resolved at the HTTP layer from Hono context (e.g. `authUserId`)
+ * - `'ctx:key'`   → resolved at the HTTP layer from Hono context (e.g. `actor.id`)
  * - `'param:key'` → resolved at the HTTP layer from a URL path param
  * - `'input:key'` → resolved at the HTTP layer from the request body
  * - literal       → constant value baked into the generated code

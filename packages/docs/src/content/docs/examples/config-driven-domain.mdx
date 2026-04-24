@@ -210,13 +210,15 @@ permissions, or docs.
 Declare named middleware in the plugin and reference it by name in entity route config:
 
 ```typescript
+import { getActor } from '@lastshotlabs/slingshot-core';
+
 declare function getPost(id: string): Promise<{ authorId: string }>;
 
 const middleware = {
   ownerOnly: async (c: import('hono').Context, next: import('hono').Next) => {
-    const userId = c.get('authUserId');
-    const post = await getPost(c.req.param('id'));
-    if (post.authorId !== userId) return c.json({ error: 'Forbidden' }, 403);
+    const actor = getActor(c);
+    const post = await getPost(c.req.param('id')!);
+    if (post.authorId !== actor.id) return c.json({ error: 'Forbidden' }, 403);
     await next();
   },
 };

@@ -265,8 +265,17 @@ export async function createHarness(opts?: {
     userAuth: (async (c, next) => {
       const uid = c.req.header('x-test-user') ?? userId;
       const setter = c as unknown as { set(k: string, v: unknown): void };
-      setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
-      setter.set('authUserId', uid);
+      setter.set(
+        'actor',
+        Object.freeze({
+          id: uid,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     }) as MiddlewareHandler,
     requireRole: () => async (_c, next) => next(),
@@ -275,8 +284,17 @@ export async function createHarness(opts?: {
   app.use('*', async (c, next) => {
     const uid = c.req.header('x-test-user') ?? userId;
     const setter = c as unknown as { set(k: string, v: unknown): void };
-    setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
-    setter.set('authUserId', uid);
+    setter.set(
+      'actor',
+      Object.freeze({
+        id: uid,
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: null,
+        claims: {},
+      }),
+    );
     setter.set('slingshotCtx', { routeAuth });
     await next();
   });

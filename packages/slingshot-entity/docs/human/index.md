@@ -94,6 +94,7 @@ defineEntity('Task', {
   storageFields: {
     mongoPkField: 'pk',       // default: '_id'
     ttlField: 'expiresAt',    // default: '_expires_at'
+    mongoTtlField: 'expiry',  // default: '_expiresAt'
   },
 });
 ```

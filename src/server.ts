@@ -1,5 +1,5 @@
-import { validateServerConfig } from '@framework/config/schema';
 import { publishAppShutdownOnce } from '@framework/buildContext';
+import { validateServerConfig } from '@framework/config/schema';
 import { log } from '@framework/lib/logger';
 import { getContextStoreInfra } from '@framework/persistence/internalRepoResolution';
 import { runPluginTeardown } from '@framework/runPluginLifecycle';
@@ -25,8 +25,8 @@ import { disconnectRedis } from '@lib/redis';
 import type { Server, WebSocketHandler } from 'bun';
 import type { Connection } from 'mongoose';
 import type {
-  EventKey,
   EventEnvelope,
+  EventKey,
   RuntimeServerInstance,
   SlingshotEventBus,
   SlingshotPlugin,
@@ -276,14 +276,13 @@ export const createServer = async <T extends object = object>(
 
       // 5. Per-endpoint bus subscriptions (once per event key, not per client)
       const heartbeatMs = epConfig.heartbeat === undefined ? 30_000 : epConfig.heartbeat;
-      const upgradeHandler = epConfig.upgrade ?? createSseUpgradeHandler(ssePath, ctx.userResolver);
+      const upgradeHandler =
+        epConfig.upgrade ?? createSseUpgradeHandler(ssePath, ctx.actorResolver);
 
       for (const rawKey of epConfig.events) {
         const definition = ctx.events.definitions.get(rawKey as never);
         if (!definition) {
-          throw new Error(
-            `[sse] "${rawKey}" is not registered in the event definition registry.`,
-          );
+          throw new Error(`[sse] "${rawKey}" is not registered in the event definition registry.`);
         }
         if (!definition.exposure.includes('client-safe')) {
           throw new Error(
@@ -394,7 +393,7 @@ export const createServer = async <T extends object = object>(
       async open(socket) {
         const ep = endpoints[socket.data.endpoint];
         if (ep.heartbeat) registerSocket(wsState, socket, socket.data.id, socket.data.endpoint);
-        if (ep.presence) trackSocket(wsState, socket.data.id, socket.data.userId);
+        if (ep.presence) trackSocket(wsState, socket.data.id, socket.data.actorId);
         wsState.socketRegistry.set(socket.data.id, socket);
         if (ep.recovery) {
           socket.data.sessionId = crypto.randomUUID();
@@ -495,7 +494,7 @@ export const createServer = async <T extends object = object>(
           setStandaloneTrustProxy(req, ctx.trustProxy);
           return ep.upgrade
             ? ep.upgrade(req, server)
-            : createWsUpgradeHandler(server as Server<SocketData>, path, ctx.userResolver)(req);
+            : createWsUpgradeHandler(server as Server<SocketData>, path, ctx.actorResolver)(req);
         },
       ]),
     );
@@ -632,8 +631,7 @@ export const createServer = async <T extends object = object>(
           exitCode = 1;
         }
 
-        for (const { key, listener } of sseBusListeners)
-          slingshotBus.offEnvelope(key, listener);
+        for (const { key, listener } of sseBusListeners) slingshotBus.offEnvelope(key, listener);
 
         try {
           await slingshotBus.shutdown?.();

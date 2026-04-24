@@ -62,8 +62,7 @@ const eventKeySchema = z
   });
 
 const routeEventScopeValueSchema = z.custom<RouteEventScopeValue>(
-  value =>
-    typeof value === 'string' && (value.startsWith('record:') || value.startsWith('ctx:')),
+  value => typeof value === 'string' && (value.startsWith('record:') || value.startsWith('ctx:')),
   {
     message: "event.scope values must start with 'record:' or 'ctx:'",
   },
@@ -419,8 +418,7 @@ export const entityRouteConfigSchema = z
             ctx.addIssue({
               code: 'custom',
               path: [...path, 'payload'],
-              message:
-                `event.payload must include "${fieldName}" because event.scope references ${value}.`,
+              message: `event.payload must include "${fieldName}" because event.scope references ${value}.`,
             });
           }
         }

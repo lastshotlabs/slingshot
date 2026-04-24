@@ -1,7 +1,6 @@
 import { OpenAPIHono, type OpenAPIHonoOptions } from '@hono/zod-openapi';
 import type { Context } from 'hono';
 import type { z } from 'zod';
-import type { AuthVariables } from './authVariables';
 import type { SlingshotContext } from './context/slingshotContext';
 import type { Actor } from './identity';
 import type { UploadResult } from './storageAdapter';
@@ -165,6 +164,17 @@ export type AppVariables = {
    * `createChildSpan` helper exported from the framework root.
    */
   otelSpan: import('@opentelemetry/api').Span | undefined;
+  /**
+   * The raw, already-verified JWT payload stashed by the identity middleware.
+   *
+   * @remarks
+   * Set by `identify` after the token signature is verified. Contains all claims
+   * from the JWT (e.g. `sub`, `sid`, `roles`, `azp`, `exp`, custom claims).
+   * Typed `unknown` to avoid a hard dependency on the auth plugin's JWT payload
+   * type in `slingshot-core`. `null` when unauthenticated or when only bearer auth
+   * (not `identify`) ran.
+   */
+  tokenPayload: unknown;
 };
 
 /**
@@ -185,7 +195,7 @@ export type AppVariables = {
  * });
  * ```
  */
-export type AppEnv = { Variables: AppVariables & AuthVariables };
+export type AppEnv = { Variables: AppVariables };
 
 /**
  * The Hono `defaultHook` used by all `OpenAPIHono` routers created via `createRouter()`.

@@ -3,7 +3,13 @@ import { userAuth } from '@auth/middleware/userAuth';
 import { ErrorResponse } from '@auth/schemas/error';
 import * as AuthService from '@auth/services/auth';
 import { z } from 'zod';
-import { createRoute, errorResponse, getActor, getActorId, withSecurity } from '@lastshotlabs/slingshot-core';
+import {
+  createRoute,
+  errorResponse,
+  getActor,
+  getActorId,
+  withSecurity,
+} from '@lastshotlabs/slingshot-core';
 import { createRouter, getClientIp } from '@lastshotlabs/slingshot-core';
 import type { AuthRateLimitConfig, StepUpConfig } from '../config/authConfig';
 import type { AuthRuntimeContext } from '../runtime';

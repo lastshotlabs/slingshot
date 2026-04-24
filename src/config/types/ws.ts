@@ -31,8 +31,8 @@ export type WsMiddlewareHandler = (
 export interface WsEventContext {
   /** Stable socket ID assigned by the framework on open. Also the sender ID for exclude. */
   socketId: string;
-  /** Authenticated userId from socketUsers map. Null for unauthenticated sockets. */
-  userId: string | null;
+  /** Authenticated actorId from socketUsers map. Null for unauthenticated sockets. */
+  actorId: string | null;
   /** Endpoint name this socket is connected to. */
   endpoint: string;
   /** Publish a JSON-serialisable payload to a room on this endpoint. */

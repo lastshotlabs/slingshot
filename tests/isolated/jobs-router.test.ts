@@ -121,7 +121,17 @@ function makeRouter(
       if (!token) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
-      c.set('authUserId', 'user-abc');
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'user-abc',
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     },
     requireRole: () => async (_c: any, next: any) => {
@@ -238,7 +248,7 @@ describe('GET /jobs/:queue - list jobs', () => {
     );
   });
 
-  test('scopeToUser filters jobs by authUserId when userAuth is enabled', async () => {
+  test('scopeToUser filters jobs by actor ID when userAuth is enabled', async () => {
     const myJob = makeFakeJob({ id: 'j4', data: { userId: 'user-abc' } });
     const otherJob = makeFakeJob({ id: 'j5', data: { userId: 'user-xyz' } });
     _jobs = [myJob, otherJob];

@@ -2,7 +2,11 @@ import type { ConnectionOptions } from 'bullmq';
 import type { Context, MiddlewareHandler } from 'hono';
 import type Redis from 'ioredis';
 import type { Connection } from 'mongoose';
-import type { PluginSeedContext, PluginSetupContext, StandalonePlugin } from '@lastshotlabs/slingshot-core';
+import type {
+  PluginSeedContext,
+  PluginSetupContext,
+  StandalonePlugin,
+} from '@lastshotlabs/slingshot-core';
 import {
   COOKIE_TOKEN,
   HttpError,
@@ -16,6 +20,7 @@ import {
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { bootstrapAuth } from './bootstrap';
 import type { BootstrapResult } from './bootstrap';
+import { registerAuthEventDefinitions } from './eventGovernance';
 import { createAccountGuard } from './guards/accountGuard';
 import { createMemoryCacheAdapter } from './lib/cache';
 import { templates } from './lib/emailTemplates';
@@ -28,7 +33,6 @@ import { csrfProtection } from './middleware/csrf';
 import { createIdentifyMiddleware } from './middleware/identify';
 import { requireMfaSetup } from './middleware/requireMfaSetup';
 import { requireRole } from './middleware/requireRole';
-import { registerAuthEventDefinitions } from './eventGovernance';
 import { userAuth } from './middleware/userAuth';
 import { AUTH_RUNTIME_KEY } from './runtime';
 import { assertLoginEmailVerified } from './services/auth';
@@ -475,7 +479,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
         ctx.pluginState.set(AUTH_RUNTIME_KEY, result.runtime);
       }
 
-      // UserResolver — provides resolveUserId to framework WS/SSE upgrade
+      // RequestActorResolver — provides resolveActorId to framework WS/SSE upgrade
       const runtime = result.runtime;
       const trustProxy = frameworkConfig.trustProxy;
       const computeResolverFingerprint = (
@@ -489,8 +493,8 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
         });
         return sha256(parts.join(':'));
       };
-      registrar.setUserResolver({
-        async resolveUserId(req: Request): Promise<string | null> {
+      registrar.setRequestActorResolver({
+        async resolveActorId(req: Request): Promise<string | null> {
           try {
             const url = new URL(req.url);
             const token =

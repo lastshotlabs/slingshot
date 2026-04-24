@@ -1,17 +1,14 @@
 import { existsSync, readFileSync } from 'fs';
 import { dirname, resolve } from 'path';
-import type {
-  AnyResolvedTask,
-  AnyResolvedWorkflow,
-} from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 import {
   interpolateEnvVars,
   loadHandlersIntoRegistry,
   resolveHandlersFileEntries,
 } from './createServerFromManifest';
-import { createManifestHandlerRegistry } from './manifestHandlerRegistry';
 import type { AppManifest } from './manifest';
 import { validateAppManifest } from './manifest';
+import { createManifestHandlerRegistry } from './manifestHandlerRegistry';
 import type { ManifestHandlerRegistry } from './manifestHandlerRegistry';
 
 export interface CreateTemporalOrchestrationWorkerFromManifestOptions {
@@ -99,7 +96,9 @@ async function resolveWorkerManifest(
   };
 }
 
-function resolveTemporalTlsConfig(config: Record<string, unknown>): Record<string, unknown> | undefined {
+function resolveTemporalTlsConfig(
+  config: Record<string, unknown>,
+): Record<string, unknown> | undefined {
   const tls = config['tls'];
   if (!isRecord(tls)) return undefined;
   const resolved: Record<string, unknown> = {};
@@ -188,7 +187,10 @@ export async function createTemporalOrchestrationWorkerFromManifest(
   }
 
   const adapterConfig = isRecord(adapterRef['config']) ? adapterRef['config'] : {};
-  if (typeof adapterConfig['workflowTaskQueue'] !== 'string' || adapterConfig['workflowTaskQueue'].length === 0) {
+  if (
+    typeof adapterConfig['workflowTaskQueue'] !== 'string' ||
+    adapterConfig['workflowTaskQueue'].length === 0
+  ) {
     throw new Error(
       '[createTemporalOrchestrationWorkerFromManifest] Temporal adapter.config.workflowTaskQueue is required.',
     );
@@ -230,11 +232,13 @@ export async function createTemporalOrchestrationWorkerFromManifest(
     typeof adapterConfig['defaultActivityTaskQueue'] === 'string'
       ? adapterConfig['defaultActivityTaskQueue']
       : undefined;
-  const activityTaskQueues = [...new Set(
-    [...selectedTasks.values()].map(
-      task => task.queue ?? defaultActivityTaskQueue ?? workflowTaskQueue,
+  const activityTaskQueues = [
+    ...new Set(
+      [...selectedTasks.values()].map(
+        task => task.queue ?? defaultActivityTaskQueue ?? workflowTaskQueue,
+      ),
     ),
-  )];
+  ];
 
   if (options?.dryRun) {
     return {
@@ -273,14 +277,12 @@ export async function createTemporalOrchestrationWorkerFromManifest(
     ...(typeof workerConfig['identity'] === 'string' ? { identity: workerConfig['identity'] } : {}),
     ...(typeof workerConfig['maxConcurrentWorkflowTaskExecutions'] === 'number'
       ? {
-          maxConcurrentWorkflowTaskExecutions:
-            workerConfig['maxConcurrentWorkflowTaskExecutions'],
+          maxConcurrentWorkflowTaskExecutions: workerConfig['maxConcurrentWorkflowTaskExecutions'],
         }
       : {}),
     ...(typeof workerConfig['maxConcurrentActivityTaskExecutions'] === 'number'
       ? {
-          maxConcurrentActivityTaskExecutions:
-            workerConfig['maxConcurrentActivityTaskExecutions'],
+          maxConcurrentActivityTaskExecutions: workerConfig['maxConcurrentActivityTaskExecutions'],
         }
       : {}),
   });

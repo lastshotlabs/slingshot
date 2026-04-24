@@ -1,0 +1,119 @@
+---
+title: App Authoring
+description: The code-first core of every Slingshot app
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Slingshot should be learned from the app root inward.
+
+Start with `createServer()` or `createApp()`. Then learn the top-level config, the runtime context,
+the event bus, realtime transports, and the package-first composition model those apps are built
+from.
+
+## The canonical shape
+
+```typescript title="src/index.ts"
+import { createServer, definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+const healthPackage = definePackage({
+  name: 'health',
+  domains: [
+    domain({
+      name: 'health',
+      basePath: '/health',
+      routes: [
+        route.get({
+          path: '/',
+          auth: 'none',
+          summary: 'Health check',
+          handler: ({ respond }) => respond.json({ ok: true }),
+        }),
+      ],
+    }),
+  ],
+});
+
+await createServer({
+  port: 3000,
+  packages: [healthPackage],
+});
+```
+
+That one file already demonstrates the core model:
+
+- the app root is code
+- packages are the canonical composition surface
+- routes, auth, permissions, events, OpenAPI, and runtime concerns assemble around that root
+
+## What every app has
+
+<CardGrid>
+  <Card title="Assembly" icon="seti:config">
+    `createApp()` assembles the app. `createServer()` adds the network server, workers,
+    WebSockets, SSE, and shutdown behavior.
+  </Card>
+  <Card title="Config" icon="seti:json">
+    Top-level config covers security, db, versioning, runtime, secrets, metrics, jobs, and
+    realtime.
+  </Card>
+  <Card title="Context" icon="seti:javascript">
+    `SlingshotContext` holds the frozen resolved config, event bus, persistence handles,
+    plugin/package state, and runtime helpers.
+  </Card>
+  <Card title="Events" icon="comment-alt">
+    Every app gets an event bus. SSE, webhooks, and many cross-package behaviors build on that
+    model.
+  </Card>
+  <Card title="Realtime" icon="seti:html">
+    WebSockets and SSE are separate core transports with separate docs homes and scaling concerns.
+  </Card>
+  <Card title="Composition" icon="seti:folder">
+    App roots should prefer `packages`. Raw `plugins` are still available for lower-level
+    lifecycle control and escape hatches.
+  </Card>
+</CardGrid>
+
+## Learn in this order
+
+<CardGrid>
+  <LinkCard
+    title="createServer and createApp"
+    href="/slingshot/app-authoring/create-server-and-create-app/"
+    description="What the app assembly step does, what the server adds, and when to use each."
+  />
+  <LinkCard
+    title="App Config"
+    href="/slingshot/app-authoring/app-config/"
+    description="The top-level config categories every serious app ends up using."
+  />
+  <LinkCard
+    title="Events and the Event Bus"
+    href="/slingshot/app-authoring/events-and-the-event-bus/"
+    description="Typed events, canonical publishing, scopes, exposure, and scaling."
+  />
+  <LinkCard
+    title="WebSockets"
+    href="/slingshot/app-authoring/websockets/"
+    description="Endpoint config, incoming events, rooms, presence, recovery, and transport."
+  />
+  <LinkCard
+    title="Server-Sent Events"
+    href="/slingshot/app-authoring/server-sent-events/"
+    description="Registry-backed event streaming for browser clients."
+  />
+  <LinkCard
+    title="Packages and Plugins"
+    href="/slingshot/app-authoring/packages-and-plugins/"
+    description="Why packages are the canonical app-builder surface and where plugins still fit."
+  />
+</CardGrid>
+
+## Where this leads next
+
+- [Package-First Authoring](/slingshot/package-first/) explains how to build packages the app root
+  composes.
+- [Entity System](/slingshot/entity-system/) covers the canonical path for data-shaped product
+  domains, generated routes, operations, and swappable storage.
+- [Alternate Paths](/slingshot/alternate-paths/) covers supported secondary flows like manifest
+  authoring.

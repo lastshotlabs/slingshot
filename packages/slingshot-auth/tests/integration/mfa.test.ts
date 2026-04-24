@@ -26,7 +26,7 @@ function buildApp(runtime: MutableTestRuntime) {
 }
 
 /**
- * Wrap the app with an extra middleware that injects authUserId and sessionId
+ * Wrap the app with an extra middleware that injects the actor
  * into the Hono context, simulating an authenticated session.
  */
 function buildAuthenticatedApp(
@@ -37,8 +37,17 @@ function buildAuthenticatedApp(
   const app = wrapWithRuntime(runtime);
   // Inject auth context before MFA routes
   app.use('*', async (c, next) => {
-    c.set('authUserId', userId);
-    c.set('sessionId', sessionId);
+    c.set(
+      'actor',
+      Object.freeze({
+        id: userId,
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId,
+        roles: null,
+        claims: {},
+      }),
+    );
     await next();
   });
   app.onError((err, c) =>
@@ -61,8 +70,17 @@ function buildAuthenticatedAppWithEmailOtp(
 ) {
   const app = wrapWithRuntime(runtime);
   app.use('*', async (c, next) => {
-    c.set('authUserId', userId);
-    c.set('sessionId', sessionId);
+    c.set(
+      'actor',
+      Object.freeze({
+        id: userId,
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId,
+        roles: null,
+        claims: {},
+      }),
+    );
     await next();
   });
   app.onError((err, c) =>

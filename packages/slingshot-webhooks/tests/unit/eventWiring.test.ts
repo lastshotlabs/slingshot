@@ -38,7 +38,11 @@ function createEvents(bus: ReturnType<typeof createInProcessAdapter>): Slingshot
       ownerPlugin: 'test-webhooks',
       exposure: ['tenant-webhook'],
       resolveScope(payload) {
-        return { tenantId: payload.tenantId, resourceType: 'document', resourceId: payload.documentId };
+        return {
+          tenantId: payload.tenantId,
+          resourceType: 'document',
+          resourceId: payload.documentId,
+        };
       },
     }),
   );

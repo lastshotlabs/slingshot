@@ -1053,8 +1053,10 @@ export interface EntitySystemFields {
 export interface EntityStorageFieldMap {
   /** Mongo document primary key field. Default: `'_id'`. */
   readonly mongoPkField?: string;
-  /** SQL/storage TTL expiry field. Default: `'_expires_at'`. */
+  /** SQL/storage TTL expiry column name. Default: `'_expires_at'`. */
   readonly ttlField?: string;
+  /** Mongo TTL expiry field name. Default: `'_expiresAt'`. */
+  readonly mongoTtlField?: string;
 }
 
 /**
@@ -1089,6 +1091,8 @@ export interface ResolvedEntityStorageFieldMap {
   readonly mongoPkField: string;
   /** Resolved SQL/storage TTL expiry column name. */
   readonly ttlField: string;
+  /** Resolved Mongo TTL expiry field name. */
+  readonly mongoTtlField: string;
 }
 
 // ============================================================================
@@ -1490,6 +1494,7 @@ export function defineEntity<F extends Record<string, FieldDef>>(
   const resolvedStorageFields: ResolvedEntityStorageFieldMap = {
     mongoPkField: config.storageFields?.mongoPkField ?? '_id',
     ttlField: config.storageFields?.ttlField ?? '_expires_at',
+    mongoTtlField: config.storageFields?.mongoTtlField ?? '_expiresAt',
   };
 
   const resolvedConventions: ResolvedEntityStorageConventions = {

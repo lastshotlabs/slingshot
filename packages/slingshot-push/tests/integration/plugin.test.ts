@@ -204,20 +204,28 @@ async function createPushHarness(opts?: {
 
   const postGuards: PostAuthGuard[] | undefined = opts?.authRuntime
     ? [
-        async (c) => {
+        async c => {
           const actorId = getActorId(c as import('hono').Context<AppEnv>);
           if (!actorId) return null;
           const rt = opts.authRuntime!;
           const suspensionStatus = await rt.adapter.getSuspended(actorId);
           if (suspensionStatus?.suspended) {
-            return { error: 'ACCOUNT_SUSPENDED', message: 'Account is suspended', status: 403 as const };
+            return {
+              error: 'ACCOUNT_SUSPENDED',
+              message: 'Account is suspended',
+              status: 403 as const,
+            };
           }
           const requiresVerifiedEmail =
             rt.config?.primaryField === 'email' && rt.config.emailVerification?.required === true;
           if (requiresVerifiedEmail && rt.adapter.getEmailVerified) {
             const verified = await rt.adapter.getEmailVerified(actorId);
             if (!verified) {
-              return { error: 'EMAIL_NOT_VERIFIED', message: 'Email not verified', status: 403 as const };
+              return {
+                error: 'EMAIL_NOT_VERIFIED',
+                message: 'Email not verified',
+                status: 403 as const,
+              };
             }
           }
           return null;
@@ -229,8 +237,17 @@ async function createPushHarness(opts?: {
       const uid = c.req.header('x-test-user') ?? userId;
       const tid = c.req.header('x-test-tenant') ?? '';
       const setter = c as unknown as { set(k: string, v: unknown): void };
-      setter.set('actor', { id: uid, kind: 'user', tenantId: tid || null, sessionId: null, roles: null, claims: {} });
-      setter.set('authUserId', uid);
+      setter.set(
+        'actor',
+        Object.freeze({
+          id: uid,
+          kind: 'user' as const,
+          tenantId: tid || null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       setter.set('tenantId', tid);
       await next();
     }) as MiddlewareHandler,
@@ -451,7 +468,7 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
   });
 
   test('subscribe to topic requires authentication (401 without user)', async () => {
-    // Override to not set authUserId
+    // Override to not set actor
     const app = new Hono();
     const runtime = createRuntime();
     const fc = createFrameworkConfig();
@@ -494,7 +511,7 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ deviceId: 'x' }),
     });
-    // Without authUserId set, the route should return 401
+    // Without actor set, the route should return 401
     expect(res.status).toBe(401);
   });
 

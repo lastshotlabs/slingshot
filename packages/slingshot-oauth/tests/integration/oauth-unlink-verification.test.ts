@@ -22,7 +22,7 @@ import { makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
 type TestRuntime = ReturnType<typeof makeTestRuntime>;
 
 // Build a minimal app that bypasses the JWT-based userAuth by pre-setting
-// authUserId and sessionId in the Hono context before the route middleware runs.
+// the actor in the Hono context before the route middleware runs.
 function buildApp(
   runtime: TestRuntime,
   userId: string,
@@ -31,10 +31,19 @@ function buildApp(
   rateLimit?: { oauthUnlink?: { max: number; windowMs: number } },
 ) {
   const app = wrapWithRuntime(runtime);
-  // userAuth only checks c.get('authUserId') — pre-set it here so it passes.
+  // userAuth reads actor — pre-set it here so it passes.
   app.use('*', async (c, next) => {
-    c.set('authUserId', userId);
-    c.set('sessionId', sessionId);
+    c.set(
+      'actor',
+      Object.freeze({
+        id: userId,
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId,
+        roles: null,
+        claims: {},
+      }),
+    );
     await next();
   });
   app.route('/', createOAuthRouter(providers, '/', runtime, rateLimit));

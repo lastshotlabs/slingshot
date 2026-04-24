@@ -255,11 +255,11 @@ describe('parseUpload', () => {
 describe('presigned URL route', () => {
   it('returns 501 when adapter does not support presignPut (memory adapter)', async () => {
     const router = createUploadsRouter({});
-    // The router requires userAuth — set authUserId manually via middleware
+    // The router requires userAuth — set actor manually via middleware
     const app = createRouter();
     const routeAuth = {
       userAuth: async (c: any, next: any) => {
-        if (!c.get('authUserId')) return c.json({ error: 'Unauthorized' }, 401);
+        if (!c.get('actor')) return c.json({ error: 'Unauthorized' }, 401);
         await next();
       },
       requireRole: () => async (_c: any, next: any) => {
@@ -283,10 +283,17 @@ describe('presigned URL route', () => {
     } as any;
     attachContext(app, slingshotCtx);
     app.use('*', async (c, next) => {
-      c.set('authUserId', 'user-1');
-      c.set('roles', ['user']);
-      c.set('sessionId', 'sess-1');
-      c.set('tenantId', null);
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'user-1',
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: 'sess-1',
+          roles: ['user'],
+          claims: {},
+        }),
+      );
       c.set('tenantConfig', null);
       await next();
     });
@@ -322,7 +329,7 @@ describe('presigned URL route', () => {
     const app = createRouter();
     const routeAuth = {
       userAuth: async (c: any, next: any) => {
-        if (!c.get('authUserId')) return c.json({ error: 'Unauthorized' }, 401);
+        if (!c.get('actor')) return c.json({ error: 'Unauthorized' }, 401);
         await next();
       },
       requireRole: () => async (_c: any, next: any) => {
@@ -356,10 +363,17 @@ describe('presigned URL route', () => {
     attachContext(app, slingshotCtx);
     app.use('*', async (c, next) => {
       c.set('slingshotCtx', slingshotCtx);
-      c.set('authUserId', 'user-1');
-      c.set('roles', ['user']);
-      c.set('sessionId', 'sess-1');
-      c.set('tenantId', null);
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'user-1',
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: 'sess-1',
+          roles: ['user'],
+          claims: {},
+        }),
+      );
       c.set('tenantConfig', null);
       await next();
     });
@@ -411,7 +425,7 @@ describe('presigned URL route', () => {
     const app = createRouter();
     const routeAuth = {
       userAuth: async (c: any, next: any) => {
-        if (!c.get('authUserId')) return c.json({ error: 'Unauthorized' }, 401);
+        if (!c.get('actor')) return c.json({ error: 'Unauthorized' }, 401);
         await next();
       },
       requireRole: () => async (_c: any, next: any) => {
@@ -442,10 +456,17 @@ describe('presigned URL route', () => {
     attachContext(app, slingshotCtx);
     app.use('*', async (c, next) => {
       c.set('slingshotCtx', slingshotCtx);
-      c.set('authUserId', 'user-1');
-      c.set('roles', ['user']);
-      c.set('sessionId', 'sess-1');
-      c.set('tenantId', null);
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'user-1',
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: 'sess-1',
+          roles: ['user'],
+          claims: {},
+        }),
+      );
       c.set('tenantConfig', null);
       await next();
     });

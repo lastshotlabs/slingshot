@@ -290,7 +290,7 @@ describe('auditLog middleware', () => {
     expect(new Date(provider.entries[0].createdAt).getTime()).toBeGreaterThan(0);
   });
 
-  test('userId defaults to null when authUserId is not set', async () => {
+  test('userId defaults to null when actor is anonymous', async () => {
     const provider = makeMockProvider();
     const middleware = auditLog({ store: 'memory', provider });
 

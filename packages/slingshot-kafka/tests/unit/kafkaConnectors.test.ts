@@ -153,9 +153,9 @@ describe('kafkaConnectors', () => {
 
     expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
     expect(fakeKafkaState.producerSendCalls[0]?.topic).toBe('external.users.created');
-    expect(fakeKafkaState.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.owner-plugin']).toBe(
-      'test-auth',
-    );
+    expect(
+      fakeKafkaState.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.owner-plugin'],
+    ).toBe('test-auth');
     expect(fakeKafkaState.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.exposure']).toBe(
       'connector',
     );

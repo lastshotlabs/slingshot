@@ -117,7 +117,7 @@ export function attachContext(app: object, ctx: SlingshotContext): void {
  * import { getContext } from '@lastshotlabs/slingshot-core';
  *
  * const ctx = getContext(app);
- * const userId = await ctx.userResolver?.resolveUserId(req);
+ * const actorId = await ctx.actorResolver?.resolveActorId(req);
  * ```
  */
 export function getContext(app: object): SlingshotContext {

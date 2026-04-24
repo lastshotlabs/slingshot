@@ -419,7 +419,7 @@ describe('bullmq orchestration adapter', () => {
       throw new Error('missing lock token');
     };
 
-    await expect(adapter.cancelRun(handle.id)).rejects.toThrow("Failed to cancel active run");
+    await expect(adapter.cancelRun(handle.id)).rejects.toThrow('Failed to cancel active run');
 
     const run = await adapter.getRun(handle.id);
     expect(run?.status).toBe('running');

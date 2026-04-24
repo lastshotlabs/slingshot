@@ -1,0 +1,86 @@
+---
+title: Server-Sent Events
+description: Registry-backed event streaming for browser clients
+---
+
+SSE is the browser-facing streaming transport built directly on the event bus and event definition
+model.
+
+Use it when the server needs to push updates to clients but clients do not need a bidirectional
+socket.
+
+## A minimal SSE endpoint
+
+```typescript title="src/index.ts"
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  sse: {
+    endpoints: {
+      '/events': {
+        events: ['app:notification.created'],
+        heartbeat: 15_000,
+        filter: (client, _event, payload) =>
+          client.actorId !== null &&
+          (payload as { userId: string }).userId === client.actorId,
+      },
+    },
+  },
+});
+```
+
+## How SSE fits into the model
+
+An SSE endpoint does not publish events itself. It subscribes to the app event bus and streams
+events whose definitions allow that exposure.
+
+That means SSE depends on:
+
+- event definitions
+- event envelope scope
+- client-safe exposure rules
+- optional endpoint-specific filtering
+
+## Why event definitions matter here
+
+Only events that were explicitly defined and exposed should reach browser clients.
+
+Typical flow:
+
+1. register an event with `defineEvent(...)`
+2. mark it `client-safe`
+3. publish it with `ctx.events.publish(...)`
+4. let SSE stream it to matching subscribers
+
+This keeps browser delivery aligned with the same canonical event model used elsewhere.
+
+## Upgrade and filtering
+
+Each endpoint can also define:
+
+- `upgrade(req)` to accept or reject the connection and attach client metadata
+- `filter(client, event, payload)` for per-client delivery control
+- `heartbeat` to keep connections alive
+
+That gives you a clean split:
+
+- event definitions control what is externally exposable
+- endpoint filters control which subscribed client gets which exposed event
+
+## Use SSE for
+
+- notifications
+- activity feeds
+- dashboards
+- browser event streams where `EventSource` is enough
+
+## Do not treat SSE as WebSockets-lite
+
+SSE is simpler because it is one-way. It does not replace:
+
+- room subscriptions
+- client-to-server events
+- presence
+- connection recovery for bidirectional sessions
+
+Those belong to [WebSockets](/slingshot/app-authoring/websockets/).

@@ -1,0 +1,78 @@
+---
+title: OpenAPI and Validation
+description: Typed request contracts, schema preload, and generated docs
+---
+
+OpenAPI and validation are part of the normal authoring path, not a bolt-on.
+
+## Typed package routes
+
+Package-owned routes can declare request and response metadata directly.
+
+```typescript
+import { z } from 'zod';
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+const postParams = z.object({ id: z.string() });
+const postResponse = z.object({ id: z.string(), title: z.string() });
+
+export const blogPackage = definePackage({
+  name: 'blog',
+  domains: [
+    domain({
+      name: 'posts',
+      basePath: '/posts',
+      routes: [
+        route.get({
+          path: '/:id',
+          request: { params: postParams },
+          responses: {
+            200: { description: 'Post', schema: postResponse },
+          },
+          handler: ({ params, respond }) =>
+            respond.json({ id: params.id, title: 'Hello' }),
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+That metadata drives both runtime validation and generated docs.
+
+## `modelSchemas`
+
+Use `modelSchemas` when you want shared schema sources preloaded before route discovery.
+
+```typescript
+await createServer({
+  modelSchemas: new URL('./schemas', import.meta.url).pathname,
+});
+```
+
+This is especially useful when routes reference named schemas defined outside the route file.
+
+## Generated docs
+
+By default, Slingshot generates:
+
+- `/openapi.json`
+- `/docs`
+
+With versioning enabled, each version gets its own docs and spec output.
+
+## Validation behavior
+
+Use the top-level `validation` config when you want to standardize error formatting instead of
+letting every route invent its own error shape.
+
+## This matters for entities too
+
+Entity-generated routes are not exempt from this model. Generated CRUD routes, named operations,
+route overrides, and extra routes all participate in validation and OpenAPI generation.
+
+## Next
+
+- [Entity System](/slingshot/entity-system/)
+- [Guides: OpenAPI](/slingshot/guides/openapi/)
+- [App Config](/slingshot/app-authoring/app-config/)

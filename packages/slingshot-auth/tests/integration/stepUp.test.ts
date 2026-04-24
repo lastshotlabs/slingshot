@@ -29,8 +29,17 @@ function buildApp(
   // Inject auth context if authenticated
   if (opts?.authenticated !== false && opts?.userId) {
     app.use('*', async (c, next) => {
-      c.set('authUserId', opts.userId!);
-      c.set('sessionId', SESSION_ID);
+      c.set(
+        'actor',
+        Object.freeze({
+          id: opts.userId!,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: SESSION_ID,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     });
   }

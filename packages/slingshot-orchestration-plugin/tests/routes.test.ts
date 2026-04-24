@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { createMemoryAdapter } from '@lastshotlabs/slingshot-orchestration';
 import { defineTask } from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationRouter } from '../src/routes';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+import { createOrchestrationRouter } from '../src/routes';
 
 describe('orchestration routes', () => {
   test('starts runs through HTTP routes and propagates tenant context', async () => {
@@ -67,9 +67,7 @@ describe('orchestration routes', () => {
 
     const catalogResponse = await app.request('/orchestration/tasks');
     expect(catalogResponse.status).toBe(200);
-    expect(await catalogResponse.json()).toEqual([
-      { name: 'route-task', description: null },
-    ]);
+    expect(await catalogResponse.json()).toEqual([{ name: 'route-task', description: null }]);
   });
 
   test('hides tenant-scoped runs from other tenants', async () => {

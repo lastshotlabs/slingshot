@@ -1,0 +1,98 @@
+---
+title: domain and route
+description: Typed non-entity routes owned by a package
+---
+
+Not every package route should be generated from an entity.
+
+For package-owned HTTP surfaces that are still part of the package contract, use `domain(...)` and
+`route.*(...)`.
+
+## A typed domain
+
+```typescript
+import { z } from 'zod';
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+
+const createInviteBody = z.object({
+  email: z.string().email(),
+});
+
+export const invitesPackage = definePackage({
+  name: 'invites',
+  domains: [
+    domain({
+      name: 'invites',
+      basePath: '/invites',
+      routes: [
+        route.post({
+          path: '/',
+          auth: 'userAuth',
+          request: { body: createInviteBody },
+          responses: {
+            201: {
+              description: 'Created invite',
+            },
+          },
+          handler: async ({ body, respond }) => {
+            return respond.json({ email: body.email, invited: true }, 201);
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+## What route definitions can declare
+
+Package routes can carry:
+
+- `auth`
+- `permission`
+- `rateLimit`
+- `idempotency`
+- `middleware`
+- `event`
+- typed `request`
+- typed `responses`
+- `summary` and `description`
+
+That makes package routes a first-class authoring surface, not a low-level escape hatch.
+
+## Domain-local services
+
+`domain(...)` can also publish a service bag that route handlers receive as `ctx.services`.
+
+```typescript
+const postsDomain = domain({
+  name: 'posts',
+  services: {
+    now: () => new Date().toISOString(),
+  },
+  routes: [
+    route.withServices<{ now: () => string }>().get({
+      path: '/clock',
+      auth: 'none',
+      handler: ({ services, respond }) => respond.json({ now: services.now() }),
+    }),
+  ],
+});
+```
+
+Use this for domain-local helpers that belong to the route group itself.
+
+## When to use package routes vs entity routes
+
+Use package routes when the behavior is:
+
+- not naturally CRUD or named-op shaped
+- not centered on one entity adapter
+- still part of the package's public HTTP surface
+
+Use the entity system when the route semantics should be generated from the domain model.
+
+## Next
+
+- [Entity System](/slingshot/entity-system/)
+- [OpenAPI and Validation](/slingshot/app-authoring/openapi-and-validation/)

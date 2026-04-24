@@ -54,7 +54,7 @@ describe('buildIncomingDispatch', () => {
       const typingHandler = handlers.find(h => h.event === 'chat.typing')!;
 
       await typingHandler.handler({
-        userId: 'user-1',
+        actorId: 'user-1',
         socketId: 'socket-123',
         roomId: room.id,
         payload: { roomId: room.id },
@@ -79,7 +79,7 @@ describe('buildIncomingDispatch', () => {
       const typingHandler = handlers.find(h => h.event === 'chat.typing')!;
 
       await typingHandler.handler({
-        userId: 'non-member',
+        actorId: 'non-member',
         socketId: 'socket-456',
         roomId: room.id,
         payload: { roomId: room.id },
@@ -104,7 +104,7 @@ describe('buildIncomingDispatch', () => {
       const readHandler = handlers.find(h => h.event === 'chat.read')!;
 
       await readHandler.handler({
-        userId: 'user-1',
+        actorId: 'user-1',
         socketId: 'socket-1',
         roomId: room.id,
         payload: { roomId: room.id, messageId: msg.id },
@@ -143,7 +143,7 @@ describe('buildIncomingDispatch', () => {
       const readHandler = handlers.find(h => h.event === 'chat.read')!;
 
       await readHandler.handler({
-        userId: 'non-member',
+        actorId: 'non-member',
         socketId: 'socket-1',
         roomId: room.id,
         payload: { roomId: room.id, messageId: msg.id },
@@ -164,7 +164,7 @@ describe('buildIncomingDispatch', () => {
       const pingHandler = handlers.find(h => h.event === 'chat.ping')!;
 
       await pingHandler.handler({
-        userId: 'user-1',
+        actorId: 'user-1',
         socketId: 'socket-1',
         roomId: 'room-1',
         payload: { ts: 1234567890 },
@@ -187,7 +187,7 @@ describe('buildIncomingDispatch', () => {
 
       // Should not throw
       await pingHandler.handler({
-        userId: 'user-1',
+        actorId: 'user-1',
         socketId: 'socket-1',
         roomId: 'room-1',
         payload: { ts: 123 },

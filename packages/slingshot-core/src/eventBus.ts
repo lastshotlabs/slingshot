@@ -1,8 +1,8 @@
-import { validateEventPayload } from './eventSchemaRegistry';
-import type { EventBusSerializationOptions, ValidationMode } from './eventSerializer';
 import type { EventKey } from './eventDefinition';
 import type { EventEnvelope } from './eventEnvelope';
 import { createRawEventEnvelope, isEventEnvelope } from './eventEnvelope';
+import { validateEventPayload } from './eventSchemaRegistry';
+import type { EventBusSerializationOptions, ValidationMode } from './eventSerializer';
 
 /**
  * Central event map for all built-in Slingshot events.
@@ -323,7 +323,6 @@ export interface SlingshotEventBus {
    * async handlers so shutdown resolves only after the current bus work has quiesced.
    */
   shutdown?(): Promise<void>;
-
 }
 
 /**
@@ -357,7 +356,10 @@ export class InProcessAdapter implements SlingshotEventBus {
   >();
   private payloadListenerWrappers = new Map<
     string,
-    Map<(payload: unknown) => void | Promise<void>, (envelope: EventEnvelope) => void | Promise<void>>
+    Map<
+      (payload: unknown) => void | Promise<void>,
+      (envelope: EventEnvelope) => void | Promise<void>
+    >
   >();
   private pendingHandlers = new Set<Promise<void>>();
   private readonly registry?: EventBusSerializationOptions['schemaRegistry'];
@@ -373,8 +375,12 @@ export class InProcessAdapter implements SlingshotEventBus {
       ? payload
       : createRawEventEnvelope(
           event as EventKey,
-          validateEventPayload(event as string, payload, this.registry, this.validation) as
-            SlingshotEventMap[K],
+          validateEventPayload(
+            event as string,
+            payload,
+            this.registry,
+            this.validation,
+          ) as SlingshotEventMap[K],
         );
     const fns = this.envelopeListeners.get(event as string);
     if (!fns) return;
@@ -451,8 +457,7 @@ export class InProcessAdapter implements SlingshotEventBus {
     const key = event as string; // K extends string — safe cast
     if (!this.envelopeListeners.has(key)) this.envelopeListeners.set(key, new Set());
     const listenerSet = this.envelopeListeners.get(key);
-    if (listenerSet)
-      listenerSet.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
+    if (listenerSet) listenerSet.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
   }
 
   off<K extends keyof SlingshotEventMap>(

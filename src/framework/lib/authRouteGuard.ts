@@ -41,9 +41,7 @@ export async function getAuthenticatedAccountGuardFailure(c: {
 }): Promise<{ error: string; status: 403 } | null> {
   const actor = getActor(c as Parameters<typeof getActor>[0]);
   if (actor.kind !== 'user' || !actor.id) {
-    throw new Error(
-      '[security] authenticated route guard requires an authenticated user actor',
-    );
+    throw new Error('[security] authenticated route guard requires an authenticated user actor');
   }
 
   const runtime = getAuthRuntimeFromRequest(c);

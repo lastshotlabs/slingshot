@@ -300,7 +300,16 @@ describe('rest middleware guards', () => {
       buildHostOnlyGuard({ getSessionAdapter: () => sessionAdapter })(
         createContext({
           params: { id: 'session-1' },
-          values: { authUserId: 'host-user' },
+          values: {
+            actor: Object.freeze({
+              id: 'host-user',
+              kind: 'user',
+              tenantId: null,
+              sessionId: null,
+              roles: null,
+              claims: {},
+            }),
+          },
         }),
         next,
       ),
@@ -311,7 +320,16 @@ describe('rest middleware guards', () => {
       buildHostOnlyGuard({ getSessionAdapter: () => sessionAdapter })(
         createContext({
           params: { id: 'session-1' },
-          values: { authUserId: 'guest-user' },
+          values: {
+            actor: Object.freeze({
+              id: 'guest-user',
+              kind: 'user',
+              tenantId: null,
+              sessionId: null,
+              roles: null,
+              claims: {},
+            }),
+          },
         }),
         async () => {},
       ),
@@ -411,7 +429,16 @@ describe('rest middleware guards', () => {
       })(
         createContext({
           body,
-          values: { authUserId: 'host-user' },
+          values: {
+            actor: Object.freeze({
+              id: 'host-user',
+              kind: 'user',
+              tenantId: null,
+              sessionId: null,
+              roles: null,
+              claims: {},
+            }),
+          },
         }),
         async () => {},
       ),
@@ -470,7 +497,16 @@ describe('rest middleware guards', () => {
         createContext({
           params: { id: 'session-1' },
           body: joinBody,
-          values: { authUserId: 'fresh-user' },
+          values: {
+            actor: Object.freeze({
+              id: 'fresh-user',
+              kind: 'user',
+              tenantId: null,
+              sessionId: null,
+              roles: null,
+              claims: {},
+            }),
+          },
         }),
         async () => {},
       ),

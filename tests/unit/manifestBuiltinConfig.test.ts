@@ -232,16 +232,30 @@ describe('resolveSearchManifestConfig', () => {
 
     const adminCtx = {
       get: (k: string) => {
-        if (k === 'roles') return ['super-admin'];
-        if (k === 'authUserId') return 'admin_1';
+        if (k === 'actor')
+          return Object.freeze({
+            id: 'admin_1',
+            kind: 'user',
+            tenantId: null,
+            sessionId: null,
+            roles: ['super-admin'],
+            claims: {},
+          });
         return null;
       },
       set: () => {},
     };
     const userCtx = {
       get: (k: string) => {
-        if (k === 'roles') return ['member'];
-        if (k === 'authUserId') return 'user_1';
+        if (k === 'actor')
+          return Object.freeze({
+            id: 'user_1',
+            kind: 'user',
+            tenantId: null,
+            sessionId: null,
+            roles: ['member'],
+            claims: {},
+          });
         return null;
       },
       set: () => {},
@@ -253,11 +267,24 @@ describe('resolveSearchManifestConfig', () => {
     expect(await gate.verifyRequest(anonCtx)).toBe(false);
   });
 
-  it('resolves adminGate: "authenticated" to a gate that checks authUserId', async () => {
+  it('resolves adminGate: "authenticated" to a gate that checks actor identity', async () => {
     const result = resolveSearchManifestConfig({ adminGate: 'authenticated' });
     const gate = result['adminGate'] as { verifyRequest(c: unknown): Promise<boolean> };
 
-    const authCtx = { get: (k: string) => (k === 'authUserId' ? 'usr_1' : null), set: () => {} };
+    const authCtx = {
+      get: (k: string) =>
+        k === 'actor'
+          ? Object.freeze({
+              id: 'usr_1',
+              kind: 'user',
+              tenantId: null,
+              sessionId: null,
+              roles: null,
+              claims: {},
+            })
+          : null,
+      set: () => {},
+    };
     const anonCtx = { get: () => null, set: () => {} };
 
     expect(await gate.verifyRequest(authCtx)).toBe(true);

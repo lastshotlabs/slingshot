@@ -165,8 +165,4 @@ export interface FieldDef<
   readonly enumValues?: EnumValues;
 }
 
-export type {
-  ResolveDflt,
-  ResolveOpt,
-  ResolveUpd,
-};
+export type { ResolveDflt, ResolveOpt, ResolveUpd };

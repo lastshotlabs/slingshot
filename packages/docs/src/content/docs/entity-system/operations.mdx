@@ -1,0 +1,75 @@
+---
+title: Operations
+description: Named behaviors beyond CRUD, from lookups to transitions and search
+---
+
+Operations are how the entity system models behavior beyond basic CRUD.
+
+## Define operations next to the entity
+
+```typescript
+import { defineOperations, op } from '@lastshotlabs/slingshot';
+
+export const PostOps = defineOperations(Post, {
+  byAuthor: op.lookup({
+    fields: { authorId: 'param:authorId' },
+    returns: 'many',
+  }),
+  existsByTitle: op.exists({
+    fields: { title: 'param:title' },
+  }),
+  publish: op.transition({
+    field: 'status',
+    from: 'draft',
+    to: 'published',
+    match: { id: 'param:id' },
+  }),
+  searchPublished: op.search({
+    fields: ['title', 'body'],
+    filter: { status: 'published' },
+  }),
+});
+```
+
+## What operations are for
+
+Use operations when the behavior is still adapter-shaped and belongs to the domain model:
+
+- lookups
+- existence checks
+- transitions
+- field updates
+- search
+- aggregates
+- batches
+- transactions
+- derived or computed behaviors
+
+## Why operations matter to the docs structure
+
+They are the point where the entity system stops being "CRUD generation" and becomes a real domain
+runtime.
+
+That is why operations need their own first-class docs home instead of being buried inside generic
+entity examples.
+
+## Where they show up
+
+Operations affect:
+
+- generated adapter methods
+- generated named-op routes
+- OpenAPI
+- route policy
+- backend delegation such as search-provider integration
+
+## Use the right level
+
+If the behavior belongs to the entity adapter surface, make it an operation.
+
+If it is really a package-owned route with different semantics, make it a domain route instead.
+
+## Next
+
+- [Route Policy](/slingshot/entity-system/route-policy/)
+- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/)

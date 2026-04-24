@@ -143,8 +143,9 @@ export function arrayPushMongo(
   return async (id, value) => {
     const Model = getModel();
     const arrayOp = dedupe ? '$addToSet' : '$push';
-    await Model.updateOne({ _id: id }, { [arrayOp]: { [op.field]: value } });
-    const doc = await Model.findOne({ _id: id }).lean();
+    const pkField = config._storageFields.mongoPkField;
+    await Model.updateOne({ [pkField]: id }, { [arrayOp]: { [op.field]: value } });
+    const doc = await Model.findOne({ [pkField]: id }).lean();
     if (!doc) throw new Error(`[${config.name}] Not found`);
     return fromDoc(doc);
   };

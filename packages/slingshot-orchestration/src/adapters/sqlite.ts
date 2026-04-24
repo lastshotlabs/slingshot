@@ -230,10 +230,7 @@ export function createSqliteAdapter(options: {
        AND idempotency_key = ?
      ORDER BY created_at ASC
      LIMIT 1`,
-  ) as Database.Statement<
-    ['task' | 'workflow', string, string | null, string],
-    { id: string }
-  >;
+  ) as Database.Statement<['task' | 'workflow', string, string | null, string], { id: string }>;
   const upsertStep = db.prepare(`
     INSERT INTO orchestration_steps (run_id, name, task, status, output, error, attempts, started_at, completed_at)
     VALUES (@runId, @name, @task, @status, @output, @error, @attempts, @startedAt, @completedAt)
@@ -609,10 +606,7 @@ export function createSqliteAdapter(options: {
       if (!def) {
         throw new OrchestrationError('WORKFLOW_NOT_FOUND', `Workflow '${name}' not registered`);
       }
-      const scopedIdempotencyKey = createIdempotencyScope(
-        { type: 'workflow', name },
-        opts ?? {},
-      );
+      const scopedIdempotencyKey = createIdempotencyScope({ type: 'workflow', name }, opts ?? {});
       if (scopedIdempotencyKey) {
         const existing = findExistingIdempotentRun({ type: 'workflow', name }, opts ?? {});
         if (existing) return createHandle(existing.id);

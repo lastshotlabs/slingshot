@@ -81,6 +81,26 @@ Package-first authoring builds on the same seam. Capabilities are declared in co
 owning package during bootstrap finalization, and consumed through typed handles instead of mutable
 adapter bags or module-global registries.
 
+### Actor-first identity
+
+Core owns the canonical identity model for all framework consumers:
+
+- `Actor` — frozen identity shape with `id`, `kind`, `tenantId`, `sessionId`, `roles`, and `claims`.
+  Five kinds: `'user'`, `'service-account'`, `'api-key'`, `'system'`, `'anonymous'`.
+- `ANONYMOUS_ACTOR` — frozen singleton for unauthenticated requests.
+- `getActor(c)` — reads `c.get('actor')`, falls back to `ANONYMOUS_ACTOR`. Never returns `null`.
+- `getActorId(c)` — shorthand for the actor's primary ID, `null` when anonymous.
+- `getActorTenantId(c)` — actor-scoped tenant, `null` when tenantless.
+- `getRequestTenantId(c)` — request-scoped tenant from tenant-resolution middleware (distinct from
+  actor tenant — they usually match but diverge for cross-tenant operations).
+
+Guards, permissions, data scoping, audit, entity routes, and transport helpers all read identity
+through the actor shape. Auth middleware (`identify`) publishes the frozen actor on the Hono context;
+downstream consumers read it via the helpers above.
+
+`RequestActorResolver` (registered via `CoreRegistrar.setRequestActorResolver()`) resolves an actor
+ID from raw HTTP requests for WS/SSE upgrade paths where full middleware hasn't run.
+
 ### Event governance
 
 Core now owns the registry-backed event contract:

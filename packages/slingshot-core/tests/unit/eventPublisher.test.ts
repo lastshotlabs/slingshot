@@ -82,9 +82,9 @@ describe('eventPublisher', () => {
       bus: createInProcessAdapter(),
     });
 
-    expect(() => publisher.publish('auth:logout', { userId: 'user-1', sessionId: 'session-1' })).toThrow(
-      'resolved a null scope',
-    );
+    expect(() =>
+      publisher.publish('auth:logout', { userId: 'user-1', sessionId: 'session-1' }),
+    ).toThrow('resolved a null scope');
   });
 
   test('uses the default subscriber authorizer when a definition does not provide one', () => {
@@ -107,18 +107,10 @@ describe('eventPublisher', () => {
     });
 
     expect(
-      authorizeEventSubscriber(
-        definition,
-        { kind: 'user', ownerId: 'user-1' },
-        envelope,
-      ),
+      authorizeEventSubscriber(definition, { kind: 'user', ownerId: 'user-1' }, envelope),
     ).toBe(true);
     expect(
-      authorizeEventSubscriber(
-        definition,
-        { kind: 'user', ownerId: 'user-2' },
-        envelope,
-      ),
+      authorizeEventSubscriber(definition, { kind: 'user', ownerId: 'user-2' }, envelope),
     ).toBe(false);
   });
 });

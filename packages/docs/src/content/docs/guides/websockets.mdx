@@ -45,20 +45,20 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
       const userId = verifyToken(token);
       if (!userId) return new Response('Unauthorized', { status: 401 });
       // Data attached to the socket, available in all handlers
-      return { userId };
+      return { actorId: userId };
     }
 
-    export async function wsOpen(ws: ServerWebSocket<{ userId: string }>) {
-      console.log('Connected:', ws.data.userId);
+    export async function wsOpen(ws: ServerWebSocket<{ actorId: string }>) {
+      console.log('Connected:', ws.data.actorId);
     }
 
-    export async function wsMessage(ws: ServerWebSocket<{ userId: string }>, message: string | Buffer) {
+    export async function wsMessage(ws: ServerWebSocket<{ actorId: string }>, message: string | Buffer) {
       // Echo back
       ws.send(message);
     }
 
-    export async function wsClose(ws: ServerWebSocket<{ userId: string }>) {
-      console.log('Disconnected:', ws.data.userId);
+    export async function wsClose(ws: ServerWebSocket<{ actorId: string }>) {
+      console.log('Disconnected:', ws.data.actorId);
     }
     ```
 
@@ -77,17 +77,17 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
               if (!token) return new Response('Unauthorized', { status: 401 });
               const userId = verifyToken(token);
               if (!userId) return new Response('Unauthorized', { status: 401 });
-              return { userId }; // attached to ws.data
+              return { actorId: userId }; // attached to ws.data
             },
             on: {
               open: (ws) => {
-                console.log('Connected:', ws.data.userId);
+                console.log('Connected:', ws.data.actorId);
               },
               message: (ws, message) => {
                 ws.send(message);
               },
               close: (ws) => {
-                console.log('Disconnected:', ws.data.userId);
+                console.log('Disconnected:', ws.data.actorId);
               },
             },
           },
@@ -104,7 +104,7 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
 Bun's WebSocket server has built-in room support. Clients subscribe to named rooms and publish to them:
 
 ```typescript
-export async function wsOpen(ws: ServerWebSocket<{ userId: string; roomId: string }>) {
+export async function wsOpen(ws: ServerWebSocket<{ actorId: string; roomId: string }>) {
   // Subscribe this connection to a room
   ws.subscribe(ws.data.roomId);
 
@@ -113,13 +113,13 @@ export async function wsOpen(ws: ServerWebSocket<{ userId: string; roomId: strin
     ws.data.roomId,
     JSON.stringify({
       type: 'joined',
-      userId: ws.data.userId,
+      userId: ws.data.actorId,
     }),
   );
 }
 
 export async function wsMessage(
-  ws: ServerWebSocket<{ userId: string; roomId: string }>,
+  ws: ServerWebSocket<{ actorId: string; roomId: string }>,
   msg: string | Buffer,
 ) {
   const data = JSON.parse(msg.toString());
@@ -129,19 +129,19 @@ export async function wsMessage(
     ws.data.roomId,
     JSON.stringify({
       type: 'message',
-      userId: ws.data.userId,
+      userId: ws.data.actorId,
       text: data.text,
     }),
   );
 }
 
-export async function wsClose(ws: ServerWebSocket<{ userId: string; roomId: string }>) {
+export async function wsClose(ws: ServerWebSocket<{ actorId: string; roomId: string }>) {
   ws.unsubscribe(ws.data.roomId);
   ws.publish(
     ws.data.roomId,
     JSON.stringify({
       type: 'left',
-      userId: ws.data.userId,
+      userId: ws.data.actorId,
     }),
   );
 }
@@ -161,7 +161,7 @@ export async function wsUpgrade(req: Request) {
   const userId = verifyToken(token);
   if (!userId) return new Response('Unauthorized', { status: 401 });
 
-  return { userId, roomId };
+  return { actorId: userId, roomId };
 }
 ```
 
@@ -192,12 +192,12 @@ declare function checkPermission(
 ): Promise<boolean>;
 
 export async function wsRoomSubscribe(
-  ws: ServerWebSocket<{ userId: string }>,
+  ws: ServerWebSocket<{ actorId: string }>,
   room: string,
 ): Promise<boolean> {
   // Return true to allow, false to deny
   const [resourceType, resourceId] = room.split(':');
-  return checkPermission(ws.data.userId, 'read', resourceType, resourceId);
+  return checkPermission(ws.data.actorId, 'read', resourceType, resourceId);
 }
 ```
 

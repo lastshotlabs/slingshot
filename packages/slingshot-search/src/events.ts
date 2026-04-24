@@ -71,4 +71,3 @@ declare module '@lastshotlabs/slingshot-core' {
 }
 
 export {};
-

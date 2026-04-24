@@ -2,7 +2,7 @@ import { requireRole } from '@auth/middleware/requireRole';
 import { requireVerifiedEmail } from '@auth/middleware/requireVerifiedEmail';
 import { userAuth } from '@auth/middleware/userAuth';
 import { cacheResponse } from '@framework/middleware/cacheResponse';
-import { createRouter } from '@lastshotlabs/slingshot-core';
+import { createRouter, getActor } from '@lastshotlabs/slingshot-core';
 
 export const router = createRouter();
 
@@ -58,7 +58,11 @@ router.post('/public/action', c => {
 
 // Exposes identify context without requiring auth — used by identify.test.ts
 router.get('/me-raw', c => {
-  return c.json({ authUserId: c.get('authUserId') ?? null, sessionId: c.get('sessionId') ?? null });
+  const actor = getActor(c);
+  return c.json({
+    actorId: actor.kind === 'anonymous' ? null : actor.id,
+    sessionId: actor.sessionId,
+  });
 });
 
 // Requires email verification — used by requireVerifiedEmail.test.ts

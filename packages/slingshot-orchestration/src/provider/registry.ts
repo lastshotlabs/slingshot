@@ -1,10 +1,5 @@
 import { OrchestrationError } from '../errors';
-import type {
-  AnyResolvedTask,
-  AnyResolvedWorkflow,
-  StepEntry,
-  WorkflowEntry,
-} from '../types';
+import type { AnyResolvedTask, AnyResolvedWorkflow, StepEntry, WorkflowEntry } from '../types';
 import type {
   OrchestrationProviderRegistry,
   ProviderParallelManifest,
@@ -43,7 +38,9 @@ function toTaskManifest(task: AnyResolvedTask): ProviderTaskManifest {
   });
 }
 
-function toProviderStep<TWorkflowInput>(entry: StepEntry<TWorkflowInput>): ProviderStepManifest<TWorkflowInput> {
+function toProviderStep<TWorkflowInput>(
+  entry: StepEntry<TWorkflowInput>,
+): ProviderStepManifest<TWorkflowInput> {
   return Object.freeze({
     _tag: 'Step',
     name: entry.name,

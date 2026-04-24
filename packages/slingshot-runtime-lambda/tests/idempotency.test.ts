@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { type Actor, type HandlerMeta, type SlingshotContext } from '@lastshotlabs/slingshot-core';
+import {
+  ANONYMOUS_ACTOR,
+  type Actor,
+  type HandlerMeta,
+  type SlingshotContext,
+} from '@lastshotlabs/slingshot-core';
 import { invokeWithRecordIdempotency } from '../src/idempotency';
 
 function createContext(): SlingshotContext {
@@ -34,12 +39,10 @@ function createContext(): SlingshotContext {
 }
 
 function createMeta(overrides?: Partial<HandlerMeta>): HandlerMeta {
-  const authUserId = overrides?.authUserId ?? 'user-1';
-  const tenantId = overrides?.tenantId ?? 'tenant-1';
   const actor: Actor = overrides?.actor ?? {
-    id: authUserId,
+    id: 'user-1',
     kind: 'user',
-    tenantId,
+    tenantId: 'tenant-1',
     sessionId: null,
     roles: null,
     claims: {},
@@ -47,13 +50,9 @@ function createMeta(overrides?: Partial<HandlerMeta>): HandlerMeta {
   return {
     requestId: 'req-1',
     actor,
-    requestTenantId: tenantId,
-    tenantId,
-    authUserId,
+    requestTenantId: actor.tenantId,
     correlationId: 'corr-1',
     ip: null,
-    authClientId: null,
-    bearerClientId: null,
     bearerAuthenticated: false,
     ...overrides,
   };
@@ -139,9 +138,7 @@ describe('invokeWithRecordIdempotency', () => {
   test('requires an authenticated subject for user-scoped keys', async () => {
     const ctx = createContext();
     const meta = createMeta({
-      authUserId: null,
-      authClientId: null,
-      bearerClientId: null,
+      actor: { ...ANONYMOUS_ACTOR },
       idempotencyKey: 'idem-4',
     });
 

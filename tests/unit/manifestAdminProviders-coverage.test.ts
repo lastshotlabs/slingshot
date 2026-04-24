@@ -88,27 +88,63 @@ describe('createDeferredAdminProviders — coverage', () => {
   // -----------------------------------------------------------------------
   // accessProvider.verifyRequest — lines 84-94
   // -----------------------------------------------------------------------
-  test('verifyRequest returns null when authUserId is not a string', async () => {
+  test('verifyRequest returns null when actor id is not a string', async () => {
     const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
-    const c = mockContext({ authUserId: undefined, roles: ['super-admin'] });
+    const c = mockContext({
+      actor: Object.freeze({
+        id: null,
+        kind: 'anonymous' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: ['super-admin'],
+        claims: {},
+      }),
+    });
     expect(await result.accessProvider!.verifyRequest(c as never)).toBeNull();
   });
 
   test('verifyRequest returns null when roles is not an array', async () => {
     const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
-    const c = mockContext({ authUserId: 'u1', roles: 'not-array' });
+    const c = mockContext({
+      actor: Object.freeze({
+        id: 'u1',
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: 'not-array' as any,
+        claims: {},
+      }),
+    });
     expect(await result.accessProvider!.verifyRequest(c as never)).toBeNull();
   });
 
   test('verifyRequest returns null when roles lacks super-admin', async () => {
     const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
-    const c = mockContext({ authUserId: 'u1', roles: ['editor'] });
+    const c = mockContext({
+      actor: Object.freeze({
+        id: 'u1',
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: ['editor'],
+        claims: {},
+      }),
+    });
     expect(await result.accessProvider!.verifyRequest(c as never)).toBeNull();
   });
 
   test('verifyRequest filters non-string role values', async () => {
     const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
-    const c = mockContext({ authUserId: 'u1', roles: [42, 'super-admin', null] });
+    const c = mockContext({
+      actor: Object.freeze({
+        id: 'u1',
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: [42, 'super-admin', null] as any,
+        claims: {},
+      }),
+    });
     const principal = await result.accessProvider!.verifyRequest(c as never);
     expect(principal).not.toBeNull();
     expect(principal!.subject).toBe('u1');
@@ -118,7 +154,16 @@ describe('createDeferredAdminProviders — coverage', () => {
 
   test('verifyRequest returns principal for valid super-admin user', async () => {
     const result = createDeferredAdminProviders({ accessProvider: 'slingshot-auth' });
-    const c = mockContext({ authUserId: 'admin-1', roles: ['super-admin', 'editor'] });
+    const c = mockContext({
+      actor: Object.freeze({
+        id: 'admin-1',
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: ['super-admin', 'editor'],
+        claims: {},
+      }),
+    });
     const principal = await result.accessProvider!.verifyRequest(c as never);
     expect(principal).toEqual({
       subject: 'admin-1',

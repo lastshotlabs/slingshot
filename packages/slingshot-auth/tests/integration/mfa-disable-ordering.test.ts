@@ -37,8 +37,17 @@ function buildMfaApp(
     ),
   );
   app.use('*', async (c, next) => {
-    c.set('authUserId', userId);
-    c.set('sessionId', 'test-session');
+    c.set(
+      'actor',
+      Object.freeze({
+        id: userId,
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: 'test-session',
+        roles: null,
+        claims: {},
+      }),
+    );
     await next();
   });
   app.route('/', createMfaRouter({ rateLimit }, runtime));

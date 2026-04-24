@@ -3,19 +3,14 @@ import { getRedisConnectionOptions } from '@lib/redis';
 import type { Server } from 'bun';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { dirname, resolve } from 'path';
-import {
-  createEventSchemaRegistry,
-} from '@lastshotlabs/slingshot-core';
+import { createEventSchemaRegistry } from '@lastshotlabs/slingshot-core';
 import type {
   EventSchemaRegistry,
   KafkaConnectorHandle,
   SlingshotEventBus,
   ValidationMode,
 } from '@lastshotlabs/slingshot-core';
-import type {
-  AnyResolvedTask,
-  AnyResolvedWorkflow,
-} from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedTask, AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 import { type CreateServerConfig, createServer, getServerContext } from '../server';
 import { createBuiltinPluginFactory, loadBuiltinPlugin } from './builtinPlugins';
 import { validateAppManifest } from './manifest';
@@ -88,7 +83,10 @@ function registerOrchestrationCollection(
 export function resolveHandlersFileEntries(
   handlersConfig: string | { dir: string } | false | undefined,
   baseDir: string,
-): { mode: 'disabled' } | { mode: 'file'; filePath: string } | { mode: 'dir'; dirPath: string; files: string[] } {
+):
+  | { mode: 'disabled' }
+  | { mode: 'file'; filePath: string }
+  | { mode: 'dir'; dirPath: string; files: string[] } {
   if (handlersConfig === false) {
     return { mode: 'disabled' };
   }
@@ -842,7 +840,9 @@ export async function createServerFromManifest(
       const { runPluginSeed } = await import('@framework/runPluginLifecycle');
       await runPluginSeed(
         ctx.plugins as import('@lastshotlabs/slingshot-core').SlingshotPlugin[],
-        ctx.app as import('@hono/zod-openapi').OpenAPIHono<import('@lastshotlabs/slingshot-core').AppEnv>,
+        ctx.app as import('@hono/zod-openapi').OpenAPIHono<
+          import('@lastshotlabs/slingshot-core').AppEnv
+        >,
         ctx.bus,
         ctx.events,
         seed as Record<string, unknown>,

@@ -147,7 +147,7 @@ const rateLimitSchema = z.object({
         .describe(
           'Built-in rate-limit key strategy. ' +
             '"ip" keys by client IP address (framework default). ' +
-            '"user" keys by authenticated user ID (authUserId); unauthenticated requests use IP fallback. ' +
+            '"user" keys by authenticated actor ID; unauthenticated requests use IP fallback. ' +
             '"ip+user" uses user ID when authenticated, IP when anonymous.',
         ),
       appManifestHandlerRefSchema,
@@ -163,7 +163,7 @@ const rateLimitSchema = z.object({
         .enum(['authenticated'])
         .describe(
           'Built-in rate-limit skip strategy. ' +
-            '"authenticated" skips rate limiting for requests with a valid authUserId.',
+            '"authenticated" skips rate limiting for requests with an authenticated actor.',
         ),
       appManifestHandlerRefSchema,
     ])

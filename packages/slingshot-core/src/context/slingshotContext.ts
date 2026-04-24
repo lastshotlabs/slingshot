@@ -5,8 +5,8 @@ import type {
   EmailTemplate,
   FingerprintBuilder,
   RateLimitAdapter,
+  RequestActorResolver,
   RouteAuthRegistry,
-  UserResolver,
 } from '../coreContracts';
 import type { CronRegistryRepository } from '../cronRegistry';
 import type { DataEncryptionKey } from '../crypto';
@@ -685,8 +685,8 @@ export interface SlingshotContext {
   /** Route auth registry for framework-owned routes. */
   readonly routeAuth: RouteAuthRegistry | null;
 
-  /** User resolver used by framework WS/SSE and related helpers. */
-  readonly userResolver: UserResolver | null;
+  /** Request actor resolver used by framework WS/SSE and related helpers. */
+  readonly actorResolver: RequestActorResolver | null;
 
   /** Rate limit adapter used by framework middleware. */
   readonly rateLimitAdapter: RateLimitAdapter | null;

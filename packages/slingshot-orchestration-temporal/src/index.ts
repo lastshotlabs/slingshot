@@ -28,7 +28,12 @@ export { mapTemporalStatus } from './statusMap';
 /**
  * Build and encode Temporal visibility/search-attribute payloads for Slingshot runs.
  */
-export { buildSearchAttributes, buildVisibilityQuery, encodeTag, encodeTags } from './searchAttributes';
+export {
+  buildSearchAttributes,
+  buildVisibilityQuery,
+  encodeTag,
+  encodeTags,
+} from './searchAttributes';
 /**
  * Derive the deterministic Temporal workflow ID used for a portable Slingshot run.
  */

@@ -52,7 +52,7 @@ function createMockWs(id: string, endpoint = '/ws') {
       id,
       endpoint,
       rooms: new Set<string>(),
-      userId: null,
+      actorId: null,
       sessionId: undefined as string | undefined,
     },
     sent,

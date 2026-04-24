@@ -11,14 +11,14 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## What the registrar holds
 
-| Capability                                     | Registrar method          | Published by                     | Read from context via                        |
-| ---------------------------------------------- | ------------------------- | -------------------------------- | -------------------------------------------- |
-| Route auth helpers (`userAuth`, `requireRole`) | `setRouteAuth()`          | `slingshot-auth`                 | `getRouteAuth(ctx)` or `ctx.routeAuth`       |
-| User resolver                                  | `setUserResolver()`       | `slingshot-auth`                 | `getUserResolver(ctx)` or `ctx.userResolver` |
-| Email templates                                | `addEmailTemplates()`     | `slingshot-auth`, custom plugins | `ctx.emailTemplates`                         |
-| Rate limit adapter                             | `setRateLimitAdapter()`   | `slingshot-auth`                 | `ctx.rateLimitAdapter`                       |
-| Cache adapters                                 | `addCacheAdapter()`       | Any plugin                       | `ctx.cacheAdapters`                          |
-| Fingerprint builder                            | `setFingerprintBuilder()` | `slingshot-auth`                 | `ctx.fingerprintBuilder`                     |
+| Capability                                     | Registrar method            | Published by                     | Read from context via                                 |
+| ---------------------------------------------- | --------------------------- | -------------------------------- | ----------------------------------------------------- |
+| Route auth helpers (`userAuth`, `requireRole`) | `setRouteAuth()`            | `slingshot-auth`                 | `getRouteAuth(ctx)` or `ctx.routeAuth`                |
+| Request actor resolver                         | `setRequestActorResolver()` | `slingshot-auth`                 | `getRequestActorResolver(ctx)` or `ctx.actorResolver` |
+| Email templates                                | `addEmailTemplates()`       | `slingshot-auth`, custom plugins | `ctx.emailTemplates`                                  |
+| Rate limit adapter                             | `setRateLimitAdapter()`     | `slingshot-auth`                 | `ctx.rateLimitAdapter`                                |
+| Cache adapters                                 | `addCacheAdapter()`         | Any plugin                       | `ctx.cacheAdapters`                                   |
+| Fingerprint builder                            | `setFingerprintBuilder()`   | `slingshot-auth`                 | `ctx.fingerprintBuilder`                              |
 
 ## Accessing capabilities from the registrar
 
@@ -26,7 +26,7 @@ After the plugin lifecycle completes, the registrar drains its values into `Slin
 
 ```typescript
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { getContext, getRouteAuth, getUserResolver } from '@lastshotlabs/slingshot-core';
+import { getContext, getRequestActorResolver, getRouteAuth } from '@lastshotlabs/slingshot-core';
 
 const plugin: SlingshotPlugin = {
   name: 'example',
@@ -35,16 +35,16 @@ const plugin: SlingshotPlugin = {
 
     // Read what other plugins have published
     const userAuth = getRouteAuth(ctx)?.userAuth;
-    const userResolver = getUserResolver(ctx);
+    const actorResolver = getRequestActorResolver(ctx);
     void userAuth;
-    void userResolver;
+    void actorResolver;
   },
 };
 
 void plugin;
 ```
 
-## Publishing a user resolver
+## Publishing a request actor resolver
 
 If your plugin provides user lookup (for WebSocket auth, admin, etc.), publish it during `setupPost` via `config.registrar`:
 
@@ -60,8 +60,8 @@ const adapter = {
 const plugin: SlingshotPlugin = {
   name: 'example',
   setupPost({ config }) {
-    config.registrar.setUserResolver({
-      async resolveUserId(req: Request): Promise<string | null> {
+    config.registrar.setRequestActorResolver({
+      async resolveActorId(req: Request): Promise<string | null> {
         const token = req.headers.get('authorization')?.replace('Bearer ', '');
         if (!token) return null;
         const user = await adapter.verifyToken(token);
@@ -109,7 +109,7 @@ The registrar holds **shared cross-package capabilities** with a stable contract
 Use the registrar for:
 
 - Route middleware that route files import directly
-- Capabilities the framework consumes (user resolver, cache adapters)
+- Capabilities the framework consumes (request actor resolver, cache adapters)
 - Named template registries
 
 Use `pluginState` for:
@@ -133,7 +133,7 @@ Without it, there's no clean way to share runtime capabilities across packages. 
 
 **Hardcoding in the framework** doesn't scale. The framework can't know about your custom plugins, and it shouldn't need to.
 
-The registrar gives startup a structured handoff point. Auth calls `config.registrar.setRouteAuth(...)` during its `setupPost`. After all plugins run, `createApp()` drains those values into `SlingshotContext` — your route files read them via `getRouteAuth(ctx)` without importing auth internals. Each app instance gets its own registrar, so tests that run two apps in the same process don't interfere with each other.
+The registrar gives startup a structured handoff point. Auth calls `config.registrar.setRouteAuth(...)` during its `setupPost`. After all plugins run, `createApp()` drains those values into `SlingshotContext` -- your route files read them via `getRouteAuth(ctx)` without importing auth internals. Each app instance gets its own registrar, so tests that run two apps in the same process don't interfere with each other.
 
 ## See also
 

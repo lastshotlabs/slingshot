@@ -32,8 +32,8 @@ export interface IncomingHandler {
  * @internal
  */
 export interface IncomingHandlerContext {
-  /** Authenticated user ID from the WS session. */
-  userId: string;
+  /** Authenticated actor ID from the WS session. */
+  actorId: string;
   /** Socket/connection ID of the sender. Used for excluding sender from broadcasts. */
   socketId: string;
   /** The room ID extracted from the channel URL parameter. */
@@ -96,14 +96,14 @@ export function buildIncomingDispatch(
         if (!roomId) return;
 
         // Verify membership
-        const member = await state.members.findMember({ roomId, userId: ctx.userId });
+        const member = await state.members.findMember({ roomId, userId: ctx.actorId });
         if (!member) return;
 
         // Volatile broadcast — exclude sender
         ctx.publish(
           `messages:${roomId}:live`,
           'chat.typing',
-          { userId: ctx.userId, roomId },
+          { userId: ctx.actorId, roomId },
           { volatile: true, exclude: new Set([ctx.socketId]) },
         );
       },
@@ -130,7 +130,7 @@ export function buildIncomingDispatch(
         const messageId = payload.messageId;
         if (!roomId || !messageId) return;
 
-        const member = await state.members.findMember({ roomId, userId: ctx.userId });
+        const member = await state.members.findMember({ roomId, userId: ctx.actorId });
         if (!member) return;
 
         // Verify the messageId actually belongs to this room.
@@ -154,18 +154,18 @@ export function buildIncomingDispatch(
         // upsert. incrementReadBy must only fire on the first read — not on every
         // subsequent chat.read event for the same message from the same user.
         const existingReceipts = await state.receipts.listByMessage({ messageId });
-        const alreadyRead = existingReceipts.items.some(r => r.userId === ctx.userId);
+        const alreadyRead = existingReceipts.items.some(r => r.userId === ctx.actorId);
 
         // Upsert receipt (idempotent — returns existing if already present)
         const receipt = await state.receipts.upsertReceipt({
-          userId: ctx.userId,
+          userId: ctx.actorId,
           messageId,
           roomId,
           readAt,
         });
 
         // Update lastReadAt on membership
-        await state.members.updateLastRead({ roomId, userId: ctx.userId }, { lastReadAt: readAt });
+        await state.members.updateLastRead({ roomId, userId: ctx.actorId }, { lastReadAt: readAt });
 
         // Only increment readBy count on the first read of this message by this user.
         if (!alreadyRead) {
@@ -176,7 +176,7 @@ export function buildIncomingDispatch(
         const busPayload: ReadReceiptCreatedPayload & { messageId: string; readAt: string } = {
           receipt,
           roomId,
-          userId: ctx.userId,
+          userId: ctx.actorId,
           messageId,
           readAt,
         };

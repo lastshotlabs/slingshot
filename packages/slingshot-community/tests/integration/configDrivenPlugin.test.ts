@@ -10,7 +10,7 @@
  * The framework config is a hand-rolled in-memory fake modeled after
  * packages/slingshot-entity/tests/integration/entityPlugin.test.ts. A tiny
  * slingshotCtx middleware is installed so applyRouteConfig's auth path
- * can resolve routeAuth.userAuth to set authUserId on the context.
+ * can resolve routeAuth.userAuth to set the actor on the context.
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
@@ -294,8 +294,17 @@ async function createCommunityHarness(opts?: {
     userAuth: (async (c, next) => {
       const uid = c.req.header('x-test-user') ?? userId;
       const setter = c as unknown as { set(k: string, v: unknown): void };
-      setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
-      setter.set('authUserId', uid);
+      setter.set(
+        'actor',
+        Object.freeze({
+          id: uid,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     }) as MiddlewareHandler,
     requireRole: () => async (_c, next) => next(),

@@ -178,7 +178,6 @@ describe('parseUpload', () => {
       },
       get: (key: string) => {
         if (key === 'slingshotCtx') return slingshotCtx;
-        if (key === 'authUserId') return null;
         if (key === 'tenantId') return null;
         if (key === 'uploadBucket') return undefined;
         return null;

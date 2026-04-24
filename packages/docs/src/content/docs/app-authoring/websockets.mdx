@@ -1,0 +1,117 @@
+---
+title: WebSockets
+description: Endpoint config, incoming events, rooms, presence, recovery, and transport
+---
+
+WebSockets are a first-class core transport in Slingshot.
+
+They are not interchangeable with SSE. Use WebSockets when clients need to send messages back,
+subscribe to rooms, or participate in presence and recovery flows.
+
+## A minimal endpoint
+
+```typescript title="src/index.ts"
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  ws: {
+    endpoints: {
+      '/ws': {
+        presence: true,
+        heartbeat: true,
+        rateLimit: { windowMs: 10_000, maxMessages: 50, onExceeded: 'close' },
+        onRoomSubscribe: async (ws, room) => room.startsWith(`user:${ws.data.actorId}:`),
+        incoming: {
+          'chat:message': {
+            auth: 'userAuth',
+            handler: (_ws, payload, ctx) => {
+              const room = `user:${ctx.actorId}:inbox`;
+              ctx.publish(room, { type: 'chat:message', payload });
+              return { delivered: true };
+            },
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+## The endpoint surface
+
+Each endpoint can configure:
+
+- `on.open`, `on.message`, `on.close`, `on.drain`
+- `onRoomSubscribe`
+- `incoming` named event handlers
+- `middleware` for incoming events
+- `presence`
+- `heartbeat`
+- `persistence`
+- `recovery`
+- `rateLimit`
+
+That is a real runtime surface, not just a thin socket wrapper.
+
+## Rooms and publish
+
+Incoming event handlers get a `WsEventContext` with:
+
+- `publish(room, data)`
+- `subscribe(room)`
+- `unsubscribe(room)`
+- `socketId`
+- `actorId`
+- `endpoint`
+
+That is the canonical room-level API for framework-managed WebSocket behavior.
+
+## Presence and recovery
+
+Presence and recovery are separate concerns:
+
+- `presence` tracks connected actors and room membership
+- `recovery` lets clients reconnect and resume within a configured window
+
+Recovery requires persistence. Slingshot will reject invalid recovery configuration at startup
+instead of failing later at runtime.
+
+## Transport and scaling
+
+Single-instance room publish works without extra setup. Multi-instance delivery requires a shared
+WebSocket transport:
+
+```typescript
+await createServer({
+  ws: {
+    transport: myWsTransport,
+    endpoints: {
+      '/ws': { presence: true },
+    },
+  },
+});
+
+declare const myWsTransport: import('@lastshotlabs/slingshot').WsConfig['transport'];
+```
+
+This is separate from the event bus. The event bus handles app events. The WebSocket transport
+handles cross-instance room fan-out.
+
+## Package self-wiring
+
+Packages can bootstrap endpoint hooks through the root `ws` config. `createApp()` exposes the
+bootstrap endpoint map on context so packages can attach `incoming` handlers or subscribe guards
+before `createServer()` starts the live transport.
+
+That is how package-owned realtime behavior can remain package-owned instead of leaking into the app
+root.
+
+## Use WebSockets for
+
+- chat and collaborative editing
+- room subscriptions
+- presence
+- low-latency bidirectional workflows
+
+Use [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) when the stream is
+server-to-client only.

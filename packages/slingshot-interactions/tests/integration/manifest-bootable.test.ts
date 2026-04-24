@@ -294,15 +294,14 @@ describe('Plugin bootstrap from manifest JSON', () => {
 
   test('dispatch route returns 400 for invalid JSON body', async () => {
     const { app } = await bootFromManifest();
-    // Route reads authUserId from c.get('authUserId') — simulate via slingshotCtx middleware
-    // The test context sets authUserId via the context map; we add a pre-route middleware.
+    // Route reads actor from c.get('actor') — simulate via slingshotCtx middleware.
     // Simplest: directly call with bad JSON and a fake user header.
     const res = await app.request('/interactions/dispatch', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-test-user': 'user_test' },
       body: 'not-json',
     });
-    // Returns 401 (authUserId not set from x-test-user) or 400 depending on middleware order.
+    // Returns 401 (actor not set from x-test-user) or 400 depending on middleware order.
     // Either way it does NOT crash.
     expect([400, 401]).toContain(res.status);
   });

@@ -1,5 +1,6 @@
 import type { SlingshotContext } from './context/slingshotContext';
 import type { HandlerMeta, SlingshotHandler } from './handler';
+import type { Actor } from './identity';
 import type { SlingshotRuntime } from './runtime';
 
 /**
@@ -22,12 +23,33 @@ export interface RecordOutcome {
 }
 
 /**
+ * Metadata extracted from a trigger event by a {@link TriggerAdapter}.
+ *
+ * Extends `Partial<HandlerMeta>` with raw identity fields that the Lambda
+ * runtime uses to construct the canonical {@link Actor}. Trigger adapters
+ * can either set the `actor` field directly or provide the raw identity
+ * fields and let `buildMeta` derive the actor.
+ */
+export interface TriggerExtractedMeta extends Partial<HandlerMeta> {
+  /** Tenant context from the trigger event metadata. */
+  tenantId?: string | null;
+  /** User ID from the trigger event metadata. */
+  authUserId?: string | null;
+  /** M2M client ID from the trigger event metadata. */
+  authClientId?: string | null;
+  /** Bearer client ID from the trigger event metadata. */
+  bearerClientId?: string | null;
+  /** Effective roles from the trigger event metadata. */
+  roles?: string[] | null;
+}
+
+/**
  * Cloud-agnostic trigger adapter.
  */
 export interface TriggerAdapter<TEvent = unknown, TResult = unknown> {
   readonly kind: string;
   extractInputs(event: TEvent): TriggerRecord[];
-  extractMeta(event: TEvent, record: TriggerRecord): Partial<HandlerMeta>;
+  extractMeta(event: TEvent, record: TriggerRecord): TriggerExtractedMeta;
   assembleResult(outcomes: RecordOutcome[]): TResult;
 }
 

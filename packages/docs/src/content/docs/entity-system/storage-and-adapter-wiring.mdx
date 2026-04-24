@@ -1,0 +1,90 @@
+---
+title: Storage and Adapter Wiring
+description: Swappable backends, factory composition, and standard vs manual wiring
+---
+
+The storage story is one of the core strengths of the entity system.
+
+One entity definition can target multiple backends without changing the domain model.
+
+## The default story: `createEntityFactories(...)`
+
+```typescript
+import { createEntityFactories } from '@lastshotlabs/slingshot';
+
+const postFactories = createEntityFactories(Post, PostOps);
+```
+
+From one entity config, the framework can resolve adapters for:
+
+- `memory`
+- `redis`
+- `sqlite`
+- `mongo`
+- `postgres`
+
+That is the core "swappable storage" story.
+
+## Wiring modes in `entity(...)`
+
+Entity modules support three wiring modes:
+
+### `standard`
+
+The default. Let the framework resolve the adapter from the entity config and active store.
+
+### `factories`
+
+Provide an explicit repo-factory set, usually from `createEntityFactories(...)` or
+`createCompositeFactories(...)`.
+
+```typescript
+entity({
+  config: Post,
+  operations: PostOps,
+  wiring: {
+    mode: 'factories',
+    factories: createEntityFactories(Post, PostOps),
+  },
+})
+```
+
+### `manual`
+
+Fully manual adapter construction for advanced cases.
+
+```typescript
+entity({
+  config: Post,
+  wiring: {
+    mode: 'manual',
+    buildAdapter: (storeType, infra) => {
+      void storeType;
+      return createMyAdapter(infra);
+    },
+  },
+})
+
+declare function createMyAdapter(infra: unknown): unknown;
+```
+
+## Composite factories
+
+Use `createCompositeFactories(...)` when a package owns several related entities and you want one
+combined factory surface for cross-entity behavior.
+
+## Swappable storage is not just backend swapping
+
+The advanced part of the story is that consumers can also shape:
+
+- field naming conventions
+- system-field conventions
+- TTL field mapping
+- default generation and update conventions
+
+That is why the entity docs need to explain backend swapping and consumer shape hardening together.
+
+## Next
+
+- [defineEntity](/slingshot/entity-system/define-entity/)
+- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/)

@@ -240,8 +240,17 @@ export async function createPollsTestApp(
       const uid = c.req.header('x-user-id') ?? c.req.header('x-test-user');
       if (!uid) return c.json({ error: 'Unauthorized' }, 401);
       const setter = c as typeof c & { set(key: string, value: unknown): void };
-      setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
-      setter.set('authUserId', uid);
+      setter.set(
+        'actor',
+        Object.freeze({
+          id: uid,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     }) as MiddlewareHandler,
     requireRole: () => ((_c, next) => next()) as MiddlewareHandler,
@@ -251,8 +260,17 @@ export async function createPollsTestApp(
     const uid = c.req.header('x-user-id') ?? c.req.header('x-test-user');
     if (uid) {
       const setter = c as typeof c & { set(key: string, value: unknown): void };
-      setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
-      setter.set('authUserId', uid);
+      setter.set(
+        'actor',
+        Object.freeze({
+          id: uid,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
     }
     const tid = c.req.header('x-tenant-id');
     if (tid) {

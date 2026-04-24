@@ -102,9 +102,27 @@ describe('buildRateLimitMiddleware', () => {
     let status = 200;
     let body: unknown;
 
+    const actor = userId
+      ? Object.freeze({
+          id: userId,
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        })
+      : Object.freeze({
+          id: null,
+          kind: 'anonymous' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        });
+
     const c = {
       get(key: string) {
-        if (key === 'authUserId') return userId;
+        if (key === 'actor') return actor;
         if (key === 'tenantId') return tenantId;
         return undefined;
       },

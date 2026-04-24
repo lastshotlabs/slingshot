@@ -5,7 +5,7 @@ import { getAuthRuntimeFromRequest } from '@lastshotlabs/slingshot-auth';
 import { createCommunityPlugin } from '@lastshotlabs/slingshot-community';
 import type { CommunityPluginConfig } from '@lastshotlabs/slingshot-community';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { PERMISSIONS_STATE_KEY, getContext } from '@lastshotlabs/slingshot-core';
+import { PERMISSIONS_STATE_KEY, getActor, getContext } from '@lastshotlabs/slingshot-core';
 import { createNotificationsPlugin } from '@lastshotlabs/slingshot-notifications';
 import { createOAuthPlugin } from '@lastshotlabs/slingshot-oauth';
 import {
@@ -201,23 +201,22 @@ export function notificationsPlugin(): SlingshotPlugin {
 }
 
 /**
- * Middleware that bridges the slingshot-auth identity context (authUserId + roles)
- * to the communityPrincipal context variable expected by community routes.
- * Must be registered after identify runs.
+ * Middleware that bridges the actor identity to the communityPrincipal context
+ * variable expected by community routes. Must be registered after identify runs.
  */
 export const communityAuthBridge = async (c: any, next: () => Promise<void>) => {
-  const userId = c.get('authUserId');
-  if (userId) {
-    let roles: string[] = c.get('roles') ?? [];
+  const actor = getActor(c);
+  if (actor.kind !== 'anonymous' && actor.id) {
+    let roles: string[] = actor.roles ? [...actor.roles] : [];
     if (!roles.length) {
       try {
         const adapter = getAuthRuntimeFromRequest(c).adapter;
-        roles = adapter.getEffectiveRoles ? await adapter.getEffectiveRoles(userId, null) : [];
+        roles = adapter.getEffectiveRoles ? await adapter.getEffectiveRoles(actor.id, null) : [];
       } catch {
         roles = [];
       }
     }
-    c.set('communityPrincipal', { subject: userId, roles });
+    c.set('communityPrincipal', { subject: actor.id, roles });
   }
   await next();
 };

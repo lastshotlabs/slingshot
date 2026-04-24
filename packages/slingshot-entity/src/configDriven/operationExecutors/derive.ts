@@ -225,7 +225,9 @@ export function deriveMongo(
       const resolved = resolveWhere(source.where, params);
       const query: Record<string, unknown> = {};
       for (const [field, target] of Object.entries(resolved)) {
-        const mongoField = config.fields[field].primary ? '_id' : field;
+        const mongoField = config.fields[field].primary
+          ? config._storageFields.mongoPkField
+          : field;
         query[mongoField] = target;
       }
       const docs = await getModel().find(query).lean();

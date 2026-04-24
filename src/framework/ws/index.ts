@@ -1,7 +1,7 @@
-import { resolveUserId } from '@framework/lib/resolveUserId';
+import { resolveActorId } from '@framework/lib/resolveActorId';
 import type { Server } from 'bun';
 import { setStandaloneClientIp } from '@lastshotlabs/slingshot-core';
-import type { UserResolver } from '@lastshotlabs/slingshot-core';
+import type { RequestActorResolver } from '@lastshotlabs/slingshot-core';
 
 /**
  * Per-socket data attached to every WebSocket connection by the Bun server.
@@ -16,8 +16,8 @@ import type { UserResolver } from '@lastshotlabs/slingshot-core';
 export type SocketData<T extends object = object> = {
   /** Unique connection identifier (UUID v4), assigned on upgrade. */
   id: string;
-  /** Authenticated user ID, or `null` for unauthenticated connections. */
-  userId: string | null;
+  /** Authenticated actor ID, or `null` for unauthenticated connections. */
+  actorId: string | null;
   /** Set of room names this socket has joined. Managed by the WebSocket plugin. */
   rooms: Set<string>;
   /** Upgrade path this socket connected via, e.g. `"/chat"`. Used as a routing key. */
@@ -31,16 +31,16 @@ type BaseSocketData = SocketData;
 /**
  * Create the default WebSocket upgrade handler for a Bun HTTP server.
  *
- * Resolves the authenticated `userId` from the upgrade request's session cookie or
- * bearer token (via the optional `userResolver`), then calls `server.upgrade()` to
+ * Resolves the authenticated `actorId` from the upgrade request's session cookie or
+ * bearer token (via the optional `actorResolver`), then calls `server.upgrade()` to
  * promote the connection to a WebSocket. If the upgrade succeeds the handler returns
  * `undefined` (Bun expects no response for successful upgrades); on failure it returns
  * a 400 JSON error response.
  *
  * Auth failure is not a hard rejection - unauthenticated connections proceed with
- * `userId: null`. That includes invalid tokens, stale sessions, suspension,
+ * `actorId: null`. That includes invalid tokens, stale sessions, suspension,
  * required-email-verification failures, and session-binding mismatches resolved
- * by the active `userResolver`. Enforce authentication in your WebSocket `open`
+ * by the active `actorResolver`. Enforce authentication in your WebSocket `open`
  * handler or a wrapping middleware if you require it.
  *
  * @param server - The Bun `Server` instance that owns this WebSocket connection.
@@ -48,7 +48,7 @@ type BaseSocketData = SocketData;
  *   (or a compatible supertype) so `server.upgrade()` can attach the socket data.
  * @param endpoint - Route path this upgrade handler is mounted on (e.g., `"/chat"`).
  *   Stored in `SocketData.endpoint` for use in room routing and fanout.
- * @param userResolver - Optional custom resolver for extracting the authenticated user
+ * @param actorResolver - Optional custom resolver for extracting the authenticated user
  *   ID from the upgrade request. Uses the framework's default cookie/token resolver
  *   when `null` or omitted.
  * @returns An async handler `(req: Request) => Promise<Response | undefined>`.
@@ -61,7 +61,7 @@ type BaseSocketData = SocketData;
  * ```
  */
 export const createWsUpgradeHandler =
-  (server: Server<BaseSocketData>, endpoint: string, userResolver?: UserResolver | null) =>
+  (server: Server<BaseSocketData>, endpoint: string, actorResolver?: RequestActorResolver | null) =>
   async (req: Request): Promise<Response | undefined> => {
     try {
       const ip = server.requestIP(req)?.address;
@@ -69,9 +69,9 @@ export const createWsUpgradeHandler =
     } catch {
       // intentional — requestIP may throw in some environments
     }
-    const userId = await resolveUserId(req, userResolver ?? null);
+    const actorId = await resolveActorId(req, actorResolver ?? null);
     const upgraded = server.upgrade(req, {
-      data: { id: crypto.randomUUID(), userId, rooms: new Set(), endpoint },
+      data: { id: crypto.randomUUID(), actorId, rooms: new Set(), endpoint },
     });
     return upgraded ? undefined : Response.json({ error: 'Upgrade failed' }, { status: 400 });
   };

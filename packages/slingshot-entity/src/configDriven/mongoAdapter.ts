@@ -136,6 +136,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
   const collectionName = storageName(config, 'mongo');
   const pkField = config._pkField;
   const mongoPkField = config._storageFields.mongoPkField;
+  const mongoTtlField = config._storageFields.mongoTtlField;
   const ttlSeconds = config.ttl?.defaultSeconds;
   const customAutoDefault = config._conventions?.autoDefault;
   const customOnUpdate = config._conventions?.onUpdate;
@@ -201,7 +202,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
 
     // TTL tracking field
     if (ttlSeconds) {
-      schemaDef['_expiresAt'] = { type: Date, required: true };
+      schemaDef[mongoTtlField] = { type: Date, required: true };
     }
 
     const schema = new mongoosePkg.Schema(schemaDef, { collection: collectionName });
@@ -228,7 +229,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
 
     // TTL index
     if (ttlSeconds) {
-      schema.index({ _expiresAt: 1 }, { expireAfterSeconds: 0 });
+      schema.index({ [mongoTtlField]: 1 }, { expireAfterSeconds: 0 });
     }
 
     // Opaque mongoose boundary — our minimal MongooseSchema wrapper satisfies mongoose.Schema at runtime
@@ -261,7 +262,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
   /**
    * Build a MongoDB query fragment that excludes TTL-expired documents.
    *
-   * Adds `{ _expiresAt: { $gt: new Date() } }` when the entity has TTL
+   * Adds `{ [mongoTtlField]: { $gt: new Date() } }` when the entity has TTL
    * configuration. MongoDB's own TTL index will eventually remove expired
    * documents, but this filter prevents them from being returned during the
    * window between expiry and the next TTL sweep.
@@ -270,7 +271,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
    */
   function notExpiredFilter(): Record<string, unknown> {
     if (!ttlSeconds) return {};
-    return { _expiresAt: { $gt: new Date() } };
+    return { [mongoTtlField]: { $gt: new Date() } };
   }
 
   /**
@@ -315,24 +316,28 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       const doc = toMongoDoc(record, config);
 
       if (ttlSeconds) {
-        doc['_expiresAt'] = new Date(Date.now() + ttlSeconds * 1000);
+        doc[mongoTtlField] = new Date(Date.now() + ttlSeconds * 1000);
       }
 
-      await Model.updateOne({ _id: doc._id }, { $set: doc }, { upsert: true });
+      await Model.updateOne({ [mongoPkField]: doc[mongoPkField] }, { $set: doc }, { upsert: true });
       const created: Entity = { ...record } as unknown as Entity;
       return created;
     },
 
     async getById(id, filter) {
       const Model = getModel();
-      const doc = await Model.findOne({ _id: id, ...baseFilter(), ...filterQuery(filter) }).lean();
+      const doc = await Model.findOne({
+        [mongoPkField]: id,
+        ...baseFilter(),
+        ...filterQuery(filter),
+      }).lean();
       if (!doc) return null;
       return fromMongoDoc(doc, config) as Entity;
     },
 
     async update(id, input, filter) {
       const Model = getModel();
-      const query = { _id: id, ...baseFilter(), ...filterQuery(filter) };
+      const query = { [mongoPkField]: id, ...baseFilter(), ...filterQuery(filter) };
 
       const updatePayload = applyOnUpdate(
         input as Record<string, unknown>,
@@ -352,7 +357,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       }
 
       if (ttlSeconds) {
-        $set['_expiresAt'] = new Date(Date.now() + ttlSeconds * 1000);
+        $set[mongoTtlField] = new Date(Date.now() + ttlSeconds * 1000);
       }
 
       if (Object.keys($set).length === 0) {
@@ -373,7 +378,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
 
     async delete(id, filter) {
       const Model = getModel();
-      const query = { _id: id, ...baseFilter(), ...filterQuery(filter) };
+      const query = { [mongoPkField]: id, ...baseFilter(), ...filterQuery(filter) };
 
       if (config.softDelete) {
         const onUpdatePayload = applyOnUpdate({}, config.fields, customOnUpdate);

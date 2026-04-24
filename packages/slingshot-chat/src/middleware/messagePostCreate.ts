@@ -1,6 +1,6 @@
 // packages/slingshot-chat/src/middleware/messagePostCreate.ts
 import type { MiddlewareHandler } from 'hono';
-import { getActorId, getSlingshotCtx, type PermissionsAdapter } from '@lastshotlabs/slingshot-core';
+import { type PermissionsAdapter, getActorId, getSlingshotCtx } from '@lastshotlabs/slingshot-core';
 import type { RoomAdapter } from '../types';
 
 /**

@@ -170,9 +170,10 @@ export function incrementMongo(
   return async (id, by) => {
     const effectiveBy = by ?? op.by ?? 1;
     const Model = getModel();
-    const result = await Model.updateOne({ _id: id }, { $inc: { [op.field]: effectiveBy } });
+    const pkField = config._storageFields.mongoPkField;
+    const result = await Model.updateOne({ [pkField]: id }, { $inc: { [op.field]: effectiveBy } });
     if (result.matchedCount === 0) throw new Error(`[${config.name}] Not found`);
-    const doc = await Model.findOne({ _id: id }).lean();
+    const doc = await Model.findOne({ [pkField]: id }).lean();
     if (!doc) throw new Error(`[${config.name}] Not found`);
     return fromDoc(doc);
   };

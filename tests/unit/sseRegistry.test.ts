@@ -4,7 +4,7 @@ import { createSseRegistry, createSseUpgradeHandler } from '../../src/framework/
 const endpoint = '/__sse/test';
 
 function makeClient(id = 'client-1') {
-  return { id, userId: null, endpoint };
+  return { id, actorId: null, endpoint };
 }
 
 describe('createSseRegistry', () => {
@@ -266,24 +266,24 @@ describe('createSseRegistry', () => {
 });
 
 describe('createSseUpgradeHandler', () => {
-  test('returns a function that resolves client data with id, userId, endpoint', async () => {
+  test('returns a function that resolves client data with id, actorId, endpoint', async () => {
     const upgrade = createSseUpgradeHandler('/events');
     const req = new Request('http://localhost/events');
     const clientData = await upgrade(req);
     expect(typeof clientData.id).toBe('string');
     expect(clientData.id.length).toBeGreaterThan(0);
     expect(clientData.endpoint).toBe('/events');
-    expect(clientData.userId).toBeNull();
+    expect(clientData.actorId).toBeNull();
   });
 
-  test('uses custom userResolver when provided', async () => {
-    const userResolver = {
-      resolveUserId: async () => 'user-abc',
+  test('uses custom actorResolver when provided', async () => {
+    const actorResolver = {
+      resolveActorId: async () => 'user-abc',
     };
-    const upgrade = createSseUpgradeHandler('/events', userResolver);
+    const upgrade = createSseUpgradeHandler('/events', actorResolver);
     const req = new Request('http://localhost/events');
     const clientData = await upgrade(req);
-    expect(clientData.userId).toBe('user-abc');
+    expect(clientData.actorId).toBe('user-abc');
     expect(clientData.endpoint).toBe('/events');
   });
 

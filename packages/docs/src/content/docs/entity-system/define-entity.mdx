@@ -1,0 +1,75 @@
+---
+title: defineEntity
+description: Fields, indexes, conventions, and the core entity contract
+---
+
+`defineEntity(...)` is the canonical domain-model entrypoint.
+
+It validates the config, resolves storage naming and primary-key metadata, and returns a frozen
+entity definition the rest of the runtime can trust.
+
+## A representative entity
+
+```typescript
+import { defineEntity, field, index, relation } from '@lastshotlabs/slingshot';
+
+export const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    authorId: field.string(),
+    title: field.string(),
+    body: field.string(),
+    status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  indexes: [index(['authorId', 'createdAt'])],
+  relations: [relation('authorId', 'User', 'id')],
+  routes: {
+    defaults: { auth: 'userAuth' },
+    list: { auth: 'none' },
+  },
+});
+```
+
+## What `defineEntity(...)` resolves for you
+
+The resolved config includes:
+
+- the entity name
+- the primary-key field
+- the storage name
+- normalized system-field names
+- normalized storage-field names
+- normalized conventions
+
+That is important because the storage and routing layers depend on consistent resolved metadata.
+
+## System fields, storage fields, and conventions
+
+These are some of the highest-value advanced features in the entity system because they let
+consumers harden the generated shape without rewriting the system.
+
+Examples include:
+
+- `systemFields` for owner, tenant, version, and actor-related field names
+- `storageFields` for backend-specific naming like TTL fields
+- `conventions` for Redis key naming, defaults, and update conventions
+
+That is part of the swappable storage story, not an unrelated detail.
+
+## What this page does not do
+
+`defineEntity(...)` defines the model. It does not, by itself, explain:
+
+- named operations
+- route policy
+- backend wiring
+- route overrides and extra routes
+
+Those are separate docs homes because they are substantial topics on their own.
+
+## Next
+
+- [Operations](/slingshot/entity-system/operations/)
+- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/)

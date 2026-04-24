@@ -1,14 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { defineEvent } from '@lastshotlabs/slingshot-core';
-import { createTestFullServer } from '../setup-e2e';
 import { getServerContext } from '../../src/server';
+import { createTestFullServer } from '../setup-e2e';
 
 const TEST_SSE_EVENT = 'test:sse.item.created';
 const TEST_SSE_OTHER_EVENT = 'test:sse.item.updated';
 
-function createSseDefinitionPlugin(
-  keys: string[] = [TEST_SSE_EVENT, TEST_SSE_OTHER_EVENT],
-) {
+function createSseDefinitionPlugin(keys: string[] = [TEST_SSE_EVENT, TEST_SSE_OTHER_EVENT]) {
   return {
     name: 'test-sse-definitions',
     setupMiddleware({ events }) {

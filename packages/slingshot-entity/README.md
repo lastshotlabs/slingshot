@@ -34,6 +34,7 @@ This package owns the ergonomic side of the platform:
 
 - `defineEntity`
 - `defineOperations`
+- `entity(...)` for package-first runtime authoring
 - builders such as `field`, `index`, `relation`, and `op`
 - code generation from those definitions
 
@@ -42,6 +43,10 @@ The goal is to make the declarative path easier than the hand-wired path.
 ### Runtime orchestration
 
 `createEntityPlugin()` and the routing helpers are the runtime proof that the same definitions can drive live packages, not just generated code. This is what lets packages like community express behavior through entity config, middleware references, registry-backed route events, composed extra routes, and generated executor overrides instead of bespoke route files.
+
+The default code-first path is now package-first: `definePackage(...)` owns composition and
+`entity(...)` is the canonical home for entity-owned runtime behavior. `createEntityPlugin()` stays
+available as the lower-level compatibility and escape-hatch surface.
 
 The stock CRUD list route is part of that contract. For entities mounted through
 `createEntityPlugin()`, `GET /{entity}` accepts the same allowlisted list query params that the
@@ -54,7 +59,77 @@ Entity runtime assembly now has a few explicit invariants:
 - dependent route builders should use the published-adapter lookup helpers rather than closing over sibling adapters manually
 - generated CRUD and named-operation routes keep framework-owned shells; overrides replace executors, not route shapes
 - extra routes and generated routes share one planner, one collision check, and one specificity ordering model
+- extra routes and generated overrides can declare typed request schemas and OpenAPI response metadata
 - the manual router escape hatch still exists in plugin `setupRoutes`, but it should be for routes that do not fit the entity shell rather than a default workaround
+
+## Consumer Shape Hardening
+
+Entity definitions support configurable system fields, storage field mapping, and storage
+conventions so consumers are not locked into first-party naming assumptions.
+
+### System Fields
+
+`systemFields` on `EntityConfig` lets consumers rename audit and ownership fields:
+
+```ts
+defineEntity('Task', {
+  fields: { ... },
+  systemFields: {
+    createdBy: 'author',
+    updatedBy: 'lastEditor',
+    ownerField: 'assignee',
+    tenantField: 'workspace',
+    version: 'rev',
+  },
+});
+```
+
+### Storage Field Mapping
+
+`storageFields` on `EntityConfig` lets consumers rename backend-specific fields:
+
+```ts
+defineEntity('Task', {
+  fields: { ... },
+  storageFields: {
+    mongoPkField: 'pk',       // default: '_id'
+    ttlField: 'expiresAt',    // default: '_expires_at'
+    mongoTtlField: 'expiry',  // default: '_expiresAt'
+  },
+});
+```
+
+### Storage Conventions
+
+`conventions` on `EntityConfig` opens ID generation, on-update strategies, and Redis key
+format beyond the built-in defaults:
+
+```ts
+defineEntity('Task', {
+  fields: { ... },
+  conventions: {
+    redisKey: ({ appName, storageName, pk }) => `${appName}/${storageName}/${pk}`,
+    autoDefault: (kind) => kind === 'ulid' ? generateUlid() : undefined,
+    onUpdate: (kind) => kind === 'increment' ? computeNextVersion() : undefined,
+  },
+});
+```
+
+Built-in defaults: Redis key is `${storageName}:${appName}:${pk}`, auto-default handles
+`'uuid'`/`'cuid'`/`'now'`, on-update handles `'now'`. Custom resolvers return `undefined`
+to fall through to the built-in handler.
+
+### Manifest Helper Field Mapping
+
+`autoGrant` and `activityLog` manifest helpers resolve payload fields from entity metadata
+(`_pkField`, `_systemFields.tenantField`) instead of hardcoding `id` and `orgId`. Explicit
+config (`resourceIdField`, `tenantIdField`, `actorIdFields`) overrides resolved defaults.
+
+### Operation Registry
+
+Policy and data-scope logic resolves operation semantics through a centralized registry
+instead of scattered `CRUD_OPS` sets and switch statements. Built-in CRUD operations are
+registered by default; named operations resolve through the same pipeline.
 
 ## Relationship To Other Packages
 

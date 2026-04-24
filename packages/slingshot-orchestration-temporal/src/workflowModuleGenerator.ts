@@ -1,8 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { basename, dirname, relative, resolve } from 'node:path';
-import type {
-  AnyResolvedWorkflow,
-} from '@lastshotlabs/slingshot-orchestration';
+import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 import type {
   OrchestrationProviderRegistry,
   ProviderTaskManifest,
@@ -39,7 +37,10 @@ export async function generateTemporalWorkflowModule(options: {
 
   const modulePath = resolve(outDir, `slingshot-temporal-workflows-${Date.now()}.ts`);
   const importDefinitionsPath = toImportPath(dirname(modulePath), options.definitionsModulePath);
-  const importPackageWorkflowsPath = toImportPath(dirname(modulePath), options.packageWorkflowsPath);
+  const importPackageWorkflowsPath = toImportPath(
+    dirname(modulePath),
+    options.packageWorkflowsPath,
+  );
   const taskManifestEntries = options.registry
     .listTaskManifests()
     .map(task => `${literal(task.name)}: ${taskManifestLiteral(task)}`)

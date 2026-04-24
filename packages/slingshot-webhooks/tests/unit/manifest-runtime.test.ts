@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  type EventDefinitionRegistry,
   createEventDefinitionRegistry,
   defineEvent,
-  type EventDefinitionRegistry,
 } from '@lastshotlabs/slingshot-core';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import {
@@ -351,7 +351,11 @@ describe('webhooks manifest runtime', () => {
 
     expect(created.subscriptions).toEqual([
       { event: 'test:webhook.other', exposure: 'tenant-webhook', sourcePattern: 'test:webhook.*' },
-      { event: 'test:webhook.visible', exposure: 'tenant-webhook', sourcePattern: 'test:webhook.*' },
+      {
+        event: 'test:webhook.visible',
+        exposure: 'tenant-webhook',
+        sourcePattern: 'test:webhook.*',
+      },
     ]);
     expect(created.secret).toBe('cret');
     expect(records[0]?.subscriptions).toEqual(created.subscriptions);

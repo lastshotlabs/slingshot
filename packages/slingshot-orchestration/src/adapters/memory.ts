@@ -215,10 +215,7 @@ export function createMemoryAdapter(
         throw new OrchestrationError('WORKFLOW_NOT_FOUND', `Workflow '${name}' not registered`);
       }
 
-      const scopedIdempotencyKey = createIdempotencyScope(
-        { type: 'workflow', name },
-        opts ?? {},
-      );
+      const scopedIdempotencyKey = createIdempotencyScope({ type: 'workflow', name }, opts ?? {});
       if (scopedIdempotencyKey) {
         const existingRunId = idempotencyKeys.get(scopedIdempotencyKey);
         if (existingRunId) {

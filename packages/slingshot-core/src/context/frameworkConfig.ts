@@ -87,7 +87,7 @@ export interface SlingshotFrameworkConfig {
    * pair and snapshots the collected values immutably into `SlingshotContext`.
    *
    * Do NOT call `registrar` methods outside of `setupPost`. Reading from
-   * `SlingshotContext.*` (e.g. `ctx.userResolver`) is correct after bootstrap completes;
+   * `SlingshotContext.*` (e.g. `ctx.actorResolver`) is correct after bootstrap completes;
    * writing goes through `registrar` only during the setup lifecycle.
    */
   registrar: CoreRegistrar;

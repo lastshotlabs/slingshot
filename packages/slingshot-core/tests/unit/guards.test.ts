@@ -75,8 +75,6 @@ function createMeta(overrides: Partial<HandlerMeta> & { actor: Actor }): Handler
     requestId: 'req-1',
     correlationId: 'req-1',
     requestTenantId: overrides.actor.tenantId ?? null,
-    tenantId: overrides.actor.tenantId ?? null,
-    authUserId: overrides.actor.kind === 'user' ? overrides.actor.id : null,
     ip: null,
     ...overrides,
   };
@@ -85,7 +83,14 @@ function createMeta(overrides: Partial<HandlerMeta> & { actor: Actor }): Handler
 describe('requireBearer', () => {
   test('allows api-key actor', async () => {
     const guard = requireBearer();
-    const actor: Actor = { id: 'key-1', kind: 'api-key', tenantId: null, sessionId: null, roles: null, claims: {} };
+    const actor: Actor = {
+      id: 'key-1',
+      kind: 'api-key',
+      tenantId: null,
+      sessionId: null,
+      roles: null,
+      claims: {},
+    };
 
     await expect(
       guard({
@@ -98,7 +103,14 @@ describe('requireBearer', () => {
 
   test('allows service-account actor', async () => {
     const guard = requireBearer();
-    const actor: Actor = { id: 'svc-1', kind: 'service-account', tenantId: null, sessionId: null, roles: null, claims: {} };
+    const actor: Actor = {
+      id: 'svc-1',
+      kind: 'service-account',
+      tenantId: null,
+      sessionId: null,
+      roles: null,
+      claims: {},
+    };
 
     await expect(
       guard({
@@ -111,7 +123,14 @@ describe('requireBearer', () => {
 
   test('rejects user actor', async () => {
     const guard = requireBearer();
-    const actor: Actor = { id: 'user-1', kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} };
+    const actor: Actor = {
+      id: 'user-1',
+      kind: 'user',
+      tenantId: null,
+      sessionId: null,
+      roles: null,
+      claims: {},
+    };
 
     await expect(
       guard({
@@ -142,7 +161,14 @@ describe('requireBearer', () => {
 });
 
 describe('requireUserAuth', () => {
-  const userActor: Actor = { id: 'user-1', kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} };
+  const userActor: Actor = {
+    id: 'user-1',
+    kind: 'user',
+    tenantId: null,
+    sessionId: null,
+    roles: null,
+    claims: {},
+  };
 
   test('allows authenticated users when the custom access policy passes', async () => {
     const ctx = createContextFixture();

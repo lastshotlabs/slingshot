@@ -40,7 +40,7 @@ describe('resolveRateLimitKeyStrategy', () => {
     expect(typeof fn).toBe('function');
   });
 
-  it('"user" falls back to IP when authUserId is absent', () => {
+  it('"user" falls back to IP when actor is anonymous', () => {
     const fn = resolveRateLimitKeyStrategy('user');
     const c = fakeContext({});
     const key = fn(c);
@@ -51,13 +51,31 @@ describe('resolveRateLimitKeyStrategy', () => {
 
   it('"user" returns userId when present', () => {
     const fn = resolveRateLimitKeyStrategy('user');
-    const c = fakeContext({ authUserId: 'usr_123' });
+    const c = fakeContext({
+      actor: Object.freeze({
+        id: 'usr_123',
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: null,
+        claims: {},
+      }),
+    });
     expect(fn(c)).toBe('usr_123');
   });
 
   it('"ip+user" prefixes u: for authenticated users', () => {
     const fn = resolveRateLimitKeyStrategy('ip+user');
-    const c = fakeContext({ authUserId: 'usr_456' });
+    const c = fakeContext({
+      actor: Object.freeze({
+        id: 'usr_456',
+        kind: 'user' as const,
+        tenantId: null,
+        sessionId: null,
+        roles: null,
+        claims: {},
+      }),
+    });
     expect(fn(c)).toBe('u:usr_456');
   });
 
@@ -74,12 +92,25 @@ describe('resolveRateLimitKeyStrategy', () => {
 // ---------------------------------------------------------------------------
 
 describe('resolveRateLimitSkipStrategy', () => {
-  it('"authenticated" returns true when authUserId is set', () => {
+  it('"authenticated" returns true when actor is authenticated', () => {
     const fn = resolveRateLimitSkipStrategy('authenticated');
-    expect(fn(fakeContext({ authUserId: 'usr_1' }))).toBe(true);
+    expect(
+      fn(
+        fakeContext({
+          actor: Object.freeze({
+            id: 'usr_1',
+            kind: 'user' as const,
+            tenantId: null,
+            sessionId: null,
+            roles: null,
+            claims: {},
+          }),
+        }),
+      ),
+    ).toBe(true);
   });
 
-  it('"authenticated" returns false when authUserId is null', () => {
+  it('"authenticated" returns false when actor is anonymous', () => {
     const fn = resolveRateLimitSkipStrategy('authenticated');
     expect(fn(fakeContext({}))).toBe(false);
   });

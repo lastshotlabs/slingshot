@@ -153,7 +153,7 @@ describe('requestLogger middleware', () => {
         roles: null,
         claims: {},
       } satisfies Actor);
-      c.set('authUserId', 'legacy-user');
+      // actor already set above — no legacy variable needed
       await next();
     });
     app.get('/api/data', c => c.json({ ok: true }));

@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import {
-  createEventDefinitionRegistry,
-  createEventSchemaRegistry,
-  defineEvent,
-} from '../../src';
+import { createEventDefinitionRegistry, createEventSchemaRegistry, defineEvent } from '../../src';
 
 describe('eventDefinitionRegistry', () => {
   test('registers definitions and mirrors schemas into the schema registry', () => {

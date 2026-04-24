@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getActorId, getActorTenantId } from '@lastshotlabs/slingshot-core';
+import type { Actor, AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActor, getActorId, getActorTenantId } from '@lastshotlabs/slingshot-core';
 import { isProd } from '../lib/env';
 import { getAuthRuntimeFromRequest } from '../runtime';
 
@@ -21,7 +21,7 @@ async function getEffectiveRoles(
  * effective role set — direct roles ∪ group baseline roles ∪ per-membership roles —
  * via `getActorId(c)` and returns `403 Forbidden` when none of the required roles are present.
  *
- * Effective roles are written to `c.set('roles', ...)` for downstream handlers.
+ * Effective roles are written to the actor via `c.set('actor', ...)` for downstream handlers.
  *
  * When a tenant context is active (actor has a `tenantId`), role resolution is scoped
  * to that tenant. Use `requireRole.global()` to bypass tenant scoping and enforce
@@ -55,9 +55,13 @@ export const requireRole = Object.assign(
       const runtime = getAuthRuntimeFromRequest(c);
       // Prefer actor tenantId, but fall back to raw context — tenant can be set
       // by route-level middleware after the actor was already resolved.
-      const tenantId = getActorTenantId(c) ?? (c.get('tenantId') as string | null | undefined) ?? null;
+      const tenantId =
+        getActorTenantId(c) ?? (c.get('tenantId') as string | null | undefined) ?? null;
       const effective = await getEffectiveRoles(runtime.adapter, userId, tenantId);
-      c.set('roles', effective);
+
+      // Update the actor with hydrated roles.
+      const existing = getActor(c);
+      c.set('actor', Object.freeze({ ...existing, roles: Object.freeze([...effective]) }) as Actor);
 
       if (!roles.some(r => effective.includes(r))) {
         return c.json({ error: 'Forbidden' }, 403);
@@ -98,7 +102,13 @@ export const requireRole = Object.assign(
         }
 
         const effective = await getEffectiveRoles(runtime.adapter, userId, null);
-        c.set('roles', effective);
+
+        // Update the actor with hydrated roles.
+        const existing = getActor(c);
+        c.set(
+          'actor',
+          Object.freeze({ ...existing, roles: Object.freeze([...effective]) }) as Actor,
+        );
 
         if (!roles.some(r => effective.includes(r))) {
           return c.json({ error: 'Forbidden' }, 403);

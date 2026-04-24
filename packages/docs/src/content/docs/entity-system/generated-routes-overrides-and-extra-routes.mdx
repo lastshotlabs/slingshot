@@ -1,0 +1,92 @@
+---
+title: Generated Routes, Overrides, and Extra Routes
+description: Defaults, executor overrides, collision rules, and custom routes inside the entity shell
+---
+
+Generated routes are the normal path. Overrides and extra routes are the main customization seams.
+
+## What you get by default
+
+When an entity has route config, Slingshot can generate:
+
+- `create`
+- `list`
+- `get`
+- `update`
+- `delete`
+- named-operation routes
+
+That is the baseline behavior.
+
+## Override a generated route
+
+Use overrides when you want to keep the generated route identity but replace its executor or docs
+metadata.
+
+```typescript
+import { defineEntityExecutor, entity } from '@lastshotlabs/slingshot-entity';
+
+const PostModule = entity({
+  config: Post,
+  operations: PostOps,
+  overrides: {
+    get: defineEntityExecutor({
+      summary: 'Get a post with viewer metadata',
+      build: ({ entityAdapter }) => async ({ params, respond }) => {
+        const post = await entityAdapter.get(params.id);
+        return respond.json({ post, viewerCanEdit: true });
+      },
+    }),
+  },
+});
+```
+
+## Add an extra route
+
+Use an extra route when the route should live beside the entity shell but is not one of the
+generated defaults.
+
+```typescript
+import { defineEntityRoute, entity } from '@lastshotlabs/slingshot-entity';
+
+const PostModule = entity({
+  config: Post,
+  extraRoutes: [
+    defineEntityRoute({
+      key: 'preview',
+      method: 'post',
+      path: '/:id/preview',
+      auth: 'userAuth',
+      buildExecutor: () => async ({ params, respond }) =>
+        respond.json({ id: params.id, preview: true }),
+    }),
+  ],
+});
+```
+
+## Collision rules
+
+Extra routes cannot silently collide with generated routes.
+
+If you want to replace a generated route, use an override. Do not create an extra route that
+matches the same method and path and hope the framework picks the right one.
+
+That distinction is important enough that the runtime throws on invalid collisions.
+
+## When to use what
+
+Use:
+
+- generated routes for the default case
+- overrides when the route identity should stay the same
+- extra routes when you want a new route inside the entity shell
+
+## Why this docs split matters
+
+This is one of the main DX seams in the entity system. It needs to be documented as a first-class
+surface, not as a side note in examples.
+
+## Next
+
+- [Route Policy](/slingshot/entity-system/route-policy/)
+- [Package-First Authoring](/slingshot/package-first/)

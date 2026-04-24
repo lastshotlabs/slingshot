@@ -1,6 +1,10 @@
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
-import type { PluginSeedContext, PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type {
+  PluginSeedContext,
+  PluginSetupContext,
+  SlingshotPlugin,
+} from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
   getPluginState,

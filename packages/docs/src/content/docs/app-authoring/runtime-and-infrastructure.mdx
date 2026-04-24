@@ -1,0 +1,81 @@
+---
+title: Runtime and Infrastructure
+description: Databases, secrets, uploads, jobs, metrics, and runtime abstraction
+---
+
+Slingshot treats infrastructure as part of app assembly, not as scattered package-local setup.
+
+## A representative production root
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  db: {
+    postgres: process.env.POSTGRES_URL,
+    redis: process.env.REDIS_URL,
+  },
+  upload: {
+    provider: 'local',
+    directory: './uploads',
+  },
+  jobs: {
+    enabled: true,
+  },
+  logging: {
+    enabled: true,
+  },
+  metrics: {
+    enabled: true,
+  },
+  observability: {
+    serviceName: 'slingshot-app',
+  },
+  secrets: { provider: 'env' },
+  runtime: myRuntime,
+});
+
+declare const myRuntime: import('@lastshotlabs/slingshot').CreateAppConfig['runtime'];
+```
+
+## What belongs here
+
+### Persistence and stores
+
+`db` decides how the framework resolves infrastructure for packages, entities, permissions, uploads,
+jobs, and more.
+
+### Secrets
+
+Secrets resolve before most of the app is assembled. That is why `secrets` is a top-level concern.
+
+### Runtime
+
+The runtime abstraction is part of the app root because it affects hosting, file access, and server
+startup behavior.
+
+### Jobs and uploads
+
+These are not package-internal details. They expose app-level infrastructure and HTTP surfaces.
+
+### Monitoring and tracing
+
+`logging`, `metrics`, and `observability` are operational features the framework can wire once for
+the whole app.
+
+## Read these with the root config, not after the fact
+
+One of the main docs goals here is to make the app root communicate production reality early:
+
+- what storage exists
+- what operational endpoints exist
+- how secrets are resolved
+- what runtime the app assumes
+
+## Specialized guides
+
+- [Runtime](/slingshot/guides/runtime/)
+- [Secrets](/slingshot/guides/secrets/)
+- [Uploads](/slingshot/guides/file-uploads/)
+- [Monitoring](/slingshot/guides/monitoring/)
+- [Observability](/slingshot/guides/observability/)

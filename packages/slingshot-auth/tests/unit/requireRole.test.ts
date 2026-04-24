@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { AppEnv, SlingshotContext } from '@lastshotlabs/slingshot-core';
+import { getActor } from '@lastshotlabs/slingshot-core';
 import { requireRole } from '../../src/middleware/requireRole';
 import { AUTH_RUNTIME_KEY } from '../../src/runtime';
 import type { AuthRuntimeContext } from '../../src/runtime';
@@ -39,10 +40,31 @@ function buildApp(opts: {
       pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
     };
     c.set('slingshotCtx', ctxPartial as SlingshotContext);
-    // Simulate auth context vars
-    c.set('authUserId', userId);
-    if (tenantId !== null) {
-      c.set('tenantId', tenantId);
+    // Simulate auth context via actor
+    if (userId) {
+      c.set(
+        'actor',
+        Object.freeze({
+          id: userId,
+          kind: 'user' as const,
+          tenantId,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
+    } else {
+      c.set(
+        'actor',
+        Object.freeze({
+          id: null,
+          kind: 'anonymous' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
     }
     await next();
   });
@@ -131,11 +153,11 @@ describe('requireRole — multiple roles (OR logic)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. No authUserId — returns 401
+// 3. No actor — returns 401
 // ---------------------------------------------------------------------------
 
 describe('requireRole — unauthenticated', () => {
-  test('no authUserId returns 401', async () => {
+  test('no actor returns 401', async () => {
     const app = buildApp({
       rolesResolver: async () => ['admin'],
       userId: null,
@@ -147,7 +169,7 @@ describe('requireRole — unauthenticated', () => {
     expect(await res.json()).toEqual({ error: 'Unauthorized' });
   });
 
-  test('empty string authUserId returns 401', async () => {
+  test('empty string actor id returns 401', async () => {
     const app = buildApp({
       rolesResolver: async () => ['admin'],
       userId: '',
@@ -258,7 +280,7 @@ describe('requireRole — sets roles on context', () => {
       userId: 'user-1',
     });
     app.get('/check', requireRole('admin'), c => {
-      const roles = c.get('roles');
+      const roles = getActor(c).roles;
       return c.json({ roles });
     });
 
@@ -285,7 +307,17 @@ describe('requireRole — adapter missing getEffectiveRoles', () => {
         pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
       };
       c.set('slingshotCtx', ctxPartial as SlingshotContext);
-      c.set('authUserId', 'user-1');
+      c.set(
+        'actor',
+        Object.freeze({
+          id: 'user-1',
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
       await next();
     });
     app.onError((err, c) => c.json({ error: err.message }, 500));

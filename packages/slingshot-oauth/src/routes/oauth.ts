@@ -20,7 +20,7 @@ import {
   verifyAnyFactor,
 } from '@lastshotlabs/slingshot-auth/plugin';
 import { createRoute, errorResponse, withSecurity } from '@lastshotlabs/slingshot-core';
-import { createRouter } from '@lastshotlabs/slingshot-core';
+import { createRouter, getActor } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { HttpError } from '@lastshotlabs/slingshot-core';
 import { COOKIE_REFRESH_TOKEN, COOKIE_TOKEN } from '@lastshotlabs/slingshot-core';
@@ -43,15 +43,19 @@ const hookCtx = (c: Context<AppEnv>): HookContext => ({
 
 const tags = ['OAuth'];
 
-const getContextValue = (c: Context<AppEnv>, key: string): unknown =>
-  (c as { get(key: string): unknown }).get(key);
+/** Returns the authenticated user's ID, or throws 401 if anonymous. */
+const requireUserId = (c: Context<AppEnv>): string => {
+  const actor = getActor(c);
+  if (actor.kind === 'anonymous' || !actor.id)
+    throw new HttpError(401, 'Authenticated user required');
+  return actor.id;
+};
 
-const getRequiredContextString = (c: Context<AppEnv>, key: string): string => {
-  const value = getContextValue(c, key);
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new HttpError(401, `Missing ${key}`);
-  }
-  return value;
+/** Returns the authenticated session ID, or throws 401 if absent. */
+const requireSessionId = (c: Context<AppEnv>): string => {
+  const actor = getActor(c);
+  if (!actor.sessionId) throw new HttpError(401, 'Missing sessionId');
+  return actor.sessionId;
 };
 
 const requireCodeVerifier = (
@@ -530,7 +534,7 @@ export const createOAuthRouter = (
       async c => {
         const state = generateState();
         const codeVerifier = generateCodeVerifier();
-        const userId = getRequiredContextString(c, 'authUserId');
+        const userId = requireUserId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         await storeOAuthState(state, codeVerifier, userId);
@@ -592,8 +596,8 @@ export const createOAuthRouter = (
         if (!adapter.unlinkProvider) {
           return errorResponse(c, 'Auth adapter does not support unlinkProvider', 500);
         }
-        const userId = getRequiredContextString(c, 'authUserId');
-        const sessionId = getRequiredContextString(c, 'sessionId');
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         if (await runtime.rateLimit.trackAttempt(`oauth-unlink:${userId}`, oauthUnlinkOpts)) {
@@ -732,7 +736,7 @@ export const createOAuthRouter = (
       ),
       async c => {
         const state = generateState();
-        const userId = getRequiredContextString(c, 'authUserId');
+        const userId = requireUserId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         await storeOAuthState(state, undefined, userId);
@@ -872,7 +876,7 @@ export const createOAuthRouter = (
       async c => {
         const state = generateState();
         const codeVerifier = generateCodeVerifier();
-        const userId = getRequiredContextString(c, 'authUserId');
+        const userId = requireUserId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         await storeOAuthState(state, codeVerifier, userId);
@@ -934,8 +938,8 @@ export const createOAuthRouter = (
         if (!adapter.unlinkProvider) {
           return errorResponse(c, 'Auth adapter does not support unlinkProvider', 500);
         }
-        const userId = getRequiredContextString(c, 'authUserId');
-        const sessionId = getRequiredContextString(c, 'sessionId');
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         if (await runtime.rateLimit.trackAttempt(`oauth-unlink:${userId}`, oauthUnlinkOpts)) {
@@ -1085,7 +1089,7 @@ export const createOAuthRouter = (
       ),
       async c => {
         const state = generateState();
-        const userId = getRequiredContextString(c, 'authUserId');
+        const userId = requireUserId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         await storeOAuthState(state, undefined, userId);
@@ -1143,8 +1147,8 @@ export const createOAuthRouter = (
         if (!adapter.unlinkProvider) {
           return errorResponse(c, 'Auth adapter does not support unlinkProvider', 500);
         }
-        const userId = getRequiredContextString(c, 'authUserId');
-        const sessionId = getRequiredContextString(c, 'sessionId');
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         if (await runtime.rateLimit.trackAttempt(`oauth-unlink:${userId}`, oauthUnlinkOpts)) {
@@ -1279,7 +1283,7 @@ export const createOAuthRouter = (
       ),
       async c => {
         const state = generateState();
-        const userId = getRequiredContextString(c, 'authUserId');
+        const userId = requireUserId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         await storeOAuthState(state, undefined, userId);
@@ -1337,8 +1341,8 @@ export const createOAuthRouter = (
         if (!adapter.unlinkProvider) {
           return errorResponse(c, 'Auth adapter does not support unlinkProvider', 500);
         }
-        const userId = getRequiredContextString(c, 'authUserId');
-        const sessionId = getRequiredContextString(c, 'sessionId');
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         if (await runtime.rateLimit.trackAttempt(`oauth-unlink:${userId}`, oauthUnlinkOpts)) {
@@ -1486,7 +1490,7 @@ export const createOAuthRouter = (
       async c => {
         const state = generateState();
         const codeVerifier = generateCodeVerifier();
-        const userId = getRequiredContextString(c, 'authUserId');
+        const userId = requireUserId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         await storeOAuthState(state, codeVerifier, userId);
@@ -1547,8 +1551,8 @@ export const createOAuthRouter = (
         if (!adapter.unlinkProvider) {
           return errorResponse(c, 'Auth adapter does not support unlinkProvider', 500);
         }
-        const userId = getRequiredContextString(c, 'authUserId');
-        const sessionId = getRequiredContextString(c, 'sessionId');
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         if (await runtime.rateLimit.trackAttempt(`oauth-unlink:${userId}`, oauthUnlinkOpts)) {
@@ -1688,7 +1692,7 @@ export const createOAuthRouter = (
       ),
       async c => {
         const state = generateState();
-        const userId = getRequiredContextString(c, 'authUserId');
+        const userId = requireUserId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         await storeOAuthState(state, undefined, userId);
@@ -1746,8 +1750,8 @@ export const createOAuthRouter = (
         if (!adapter.unlinkProvider) {
           return errorResponse(c, 'Auth adapter does not support unlinkProvider', 500);
         }
-        const userId = getRequiredContextString(c, 'authUserId');
-        const sessionId = getRequiredContextString(c, 'sessionId');
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         if (await runtime.rateLimit.trackAttempt(`oauth-unlink:${userId}`, oauthUnlinkOpts)) {
@@ -1882,7 +1886,7 @@ export const createOAuthRouter = (
       ),
       async c => {
         const state = generateState();
-        const userId = getRequiredContextString(c, 'authUserId');
+        const userId = requireUserId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         await storeOAuthState(state, undefined, userId);
@@ -1940,8 +1944,8 @@ export const createOAuthRouter = (
         if (!adapter.unlinkProvider) {
           return errorResponse(c, 'Auth adapter does not support unlinkProvider', 500);
         }
-        const userId = getRequiredContextString(c, 'authUserId');
-        const sessionId = getRequiredContextString(c, 'sessionId');
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         if (await runtime.rateLimit.trackAttempt(`oauth-unlink:${userId}`, oauthUnlinkOpts)) {
@@ -2090,7 +2094,7 @@ export const createOAuthRouter = (
       ),
       async c => {
         const state = generateState();
-        const userId = getRequiredContextString(c, 'authUserId');
+        const userId = requireUserId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         await storeOAuthState(state, undefined, userId);
@@ -2148,8 +2152,8 @@ export const createOAuthRouter = (
         if (!adapter.unlinkProvider) {
           return errorResponse(c, 'Auth adapter does not support unlinkProvider', 500);
         }
-        const userId = getRequiredContextString(c, 'authUserId');
-        const sessionId = getRequiredContextString(c, 'sessionId');
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
         if (await runtime.rateLimit.trackAttempt(`oauth-unlink:${userId}`, oauthUnlinkOpts)) {
@@ -2223,8 +2227,8 @@ export const createOAuthRouter = (
           { userToken: [] },
         ),
         async c => {
-          const userId = getRequiredContextString(c, 'authUserId');
-          const sessionId = getRequiredContextString(c, 'sessionId');
+          const userId = requireUserId(c);
+          const sessionId = requireSessionId(c);
           const { purpose, returnUrl } = c.req.valid('query');
           const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
           if (blocked) return blocked;

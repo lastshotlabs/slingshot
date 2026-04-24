@@ -1,7 +1,6 @@
 import { createMfaChallenge } from '@auth/lib/mfaChallenge';
 import type { WebAuthnCredential } from '@lastshotlabs/slingshot-core';
 import { HttpError } from '@lastshotlabs/slingshot-core';
-import { publishAuthEvent } from '../eventGovernance';
 import {
   decryptField,
   encryptField,
@@ -9,6 +8,7 @@ import {
   sha256,
   timingSafeEqual,
 } from '@lastshotlabs/slingshot-core';
+import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';
 
 /**

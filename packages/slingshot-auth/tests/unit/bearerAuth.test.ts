@@ -11,7 +11,8 @@ function buildApp(config: Parameters<typeof createBearerAuth>[0]) {
   const app = new Hono();
   app.use('/protected/*', createBearerAuth(config));
   app.get('/protected/resource', c => {
-    const clientId = (c as any).get('bearerClientId');
+    const actor = (c as any).get('actor');
+    const clientId = actor?.kind === 'api-key' ? actor.id : undefined;
     return c.json({ ok: true, ...(clientId ? { clientId } : {}) });
   });
   return app;

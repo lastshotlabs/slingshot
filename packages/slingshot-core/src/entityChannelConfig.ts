@@ -9,7 +9,7 @@
 /**
  * Authentication strategy enforced at WebSocket channel subscribe time.
  *
- * - `'userAuth'` — requires a valid session (resolved by `UserResolver`)
+ * - `'userAuth'` — requires a valid session (resolved by `RequestActorResolver`)
  * - `'bearer'`   — requires a valid bearer token
  * - `'none'`     — no auth check; any client may subscribe
  *
@@ -236,7 +236,7 @@ export interface ChannelIncomingEventDeclaration {
     payload: unknown,
     context: {
       socketId: string;
-      userId: string | null;
+      actorId: string | null;
       endpoint: string;
       publish(room: string, data: unknown): void;
       subscribe(room: string): void;

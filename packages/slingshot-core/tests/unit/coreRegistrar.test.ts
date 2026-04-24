@@ -18,7 +18,7 @@ describe('createCoreRegistrar', () => {
     const snapshot = drain();
 
     expect(snapshot.routeAuth).toBeNull();
-    expect(snapshot.userResolver).toBeNull();
+    expect(snapshot.actorResolver).toBeNull();
     expect(snapshot.rateLimitAdapter).toBeNull();
     expect(snapshot.fingerprintBuilder).toBeNull();
     expect(snapshot.cacheAdapters.size).toBe(0);
@@ -33,8 +33,8 @@ describe('createCoreRegistrar', () => {
       requireRole: () => createMiddleware(),
       bearerAuth: createMiddleware(),
     };
-    const userResolver = {
-      async resolveUserId(): Promise<string | null> {
+    const actorResolver = {
+      async resolveActorId(): Promise<string | null> {
         return 'user-1';
       },
     };
@@ -50,14 +50,14 @@ describe('createCoreRegistrar', () => {
     };
 
     registrar.setRouteAuth(routeAuth);
-    registrar.setUserResolver(userResolver);
+    registrar.setRequestActorResolver(actorResolver);
     registrar.setRateLimitAdapter(rateLimitAdapter);
     registrar.setFingerprintBuilder(fingerprintBuilder);
 
     const snapshot = drain();
 
     expect(snapshot.routeAuth).toBe(routeAuth);
-    expect(snapshot.userResolver).toBe(userResolver);
+    expect(snapshot.actorResolver).toBe(actorResolver);
     expect(snapshot.rateLimitAdapter).toBe(rateLimitAdapter);
     expect(snapshot.fingerprintBuilder).toBe(fingerprintBuilder);
   });
@@ -74,8 +74,8 @@ describe('createCoreRegistrar', () => {
     expect(() => registrar.setRouteAuth(asNever({}))).toThrow(
       'CoreRegistrar is finalized; setRouteAuth() cannot be called after drain().',
     );
-    expect(() => registrar.setUserResolver(asNever({}))).toThrow(
-      'CoreRegistrar is finalized; setUserResolver() cannot be called after drain().',
+    expect(() => registrar.setRequestActorResolver(asNever({}))).toThrow(
+      'CoreRegistrar is finalized; setRequestActorResolver() cannot be called after drain().',
     );
     expect(() => registrar.setRateLimitAdapter(asNever({}))).toThrow(
       'CoreRegistrar is finalized; setRateLimitAdapter() cannot be called after drain().',

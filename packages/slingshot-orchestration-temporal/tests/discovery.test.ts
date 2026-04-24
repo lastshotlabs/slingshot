@@ -1,10 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { defineTask, defineWorkflow, step } from '@lastshotlabs/slingshot-orchestration';
-import {
-  discoverOrchestrationDefinitions,
-  selectOrchestrationDefinitions,
-} from '../src/discovery';
+import { discoverOrchestrationDefinitions, selectOrchestrationDefinitions } from '../src/discovery';
 
 describe('Temporal orchestration discovery', () => {
   test('discovers task/workflow exports and closes workflow task dependencies', () => {

@@ -64,9 +64,7 @@ export interface NotificationPreferenceAdapter {
   delete(id: string): Promise<boolean>;
   list(opts?: Record<string, unknown>): Promise<PaginatedResult<NotificationPreferenceRecord>>;
   clear(): Promise<void>;
-  listByUser(params: {
-    userId: string;
-  }): Promise<PaginatedResult<NotificationPreferenceRecord>>;
+  listByUser(params: { userId: string }): Promise<PaginatedResult<NotificationPreferenceRecord>>;
   resolveForNotification(params: { userId: string }): Promise<NotificationPreferenceRecord[]>;
 }
 

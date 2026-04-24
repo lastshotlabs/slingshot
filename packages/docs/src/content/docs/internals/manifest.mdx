@@ -135,8 +135,8 @@ Many manifest fields that accept a `{ "handler": "name" }` reference also accept
 
 | Field                             | Strategies                               | Description                                        |
 | --------------------------------- | ---------------------------------------- | -------------------------------------------------- |
-| `security.rateLimit.keyGenerator` | `"ip"`, `"user"`, `"ip+user"`            | Rate-limit key derivation                          |
-| `security.rateLimit.skip`         | `"authenticated"`                        | Skip rate limits for logged-in users               |
+| `security.rateLimit.keyGenerator` | `"ip"`, `"user"`, `"ip+user"`            | Rate-limit key derivation (actor ID for `"user"`)  |
+| `security.rateLimit.skip`         | `"authenticated"`                        | Skip rate limits for authenticated actors          |
 | `logging.onLog`                   | `"json"`, `"pretty"`                     | Request log formatting                             |
 | `metrics.normalizePath`           | `"strip-ids"`                            | Replace UUIDs and numeric path segments with `:id` |
 | `validation.formatError`          | `"flat"`, `"grouped"`                    | Validation error response shape                    |

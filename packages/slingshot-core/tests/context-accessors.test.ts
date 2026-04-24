@@ -16,9 +16,12 @@ import {
 } from '../src/pluginState';
 import { getPushFormatterPeer, getPushFormatterPeerOrNull } from '../src/pushPeer';
 import { getFingerprintBuilder, getRateLimitAdapter } from '../src/rateLimit';
+import {
+  getRequestActorResolver,
+  getRequestActorResolverOrNull,
+} from '../src/requestActorResolver';
 import { getRouteAuth, getRouteAuthOrNull } from '../src/routeAuth';
 import { getSearchPluginRuntime, getSearchPluginRuntimeOrNull } from '../src/searchPluginRuntime';
-import { getUserResolver, getUserResolverOrNull } from '../src/userResolver';
 
 function createMiddleware() {
   return (async (_c: unknown, next: () => Promise<void>) => {
@@ -46,7 +49,7 @@ function createContextFixture(overrides: Record<string, unknown> = {}) {
     config: {},
     persistence: {},
     routeAuth: null,
-    userResolver: null,
+    actorResolver: null,
     rateLimitAdapter: null,
     fingerprintBuilder: null,
     cacheAdapters: new Map(),
@@ -64,8 +67,8 @@ describe('slingshot-core context accessors', () => {
       requireRole: () => createMiddleware(),
       bearerAuth: createMiddleware(),
     };
-    const userResolver = {
-      async resolveUserId(): Promise<string | null> {
+    const actorResolver = {
+      async resolveActorId(): Promise<string | null> {
         return 'user-1';
       },
     };
@@ -87,7 +90,7 @@ describe('slingshot-core context accessors', () => {
     };
 
     registrar.setRouteAuth(routeAuth);
-    registrar.setUserResolver(userResolver);
+    registrar.setRequestActorResolver(actorResolver);
     registrar.setRateLimitAdapter(rateLimitAdapter);
     registrar.setFingerprintBuilder(fingerprintBuilder);
     registrar.addCacheAdapter('memory', cacheAdapter);
@@ -95,7 +98,7 @@ describe('slingshot-core context accessors', () => {
 
     const snapshot = drain();
     expect(snapshot.routeAuth).toBe(routeAuth);
-    expect(snapshot.userResolver).toBe(userResolver);
+    expect(snapshot.actorResolver).toBe(actorResolver);
     expect(snapshot.rateLimitAdapter).toBe(rateLimitAdapter);
     expect(snapshot.fingerprintBuilder).toBe(fingerprintBuilder);
     expect(snapshot.cacheAdapters.get('memory')).toBe(cacheAdapter);
@@ -345,8 +348,8 @@ describe('slingshot-core context accessors', () => {
       requireRole: () => createMiddleware(),
       bearerAuth: createMiddleware(),
     };
-    const userResolver = {
-      async resolveUserId(): Promise<string | null> {
+    const actorResolver = {
+      async resolveActorId(): Promise<string | null> {
         return 'user-42';
       },
     };
@@ -364,7 +367,7 @@ describe('slingshot-core context accessors', () => {
     const template = { subject: 'Reset', html: '<p>Reset</p>' };
     const ctx = createContextFixture({
       routeAuth,
-      userResolver,
+      actorResolver,
       rateLimitAdapter,
       fingerprintBuilder,
       cacheAdapters: new Map([['memory', cacheAdapter]]),
@@ -376,8 +379,8 @@ describe('slingshot-core context accessors', () => {
 
     expect(getRouteAuth(ctx as never)).toBe(routeAuth);
     expect(getRouteAuthOrNull(ctx as never)).toBe(routeAuth);
-    expect(getUserResolver(ctx as never)).toBe(userResolver);
-    expect(getUserResolverOrNull(ctx as never)).toBe(userResolver);
+    expect(getRequestActorResolver(ctx as never)).toBe(actorResolver);
+    expect(getRequestActorResolverOrNull(ctx as never)).toBe(actorResolver);
     expect(getCacheAdapter(ctx as never, 'memory')).toBe(cacheAdapter);
     expect(getCacheAdapterOrNull(ctx as never, 'redis')).toBeNull();
     expect(getRateLimitAdapter(ctx as never)).toBe(rateLimitAdapter);
@@ -389,7 +392,7 @@ describe('slingshot-core context accessors', () => {
     expect(getEmailTemplate(ctx as never, 'password-reset')).toEqual(template);
     expect(getEmailTemplate(ctx as never, 'missing')).toBeNull();
 
-    await expect(userResolver.resolveUserId(new Request('http://example.com'))).resolves.toBe(
+    await expect(actorResolver.resolveActorId(new Request('http://example.com'))).resolves.toBe(
       'user-42',
     );
     await expect(
@@ -407,7 +410,9 @@ describe('slingshot-core context accessors', () => {
     attachContext(app, ctx as never);
 
     expect(() => getRouteAuth(ctx as never)).toThrow('No RouteAuthRegistry registered');
-    expect(() => getUserResolver(ctx as never)).toThrow('No UserResolver registered');
+    expect(() => getRequestActorResolver(ctx as never)).toThrow(
+      'No RequestActorResolver registered',
+    );
     expect(() => getCacheAdapter(ctx as never, 'memory')).toThrow(
       'No CacheAdapter registered for store "memory"',
     );

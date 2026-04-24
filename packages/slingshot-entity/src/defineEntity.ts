@@ -119,6 +119,7 @@ export function defineEntity<const F extends Record<string, FieldDef>>(
   const _storageFields = {
     mongoPkField: config.storageFields?.mongoPkField ?? '_id',
     ttlField: config.storageFields?.ttlField ?? '_expires_at',
+    mongoTtlField: config.storageFields?.mongoTtlField ?? '_expiresAt',
   };
 
   const _conventions = {

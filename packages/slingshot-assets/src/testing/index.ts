@@ -178,9 +178,19 @@ export async function createAssetsTestApp(
     userAuth: (async (c, next) => {
       const userId = c.req.header('x-user-id') ?? c.req.header('x-test-user');
       if (!userId) return c.json({ error: 'Unauthorized' }, 401);
-      (c as typeof c & { set(key: string, value: unknown): void }).set('actor', { id: userId, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
-      c.set('authUserId', userId);
-      c.set('tenantId', c.req.header('x-tenant-id') ?? null);
+      const tenantId = c.req.header('x-tenant-id') ?? null;
+      (c as typeof c & { set(key: string, value: unknown): void }).set(
+        'actor',
+        Object.freeze({
+          id: userId,
+          kind: 'user',
+          tenantId,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      );
+      c.set('tenantId', tenantId);
       await next();
     }) as MiddlewareHandler,
     requireRole: () => (async (_c, next) => next()) as MiddlewareHandler,

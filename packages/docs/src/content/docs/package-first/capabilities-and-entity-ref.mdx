@@ -1,0 +1,90 @@
+---
+title: Capabilities and entityRef
+description: Typed cross-package contracts for services and entity adapters
+---
+
+Capabilities and entity refs are how packages depend on each other without hard-coding adapter bags
+or global singletons.
+
+## Capabilities
+
+Use a capability when one package wants to publish a typed service for another package to consume.
+
+```typescript
+import {
+  defineCapability,
+  definePackage,
+  domain,
+  provideCapability,
+  route,
+} from '@lastshotlabs/slingshot';
+
+const Mailer = defineCapability<{ send(to: string, body: string): Promise<void> }>('mailer');
+
+const mailPackage = definePackage({
+  name: 'mail',
+  capabilities: {
+    provides: [
+      provideCapability(Mailer, () => ({
+        send: async (_to, _body) => {},
+      })),
+    ],
+  },
+});
+
+const notificationsPackage = definePackage({
+  name: 'notifications',
+  dependencies: ['mail'],
+  capabilities: {
+    requires: [Mailer],
+  },
+  domains: [
+    domain({
+      name: 'notifications',
+      routes: [
+        route.post({
+          path: '/notify',
+          auth: 'none',
+          handler: async ({ capabilities, respond }) => {
+            await capabilities.require(Mailer).send('user@example.com', 'hello');
+            return respond.noContent();
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+## `entityRef(...)`
+
+Use an entity ref when one package needs a typed handle to another package's entity adapter.
+
+```typescript
+import { entityRef } from '@lastshotlabs/slingshot';
+
+const PostRef = entityRef<{ get(id: string): Promise<unknown> }>({
+  plugin: 'blog',
+  entity: 'Post',
+});
+```
+
+Then package routes can resolve the adapter through `ctx.entities.get(...)`.
+
+## Why these are separate concepts
+
+- capabilities are for service-like contracts
+- entity refs are for framework-managed entity adapters
+
+That split keeps cross-package contracts explicit.
+
+## When to use them
+
+Use a capability when the dependency is behavior.
+
+Use an entity ref when the dependency is data access through a framework-managed entity surface.
+
+## Next
+
+- [definePackage](/slingshot/package-first/define-package/)
+- [Entity System: Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/)

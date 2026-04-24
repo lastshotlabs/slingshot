@@ -152,4 +152,3 @@ describe('BullMQ adapter — validation', () => {
     );
   });
 });
-

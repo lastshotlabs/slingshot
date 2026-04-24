@@ -1,0 +1,143 @@
+---
+title: Events and the Event Bus
+description: Typed events, canonical publishing, scopes, exposure, and app-level transport
+---
+
+The event bus is part of the core application model.
+
+Every Slingshot app gets one. If you do not supply `eventBus`, `createApp()` creates a default
+in-process adapter for you.
+
+## The model
+
+- `defineEvent(...)` defines the event contract
+- `ctx.events.publish(...)` is the canonical publish path
+- `bus.on(...)` is the subscription surface
+- event definitions control exposure and scope for SSE, webhooks, and external consumers
+
+## Define events explicitly
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot';
+import { defineEvent } from '@lastshotlabs/slingshot';
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'app:notification.created': { userId: string; notificationId: string; body: string };
+  }
+}
+
+export const notificationsEventsPlugin: SlingshotPlugin = {
+  name: 'notifications-events',
+  setupMiddleware({ events }) {
+    events.register(
+      defineEvent('app:notification.created', {
+        ownerPlugin: 'notifications',
+        exposure: ['client-safe', 'user-webhook'],
+        resolveScope(payload) {
+          return {
+            userId: payload.userId,
+            actorId: payload.userId,
+            resourceType: 'notification',
+            resourceId: payload.notificationId,
+          };
+        },
+      }),
+    );
+  },
+};
+```
+
+The definition is not ceremony. It controls validation, exposure, and scope resolution for every
+downstream transport that depends on the event model.
+
+## Publish through `ctx.events`
+
+```typescript
+import { createApp, getContext } from '@lastshotlabs/slingshot';
+
+const { app } = await createApp({ plugins: [notificationsEventsPlugin] });
+const ctx = getContext(app);
+
+ctx.events.publish('app:notification.created', {
+  userId: 'user-123',
+  notificationId: 'notif-1',
+  body: 'Build finished',
+});
+```
+
+This is the canonical path because it produces the framework event envelope, applies the
+registered event definition, and keeps SSE and webhook filtering coherent.
+
+Use raw `bus.emit(...)` only for lower-level or transport-specific behavior.
+
+## Subscribe in `setupPost`
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot';
+
+export const notificationsSubscriberPlugin: SlingshotPlugin = {
+  name: 'notifications-subscriber',
+  setupPost({ bus }) {
+    bus.on('app:notification.created', async payload => {
+      await saveNotificationToAuditLog(payload.notificationId);
+    });
+  },
+};
+
+declare function saveNotificationToAuditLog(id: string): Promise<void>;
+```
+
+`setupPost` is the safe point for subscriptions because route and runtime registration is complete.
+
+## Exposure and scope are first-class
+
+Event definitions can mark events as:
+
+- `internal`
+- `client-safe`
+- `tenant-webhook`
+- `user-webhook`
+- `app-webhook`
+- `connector`
+
+That is how one event model fans out into multiple delivery surfaces without requiring each surface
+to invent its own allowlist rules.
+
+## Security-sensitive events
+
+Some namespaces are intentionally not browser-deliverable. `SECURITY_EVENT_TYPES` and related
+framework rules exist so transports like SSE can filter sensitive events safely.
+
+## Scaling the bus
+
+The default in-process adapter is correct for a single process. At scale, supply a shared bus:
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+
+await createServer({
+  eventBus: mySharedEventBus,
+});
+
+declare const mySharedEventBus: import('@lastshotlabs/slingshot-core').SlingshotEventBus;
+```
+
+That decision affects cross-instance event delivery, webhook fan-out, and any package behavior that
+depends on events crossing instance boundaries.
+
+## This is why the bus is a core page
+
+The event bus is not a plugin-authoring side topic. It is the shared event transport behind:
+
+- package-to-package side effects
+- SSE
+- webhook delivery
+- search sync
+- security and lifecycle events
+
+## Next
+
+- [Server-Sent Events](/slingshot/app-authoring/server-sent-events/)
+- [Alternate Paths: Manifest Authoring](/slingshot/alternate-paths/manifest-authoring/)
+- [Internals: Event Bus](/slingshot/internals/event-bus/)

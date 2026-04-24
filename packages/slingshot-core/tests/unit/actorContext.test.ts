@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Context } from 'hono';
-import type { AppEnv } from '../../src/context';
 import { getActor, getActorId, getActorTenantId } from '../../src/actorContext';
+import type { AppEnv } from '../../src/context';
 import type { Actor } from '../../src/identity';
 
 function createContext(values: Record<string, unknown> = {}): Context<AppEnv> {
@@ -17,7 +17,7 @@ function createContext(values: Record<string, unknown> = {}): Context<AppEnv> {
 }
 
 describe('actorContext helpers', () => {
-  test('returns an explicit actor from context and freezes it', () => {
+  test('returns an explicit actor from context', () => {
     const actor: Actor = {
       id: 'user-1',
       kind: 'user',
@@ -31,51 +31,14 @@ describe('actorContext helpers', () => {
     const resolved = getActor(c);
 
     expect(resolved).toMatchObject(actor);
-    expect(Object.isFrozen(resolved)).toBe(true);
-    expect(Object.isFrozen(resolved.claims)).toBe(true);
-    expect(Object.isFrozen(resolved.roles!)).toBe(true);
   });
 
-  test('resolves a user actor from legacy auth variables when actor is absent', () => {
-    const c = createContext({
-      authUserId: 'user-2',
-      sessionId: 'sess-2',
-      tenantId: 'tenant-2',
-      roles: ['editor'],
-    });
+  test('returns ANONYMOUS_ACTOR when no actor is set', () => {
+    const c = createContext();
 
     const actor = getActor(c);
 
     expect(actor).toMatchObject({
-      id: 'user-2',
-      kind: 'user',
-      tenantId: 'tenant-2',
-      sessionId: 'sess-2',
-      roles: ['editor'],
-    });
-    expect(getActorId(c)).toBe('user-2');
-    expect(getActorTenantId(c)).toBe('tenant-2');
-    expect(c.get('actor')).toBe(actor);
-  });
-
-  test('resolves a service-account actor from authClientId', () => {
-    const c = createContext({
-      authClientId: 'svc-1',
-      tenantId: 'tenant-svc',
-    });
-
-    expect(getActor(c)).toMatchObject({
-      id: 'svc-1',
-      kind: 'service-account',
-      tenantId: 'tenant-svc',
-      sessionId: null,
-    });
-  });
-
-  test('resolves an anonymous actor when no identity inputs are present', () => {
-    const c = createContext();
-
-    expect(getActor(c)).toMatchObject({
       id: null,
       kind: 'anonymous',
       tenantId: null,
@@ -85,20 +48,51 @@ describe('actorContext helpers', () => {
     expect(getActorTenantId(c)).toBeNull();
   });
 
-  test('refreshes a stale anonymous actor when auth variables appear later', () => {
-    const c = createContext({
-      actor: {
-        id: null,
-        kind: 'anonymous',
-        tenantId: null,
-        sessionId: null,
-        roles: null,
-        claims: {},
-      } satisfies Actor,
-    });
+  test('getActorId returns actor.id for a user actor', () => {
+    const actor: Actor = {
+      id: 'user-2',
+      kind: 'user',
+      tenantId: 'tenant-2',
+      sessionId: 'sess-2',
+      roles: ['editor'],
+      claims: {},
+    };
+    const c = createContext({ actor });
 
-    c.set('authUserId', 'late-user');
-    c.set('tenantId', 'late-tenant');
+    expect(getActorId(c)).toBe('user-2');
+    expect(getActorTenantId(c)).toBe('tenant-2');
+  });
+
+  test('getActorTenantId returns null for tenantless actor', () => {
+    const actor: Actor = {
+      id: 'svc-1',
+      kind: 'service-account',
+      tenantId: null,
+      sessionId: null,
+      roles: null,
+      claims: {},
+    };
+    const c = createContext({ actor });
+
+    expect(getActorTenantId(c)).toBeNull();
+  });
+
+  test('explicit actor set after context creation is returned by getActor', () => {
+    const c = createContext();
+
+    // Initially anonymous
+    expect(getActor(c)).toMatchObject({ kind: 'anonymous' });
+
+    // Set actor later (simulating auth middleware)
+    const actor: Actor = Object.freeze({
+      id: 'late-user',
+      kind: 'user' as const,
+      tenantId: 'late-tenant',
+      sessionId: null,
+      roles: null,
+      claims: {},
+    });
+    c.set('actor', actor);
 
     expect(getActor(c)).toMatchObject({
       id: 'late-user',

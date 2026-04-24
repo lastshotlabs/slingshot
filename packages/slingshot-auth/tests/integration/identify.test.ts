@@ -12,6 +12,7 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import type { AppEnv, SlingshotContext } from '@lastshotlabs/slingshot-core';
+import { getActor } from '@lastshotlabs/slingshot-core';
 import { signToken } from '../../src/lib/jwt';
 import { createIdentifyMiddleware } from '../../src/middleware/identify';
 import { AUTH_RUNTIME_KEY } from '../../src/runtime';
@@ -36,13 +37,14 @@ function buildApp(signingOverride?: Record<string, unknown>) {
     await next();
   });
   app.use('*', createIdentifyMiddleware(runtime));
-  app.get('/test', c =>
-    c.json({
-      authUserId: c.get('authUserId'),
-      sessionId: c.get('sessionId'),
-      authClientId: c.get('authClientId'),
-    }),
-  );
+  app.get('/test', c => {
+    const actor = getActor(c);
+    return c.json({
+      actorId: actor.kind === 'user' ? actor.id : null,
+      sessionId: actor.sessionId,
+      authClientId: actor.kind === 'service-account' ? actor.id : null,
+    });
+  });
   return app;
 }
 
@@ -61,7 +63,7 @@ describe('token extraction', () => {
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
     expect(body.sessionId).toBeNull();
     expect(body.authClientId).toBeNull();
   });
@@ -83,7 +85,7 @@ describe('token extraction', () => {
       headers: { 'x-user-token': token },
     });
     const body = await res.json();
-    expect(body.authUserId).toBe(userId);
+    expect(body.actorId).toBe(userId);
     expect(body.sessionId).toBe(sessionId);
   });
 
@@ -95,7 +97,7 @@ describe('token extraction', () => {
     expect(res.status).toBe(200);
 
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
   });
 
   test('expired JWT — treated as unauthenticated', async () => {
@@ -116,7 +118,7 @@ describe('token extraction', () => {
       headers: { 'x-user-token': token },
     });
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
   });
 
   test('token signed with wrong secret — treated as unauthenticated', async () => {
@@ -130,7 +132,7 @@ describe('token extraction', () => {
       headers: { 'x-user-token': token },
     });
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
   });
 });
 
@@ -152,7 +154,7 @@ describe('session mismatch', () => {
       headers: { 'x-user-token': token },
     });
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
   });
 
   test('token with session that stores a different JWT — unauthenticated', async () => {
@@ -182,7 +184,7 @@ describe('session mismatch', () => {
     });
     const body = await res.json();
     // Token/session mismatch — treated as unauthenticated
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
   });
 });
 
@@ -205,7 +207,7 @@ describe('M2M token detection', () => {
     });
     const body = await res.json();
     expect(body.authClientId).toBe('client-123');
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
     expect(body.sessionId).toBeNull();
   });
 
@@ -225,7 +227,7 @@ describe('M2M token detection', () => {
       headers: { 'x-user-token': token },
     });
     const body = await res.json();
-    expect(body.authUserId).toBe(userId);
+    expect(body.actorId).toBe(userId);
     expect(body.sessionId).toBe(sessionId);
     expect(body.authClientId).toBeNull();
   });
@@ -269,7 +271,7 @@ describe('session fingerprint binding', () => {
       },
     });
     const body = await res.json();
-    expect(body.authUserId).toBe(userId);
+    expect(body.actorId).toBe(userId);
   });
 
   test('matching fingerprint on subsequent request — authenticated', async () => {
@@ -289,7 +291,7 @@ describe('session fingerprint binding', () => {
       headers: { 'x-user-token': token, 'user-agent': 'TestBrowser/1.0' },
     });
     const body = await res.json();
-    expect(body.authUserId).toBe(userId);
+    expect(body.actorId).toBe(userId);
   });
 
   test('onMismatch=unauthenticate — mismatched UA clears identity', async () => {
@@ -307,7 +309,7 @@ describe('session fingerprint binding', () => {
       headers: { 'x-user-token': token, 'user-agent': 'CompletelyDifferentBrowser/2.0' },
     });
     const body = await res.json();
-    expect(body.authUserId).toBeNull();
+    expect(body.actorId).toBeNull();
   });
 
   test('onMismatch=reject — mismatched UA throws 401', async () => {
@@ -349,7 +351,7 @@ describe('session fingerprint binding', () => {
       headers: { 'x-user-token': token, 'user-agent': 'DifferentBrowser/2.0' },
     });
     const body = await res.json();
-    expect(body.authUserId).toBe(userId);
+    expect(body.actorId).toBe(userId);
   });
 });
 

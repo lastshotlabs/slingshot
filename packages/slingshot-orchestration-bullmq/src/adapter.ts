@@ -13,8 +13,8 @@ import {
   type ScheduleHandle,
   type StepRun,
   type WorkflowRun,
-  createIdempotencyScope,
   createCachedRunHandle,
+  createIdempotencyScope,
   generateRunId,
 } from '@lastshotlabs/slingshot-orchestration';
 import { mapBullMQStatus } from './statusMap';
@@ -93,7 +93,10 @@ function serializeRunSnapshot(run: Run | WorkflowRun): SerializedRunSnapshot {
   return {
     ...base,
     steps: Object.fromEntries(
-      Object.entries(workflowRun.steps).map(([stepName, step]) => [stepName, serializeStepRun(step)]),
+      Object.entries(workflowRun.steps).map(([stepName, step]) => [
+        stepName,
+        serializeStepRun(step),
+      ]),
     ),
   };
 }
@@ -137,7 +140,10 @@ function getRunId(job: Job<Record<string, unknown>>): string {
   return rawRunId.length > 0 ? rawRunId : String(job.id);
 }
 
-function isCancelledFailedJob(job: Job<Record<string, unknown>>, state: JobType | 'unknown'): boolean {
+function isCancelledFailedJob(
+  job: Job<Record<string, unknown>>,
+  state: JobType | 'unknown',
+): boolean {
   return state === 'failed' && job.failedReason === CANCELLATION_ERROR_MESSAGE;
 }
 
@@ -151,9 +157,10 @@ function toRun(job: Job<Record<string, unknown>>, type: 'task' | 'workflow'): Ru
     status: 'pending',
     input: job.data['input'],
     output: job.returnvalue,
-    error: typeof job.failedReason === 'string' && job.failedReason.length > 0
-      ? { message: job.failedReason }
-      : undefined,
+    error:
+      typeof job.failedReason === 'string' && job.failedReason.length > 0
+        ? { message: job.failedReason }
+        : undefined,
     tenantId:
       typeof job.data['tenantId'] === 'string' ? (job.data['tenantId'] as string) : undefined,
     priority: typeof job.opts.priority === 'number' ? job.opts.priority : undefined,
@@ -443,7 +450,10 @@ export function createBullMQOrchestrationAdapter(
 
   async function persistCancelledSnapshot(snapshot: Run | WorkflowRun): Promise<void> {
     const client = await getCancellationSnapshotStore();
-    await client.set(getCancelledRunKey(snapshot.id), JSON.stringify(serializeRunSnapshot(snapshot)));
+    await client.set(
+      getCancelledRunKey(snapshot.id),
+      JSON.stringify(serializeRunSnapshot(snapshot)),
+    );
     await client.zadd(cancelledRunsIndexKey, snapshot.createdAt.getTime(), snapshot.id);
   }
 
@@ -577,10 +587,7 @@ export function createBullMQOrchestrationAdapter(
 
     const cancellationWatcher = createCancellationWatcher(runId);
     try {
-      return await Promise.race([
-        job.waitUntilFinished(queueEvents),
-        cancellationWatcher.promise,
-      ]);
+      return await Promise.race([job.waitUntilFinished(queueEvents), cancellationWatcher.promise]);
     } finally {
       cancellationWatcher.stop();
     }
@@ -829,7 +836,10 @@ export function createBullMQOrchestrationAdapter(
       for (const run of merged) {
         visibleRuns.set(run.id, run);
       }
-      if (!filter?.status || (Array.isArray(filter.status) ? filter.status : [filter.status]).includes('cancelled')) {
+      if (
+        !filter?.status ||
+        (Array.isArray(filter.status) ? filter.status : [filter.status]).includes('cancelled')
+      ) {
         for (const snapshot of await listPersistedCancelledSnapshots()) {
           const existing = visibleRuns.get(snapshot.id);
           if (!existing || existing.status === 'failed') {

@@ -1,0 +1,135 @@
+---
+title: Guides
+description: Production and operational topics — security, testing, deployment, scaling, and more
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+These guides cover what you need after you have a working app. They are independent of each other —
+read whichever ones apply to your situation.
+
+## Before you ship
+
+<CardGrid>
+  <LinkCard
+    title="Security"
+    href="/slingshot/guides/security/"
+    description="CORS, CSRF, rate limits, helmet, content security policy, and secrets rotation."
+  />
+  <LinkCard
+    title="Testing"
+    href="/slingshot/guides/testing/"
+    description="Unit, integration, entity route, and plugin testing patterns."
+  />
+  <LinkCard
+    title="Error Handling"
+    href="/slingshot/guides/error-handling/"
+    description="Structured errors, error boundaries, and consistent error responses."
+  />
+</CardGrid>
+
+## Multi-tenant and permissions
+
+<CardGrid>
+  <LinkCard
+    title="Multi-Tenancy"
+    href="/slingshot/guides/multi-tenancy/"
+    description="Tenant resolution, scoped data, isolation strategies, and cross-tenant operations."
+  />
+  <LinkCard
+    title="Permissions"
+    href="/slingshot/guides/permissions/"
+    description="RBAC, grants, evaluators, and resource-level access control."
+  />
+</CardGrid>
+
+## Infrastructure and operations
+
+<CardGrid>
+  <LinkCard
+    title="Deployment"
+    href="/slingshot/guides/deployment/"
+    description="Docker, serverless, managed hosting, and environment configuration."
+  />
+  <LinkCard
+    title="Lambda"
+    href="/slingshot/guides/lambda/"
+    description="AWS Lambda runtime, cold starts, trigger adapters, and manifest-driven function wiring."
+  />
+  <LinkCard
+    title="Runtime"
+    href="/slingshot/guides/runtime/"
+    description="Bun, Node, and edge runtimes — what each supports and when to switch."
+  />
+  <LinkCard
+    title="Horizontal Scaling"
+    href="/slingshot/guides/horizontal-scaling/"
+    description="Stateless workers, external event buses, session stores, and WebSocket scaling."
+  />
+  <LinkCard
+    title="Secrets"
+    href="/slingshot/guides/secrets/"
+    description="Secret providers, rotation, and environment-specific resolution."
+  />
+</CardGrid>
+
+## Observability
+
+<CardGrid>
+  <LinkCard
+    title="Observability"
+    href="/slingshot/guides/observability/"
+    description="Structured logging, OpenTelemetry tracing, and metrics export."
+  />
+  <LinkCard
+    title="Monitoring"
+    href="/slingshot/guides/monitoring/"
+    description="Health checks, readiness probes, and operational dashboards."
+  />
+</CardGrid>
+
+## Feature-specific
+
+<CardGrid>
+  <LinkCard
+    title="OpenAPI"
+    href="/slingshot/guides/openapi/"
+    description="Generated API docs, typed routes, schema registration, and versioned specs."
+  />
+  <LinkCard
+    title="Uploads"
+    href="/slingshot/guides/file-uploads/"
+    description="File upload handling, storage backends, and size limits."
+  />
+  <LinkCard
+    title="WebSockets"
+    href="/slingshot/guides/websockets/"
+    description="Advanced WebSocket patterns — rooms, pub/sub, scaling, and auth."
+  />
+  <LinkCard
+    title="Webhook Governance"
+    href="/slingshot/guides/webhook-governance/"
+    description="Webhook delivery, retry policies, payload signing, and endpoint management."
+  />
+  <LinkCard
+    title="Content Model"
+    href="/slingshot/guides/content-model/"
+    description="Structuring content entities, rich text, versioning, and publishing workflows."
+  />
+</CardGrid>
+
+## Migration
+
+<CardGrid>
+  <LinkCard
+    title="Migrate Community Plugin"
+    href="/slingshot/guides/migrate-community-plugin/"
+    description="Upgrade guide for the slingshot-community config rewrite."
+  />
+</CardGrid>
+
+## Troubleshooting
+
+When something is not working:
+
+- [Troubleshooting](/slingshot/guides/troubleshooting/) — common errors, debugging strategies, and diagnostic tools

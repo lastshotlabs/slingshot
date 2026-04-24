@@ -32,14 +32,14 @@ await createServer({
 
 ## The config categories
 
-| Category | Keys | What it controls |
-| --- | --- | --- |
-| App metadata | `meta`, `routesDir`, `modelSchemas`, `versioning` | Route discovery, docs metadata, schema preload, versioned APIs |
-| Request pipeline | `security`, `middleware`, `validation` | CORS, signing, rate limiting, request middleware, validation output |
-| Infrastructure | `db`, `upload`, `jobs`, `runtime`, `secrets` | Databases, uploads, job endpoints, runtime abstraction, secret resolution |
-| Composition | `packages`, `plugins`, `permissions` | Package-first app structure, raw plugins, shared permissions bootstrap |
-| Events and realtime | `eventBus`, `kafkaConnectors`, `ws`, `sse` | Cross-package events, Kafka bridge, WebSockets, SSE |
-| Operations | `logging`, `metrics`, `observability`, `tenancy` | Logging, `/metrics`, tracing, tenant resolution |
+| Category            | Keys                                              | What it controls                                                          |
+| ------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| App metadata        | `meta`, `routesDir`, `modelSchemas`, `versioning` | Route discovery, docs metadata, schema preload, versioned APIs            |
+| Request pipeline    | `security`, `middleware`, `validation`            | CORS, signing, rate limiting, request middleware, validation output       |
+| Infrastructure      | `db`, `upload`, `jobs`, `runtime`, `secrets`      | Databases, uploads, job endpoints, runtime abstraction, secret resolution |
+| Composition         | `packages`, `plugins`, `permissions`              | Package-first app structure, raw plugins, shared permissions bootstrap    |
+| Events and realtime | `eventBus`, `kafkaConnectors`, `ws`, `sse`        | Cross-package events, Kafka bridge, WebSockets, SSE                       |
+| Operations          | `logging`, `metrics`, `observability`, `tenancy`  | Logging, `/metrics`, tracing, tenant resolution                           |
 
 ## The keys that matter first
 

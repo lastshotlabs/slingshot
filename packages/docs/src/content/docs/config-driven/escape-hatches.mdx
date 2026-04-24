@@ -9,17 +9,23 @@ When the managed surface stops being the right abstraction, these are the suppor
 
 ## Route-level escape hatches
 
+### Generated-route executor overrides
+
+Replace the executor behind a generated CRUD or named-operation route while keeping the route shell, OpenAPI spec, and middleware intact. Use `defineEntityExecutor()` with an `overrides` map.
+
+Full examples: [Override a generated route](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route)
+
+### Extra routes inside the entity shell
+
+Add routes that live alongside generated entity routes using `extraRoutes` and `defineEntityRoute()`. They share the same collision checking and specificity ordering as generated routes.
+
+Full examples: [Add an extra route](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route)
+
 ### File-based routes with `routesDir`
 
-Use this when the route belongs to the app directly rather than to a package-owned entity/domain module.
+Use this when the route belongs to the app directly rather than to a package-owned entity/domain module. Author the route with `createRoute(...)`, `createRouter()`, and `router.openapi(...)`, then let `routesDir` auto-discover and mount the route module.
 
-Author the route with:
-
-- `createRoute(...)`
-- `createRouter()`
-- `router.openapi(...)`
-
-Then let `routesDir` auto-discover and mount the route module.
+Full examples: [File-based routes](/slingshot/config-driven/routes/#file-based-routes-with-routesdir)
 
 ### Raw Hono routers and middleware
 
@@ -37,72 +43,75 @@ This is still a supported path. It is just lower-level than package/entity autho
 
 Use `entity({ wiring: { mode: 'factories', ... } })` when you want custom repo-backed behavior while keeping the entity shell.
 
-This is the normal escape hatch for:
+This is the normal escape hatch for custom repos, store-specific adapter behavior, and persistence code that still maps cleanly to an entity adapter.
 
-- custom repos
-- store-specific adapter behavior
-- persistence code that still maps cleanly to an entity adapter
+Full examples: [Factories wiring mode](/slingshot/entity-system/storage-and-adapter-wiring/#factories)
 
 ### Manual adapter wiring
 
 Use `entity({ wiring: { mode: 'manual', buildAdapter(...) } })` when you need full control over adapter construction.
 
-This is the stronger escape hatch for:
+This is the stronger escape hatch for non-standard persistence composition, custom driver integration, and repo layers that do not fit the standard factories path.
 
-- non-standard persistence composition
-- custom driver integration
-- repo layers that do not fit the standard factories path
+Full examples: [Manual wiring mode](/slingshot/entity-system/storage-and-adapter-wiring/#manual)
+
+### Composite factories
+
+Use `createCompositeFactories(...)` when a package owns several related entities that share a backing store and should be wired together.
+
+Full examples: [Composite factories](/slingshot/entity-system/storage-and-adapter-wiring/#composite-factories)
+
+### Storage backend swapping
+
+Switch the backing store for entities at the app root without changing entity definitions or adapter code. Supports memory, SQLite, Postgres, Redis, and Mongo.
+
+Full examples: [Backend swapping at the app root](/slingshot/entity-system/storage-and-adapter-wiring/#backend-swapping-at-the-app-root)
 
 ### Raw SQL
 
 Raw SQL belongs in the adapter or repo layer, not in the entity DSL itself.
 
-Use it when:
-
-- you need hand-written joins
-- you need database-specific query tuning
-- you are implementing a reporting or analytics query that does not map well to the operation DSL
-
-The route shell or package layer can still sit above that repo code.
+Use it when you need hand-written joins, database-specific query tuning, or reporting queries that do not map to the operation DSL. The route shell or package layer can still sit above that repo code.
 
 ### Drizzle
 
 Drizzle is also an escape hatch, not the primary config-driven abstraction.
 
-The right place for Drizzle code is usually:
+The right place for Drizzle code is usually a custom repo used by factories wiring, a manual adapter implementation, or a package-local service used by a package domain route. Keep the boundary explicit instead of pretending it is the entity DSL itself.
 
-- a custom repo used by factories wiring
-- a manual adapter implementation
-- a package-local service used by a package domain route
+## Consumer shape escape hatches
 
-Use Drizzle when you want its query builder or schema tooling, but keep the boundary explicit instead of pretending it is the entity DSL itself.
+### System fields, storage fields, and conventions
+
+`defineEntity(...)` accepts `systemFields`, `storageFields`, and `conventions` to rename audit fields, storage column names, ID generation strategies, and Redis key formats without forking adapters.
+
+Full examples: [System fields, storage fields, and conventions](/slingshot/entity-system/define-entity/#system-fields-storage-fields-and-conventions)
 
 ## Runtime composition escape hatches
 
 ### Package domain routes
 
-A package `domain({ routes: [...] })` route is not a full escape hatch, but it is the first step out of pure entity CRUD/operation generation.
+A package `domain({ routes: [...] })` route is the first step out of pure entity CRUD/operation generation. Use it when the route spans multiple entities, handles orchestration, or has a package-level response model.
 
-Use it when:
+Full examples: [Package domain routes](/slingshot/package-first/domain-and-route/)
 
-- the route spans multiple entities
-- the route is orchestration or analytics
-- the response model is package-level, not entity-level
+### `createEntityPlugin()`
+
+Use `createEntityPlugin()` when you need lower-level orchestration that `entity(...)` and `definePackage(...)` do not cover. This is the lower-level compatibility and escape-hatch surface beneath package-first authoring.
+
+Full examples: [Config-Driven Domain example](/slingshot/examples/config-driven-domain/#build-the-plugin)
 
 ### Raw plugins
 
-Use a raw `SlingshotPlugin` when you need:
-
-- full lifecycle control
-- custom bootstrapping that does not fit package/entity compilation
-- framework-level integration work
-- direct router mounting or app mutation in plugin phases
+Use a raw `SlingshotPlugin` when you need full lifecycle control, custom bootstrapping that does not fit package/entity compilation, or direct router mounting in plugin phases.
 
 This is the broadest escape hatch and should be treated as the lowest-level public authoring surface.
 
+Full examples: [Plugin Interface](/slingshot/authoring/plugin-interface/)
+
 ## Middleware escape hatches
 
-There are three common levels:
+Three levels, from managed to raw:
 
 1. Package middleware referenced by name from entity/domain routes
 2. Raw Hono middleware mounted through routers or plugin phases
@@ -115,6 +124,8 @@ Use the lowest level that actually solves the problem.
 Use:
 
 - package/entity authoring for the normal case
+- executor overrides to replace generated route behavior
+- extra routes for entity-adjacent endpoints
 - package domain routes for orchestration and custom package endpoints
 - factories/manual adapters for custom persistence
 - raw SQL or Drizzle inside repo/adapter code
@@ -123,7 +134,11 @@ Use:
 
 ## See also
 
-- [Routes](/slingshot/config-driven/routes/)
+- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — full examples for overrides and extra routes
+- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — full examples for all wiring modes
+- [defineEntity](/slingshot/entity-system/define-entity/) — system fields, storage fields, and conventions
+- [Package Domain Routes](/slingshot/package-first/domain-and-route/) — typed routes that belong to the package
+- [Routes](/slingshot/config-driven/routes/) — file-based routes and the route decision matrix
 - [Adapters and Factories](/slingshot/config-driven/adapters/)
 - [Cross-Entity and Transactions](/slingshot/config-driven/cross-entity/)
 - [Packages and Capabilities](/slingshot/config-driven/packages/)

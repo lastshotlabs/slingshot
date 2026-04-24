@@ -1,46 +1,65 @@
 ---
 title: Entity System
-description: The canonical authoring path for data-shaped domains in Slingshot
+description: Define your data model once, get CRUD routes, operations, and storage wiring automatically
 ---
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-The entity system is how you author data-shaped domains the same way the framework's own packages
-do.
+Every backend app needs CRUD routes, input validation, auth checks, and database queries for its
+data models. Writing all of that by hand is repetitive and error-prone. The entity system generates
+it from a single definition.
 
-It is code-first, package-friendly, and designed around generated behavior with explicit
-customization seams.
+Define your data shape. The framework generates:
 
-## Use this when
+- `GET /posts`, `GET /posts/:id`, `POST /posts`, `PATCH /posts/:id`, `DELETE /posts/:id`
+- Input validation and OpenAPI docs
+- Named operations like "publish" or "lookup by slug"
+- Auth, permissions, and rate limiting per route
+- Storage that works with memory, SQLite, Postgres, MongoDB, or Redis
 
-Use the entity system when your package owns a data-shaped domain and you want:
+You still own the data model. The framework just writes the boilerplate.
 
-- a canonical entity definition
-- generated CRUD routes
-- named operations beyond CRUD
-- swappable storage backends
-- route policy attached to the domain model
+## What you'll learn
 
-## The canonical flow
+- How to define an entity with fields, indexes, and route defaults
+- How to add operations beyond CRUD (lookups, transitions, aggregates)
+- How to control auth, permissions, and middleware per route
+- How to swap storage backends without changing your entity code
+- How to override or extend generated routes when you need custom behavior
+
+## A minimal entity
 
 ```typescript
-import { defineOperations, definePackage, defineEntity, entity, field, op } from '@lastshotlabs/slingshot';
+import { defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
 
 const Post = defineEntity('Post', {
   namespace: 'blog',
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
-    authorId: field.string(),
     title: field.string(),
-    status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
-  },
-  routes: {
-    defaults: { auth: 'userAuth' },
-    list: { auth: 'none' },
+    body: field.string(),
   },
 });
 
+export const blogPackage = definePackage({
+  name: 'blog',
+  entities: [entity({ config: Post })],
+});
+```
+
+This generates five routes (`GET /posts`, `GET /posts/:id`, `POST /posts`, `PATCH /posts/:id`,
+`DELETE /posts/:id`), all with input validation and OpenAPI documentation. No route handlers to
+write.
+
+## Adding operations
+
+Operations model behavior beyond basic CRUD:
+
+```typescript
+import { defineOperations, op } from '@lastshotlabs/slingshot';
+
 const PostOps = defineOperations(Post, {
+  bySlug: op.lookup({ field: 'slug', unique: true }),
   publish: op.transition({
     field: 'status',
     from: 'draft',
@@ -49,80 +68,62 @@ const PostOps = defineOperations(Post, {
   }),
 });
 
-export const blogPackage = definePackage({
-  name: 'blog',
-  entities: [
-    entity({
-      config: Post,
-      operations: PostOps,
-    }),
-  ],
+// Then wire it in:
+entity({ config: Post, operations: PostOps });
+```
+
+This generates `GET /posts/by-slug/:slug` and `POST /posts/:id/publish` automatically.
+
+## Adding auth and permissions
+
+Route policy controls auth, permissions, rate limits, and events per route:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    /* ... */
+  },
+  routes: {
+    defaults: { auth: 'userAuth' }, // all routes require login
+    list: { auth: 'none' }, // except the list route
+    create: { permission: 'blog:post.create' }, // create requires a specific permission
+  },
 });
 ```
 
-## What the entity system gives you
-
-- one canonical entity definition
-- generated CRUD routes
-- named operations beyond CRUD
-- route policy for auth, permissions, rate limiting, idempotency, and events
-- swappable storage backends
-- customization seams for overrides and extra routes
-- WebSocket channel declarations and other advanced wiring when needed
-
-## The docs contract for this section
-
-Every important entity topic should answer four questions:
-
-1. what you get by default
-2. how to customize it
-3. what escape hatches exist
-4. when to stop using the generated path and drop lower
-
 ## Learn this section in order
 
-- [defineEntity](/slingshot/entity-system/define-entity/)
-- [Route Policy](/slingshot/entity-system/route-policy/)
-- [Operations](/slingshot/entity-system/operations/)
-- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/)
-- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/)
-
-## Common entity use cases
-
-<CardGrid>
-  <LinkCard
-    title="Define an entity"
-    href="/slingshot/entity-system/define-entity/"
-    description="Start with fields, indexes, relations, storage naming, and route defaults."
-  />
-  <LinkCard
-    title="Add named behavior"
-    href="/slingshot/entity-system/operations/"
-    description="Model lookups, transitions, aggregates, search, and other non-CRUD behavior."
-  />
-  <LinkCard
-    title="Control route policy"
-    href="/slingshot/entity-system/route-policy/"
-    description="Attach auth, permissions, idempotency, rate limits, middleware, and events."
-  />
-</CardGrid>
+1. [defineEntity](/slingshot/entity-system/define-entity/) — fields, indexes, relations, and route defaults
+2. [Operations](/slingshot/entity-system/operations/) — lookups, transitions, aggregates, and search
+3. [Route Policy](/slingshot/entity-system/route-policy/) — auth, permissions, rate limits, middleware, and events
+4. [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — swap backends without changing entity code
+5. [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customize or extend what the framework generates
 
 ## Less common built-ins
 
 These are still part of the canonical entity story and should be easy to discover:
 
-- storage backend swapping
-- consumer-controlled field and naming conventions
-- factory-backed and composite adapter wiring
-- generated route overrides
-- extra routes inside the entity shell
+- [Storage backend swapping](/slingshot/entity-system/storage-and-adapter-wiring/#backend-swapping-at-the-app-root)
+- [Consumer-controlled field and naming conventions](/slingshot/entity-system/define-entity/#system-fields-storage-fields-and-conventions)
+- [Factory-backed](/slingshot/entity-system/storage-and-adapter-wiring/#factories) and [composite](/slingshot/entity-system/storage-and-adapter-wiring/#composite-factories) adapter wiring
+- [Generated route overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route)
+- [Extra routes inside the entity shell](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route)
 
 ## Escape hatches
 
-When the generated path is not enough, the main escape hatches are:
+When the generated path is not enough:
 
-- manual adapter wiring
-- `createEntityPlugin()` for lower-level orchestration work
-- generated-route executor overrides
-- extra routes
-- package routes outside the entity shell when the behavior is no longer entity-shaped
+- [Manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual)
+- [`createEntityPlugin()`](/slingshot/examples/config-driven-domain/#build-the-plugin) for lower-level orchestration work
+- [Generated-route executor overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route)
+- [Extra routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route)
+- [Package routes](/slingshot/package-first/domain-and-route/) outside the entity shell when the behavior is no longer entity-shaped
+
+Full decision guide: [Escape Hatches](/slingshot/config-driven/escape-hatches/)
+
+## After this section
+
+- [Examples](/slingshot/examples/) — complete apps that combine packages, entities, and runtime features
+- [Config-Driven Domain](/slingshot/examples/config-driven-domain/) is the closest match to what this section teaches
+- [Guides](/slingshot/guides/) — production concerns like security, testing, deployment, and scaling

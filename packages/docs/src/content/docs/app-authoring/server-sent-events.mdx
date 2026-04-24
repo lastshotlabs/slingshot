@@ -17,8 +17,8 @@ These examples extend the [starter app](/slingshot/app-authoring/starter-app/) a
 
 ```typescript title="src/index.ts"
 import { createServer } from '@lastshotlabs/slingshot';
-import { blogPackage } from './blog/package';
 import { blogEventsPlugin } from './blog/events';
+import { blogPackage } from './blog/package';
 
 await createServer({
   packages: [blogPackage],
@@ -29,8 +29,7 @@ await createServer({
         events: ['blog:post.published'],
         heartbeat: 15_000,
         filter: (client, _event, payload) =>
-          client.actorId !== null &&
-          (payload as { authorId: string }).authorId === client.actorId,
+          client.actorId !== null && (payload as { authorId: string }).authorId === client.actorId,
       },
     },
   },

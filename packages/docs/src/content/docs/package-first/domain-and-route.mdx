@@ -117,8 +117,7 @@ route.post({
     key: 'blog:post.publishRequested',
     payload: ['id'],
   },
-  handler: ({ params, respond }) =>
-    respond.json({ queued: true, postId: params.id }),
+  handler: ({ params, respond }) => respond.json({ queued: true, postId: params.id }),
 });
 ```
 

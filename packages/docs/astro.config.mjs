@@ -5,11 +5,40 @@ import { defineConfig } from 'astro/config';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const docsSite = process.env.DOCS_SITE_URL ?? 'https://lastshotlabs.github.io';
+const spawnBlocked = process.env.SLINGSHOT_DOCS_SPAWN_BLOCKED === '1';
 
 export default defineConfig({
   site: docsSite,
   base: '/slingshot',
   vite: {
+    ...(spawnBlocked
+      ? {
+          optimizeDeps: {
+            noDiscovery: true,
+            include: [],
+          },
+          ssr: {
+            optimizeDeps: {
+              noDiscovery: true,
+              include: [],
+            },
+          },
+          environments: {
+            client: {
+              optimizeDeps: {
+                noDiscovery: true,
+                include: [],
+              },
+            },
+            ssr: {
+              optimizeDeps: {
+                noDiscovery: true,
+                include: [],
+              },
+            },
+          },
+        }
+      : {}),
     resolve: {
       alias: {
         // Force Astro/Starlight to use Zod v3 from this package,
@@ -60,12 +89,6 @@ export default defineConfig({
               slug: 'app-authoring/context-and-request-model',
             },
             { label: 'Middleware', slug: 'app-authoring/middleware' },
-            {
-              label: 'Events and the Event Bus',
-              slug: 'app-authoring/events-and-the-event-bus',
-            },
-            { label: 'WebSockets', slug: 'app-authoring/websockets' },
-            { label: 'Server-Sent Events', slug: 'app-authoring/server-sent-events' },
             { label: 'Packages and Plugins', slug: 'app-authoring/packages-and-plugins' },
             {
               label: 'OpenAPI and Validation',
@@ -74,6 +97,37 @@ export default defineConfig({
             {
               label: 'Runtime and Infrastructure',
               slug: 'app-authoring/runtime-and-infrastructure',
+            },
+          ],
+        },
+        {
+          label: 'Core Features',
+          items: [
+            {
+              label: 'Events and the Event Bus',
+              slug: 'app-authoring/events-and-the-event-bus',
+            },
+            { label: 'WebSockets', slug: 'app-authoring/websockets' },
+            { label: 'Server-Sent Events', slug: 'app-authoring/server-sent-events' },
+            {
+              label: 'Auth',
+              slug: 'examples/with-auth',
+              badge: { text: 'Preview', variant: 'caution' },
+            },
+            {
+              label: 'Permissions',
+              slug: 'guides/permissions',
+              badge: { text: 'Preview', variant: 'caution' },
+            },
+            {
+              label: 'Multi-Tenancy',
+              slug: 'guides/multi-tenancy',
+              badge: { text: 'Preview', variant: 'caution' },
+            },
+            {
+              label: 'Jobs and Orchestration',
+              slug: 'orchestration/overview',
+              badge: { text: 'Preview', variant: 'caution' },
             },
           ],
         },
@@ -109,6 +163,8 @@ export default defineConfig({
         },
         {
           label: 'Orchestration',
+          badge: { text: 'Preview', variant: 'caution' },
+          collapsed: true,
           items: [
             { label: 'Overview', slug: 'orchestration/overview' },
             { label: 'Code-First Guide', slug: 'orchestration/code-first' },
@@ -140,17 +196,25 @@ export default defineConfig({
         {
           label: 'Guides',
           items: [
+            { label: 'Overview', slug: 'guides' },
             { label: 'Security', slug: 'guides/security' },
+            { label: 'Testing', slug: 'guides/testing' },
+            { label: 'Error Handling', slug: 'guides/error-handling' },
             { label: 'Multi-Tenancy', slug: 'guides/multi-tenancy' },
             { label: 'Permissions', slug: 'guides/permissions' },
-            { label: 'Uploads', slug: 'guides/file-uploads' },
+            { label: 'Deployment', slug: 'guides/deployment' },
+            { label: 'Lambda', slug: 'guides/lambda' },
             { label: 'Runtime', slug: 'guides/runtime' },
+            { label: 'Horizontal Scaling', slug: 'guides/horizontal-scaling' },
             { label: 'Secrets', slug: 'guides/secrets' },
             { label: 'Observability', slug: 'guides/observability' },
             { label: 'Monitoring', slug: 'guides/monitoring' },
-            { label: 'Testing', slug: 'guides/testing' },
-            { label: 'Deployment', slug: 'guides/deployment' },
-            { label: 'Horizontal Scaling', slug: 'guides/horizontal-scaling' },
+            { label: 'OpenAPI', slug: 'guides/openapi' },
+            { label: 'Uploads', slug: 'guides/file-uploads' },
+            { label: 'WebSockets', slug: 'guides/websockets' },
+            { label: 'Webhook Governance', slug: 'guides/webhook-governance' },
+            { label: 'Content Model', slug: 'guides/content-model' },
+            { label: 'Migrate Community Plugin', slug: 'guides/migrate-community-plugin' },
             { label: 'Troubleshooting', slug: 'guides/troubleshooting' },
           ],
         },

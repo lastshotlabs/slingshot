@@ -1,6 +1,6 @@
 ---
 title: Quick Start
-description: A minimal Slingshot app, code first
+description: Build a working backend in under 5 minutes
 ---
 
 ## Install
@@ -9,7 +9,7 @@ description: A minimal Slingshot app, code first
 bun add @lastshotlabs/slingshot zod
 ```
 
-## Start with one package and one route
+## Step 1: A route that works
 
 Create `src/index.ts`:
 
@@ -46,71 +46,149 @@ Run it:
 bun run src/index.ts
 ```
 
-Now hit:
+Test it:
 
 ```bash
 curl http://localhost:3000/health
+# → { "ok": true }
 ```
 
-You should get:
+Your API docs are already live at `http://localhost:3000/docs`.
 
-```json
-{ "ok": true }
-```
+**What just happened:** `createServer` started a Hono server. `definePackage` created a module
+with one route. The route is typed, shows up in OpenAPI docs, and can be tested with `curl`.
 
-Your generated docs are also live at `http://localhost:3000/docs`.
+## Step 2: Add a data model
 
-## This is the canonical scaffold
+Most backends need CRUD for a data model. Instead of writing five routes by hand, define an entity:
 
-If you are asking "what is the normal Slingshot app shape?", it is this:
-
-- `createServer(...)` at the app root
-- `packages: [...]` as the main composition surface
-- `definePackage(...)` for package modules
-- `defineEntity(...)` when a package owns a data-shaped domain
-
-## Add an entity
-
-When the package owns a data-shaped domain, move to the entity system.
-
-```typescript title="src/post.ts"
+```typescript title="src/entities/post.ts"
 import { defineEntity, field } from '@lastshotlabs/slingshot';
 
 export const Post = defineEntity('Post', {
   namespace: 'blog',
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
-    authorId: field.string(),
     title: field.string(),
     body: field.string(),
-  },
-  routes: {
-    defaults: { auth: 'userAuth' },
-    list: { auth: 'none' },
-    get: { auth: 'none' },
   },
 });
 ```
 
-That is the canonical next step for most real apps.
+Wire it into your package:
+
+```typescript title="src/index.ts"
+import { createServer, definePackage, entity } from '@lastshotlabs/slingshot';
+import { Post } from './entities/post';
+
+const blogPackage = definePackage({
+  name: 'blog',
+  entities: [entity({ config: Post })],
+});
+
+await createServer({
+  port: 3000,
+  packages: [blogPackage],
+});
+```
+
+That's it. You now have:
+
+```bash
+curl -X POST http://localhost:3000/posts \
+  -H "Content-Type: application/json" \
+  -d '{ "title": "Hello", "body": "World" }'
+# → { "id": "01J...", "title": "Hello", "body": "World" }
+
+curl http://localhost:3000/posts
+# → [{ "id": "01J...", "title": "Hello", "body": "World" }]
+```
+
+Five routes generated from one definition: `GET /posts`, `GET /posts/:id`, `POST /posts`,
+`PATCH /posts/:id`, `DELETE /posts/:id`. All with input validation and OpenAPI docs.
+
+## Step 3: Add auth to some routes
+
+Most apps need some routes to require login. Add route defaults:
+
+```typescript title="src/entities/post.ts"
+export const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' }, // all routes require login by default
+    list: { auth: 'none' }, // anyone can list posts
+    get: { auth: 'none' }, // anyone can read a post
+  },
+});
+```
+
+Now `POST`, `PATCH`, and `DELETE` require a valid JWT. `GET` routes are public.
+
+To actually issue JWTs, add the auth package — see [Auth Setup](/slingshot/examples/with-auth/).
 
 ## What to learn next
 
-1. [App Authoring](/slingshot/app-authoring/) for app config, events, WebSockets, SSE, and core runtime behavior.
-2. [Starter App](/slingshot/app-authoring/starter-app/) for the full canonical starter example used across the docs.
-3. [Package-First Authoring](/slingshot/package-first/) for `definePackage(...)`, `domain(...)`, and capabilities.
-4. [Entity System](/slingshot/entity-system/) for `defineEntity(...)`, operations, swappable storage, and generated routes.
-
-## Progress to advanced features
-
-After the fundamentals, the usual progression is:
-
-1. [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)
-2. [WebSockets](/slingshot/app-authoring/websockets/) or [Server-Sent Events](/slingshot/app-authoring/server-sent-events/)
-3. [Runtime and Infrastructure](/slingshot/app-authoring/runtime-and-infrastructure/)
-4. [Escape Hatches](/slingshot/package-first/escape-hatches/) if you need fully custom wiring
-
-## Manifest path
-
-If you want a manifest-driven entrypoint instead, that path is still supported. It now lives under
-[Alternate Paths](/slingshot/alternate-paths/) so the main docs can stay code-first.
+<table>
+  <thead>
+    <tr>
+      <th>I want to...</th>
+      <th>Read</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Understand the app model</td>
+      <td>
+        <a href="/slingshot/app-authoring/">App Authoring</a>
+      </td>
+    </tr>
+    <tr>
+      <td>See the full starter example</td>
+      <td>
+        <a href="/slingshot/app-authoring/starter-app/">Starter App</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Organize code into packages</td>
+      <td>
+        <a href="/slingshot/package-first/">Package-First Authoring</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Generate routes from data models</td>
+      <td>
+        <a href="/slingshot/entity-system/">Entity System</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Add login and sessions</td>
+      <td>
+        <a href="/slingshot/examples/with-auth/">Auth Setup</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Send events between features</td>
+      <td>
+        <a href="/slingshot/app-authoring/events-and-the-event-bus/">Events</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Add realtime (WebSockets/SSE)</td>
+      <td>
+        <a href="/slingshot/app-authoring/websockets/">WebSockets</a> or{' '}
+        <a href="/slingshot/app-authoring/server-sent-events/">SSE</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Use manifests instead of code</td>
+      <td>
+        <a href="/slingshot/alternate-paths/">Alternate Paths</a>
+      </td>
+    </tr>
+  </tbody>
+</table>

@@ -50,14 +50,14 @@ actor belong.
 
 ## What belongs where
 
-| Use case | Read from |
-| --- | --- |
+| Use case                             | Read from                              |
+| ------------------------------------ | -------------------------------------- |
 | Authenticated caller for one request | `getActor(c)` or route handler context |
-| Event publishing infrastructure | `SlingshotContext` |
-| Shared persistence handles | `SlingshotContext` |
-| WebSocket room state | `SlingshotContext.ws` |
-| Route params and JSON body | request or typed route context |
-| App config | `SlingshotContext.config` |
+| Event publishing infrastructure      | `SlingshotContext`                     |
+| Shared persistence handles           | `SlingshotContext`                     |
+| WebSocket room state                 | `SlingshotContext.ws`                  |
+| Route params and JSON body           | request or typed route context         |
+| App config                           | `SlingshotContext.config`              |
 
 ## Common mistakes
 

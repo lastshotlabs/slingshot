@@ -42,7 +42,7 @@ The default. Let the framework resolve the adapter from the entity config and ac
 entity({
   config: Post,
   operations: PostOperations,
-})
+});
 ```
 
 ### `factories`
@@ -58,7 +58,7 @@ entity({
     mode: 'factories',
     factories: postFactories,
   },
-})
+});
 ```
 
 ### `manual`
@@ -75,7 +75,7 @@ entity({
       return createMyAdapter(infra);
     },
   },
-})
+});
 
 declare function createMyAdapter(infra: unknown): unknown;
 ```

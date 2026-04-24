@@ -83,18 +83,18 @@ That is a realistic package:
 
 ## What it declares
 
-| Field | Purpose |
-| --- | --- |
-| `name` | Stable package identity for ordering and diagnostics |
-| `mountPath` | Base path shared by the package's entities and domains |
-| `dependencies` | Other packages or plugins that must be installed first |
-| `entities` | Package-owned entity modules |
-| `domains` | Package-owned non-entity route groups |
-| `middleware` | Named middleware available to package routes |
-| `capabilities` | Published and required typed capabilities |
-| `tenantExemptPaths` | Paths that bypass tenant resolution |
-| `csrfExemptPaths` | Paths that bypass CSRF enforcement |
-| `publicPaths` | Paths the package exposes publicly |
+| Field               | Purpose                                                |
+| ------------------- | ------------------------------------------------------ |
+| `name`              | Stable package identity for ordering and diagnostics   |
+| `mountPath`         | Base path shared by the package's entities and domains |
+| `dependencies`      | Other packages or plugins that must be installed first |
+| `entities`          | Package-owned entity modules                           |
+| `domains`           | Package-owned non-entity route groups                  |
+| `middleware`        | Named middleware available to package routes           |
+| `capabilities`      | Published and required typed capabilities              |
+| `tenantExemptPaths` | Paths that bypass tenant resolution                    |
+| `csrfExemptPaths`   | Paths that bypass CSRF enforcement                     |
+| `publicPaths`       | Paths the package exposes publicly                     |
 
 ## Why this exists instead of "just plugins"
 

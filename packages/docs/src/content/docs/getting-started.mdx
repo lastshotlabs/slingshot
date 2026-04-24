@@ -67,24 +67,20 @@ This is the canonical path for data-shaped domains:
 
 These still exist:
 
-- raw plugins
-- manual adapter wiring
-- extra routes
-- route executor overrides
+- [raw plugins](/slingshot/authoring/plugin-interface/)
+- [manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual)
+- [extra routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route)
+- [route executor overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route)
 
-They matter, but they should not be the first thing people learn.
+They matter, but they should not be the first thing people learn. See [Escape Hatches](/slingshot/config-driven/escape-hatches/) for the full guide.
 
-## Why the docs are structured this way
+## How the docs are organized
 
-The older docs made it too easy to learn Slingshot as:
+The docs follow the real authoring experience:
 
-- manifests first
-- plugin internals second
-- core code-first authoring only later
-
-That inverted the real authoring experience.
-
-The current docs are organized around the actual core API surface instead.
+1. Core API surface and package-first composition first
+2. Entity system and config-driven patterns second
+3. Plugin internals and manifests only when you need them
 
 ## What not to miss
 

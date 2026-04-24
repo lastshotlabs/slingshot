@@ -1,24 +1,24 @@
 ---
 title: Package-First Authoring
-description: The canonical code-first authoring surface for Slingshot packages
+description: Organize your backend into reusable modules with typed routes, middleware, and capabilities
 ---
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-Package-first authoring is the main code-first surface for composing product modules in Slingshot.
+Most backend apps start simple and get messy fast — routes scattered across files, middleware applied
+inconsistently, shared logic duplicated between features. Packages solve this by giving each feature
+area a clear boundary.
 
-This is the layer between the app root and the lower-level plugin lifecycle.
+A package owns its routes, middleware, entities, and capabilities. The app root just composes them.
 
-## Use this when
+## What you'll learn
 
-Use package-first authoring when you want to:
+- How to define a package and mount it at a path
+- How to write typed routes inside a package
+- How to share capabilities between packages
+- When to use packages vs raw plugins
 
-- scaffold an app from package modules
-- keep non-entity routes package-owned
-- publish typed cross-package capabilities
-- compose entities and routes without dropping straight into raw plugin lifecycle code
-
-## The core pieces
+## Your first package
 
 ```typescript
 import { definePackage, domain, route } from '@lastshotlabs/slingshot';
@@ -41,66 +41,42 @@ export const healthPackage = definePackage({
 });
 ```
 
-Package-first authoring is built around:
+Register it in your app:
 
-- `definePackage(...)`
-- `domain(...)`
-- `route.*(...)`
-- `entity(...)`
-- `defineCapability(...)`
-- `provideCapability(...)`
-- `entityRef(...)`
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+import { healthPackage } from './packages/health';
 
-## What a package owns
+await createServer({
+  port: 3000,
+  packages: [healthPackage],
+});
+```
 
-A package can own:
+That's it. The package mounts at `/health`, the route responds at `GET /health/`, and the app root
+doesn't need to know anything about the route internals.
 
-- entity modules
-- non-entity domain routes
-- package-local middleware
-- capability publication and requirements
-- mount path and dependency metadata
-- public, tenant-exempt, and CSRF-exempt paths
+## When to use packages
 
-That is why packages are the right public abstraction for app builders.
+| Situation                                       | Use                                                                         |
+| ----------------------------------------------- | --------------------------------------------------------------------------- |
+| Feature area with its own routes                | Package with `domain(...)`                                                  |
+| Data-shaped domain (posts, users, orders)       | Package with `entity(...)` — see [Entity System](/slingshot/entity-system/) |
+| Shared middleware or services                   | Package with capabilities                                                   |
+| One-off infrastructure (custom health, metrics) | Package with a single domain                                                |
+| Framework-level lifecycle work                  | Raw plugin — see [Escape Hatches](/slingshot/package-first/escape-hatches/) |
 
 ## Learn this section in order
 
-- [definePackage](/slingshot/package-first/define-package/)
-- [domain and route](/slingshot/package-first/domain-and-route/)
-- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/)
-- [Escape Hatches](/slingshot/package-first/escape-hatches/)
-
-## Common package authoring use cases
-
-<CardGrid>
-  <LinkCard
-    title="Define a package"
-    href="/slingshot/package-first/define-package/"
-    description="Declare the package boundary, mount path, dependencies, entities, and domains."
-  />
-  <LinkCard
-    title="Add package routes"
-    href="/slingshot/package-first/domain-and-route/"
-    description="Build typed package-owned routes that are not generated from entities."
-  />
-  <LinkCard
-    title="Share capabilities"
-    href="/slingshot/package-first/capabilities-and-entity-ref/"
-    description="Publish services and consume typed cross-package contracts."
-  />
-</CardGrid>
-
-## Progression: common to advanced
-
-- common path: `definePackage(...)` plus `domain(...)` and `route.*(...)`
-- common data path: attach `entity(...)` modules and move into the entity-system docs
-- less common built-ins: typed capabilities, entity refs, package-local middleware, mount metadata
-- escape hatches: raw plugins, lifecycle hooks, manual entity wiring, direct framework internals
+1. [definePackage](/slingshot/package-first/define-package/) — declare the boundary, mount path, and dependencies
+2. [domain and route](/slingshot/package-first/domain-and-route/) — write typed routes that belong to the package
+3. [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — share services across packages
+4. [Escape Hatches](/slingshot/package-first/escape-hatches/) — when to drop to raw plugins
 
 ## Where entities fit
 
-The entity system plugs directly into package authoring through `entity(...)`. If a package owns a
-data-shaped domain, the entity system is usually the canonical way to express it.
+If your package owns data (posts, comments, orders), the entity system generates CRUD routes,
+operations, and storage wiring from a single definition. You add `entity(...)` modules inside
+`definePackage(...)`.
 
 See [Entity System](/slingshot/entity-system/) next.

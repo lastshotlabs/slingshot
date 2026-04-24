@@ -20,14 +20,14 @@ That is still the right layer for some infrastructure integrations and lower-lev
 
 Inside the entity system, the main escape hatches are:
 
-- manual adapter wiring
-- factory-backed adapter wiring
-- generated-route executor overrides
-- extra routes
-- `createEntityPlugin()` for lower-level orchestration work
+- [Generated-route executor overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route) — replace the executor behind a CRUD or named-operation route
+- [Extra routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route) — add routes alongside generated entity routes
+- [Factory-backed adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#factories) — custom repos while keeping the entity shell
+- [Manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual) — full control over adapter construction
+- [Consumer field and naming conventions](/slingshot/entity-system/define-entity/#system-fields-storage-fields-and-conventions) — rename system fields, storage columns, and ID strategies
+- [`createEntityPlugin()`](/slingshot/examples/config-driven-domain/#build-the-plugin) — lower-level orchestration work
 
-Those are documented in the entity-system section because they are part of the normal advanced
-authoring path, not just internals.
+These are part of the normal advanced authoring path, not internals. Full examples live in the linked pages.
 
 ## `inspectPackage(...)`
 
@@ -42,5 +42,6 @@ Do not drop to raw plugins just because the plugin lifecycle existed first.
 
 ## Next
 
-- [Plugin Interface](/slingshot/authoring/plugin-interface/)
-- [Internals: Plugin Lifecycle](/slingshot/internals/plugin-lifecycle/)
+- [Entity System](/slingshot/entity-system/) — the next section in the learning path: data-shaped domains with generated routes
+- [Examples](/slingshot/examples/) — complete apps that combine packages and entities
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — lower-level reference for raw plugin authoring

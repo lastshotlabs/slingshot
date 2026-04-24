@@ -60,12 +60,11 @@ That one file already demonstrates the core model:
 
 <CardGrid>
   <Card title="Assembly" icon="seti:config">
-    `createApp()` assembles the app. `createServer()` adds the network server, workers,
-    WebSockets, SSE, and shutdown behavior.
+    `createApp()` assembles the app. `createServer()` adds the network server, workers, WebSockets,
+    SSE, and shutdown behavior.
   </Card>
   <Card title="Config" icon="seti:config">
-    Top-level config covers security, db, versioning, runtime, secrets, metrics, jobs, and
-    realtime.
+    Top-level config covers security, db, versioning, runtime, secrets, metrics, jobs, and realtime.
   </Card>
   <Card title="Context" icon="seti:config">
     `SlingshotContext` holds the frozen resolved config, event bus, persistence handles,
@@ -79,8 +78,8 @@ That one file already demonstrates the core model:
     WebSockets and SSE are separate core transports with separate docs homes and scaling concerns.
   </Card>
   <Card title="Composition" icon="seti:config">
-    App roots should prefer `packages`. Raw `plugins` are still available for lower-level
-    lifecycle control and escape hatches.
+    App roots should prefer `packages`. Raw `plugins` are still available for lower-level lifecycle
+    control and escape hatches.
   </Card>
 </CardGrid>
 
@@ -179,8 +178,13 @@ These are the pages that explain the framework's core API, in order:
     description="DB config, uploads, jobs, logging, metrics, tracing, secrets, and runtime."
   />
   <LinkCard
+    title="Orchestration"
+    href="/slingshot/orchestration/overview/"
+    description="Background tasks, durable workflows, retries, and async job processing."
+  />
+  <LinkCard
     title="Guides"
-    href="/slingshot/guides/runtime/"
+    href="/slingshot/guides/"
     description="Security, multi-tenancy, permissions, monitoring, runtime, deployment, and scaling."
   />
 </CardGrid>
@@ -204,20 +208,18 @@ happy path.
 
 These are still first-class, but they should come after the canonical path:
 
-- raw `plugins`
-- lower-level plugin lifecycle work
-- manual adapter wiring
-- factory-backed adapter wiring
-- generated-route executor overrides
-- extra routes inside the entity shell
+- raw `plugins` and [lower-level plugin lifecycle work](/slingshot/authoring/plugin-interface/)
+- [manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual)
+- [factory-backed adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#factories)
+- [generated-route executor overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route)
+- [extra routes inside the entity shell](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route)
+
+See [Escape Hatches](/slingshot/config-driven/escape-hatches/) for the full decision guide.
 
 ## Where this leads next
 
-- [Package-First Authoring](/slingshot/package-first/) explains how to build packages the app root
-  composes.
-- [Entity System](/slingshot/entity-system/) covers the canonical path for data-shaped product
-  domains, generated routes, operations, and swappable storage.
-- [Starter App](/slingshot/app-authoring/starter-app/) is the example thread reused across those
-  pages.
-- [Alternate Paths](/slingshot/alternate-paths/) covers supported secondary flows like manifest
-  authoring.
+- [Package-First Authoring](/slingshot/package-first/) — build packages the app root composes
+- [Entity System](/slingshot/entity-system/) — data-shaped product domains with generated routes and operations
+- [Orchestration](/slingshot/orchestration/overview/) — background tasks, durable workflows, and async job processing
+- [Examples](/slingshot/examples/) — complete apps that combine what you have learned
+- [Guides](/slingshot/guides/) — production concerns like security, testing, deployment, and scaling

@@ -46,10 +46,12 @@ const PostModule = entity({
   overrides: {
     get: defineEntityExecutor({
       summary: 'Get a post with viewer metadata',
-      build: ({ entityAdapter }) => async ({ params, respond }) => {
-        const post = await entityAdapter.get(params.id);
-        return respond.json({ post, viewerCanEdit: true });
-      },
+      build:
+        ({ entityAdapter }) =>
+        async ({ params, respond }) => {
+          const post = await entityAdapter.get(params.id);
+          return respond.json({ post, viewerCanEdit: true });
+        },
     }),
   },
 });
@@ -71,10 +73,12 @@ const PostModule = entity({
       method: 'post',
       path: '/:id/preview',
       auth: 'userAuth',
-      buildExecutor: ({ entityAdapter }) => async ({ params, respond }) => {
-        const post = await entityAdapter.get(params.id);
-        return respond.json({ id: params.id, preview: post?.body?.slice(0, 140) });
-      },
+      buildExecutor:
+        ({ entityAdapter }) =>
+        async ({ params, respond }) => {
+          const post = await entityAdapter.get(params.id);
+          return respond.json({ id: params.id, preview: post?.body?.slice(0, 140) });
+        },
     }),
   ],
 });
@@ -97,12 +101,10 @@ Use:
 - overrides when the route identity should stay the same
 - extra routes when you want a new route inside the entity shell
 
-## Why this docs split matters
-
-This is one of the main DX seams in the entity system. It needs to be documented as a first-class
-surface, not as a side note in examples.
-
 ## Next
 
-- [Route Policy](/slingshot/entity-system/route-policy/)
-- [Package-First Authoring](/slingshot/package-first/)
+You have now seen the full entity system surface. From here:
+
+- [Config-Driven Domain example](/slingshot/examples/config-driven-domain/) — see entities, operations, overrides, and extra routes in a complete app
+- [Examples](/slingshot/examples/) — product-shaped apps that combine what you have learned
+- [Escape Hatches](/slingshot/config-driven/escape-hatches/) — the full decision guide for when you need to drop lower

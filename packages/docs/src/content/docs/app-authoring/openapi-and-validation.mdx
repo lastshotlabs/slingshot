@@ -29,8 +29,7 @@ export const blogPackage = definePackage({
           responses: {
             200: { description: 'Post', schema: postResponse },
           },
-          handler: ({ params, respond }) =>
-            respond.json({ id: params.id, title: 'Hello' }),
+          handler: ({ params, respond }) => respond.json({ id: params.id, title: 'Hello' }),
         }),
       ],
     }),

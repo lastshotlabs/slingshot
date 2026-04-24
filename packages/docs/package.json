@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
-    "build": "bun ../../scripts/ensure-pagefind-link.ts && astro build",
-    "lint": "astro check",
-    "preview": "astro preview",
+    "dev": "node ./scripts/astro-safe.mjs dev",
+    "build": "node ./scripts/ensure-pagefind-link.mjs && node ./scripts/astro-safe.mjs build && powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/ensure-pagefind-index.ps1",
+    "lint": "node ./scripts/astro-safe.mjs check",
+    "preview": "node ./scripts/astro-safe.mjs preview",
     "generate-api": "bun generate-api.ts"
   },
   "dependencies": {

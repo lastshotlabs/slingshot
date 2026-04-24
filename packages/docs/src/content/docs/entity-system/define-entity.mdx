@@ -8,29 +8,53 @@ description: Fields, indexes, conventions, and the core entity contract
 It validates the config, resolves storage naming and primary-key metadata, and returns a frozen
 entity definition the rest of the runtime can trust.
 
-## A representative entity
+The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
+its `Post` entity.
 
-```typescript
+## A real entity definition
+
+```typescript title="src/blog/post.ts"
 import { defineEntity, field, index, relation } from '@lastshotlabs/slingshot';
 
 export const Post = defineEntity('Post', {
   namespace: 'blog',
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
+    slug: field.string(),
     authorId: field.string(),
     title: field.string(),
     body: field.string(),
     status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
     createdAt: field.date({ default: 'now' }),
+    updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
   },
-  indexes: [index(['authorId', 'createdAt'])],
+  indexes: [index(['slug']), index(['authorId', 'createdAt'])],
   relations: [relation('authorId', 'User', 'id')],
+  systemFields: {
+    ownerField: 'authorId',
+  },
+  storageFields: {
+    ttlField: '_expires_at',
+  },
+  conventions: {
+    redisKey: ({ storageName, id }) => `${storageName}:post:${id}`,
+  },
   routes: {
     defaults: { auth: 'userAuth' },
     list: { auth: 'none' },
+    get: { auth: 'none' },
   },
 });
 ```
+
+That one definition covers:
+
+- data shape
+- storage naming
+- indexing
+- ownership conventions
+- route defaults
+- backend-specific conventions when needed
 
 ## What `defineEntity(...)` resolves for you
 
@@ -55,6 +79,20 @@ Examples include:
 - `systemFields` for owner, tenant, version, and actor-related field names
 - `storageFields` for backend-specific naming like TTL fields
 - `conventions` for Redis key naming, defaults, and update conventions
+
+## What a new author should usually do
+
+Start with:
+
+- fields
+- indexes
+- route defaults
+
+Then add:
+
+- `systemFields` when you need ownership or tenant naming to match an existing schema
+- `storageFields` when a backend needs a specific field name
+- `conventions` when you need stable generated naming or update behavior
 
 That is part of the swappable storage story, not an unrelated detail.
 

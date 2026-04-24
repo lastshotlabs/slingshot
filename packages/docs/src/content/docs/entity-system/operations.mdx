@@ -5,18 +5,26 @@ description: Named behaviors beyond CRUD, from lookups to transitions and search
 
 Operations are how the entity system models behavior beyond basic CRUD.
 
+The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
+its `Post` entity.
+
 ## Define operations next to the entity
 
-```typescript
+```typescript title="src/blog/post-operations.ts"
 import { defineOperations, op } from '@lastshotlabs/slingshot';
+import { Post } from './post';
 
 export const PostOps = defineOperations(Post, {
   byAuthor: op.lookup({
     fields: { authorId: 'param:authorId' },
     returns: 'many',
   }),
-  existsByTitle: op.exists({
-    fields: { title: 'param:title' },
+  bySlug: op.lookup({
+    fields: { slug: 'param:slug' },
+    returns: 'one',
+  }),
+  existsBySlug: op.exists({
+    fields: { slug: 'param:slug' },
   }),
   publish: op.transition({
     field: 'status',
@@ -24,12 +32,33 @@ export const PostOps = defineOperations(Post, {
     to: 'published',
     match: { id: 'param:id' },
   }),
+  retitle: op.fieldUpdate({
+    match: { id: 'param:id' },
+    set: ['title'],
+  }),
   searchPublished: op.search({
     fields: ['title', 'body'],
     filter: { status: 'published' },
   }),
 });
 ```
+
+That gives the package:
+
+- adapter methods like `byAuthor(...)`, `bySlug(...)`, and `publish(...)`
+- generated named-operation routes
+- generated docs for those routes
+- a single place to evolve domain behavior without scattering helpers
+
+## What the generated routes usually look like
+
+For the `PostOps` above, the generated route shell usually includes routes like:
+
+- `GET /blog/posts/by-author/:authorId`
+- `GET /blog/posts/by-slug/:slug`
+- `GET /blog/posts/exists-by-slug/:slug`
+- `POST /blog/posts/:id/publish`
+- `PATCH /blog/posts/:id/retitle`
 
 ## What operations are for
 

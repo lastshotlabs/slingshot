@@ -5,21 +5,59 @@ description: The top-level package contract for code-first app modules
 
 `definePackage(...)` is the canonical package boundary.
 
-## A representative package
+The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and its
+`blogPackage`.
 
-```typescript
-import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+## A package you can actually ship
+
+```typescript title="src/blog/package.ts"
+import { z } from 'zod';
+import { definePackage, domain, entity, route } from '@lastshotlabs/slingshot';
+import { Post } from './post';
+import { PostOperations } from './post-operations';
+
+const previewBody = z.object({
+  markdown: z.string(),
+});
 
 export const blogPackage = definePackage({
   name: 'blog',
   mountPath: '/blog',
   dependencies: ['slingshot-auth'],
+  entities: [
+    entity({
+      config: Post,
+      operations: PostOperations,
+    }),
+  ],
   middleware: {
-    auditRequest: async (_c, next) => {
+    requireEditor: async (c, next) => {
+      if (c.get('actor')?.role !== 'editor') {
+        return c.json({ error: 'forbidden' }, 403);
+      }
       await next();
     },
   },
   domains: [
+    domain({
+      name: 'preview',
+      basePath: '/preview',
+      routes: [
+        route.post({
+          path: '/',
+          auth: 'userAuth',
+          middleware: ['requireEditor'],
+          request: { body: previewBody },
+          responses: {
+            200: { description: 'Rendered markdown preview' },
+          },
+          handler: ({ body, respond }) =>
+            respond.json({
+              html: `<article>${body.markdown}</article>`,
+            }),
+        }),
+      ],
+    }),
     domain({
       name: 'health',
       basePath: '/health',
@@ -27,7 +65,7 @@ export const blogPackage = definePackage({
         route.get({
           path: '/',
           auth: 'none',
-          handler: ({ respond }) => respond.json({ ok: true }),
+          handler: ({ respond }) => respond.json({ ok: true, package: 'blog' }),
         }),
       ],
     }),
@@ -35,6 +73,13 @@ export const blogPackage = definePackage({
   publicPaths: ['/blog/health'],
 });
 ```
+
+That is a realistic package:
+
+- entity-backed routes live in `entities`
+- one-off but package-owned routes live in `domains`
+- package-local middleware stays package-owned
+- the app root only composes the package; it does not need to know the route internals
 
 ## What it declares
 
@@ -64,6 +109,17 @@ Packages give the framework a stronger authoring contract:
 
 Use `inspectPackage(...)` when you want the effective route and module graph without dropping into
 framework internals.
+
+```typescript
+import { inspectPackage } from '@lastshotlabs/slingshot';
+import { blogPackage } from './package';
+
+const inspection = inspectPackage(blogPackage);
+
+console.log(inspection.mountPath); // '/blog'
+console.log(inspection.entities.map(entity => entity.resolvedPath));
+console.log(inspection.domains.flatMap(domain => domain.routes));
+```
 
 That is useful for docs tooling, tests, and sanity checks when a package is large enough to need a
 structural overview.

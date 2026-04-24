@@ -9,20 +9,28 @@ model.
 Use it when the server needs to push updates to clients but clients do not need a bidirectional
 socket.
 
-## A minimal SSE endpoint
+These examples extend the [starter app](/slingshot/app-authoring/starter-app/) and the
+`blog:post.published` event from
+[Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/).
+
+## A copyable SSE endpoint
 
 ```typescript title="src/index.ts"
 import { createServer } from '@lastshotlabs/slingshot';
+import { blogPackage } from './blog/package';
+import { blogEventsPlugin } from './blog/events';
 
 await createServer({
+  packages: [blogPackage],
+  plugins: [blogEventsPlugin],
   sse: {
     endpoints: {
       '/events': {
-        events: ['app:notification.created'],
+        events: ['blog:post.published'],
         heartbeat: 15_000,
         filter: (client, _event, payload) =>
           client.actorId !== null &&
-          (payload as { userId: string }).userId === client.actorId,
+          (payload as { authorId: string }).authorId === client.actorId,
       },
     },
   },
@@ -54,6 +62,22 @@ Typical flow:
 
 This keeps browser delivery aligned with the same canonical event model used elsewhere.
 
+## Browser client example
+
+```typescript title="web/post-events.ts"
+const source = new EventSource('/events');
+
+source.addEventListener('blog:post.published', event => {
+  const payload = JSON.parse(event.data) as {
+    postId: string;
+    title: string;
+    slug: string;
+  };
+
+  console.log('new published post', payload.slug, payload.title);
+});
+```
+
 ## Upgrade and filtering
 
 Each endpoint can also define:
@@ -66,6 +90,12 @@ That gives you a clean split:
 
 - event definitions control what is externally exposable
 - endpoint filters control which subscribed client gets which exposed event
+
+## Progression
+
+- default: expose a client-safe event on one SSE endpoint
+- customize: add `upgrade(req)` or `filter(client, event, payload)` for finer per-client control
+- escape hatch: change the underlying event bus transport when SSE needs cross-instance delivery
 
 ## Use SSE for
 

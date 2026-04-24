@@ -7,12 +7,17 @@ The storage story is one of the core strengths of the entity system.
 
 One entity definition can target multiple backends without changing the domain model.
 
+The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
+its `Post` entity.
+
 ## The default story: `createEntityFactories(...)`
 
-```typescript
+```typescript title="src/blog/post-factories.ts"
 import { createEntityFactories } from '@lastshotlabs/slingshot';
+import { Post } from './post';
+import { PostOperations } from './post-operations';
 
-const postFactories = createEntityFactories(Post, PostOps);
+export const postFactories = createEntityFactories(Post, PostOperations);
 ```
 
 From one entity config, the framework can resolve adapters for:
@@ -33,18 +38,25 @@ Entity modules support three wiring modes:
 
 The default. Let the framework resolve the adapter from the entity config and active store.
 
+```typescript title="src/blog/package.ts"
+entity({
+  config: Post,
+  operations: PostOperations,
+})
+```
+
 ### `factories`
 
 Provide an explicit repo-factory set, usually from `createEntityFactories(...)` or
 `createCompositeFactories(...)`.
 
-```typescript
+```typescript title="src/blog/package.ts"
 entity({
   config: Post,
-  operations: PostOps,
+  operations: PostOperations,
   wiring: {
     mode: 'factories',
-    factories: createEntityFactories(Post, PostOps),
+    factories: postFactories,
   },
 })
 ```
@@ -53,7 +65,7 @@ entity({
 
 Fully manual adapter construction for advanced cases.
 
-```typescript
+```typescript title="src/blog/package.ts"
 entity({
   config: Post,
   wiring: {
@@ -67,6 +79,34 @@ entity({
 
 declare function createMyAdapter(infra: unknown): unknown;
 ```
+
+## Backend swapping at the app root
+
+The package and entity code above does not need to change when the app changes stores.
+
+```typescript title="src/index.ts"
+await createServer({
+  db: {
+    sqlite: './data/app.db',
+  },
+  packages: [blogPackage],
+});
+```
+
+Later, the same package can move to a different store strategy:
+
+```typescript title="src/index.ts"
+await createServer({
+  db: {
+    postgres: process.env.DATABASE_URL,
+    redis: process.env.REDIS_URL,
+  },
+  packages: [blogPackage],
+});
+```
+
+That is the main point of the storage story: the domain model stays stable while persistence
+changes around it.
 
 ## Composite factories
 

@@ -8,34 +8,53 @@ Not every package route should be generated from an entity.
 For package-owned HTTP surfaces that are still part of the package contract, use `domain(...)` and
 `route.*(...)`.
 
-## A typed domain
+The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
+its `blogPackage`.
 
-```typescript
+## A typed route that belongs to the package, not the entity
+
+```typescript title="src/blog/package.ts"
 import { z } from 'zod';
 import { definePackage, domain, route } from '@lastshotlabs/slingshot';
 
-const createInviteBody = z.object({
-  email: z.string().email(),
+const previewBody = z.object({
+  markdown: z.string(),
 });
 
-export const invitesPackage = definePackage({
-  name: 'invites',
+const previewResponse = z.object({
+  html: z.string(),
+  wordCount: z.number(),
+});
+
+export const blogPackage = definePackage({
+  name: 'blog',
   domains: [
     domain({
-      name: 'invites',
-      basePath: '/invites',
+      name: 'preview',
+      basePath: '/preview',
+      services: {
+        renderMarkdown(markdown: string) {
+          return `<article>${markdown}</article>`;
+        },
+      },
       routes: [
         route.post({
           path: '/',
           auth: 'userAuth',
-          request: { body: createInviteBody },
+          summary: 'Preview rendered post content',
+          request: { body: previewBody },
           responses: {
             201: {
-              description: 'Created invite',
+              description: 'Rendered preview',
+              schema: previewResponse,
             },
           },
-          handler: async ({ body, respond }) => {
-            return respond.json({ email: body.email, invited: true }, 201);
+          handler: async ({ body, services, respond }) => {
+            const html = services.renderMarkdown(body.markdown);
+            return respond.json(
+              { html, wordCount: body.markdown.trim().split(/\s+/).filter(Boolean).length },
+              201,
+            );
           },
         }),
       ],
@@ -81,6 +100,30 @@ const postsDomain = domain({
 ```
 
 Use this for domain-local helpers that belong to the route group itself.
+
+## A route with params, permissions, and events
+
+```typescript title="src/blog/package.ts"
+const publishParams = z.object({
+  id: z.string(),
+});
+
+route.post({
+  path: '/posts/:id/publish-now',
+  auth: 'userAuth',
+  permission: { requires: 'blog:post.publish' },
+  request: { params: publishParams },
+  event: {
+    key: 'blog:post.publishRequested',
+    payload: ['id'],
+  },
+  handler: ({ params, respond }) =>
+    respond.json({ queued: true, postId: params.id }),
+});
+```
+
+That is the canonical package-route shape when the behavior belongs to the package but not to one
+entity's generated route shell.
 
 ## When to use package routes vs entity routes
 

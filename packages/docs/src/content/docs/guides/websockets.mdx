@@ -5,6 +5,11 @@ description: Bidirectional realtime connections — rooms, pub/sub, auth, and sc
 
 import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
 
+If you are learning WebSockets as a core app feature, start with
+[App Authoring: WebSockets](/slingshot/app-authoring/websockets/).
+
+This guide goes deeper on lower-level and entity-channel-specific behavior.
+
 Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets are bidirectional — clients send messages, not just receive them. Use them for chat, collaborative editing, live cursors, and anything that needs low-latency two-way communication. For one-way event streams, use [SSE](/slingshot/examples/realtime-sse/) instead.
 
 ## Define a WebSocket endpoint

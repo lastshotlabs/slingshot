@@ -23,7 +23,7 @@ export default defineConfig({
       title: 'Slingshot',
       disable404Route: true,
       description:
-        'Composable Slingshot packages for app assembly, auth, config-driven entities, realtime, and platform tooling',
+        'Composable Slingshot packages for app assembly, package-first authoring, entities, events, realtime, and platform tooling',
       social: [
         {
           icon: 'github',
@@ -38,7 +38,6 @@ export default defineConfig({
         {
           label: 'Get Started',
           items: [
-            { label: 'Overview', slug: '' },
             { label: 'Start Here', slug: 'start-here' },
             { label: 'Introduction', slug: 'getting-started' },
             { label: 'Quick Start', slug: 'quick-start' },
@@ -54,6 +53,7 @@ export default defineConfig({
               label: 'createServer and createApp',
               slug: 'app-authoring/create-server-and-create-app',
             },
+            { label: 'Starter App', slug: 'app-authoring/starter-app' },
             { label: 'App Config', slug: 'app-authoring/app-config' },
             {
               label: 'Context and Request Model',
@@ -179,14 +179,12 @@ export default defineConfig({
           label: 'Plugin and Authoring Reference',
           collapsed: true,
           items: [
-            { label: 'Plugin Overview', slug: 'plugins/overview' },
             { label: 'Plugin Interface', slug: 'authoring/plugin-interface' },
             { label: 'SlingshotContext', slug: 'authoring/context' },
             { label: 'CoreRegistrar', slug: 'authoring/registrar' },
             { label: 'Event Bus', slug: 'authoring/event-bus' },
             { label: 'Testing Plugins', slug: 'authoring/testing-plugins' },
             { label: 'Publishing', slug: 'authoring/publishing' },
-            { label: 'Config-Driven Walkthrough', slug: 'config-driven-walkthrough' },
           ],
         },
         {

@@ -1,249 +1,30 @@
 ---
-title: Config-Driven Walkthrough
-description: Define an entity once. Get routes, adapters, events, and permissions without writing the wiring.
+title: "Legacy: Config-Driven Walkthrough"
+description: Legacy walkthrough page redirected to the package-first and entity-system learning path
 ---
 
-The core Slingshot authoring pattern is now:
+This walkthrough still describes a valid authoring flow, but the canonical docs path is now split
+more clearly:
 
-1. define an entity
-2. define operations
-3. mount them in a package
-4. compose the app
+1. [Quick Start](/slingshot/quick-start/)
+2. [Package-First Authoring](/slingshot/package-first/)
+3. [Entity System](/slingshot/entity-system/)
 
-This walkthrough uses the primary code-first path. Manifest-backed authoring still exists, but it is not the default framing here.
+## The flow you are looking for
 
-## 1. The entity carries the core model
+If your goal is "show me the normal way to author a Slingshot app," the answer is:
 
-```typescript title="thread-entity.ts"
-import { defineEntity, field, index } from '@lastshotlabs/slingshot';
+1. scaffold the app with `createServer(...)`
+2. compose with `packages: [...]`
+3. define packages with `definePackage(...)`
+4. define data-shaped domains with `defineEntity(...)`
+5. add named behavior with `defineOperations(...)`
+6. customize with route policy, storage wiring, overrides, and extra routes only when needed
 
-export const Thread = defineEntity('Thread', {
-  namespace: 'community',
-  fields: {
-    id: field.string({ primary: true, default: 'uuid' }),
-    containerId: field.string(),
-    authorId: field.string(),
-    title: field.string(),
-    body: field.string({ optional: true }),
-    status: field.enum(['draft', 'published', 'deleted'] as const, { default: 'draft' }),
-    tags: field.stringArray({ optional: true }),
-    locked: field.boolean({ default: false }),
-    pinned: field.boolean({ default: false }),
-    createdAt: field.date({ default: 'now' }),
-    updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
-  },
-  indexes: [
-    index(['containerId', 'createdAt'], { direction: 'desc' }),
-    index(['authorId', 'createdAt'], { direction: 'desc' }),
-  ],
-  routes: {
-    defaults: { auth: 'userAuth' },
-    get: { auth: 'none' },
-    list: { auth: 'none' },
-    create: {
-      permission: {
-        requires: 'community:container.write',
-        scope: { resourceType: 'community:container', resourceId: 'param:containerId' },
-      },
-      event: {
-        key: 'community:thread.created',
-        payload: ['id', 'containerId', 'authorId', 'title'],
-        scope: { resourceType: 'community:container', resourceId: 'record:containerId' },
-        exposure: ['client-safe'],
-      },
-      middleware: ['banCheck', 'autoMod'],
-    },
-  },
-});
-```
+## Read these instead
 
-One definition can carry:
-
-- field structure
-- indexes
-- generated route defaults
-- auth and permission config
-- event emission metadata
-- named middleware references
-
-## 2. Operations express domain behavior
-
-CRUD comes from the entity automatically. Operations are for behavior that should become typed adapter methods and managed HTTP routes.
-
-```typescript title="thread-operations.ts"
-import { defineOperations, op } from '@lastshotlabs/slingshot';
-import { Thread } from './thread-entity';
-
-export const threadOperations = defineOperations(Thread, {
-  byContainer: op.lookup({
-    fields: { containerId: 'param:containerId' },
-    filter: { status: { $ne: 'deleted' } },
-    returns: 'many',
-    sort: 'createdAt',
-    direction: 'desc',
-    paginate: true,
-  }),
-
-  publish: op.transition({
-    field: 'status',
-    from: 'draft',
-    to: 'published',
-    match: { id: 'param:id' },
-    returns: 'entity',
-  }),
-
-  lock: op.fieldUpdate({
-    match: { id: 'param:id' },
-    set: ['locked'],
-  }),
-
-  addTag: op.arrayPush({
-    field: 'tags',
-    value: 'input:tag',
-  }),
-
-  countByContainer: op.aggregate({
-    groupBy: 'containerId',
-    compute: { total: 'count' },
-    filter: { status: 'published' },
-  }),
-});
-```
-
-Each operation can produce:
-
-- a typed adapter method
-- an auto-mounted route in the managed entity shell
-- validation and OpenAPI metadata
-
-## 3. The package owns assembly
-
-`definePackage(...)` is the default top-level authoring surface.
-
-```typescript title="threads-package.ts"
-import type { MiddlewareHandler } from 'hono';
-import { createApp, definePackage, domain, entity, route } from '@lastshotlabs/slingshot';
-import { Thread } from './thread-entity';
-import { threadOperations } from './thread-operations';
-
-declare function createBanCheckMiddleware(): MiddlewareHandler;
-declare function createAutoModMiddleware(): MiddlewareHandler;
-
-export const threadsPackage = definePackage({
-  name: 'threads',
-  mountPath: '/community',
-  entities: [
-    entity({
-      config: Thread,
-      operations: threadOperations,
-    }),
-  ],
-  middleware: {
-    banCheck: createBanCheckMiddleware(),
-    autoMod: createAutoModMiddleware(),
-  },
-  domains: [
-    domain({
-      name: 'analytics',
-      basePath: '/analytics',
-      services: {},
-      routes: [
-        route.get({
-          path: '/summary',
-          async handler(ctx) {
-            return ctx.respond.json({ packageName: ctx.packageName });
-          },
-        }),
-      ] as const,
-    }),
-  ],
-});
-
-await createApp({
-  packages: [threadsPackage],
-});
-```
-
-That package now owns:
-
-- entity-backed CRUD and operation routes
-- package-owned custom routes under `domain(...).routes`
-- named middleware usable by those routes
-- mount path and dependency composition
-
-## 4. Use the entity shell before a manual router
-
-If a route still belongs to one entity, prefer the entity shell first.
-
-Use:
-
-- generated CRUD routes
-- generated operation routes
-- `extraRoutes`
-- generated route `overrides`
-
-Only drop lower when the route no longer belongs to one entity or no longer fits the managed route shell.
-
-## 5. Actor-first request context
-
-The public identity model is actor-first.
-
-Use bindings like:
-
-- `ctx:actor.id`
-- `ctx:actor.tenantId`
-- `ctx:actor.claims.orgId`
-
-Example:
-
-```jsonc
-{
-  "routes": {
-    "defaults": { "auth": "userAuth" },
-    "dataScope": { "field": "authorId", "from": "ctx:actor.id" },
-  },
-}
-```
-
-Legacy aliases such as `ctx:authUserId` and `ctx:tenantId` still resolve for compatibility, but they are not the default authoring model.
-
-## 6. What gets generated
-
-From one entity plus operations, the managed layer can mount:
-
-- `GET /threads`
-- `POST /threads`
-- `GET /threads/:id`
-- `PATCH /threads/:id`
-- `DELETE /threads/:id`
-- named operation routes like `/threads/by-container` or `/threads/:id/publish`
-
-The exact shape depends on your operations and route config, but the point is that the framework owns the repetitive wiring.
-
-## 7. Reach for tools in this order
-
-1. Existing feature packages
-2. Your own package-first entity/domain authoring
-3. Package domain routes for orchestration and custom endpoints
-4. Escape hatches like `routesDir`, raw Hono, manual adapters, raw SQL/Drizzle, or raw plugins
-
-## Manifest note
-
-Manifest-backed authoring still exists for teams that need declarative bootstrap artifacts, but it is intentionally not the primary framing here.
-
-If you need that path, see:
-
-- [Manifest vs Code](/slingshot/manifest-vs-code/)
-- [Config-Driven Overview](/slingshot/config-driven/)
-- [Config-Driven Infrastructure](/slingshot/config-driven/infra/)
-
-## Go deeper
-
-- [Entities](/slingshot/config-driven/entities/)
-- [Routes](/slingshot/config-driven/routes/)
-- [Packages and Capabilities](/slingshot/config-driven/packages/)
-- [Cross-Entity and Transactions](/slingshot/config-driven/cross-entity/)
-- [Adapters and Factories](/slingshot/config-driven/adapters/)
-- [Auth, Policies, and Middleware](/slingshot/config-driven/auth-and-middleware/)
-- [Escape Hatches](/slingshot/config-driven/escape-hatches/)
-- [Operations Reference](/slingshot/config-driven/operations/)
+- [Quick Start](/slingshot/quick-start/)
+- [App Authoring](/slingshot/app-authoring/)
+- [Package-First Authoring](/slingshot/package-first/)
+- [Entity System](/slingshot/entity-system/)
+- [Example: Config-Driven Domain](/slingshot/examples/config-driven-domain/)

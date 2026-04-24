@@ -5,6 +5,11 @@ description: Instance-scoped runtime state — how to access it, what it holds, 
 
 import { Aside } from '@astrojs/starlight/components';
 
+If you are learning the framework core, start with
+[App Authoring: Context and Request Model](/slingshot/app-authoring/context-and-request-model/).
+
+This page is the lower-level authoring reference for plugin and framework work.
+
 `SlingshotContext` is the per-app runtime container. It replaces module-level singletons with instance-owned state. Every `createApp()` call gets its own context — zero cross-app pollution.
 
 ## Accessing context

@@ -1,13 +1,16 @@
 ---
 title: Examples
-description: Complete Slingshot app compositions for auth, collaboration, SaaS, rendering, and config-driven authoring
+description: Complete Slingshot app compositions for auth, collaboration, SaaS, rendering, and package-first or entity authoring
 ---
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-These are the highest-signal starting points for the platform. They are organized around product and
-authoring goals rather than package names so users can answer "which example looks like my app?"
-quickly.
+These are the highest-signal starting points for the platform.
+
+Use them in two different ways:
+
+- by product shape: "which example looks like my app?"
+- by learning stage: "what example should I read after the docs spine?"
 
 All examples use in-memory adapters by default. Swapping to SQLite, Postgres, MongoDB, or Redis is
 a one-line change. See [Production Databases](/slingshot/examples/production-databases/).
@@ -55,6 +58,20 @@ Source-backed example apps live in the repo under `examples/`. The current sourc
     description="Code-first tasks, workflows, protected routes, and runtime access from app code."
   />
 </CardGrid>
+
+## Recommended progression
+
+If you want the learning path to stay coherent, use examples in this order:
+
+1. [Config-Driven Domain](/slingshot/examples/config-driven-domain/) after [Quick Start](/slingshot/quick-start/)
+2. one product-shaped example that matches your app
+3. a focused advanced example like [Realtime with SSE](/slingshot/examples/realtime-sse/) or
+   [Custom Event Bus](/slingshot/examples/custom-event-bus/)
+4. [Custom Plugin](/slingshot/examples/custom-plugin/) only when you actually need escape hatches
+
+## Choose by use case
+
+This is the fastest way to find the right example.
 
 ## Capability map
 
@@ -112,5 +129,11 @@ Source-backed example apps live in the repo under `examples/`. The current sourc
 | Live updates in the browser        | [Realtime with SSE](/slingshot/examples/realtime-sse/)                  |
 | Events that cross server instances | [Custom Event Bus](/slingshot/examples/custom-event-bus/)               |
 
-To build your own entity-driven plugin step by step, see [Build a Plugin](/slingshot/plugins/overview/) and
-[Config-Driven Domain](/slingshot/examples/config-driven-domain/).
+## How these fit the docs spine
+
+- fundamentals: [Quick Start](/slingshot/quick-start/), [App Authoring](/slingshot/app-authoring/)
+- canonical package and entity path: [Package-First Authoring](/slingshot/package-first/),
+  [Entity System](/slingshot/entity-system/)
+- product-shaped references: the examples on this page
+- advanced and escape-hatch references: [Custom Plugin](/slingshot/examples/custom-plugin/),
+  [Custom Event Bus](/slingshot/examples/custom-event-bus/)

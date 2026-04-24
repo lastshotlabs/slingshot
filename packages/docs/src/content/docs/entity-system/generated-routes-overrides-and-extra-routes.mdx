@@ -5,6 +5,9 @@ description: Defaults, executor overrides, collision rules, and custom routes in
 
 Generated routes are the normal path. Overrides and extra routes are the main customization seams.
 
+The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
+its `Post` entity module.
+
 ## What you get by default
 
 When an entity has route config, Slingshot can generate:
@@ -18,17 +21,28 @@ When an entity has route config, Slingshot can generate:
 
 That is the baseline behavior.
 
+For the starter app's `Post` entity, that usually means routes like:
+
+- `POST /blog/posts`
+- `GET /blog/posts`
+- `GET /blog/posts/:id`
+- `PATCH /blog/posts/:id`
+- `DELETE /blog/posts/:id`
+- `GET /blog/posts/by-author/:authorId`
+- `GET /blog/posts/by-slug/:slug`
+- `POST /blog/posts/:id/publish`
+
 ## Override a generated route
 
 Use overrides when you want to keep the generated route identity but replace its executor or docs
 metadata.
 
-```typescript
+```typescript title="src/blog/package.ts"
 import { defineEntityExecutor, entity } from '@lastshotlabs/slingshot-entity';
 
 const PostModule = entity({
   config: Post,
-  operations: PostOps,
+  operations: PostOperations,
   overrides: {
     get: defineEntityExecutor({
       summary: 'Get a post with viewer metadata',
@@ -46,7 +60,7 @@ const PostModule = entity({
 Use an extra route when the route should live beside the entity shell but is not one of the
 generated defaults.
 
-```typescript
+```typescript title="src/blog/package.ts"
 import { defineEntityRoute, entity } from '@lastshotlabs/slingshot-entity';
 
 const PostModule = entity({
@@ -57,8 +71,10 @@ const PostModule = entity({
       method: 'post',
       path: '/:id/preview',
       auth: 'userAuth',
-      buildExecutor: () => async ({ params, respond }) =>
-        respond.json({ id: params.id, preview: true }),
+      buildExecutor: ({ entityAdapter }) => async ({ params, respond }) => {
+        const post = await entityAdapter.get(params.id);
+        return respond.json({ id: params.id, preview: post?.body?.slice(0, 140) });
+      },
     }),
   ],
 });

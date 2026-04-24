@@ -1,228 +1,116 @@
 ---
 title: Quick Start
-description: A running Slingshot app with auth in under two minutes
+description: A minimal Slingshot app, code first
 ---
-
-import { TabItem, Tabs } from '@astrojs/starlight/components';
 
 ## Install
 
 ```bash
-bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth hono zod
+bun add @lastshotlabs/slingshot zod
 ```
 
-## Start the server
+## Start with one package and one route
 
-<Tabs>
-  <TabItem label="Manifest">
-    Create `app.manifest.json` in your project root:
+Create `src/index.ts`:
 
-    ```json title="app.manifest.json"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "security": {
-        "signing": { "secret": "${secret:JWT_SECRET}" }
-      },
-      "plugins": [
-        {
-          "plugin": "slingshot-auth",
-          "config": {
-            "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
-            "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
-          }
-        }
-      ]
-    }
-    ```
+```typescript title="src/index.ts"
+import { createServer, definePackage, domain, route } from '@lastshotlabs/slingshot';
 
-    ```bash
-    slingshot start
-    ```
-
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    import { createServer } from '@lastshotlabs/slingshot';
-    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-
-    await createServer({
-      port: 3000,
-      security: {
-        signing: { secret: process.env.JWT_SECRET! },
-      },
-      plugins: [
-        createAuthPlugin({
-          auth: { roles: ['user', 'admin'], defaultRole: 'user' },
-          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+const appPackage = definePackage({
+  name: 'app',
+  domains: [
+    domain({
+      name: 'health',
+      basePath: '/health',
+      routes: [
+        route.get({
+          path: '/',
+          auth: 'none',
+          summary: 'Health check',
+          handler: ({ respond }) => respond.json({ ok: true }),
         }),
       ],
-    });
-    ```
+    }),
+  ],
+});
 
-    ```bash
-    bun run src/index.ts
-    ```
+await createServer({
+  port: 3000,
+  packages: [appPackage],
+});
+```
 
-  </TabItem>
-</Tabs>
-
-Your API docs are live at **`http://localhost:3000/docs`** - the full OpenAPI spec, automatically generated from every route.
-
-## Register and log in
+Run it:
 
 ```bash
-# Register an account
-curl -X POST http://localhost:3000/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{ "email": "you@example.com", "password": "hunter2" }'
-
-# Log in - returns a JWT
-curl -X POST http://localhost:3000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{ "email": "you@example.com", "password": "hunter2" }'
-# { "token": "eyJ..." }
-
-# Use the token on protected routes
-curl http://localhost:3000/auth/me \
-  -H "Authorization: Bearer eyJ..."
+bun run src/index.ts
 ```
 
-## Protect a route
+Now hit:
 
-Import `userAuth` from `@lastshotlabs/slingshot-auth` and apply it as middleware. `userAuth` rejects unauthenticated requests automatically - no manual check needed.
+```bash
+curl http://localhost:3000/health
+```
 
-```typescript title="src/routes/dashboard.ts"
-import { createRouter, getActor } from '@lastshotlabs/slingshot';
-import { userAuth } from '@lastshotlabs/slingshot-auth';
+You should get:
 
-export const router = createRouter();
+```json
+{ "ok": true }
+```
 
-// All routes in this file require authentication.
-router.use('*', userAuth);
+Your generated docs are also live at `http://localhost:3000/docs`.
 
-router.get('/dashboard', c => {
-  // actor is guaranteed after userAuth validates the token.
-  const actor = getActor(c);
-  return c.json({ userId: actor.id });
+## This is the canonical scaffold
+
+If you are asking "what is the normal Slingshot app shape?", it is this:
+
+- `createServer(...)` at the app root
+- `packages: [...]` as the main composition surface
+- `definePackage(...)` for package modules
+- `defineEntity(...)` when a package owns a data-shaped domain
+
+## Add an entity
+
+When the package owns a data-shaped domain, move to the entity system.
+
+```typescript title="src/post.ts"
+import { defineEntity, field } from '@lastshotlabs/slingshot';
+
+export const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    authorId: field.string(),
+    title: field.string(),
+    body: field.string(),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' },
+    list: { auth: 'none' },
+    get: { auth: 'none' },
+  },
 });
 ```
 
-## Restrict to a role
+That is the canonical next step for most real apps.
 
-`requireRole` works the same way - add it after `userAuth`:
+## What to learn next
 
-```typescript
-import { createRouter } from '@lastshotlabs/slingshot';
-import { requireRole, userAuth } from '@lastshotlabs/slingshot-auth';
+1. [App Authoring](/slingshot/app-authoring/) for app config, events, WebSockets, SSE, and core runtime behavior.
+2. [Starter App](/slingshot/app-authoring/starter-app/) for the full canonical starter example used across the docs.
+3. [Package-First Authoring](/slingshot/package-first/) for `definePackage(...)`, `domain(...)`, and capabilities.
+4. [Entity System](/slingshot/entity-system/) for `defineEntity(...)`, operations, swappable storage, and generated routes.
 
-declare function deleteUser(id: string): Promise<void>;
+## Progress to advanced features
 
-const router = createRouter();
+After the fundamentals, the usual progression is:
 
-// Only admins can reach this route.
-router.use('/admin/*', userAuth, requireRole('admin'));
+1. [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)
+2. [WebSockets](/slingshot/app-authoring/websockets/) or [Server-Sent Events](/slingshot/app-authoring/server-sent-events/)
+3. [Runtime and Infrastructure](/slingshot/app-authoring/runtime-and-infrastructure/)
+4. [Escape Hatches](/slingshot/package-first/escape-hatches/) if you need fully custom wiring
 
-router.delete('/admin/users/:id', async c => {
-  const id = c.req.param('id');
-  await deleteUser(id);
-  return c.json({ deleted: id });
-});
-```
+## Manifest path
 
-## Point the server at your routes
-
-<Tabs>
-  <TabItem label="Manifest">
-    ```json title="app.manifest.json"
-    {
-      "manifestVersion": 1,
-      "port": 3000,
-      "routesDir": "${importMetaDir}/src/routes",
-      "plugins": [...]
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    import { dirname, join } from 'node:path';
-    import { fileURLToPath } from 'node:url';
-    import { createServer } from '@lastshotlabs/slingshot';
-
-    const here = dirname(fileURLToPath(import.meta.url));
-
-    await createServer({
-      port: 3000,
-      routesDir: join(here, 'routes'),
-      // ...
-    });
-    ```
-
-  </TabItem>
-</Tabs>
-
-Any file in `routesDir` that exports a `router` mounts automatically. No manual registration.
-
-## Switch to persistent storage
-
-In-memory data resets on restart. One config change switches to SQLite:
-
-<Tabs>
-  <TabItem label="Manifest">
-    ```json
-    {
-      "db": { "sqlite": "${importMetaDir}/data/app.db" },
-      "plugins": [{
-        "plugin": "slingshot-auth",
-        "config": {
-          "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
-          "db": { "auth": "sqlite", "sessions": "sqlite", "oauthState": "sqlite" }
-        }
-      }]
-    }
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript
-    createAuthPlugin({
-      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
-      db: { auth: 'sqlite', sessions: 'sqlite', oauthState: 'sqlite' },
-    })
-    ```
-  </TabItem>
-</Tabs>
-
-Nothing else changes. [Postgres and MongoDB](/slingshot/examples/production-databases/) work the same way.
-
-## Add more plugins
-
-Drop any Slingshot plugin into the array and its routes wire in automatically:
-
-<Tabs>
-  <TabItem label="Manifest">
-    ```json
-    "plugins": [
-      { "plugin": "slingshot-auth", "config": { "auth": { "roles": ["user"], "defaultRole": "user" } } },
-      { "plugin": "slingshot-community" },
-      { "plugin": "slingshot-organizations" }
-    ]
-    ```
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript
-    plugins: [
-      createAuthPlugin({ ... }),
-      createCommunityPlugin({ ... }),
-      createOrganizationsPlugin({ ... }),
-    ]
-    ```
-  </TabItem>
-</Tabs>
-
-## Where to go next
-
-- [Auth Setup](/slingshot/examples/with-auth/) - OAuth, MFA, passkeys, email verification
-- [Forum App](/slingshot/examples/forum-app/) - community + permissions fully wired
-- [Config-Driven Domain](/slingshot/examples/config-driven-domain/) - define your own entity and ship it as a plugin
-- [OpenAPI](/slingshot/guides/openapi/) - typed routes, named schemas, versioning
-- [Installation](/slingshot/installation/) - all packages and optional dependencies
+If you want a manifest-driven entrypoint instead, that path is still supported. It now lives under
+[Alternate Paths](/slingshot/alternate-paths/) so the main docs can stay code-first.

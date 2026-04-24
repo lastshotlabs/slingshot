@@ -8,26 +8,40 @@ WebSockets are a first-class core transport in Slingshot.
 They are not interchangeable with SSE. Use WebSockets when clients need to send messages back,
 subscribe to rooms, or participate in presence and recovery flows.
 
-## A minimal endpoint
+These examples extend the [starter app](/slingshot/app-authoring/starter-app/) with a blog
+collaboration endpoint.
+
+## A copyable endpoint
 
 ```typescript title="src/index.ts"
 import { createServer } from '@lastshotlabs/slingshot';
+import { blogPackage } from './blog/package';
 
 await createServer({
+  packages: [blogPackage],
   ws: {
     endpoints: {
-      '/ws': {
+      '/ws/blog': {
         presence: true,
         heartbeat: true,
         rateLimit: { windowMs: 10_000, maxMessages: 50, onExceeded: 'close' },
-        onRoomSubscribe: async (ws, room) => room.startsWith(`user:${ws.data.actorId}:`),
+        onRoomSubscribe: async (ws, room) =>
+          room === `post:${ws.data.actorId}:drafts` || room.startsWith('post:public:'),
         incoming: {
-          'chat:message': {
+          'post:typing': {
             auth: 'userAuth',
             handler: (_ws, payload, ctx) => {
-              const room = `user:${ctx.actorId}:inbox`;
-              ctx.publish(room, { type: 'chat:message', payload });
+              const room = `post:${ctx.actorId}:drafts`;
+              ctx.publish(room, { type: 'post:typing', payload });
               return { delivered: true };
+            },
+          },
+          'post:subscribePublic': {
+            auth: 'none',
+            handler: (_ws, payload, ctx) => {
+              const postId = (payload as { postId: string }).postId;
+              ctx.subscribe(`post:public:${postId}`);
+              return { subscribed: postId };
             },
           },
         },
@@ -96,6 +110,13 @@ declare const myWsTransport: import('@lastshotlabs/slingshot').WsConfig['transpo
 
 This is separate from the event bus. The event bus handles app events. The WebSocket transport
 handles cross-instance room fan-out.
+
+## Progression
+
+- default: one endpoint with `incoming`, `onRoomSubscribe`, and room publish
+- customize: add `middleware`, `persistence`, and `recovery`
+- escape hatch: supply a shared `transport` and let packages self-wire endpoint behavior through
+  the bootstrap endpoint map
 
 ## Package self-wiring
 

@@ -6,11 +6,14 @@ description: Typed cross-package contracts for services and entity adapters
 Capabilities and entity refs are how packages depend on each other without hard-coding adapter bags
 or global singletons.
 
+These examples extend the [starter app](/slingshot/app-authoring/starter-app/) with a mail package
+and a search package that read from `blogPackage`.
+
 ## Capabilities
 
 Use a capability when one package wants to publish a typed service for another package to consume.
 
-```typescript
+```typescript title="src/mail/package.ts"
 import {
   defineCapability,
   definePackage,
@@ -26,7 +29,9 @@ const mailPackage = definePackage({
   capabilities: {
     provides: [
       provideCapability(Mailer, () => ({
-        send: async (_to, _body) => {},
+        send: async (to, body) => {
+          console.log('sending mail', { to, body });
+        },
       })),
     ],
   },
@@ -46,7 +51,7 @@ const notificationsPackage = definePackage({
           path: '/notify',
           auth: 'none',
           handler: async ({ capabilities, respond }) => {
-            await capabilities.require(Mailer).send('user@example.com', 'hello');
+            await capabilities.require(Mailer).send('user@example.com', 'A post was published');
             return respond.noContent();
           },
         }),
@@ -60,16 +65,44 @@ const notificationsPackage = definePackage({
 
 Use an entity ref when one package needs a typed handle to another package's entity adapter.
 
-```typescript
-import { entityRef } from '@lastshotlabs/slingshot';
+```typescript title="src/search/package.ts"
+import { definePackage, domain, entityRef, route } from '@lastshotlabs/slingshot';
+import type { PackageEntityAdapterFor } from '@lastshotlabs/slingshot-entity';
+import { Post } from '../blog/post';
+import { PostOperations } from '../blog/post-operations';
 
-const PostRef = entityRef<{ get(id: string): Promise<unknown> }>({
+type PostAdapter = PackageEntityAdapterFor<typeof Post, typeof PostOperations.operations>;
+
+const PostRef = entityRef<PostAdapter>({
   plugin: 'blog',
   entity: 'Post',
 });
+
+export const searchPackage = definePackage({
+  name: 'search',
+  dependencies: ['blog'],
+  domains: [
+    domain({
+      name: 'search',
+      basePath: '/search',
+      routes: [
+        route.get({
+          path: '/posts/by-slug/:slug',
+          auth: 'none',
+          handler: async ({ entities, request, respond }) => {
+            const posts = entities.get(PostRef);
+            const result = await posts.bySlug({ slug: request.req.param('slug') });
+            return respond.json({ result });
+          },
+        }),
+      ],
+    }),
+  ],
+});
 ```
 
-Then package routes can resolve the adapter through `ctx.entities.get(...)`.
+Then package routes can resolve the adapter through `ctx.entities.get(...)` without coupling the
+packages through direct imports of runtime state.
 
 ## Why these are separate concepts
 

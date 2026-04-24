@@ -8,6 +8,9 @@ The event bus is part of the core application model.
 Every Slingshot app gets one. If you do not supply `eventBus`, `createApp()` creates a default
 in-process adapter for you.
 
+These examples extend the [starter app](/slingshot/app-authoring/starter-app/) with a publication
+event for blog posts.
+
 ## The model
 
 - `defineEvent(...)` defines the event contract
@@ -15,31 +18,36 @@ in-process adapter for you.
 - `bus.on(...)` is the subscription surface
 - event definitions control exposure and scope for SSE, webhooks, and external consumers
 
-## Define events explicitly
+## Define an event once
 
-```typescript
+```typescript title="src/blog/events.ts"
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot';
 import { defineEvent } from '@lastshotlabs/slingshot';
 
 declare module '@lastshotlabs/slingshot-core' {
   interface SlingshotEventMap {
-    'app:notification.created': { userId: string; notificationId: string; body: string };
+    'blog:post.published': {
+      postId: string;
+      authorId: string;
+      title: string;
+      slug: string;
+    };
   }
 }
 
-export const notificationsEventsPlugin: SlingshotPlugin = {
-  name: 'notifications-events',
+export const blogEventsPlugin: SlingshotPlugin = {
+  name: 'blog-events',
   setupMiddleware({ events }) {
     events.register(
-      defineEvent('app:notification.created', {
-        ownerPlugin: 'notifications',
+      defineEvent('blog:post.published', {
+        ownerPlugin: 'blog',
         exposure: ['client-safe', 'user-webhook'],
         resolveScope(payload) {
           return {
-            userId: payload.userId,
-            actorId: payload.userId,
-            resourceType: 'notification',
-            resourceId: payload.notificationId,
+            userId: payload.authorId,
+            actorId: payload.authorId,
+            resourceType: 'post',
+            resourceId: payload.postId,
           };
         },
       }),
@@ -53,16 +61,22 @@ downstream transport that depends on the event model.
 
 ## Publish through `ctx.events`
 
-```typescript
+```typescript title="src/publish-post.ts"
 import { createApp, getContext } from '@lastshotlabs/slingshot';
+import { blogEventsPlugin } from './blog/events';
+import { blogPackage } from './blog/package';
 
-const { app } = await createApp({ plugins: [notificationsEventsPlugin] });
+const { app } = await createApp({
+  packages: [blogPackage],
+  plugins: [blogEventsPlugin],
+});
 const ctx = getContext(app);
 
-ctx.events.publish('app:notification.created', {
-  userId: 'user-123',
-  notificationId: 'notif-1',
-  body: 'Build finished',
+ctx.events.publish('blog:post.published', {
+  postId: 'post-123',
+  authorId: 'user-123',
+  title: 'Shipping the docs rewrite',
+  slug: 'shipping-the-docs-rewrite',
 });
 ```
 
@@ -73,19 +87,19 @@ Use raw `bus.emit(...)` only for lower-level or transport-specific behavior.
 
 ## Subscribe in `setupPost`
 
-```typescript
+```typescript title="src/blog/subscribers.ts"
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot';
 
-export const notificationsSubscriberPlugin: SlingshotPlugin = {
-  name: 'notifications-subscriber',
+export const analyticsPlugin: SlingshotPlugin = {
+  name: 'analytics',
   setupPost({ bus }) {
-    bus.on('app:notification.created', async payload => {
-      await saveNotificationToAuditLog(payload.notificationId);
+    bus.on('blog:post.published', async payload => {
+      await savePublicationAudit(payload.postId, payload.slug);
     });
   },
 };
 
-declare function saveNotificationToAuditLog(id: string): Promise<void>;
+declare function savePublicationAudit(postId: string, slug: string): Promise<void>;
 ```
 
 `setupPost` is the safe point for subscriptions because route and runtime registration is complete.
@@ -125,6 +139,14 @@ declare const mySharedEventBus: import('@lastshotlabs/slingshot-core').Slingshot
 
 That decision affects cross-instance event delivery, webhook fan-out, and any package behavior that
 depends on events crossing instance boundaries.
+
+## The default, the customization, and the escape hatch
+
+- default: let `createApp()` create the in-process bus and publish through `ctx.events`
+- customize: register explicit event definitions with `defineEvent(...)` and subscribe in
+  `setupPost`
+- escape hatch: provide your own `eventBus` implementation when the app needs shared multi-instance
+  delivery
 
 ## This is why the bus is a core page
 

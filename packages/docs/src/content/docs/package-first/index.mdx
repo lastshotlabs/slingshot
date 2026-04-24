@@ -3,9 +3,20 @@ title: Package-First Authoring
 description: The canonical code-first authoring surface for Slingshot packages
 ---
 
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
 Package-first authoring is the main code-first surface for composing product modules in Slingshot.
 
 This is the layer between the app root and the lower-level plugin lifecycle.
+
+## Use this when
+
+Use package-first authoring when you want to:
+
+- scaffold an app from package modules
+- keep non-entity routes package-owned
+- publish typed cross-package capabilities
+- compose entities and routes without dropping straight into raw plugin lifecycle code
 
 ## The core pieces
 
@@ -59,6 +70,33 @@ That is why packages are the right public abstraction for app builders.
 - [domain and route](/slingshot/package-first/domain-and-route/)
 - [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/)
 - [Escape Hatches](/slingshot/package-first/escape-hatches/)
+
+## Common package authoring use cases
+
+<CardGrid>
+  <LinkCard
+    title="Define a package"
+    href="/slingshot/package-first/define-package/"
+    description="Declare the package boundary, mount path, dependencies, entities, and domains."
+  />
+  <LinkCard
+    title="Add package routes"
+    href="/slingshot/package-first/domain-and-route/"
+    description="Build typed package-owned routes that are not generated from entities."
+  />
+  <LinkCard
+    title="Share capabilities"
+    href="/slingshot/package-first/capabilities-and-entity-ref/"
+    description="Publish services and consume typed cross-package contracts."
+  />
+</CardGrid>
+
+## Progression: common to advanced
+
+- common path: `definePackage(...)` plus `domain(...)` and `route.*(...)`
+- common data path: attach `entity(...)` modules and move into the entity-system docs
+- less common built-ins: typed capabilities, entity refs, package-local middleware, mount metadata
+- escape hatches: raw plugins, lifecycle hooks, manual entity wiring, direct framework internals
 
 ## Where entities fit
 

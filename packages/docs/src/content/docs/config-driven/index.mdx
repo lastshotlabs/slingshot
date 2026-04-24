@@ -1,96 +1,71 @@
 ---
-title: Config-Driven Overview
-description: Build Slingshot apps with package-first entity, route, capability, and policy authoring.
+title: Legacy: Config-Driven Overview
+description: Legacy name for the package-first and entity-system authoring path
 ---
 
-The primary Slingshot authoring path is now package-first and code-first.
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-You define:
+`Config-driven` is the older name for what the docs now split into two clearer sections:
 
-- entities with `defineEntity(...)`
-- domain behavior with `defineOperations(...)`
-- package composition with `definePackage(...)`
-- package-owned custom endpoints with `domain(...)` and `route.*(...)`
+- [Package-First Authoring](/slingshot/package-first/)
+- [Entity System](/slingshot/entity-system/)
 
-From those declarations, Slingshot derives adapters, routes, validation, OpenAPI, and runtime wiring without forcing you down to raw plugins or ad hoc router glue.
+Those sections are now the canonical docs path.
 
-## Authoring map
+## If you landed here
 
-The package-first authoring surface is split by concern:
+Use this mapping:
 
-- [Packages and Capabilities](/slingshot/config-driven/packages/) — `definePackage(...)`, `domain(...)`, `route.*(...)`, and typed capabilities
-- [Entities](/slingshot/config-driven/entities/) — `defineEntity(...)`, `entity(...)`, fields, indexes, generated CRUD, and path ownership
-- [Routes](/slingshot/config-driven/routes/) — when routes come from entities, when they live in package domains, and how typed request/response metadata works
-- [Cross-Entity and Transactions](/slingshot/config-driven/cross-entity/) — orchestration, reporting, transactions, and where cross-entity logic belongs
-- [Adapters and Factories](/slingshot/config-driven/adapters/) — standard wiring, custom factories, manual adapters, Drizzle/raw SQL integration, and persistence escape hatches
-- [Auth, Policies, and Middleware](/slingshot/config-driven/auth-and-middleware/) — actor-first auth, permissions, policies, and package middleware
-- [Escape Hatches](/slingshot/config-driven/escape-hatches/) — raw Hono, raw plugins, custom middleware, manual adapters, and lower-level integration points
-- [Infrastructure](/slingshot/config-driven/infra/) — org-level and app-level deployment config, resource provisioning, container sizing, scaling, and the deployment pipeline
-- [Operations Reference](/slingshot/config-driven/operations/) — the built-in operation DSL
-- [Workflow](/slingshot/config-driven/workflow/) — the end-to-end build/test/docs loop
+- `definePackage(...)`, `domain(...)`, `route.*(...)`, capabilities, and `entityRef(...)`
+  now live under [Package-First Authoring](/slingshot/package-first/)
+- `defineEntity(...)`, `defineOperations(...)`, storage wiring, generated routes, overrides, and
+  extra routes now live under [Entity System](/slingshot/entity-system/)
 
-## The default stack
+## Canonical path
 
-For most teams, the intended path is:
+<CardGrid>
+  <LinkCard
+    title="Quick Start"
+    href="/slingshot/quick-start/"
+    description="Start with the normal code-first app scaffold."
+  />
+  <LinkCard
+    title="App Authoring"
+    href="/slingshot/app-authoring/"
+    description="Learn the core API surface: app assembly, config, context, events, WebSockets, SSE, and composition."
+  />
+  <LinkCard
+    title="Package-First Authoring"
+    href="/slingshot/package-first/"
+    description="Learn the canonical package-level authoring model."
+  />
+  <LinkCard
+    title="Entity System"
+    href="/slingshot/entity-system/"
+    description="Learn the canonical model for data-shaped domains."
+  />
+</CardGrid>
 
-1. Define entities with `defineEntity(...)`
-2. Define domain behavior with `defineOperations(...)`
-3. Mount them in packages with `entity(...)`
-4. Add package-owned custom endpoints with `domain({ routes: [...] })`
-5. Compose the app with `createApp({ packages })`
+## Why this changed
 
-That gives you a managed route shell, actor-first request identity, generated OpenAPI metadata, and a package boundary that stays coherent as the app grows.
+`Config-driven` was too broad. It mixed:
 
-## What gets generated
+- package authoring
+- entity authoring
+- route policy
+- storage wiring
+- escape hatches
 
-From those declarations, Slingshot can generate or assemble:
+That made it harder for users to answer basic questions like:
 
-- storage adapters
-- CRUD and operation-backed HTTP routes
-- route validation and OpenAPI metadata
-- policy, auth, middleware, and event wiring
-- typed package capability contracts
+- how do I scaffold an app?
+- where is the normal package story?
+- where is the normal entity story?
+- where do the advanced customizations begin?
 
-The goal is not “everything is magic.” The goal is that the repetitive wiring is framework-owned and the domain decisions stay in one place.
+The new split makes those paths explicit.
 
-## Where escape hatches start
+## Legacy deep links
 
-The config-driven stack is the default, not the only option.
-
-When you need lower-level control, you can drop to:
-
-- `routesDir` + `createRoute(...)` + `router.openapi(...)`
-- custom factories or manual adapter wiring
-- raw SQL or Drizzle-backed repo code
-- package domain routes for orchestration or reporting
-- raw `SlingshotPlugin` lifecycle hooks
-
-Those escape hatches are documented explicitly in [Escape Hatches](/slingshot/config-driven/escape-hatches/).
-
-## Manifest support
-
-Manifest and JSON-backed authoring still exist, but they are no longer the primary mental model for this section.
-
-Use the manifest path when:
-
-- you are working with manifest-driven server bootstrap
-- you need a machine-editable declarative artifact
-- you are integrating with tooling that emits manifest config directly
-
-If you need that path, start here:
-
-- [Manifest vs Code](/slingshot/manifest-vs-code/)
-- [Config-Driven Infrastructure](/slingshot/config-driven/infra/)
-
-## Where to go next
-
-- [Packages and Capabilities](/slingshot/config-driven/packages/) — the top-level package composition surface
-- [Entities](/slingshot/config-driven/entities/) — entity structure, generated routes, and path ownership
-- [Routes](/slingshot/config-driven/routes/) — entity routes versus package-owned domain routes
-- [Cross-Entity and Transactions](/slingshot/config-driven/cross-entity/) — orchestration, reporting, and transaction-style behavior
-- [Adapters and Factories](/slingshot/config-driven/adapters/) — custom persistence and Drizzle/raw SQL integration
-- [Auth, Policies, and Middleware](/slingshot/config-driven/auth-and-middleware/) — actor-first auth and package middleware wiring
-- [Escape Hatches](/slingshot/config-driven/escape-hatches/) — raw Hono, manual adapters, and raw plugin integration
-- [Infrastructure](/slingshot/config-driven/infra/) — deployment config, resource provisioning, and scaling
-- [Operations Reference](/slingshot/config-driven/operations/) — every operation kind, its config shape, and examples
-- [Config-Driven Walkthrough](/slingshot/config-driven-walkthrough/) — entity -> operations -> package -> app, using the TypeScript builders
+The old `config-driven/*` pages still exist for compatibility and deeper reference material, but
+they are no longer the main learning path.

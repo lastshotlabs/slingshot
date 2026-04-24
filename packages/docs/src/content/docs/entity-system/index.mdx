@@ -3,11 +3,23 @@ title: Entity System
 description: The canonical authoring path for data-shaped domains in Slingshot
 ---
 
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
 The entity system is how you author data-shaped domains the same way the framework's own packages
 do.
 
 It is code-first, package-friendly, and designed around generated behavior with explicit
 customization seams.
+
+## Use this when
+
+Use the entity system when your package owns a data-shaped domain and you want:
+
+- a canonical entity definition
+- generated CRUD routes
+- named operations beyond CRUD
+- swappable storage backends
+- route policy attached to the domain model
 
 ## The canonical flow
 
@@ -74,3 +86,43 @@ Every important entity topic should answer four questions:
 - [Operations](/slingshot/entity-system/operations/)
 - [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/)
 - [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/)
+
+## Common entity use cases
+
+<CardGrid>
+  <LinkCard
+    title="Define an entity"
+    href="/slingshot/entity-system/define-entity/"
+    description="Start with fields, indexes, relations, storage naming, and route defaults."
+  />
+  <LinkCard
+    title="Add named behavior"
+    href="/slingshot/entity-system/operations/"
+    description="Model lookups, transitions, aggregates, search, and other non-CRUD behavior."
+  />
+  <LinkCard
+    title="Control route policy"
+    href="/slingshot/entity-system/route-policy/"
+    description="Attach auth, permissions, idempotency, rate limits, middleware, and events."
+  />
+</CardGrid>
+
+## Less common built-ins
+
+These are still part of the canonical entity story and should be easy to discover:
+
+- storage backend swapping
+- consumer-controlled field and naming conventions
+- factory-backed and composite adapter wiring
+- generated route overrides
+- extra routes inside the entity shell
+
+## Escape hatches
+
+When the generated path is not enough, the main escape hatches are:
+
+- manual adapter wiring
+- `createEntityPlugin()` for lower-level orchestration work
+- generated-route executor overrides
+- extra routes
+- package routes outside the entity shell when the behavior is no longer entity-shaped

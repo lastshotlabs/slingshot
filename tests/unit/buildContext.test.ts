@@ -1,6 +1,5 @@
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import {
-  PERMISSIONS_STATE_KEY,
   RESOLVE_REINDEX_SOURCE,
   createEntityRegistry,
   createRouter,
@@ -812,20 +811,8 @@ describe('buildContext lifecycle', () => {
     expect(ctx.wsEndpoints?.['/notifications']).toBeDefined();
   });
 
-  test('bootstraps permissions when config is provided (lines 338-367)', async () => {
-    const { ctx } = await createDirectContext({
-      permissions: {
-        adapter: 'memory',
-      },
-    });
-    expect(ctx.pluginState.has(PERMISSIONS_STATE_KEY)).toBe(true);
-    const perms = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as any;
-    expect(perms).toBeDefined();
-    expect(perms.evaluator).toBeDefined();
-    expect(perms.registry).toBeDefined();
-    expect(perms.adapter).toBeDefined();
-    expect(Object.isFrozen(perms)).toBe(true);
-  });
+  // Permissions bootstrap moved to the permissions plugin (createPermissionsPlugin).
+  // Tested in tests/unit/permissions-bootstrap.test.ts via createApp().
 
   test('ReadonlyMap forEach passes thisArg correctly (lines 178-181)', async () => {
     const { ctx } = await createDirectContext();

@@ -30,3 +30,4 @@ export { createMemoryPermissionsAdapter } from './adapters/memory';
 export { permissionsAdapterFactories } from './factories';
 export type { PermissionsAdapterFactories } from './factories';
 export { createPermissionsPlugin } from './plugin';
+export type { PermissionsPluginConfig } from './plugin';

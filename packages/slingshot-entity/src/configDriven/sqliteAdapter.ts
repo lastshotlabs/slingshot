@@ -47,15 +47,33 @@ function runSqliteImmediateTransaction(db: SqliteDb, fn: () => void): void {
   }
 }
 
+/**
+ * Create a SQLite-backed {@link EntityAdapter} for the given entity config.
+ *
+ * Auto-creates the table and indexes on first use. Handles domain ↔ storage
+ * mapping including dates (epoch ms), JSON (serialised text), booleans (0/1),
+ * and snake_case column names. Supports soft-delete, cursor pagination, TTL
+ * (via a configurable expiry column), and tenant-scoped list operations.
+ *
+ * @param db - The SQLite database instance (must implement {@link SqliteDb}).
+ * @param config - The resolved entity config with fields, indexes, and conventions.
+ * @param operations - Optional named operation configs for the entity.
+ * @returns An {@link EntityAdapter} with CRUD methods backed by SQLite.
+ *
+ * @see {@link EntityStorageFieldMap} for customising the TTL column name.
+ */
 export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
   db: SqliteDb,
   config: ResolvedEntityConfig,
   operations?: Record<string, OperationConfig>,
 ): EntityAdapter<Entity, CreateInput, UpdateInput> & Record<string, unknown> {
   const table = storageName(config, 'sqlite');
+  const customAutoDefault = config._conventions?.autoDefault;
+  const customOnUpdate = config._conventions?.onUpdate;
   const pkField = config._pkField;
   const pkColumn = toSnakeCase(pkField);
   const ttlSeconds = config.ttl?.defaultSeconds;
+  const ttlColumn = config._storageFields.ttlField;
   let initialized = false;
 
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
@@ -76,7 +94,7 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       }
 
       if (ttlSeconds) {
-        cols.push('_expires_at INTEGER NOT NULL');
+        cols.push(`${ttlColumn} INTEGER NOT NULL`);
       }
 
       db.run(`CREATE TABLE IF NOT EXISTS ${table} (\n  ${cols.join(',\n  ')}\n)`);
@@ -111,7 +129,7 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
 
   function pruneExpired(): void {
     if (!ttlSeconds) return;
-    db.run(`DELETE FROM ${table} WHERE _expires_at < ?`, [Date.now()]);
+    db.run(`DELETE FROM ${table} WHERE ${ttlColumn} < ?`, [Date.now()]);
   }
 
   function appendFilterConditions(
@@ -149,9 +167,13 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
       ensureTable();
       pruneExpired();
 
-      const record = applyDefaults(input as Record<string, unknown>, config.fields);
+      const record = applyDefaults(
+        input as Record<string, unknown>,
+        config.fields,
+        customAutoDefault,
+      );
       const row = toSqliteRow(record, config.fields);
-      if (ttlSeconds) row['_expires_at'] = expiresAt();
+      if (ttlSeconds) row[ttlColumn] = expiresAt();
 
       const columns = Object.keys(row);
       const placeholders = columns.map(() => '?').join(', ');
@@ -180,7 +202,7 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
         }
       }
       if (ttlSeconds) {
-        conditions.push('_expires_at > ?');
+        conditions.push(`${ttlColumn} > ?`);
         params.push(Date.now());
       }
       const where = `WHERE ${conditions.join(' AND ')}`;
@@ -208,7 +230,7 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
         }
       }
       if (ttlSeconds) {
-        conditions.push('_expires_at > ?');
+        conditions.push(`${ttlColumn} > ?`);
         checkParams.push(Date.now());
       }
       const where = `WHERE ${conditions.join(' AND ')}`;
@@ -219,9 +241,13 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
         return Promise.resolve(null);
       }
 
-      const updatePayload = applyOnUpdate(input as Record<string, unknown>, config.fields);
+      const updatePayload = applyOnUpdate(
+        input as Record<string, unknown>,
+        config.fields,
+        customOnUpdate,
+      );
       const partial = toSqliteRow(updatePayload, config.fields);
-      if (ttlSeconds) partial['_expires_at'] = expiresAt();
+      if (ttlSeconds) partial[ttlColumn] = expiresAt();
 
       const entries = Object.entries(partial);
       if (entries.length === 0) {
@@ -257,14 +283,14 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
         }
       }
       if (ttlSeconds) {
-        conditions.push('_expires_at > ?');
+        conditions.push(`${ttlColumn} > ?`);
         params.push(Date.now());
       }
       const where = `WHERE ${conditions.join(' AND ')}`;
 
       if (config.softDelete) {
         const sdCol = toSnakeCase(config.softDelete.field);
-        const onUpdatePayload = applyOnUpdate({}, config.fields);
+        const onUpdatePayload = applyOnUpdate({}, config.fields, customOnUpdate);
         const partial = toSqliteRow(onUpdatePayload, config.fields);
         partial[sdCol] =
           'value' in config.softDelete ? config.softDelete.value : new Date().toISOString();
@@ -305,7 +331,7 @@ export function createSqliteEntityAdapter<Entity, CreateInput, UpdateInput>(
 
       // TTL check
       if (ttlSeconds) {
-        conditions.push('_expires_at > ?');
+        conditions.push(`${ttlColumn} > ?`);
         params.push(Date.now());
       }
 

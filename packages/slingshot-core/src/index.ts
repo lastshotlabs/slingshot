@@ -1,5 +1,10 @@
 /** Core plugin lifecycle contracts implemented by Slingshot feature packages. */
-export type { SlingshotPlugin, StandalonePlugin, PluginSetupContext } from './plugin';
+export type {
+  SlingshotPlugin,
+  StandalonePlugin,
+  PluginSetupContext,
+  PluginSeedContext,
+} from './plugin';
 /** Runtime abstraction types used by Slingshot hosts and server bootstrap. */
 export type {
   SlingshotRuntime,
@@ -272,7 +277,7 @@ export {
 export type { Actor, ActorKind, IdentityResolver, IdentityResolverInput } from './identity';
 export { ANONYMOUS_ACTOR, createDefaultIdentityResolver } from './identity';
 /** Request-context actor helpers for Hono middleware and routes. */
-export { getActor, getActorId, getActorTenantId } from './actorContext';
+export { getActor, getActorId, getActorTenantId, getRequestTenantId } from './actorContext';
 
 // --- authVariables ---
 /** Request-context variable typing for auth-aware Hono handlers. */
@@ -343,7 +348,7 @@ export type { UserResolver } from './userResolver';
 /** Access the auth-published user resolver from Slingshot context. */
 export { getUserResolver, getUserResolverOrNull } from './userResolver';
 
-export type { RouteAuthRegistry } from './routeAuth';
+export type { PostAuthGuard, PostAuthGuardFailure, RouteAuthRegistry } from './routeAuth';
 /** Access route-auth helpers published through the Slingshot registrar. */
 export { getRouteAuth, getRouteAuthOrNull } from './routeAuth';
 
@@ -485,6 +490,14 @@ export type {
   TenantConfig,
   EntityStorageHints,
   EntityTtlConfig,
+  EntitySystemFields,
+  EntityStorageFieldMap,
+  ResolvedEntitySystemFields,
+  ResolvedEntityStorageFieldMap,
+  EntityStorageConventions,
+  ResolvedEntityStorageConventions,
+  CustomAutoDefaultResolver,
+  CustomOnUpdateResolver,
   EntityConfig,
   ResolvedEntityConfig,
   InferEntity,

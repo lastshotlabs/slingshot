@@ -97,6 +97,24 @@ publish path should go through `ctx.events`, not raw `bus.emit(...)` plus sideca
 
 Core owns the types for entity definitions, operations, route configs, and channel configs. Those types are consumed by `@lastshotlabs/slingshot-entity`, by runtime route wiring, and by real feature packages such as community.
 
+### Consumer shape hardening
+
+Core now owns configurable entity field mapping and storage convention types:
+
+- `EntitySystemFields` / `ResolvedEntitySystemFields` — consumer-configurable names for audit,
+  ownership, tenant, and version fields. Defaults match first-party conventions.
+- `EntityStorageFieldMap` / `ResolvedEntityStorageFieldMap` — consumer-configurable Mongo PK
+  field and SQL TTL column names.
+- `EntityStorageConventions` / `ResolvedEntityStorageConventions` — consumer-configurable Redis
+  key format (default: `${storageName}:${appName}:${pk}`), custom auto-default resolvers
+  (beyond `uuid`/`cuid`/`now`), and custom on-update resolvers (beyond `now`).
+- `CustomAutoDefaultResolver` / `CustomOnUpdateResolver` — function type aliases for the
+  convention hooks. Return `undefined` to fall through to the built-in handler.
+
+These types are declared in `src/entityConfig.ts` and resolved at `defineEntity()` time. All
+adapters consume the resolved shapes — consumers never need to fork an adapter to change field
+names or ID generation strategy.
+
 ## Practical Advice
 
 - When a feature package needs a shared interface, add it here before reaching across package boundaries.

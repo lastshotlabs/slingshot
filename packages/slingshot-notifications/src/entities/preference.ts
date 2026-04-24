@@ -50,7 +50,7 @@ export const NotificationPreference = defineEntity('NotificationPreference', {
   indexes: [index(['userId', 'scope']), index(['userId', 'source']), index(['userId', 'type'])],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
     list: {},
     get: {},
     create: {},
@@ -67,7 +67,7 @@ export const NotificationPreference = defineEntity('NotificationPreference', {
  */
 export const notificationPreferenceOperations = defineOperations(NotificationPreference, {
   listByUser: op.lookup({
-    fields: { userId: 'param:authUserId' },
+    fields: { userId: 'param:actor.id' },
     returns: 'many',
   }),
 

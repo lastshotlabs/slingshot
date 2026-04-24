@@ -4,19 +4,13 @@ import { ValidationError } from './errors';
 import { ANONYMOUS_ACTOR, type Actor } from './identity';
 
 /**
- * Safely resolve the canonical {@link Actor} from a {@link HandlerMeta} object.
- *
- * Prefers `meta.actor` when present. Falls back to constructing an `Actor` from
- * the legacy `authUserId` / `bearerClientId` / `authClientId` fields when
- * `meta.actor` is absent (e.g., in externally constructed or test-created meta
- * objects that predate the actor migration).
+ * Resolve the canonical {@link Actor} from a {@link HandlerMeta} object.
  *
  * @param meta - The handler invocation metadata to extract the actor from.
  * @returns The canonical `Actor` for this invocation — never `null`.
  */
 export function resolveActor(meta: HandlerMeta): Actor {
-  if (meta.actor) return meta.actor;
-  return buildActorFromLegacy(meta);
+  return meta.actor;
 }
 
 type MaybePromise<T> = T | Promise<T>;
@@ -35,7 +29,17 @@ export interface HandlerMeta {
   /** The resolved actor for this request. */
   actor: Actor;
 
-  /** @deprecated Use `meta.actor.tenantId`. */
+  /**
+   * The request-scoped tenant ID from tenant-resolution middleware.
+   *
+   * Distinct from `actor.tenantId` — this is the tenant context of the HTTP
+   * request (e.g. from a header or subdomain), while `actor.tenantId` is the
+   * tenant the actor belongs to. They usually match but can differ for
+   * cross-tenant operations.
+   */
+  requestTenantId: string | null;
+
+  /** @deprecated Use `meta.actor.tenantId` or `meta.requestTenantId`. */
   tenantId: string | null;
   /** @deprecated Use `meta.actor.id`. */
   authUserId: string | null;
@@ -279,70 +283,26 @@ export interface SlingshotHandler<
 
 function defaultMeta(meta: Partial<HandlerMeta> | undefined): HandlerMeta {
   const requestId = meta?.requestId ?? crypto.randomUUID();
-
-  // Prefer an explicitly supplied actor; otherwise construct one from legacy fields.
-  const actor: Actor = meta?.actor ?? buildActorFromLegacy(meta);
+  const actor: Actor = meta?.actor ?? ANONYMOUS_ACTOR;
 
   return {
     requestId,
     actor,
-    // Legacy aliases — projected from actor so both views stay in sync.
-    tenantId: actor.tenantId,
+    requestTenantId: meta?.requestTenantId ?? actor.tenantId,
+    // Legacy aliases — kept for downstream compat, will be removed.
+    tenantId: meta?.requestTenantId ?? actor.tenantId,
     authUserId: actor.kind === 'user' ? actor.id : null,
     roles: actor.roles,
     correlationId: meta?.correlationId ?? requestId,
     ip: meta?.ip ?? null,
     ...(meta?.idempotencyKey ? { idempotencyKey: meta.idempotencyKey } : {}),
-    authClientId: actor.kind === 'service-account' ? actor.id : (meta?.authClientId ?? null),
-    bearerClientId: actor.kind === 'api-key' ? actor.id : (meta?.bearerClientId ?? null),
+    authClientId: actor.kind === 'service-account' ? actor.id : null,
+    bearerClientId: actor.kind === 'api-key' ? actor.id : null,
     bearerAuthenticated: meta?.bearerAuthenticated ?? false,
     method: meta?.method,
     path: meta?.path,
     userAgent: meta?.userAgent ?? null,
   };
-}
-
-/**
- * Build an Actor from the legacy HandlerMeta fields when no explicit actor is provided.
- * This preserves backward compatibility for callers that construct HandlerMeta without actor.
- */
-function buildActorFromLegacy(meta: Partial<HandlerMeta> | undefined): Actor {
-  if (!meta) return ANONYMOUS_ACTOR;
-
-  const tenantId = meta.tenantId ?? null;
-  const roles = meta.roles ?? null;
-
-  if (meta.authUserId) {
-    return {
-      id: meta.authUserId,
-      kind: 'user',
-      tenantId,
-      sessionId: null,
-      roles,
-      claims: {},
-    };
-  }
-  if (meta.bearerClientId) {
-    return {
-      id: meta.bearerClientId,
-      kind: 'api-key',
-      tenantId,
-      sessionId: null,
-      roles,
-      claims: {},
-    };
-  }
-  if (meta.authClientId) {
-    return {
-      id: meta.authClientId,
-      kind: 'service-account',
-      tenantId,
-      sessionId: null,
-      roles,
-      claims: {},
-    };
-  }
-  return { ...ANONYMOUS_ACTOR, tenantId };
 }
 
 function collectAfterHooks<TInput extends ZodTypeAny, TOutput>(

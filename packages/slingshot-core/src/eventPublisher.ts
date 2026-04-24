@@ -101,6 +101,7 @@ export function createEventPublisher(options: CreateEventPublisherOptions): Slin
         requestId: ctx.requestId,
         correlationId: ctx.correlationId,
         source: ctx.source,
+        requestTenantId: ctx.requestTenantId,
       });
 
       const busWithEnvelopeEmit = options.bus as SlingshotEventBus & {

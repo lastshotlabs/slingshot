@@ -29,7 +29,7 @@ export const OrganizationInvite = defineEntity('OrganizationInvite', {
     defaults: { auth: 'userAuth' },
     dataScope: [
       { field: 'orgId', from: 'param:orgId', applyTo: ['create', 'list', 'get'] },
-      { field: 'invitedBy', from: 'ctx:authUserId', applyTo: ['create'] },
+      { field: 'invitedBy', from: 'ctx:actor.id', applyTo: ['create'] },
       { field: 'expiresAt', from: 'ctx:inviteExpiresAt', applyTo: ['create'] },
     ],
     create: { middleware: ['inviteCreateDefaults', 'organizationsAdminGuard'] },

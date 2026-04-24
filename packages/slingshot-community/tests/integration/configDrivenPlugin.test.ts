@@ -289,11 +289,13 @@ async function createCommunityHarness(opts?: {
 
   // Install a tiny slingshotCtx middleware so applyRouteConfig's userAuth
   // branch can resolve the routeAuth registry. The stub userAuth handler
-  // sets authUserId from a header so each test can pose as different users.
+  // sets actor from a header so each test can pose as different users.
   const routeAuth: RouteAuthRegistry = {
     userAuth: (async (c, next) => {
       const uid = c.req.header('x-test-user') ?? userId;
-      (c as unknown as { set(k: string, v: unknown): void }).set('authUserId', uid);
+      const setter = c as unknown as { set(k: string, v: unknown): void };
+      setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
+      setter.set('authUserId', uid);
       await next();
     }) as MiddlewareHandler,
     requireRole: () => async (_c, next) => next(),
@@ -734,7 +736,7 @@ describe('createCommunityPlugin â€” shared notifications wiring', () => {
 
     expect(res.status).toBeLessThan(300);
 
-    const notifications = await harness.notifications.listByUser({ authUserId: 'user-42' });
+    const notifications = await harness.notifications.listByUser({ 'actor.id': 'user-42' });
     expect(notifications.items).toHaveLength(1);
     expect(notifications.items[0]?.type).toBe('community:ban');
     expect(notifications.items[0]?.source).toBe('community');

@@ -20,7 +20,7 @@ export const UserMute = defineEntity('UserMute', {
   indexes: [index(['userId', 'mutedUserId', 'containerId'], { unique: true })],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
     create: {},

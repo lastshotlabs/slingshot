@@ -47,6 +47,7 @@ function createMeta(overrides?: Partial<HandlerMeta>): HandlerMeta {
   return {
     requestId: 'req-1',
     actor,
+    requestTenantId: tenantId,
     tenantId,
     authUserId,
     correlationId: 'corr-1',

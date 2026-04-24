@@ -24,7 +24,7 @@ export const Bookmark = defineEntity('Bookmark', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
     create: {},

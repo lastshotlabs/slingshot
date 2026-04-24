@@ -32,7 +32,7 @@ export const RoomMember = defineEntity('RoomMember', {
   indexes: [index(['roomId', 'userId'], { unique: true }), index(['userId']), index(['roomId'])],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId', applyTo: ['list'] },
+    dataScope: { field: 'userId', from: 'ctx:actor.id', applyTo: ['list'] },
     get: {
       permission: {
         requires: 'chat:room.read',

@@ -160,7 +160,7 @@ export function createAssetsManifestRuntime(args: {
       );
     }
 
-    const userId = readRequiredString(params, 'authUserId', 'Authenticated user required');
+    const userId = readRequiredString(params, 'actor.id', 'Authenticated user required');
     const filename = readOptionalString(params, 'filename');
     const mimeType = readOptionalString(params, 'mimeType');
     const tenantId = readOptionalString(params, 'tenantId') ?? config.tenantId;
@@ -221,7 +221,7 @@ export function createAssetsManifestRuntime(args: {
     }
 
     const key = readRequiredString(params, 'key', 'key is required');
-    const userId = readRequiredString(params, 'authUserId', 'Authenticated user required');
+    const userId = readRequiredString(params, 'actor.id', 'Authenticated user required');
     const tenantId = readOptionalString(params, 'tenantId');
     const expirySeconds = readPresignedExpiry(config, params);
 
@@ -254,7 +254,7 @@ export function createAssetsManifestRuntime(args: {
     }
 
     const id = readRequiredString(params, 'id', 'id is required');
-    const userId = readRequiredString(params, 'authUserId', 'Authenticated user required');
+    const userId = readRequiredString(params, 'actor.id', 'Authenticated user required');
     const tenantId = readOptionalString(params, 'tenantId');
     const asset = await assetAdapter.getById(id);
     if (!asset) {

@@ -187,344 +187,118 @@ describe('BullMQ event bus error paths', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. runManifestSeed (lines 340-436) — seed users and orgs
+// 3. Plugin seed lifecycle (runPluginSeed)
 // ---------------------------------------------------------------------------
 
 describe('manifest seed', () => {
-  // These tests need to mock createServer to return a server with context,
-  // and mock the auth/permissions/org service modules.
+  // Seed logic now lives in each plugin's seed() method. These tests verify
+  // the runPluginSeed orchestrator calls plugin.seed() in order and threads
+  // the shared seedState map between plugins.
 
-  function makeServerWithContext(ctx: Record<string, unknown>): TestServer {
-    const server = {
-      stop: () => Promise.resolve(),
-      port: 3000,
-    } as unknown as TestServer;
-    // Attach context via the well-known symbol
-    Object.defineProperty(server, Symbol.for('slingshot.serverContext'), {
-      configurable: true,
-      enumerable: false,
-      writable: true,
-      value: ctx,
+  it('calls seed() on plugins that implement it', async () => {
+    const { runPluginSeed } = await import('../../src/framework/runPluginLifecycle');
+    const seedCalls: string[] = [];
+    const plugins: SlingshotPlugin[] = [
+      {
+        name: 'plugin-a',
+        setupMiddleware: async () => {},
+        async seed({ seedState }) {
+          seedCalls.push('a');
+          seedState.set('a:done', true);
+        },
+      },
+      {
+        name: 'plugin-b',
+        setupMiddleware: async () => {},
+        async seed({ seedState }) {
+          seedCalls.push('b');
+          expect(seedState.get('a:done')).toBe(true);
+        },
+      },
+    ];
+
+    const app = {} as any;
+    const bus = { publish: async () => {}, emit: () => {}, subscribe: () => ({ unsubscribe: () => {} }) } as any;
+    const events = { publish: () => ({}) } as any;
+
+    await runPluginSeed(plugins, app, bus, events, { users: [] });
+    expect(seedCalls).toEqual(['a', 'b']);
+  });
+
+  it('skips plugins without seed()', async () => {
+    const { runPluginSeed } = await import('../../src/framework/runPluginLifecycle');
+    const plugins: SlingshotPlugin[] = [
+      { name: 'no-seed', setupMiddleware: async () => {} },
+    ];
+
+    const app = {} as any;
+    const bus = { publish: async () => {}, emit: () => {}, subscribe: () => ({ unsubscribe: () => {} }) } as any;
+    const events = { publish: () => ({}) } as any;
+
+    // Should not throw
+    await runPluginSeed(plugins, app, bus, events, {});
+  });
+
+  it('threads seedState across plugins for cross-plugin coordination', async () => {
+    const { runPluginSeed } = await import('../../src/framework/runPluginLifecycle');
+    const plugins: SlingshotPlugin[] = [
+      {
+        name: 'auth-seed',
+        setupMiddleware: async () => {},
+        async seed({ manifestSeed, seedState }) {
+          const users = manifestSeed.users as Array<{ email: string }>;
+          for (const u of users ?? []) {
+            seedState.set(`user:${u.email}`, `id-${u.email}`);
+          }
+        },
+      },
+      {
+        name: 'perms-seed',
+        setupMiddleware: async () => {},
+        async seed({ seedState }) {
+          // Should see IDs from auth-seed
+          expect(seedState.get('user:admin@test.com')).toBe('id-admin@test.com');
+        },
+      },
+    ];
+
+    const app = {} as any;
+    const bus = { publish: async () => {}, emit: () => {}, subscribe: () => ({ unsubscribe: () => {} }) } as any;
+    const events = { publish: () => ({}) } as any;
+
+    await runPluginSeed(plugins, app, bus, events, {
+      users: [{ email: 'admin@test.com', password: 'secret' }],
     });
-    return server;
-  }
+  });
 
-  it('seeds users that do not exist', async () => {
-    const createdUsers: Array<{ email: string; hash: string }> = [];
-    const fakeAdapter = {
-      findByEmail: mock(async () => null),
-      create: mock(async (email: string, hash: string) => {
-        createdUsers.push({ email, hash });
-        return { id: `user-${email}` };
-      }),
+  it('createServerFromManifest calls runPluginSeed when seed data is present', async () => {
+    const seedCalled = mock(async () => {});
+    const fakePlugin: SlingshotPlugin = {
+      name: 'test-seed-plugin',
+      setupMiddleware: async () => {},
+      seed: seedCalled,
     };
-    const fakePassword = {
-      hash: mock(async (pw: string) => `hashed-${pw}`),
-    };
+
+    function makeServerWithContext(ctx: Record<string, unknown>): TestServer {
+      const server = {
+        stop: () => Promise.resolve(),
+        port: 3000,
+      } as unknown as TestServer;
+      Object.defineProperty(server, Symbol.for('slingshot.serverContext'), {
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        value: ctx,
+      });
+      return server;
+    }
 
     const ctx = {
-      pluginState: new Map(),
-      bus: { emit: () => {}, on: () => {}, off: () => {} },
+      plugins: [fakePlugin],
+      app: {},
+      bus: { publish: async () => {}, emit: () => {}, subscribe: () => ({ unsubscribe: () => {} }) },
+      events: { publish: () => ({}) },
     };
-
-    // Mock auth runtime
-    const authMock = spyOn(
-      await import('@lastshotlabs/slingshot-auth'),
-      'getAuthRuntimeContext',
-    ).mockReturnValue({ adapter: fakeAdapter, password: fakePassword } as any);
-
-    // Mock permissions — no permissions plugin
-    const permsMock = spyOn(
-      await import('@lastshotlabs/slingshot-core'),
-      'getPermissionsStateOrNull',
-    ).mockReturnValue(null);
-
-    // Mock org service — no org service
-    const orgMock = spyOn(
-      await import('@lastshotlabs/slingshot-organizations'),
-      'getOrganizationsOrgServiceOrNull',
-    ).mockReturnValue(null);
-
-    const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(
-      makeServerWithContext(ctx),
-    );
-
-    const manifest = JSON.stringify({
-      manifestVersion: 1,
-      seed: {
-        users: [
-          { email: 'admin@test.com', password: 'secret123' },
-          { email: 'user@test.com', password: 'pw456' },
-        ],
-      },
-    });
-    const path = writeTempManifest(manifest);
-
-    try {
-      await createServerFromManifest(path);
-      expect(fakeAdapter.findByEmail).toHaveBeenCalledTimes(2);
-      expect(fakeAdapter.create).toHaveBeenCalledTimes(2);
-      expect(createdUsers[0].email).toBe('admin@test.com');
-      expect(createdUsers[0].hash).toBe('hashed-secret123');
-    } finally {
-      authMock.mockRestore();
-      permsMock.mockRestore();
-      orgMock.mockRestore();
-      serverSpy.mockRestore();
-    }
-  });
-
-  it('skips existing users during seed', async () => {
-    const fakeAdapter = {
-      findByEmail: mock(async (email: string) => ({ id: `existing-${email}` })),
-      create: mock(async () => ({ id: 'new' })),
-    };
-    const fakePassword = { hash: mock(async (pw: string) => `hashed-${pw}`) };
-
-    const ctx = { pluginState: new Map() };
-
-    const authMock = spyOn(
-      await import('@lastshotlabs/slingshot-auth'),
-      'getAuthRuntimeContext',
-    ).mockReturnValue({ adapter: fakeAdapter, password: fakePassword } as any);
-
-    const permsMock = spyOn(
-      await import('@lastshotlabs/slingshot-core'),
-      'getPermissionsStateOrNull',
-    ).mockReturnValue(null);
-
-    const orgMock = spyOn(
-      await import('@lastshotlabs/slingshot-organizations'),
-      'getOrganizationsOrgServiceOrNull',
-    ).mockReturnValue(null);
-
-    const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(
-      makeServerWithContext(ctx),
-    );
-
-    const manifest = JSON.stringify({
-      manifestVersion: 1,
-      seed: {
-        users: [{ email: 'exists@test.com', password: 'pw' }],
-      },
-    });
-    const path = writeTempManifest(manifest);
-
-    try {
-      await createServerFromManifest(path);
-      expect(fakeAdapter.findByEmail).toHaveBeenCalledTimes(1);
-      expect(fakeAdapter.create).not.toHaveBeenCalled();
-    } finally {
-      authMock.mockRestore();
-      permsMock.mockRestore();
-      orgMock.mockRestore();
-      serverSpy.mockRestore();
-    }
-  });
-
-  it('grants super-admin to seeded user when permissions plugin is active', async () => {
-    const grantsMade: unknown[] = [];
-    const fakeAdapter = {
-      findByEmail: mock(async () => null),
-      create: mock(async (email: string) => ({ id: `user-${email}` })),
-    };
-    const fakePassword = { hash: mock(async (pw: string) => `hashed-${pw}`) };
-
-    const fakePermsAdapter = {
-      createGrant: mock(async (grant: unknown) => {
-        grantsMade.push(grant);
-      }),
-    };
-
-    const ctx = { pluginState: new Map() };
-
-    const authMock = spyOn(
-      await import('@lastshotlabs/slingshot-auth'),
-      'getAuthRuntimeContext',
-    ).mockReturnValue({ adapter: fakeAdapter, password: fakePassword } as any);
-
-    const permsMock = spyOn(
-      await import('@lastshotlabs/slingshot-core'),
-      'getPermissionsStateOrNull',
-    ).mockReturnValue({ adapter: fakePermsAdapter } as any);
-
-    const orgMock = spyOn(
-      await import('@lastshotlabs/slingshot-organizations'),
-      'getOrganizationsOrgServiceOrNull',
-    ).mockReturnValue(null);
-
-    const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(
-      makeServerWithContext(ctx),
-    );
-
-    const manifest = JSON.stringify({
-      manifestVersion: 1,
-      seed: {
-        users: [{ email: 'admin@test.com', password: 'secret', superAdmin: true }],
-      },
-    });
-    const path = writeTempManifest(manifest);
-
-    try {
-      await createServerFromManifest(path);
-      expect(fakePermsAdapter.createGrant).toHaveBeenCalledTimes(1);
-      const grant = grantsMade[0] as Record<string, unknown>;
-      expect(grant.subjectId).toBe('user-admin@test.com');
-      expect(grant.subjectType).toBe('user');
-      expect(grant.grantedBy).toBe('manifest-seed');
-    } finally {
-      authMock.mockRestore();
-      permsMock.mockRestore();
-      orgMock.mockRestore();
-      serverSpy.mockRestore();
-    }
-  });
-
-  it('warns when superAdmin requested but permissions plugin is absent', async () => {
-    const fakeAdapter = {
-      findByEmail: mock(async () => null),
-      create: mock(async (email: string) => ({ id: `user-${email}` })),
-    };
-    const fakePassword = { hash: mock(async (pw: string) => `hashed-${pw}`) };
-
-    const ctx = { pluginState: new Map() };
-
-    const authMock = spyOn(
-      await import('@lastshotlabs/slingshot-auth'),
-      'getAuthRuntimeContext',
-    ).mockReturnValue({ adapter: fakeAdapter, password: fakePassword } as any);
-
-    const permsMock = spyOn(
-      await import('@lastshotlabs/slingshot-core'),
-      'getPermissionsStateOrNull',
-    ).mockReturnValue(null);
-
-    const orgMock = spyOn(
-      await import('@lastshotlabs/slingshot-organizations'),
-      'getOrganizationsOrgServiceOrNull',
-    ).mockReturnValue(null);
-
-    const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(
-      makeServerWithContext(ctx),
-    );
-
-    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
-    const manifest = JSON.stringify({
-      manifestVersion: 1,
-      seed: {
-        users: [{ email: 'admin@test.com', password: 'secret', superAdmin: true }],
-      },
-    });
-    const path = writeTempManifest(manifest);
-
-    try {
-      await createServerFromManifest(path);
-      const warnings = warnSpy.mock.calls.map(c => c[0]);
-      expect(warnings.some((w: string) => w.includes('permissions plugin is not running'))).toBe(
-        true,
-      );
-    } finally {
-      authMock.mockRestore();
-      permsMock.mockRestore();
-      orgMock.mockRestore();
-      serverSpy.mockRestore();
-      warnSpy.mockRestore();
-    }
-  });
-
-  it('warns when seed.orgs defined but org service is absent', async () => {
-    const fakeAdapter = {
-      findByEmail: mock(async () => null),
-      create: mock(async (email: string) => ({ id: `user-${email}` })),
-    };
-    const fakePassword = { hash: mock(async (pw: string) => `hashed-${pw}`) };
-
-    const ctx = { pluginState: new Map() };
-
-    const authMock = spyOn(
-      await import('@lastshotlabs/slingshot-auth'),
-      'getAuthRuntimeContext',
-    ).mockReturnValue({ adapter: fakeAdapter, password: fakePassword } as any);
-
-    const permsMock = spyOn(
-      await import('@lastshotlabs/slingshot-core'),
-      'getPermissionsStateOrNull',
-    ).mockReturnValue(null);
-
-    const orgMock = spyOn(
-      await import('@lastshotlabs/slingshot-organizations'),
-      'getOrganizationsOrgServiceOrNull',
-    ).mockReturnValue(null);
-
-    const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(
-      makeServerWithContext(ctx),
-    );
-
-    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-
-    const manifest = JSON.stringify({
-      manifestVersion: 1,
-      seed: {
-        orgs: [{ name: 'Test Org', slug: 'test-org' }],
-      },
-    });
-    const path = writeTempManifest(manifest);
-
-    try {
-      await createServerFromManifest(path);
-      const warnings = warnSpy.mock.calls.map(c => c[0]);
-      expect(
-        warnings.some((w: string) => w.includes('slingshot-organizations plugin is not running')),
-      ).toBe(true);
-    } finally {
-      authMock.mockRestore();
-      permsMock.mockRestore();
-      orgMock.mockRestore();
-      serverSpy.mockRestore();
-      warnSpy.mockRestore();
-    }
-  });
-
-  it('seeds orgs and adds members', async () => {
-    const fakeAdapter = {
-      findByEmail: mock(async (email: string) => {
-        if (email === 'existing@test.com') return { id: 'existing-user-id' };
-        return null;
-      }),
-      create: mock(async (email: string) => ({ id: `user-${email}` })),
-    };
-    const fakePassword = { hash: mock(async (pw: string) => `hashed-${pw}`) };
-
-    const createdOrgs: unknown[] = [];
-    const addedMembers: unknown[] = [];
-    const fakeOrgService = {
-      getOrgBySlug: mock(async () => null),
-      createOrg: mock(async (data: unknown) => {
-        createdOrgs.push(data);
-        return { id: 'org-1', ...(data as object) };
-      }),
-      addOrgMember: mock(async (...args: unknown[]) => {
-        addedMembers.push(args);
-      }),
-    };
-
-    const ctx = { pluginState: new Map() };
-
-    const authMock = spyOn(
-      await import('@lastshotlabs/slingshot-auth'),
-      'getAuthRuntimeContext',
-    ).mockReturnValue({ adapter: fakeAdapter, password: fakePassword } as any);
-
-    const permsMock = spyOn(
-      await import('@lastshotlabs/slingshot-core'),
-      'getPermissionsStateOrNull',
-    ).mockReturnValue(null);
-
-    const orgMock = spyOn(
-      await import('@lastshotlabs/slingshot-organizations'),
-      'getOrganizationsOrgServiceOrNull',
-    ).mockReturnValue(fakeOrgService as any);
 
     const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(
       makeServerWithContext(ctx),
@@ -534,113 +308,29 @@ describe('manifest seed', () => {
       manifestVersion: 1,
       seed: {
         users: [{ email: 'admin@test.com', password: 'secret' }],
-        orgs: [
-          {
-            name: 'Test Org',
-            slug: 'test-org',
-            tenantId: 'tenant-1',
-            metadata: { plan: 'pro' },
-            members: [
-              { email: 'admin@test.com', roles: ['admin'] },
-              { email: 'existing@test.com' },
-              { email: 'notfound@test.com' },
-            ],
-          },
-        ],
       },
     });
     const path = writeTempManifest(manifest);
 
     try {
       await createServerFromManifest(path);
-      expect(fakeOrgService.createOrg).toHaveBeenCalledTimes(1);
-      // admin@test.com was seeded, so it's found via seededUserIds
-      // existing@test.com is found via adapter.findByEmail
-      // notfound@test.com is not found anywhere — skipped
-      expect(fakeOrgService.addOrgMember).toHaveBeenCalledTimes(2);
+      expect(seedCalled).toHaveBeenCalledTimes(1);
     } finally {
-      authMock.mockRestore();
-      permsMock.mockRestore();
-      orgMock.mockRestore();
       serverSpy.mockRestore();
     }
   });
 
-  it('skips existing orgs during seed', async () => {
-    const fakeAdapter = {
-      findByEmail: mock(async () => null),
-      create: mock(async (email: string) => ({ id: `user-${email}` })),
-    };
-    const fakePassword = { hash: mock(async (pw: string) => `hashed-${pw}`) };
-
-    const fakeOrgService = {
-      getOrgBySlug: mock(async () => ({ id: 'existing-org', slug: 'test-org' })),
-      createOrg: mock(async () => ({ id: 'new-org' })),
-      addOrgMember: mock(async () => {}),
-    };
-
-    const ctx = { pluginState: new Map() };
-
-    const authMock = spyOn(
-      await import('@lastshotlabs/slingshot-auth'),
-      'getAuthRuntimeContext',
-    ).mockReturnValue({ adapter: fakeAdapter, password: fakePassword } as any);
-
-    const permsMock = spyOn(
-      await import('@lastshotlabs/slingshot-core'),
-      'getPermissionsStateOrNull',
-    ).mockReturnValue(null);
-
-    const orgMock = spyOn(
-      await import('@lastshotlabs/slingshot-organizations'),
-      'getOrganizationsOrgServiceOrNull',
-    ).mockReturnValue(fakeOrgService as any);
-
-    const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(
-      makeServerWithContext(ctx),
-    );
-
-    const manifest = JSON.stringify({
-      manifestVersion: 1,
-      seed: {
-        orgs: [{ name: 'Test Org', slug: 'test-org' }],
-      },
-    });
-    const path = writeTempManifest(manifest);
-
-    try {
-      await createServerFromManifest(path);
-      expect(fakeOrgService.createOrg).not.toHaveBeenCalled();
-    } finally {
-      authMock.mockRestore();
-      permsMock.mockRestore();
-      orgMock.mockRestore();
-      serverSpy.mockRestore();
-    }
-  });
-
-  it('warns when server context is not available for seed', async () => {
-    // Return a server without context attached
+  it('skips seed when no seed data in manifest', async () => {
     const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
-    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
-    const manifest = JSON.stringify({
-      manifestVersion: 1,
-      seed: {
-        users: [{ email: 'admin@test.com', password: 'secret' }],
-      },
-    });
+    const manifest = JSON.stringify({ manifestVersion: 1 });
     const path = writeTempManifest(manifest);
 
     try {
-      await createServerFromManifest(path);
-      const warnings = warnSpy.mock.calls.map(c => c[0]);
-      expect(warnings.some((w: string) => w.includes('Could not retrieve server context'))).toBe(
-        true,
-      );
+      const server = await createServerFromManifest(path);
+      expect(server).toBeDefined();
     } finally {
       serverSpy.mockRestore();
-      warnSpy.mockRestore();
     }
   });
 });
@@ -846,25 +536,3 @@ describe('entity handler and hook registration into entity plugin', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// 6. No-seed path — ensure seed is skipped when empty
-// ---------------------------------------------------------------------------
-
-describe('no-seed path', () => {
-  it('does not run seed when seed section is absent', async () => {
-    const path = writeTempManifest(
-      JSON.stringify({
-        manifestVersion: 1,
-      }),
-    );
-
-    const serverSpy = spyOn(serverModule, 'createServer').mockResolvedValue(makeTestServer());
-
-    try {
-      const server = await createServerFromManifest(path);
-      expect(server).toBeDefined();
-    } finally {
-      serverSpy.mockRestore();
-    }
-  });
-});

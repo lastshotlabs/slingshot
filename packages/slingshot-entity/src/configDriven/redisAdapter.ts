@@ -25,13 +25,32 @@ import {
 import { resolveListFilter } from './listFilter';
 import { buildRedisOperations } from './redisOperationWiring';
 
+/**
+ * Create a Redis-backed {@link EntityAdapter} for the given entity config.
+ *
+ * Records are stored as JSON strings under prefixed keys (default format:
+ * `${storageName}:${appName}:${pk}`). Supports TTL expiration, soft-delete,
+ * cursor pagination, and tenant-scoped list operations.
+ *
+ * The key format can be customised via `config._conventions.redisKey`.
+ *
+ * @param redis - The Redis client instance (must implement {@link RedisLike}).
+ * @param appName - The application name, used in the default key prefix.
+ * @param config - The resolved entity config with fields, indexes, and conventions.
+ * @param operations - Optional named operation configs for the entity.
+ * @returns An {@link EntityAdapter} with CRUD methods backed by Redis.
+ *
+ * @see {@link EntityStorageConventions} for customising the Redis key format.
+ */
 export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
   redis: RedisLike,
   appName: string,
   config: ResolvedEntityConfig,
   operations?: Record<string, OperationConfig>,
 ): EntityAdapter<Entity, CreateInput, UpdateInput> & Record<string, unknown> {
-  const prefix = `${storageName(config, 'redis')}:${appName}:`;
+  const resolvedStorageName = storageName(config, 'redis');
+  const customRedisKey = config._conventions?.redisKey;
+  const prefix = `${resolvedStorageName}:${appName}:`;
   const pkField = config._pkField;
   const ttlSeconds = config.ttl?.defaultSeconds;
 
@@ -41,6 +60,9 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
   const defaultSortDir = config.defaultSort?.direction ?? 'asc';
 
   function rkey(pk: string | number): string {
+    if (customRedisKey) {
+      return customRedisKey({ appName, storageName: resolvedStorageName, pk });
+    }
     return `${prefix}${pk}`;
   }
 
@@ -76,20 +98,33 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
     return true;
   }
 
+  // Derive the scan pattern for key enumeration. For custom key functions,
+  // generate a pattern by replacing the PK placeholder with '*'.
+  const scanPattern = customRedisKey
+    ? customRedisKey({ appName, storageName: resolvedStorageName, pk: '*' })
+    : `${prefix}*`;
+
   async function scanAllKeys(): Promise<string[]> {
     const allKeys: string[] = [];
     let cursor = '0';
     do {
-      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 200);
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', scanPattern, 'COUNT', 200);
       cursor = nextCursor;
       allKeys.push(...keys);
     } while (cursor !== '0');
     return allKeys;
   }
 
+  const customAutoDefault = config._conventions?.autoDefault;
+  const customOnUpdate = config._conventions?.onUpdate;
+
   return {
     async create(input) {
-      const record = applyDefaults(input as Record<string, unknown>, config.fields);
+      const record = applyDefaults(
+        input as Record<string, unknown>,
+        config.fields,
+        customAutoDefault,
+      );
       await storeRecord(record);
       return { ...record } as unknown as Entity;
     },
@@ -109,7 +144,11 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
       if (filter && !matchesFilter(existing, filter)) {
         return null;
       }
-      const updatePayload = applyOnUpdate(input as Record<string, unknown>, config.fields);
+      const updatePayload = applyOnUpdate(
+        input as Record<string, unknown>,
+        config.fields,
+        customOnUpdate,
+      );
       Object.assign(existing, updatePayload);
       await storeRecord(existing);
       return { ...existing } as unknown as Entity;
@@ -122,7 +161,7 @@ export function createRedisEntityAdapter<Entity, CreateInput, UpdateInput>(
         if (filter && !matchesFilter(existing, filter)) return false;
         existing[config.softDelete.field] =
           'value' in config.softDelete ? config.softDelete.value : new Date().toISOString();
-        const onUpdateFields = applyOnUpdate({}, config.fields);
+        const onUpdateFields = applyOnUpdate({}, config.fields, customOnUpdate);
         Object.assign(existing, onUpdateFields);
         await storeRecord(existing);
         return true;

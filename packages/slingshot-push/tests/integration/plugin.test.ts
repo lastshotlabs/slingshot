@@ -15,7 +15,9 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  getActorId,
 } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, PostAuthGuard } from '@lastshotlabs/slingshot-core';
 import type {
   CoreRegistrar,
   EntityRegistry,
@@ -200,15 +202,40 @@ async function createPushHarness(opts?: {
     events: runtime.events,
   } as unknown as Parameters<typeof attachContext>[1]);
 
+  const postGuards: PostAuthGuard[] | undefined = opts?.authRuntime
+    ? [
+        async (c) => {
+          const actorId = getActorId(c as import('hono').Context<AppEnv>);
+          if (!actorId) return null;
+          const rt = opts.authRuntime!;
+          const suspensionStatus = await rt.adapter.getSuspended(actorId);
+          if (suspensionStatus?.suspended) {
+            return { error: 'ACCOUNT_SUSPENDED', message: 'Account is suspended', status: 403 as const };
+          }
+          const requiresVerifiedEmail =
+            rt.config?.primaryField === 'email' && rt.config.emailVerification?.required === true;
+          if (requiresVerifiedEmail && rt.adapter.getEmailVerified) {
+            const verified = await rt.adapter.getEmailVerified(actorId);
+            if (!verified) {
+              return { error: 'EMAIL_NOT_VERIFIED', message: 'Email not verified', status: 403 as const };
+            }
+          }
+          return null;
+        },
+      ]
+    : undefined;
   const routeAuth: RouteAuthRegistry = {
     userAuth: (async (c, next) => {
       const uid = c.req.header('x-test-user') ?? userId;
-      (c as unknown as { set(k: string, v: unknown): void }).set('authUserId', uid);
       const tid = c.req.header('x-test-tenant') ?? '';
-      (c as unknown as { set(k: string, v: unknown): void }).set('tenantId', tid);
+      const setter = c as unknown as { set(k: string, v: unknown): void };
+      setter.set('actor', { id: uid, kind: 'user', tenantId: tid || null, sessionId: null, roles: null, claims: {} });
+      setter.set('authUserId', uid);
+      setter.set('tenantId', tid);
       await next();
     }) as MiddlewareHandler,
     requireRole: () => async (_c, next) => next(),
+    postGuards,
   };
 
   app.use('*', async (c, next) => {
@@ -494,7 +521,7 @@ describe('createPushPlugin — topic subscribe / unsubscribe', () => {
       body: { deviceId: 'device-suspended' },
     });
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: 'Account suspended' });
+    expect(res.body).toEqual({ error: 'ACCOUNT_SUSPENDED', message: 'Account is suspended' });
   });
 });
 
@@ -588,7 +615,7 @@ describe('createPushPlugin — delivery ack', () => {
 
     const res = await json(harness.app, 'POST', `/push/ack/${capturedDeliveryId}`);
     expect(res.status).toBe(403);
-    expect(res.body).toEqual({ error: 'Email not verified' });
+    expect(res.body).toEqual({ error: 'EMAIL_NOT_VERIFIED', message: 'Email not verified' });
   });
 });
 

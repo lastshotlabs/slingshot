@@ -41,7 +41,7 @@ export const Reaction = defineEntity('Reaction', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
 
     get: { auth: 'none' },
     list: { auth: 'none' },

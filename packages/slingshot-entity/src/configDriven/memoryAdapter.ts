@@ -48,6 +48,9 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
     ...(config.indexes ?? []).filter(idx => idx.unique).map(idx => idx.fields),
   ];
 
+  const customAutoDefault = config._conventions?.autoDefault;
+  const customOnUpdate = config._conventions?.onUpdate;
+
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
   const cursorFields = config.pagination?.cursor.fields ?? [pkField];
@@ -153,7 +156,11 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
       evictOldest(store, maxEntries);
       if (ttlMs) evictExpired(store);
 
-      const record = applyDefaults(input as Record<string, unknown>, config.fields);
+      const record = applyDefaults(
+        input as Record<string, unknown>,
+        config.fields,
+        customAutoDefault,
+      );
       const pk = record[pkField] as string | number;
 
       const violated = findUniqueViolation(record);
@@ -199,7 +206,11 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
         return Promise.resolve(null);
       }
 
-      const updatePayload = applyOnUpdate(input as Record<string, unknown>, config.fields);
+      const updatePayload = applyOnUpdate(
+        input as Record<string, unknown>,
+        config.fields,
+        customOnUpdate,
+      );
       // Check unique constraints against the merged record before applying
       const merged = { ...entry.record, ...updatePayload };
       const violated = findUniqueViolation(merged, id);
@@ -239,7 +250,7 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
         entry.record[config.softDelete.field] =
           'value' in config.softDelete ? config.softDelete.value : new Date().toISOString();
         // Apply onUpdate fields (e.g. updatedAt)
-        const onUpdateFields = applyOnUpdate({}, config.fields);
+        const onUpdateFields = applyOnUpdate({}, config.fields, customOnUpdate);
         Object.assign(entry.record, onUpdateFields);
       } else {
         store.delete(id);

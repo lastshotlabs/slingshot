@@ -96,7 +96,7 @@ interface PushDeliveryRepo {
     id: string;
     providerMessageId?: string;
   }): Promise<RouterDeliveryRecord | null>;
-  markDelivered(params: { id: string; authUserId: string }): Promise<RouterDeliveryRecord | null>;
+  markDelivered(params: { id: string; 'actor.id': string }): Promise<RouterDeliveryRecord | null>;
   markFailed(params: { id: string; failureReason: string }): Promise<RouterDeliveryRecord | null>;
   incrementAttempts(id: string, by?: number): Promise<Record<string, unknown>>;
 }

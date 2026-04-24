@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
-import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type { PluginSeedContext, PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
   getPluginState,
@@ -210,6 +210,57 @@ export function createOrganizationsPlugin(
       };
 
       getPluginState(ctx.app).set(ORGANIZATIONS_ORG_SERVICE_STATE_KEY, orgService);
+    },
+
+    async seed({ app, manifestSeed, seedState }: PluginSeedContext) {
+      const orgService = getPluginState(app).get(ORGANIZATIONS_ORG_SERVICE_STATE_KEY) as
+        | OrganizationsOrgService
+        | undefined;
+      if (!orgService) return;
+
+      type SeedOrg = {
+        name: string;
+        slug: string;
+        tenantId?: string;
+        metadata?: Record<string, unknown>;
+        members?: ReadonlyArray<{ email: string; roles?: string[] }>;
+      };
+      const orgs = manifestSeed.orgs as ReadonlyArray<SeedOrg> | undefined;
+      if (!orgs?.length) return;
+
+      for (const seedOrg of orgs) {
+        const existing = await orgService.getOrgBySlug(seedOrg.slug);
+        if (existing) {
+          console.log(
+            `[slingshot-organizations seed] Org '${seedOrg.slug}' already exists — skipping.`,
+          );
+          continue;
+        }
+
+        const org = await orgService.createOrg({
+          name: seedOrg.name,
+          slug: seedOrg.slug,
+          tenantId: seedOrg.tenantId,
+          metadata: seedOrg.metadata,
+        });
+        console.log(
+          `[slingshot-organizations seed] Created org '${seedOrg.slug}' (id: ${org.id}).`,
+        );
+
+        for (const member of seedOrg.members ?? []) {
+          const userId = seedState.get(`user:${member.email}`) as string | undefined;
+          if (!userId) {
+            console.warn(
+              `[slingshot-organizations seed] Member '${member.email}' for org '${seedOrg.slug}' not found in seedState — skipping.`,
+            );
+            continue;
+          }
+          await orgService.addOrgMember(org.id, userId, member.roles ?? [], 'manifest-seed');
+          console.log(
+            `[slingshot-organizations seed] Added '${member.email}' to org '${seedOrg.slug}'.`,
+          );
+        }
+      }
     },
 
     async teardown() {

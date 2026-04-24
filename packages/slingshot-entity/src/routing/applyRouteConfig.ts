@@ -35,7 +35,6 @@ import { safeReadJsonBody } from '../policy/safeReadJsonBody';
 import type { PlannedEntityRoute } from './entityRoutePlanning';
 import { evaluateRouteAuth } from './evaluateRouteAuth';
 import { resolveNamedOperationRoute } from './namedOperationRouting';
-import { getUserAuthAccountGuardFailure } from './userAuthAccountGuard';
 
 /**
  * Operations where the pre-handler policy pass must be skipped.
@@ -459,12 +458,12 @@ export function applyRouteConfig(
               return authResult.response ?? c.json({ error: 'Forbidden' }, 403);
             }
 
-            if (opConfig.auth === 'userAuth') {
-              const guardFailure = await getUserAuthAccountGuardFailure(
-                c as Context<AppEnv, string>,
-              );
-              if (guardFailure) {
-                return c.json({ error: guardFailure.error }, guardFailure.status);
+            if (opConfig.auth === 'userAuth' && slingshotCtx.routeAuth?.postGuards) {
+              for (const guard of slingshotCtx.routeAuth.postGuards) {
+                const failure = await guard(c);
+                if (failure) {
+                  return c.json({ error: failure.error, message: failure.message }, failure.status);
+                }
               }
             }
 
@@ -653,12 +652,12 @@ export function applyRouteConfig(
             // record — running the pre-handler pass for those ops would force
             // dispatch-based resolvers to handle null record + null input,
             // which they cannot do (the discriminator lives on the record).
-            if (opConfig.auth === 'userAuth') {
-              const guardFailure = await getUserAuthAccountGuardFailure(
-                c as Context<AppEnv, string>,
-              );
-              if (guardFailure) {
-                return c.json({ error: guardFailure.error }, guardFailure.status);
+            if (opConfig.auth === 'userAuth' && slingshotCtx.routeAuth?.postGuards) {
+              for (const guard of slingshotCtx.routeAuth.postGuards) {
+                const failure = await guard(c);
+                if (failure) {
+                  return c.json({ error: failure.error, message: failure.message }, failure.status);
+                }
               }
             }
             const hasPostFetchPolicyPass = SKIP_PRE_HANDLER_POLICY_OPS.has(opName);

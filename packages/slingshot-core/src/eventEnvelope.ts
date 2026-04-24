@@ -11,6 +11,8 @@ export interface EventEnvelopeMeta {
   requestId?: string;
   correlationId?: string;
   source?: EventPublishContext['source'];
+  /** Request-scoped tenant ID from tenant-resolution middleware. */
+  requestTenantId?: string | null;
 }
 
 export interface EventEnvelope<K extends EventKey = EventKey> {
@@ -28,6 +30,7 @@ export interface CreateEventEnvelopeParams<K extends EventKey> {
   requestId?: string;
   correlationId?: string;
   source?: EventPublishContext['source'];
+  requestTenantId?: string | null;
 }
 
 export function createEventEnvelope<K extends EventKey>(
@@ -45,6 +48,7 @@ export function createEventEnvelope<K extends EventKey>(
       requestId: params.requestId,
       correlationId: params.correlationId,
       source: params.source,
+      requestTenantId: params.requestTenantId,
     },
   });
 }

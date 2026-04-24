@@ -61,14 +61,14 @@ function findComponentByActionId(
  *
  * @param deps - Resolved runtime dependencies.
  * @param request - Dispatch request payload.
- * @param authUserId - Authenticated user ID performing the interaction.
+ * @param userId - Authenticated user ID performing the interaction.
  * @param tenantId - Current tenant ID.
  * @returns Structured outcome with HTTP status, semantic status, and response body.
  */
 export async function dispatchInteraction(
   deps: DispatchDeps,
   request: DispatchRequest,
-  authUserId: string,
+  userId: string,
   tenantId: string,
 ): Promise<DispatchOutcome> {
   const startedAt = Date.now();
@@ -123,7 +123,7 @@ export async function dispatchInteraction(
 
   if (component.permission) {
     const allowed = await deps.evaluator.can(
-      { subjectId: authUserId, subjectType: 'user' },
+      { subjectId: userId, subjectType: 'user' },
       component.permission,
       {
         tenantId,
@@ -143,7 +143,7 @@ export async function dispatchInteraction(
   }
 
   const exceeded = await deps.rateLimit.trackAttempt(
-    `interactions:${authUserId}:${deriveActionIdPrefix(request.actionId)}`,
+    `interactions:${userId}:${deriveActionIdPrefix(request.actionId)}`,
     {
       windowMs: deps.rateLimitWindowMs,
       max: deps.rateLimitMax,
@@ -176,7 +176,7 @@ export async function dispatchInteraction(
       actionId: request.actionId,
       messageKind: request.messageKind,
       messageId: request.messageId,
-      userId: authUserId,
+      userId: userId,
       tenantId,
       values: request.values,
     });

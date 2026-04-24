@@ -2,7 +2,7 @@ import type { ConnectionOptions } from 'bullmq';
 import type { Context, MiddlewareHandler } from 'hono';
 import type Redis from 'ioredis';
 import type { Connection } from 'mongoose';
-import type { PluginSetupContext, StandalonePlugin } from '@lastshotlabs/slingshot-core';
+import type { PluginSeedContext, PluginSetupContext, StandalonePlugin } from '@lastshotlabs/slingshot-core';
 import {
   COOKIE_TOKEN,
   HttpError,
@@ -16,6 +16,7 @@ import {
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { bootstrapAuth } from './bootstrap';
 import type { BootstrapResult } from './bootstrap';
+import { createAccountGuard } from './guards/accountGuard';
 import { createMemoryCacheAdapter } from './lib/cache';
 import { templates } from './lib/emailTemplates';
 import { isProd } from './lib/env';
@@ -171,12 +172,18 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
 
         // Register auth boundary contracts with core
 
-        // RouteAuthRegistry — provides userAuth and requireRole to framework routes
+        // RouteAuthRegistry — provides userAuth, requireRole, and postGuards to framework routes
+        const accountGuard = createAccountGuard({
+          adapter: result.adapter,
+          config: result.runtime.config,
+        });
+        const postGuards = Object.freeze([accountGuard]);
         const routeAuthRegistry = {
           userAuth,
           requireRole(...roles: string[]): MiddlewareHandler<AppEnv> {
             return requireRole(...roles);
           },
+          postGuards,
         };
         registrar.setRouteAuth(routeAuthRegistry);
         if (mutableCtx) {
@@ -231,6 +238,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
               return requireRole(...roles);
             },
             bearerAuth: bearerAuthMiddleware,
+            postGuards,
           };
           registrar.setRouteAuth(bearerRouteAuthRegistry);
           if (mutableCtx) {
@@ -576,6 +584,32 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
      * Plain Hono apps call setup() directly since there is no framework to orchestrate phases.
      * Calls setupMiddleware then setupRoutes in sequence.
      */
+    async seed({ manifestSeed, seedState }: PluginSeedContext) {
+      const result = await bootstrapReady;
+      const users = manifestSeed.users as
+        | ReadonlyArray<{ email: string; password: string; superAdmin?: boolean }>
+        | undefined;
+      if (!users?.length) return;
+
+      for (const seedUser of users) {
+        const existing = await result.runtime.adapter.findByEmail(seedUser.email);
+        if (existing) {
+          console.log(`[slingshot-auth seed] User '${seedUser.email}' already exists — skipping.`);
+          seedState.set(`user:${seedUser.email}`, existing.id);
+          continue;
+        }
+
+        const hash = await result.runtime.password.hash(seedUser.password);
+        const { id } = await result.runtime.adapter.create(seedUser.email, hash);
+        seedState.set(`user:${seedUser.email}`, id);
+        console.log(`[slingshot-auth seed] Created user '${seedUser.email}' (id: ${id}).`);
+
+        if (seedUser.superAdmin) {
+          seedState.set(`superAdmin:${seedUser.email}`, true);
+        }
+      }
+    },
+
     async setup(ctx: PluginSetupContext) {
       if (this.setupMiddleware) await this.setupMiddleware(ctx);
       if (this.setupRoutes) await this.setupRoutes(ctx);

@@ -47,7 +47,7 @@ describe('serveImage runtime operation', () => {
       getAssetsRuntimeAdapter(state).serveImage({
         id: asset.id,
         w: 100,
-        authUserId: 'user-1',
+        'actor.id': 'user-1',
       }),
     ).rejects.toMatchObject({ status: 501 });
   });
@@ -69,13 +69,13 @@ describe('serveImage runtime operation', () => {
       id: asset.id,
       w: 100,
       f: 'original',
-      authUserId: 'user-1',
+      'actor.id': 'user-1',
     });
     const second = await adapter.serveImage({
       id: asset.id,
       w: 100,
       f: 'original',
-      authUserId: 'user-1',
+      'actor.id': 'user-1',
     });
 
     expect(first.headers.get('X-Image-Cache')).toBe('MISS');
@@ -99,7 +99,7 @@ describe('serveImage runtime operation', () => {
       getAssetsRuntimeAdapter(state).serveImage({
         id: asset.id,
         w: 100,
-        authUserId: 'user-1',
+        'actor.id': 'user-1',
       }),
     ).rejects.toMatchObject({ status: 400 });
   });
@@ -120,7 +120,7 @@ describe('serveImage runtime operation', () => {
       getAssetsRuntimeAdapter(state).serveImage({
         id: asset.id,
         w: 100,
-        authUserId: 'user-2',
+        'actor.id': 'user-2',
       }),
     ).rejects.toMatchObject({ status: 403 });
   });

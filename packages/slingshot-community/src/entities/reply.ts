@@ -66,7 +66,7 @@ export const Reply = defineEntity('Reply', {
   },
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'authorId', from: 'ctx:authUserId' },
+    dataScope: { field: 'authorId', from: 'ctx:actor.id' },
 
     get: { auth: 'none' },
     list: { auth: 'none' },

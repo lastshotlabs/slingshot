@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { AUTH_PLUGIN_STATE_KEY } from '../../src/authPeer';
 import { requireBearer, requireUserAuth } from '../../src/guards';
 import { HandlerError, type HandlerMeta } from '../../src/handler';
+import { ANONYMOUS_ACTOR, type Actor } from '../../src/identity';
 
 function createContextFixture() {
   return {
@@ -69,41 +70,69 @@ function createContextFixture() {
   };
 }
 
-function createMeta(overrides: Partial<HandlerMeta> = {}): HandlerMeta {
+function createMeta(overrides: Partial<HandlerMeta> & { actor: Actor }): HandlerMeta {
   return {
     requestId: 'req-1',
     correlationId: 'req-1',
-    tenantId: null,
-    authUserId: null,
+    requestTenantId: overrides.actor.tenantId ?? null,
+    tenantId: overrides.actor.tenantId ?? null,
+    authUserId: overrides.actor.kind === 'user' ? overrides.actor.id : null,
     ip: null,
-    authClientId: null,
-    bearerClientId: null,
-    userAgent: null,
     ...overrides,
   };
 }
 
 describe('requireBearer', () => {
-  test('allows named bearer clients even when the caller passes identity directly', async () => {
+  test('allows api-key actor', async () => {
     const guard = requireBearer();
+    const actor: Actor = { id: 'key-1', kind: 'api-key', tenantId: null, sessionId: null, roles: null, claims: {} };
 
     await expect(
       guard({
         input: {},
         ctx: createContextFixture() as never,
-        meta: createMeta({ bearerClientId: 'svc-static' }),
+        meta: createMeta({ actor }),
       } as never),
     ).resolves.toBeUndefined();
   });
 
-  test('rejects invocations without a client identity', async () => {
+  test('allows service-account actor', async () => {
+    const guard = requireBearer();
+    const actor: Actor = { id: 'svc-1', kind: 'service-account', tenantId: null, sessionId: null, roles: null, claims: {} };
+
+    await expect(
+      guard({
+        input: {},
+        ctx: createContextFixture() as never,
+        meta: createMeta({ actor }),
+      } as never),
+    ).resolves.toBeUndefined();
+  });
+
+  test('rejects user actor', async () => {
+    const guard = requireBearer();
+    const actor: Actor = { id: 'user-1', kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} };
+
+    await expect(
+      guard({
+        input: {},
+        ctx: createContextFixture() as never,
+        meta: createMeta({ actor }),
+      } as never),
+    ).rejects.toMatchObject<Partial<HandlerError>>({
+      message: 'Unauthorized',
+      status: 401,
+    });
+  });
+
+  test('rejects anonymous actor', async () => {
     const guard = requireBearer();
 
     await expect(
       guard({
         input: {},
         ctx: createContextFixture() as never,
-        meta: createMeta({ authClientId: null, bearerClientId: null }),
+        meta: createMeta({ actor: ANONYMOUS_ACTOR }),
       } as never),
     ).rejects.toMatchObject<Partial<HandlerError>>({
       message: 'Unauthorized',
@@ -113,6 +142,8 @@ describe('requireBearer', () => {
 });
 
 describe('requireUserAuth', () => {
+  const userActor: Actor = { id: 'user-1', kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} };
+
   test('allows authenticated users when the custom access policy passes', async () => {
     const ctx = createContextFixture();
     ctx.pluginState.set(AUTH_PLUGIN_STATE_KEY, {
@@ -129,7 +160,7 @@ describe('requireUserAuth', () => {
         input: {},
         ctx: ctx as never,
         handlerName: 'items.list',
-        meta: createMeta({ authUserId: 'user-1' }),
+        meta: createMeta({ actor: userActor }),
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -154,7 +185,7 @@ describe('requireUserAuth', () => {
         input: {},
         ctx: ctx as never,
         handlerName: 'items.list',
-        meta: createMeta({ authUserId: 'user-1' }),
+        meta: createMeta({ actor: userActor }),
       } as never),
     ).rejects.toMatchObject<Partial<HandlerError>>({
       message: 'Account disabled',

@@ -93,7 +93,7 @@ export const Message = defineEntity('Message', {
   softDelete: { field: 'deletedAt', strategy: 'non-null' },
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'authorId', from: 'ctx:authUserId' },
+    dataScope: { field: 'authorId', from: 'ctx:actor.id' },
     get: {
       permission: {
         requires: 'chat:room.read',

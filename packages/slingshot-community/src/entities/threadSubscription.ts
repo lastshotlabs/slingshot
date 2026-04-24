@@ -20,7 +20,7 @@ export const ThreadSubscription = defineEntity('ThreadSubscription', {
   indexes: [index(['userId', 'threadId'], { unique: true })],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
     create: {},

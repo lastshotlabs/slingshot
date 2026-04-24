@@ -1,7 +1,7 @@
 import { type ContextCarrier, resolveContext } from './context/contextAccess';
-import type { RouteAuthRegistry } from './coreContracts';
+import type { PostAuthGuard, PostAuthGuardFailure, RouteAuthRegistry } from './coreContracts';
 
-export type { RouteAuthRegistry };
+export type { PostAuthGuard, PostAuthGuardFailure, RouteAuthRegistry };
 
 /**
  * Retrieve the `RouteAuthRegistry` registered on a Slingshot app or context instance.

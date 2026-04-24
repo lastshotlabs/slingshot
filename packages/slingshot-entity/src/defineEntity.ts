@@ -108,11 +108,33 @@ export function defineEntity<const F extends Record<string, FieldDef>>(
         : snake + 's';
   const storageName = namespace ? `${namespace}_${pluralName}` : pluralName;
 
+  const _systemFields = {
+    createdBy: config.systemFields?.createdBy ?? 'createdBy',
+    updatedBy: config.systemFields?.updatedBy ?? 'updatedBy',
+    ownerField: config.systemFields?.ownerField ?? 'ownerId',
+    tenantField: config.systemFields?.tenantField ?? config.tenant?.field ?? 'tenantId',
+    version: config.systemFields?.version ?? 'version',
+  };
+
+  const _storageFields = {
+    mongoPkField: config.storageFields?.mongoPkField ?? '_id',
+    ttlField: config.storageFields?.ttlField ?? '_expires_at',
+  };
+
+  const _conventions = {
+    redisKey: config.conventions?.redisKey,
+    autoDefault: config.conventions?.autoDefault,
+    onUpdate: config.conventions?.onUpdate,
+  };
+
   const resolved: ResolvedEntityConfig<F> = {
     name,
     ...config,
     _pkField: pkField,
     _storageName: storageName,
+    _systemFields,
+    _storageFields,
+    _conventions,
   };
   deepFreezeEntity(resolved);
   return resolved;

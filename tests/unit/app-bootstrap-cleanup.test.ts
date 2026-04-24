@@ -1,13 +1,13 @@
 /**
- * Tests for `cleanupBootstrapFailure()` in src/app.ts (lines 340-377).
+ * Tests for bootstrap failure cleanup in src/app.ts.
  *
- * Strategy: make `buildContext()` throw NATURALLY by passing
+ * Strategy: make `assembleApp()` throw NATURALLY by passing
  * `permissions: { adapter: 'postgres' }` without configuring postgres.
- * This causes `infra.getPostgres()` to throw inside the permissions adapter
- * factory, which happens AFTER `prepareBootstrap()` succeeds (creating
- * real infrastructure). The catch block in `createApp` then calls
- * `cleanupBootstrapFailure(bootstrap)` because neither `assembly` nor
- * `partialContextCarrier.ctx` exist.
+ * The framework auto-synthesizes a permissions plugin whose `setupMiddleware`
+ * calls `resolveRepo(…, 'postgres', infra)` which throws because postgres
+ * is not configured. This happens AFTER `buildContext()` succeeds, so the
+ * catch block in `createApp` calls `partialContextCarrier.ctx.destroy()`
+ * which cleans up bus, secrets, sqlite, and all other infrastructure.
  */
 import { describe, expect, mock, test } from 'bun:test';
 import type { SecretRepository } from '@lastshotlabs/slingshot-core';
@@ -39,6 +39,7 @@ describe('cleanupBootstrapFailure', () => {
     const secretDestroy = mock(async () => {});
     const bus = {
       publish: async () => {},
+      emit: () => {},
       subscribe: () => ({ unsubscribe: () => {} }),
       shutdown: busShutdown,
     };
@@ -58,7 +59,7 @@ describe('cleanupBootstrapFailure', () => {
       }),
     ).rejects.toThrow('Postgres');
 
-    // Both cleanup paths ran — line 342 (bus.shutdown) and line 374 (secrets.destroy)
+    // ctx.destroy() cleans up bus and secrets
     expect(busShutdown).toHaveBeenCalledTimes(1);
     expect(secretDestroy).toHaveBeenCalledTimes(1);
   });
@@ -67,6 +68,7 @@ describe('cleanupBootstrapFailure', () => {
     const secretDestroy = mock(async () => {});
     const bus = {
       publish: async () => {},
+      emit: () => {},
       subscribe: () => ({ unsubscribe: () => {} }),
       shutdown: async () => {
         throw new Error('bus shutdown failed');
@@ -90,7 +92,7 @@ describe('cleanupBootstrapFailure', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain('Postgres');
 
-    // secrets.destroy still ran despite bus.shutdown throwing (line 374)
+    // secrets.destroy still ran despite bus.shutdown throwing
     expect(secretDestroy).toHaveBeenCalledTimes(1);
   });
 
@@ -98,6 +100,7 @@ describe('cleanupBootstrapFailure', () => {
     const busShutdown = mock(async () => {});
     const bus = {
       publish: async () => {},
+      emit: () => {},
       subscribe: () => ({ unsubscribe: () => {} }),
       shutdown: busShutdown,
     };
@@ -121,7 +124,7 @@ describe('cleanupBootstrapFailure', () => {
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toContain('Postgres');
 
-    // bus.shutdown still ran (it's called before secrets.destroy, line 342)
+    // bus.shutdown still ran (it's called before secrets.destroy in ctx.destroy())
     expect(busShutdown).toHaveBeenCalledTimes(1);
   });
 

@@ -33,6 +33,15 @@ function createTestContext() {
 
 const baseMeta = {
   requestId: 'req-1',
+  actor: {
+    id: 'user-1',
+    kind: 'user' as const,
+    tenantId: 'tenant-1',
+    sessionId: null,
+    roles: null,
+    claims: {},
+  },
+  requestTenantId: 'tenant-1',
   tenantId: 'tenant-1',
   authUserId: 'user-1',
   correlationId: 'corr-1',

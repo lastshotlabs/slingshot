@@ -9,6 +9,8 @@
  */
 import type {
   AutoDefault,
+  CustomAutoDefaultResolver,
+  CustomOnUpdateResolver,
   FieldDef,
   FieldType,
   ResolvedEntityConfig,
@@ -18,7 +20,20 @@ import type {
 // Case conversion
 // ---------------------------------------------------------------------------
 
-/** Convert `camelCase` to `snake_case`. */
+/**
+ * Convert a `camelCase` string to `snake_case`.
+ *
+ * Used by SQL adapters to map domain field names to database column names.
+ *
+ * @param str - The camelCase string to convert.
+ * @returns The snake_case equivalent.
+ *
+ * @example
+ * ```ts
+ * toSnakeCase('createdAt'); // 'created_at'
+ * toSnakeCase('userId');    // 'user_id'
+ * ```
+ */
 export function toSnakeCase(str: string): string {
   return str
     .replace(/([A-Z])/g, '_$1')
@@ -26,7 +41,20 @@ export function toSnakeCase(str: string): string {
     .replace(/^_/, '');
 }
 
-/** Convert `snake_case` to `camelCase`. */
+/**
+ * Convert a `snake_case` string to `camelCase`.
+ *
+ * Used by SQL adapters to map database column names back to domain field names.
+ *
+ * @param str - The snake_case string to convert.
+ * @returns The camelCase equivalent.
+ *
+ * @example
+ * ```ts
+ * toCamelCase('created_at'); // 'createdAt'
+ * toCamelCase('user_id');    // 'userId'
+ * ```
+ */
 export function toCamelCase(str: string): string {
   return str.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 }
@@ -42,16 +70,49 @@ export function toCamelCase(str: string): string {
 /**
  * Resolve an auto-default sentinel to its runtime value.
  *
+ * Built-in sentinels are handled first:
+ *
  * - `'uuid'` → a new `crypto.randomUUID()` string.
  * - `'cuid'` → a lightweight cuid-like string (`c<timestamp36><random6>`).
  *   Not cryptographically unique but collision-resistant for typical entity
  *   volumes.
  * - `'now'` → a `new Date()` representing the current wall-clock time.
  *
- * @param sentinel - One of the three supported auto-default sentinels.
- * @returns A `string` for `'uuid'` and `'cuid'`, or a `Date` for `'now'`.
+ * When the sentinel is not one of the built-in values, the optional
+ * `customResolver` is invoked. If it returns a non-`undefined` value, that
+ * value is used. If no custom resolver is provided or it returns `undefined`,
+ * an error is thrown.
+ *
+ * @param sentinel - A built-in auto-default sentinel (`'uuid'`, `'cuid'`,
+ *   `'now'`) or a custom string sentinel handled by `customResolver`.
+ * @param customResolver - Optional function that maps non-built-in sentinel
+ *   strings to their runtime values. Return `undefined` to signal that the
+ *   sentinel is unrecognised (which causes an error to be thrown).
+ * @returns A `string` for `'uuid'` and `'cuid'`, a `Date` for `'now'`, or
+ *   whatever value the `customResolver` produces for custom sentinels.
+ * @throws {Error} If the sentinel is not built-in and no `customResolver` is
+ *   provided, or if the `customResolver` returns `undefined`.
+ *
+ * @example
+ * ```ts
+ * import { ulid } from 'ulid';
+ *
+ * const customResolver: CustomAutoDefaultResolver = (kind) => {
+ *   if (kind === 'ulid') return ulid();
+ *   return undefined; // unknown — let the framework throw
+ * };
+ *
+ * resolveAutoDefault('uuid');                    // '550e8400-e29b-...'
+ * resolveAutoDefault('ulid', customResolver);    // '01ARZ3NDEKTSV...'
+ * resolveAutoDefault('unknown');                 // throws Error
+ * ```
+ *
+ * @see {@link CustomAutoDefaultResolver} from `@lastshotlabs/slingshot-core`
  */
-export function resolveAutoDefault(sentinel: AutoDefault): string | Date {
+export function resolveAutoDefault(
+  sentinel: AutoDefault | string,
+  customResolver?: CustomAutoDefaultResolver,
+): unknown {
   switch (sentinel) {
     case 'uuid':
       return crypto.randomUUID();
@@ -60,6 +121,13 @@ export function resolveAutoDefault(sentinel: AutoDefault): string | Date {
       return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
     case 'now':
       return new Date();
+    default: {
+      if (customResolver) {
+        const result = customResolver(sentinel);
+        if (result !== undefined) return result;
+      }
+      throw new Error(`Unknown auto-default sentinel: '${sentinel}'`);
+    }
   }
 }
 
@@ -78,12 +146,42 @@ export function isAutoDefault(value: string | number | boolean | undefined): val
 }
 
 /**
- * Apply auto-defaults and literal defaults to a create input,
- * producing a full entity record.
+ * Apply auto-defaults and literal defaults to a create input, producing a
+ * full entity record ready for persistence.
+ *
+ * For each field that is absent from `input` but has a `default` defined in
+ * its `FieldDef`, the default is resolved as follows:
+ *
+ * 1. **Built-in auto-default** (`'uuid'`, `'cuid'`, `'now'`): delegated to
+ *    {@link resolveAutoDefault} (with `customAutoDefault` forwarded).
+ * 2. **Custom string default**: if `customAutoDefault` is provided and the
+ *    default value is a string that is not a built-in sentinel, the resolver
+ *    is called. If it returns a non-`undefined` value, that value is used;
+ *    otherwise the literal string is used as-is.
+ * 3. **Literal default** (number, boolean, or unresolved string): applied
+ *    directly as the field value.
+ *
+ * Fields already present in `input` are never overwritten.
+ *
+ * @param input - The caller-supplied create payload. Keys are camelCase field
+ *   names; values are domain-layer types. This object is not mutated.
+ * @param fields - The entity's field definitions keyed by camelCase name.
+ *   Each `FieldDef.default` is inspected to determine whether a default
+ *   should be applied.
+ * @param customAutoDefault - Optional resolver for non-built-in auto-default
+ *   sentinels. When a field's default is a string that is not `'uuid'`,
+ *   `'cuid'`, or `'now'`, this function is called with that string. Return a
+ *   value to use it as the default, or `undefined` to fall back to the
+ *   literal string.
+ * @returns A new record containing all properties from `input` plus any
+ *   resolved defaults for missing fields.
+ *
+ * @see {@link CustomAutoDefaultResolver} from `@lastshotlabs/slingshot-core`
  */
 export function applyDefaults(
   input: Record<string, unknown>,
   fields: Record<string, FieldDef>,
+  customAutoDefault?: CustomAutoDefaultResolver,
 ): Record<string, unknown> {
   const record: Record<string, unknown> = { ...input };
 
@@ -92,7 +190,14 @@ export function applyDefaults(
 
     if (def.default !== undefined) {
       if (isAutoDefault(def.default)) {
-        record[name] = resolveAutoDefault(def.default);
+        record[name] = resolveAutoDefault(def.default, customAutoDefault);
+      } else if (typeof def.default === 'string' && customAutoDefault) {
+        const custom = customAutoDefault(def.default);
+        if (custom !== undefined) {
+          record[name] = custom;
+        } else {
+          record[name] = def.default;
+        }
       } else {
         record[name] = def.default;
       }
@@ -103,17 +208,51 @@ export function applyDefaults(
 }
 
 /**
- * Apply `onUpdate: 'now'` fields to an update payload.
+ * Apply `onUpdate` fields to an update payload, injecting computed values
+ * for fields that declare an `onUpdate` sentinel.
+ *
+ * Resolution order for each field with a non-`undefined` `onUpdate`:
+ *
+ * 1. **Built-in sentinel** (`'now'`): sets the field to `new Date()`.
+ * 2. **Custom sentinel** (any other string): if `customOnUpdate` is provided,
+ *    it is invoked with the sentinel string. When the resolver returns a
+ *    non-`undefined` value, that value is written to the field. If the
+ *    resolver returns `undefined`, the field is left unchanged (the sentinel
+ *    is silently ignored).
+ *
+ * Values already present in `input` for non-`onUpdate` fields are preserved.
+ * `onUpdate` fields are always overwritten regardless of whether the caller
+ * included them in `input`.
+ *
+ * @param input - The caller-supplied update payload. Keys are camelCase field
+ *   names; values are domain-layer types. This object is not mutated.
+ * @param fields - The entity's field definitions keyed by camelCase name.
+ *   Each `FieldDef.onUpdate` is inspected to determine whether a computed
+ *   value should be injected.
+ * @param customOnUpdate - Optional resolver invoked for non-built-in
+ *   `onUpdate` sentinels (i.e. any string other than `'now'`). Return a
+ *   value to inject it into the update payload, or `undefined` to skip the
+ *   field.
+ * @returns A new record containing all properties from `input` plus any
+ *   computed `onUpdate` values.
+ *
+ * @see {@link CustomOnUpdateResolver} from `@lastshotlabs/slingshot-core`
  */
 export function applyOnUpdate(
   input: Record<string, unknown>,
   fields: Record<string, FieldDef>,
+  customOnUpdate?: CustomOnUpdateResolver,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { ...input };
 
   for (const [name, def] of Object.entries(fields)) {
     if (def.onUpdate === 'now') {
       result[name] = new Date();
+    } else if (def.onUpdate && customOnUpdate) {
+      const custom = customOnUpdate(def.onUpdate);
+      if (custom !== undefined) {
+        result[name] = custom;
+      }
     }
   }
 
@@ -146,10 +285,22 @@ const PG_TYPE_MAP: Record<FieldType, string> = {
   'string[]': 'TEXT[]',
 };
 
+/**
+ * Map a framework {@link FieldType} to the corresponding SQLite column type.
+ *
+ * @param fieldType - The framework field type from the entity definition.
+ * @returns The SQLite column type string (e.g. `'TEXT'`, `'INTEGER'`, `'REAL'`).
+ */
 export function sqliteColumnType(fieldType: FieldType): string {
   return SQLITE_TYPE_MAP[fieldType];
 }
 
+/**
+ * Map a framework {@link FieldType} to the corresponding PostgreSQL column type.
+ *
+ * @param fieldType - The framework field type from the entity definition.
+ * @returns The Postgres column type string (e.g. `'TEXT'`, `'BOOLEAN'`, `'JSONB'`).
+ */
 export function pgColumnType(fieldType: FieldType): string {
   return PG_TYPE_MAP[fieldType];
 }
@@ -161,6 +312,10 @@ export function pgColumnType(fieldType: FieldType): string {
 /**
  * Convert a domain record (camelCase keys, native types) to a SQLite row
  * (snake_case keys, serialised types).
+ *
+ * @param record - The domain record with camelCase field names and native JS types.
+ * @param fields - The entity field definitions used for type-aware conversion.
+ * @returns A new object with snake_case keys and SQLite-compatible values.
  */
 export function toSqliteRow(
   record: Record<string, unknown>,
@@ -211,7 +366,12 @@ function domainToSqlite(val: unknown, def: FieldDef): unknown {
 }
 
 /**
- * Convert a SQLite row (snake_case keys) back to a domain record (camelCase).
+ * Convert a SQLite row (snake_case keys) back to a domain record (camelCase keys,
+ * native JS types).
+ *
+ * @param row - The raw SQLite row with snake_case column names.
+ * @param fields - The entity field definitions used for type-aware conversion.
+ * @returns A new object with camelCase keys and domain-layer types.
  */
 export function fromSqliteRow(
   row: Record<string, unknown>,
@@ -287,6 +447,10 @@ function sqliteToDomain(val: unknown, def: FieldDef): unknown {
 
 /**
  * Convert a domain record to a Postgres row (snake_case keys, native PG types).
+ *
+ * @param record - The domain record with camelCase field names and native JS types.
+ * @param fields - The entity field definitions used for type-aware conversion.
+ * @returns A new object with snake_case keys and Postgres-compatible values.
  */
 export function toPgRow(
   record: Record<string, unknown>,
@@ -333,7 +497,12 @@ function domainToPg(val: unknown, def: FieldDef): unknown {
 }
 
 /**
- * Convert a Postgres row back to a domain record.
+ * Convert a Postgres row (snake_case keys) back to a domain record (camelCase keys,
+ * native JS types).
+ *
+ * @param row - The raw Postgres row with snake_case column names.
+ * @param fields - The entity field definitions used for type-aware conversion.
+ * @returns A new object with camelCase keys and domain-layer types.
  */
 export function fromPgRow(
   row: Record<string, unknown>,
@@ -385,7 +554,14 @@ function pgToDomain(val: unknown, def: FieldDef): unknown {
 
 /**
  * Prepare a domain record for Redis JSON storage.
- * Dates are stored as ISO strings for reversibility.
+ *
+ * Dates are stored as ISO strings for reversibility. All other types are
+ * passed through unchanged — Redis stores the entire record as a single
+ * JSON string.
+ *
+ * @param record - The domain record with native JS types.
+ * @param fields - The entity field definitions used for type-aware conversion.
+ * @returns A new object with Redis-compatible values (dates as ISO strings).
  */
 export function toRedisRecord(
   record: Record<string, unknown>,
@@ -403,7 +579,14 @@ export function toRedisRecord(
 }
 
 /**
- * Restore a Redis JSON record to domain types.
+ * Restore a Redis JSON record back to domain types.
+ *
+ * Converts ISO date strings back to `Date` objects. All other types are
+ * returned as-is.
+ *
+ * @param raw - The parsed JSON record from Redis.
+ * @param fields - The entity field definitions used for type-aware conversion.
+ * @returns A new object with domain-layer types (dates as `Date` objects).
  */
 export function fromRedisRecord(
   raw: Record<string, unknown>,
@@ -425,21 +608,31 @@ export function fromRedisRecord(
 // ---------------------------------------------------------------------------
 
 /**
- * Convert a domain record to a Mongo document.
- * PK field maps to `_id`. Dates are native. JSON is native (Mixed).
+ * Convert a domain record to a MongoDB document.
+ *
+ * The PK field is mapped to the configured Mongo PK storage field
+ * (`config._storageFields.mongoPkField`, default `'_id'`).
+ * Dates are native `Date` objects. JSON is native (Mongoose Mixed).
+ *
+ * @param record - The domain record with camelCase field names and native JS types.
+ * @param config - The resolved entity config with PK field and storage field mapping.
+ * @returns A new MongoDB document object with the PK remapped to the storage field.
+ *
+ * @see {@link EntityStorageFieldMap} for configuring the Mongo PK field name.
  */
 export function toMongoDoc(
   record: Record<string, unknown>,
   config: ResolvedEntityConfig,
 ): Record<string, unknown> {
   const doc: Record<string, unknown> = {};
+  const mongoPkField = config._storageFields.mongoPkField;
 
   for (const [name, def] of Object.entries(config.fields)) {
     const val = record[name];
     if (val === undefined) continue;
 
     if (def.primary) {
-      doc['_id'] = val;
+      doc[mongoPkField] = val;
     } else {
       doc[name] = def.type === 'date' && !(val instanceof Date) ? coerceToDate(val) : val;
     }
@@ -449,17 +642,27 @@ export function toMongoDoc(
 }
 
 /**
- * Convert a Mongo document back to a domain record.
+ * Convert a MongoDB document back to a domain record.
+ *
+ * Reads the PK from the configured Mongo PK storage field
+ * (`config._storageFields.mongoPkField`, default `'_id'`).
+ *
+ * @param doc - The raw MongoDB document (from a `.lean()` query).
+ * @param config - The resolved entity config with PK field and storage field mapping.
+ * @returns A new object with domain field names and the PK mapped back.
+ *
+ * @see {@link EntityStorageFieldMap} for configuring the Mongo PK field name.
  */
 export function fromMongoDoc(
   doc: Record<string, unknown>,
   config: ResolvedEntityConfig,
 ): Record<string, unknown> {
   const record: Record<string, unknown> = {};
+  const mongoPkField = config._storageFields.mongoPkField;
 
   for (const [name, def] of Object.entries(config.fields)) {
     if (def.primary) {
-      record[name] = doc['_id'];
+      record[name] = doc[mongoPkField];
     } else {
       const val = doc[name];
       if (val !== undefined && val !== null) {
@@ -475,7 +678,21 @@ export function fromMongoDoc(
 // Storage naming conventions
 // ---------------------------------------------------------------------------
 
-/** Get the table/collection name for a config. Respects storage overrides. */
+/**
+ * Resolve the table, collection, or key prefix name for a given backend.
+ *
+ * Each backend has its own override in `config.storage`:
+ * - **sqlite**: `config.storage.sqlite.tableName` → falls back to `_storageName`
+ * - **postgres**: `config.storage.postgres.tableName` → falls back to `slingshot_<_storageName>`
+ * - **mongo**: `config.storage.mongo.collectionName` → falls back to `_storageName`
+ * - **redis**: `config.storage.redis.keyPrefix` → falls back to `_storageName`
+ *
+ * @param config - The resolved entity config containing storage hints and the derived `_storageName`.
+ * @param backend - The storage backend to resolve the name for.
+ * @returns The resolved storage identifier string.
+ *
+ * @see {@link EntityStorageHints} for per-backend override configuration.
+ */
 export function storageName(
   config: ResolvedEntityConfig,
   backend: 'sqlite' | 'postgres' | 'mongo' | 'redis',
@@ -497,14 +714,20 @@ export function storageName(
 // ---------------------------------------------------------------------------
 
 /**
- * Encode cursor pagination state to an opaque string.
+ * Encode cursor pagination state to an opaque base64url string.
+ *
+ * @param values - A record of field name → value pairs representing the cursor position.
+ * @returns An opaque base64url-encoded JSON string.
  */
 export function encodeCursor(values: Record<string, unknown>): string {
   return Buffer.from(JSON.stringify(values)).toString('base64url');
 }
 
 /**
- * Decode an opaque cursor back to pagination state.
+ * Decode an opaque cursor string back to pagination state.
+ *
+ * @param cursor - The base64url-encoded cursor string produced by {@link encodeCursor}.
+ * @returns The decoded record of field name → value pairs.
  */
 export function decodeCursor(cursor: string): Record<string, unknown> {
   return JSON.parse(Buffer.from(cursor, 'base64url').toString('utf-8')) as Record<string, unknown>;
@@ -548,6 +771,14 @@ export function isSoftDeleted(
 
 /**
  * Build an opaque cursor string from a record's cursor field values.
+ *
+ * Extracts the values of each cursor field from the record, converts
+ * `Date` values to ISO strings for serialisation, and encodes the result
+ * via {@link encodeCursor}.
+ *
+ * @param record - The entity record to extract cursor field values from.
+ * @param cursorFields - Ordered list of field names that form the cursor.
+ * @returns An opaque base64url-encoded cursor string.
  */
 export function buildCursorForRecord(
   record: Record<string, unknown>,

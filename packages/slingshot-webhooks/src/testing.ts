@@ -149,8 +149,11 @@ export async function createWebhooksTestApp(
   // Here we read from x-* headers so tests can control identity per-request.
   app.use('*', (async (c, next) => {
     const userId = c.req.header('x-user-id');
+    const tenantId = c.req.header('x-tenant-id') ?? null;
+    if (tenantId) {
+      c.set('tenantId', tenantId);
+    }
     if (userId) {
-      const tenantId = c.req.header('x-tenant-id') ?? null;
       const roles = [c.req.header('x-role') ?? 'admin'];
       c.set('actor', Object.freeze({
         id: userId,

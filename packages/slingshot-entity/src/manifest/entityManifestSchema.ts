@@ -689,9 +689,45 @@ export const autoGrantConfigSchema = z.object({
     .string()
     .min(1)
     .describe('Payload field containing the subject ID that receives the grant.'),
+  /**
+   * Payload field name for the resource ID. When omitted, falls back to the
+   * entity's primary key field name, then to `'id'`.
+   */
+  resourceIdField: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Payload field for the resource ID. Defaults to the entity PK field name.'),
+  /**
+   * Payload field name for the tenant ID. When omitted, falls back to the
+   * entity's tenant field (from `tenant.field`), then to `'orgId'`.
+   */
+  tenantIdField: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Payload field for the tenant ID. Defaults to the entity tenant field or "orgId".'),
 });
 
-/** Config for an automatic permission grant on entity creation. */
+/**
+ * Config for an automatic permission grant on entity creation.
+ *
+ * Declares which event triggers the grant, which role to assign, and which
+ * payload fields to read the subject, resource, and tenant IDs from.
+ * Field resolution follows a three-tier priority chain: explicit config
+ * fields > resolved entity metadata > hardcoded defaults.
+ *
+ * @example
+ * ```json
+ * {
+ *   "on": "created",
+ *   "role": "project:owner",
+ *   "subjectField": "createdBy",
+ *   "resourceIdField": "projectId",
+ *   "tenantIdField": "workspaceId"
+ * }
+ * ```
+ */
 export type AutoGrantConfig = z.infer<typeof autoGrantConfigSchema>;
 
 /**
@@ -712,7 +748,14 @@ export const activityEventConfigSchema = z.object({
     ),
 });
 
-/** Config for a single activity log event entry. */
+/**
+ * Config for a single activity log event entry.
+ *
+ * @example
+ * ```json
+ * { "action": "created", "meta": ["title", "status"] }
+ * ```
+ */
 export type ActivityEventConfig = z.infer<typeof activityEventConfigSchema>;
 
 /**
@@ -720,8 +763,12 @@ export type ActivityEventConfig = z.infer<typeof activityEventConfigSchema>;
  *
  * When any listed event fires, the framework calls `.create()` on the adapter
  * of the named sibling entity, writing `{ orgId, actorId, resourceType,
- * resourceId, action, meta }`. Actor is resolved from payload fields in order:
- * `createdBy` → `updatedBy` → `actorId` → `"system"`.
+ * resourceId, action, meta }`.
+ *
+ * Field resolution follows a three-tier priority chain for each field:
+ * - **Tenant ID**: `tenantIdField` > entity tenant field > `'orgId'`
+ * - **Resource ID**: `resourceIdField` > entity PK field > `'id'`
+ * - **Actor ID**: first match in `actorIdFields` > `['createdBy', 'updatedBy', 'actorId']` > `'system'`
  */
 export const activityLogConfigSchema = z.object({
   /**
@@ -739,9 +786,59 @@ export const activityLogConfigSchema = z.object({
   events: z
     .record(z.string(), activityEventConfigSchema)
     .describe('Event shortname to activity-log mapping for this entity.'),
+  /**
+   * Payload field name for the tenant ID. When omitted, falls back to the
+   * entity's tenant field (from `tenant.field`), then to `'orgId'`.
+   */
+  tenantIdField: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Payload field for the tenant ID. Defaults to the entity tenant field or "orgId".'),
+  /**
+   * Payload field name for the resource ID. When omitted, falls back to the
+   * entity's primary key field name, then to `'id'`.
+   */
+  resourceIdField: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Payload field for the resource ID. Defaults to the entity PK field name.'),
+  /**
+   * Payload field names to search for the actor ID, in priority order.
+   * The first field found in the event payload is used. When omitted,
+   * defaults to `['createdBy', 'updatedBy', 'actorId']`. Falls back to
+   * `'system'` when no field matches.
+   */
+  actorIdFields: z
+    .array(z.string().min(1))
+    .optional()
+    .describe(
+      'Payload fields to search for the actor ID, in priority order. Defaults to ["createdBy", "updatedBy", "actorId"].',
+    ),
 });
 
-/** Config for declarative activity log writes on entity events. */
+/**
+ * Config for declarative activity log writes on entity events.
+ *
+ * Declares which sibling entity receives the activity records, what resource
+ * type to label them with, and how to resolve tenant, resource, and actor IDs
+ * from event payloads. Field resolution follows a three-tier priority chain:
+ * explicit config fields > resolved entity metadata > hardcoded defaults.
+ *
+ * @example
+ * ```json
+ * {
+ *   "entity": "Activity",
+ *   "resourceType": "project",
+ *   "tenantIdField": "workspaceId",
+ *   "events": {
+ *     "created": { "action": "created" },
+ *     "updated": { "action": "updated", "meta": ["title"] }
+ *   }
+ * }
+ * ```
+ */
 export type ActivityLogConfig = z.infer<typeof activityLogConfigSchema>;
 
 /** Runtime adapter transforms declared for an entity. */
@@ -758,7 +855,12 @@ const manifestHooksObjectSchema = z.object({
 });
 export const manifestHooksSchema = manifestHooksObjectSchema.optional();
 
-/** Root-level manifest lifecycle hook config. */
+/**
+ * Root-level manifest lifecycle hook config.
+ *
+ * Declares runtime hooks that execute at specific points during the entity
+ * plugin lifecycle (e.g. after adapters are created).
+ */
 export type ManifestHooks = z.infer<typeof manifestHooksObjectSchema>;
 
 // ---------------------------------------------------------------------------

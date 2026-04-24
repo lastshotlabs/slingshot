@@ -1,12 +1,8 @@
-import type { Context, Hono } from 'hono';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import type { Hono } from 'hono';
+import { type AppEnv, getActorId, getRequestTenantId } from '@lastshotlabs/slingshot-core';
 import { dispatchInteraction } from '../handlers/dispatch';
 import type { InteractionsPluginState } from '../state';
 import { dispatchRequestSchema } from './dispatchRoute.schema';
-
-function readContextValue(c: Context, key: string): unknown {
-  return (c as { get(name: string): unknown }).get(key);
-}
 
 /** Mount the interaction dispatch route at the configured mount path. */
 export function buildDispatchRoute(
@@ -20,12 +16,12 @@ export function buildDispatchRoute(
   }
 
   app.post(`${mountPath}/dispatch`, async c => {
-    const authUserId = readContextValue(c, 'authUserId');
-    if (typeof authUserId !== 'string' || authUserId.length === 0) {
+    const userId = getActorId(c);
+    if (!userId) {
       return c.json({ error: 'unauthenticated' }, 401);
     }
 
-    const tenantId = (readContextValue(c, 'tenantId') as string | undefined) ?? '';
+    const tenantId = getRequestTenantId(c) ?? '';
     const raw: unknown = await c.req.json().catch(() => null);
     if (raw === null) {
       return c.json({ error: 'invalid json body' }, 400);
@@ -46,14 +42,14 @@ export function buildDispatchRoute(
         rateLimitMax: state.rateLimitMax,
       },
       parsed.data,
-      authUserId,
+      userId,
       tenantId,
     );
 
     try {
       await interactionEvents.create({
         tenantId,
-        userId: authUserId,
+        userId,
         messageKind: parsed.data.messageKind,
         messageId: parsed.data.messageId,
         actionId: parsed.data.actionId,
@@ -75,7 +71,7 @@ export function buildDispatchRoute(
     state.events.publish(
       outcome.status === 'ok' ? 'interactions:event.dispatched' : 'interactions:event.failed',
       {
-        userId: authUserId,
+        userId,
         tenantId,
         messageKind: parsed.data.messageKind,
         messageId: parsed.data.messageId,
@@ -86,8 +82,8 @@ export function buildDispatchRoute(
       {
         source: 'http',
         tenantId,
-        userId: authUserId,
-        actorId: authUserId,
+        userId,
+        actorId: userId,
       },
     );
 

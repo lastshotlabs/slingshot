@@ -100,11 +100,11 @@ type ContainerInviteAdapter = {
 };
 
 function getAuthUserId(params: Record<string, unknown>): string {
-  const authUserId = params.authUserId;
-  if (typeof authUserId !== 'string' || authUserId.length === 0) {
+  const userId = params['actor.id'];
+  if (typeof userId !== 'string' || userId.length === 0) {
     throw new HTTPException(401, { message: 'Unauthorized' });
   }
-  return authUserId;
+  return userId;
 }
 
 async function claimInviteSlot(

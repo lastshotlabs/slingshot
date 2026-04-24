@@ -45,7 +45,7 @@ export const InteractionEvent = defineEntity('InteractionEvent', {
     disable: ['create', 'update', 'delete'],
     dataScope: {
       field: 'userId',
-      from: 'ctx:authUserId',
+      from: 'ctx:actor.id',
       applyTo: ['get', 'list'],
     },
   },

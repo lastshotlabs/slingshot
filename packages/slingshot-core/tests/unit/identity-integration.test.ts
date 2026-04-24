@@ -236,53 +236,14 @@ describe('defaultMeta actor construction via defineHandler.invoke', () => {
     expect(result.legacyTenantId).toBeNull();
   });
 
-  test('legacy-only meta (no actor) builds actor from authUserId', async () => {
+  test('meta without actor defaults to anonymous', async () => {
     const { ctx } = createContextFixture();
     const result = await echoHandler.invoke({}, { ctx, meta: legacyMeta() });
 
-    expect(result.actorId).toBe('user-1');
-    expect(result.actorKind).toBe('user');
-    expect(result.actorTenantId).toBe('tenant-1');
-    // Legacy fields projected back from actor:
-    expect(result.legacyAuthUserId).toBe('user-1');
-    expect(result.legacyTenantId).toBe('tenant-1');
-  });
-
-  test('legacy-only meta with bearerClientId builds api-key actor', async () => {
-    const { ctx } = createContextFixture();
-    const result = await echoHandler.invoke(
-      {},
-      {
-        ctx,
-        meta: legacyMeta({
-          authUserId: null,
-          bearerClientId: 'key-1',
-          tenantId: 'org-3',
-        }),
-      },
-    );
-
-    expect(result.actorId).toBe('key-1');
-    expect(result.actorKind).toBe('api-key');
+    // Without an explicit actor, defaultMeta falls back to ANONYMOUS_ACTOR.
+    expect(result.actorId).toBeNull();
+    expect(result.actorKind).toBe('anonymous');
     expect(result.legacyAuthUserId).toBeNull();
-    expect(result.legacyTenantId).toBe('org-3');
-  });
-
-  test('legacy-only meta with authClientId builds service-account', async () => {
-    const { ctx } = createContextFixture();
-    const result = await echoHandler.invoke(
-      {},
-      {
-        ctx,
-        meta: legacyMeta({
-          authUserId: null,
-          authClientId: 'svc-1',
-        }),
-      },
-    );
-
-    expect(result.actorId).toBe('svc-1');
-    expect(result.actorKind).toBe('service-account');
   });
 
   test('no meta at all produces anonymous actor', async () => {
@@ -505,6 +466,7 @@ describe('enforceDataScope with actor bindings', () => {
       meta: {
         requestId: 'req-1',
         actor: userActor,
+        requestTenantId: 'tenant-1',
         tenantId: 'tenant-1',
         authUserId: 'user-1',
         correlationId: 'corr-1',
@@ -538,7 +500,7 @@ describe('enforceDataScope with actor bindings', () => {
     expect(input.userId).toBe('actor-id-wins');
   });
 
-  test('ctx:actor.id with no actor on meta falls back to undefined', async () => {
+  test('ctx:actor.id with anonymous actor resolves to null and rejects', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
     await expect(
@@ -548,6 +510,8 @@ describe('enforceDataScope with actor bindings', () => {
         handlerName: 'test',
         meta: {
           requestId: 'req-1',
+          actor: ANONYMOUS_ACTOR,
+          requestTenantId: null,
           tenantId: null,
           authUserId: null,
           correlationId: 'corr-1',
@@ -643,26 +607,26 @@ describe('guards with explicit actor', () => {
     ).rejects.toMatchObject({ status: 401 });
   });
 
-  test('requireAuth with legacy meta (no actor) — user passes', async () => {
+  test('requireAuth with user actor passes', async () => {
     const { ctx } = createContextFixture();
     await expect(
       requireAuth()({
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', tenantId: null, authUserId: 'user-1', correlationId: 'r', ip: null },
+        meta: { requestId: 'r', actor: userActor, requestTenantId: null, tenantId: null, authUserId: 'user-1', correlationId: 'r', ip: null },
       } as never),
     ).resolves.toBeUndefined();
   });
 
-  test('requireAuth with legacy meta (no actor) — null authUserId rejects', async () => {
+  test('requireAuth with anonymous actor rejects', async () => {
     const { ctx } = createContextFixture();
     await expect(
       requireAuth()({
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', tenantId: null, authUserId: null, correlationId: 'r', ip: null },
+        meta: { requestId: 'r', actor: ANONYMOUS_ACTOR, requestTenantId: null, tenantId: null, authUserId: null, correlationId: 'r', ip: null },
       } as never),
     ).rejects.toMatchObject({ status: 401 });
   });
@@ -736,14 +700,15 @@ describe('guards with explicit actor', () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  test('requireTenant with legacy meta — tenantId present passes', async () => {
+  test('requireTenant with anonymous actor that has tenantId passes', async () => {
     const { ctx } = createContextFixture();
+    const anonWithTenant: Actor = { ...ANONYMOUS_ACTOR, tenantId: 'tenant-1' };
     await expect(
       requireTenant()({
         ctx,
         input: {},
         handlerName: 'test',
-        meta: { requestId: 'r', tenantId: 'tenant-1', authUserId: null, correlationId: 'r', ip: null },
+        meta: { requestId: 'r', actor: anonWithTenant, requestTenantId: 'tenant-1', tenantId: 'tenant-1', authUserId: null, correlationId: 'r', ip: null },
       } as never),
     ).resolves.toBeUndefined();
   });
@@ -884,7 +849,7 @@ describe('after hooks with actor', () => {
     });
   });
 
-  test('emitEvent includes actorId from legacy meta (no actor)', async () => {
+  test('emitEvent includes actorId from user actor', async () => {
     const { ctx, emitted } = createContextFixture();
     const hook = emitEvent('item.created', {
       payload: ['id'],
@@ -897,6 +862,8 @@ describe('after hooks with actor', () => {
       handlerName: 'items.create',
       meta: {
         requestId: 'r',
+        actor: userActor,
+        requestTenantId: 'tenant-1',
         tenantId: 'tenant-1',
         authUserId: 'user-1',
         correlationId: 'r',
@@ -936,8 +903,9 @@ describe('after hooks with actor', () => {
     expect(entry.action).toBe('item.created');
   });
 
-  test('auditLog falls back to legacy meta when no actor', async () => {
+  test('auditLog with user actor without session', async () => {
     const { ctx, auditEntries } = createContextFixture();
+    const actorNoSession: Actor = { id: 'user-2', kind: 'user', tenantId: 'tenant-2', sessionId: null, roles: null, claims: {} };
     const hook = auditLog('item.deleted');
     await hook({
       ctx,
@@ -946,17 +914,18 @@ describe('after hooks with actor', () => {
       handlerName: 'items.delete',
       meta: {
         requestId: 'req-audit-2',
-        tenantId: 'legacy-tenant',
-        authUserId: 'legacy-user',
+        actor: actorNoSession,
+        requestTenantId: 'tenant-2',
+        tenantId: 'tenant-2',
+        authUserId: 'user-2',
         correlationId: 'corr-2',
         ip: '10.0.0.2',
       },
     } as never);
 
     const entry = auditEntries[0] as Record<string, unknown>;
-    expect(entry.userId).toBe('legacy-user');
-    expect(entry.tenantId).toBe('legacy-tenant');
-    // Legacy meta has no sessionId — buildActorFromLegacy sets it to null.
+    expect(entry.userId).toBe('user-2');
+    expect(entry.tenantId).toBe('tenant-2');
     expect(entry.sessionId).toBeNull();
   });
 

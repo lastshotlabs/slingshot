@@ -36,7 +36,7 @@ export const Poll = defineEntity('Poll', {
     index(['closed', 'closesAt']),
   ],
   routes: {
-    dataScope: { field: 'authorId', from: 'ctx:authUserId', applyTo: ['create'] },
+    dataScope: { field: 'authorId', from: 'ctx:actor.id', applyTo: ['create'] },
     defaults: {
       auth: 'userAuth',
       permission: { requires: 'poll:read', policy: { resolver: POLL_SOURCE_POLICY_KEY } },

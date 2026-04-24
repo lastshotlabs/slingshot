@@ -195,14 +195,14 @@ export const createAccountRouter = (
       { userToken: [] },
     ),
     async c => {
-      const authUserId = getActorId(c);
-      if (!authUserId) return errorResponse(c, 'Unauthorized', 401);
-      const user = adapter.getUser ? await adapter.getUser(authUserId) : null;
+      const userId = getActorId(c);
+      if (!userId) return errorResponse(c, 'Unauthorized', 401);
+      const user = adapter.getUser ? await adapter.getUser(userId) : null;
       const googleLinked = user?.providerIds?.some(id => id.startsWith('google:')) ?? false;
       return c.json(
         {
-          id: authUserId,
-          userId: authUserId,
+          id: userId,
+          userId: userId,
           email: user?.email,
           emailVerified: user?.emailVerified,
           googleLinked,
@@ -264,9 +264,9 @@ export const createAccountRouter = (
       { userToken: [] },
     ),
     async c => {
-      const authUserId = getActorId(c);
-      if (!authUserId) return errorResponse(c, 'Unauthorized', 401);
-      const blocked = await assertSensitiveAccountMutationAllowed(c, authUserId);
+      const userId = getActorId(c);
+      if (!userId) return errorResponse(c, 'Unauthorized', 401);
+      const blocked = await assertSensitiveAccountMutationAllowed(c, userId);
       if (blocked) return blocked;
       const body = c.req.valid('json') as {
         displayName?: string;
@@ -276,7 +276,7 @@ export const createAccountRouter = (
       };
 
       if (body.userMetadata !== undefined && adapter.setUserMetadata) {
-        await adapter.setUserMetadata(authUserId, body.userMetadata);
+        await adapter.setUserMetadata(userId, body.userMetadata);
       }
 
       const profileFields: Record<string, unknown> = {};
@@ -289,7 +289,7 @@ export const createAccountRouter = (
           return errorResponse(c, 'Auth adapter does not support profile updates', 501);
         }
         await adapter.updateProfile(
-          authUserId,
+          userId,
           profileFields as Parameters<NonNullable<typeof adapter.updateProfile>>[1],
         );
       }
@@ -353,15 +353,15 @@ export const createAccountRouter = (
       { userToken: [] },
     ),
     async c => {
-      const authUserId = getActorId(c);
-      if (!authUserId) return errorResponse(c, 'Unauthorized', 401);
+      const userId = getActorId(c);
+      if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const sessionId = getActor(c).sessionId;
       if (!sessionId) return errorResponse(c, 'Unauthorized', 401);
-      if (await runtime.rateLimit.trackAttempt(`deleteaccount:${authUserId}`, deleteAccountOpts)) {
+      if (await runtime.rateLimit.trackAttempt(`deleteaccount:${userId}`, deleteAccountOpts)) {
         return errorResponse(c, 'Too many deletion attempts. Try again later.', 429);
       }
 
-      const blocked = await assertSensitiveAccountMutationAllowed(c, authUserId);
+      const blocked = await assertSensitiveAccountMutationAllowed(c, userId);
       if (blocked) return blocked;
 
       if (!adapter.deleteUser) {
@@ -369,9 +369,9 @@ export const createAccountRouter = (
       }
 
       const body = c.req.valid('json');
-      const hasPassword = adapter.hasPassword ? await adapter.hasPassword(authUserId) : false;
+      const hasPassword = adapter.hasPassword ? await adapter.hasPassword(userId) : false;
       const mfaMethods =
-        getConfig().mfa && adapter.getMfaMethods ? await adapter.getMfaMethods(authUserId) : [];
+        getConfig().mfa && adapter.getMfaMethods ? await adapter.getMfaMethods(userId) : [];
       const hasVerifiableFactor = hasPassword || mfaMethods.length > 0;
 
       if (hasVerifiableFactor) {
@@ -387,7 +387,7 @@ export const createAccountRouter = (
           );
         }
         const { verifyAnyFactor } = await import('@auth/services/mfa');
-        const valid = await verifyAnyFactor(authUserId, sessionId, runtime, {
+        const valid = await verifyAnyFactor(userId, sessionId, runtime, {
           method,
           code: body.code,
           password: body.password,
@@ -413,7 +413,7 @@ export const createAccountRouter = (
 
       const hooks = getConfig().hooks;
       if (hooks.preDeleteAccount) {
-        await hooks.preDeleteAccount({ userId: authUserId, ...hookCtx(c) });
+        await hooks.preDeleteAccount({ userId: userId, ...hookCtx(c) });
       }
 
       // Queued deletion via BullMQ
@@ -427,7 +427,7 @@ export const createAccountRouter = (
         const delayMs = (accountDeletion.gracePeriod ?? 0) * 1000;
         const job = await queue.add(
           'delete-account',
-          { userId: authUserId },
+          { userId: userId },
           {
             delay: delayMs,
             attempts: 3,
@@ -441,7 +441,7 @@ export const createAccountRouter = (
         // Revoke sessions immediately so the user is logged out
         {
           const sr = runtime.repos.session;
-          const ss = await sr.getUserSessions(authUserId, runtime.config);
+          const ss = await sr.getUserSessions(userId, runtime.config);
           await Promise.all(ss.map(s => sr.deleteSession(s.sessionId, runtime.config)));
         }
 
@@ -451,20 +451,20 @@ export const createAccountRouter = (
           if (!jobId) throw new Error('[slingshot-auth] job.id is unexpectedly undefined');
           const cancelToken = await createDeletionCancelToken(
             runtime.repos.deletionCancelToken,
-            authUserId,
+            userId,
             jobId,
             accountDeletion.gracePeriod,
           );
           publishAuthEvent(runtime.events, 'auth:account.deletion.scheduled', {
-            userId: authUserId,
+            userId: userId,
             cancelToken,
             gracePeriodSeconds: accountDeletion.gracePeriod ?? 0,
-          }, { userId: authUserId, actorId: authUserId });
-          const user = adapter.getUser ? await adapter.getUser(authUserId) : null;
+          }, { userId: userId, actorId: userId });
+          const user = adapter.getUser ? await adapter.getUser(userId) : null;
           const email = user?.email ?? '';
           if (email) {
             publishAuthEvent(runtime.events, 'auth:delivery.account_deletion', {
-              userId: authUserId,
+              userId: userId,
               email,
               cancelToken,
               gracePeriodSeconds: accountDeletion.gracePeriod ?? 0,
@@ -473,10 +473,10 @@ export const createAccountRouter = (
         } else {
           // No grace period — deletion is immediate via the queue (delay=0).
           // Emit the same events as the synchronous path so listeners are notified.
-          eventBus.emit('security.auth.account.deleted', { userId: authUserId });
-          publishAuthEvent(runtime.events, 'auth:user.deleted', { userId: authUserId }, {
-            userId: authUserId,
-            actorId: authUserId,
+          eventBus.emit('security.auth.account.deleted', { userId: userId });
+          publishAuthEvent(runtime.events, 'auth:user.deleted', { userId: userId }, {
+            userId: userId,
+            actorId: userId,
           });
         }
 
@@ -487,29 +487,29 @@ export const createAccountRouter = (
 
       // Synchronous deletion (default)
       if (accountDeletion?.onBeforeDelete) {
-        await accountDeletion.onBeforeDelete(authUserId);
+        await accountDeletion.onBeforeDelete(userId);
       }
 
       {
         const sr = runtime.repos.session;
-        const ss = await sr.getUserSessions(authUserId, runtime.config);
+        const ss = await sr.getUserSessions(userId, runtime.config);
         await Promise.all(ss.map(s => sr.deleteSession(s.sessionId, runtime.config)));
       }
-      await adapter.deleteUser(authUserId);
+      await adapter.deleteUser(userId);
 
-      eventBus.emit('security.auth.account.deleted', { userId: authUserId });
-      publishAuthEvent(runtime.events, 'auth:user.deleted', { userId: authUserId }, {
-        userId: authUserId,
-        actorId: authUserId,
+      eventBus.emit('security.auth.account.deleted', { userId: userId });
+      publishAuthEvent(runtime.events, 'auth:user.deleted', { userId: userId }, {
+        userId: userId,
+        actorId: userId,
       });
 
       if (accountDeletion?.onAfterDelete) {
-        await accountDeletion.onAfterDelete(authUserId);
+        await accountDeletion.onAfterDelete(userId);
       }
       if (hooks.postDeleteAccount) {
         const postDeleteHook = hooks.postDeleteAccount;
         Promise.resolve()
-          .then(() => postDeleteHook({ userId: authUserId, ...hookCtx(c) }))
+          .then(() => postDeleteHook({ userId: userId, ...hookCtx(c) }))
           .catch((e: unknown) =>
             console.error(
               '[lifecycle] postDeleteAccount hook error:',
@@ -590,22 +590,22 @@ export const createAccountRouter = (
         return errorResponse(c, 'Auth adapter does not support setPassword', 501);
       }
       const { password, currentPassword } = c.req.valid('json');
-      const authUserId = getActorId(c);
-      if (!authUserId) return errorResponse(c, 'Unauthorized', 401);
+      const userId = getActorId(c);
+      if (!userId) return errorResponse(c, 'Unauthorized', 401);
       const currentSessionId = getActor(c).sessionId;
       if (!currentSessionId) return errorResponse(c, 'Unauthorized', 401);
 
-      const blocked = await assertSensitiveAccountMutationAllowed(c, authUserId);
+      const blocked = await assertSensitiveAccountMutationAllowed(c, userId);
       if (blocked) return blocked;
 
-      if (await runtime.rateLimit.trackAttempt(`setpassword:${authUserId}`, setPasswordOpts)) {
+      if (await runtime.rateLimit.trackAttempt(`setpassword:${userId}`, setPasswordOpts)) {
         eventBus.emit('security.rate_limit.exceeded', { meta: { path: c.req.path } });
         return errorResponse(c, 'Too many password change attempts. Try again later.', 429);
       }
 
       // If the user already has a password, require currentPassword to change it
       const hasExistingPassword = adapter.hasPassword
-        ? await adapter.hasPassword(authUserId)
+        ? await adapter.hasPassword(userId)
         : false;
       if (hasExistingPassword) {
         if (!currentPassword) {
@@ -614,7 +614,7 @@ export const createAccountRouter = (
             400,
           );
         }
-        if (!(await adapter.verifyPassword(authUserId, currentPassword))) {
+        if (!(await adapter.verifyPassword(userId, currentPassword))) {
           return errorResponse(c, 'Current password is incorrect.', 401);
         }
       }
@@ -638,7 +638,7 @@ export const createAccountRouter = (
       }
 
       const hooks = getConfig().hooks;
-      if (hooks.prePasswordChange) await hooks.prePasswordChange({ userId: authUserId });
+      if (hooks.prePasswordChange) await hooks.prePasswordChange({ userId: userId });
 
       const passwordHash = await runtime.password.hash(password);
 
@@ -647,7 +647,7 @@ export const createAccountRouter = (
       if (preventReuse > 0) {
         const isNew = await checkPasswordNotReused(
           adapter,
-          authUserId,
+          userId,
           password,
           preventReuse,
           runtime.password,
@@ -660,14 +660,14 @@ export const createAccountRouter = (
         }
       }
 
-      await adapter.setPassword(authUserId, passwordHash);
+      await adapter.setPassword(userId, passwordHash);
       if (preventReuse > 0)
-        await recordPasswordChange(adapter, authUserId, passwordHash, preventReuse);
-      eventBus.emit('security.auth.password.change', { userId: authUserId });
+        await recordPasswordChange(adapter, userId, passwordHash, preventReuse);
+      eventBus.emit('security.auth.password.change', { userId: userId });
       if (hooks.postPasswordChange) {
         const postPwHook = hooks.postPasswordChange;
         Promise.resolve()
-          .then(() => postPwHook({ userId: authUserId }))
+          .then(() => postPwHook({ userId: userId }))
           .catch((e: unknown) =>
             console.error(
               '[lifecycle] postPasswordChange hook error:',
@@ -682,26 +682,26 @@ export const createAccountRouter = (
         // Revoke all sessions including current, create a new session
         {
           const sr = runtime.repos.session;
-          const ss = await sr.getUserSessions(authUserId, runtime.config);
+          const ss = await sr.getUserSessions(userId, runtime.config);
           await Promise.all(ss.map(s => sr.deleteSession(s.sessionId, runtime.config)));
         }
         const { getSuspended } = await import('@auth/lib/suspension');
-        const suspensionStatus = await getSuspended(adapter, authUserId);
+        const suspensionStatus = await getSuspended(adapter, userId);
         if (suspensionStatus.suspended) {
           eventBus.emit('security.auth.login.blocked', {
-            userId: authUserId,
+            userId: userId,
             reason: 'suspended',
             meta: { reason: 'suspended' },
           });
           return errorResponse(c, 'Account suspended', 403);
         }
-        await AuthService.assertLoginEmailVerified(authUserId, runtime);
+        await AuthService.assertLoginEmailVerified(userId, runtime);
         const { createSessionForUser } = await import('@auth/services/auth');
         const metadata = {
           ipAddress: getClientIp(c) !== 'unknown' ? getClientIp(c) : undefined,
           userAgent: c.req.header('user-agent') ?? undefined,
         };
-        const newSession = await createSessionForUser(authUserId, runtime, metadata, hookCtx(c));
+        const newSession = await createSessionForUser(userId, runtime, metadata, hookCtx(c));
         setAuthCookie(
           c,
           COOKIE_TOKEN,
@@ -724,7 +724,7 @@ export const createAccountRouter = (
       } else if (pwChangePolicy === 'revoke_others') {
         {
           const sr = runtime.repos.session;
-          const ss = await sr.getUserSessions(authUserId, runtime.config);
+          const ss = await sr.getUserSessions(userId, runtime.config);
           const others = ss.filter(s => s.sessionId !== currentSessionId);
           await Promise.all(others.map(s => sr.deleteSession(s.sessionId, runtime.config)));
         }

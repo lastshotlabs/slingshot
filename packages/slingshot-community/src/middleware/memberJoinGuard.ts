@@ -21,8 +21,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export function createMemberJoinGuardMiddleware(): MiddlewareHandler {
   return async (c, next) => {
-    const authUserId = getActorId(c);
-    if (!authUserId) return c.json({ error: 'Unauthorized' }, 401);
+    const userId = getActorId(c);
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
 
     let body: MembershipCreateInput;
     try {
@@ -33,7 +33,7 @@ export function createMemberJoinGuardMiddleware(): MiddlewareHandler {
       return c.json({ error: 'Invalid JSON body' }, 400);
     }
 
-    if (body.userId !== undefined && body.userId !== authUserId) {
+    if (body.userId !== undefined && body.userId !== userId) {
       return c.json({ error: 'Forbidden' }, 403);
     }
 
@@ -48,7 +48,7 @@ export function createMemberJoinGuardMiddleware(): MiddlewareHandler {
 
     const normalized: MembershipCreateInput = {
       ...body,
-      userId: authUserId,
+      userId: userId,
       role: 'member',
     };
 

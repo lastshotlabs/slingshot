@@ -34,7 +34,7 @@ export const MessageReaction = defineEntity('MessageReaction', {
   uniques: [{ fields: ['userId', 'messageId', 'emoji'] }],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {

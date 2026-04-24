@@ -42,7 +42,11 @@ export interface ResolvePolicyArgs<TRecord, TInput> {
  * - A thrown error from the resolver → 500 (resolvers must not throw for
  *   policy decisions; throwing is reserved for programmer errors)
  *
- * @throws {HTTPException} 403 or 404 on deny, 500 on missing userId or resolver error.
+ * @param args - The policy resolution arguments including the request context,
+ *   policy config, resolver function, action, fetched record, and input payload.
+ *   See {@link ResolvePolicyArgs} for details.
+ * @returns Resolves with no value when the policy allows the action.
+ * @throws {HTTPException} 403 or 404 on deny, 500 on missing actor identity or resolver error.
  */
 export async function resolvePolicy<TRecord, TInput>(
   args: ResolvePolicyArgs<TRecord, TInput>,
@@ -88,38 +92,116 @@ export async function resolvePolicy<TRecord, TInput>(
   });
 }
 
-/** Standard CRUD operation names. */
-const CRUD_OPS = new Set(['create', 'list', 'get', 'update', 'delete']);
+// ---------------------------------------------------------------------------
+// Operation Kind Registry
+// ---------------------------------------------------------------------------
+
+/**
+ * Describes how a single operation name maps to policy concerns.
+ *
+ * The registry pre-populates entries for the five built-in CRUD operations
+ * (`create`, `list`, `get`, `update`, `delete`). Named operations that are
+ * not in the registry are resolved on-the-fly as `{ kind: 'operation' }`.
+ */
+interface OperationKindEntry {
+  /** The {@link PolicyAction} `kind` discriminant for this operation. */
+  readonly kind: PolicyAction['kind'];
+  /**
+   * The normalized name used for `applyTo` matching in policy configs.
+   *
+   * CRUD operations use their kind directly (e.g. `'create'`).
+   * Named operations use the `operation:` prefix (e.g. `'operation:publish'`).
+   */
+  readonly policyName: string;
+}
+
+/**
+ * Module-scoped registry mapping operation names to their policy action kind
+ * and normalized `applyTo` name.
+ *
+ * Seeded with the five built-in CRUD operations at module load time.
+ * Named operations that are not registered resolve through
+ * {@link resolveOperationKind} as `{ kind: 'operation' }` on the fly.
+ */
+const operationKindRegistry = new Map<string, OperationKindEntry>();
+
+/**
+ * Register a built-in CRUD operation in the operation kind registry.
+ *
+ * @param name - One of the five CRUD operation names.
+ */
+function registerCrudOp(name: 'create' | 'list' | 'get' | 'update' | 'delete'): void {
+  operationKindRegistry.set(name, { kind: name, policyName: name });
+}
+
+registerCrudOp('create');
+registerCrudOp('list');
+registerCrudOp('get');
+registerCrudOp('update');
+registerCrudOp('delete');
+
+/**
+ * Look up or derive the operation kind entry for a given operation name.
+ *
+ * Returns a pre-registered entry for CRUD operations, or constructs an
+ * ad-hoc `{ kind: 'operation' }` entry for named operations.
+ *
+ * @param opName - The operation name to resolve.
+ * @returns The resolved operation kind entry.
+ */
+function resolveOperationKind(opName: string): OperationKindEntry {
+  const entry = operationKindRegistry.get(opName);
+  if (entry) return entry;
+  return { kind: 'operation', policyName: `operation:${opName}` };
+}
 
 /**
  * Check whether a policy config applies to a given operation.
  *
- * When `applyTo` is not set, the policy applies to all operations.
- * Otherwise, CRUD ops match directly and named ops match as `operation:<name>`.
+ * Resolution uses the operation kind registry to normalize the operation name:
+ * - CRUD operations match their kind directly (e.g. `'create'`)
+ * - Named operations match with the `operation:` prefix (e.g. `'operation:publish'`)
+ *
+ * When `config.applyTo` is not set, the policy applies to all operations.
+ *
+ * @param config - The entity route policy config to check.
+ * @param opName - The operation name being evaluated.
+ * @returns `true` if the policy applies to the given operation.
+ *
+ * @example
+ * ```ts
+ * const config = { resolver: 'myPolicy', applyTo: ['create', 'operation:publish'] };
+ * policyAppliesToOp(config, 'create');   // true
+ * policyAppliesToOp(config, 'publish');  // true
+ * policyAppliesToOp(config, 'delete');   // false
+ * ```
  */
 export function policyAppliesToOp(config: EntityRoutePolicyConfig, opName: string): boolean {
   const applyTo = config.applyTo;
   if (!applyTo) return true;
-  const normalized = CRUD_OPS.has(opName) ? opName : `operation:${opName}`;
-  return applyTo.includes(normalized);
+  return applyTo.includes(resolveOperationKind(opName).policyName);
 }
 
 /**
- * Map an operation name string to a structured `PolicyAction`.
+ * Map an operation name string to a structured {@link PolicyAction}.
+ *
+ * Uses the operation kind registry to determine the action kind:
+ * - CRUD operations return `{ kind: '<crud>' }` (e.g. `{ kind: 'create' }`)
+ * - Named operations return `{ kind: 'operation', name: '<opName>' }`
+ *
+ * @param opName - The operation name to map.
+ * @returns A discriminated {@link PolicyAction} union member.
+ *
+ * @example
+ * ```ts
+ * buildPolicyAction('create');   // { kind: 'create' }
+ * buildPolicyAction('publish');  // { kind: 'operation', name: 'publish' }
+ * ```
  */
 export function buildPolicyAction(opName: string): PolicyAction {
-  switch (opName) {
-    case 'create':
-      return { kind: 'create' };
-    case 'list':
-      return { kind: 'list' };
-    case 'get':
-      return { kind: 'get' };
-    case 'update':
-      return { kind: 'update' };
-    case 'delete':
-      return { kind: 'delete' };
-    default:
-      return { kind: 'operation', name: opName };
+  const entry = resolveOperationKind(opName);
+  if (entry.kind === 'operation') {
+    return { kind: 'operation', name: opName };
   }
+  return { kind: entry.kind };
 }

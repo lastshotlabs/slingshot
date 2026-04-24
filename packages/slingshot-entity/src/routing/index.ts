@@ -22,7 +22,6 @@ export type {
 } from './entityRoutePlanning';
 export { evaluateRouteAuth } from './evaluateRouteAuth';
 export type { EvaluateRouteAuthDeps, RouteAuthResult } from './evaluateRouteAuth';
-export { getUserAuthAccountGuardFailure } from './userAuthAccountGuard';
 export {
   dataScopesFor,
   findScopedFieldInBody,

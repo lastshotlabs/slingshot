@@ -216,6 +216,19 @@ export {
 /** Lookup contract for cross-plugin entity adapter access. */
 export type { EntityAdapterLookup } from '@lastshotlabs/slingshot-core';
 
+// Consumer shape hardening — system fields, storage fields, and storage conventions
+/** Consumer-configurable entity system fields, storage field mapping, and storage convention types. */
+export type {
+  EntitySystemFields,
+  ResolvedEntitySystemFields,
+  EntityStorageFieldMap,
+  ResolvedEntityStorageFieldMap,
+  EntityStorageConventions,
+  ResolvedEntityStorageConventions,
+  CustomAutoDefaultResolver,
+  CustomOnUpdateResolver,
+} from '@lastshotlabs/slingshot-core';
+
 // Channel config wiring
 /** Wire entity channel config into runtime subscription and message handlers. */
 export {
@@ -235,7 +248,6 @@ export {
   defineEntityExecutor,
   defineEntityRoute,
   evaluateRouteAuth,
-  getUserAuthAccountGuardFailure,
   normalizeEntityRouteShape,
   planEntityRoutes,
   scoreEntityRouteSpecificity,

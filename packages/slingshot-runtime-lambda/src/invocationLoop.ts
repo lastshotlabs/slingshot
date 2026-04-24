@@ -65,6 +65,7 @@ function buildMeta(
   return {
     requestId,
     actor,
+    requestTenantId: tenantId,
     tenantId,
     authUserId,
     correlationId: extracted.correlationId ?? requestId,

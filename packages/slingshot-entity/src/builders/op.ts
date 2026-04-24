@@ -128,7 +128,7 @@ export const op = {
    * already present — making the operation idempotent.
    *
    * Value binding syntax:
-   * - `'ctx:key'`   — from Hono context (e.g. `'ctx:authUserId'`)
+   * - `'ctx:key'`   — from Hono context (e.g. `'ctx:actor.id'`)
    * - `'param:key'` — from URL path param
    * - `'input:key'` — from JSON request body field
    * - literal       — constant value
@@ -140,7 +140,7 @@ export const op = {
    *
    * @example
    * ```ts
-   * op.arrayPush({ field: 'watchers', value: 'ctx:authUserId', dedupe: true })
+   * op.arrayPush({ field: 'watchers', value: 'ctx:actor.id', dedupe: true })
    * op.arrayPush({ field: 'tags',     value: 'input:tag' })
    * ```
    */
@@ -162,7 +162,7 @@ export const op = {
    *
    * @example
    * ```ts
-   * op.arrayPull({ field: 'watchers', value: 'ctx:authUserId' })
+   * op.arrayPull({ field: 'watchers', value: 'ctx:actor.id' })
    * op.arrayPull({ field: 'tags',     value: 'input:tag' })
    * ```
    */

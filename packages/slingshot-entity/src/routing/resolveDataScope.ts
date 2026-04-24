@@ -71,9 +71,6 @@ export function resolveDataScopeValue(from: EntityRouteDataScopeSource, c: Conte
 
   if (prefix === 'ctx') {
     const actor = getActor(c);
-    if (key === 'authUserId') return actor.id ?? getContextValue('authUserId') ?? undefined;
-    if (key === 'tenantId') return actor.tenantId ?? getContextValue('tenantId') ?? undefined;
-    if (key === 'sessionId') return actor.sessionId ?? getContextValue('sessionId') ?? undefined;
     if (key === 'actor.id') return actor.id ?? undefined;
     if (key === 'actor.tenantId') return actor.tenantId ?? undefined;
     if (key === 'actor.kind') return actor.kind;
@@ -81,6 +78,7 @@ export function resolveDataScopeValue(from: EntityRouteDataScopeSource, c: Conte
     if (key.startsWith('actor.claims.')) {
       return resolveDotPath(actor.claims, key.slice('actor.claims.'.length));
     }
+    // Generic context variable fallthrough (e.g. ctx:tenantId → c.get('tenantId')).
     const value = getContextValue(key);
     return value == null ? undefined : value;
   }

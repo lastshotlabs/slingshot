@@ -15,8 +15,6 @@ import type {
   AppEnv,
   EntityChannelConfig,
   EntityRouteConfig,
-  RouteEventConfig,
-  RouteOperationConfig,
   OperationConfig,
   PermissionEvaluator,
   PermissionRegistry,
@@ -24,6 +22,8 @@ import type {
   PluginSetupContext,
   PolicyResolver,
   ResolvedEntityConfig,
+  RouteEventConfig,
+  RouteOperationConfig,
   SlingshotEventBus,
   SlingshotPlugin,
   StoreInfra,
@@ -56,11 +56,7 @@ import type { RuntimeHookRef } from './manifest/entityManifestSchema';
 import type { MultiEntityManifest } from './manifest/multiEntityManifest';
 import { resolveMultiEntityManifest } from './manifest/multiEntityManifest';
 import { freezeEntityPolicyRegistry, getEntityPolicyResolver } from './policy/registerEntityPolicy';
-import {
-  applyRouteConfig,
-  buildBareEntityRoutes,
-  planEntityRoutes,
-} from './routing';
+import { applyRouteConfig, buildBareEntityRoutes, planEntityRoutes } from './routing';
 import type {
   BareEntityAdapter,
   EntityExtraRoute,
@@ -88,6 +84,11 @@ function supportsOpenApiRegistration(value: unknown): value is OpenApiCapableRou
 interface EntityPluginEntryBase {
   /** Frozen entity config from `defineEntity()`. */
   config: ResolvedEntityConfig;
+  /**
+   * Declares whether the entry was authored directly via `createEntityPlugin()`
+   * or compiled from package-first `entity(...)` authoring.
+   */
+  authoringSource?: 'plugin' | 'package';
   /** Operations from `defineOperations()`, if any. */
   operations?: Record<string, OperationConfig>;
   /** Additional plugin-owned routes composed under the entity base path. */
@@ -770,7 +771,11 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
     : (pluginConfig.entities ?? []);
 
   if (
-    pluginConfig.entities?.some(entry => entry.extraRoutes?.length || entry.overrides !== undefined)
+    pluginConfig.entities?.some(
+      entry =>
+        entry.authoringSource !== 'package' &&
+        (entry.extraRoutes?.length || entry.overrides !== undefined),
+    )
   ) {
     console.warn(
       `[EntityPlugin:${pluginConfig.name}] plugin-entry extraRoutes/overrides are compatibility-only. ` +
@@ -797,12 +802,7 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
     }
   };
 
-  // When manifest is used without explicit permissions, auto-declare dependency
-  // on slingshot-permissions so pluginState is populated before our setupRoutes runs.
-  const dependencies =
-    pluginConfig.manifest && !pluginConfig.permissions
-      ? [...(pluginConfig.dependencies ?? []), 'slingshot-permissions']
-      : pluginConfig.dependencies;
+  const dependencies = pluginConfig.dependencies;
 
   return {
     name: pluginConfig.name,
@@ -1078,6 +1078,7 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
             );
             continue;
           }
+          const resolvedEntry = resolvedEntries.find(e => e.config.name === entityName);
           wireAutoGrant(
             bus,
             entityName,
@@ -1085,6 +1086,14 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
             entityDef.autoGrant,
             resourceType,
             resolvedPermissions.adapter,
+            resolvedEntry
+              ? {
+                  pkField: resolvedEntry.config._pkField,
+                  tenantField: resolvedEntry.config.tenant
+                    ? resolvedEntry.config._systemFields.tenantField
+                    : undefined,
+                }
+              : undefined,
           );
         }
       }
@@ -1103,7 +1112,22 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
             );
           }
           const eventKeyMap = buildEventKeyMap(entityDef);
-          wireActivityLog(bus, entityName, entityDef.activityLog, eventKeyMap, targetAdapter);
+          const resolvedLogEntry = resolvedEntries.find(e => e.config.name === entityName);
+          wireActivityLog(
+            bus,
+            entityName,
+            entityDef.activityLog,
+            eventKeyMap,
+            targetAdapter,
+            resolvedLogEntry
+              ? {
+                  pkField: resolvedLogEntry.config._pkField,
+                  tenantField: resolvedLogEntry.config.tenant
+                    ? resolvedLogEntry.config._systemFields.tenantField
+                    : undefined,
+                }
+              : undefined,
+          );
         }
       }
 
@@ -1477,17 +1501,20 @@ function registerEntityEventDefinitions(
 ): void {
   for (const entry of entries) {
     for (const event of listEntityRouteEvents(entry.config.routes, entry.extraRoutes)) {
-      const definition = defineEvent(event.key as keyof import('@lastshotlabs/slingshot-core').SlingshotEventMap, {
-        ownerPlugin: pluginName,
-        exposure: Object.freeze([...(event.exposure ?? ['internal'])]),
-        resolveScope(payload, publishContext) {
-          return buildRouteEventScope(
-            event,
-            payload as Record<string, unknown>,
-            publishContext as Record<string, unknown>,
-          );
+      const definition = defineEvent(
+        event.key as keyof import('@lastshotlabs/slingshot-core').SlingshotEventMap,
+        {
+          ownerPlugin: pluginName,
+          exposure: Object.freeze([...(event.exposure ?? ['internal'])]),
+          resolveScope(payload, publishContext) {
+            return buildRouteEventScope(
+              event,
+              payload as Record<string, unknown>,
+              publishContext as Record<string, unknown>,
+            );
+          },
         },
-      });
+      );
       events.register(definition);
     }
   }

@@ -33,7 +33,7 @@ export const PushDelivery = defineEntity('PushDelivery', {
     defaults: { auth: 'userAuth' },
     disable: ['create', 'update', 'delete', 'list'],
     dataScope: [
-      { field: 'userId', from: 'ctx:authUserId', applyTo: ['get'] },
+      { field: 'userId', from: 'ctx:actor.id', applyTo: ['get'] },
       { field: 'tenantId', from: 'ctx:tenantId', applyTo: ['get'] },
     ],
   },
@@ -50,7 +50,7 @@ export const pushDeliveryOperations = defineOperations(PushDelivery, {
     returns: 'entity',
   }),
   markDelivered: op.transition({
-    match: { id: 'param:id', userId: 'param:authUserId' },
+    match: { id: 'param:id', userId: 'param:actor.id' },
     field: 'status',
     from: ['sent'],
     to: 'delivered',

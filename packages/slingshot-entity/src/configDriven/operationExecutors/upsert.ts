@@ -36,7 +36,7 @@ function resolveOnCreate(
   config: ResolvedEntityConfig,
   input: Record<string, unknown>,
 ): Record<string, unknown> {
-  const record = applyDefaults(input, config.fields);
+  const record = applyDefaults(input, config.fields, config._conventions?.autoDefault);
   if (op.onCreate) {
     for (const [f, v] of Object.entries(op.onCreate)) {
       if (v === 'uuid') record[f] = crypto.randomUUID();

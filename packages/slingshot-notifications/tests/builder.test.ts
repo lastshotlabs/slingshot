@@ -76,7 +76,7 @@ describe('createNotificationBuilder', () => {
     expect(first).not.toBeNull();
     expect(second?.id).toBe(first?.id);
 
-    const notifications = await adapters.notifications.listByUser({ authUserId: 'user-1' });
+    const notifications = await adapters.notifications.listByUser({ 'actor.id': 'user-1' });
     expect(notifications.items).toHaveLength(1);
     expect(notifications.items[0]?.data?.count).toBe(2);
   });
@@ -121,7 +121,7 @@ describe('createNotificationBuilder', () => {
     expect(second).not.toBeNull();
     expect(second?.id).not.toBe(first?.id);
 
-    const notifications = await adapters.notifications.listByUser({ authUserId: 'user-1' });
+    const notifications = await adapters.notifications.listByUser({ 'actor.id': 'user-1' });
     expect(notifications.items).toHaveLength(2);
   });
 

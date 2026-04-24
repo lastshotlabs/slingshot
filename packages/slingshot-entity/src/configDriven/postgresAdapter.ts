@@ -9,7 +9,7 @@
  *   column types, `NOT NULL` constraints, and a `PRIMARY KEY`.
  * - Creates compound indexes (`CREATE INDEX IF NOT EXISTS`) and unique constraints
  *   (`CREATE UNIQUE INDEX IF NOT EXISTS`) from `config.indexes` and `config.uniques`.
- * - Optional `_expires_at BIGINT` column when `config.ttl.defaultSeconds` is set.
+ * - Optional TTL column (configurable, default `_expires_at`) when `config.ttl.defaultSeconds` is set.
  * - Soft-delete: `delete()` writes the soft-delete field value instead of `DELETE`.
  * - Cursor pagination: multi-field lexicographic cursors via `buildCursorForRecord`/`decodeCursor`.
  * - `create()` uses `INSERT ... ON CONFLICT DO UPDATE` (upsert semantics) to handle idempotent creates.
@@ -93,6 +93,9 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
   const pkField = config._pkField;
   const pkColumn = toSnakeCase(pkField);
   const ttlSeconds = config.ttl?.defaultSeconds;
+  const ttlColumn = config._storageFields.ttlField;
+  const customAutoDefault = config._conventions?.autoDefault;
+  const customOnUpdate = config._conventions?.onUpdate;
   let initialized = false;
   let initializationPromise: Promise<void> | null = null;
 
@@ -105,7 +108,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
    * Idempotent table initializer — runs once per adapter instance.
    *
    * Creates the table with correct column types, a primary key, and `NOT NULL`
-   * constraints. Adds an `_expires_at BIGINT NOT NULL` column when TTL is configured.
+   * constraints. Adds a TTL expiry column when TTL is configured.
    * Then creates compound indexes and unique constraints from `config.indexes` and
    * `config.uniques`. All DDL statements use `IF NOT EXISTS` to be safe to replay.
    *
@@ -130,7 +133,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
         }
 
         if (ttlSeconds) {
-          cols.push('_expires_at BIGINT NOT NULL');
+          cols.push(`${ttlColumn} BIGINT NOT NULL`);
         }
 
         await queryable.query(`CREATE TABLE IF NOT EXISTS ${table} (\n  ${cols.join(',\n  ')}\n)`);
@@ -173,7 +176,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
    * Compute the absolute expiry timestamp (milliseconds since epoch) for a new record.
    *
    * Only called when `config.ttl.defaultSeconds` is set. The returned value is stored
-   * in the `_expires_at` column and compared against `Date.now()` in read queries to
+   * in the TTL column and compared against `Date.now()` in read queries to
    * exclude expired records without a background cleanup job.
    *
    * @returns Current timestamp plus the configured TTL, in milliseconds.
@@ -230,7 +233,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       }
     }
     if (ttlSeconds) {
-      conditions.push(`_expires_at > $${paramIdxRef.value}`);
+      conditions.push(`${ttlColumn} > $${paramIdxRef.value}`);
       params.push(Date.now());
       paramIdxRef.value++;
     }
@@ -242,9 +245,13 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
     async create(input) {
       await ensureTable();
 
-      const record = applyDefaults(input as Record<string, unknown>, config.fields);
+      const record = applyDefaults(
+        input as Record<string, unknown>,
+        config.fields,
+        customAutoDefault,
+      );
       const row = toPgRow(record, config.fields);
-      if (ttlSeconds) row['_expires_at'] = expiresAt();
+      if (ttlSeconds) row[ttlColumn] = expiresAt();
 
       const columns = Object.keys(row);
       const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
@@ -278,9 +285,13 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
     async update(id, input, filter) {
       await ensureTable();
 
-      const updatePayload = applyOnUpdate(input as Record<string, unknown>, config.fields);
+      const updatePayload = applyOnUpdate(
+        input as Record<string, unknown>,
+        config.fields,
+        customOnUpdate,
+      );
       const partial = toPgRow(updatePayload, config.fields);
-      if (ttlSeconds) partial['_expires_at'] = expiresAt();
+      if (ttlSeconds) partial[ttlColumn] = expiresAt();
 
       const entries = Object.entries(partial);
       if (entries.length === 0) {
@@ -318,7 +329,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
       await ensureTable();
 
       if (config.softDelete) {
-        const onUpdatePayload = applyOnUpdate({}, config.fields);
+        const onUpdatePayload = applyOnUpdate({}, config.fields, customOnUpdate);
         const partial = toPgRow(onUpdatePayload, config.fields);
         partial[toSnakeCase(config.softDelete.field)] =
           'value' in config.softDelete ? config.softDelete.value : new Date().toISOString();
@@ -362,7 +373,7 @@ export function createPostgresEntityAdapter<Entity, CreateInput, UpdateInput>(
 
       // TTL
       if (ttlSeconds) {
-        conditions.push(`_expires_at > $${paramIdx++}`);
+        conditions.push(`${ttlColumn} > $${paramIdx++}`);
         params.push(Date.now());
       }
 

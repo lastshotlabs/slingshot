@@ -31,7 +31,7 @@ export const ContainerInvite = defineEntity('ContainerInvite', {
   indexes: [index(['token'], { unique: true }), index(['containerId'])],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'createdBy', from: 'ctx:authUserId' },
+    dataScope: { field: 'createdBy', from: 'ctx:actor.id' },
     get: {},
     list: {},
     create: {

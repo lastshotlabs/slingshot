@@ -1,7 +1,16 @@
 /**
  * Entity configuration types.
  */
-import type { EntityRouteConfig, SoftDeleteConfig } from '@lastshotlabs/slingshot-core';
+import type {
+  EntityRouteConfig,
+  EntityStorageConventions,
+  EntityStorageFieldMap,
+  EntitySystemFields,
+  ResolvedEntityStorageConventions,
+  ResolvedEntityStorageFieldMap,
+  ResolvedEntitySystemFields,
+  SoftDeleteConfig,
+} from '@lastshotlabs/slingshot-core';
 import type { FieldDef } from './fields';
 
 /**
@@ -225,6 +234,33 @@ export interface EntityConfig<F extends Record<string, FieldDef> = Record<string
   /** Declarative route configuration. When set, route generation includes auth,
    *  permissions, rate limits, events, and middleware. */
   readonly routes?: EntityRouteConfig;
+  /**
+   * Consumer-configurable system field name overrides.
+   *
+   * Allows renaming audit (`createdBy`, `updatedBy`), ownership (`ownerId`),
+   * tenant (`tenantId`), and version (`version`) field names to match the
+   * consumer's domain model. Defaults are applied at `defineEntity()` time.
+   *
+   * @see {@link EntitySystemFields} for available fields and defaults.
+   */
+  readonly systemFields?: EntitySystemFields;
+  /**
+   * Storage-level field name overrides for backend adapters.
+   *
+   * Controls Mongo primary key field (`_id`) and SQL TTL column (`_expires_at`)
+   * names. Adapters read the resolved mapping instead of hardcoding conventions.
+   *
+   * @see {@link EntityStorageFieldMap} for available fields and defaults.
+   */
+  readonly storageFields?: EntityStorageFieldMap;
+  /**
+   * Storage convention overrides for Redis key format, custom ID generation
+   * strategies (beyond `'uuid' | 'cuid' | 'now'`), and custom on-update
+   * strategies (beyond `'now'`).
+   *
+   * @see {@link EntityStorageConventions} for available convention hooks.
+   */
+  readonly conventions?: EntityStorageConventions;
 }
 
 /**
@@ -262,4 +298,10 @@ export interface ResolvedEntityConfig<
    * Redis key prefix. Computed from the entity name and optional namespace.
    */
   readonly _storageName: string;
+  /** Resolved system field names with defaults applied. @see {@link ResolvedEntitySystemFields} */
+  readonly _systemFields: ResolvedEntitySystemFields;
+  /** Resolved storage field mapping with defaults applied. @see {@link ResolvedEntityStorageFieldMap} */
+  readonly _storageFields: ResolvedEntityStorageFieldMap;
+  /** Resolved storage convention overrides. @see {@link ResolvedEntityStorageConventions} */
+  readonly _conventions: ResolvedEntityStorageConventions;
 }

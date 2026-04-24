@@ -129,6 +129,126 @@ These are supported customization tools, not the first thing to reach for. The c
 - package `domain(...)` routes for cross-entity/reporting/orchestration
 - `extraRoutes` or `overrides` when the route still belongs to the entity shell
 
+## System field customization
+
+By default, entities assume standard field names for audit and ownership concerns. Override them with `systemFields`:
+
+```typescript
+const Order = defineEntity('Order', {
+  fields: {
+    orderId: field.string({ primary: true, default: 'uuid' }),
+    workspaceId: field.string(),
+    author: field.string(),
+    lastEditor: field.string(),
+  },
+  tenant: { field: 'workspaceId' },
+  systemFields: {
+    createdBy: 'author',
+    updatedBy: 'lastEditor',
+    ownerField: 'author',
+    tenantField: 'workspaceId',
+    version: 'revision',
+  },
+});
+```
+
+Defaults when omitted:
+
+| Field         | Default                        |
+| ------------- | ------------------------------ |
+| `createdBy`   | `'createdBy'`                  |
+| `updatedBy`   | `'updatedBy'`                  |
+| `ownerField`  | `'ownerId'`                    |
+| `tenantField` | `tenant.field` or `'tenantId'` |
+| `version`     | `'version'`                    |
+
+## Storage field mapping
+
+Backend adapters use configurable field names for Mongo primary keys and SQL TTL columns:
+
+```typescript
+const Session = defineEntity('Session', {
+  fields: {
+    sid: field.string({ primary: true, default: 'uuid' }),
+  },
+  ttl: { defaultSeconds: 3600 },
+  storageFields: {
+    mongoPkField: '_sessionId', // default: '_id'
+    ttlField: 'expiresAt', // default: '_expires_at'
+  },
+});
+```
+
+Adapters read the resolved mapping from `config._storageFields` instead of hardcoding conventions.
+
+## Storage conventions
+
+Customize how records are keyed, how IDs are generated, and how fields update:
+
+```typescript
+import { ulid } from 'ulid';
+
+const Task = defineEntity('Task', {
+  fields: {
+    id: field.string({ primary: true, default: 'ulid' }),
+    name: field.string(),
+    updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
+  },
+  conventions: {
+    // Custom Redis key format
+    redisKey: ({ appName, storageName, pk }) => `${appName}/${storageName}/${pk}`,
+    // Extend auto-default beyond uuid/cuid/now
+    autoDefault: kind => (kind === 'ulid' ? ulid() : undefined),
+    // Extend onUpdate beyond 'now'
+    onUpdate: kind => (kind === 'increment' ? 1 : undefined),
+  },
+});
+```
+
+Built-in defaults when conventions are omitted:
+
+| Convention    | Default                                                                               |
+| ------------- | ------------------------------------------------------------------------------------- |
+| `redisKey`    | `` `${storageName}:${appName}:${pk}` ``                                               |
+| `autoDefault` | `'uuid'` → `crypto.randomUUID()`, `'cuid'` → lightweight cuid, `'now'` → `new Date()` |
+| `onUpdate`    | `'now'` → `new Date()`                                                                |
+
+Custom resolvers return `undefined` for unrecognized sentinels to signal a fall-through to the built-in handler.
+
+## Manifest helper field mapping
+
+When using `autoGrant` or `activityLog` in manifest mode, payload field names are resolved from entity metadata instead of hardcoded first-party names.
+
+Resolution priority (highest to lowest):
+
+1. Explicit config fields (`resourceIdField`, `tenantIdField`, `actorIdFields`)
+2. Resolved entity fields (PK field, tenant field from `tenant.field`)
+3. Hardcoded defaults (`'id'`/`'orgId'` for autoGrant, `'id'`/`'orgId'` for activityLog)
+
+```json title="app.manifest.json"
+{
+  "entities": {
+    "Project": {
+      "fields": { "projectId": { "type": "string", "primary": true }, ... },
+      "tenant": { "field": "workspaceId" },
+      "autoGrant": {
+        "on": "created",
+        "role": "project:owner",
+        "subjectField": "createdBy"
+      },
+      "activityLog": {
+        "entity": "Activity",
+        "resourceType": "project",
+        "actorIdFields": ["assignee", "createdBy"],
+        "events": { "created": { "action": "created" } }
+      }
+    }
+  }
+}
+```
+
+The `autoGrant` above resolves `resourceId` from `projectId` (entity PK) and `tenantId` from `workspaceId` (entity tenant field) automatically.
+
 ## Channel declarations
 
 Entity modules can also own realtime declarations through `channels`.

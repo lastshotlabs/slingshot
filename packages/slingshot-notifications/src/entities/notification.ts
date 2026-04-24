@@ -85,7 +85,7 @@ export const Notification = defineEntity('Notification', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
     list: {},
     disable: ['create', 'update', 'delete', 'get'],
     operations: {
@@ -126,42 +126,42 @@ export const Notification = defineEntity('Notification', {
  */
 export const notificationOperations = defineOperations(Notification, {
   listByUser: op.lookup({
-    fields: { userId: 'param:authUserId' },
+    fields: { userId: 'param:actor.id' },
     returns: 'many',
   }),
 
   listUnread: op.lookup({
-    fields: { userId: 'param:authUserId' },
+    fields: { userId: 'param:actor.id' },
     check: { read: false },
     returns: 'many',
   }),
 
   markRead: op.fieldUpdate({
-    match: { id: 'param:id', userId: 'param:authUserId' },
+    match: { id: 'param:id', userId: 'param:actor.id' },
     set: ['read', 'readAt'],
   }),
 
   markAllRead: op.batch({
     action: 'update',
-    filter: { userId: 'param:authUserId', read: false },
+    filter: { userId: 'param:actor.id', read: false },
     set: { read: true, readAt: 'now' },
     returns: 'count',
   }),
 
   unreadCount: op.aggregate({
     compute: { count: 'count' },
-    filter: { userId: 'param:authUserId', read: false },
+    filter: { userId: 'param:actor.id', read: false },
   }),
 
   unreadCountBySource: op.aggregate({
     compute: { count: 'count' },
-    filter: { userId: 'param:authUserId', source: 'param:source', read: false },
+    filter: { userId: 'param:actor.id', source: 'param:source', read: false },
   }),
 
   unreadCountByScope: op.aggregate({
     compute: { count: 'count' },
     filter: {
-      userId: 'param:authUserId',
+      userId: 'param:actor.id',
       source: 'param:source',
       scopeId: 'param:scopeId',
       read: false,
@@ -169,7 +169,7 @@ export const notificationOperations = defineOperations(Notification, {
   }),
 
   hasUnreadByDedupKey: op.exists({
-    fields: { userId: 'param:authUserId', dedupKey: 'param:dedupKey' },
+    fields: { userId: 'param:actor.id', dedupKey: 'param:dedupKey' },
     check: { read: false },
   }),
 

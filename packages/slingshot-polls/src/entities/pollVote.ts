@@ -26,7 +26,7 @@ export const PollVote = defineEntity('PollVote', {
   ],
   routes: {
     dataScope: [
-      { field: 'userId', from: 'ctx:authUserId', applyTo: ['create', 'delete'] },
+      { field: 'userId', from: 'ctx:actor.id', applyTo: ['create', 'delete'] },
       { field: 'sourceType', from: 'ctx:__voteSourceType', applyTo: ['create'] },
       { field: 'sourceId', from: 'ctx:__voteSourceId', applyTo: ['create'] },
       { field: 'scopeId', from: 'ctx:__voteScopeId', applyTo: ['create'] },

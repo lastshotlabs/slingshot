@@ -122,7 +122,7 @@ function requireInviteRuntimeAdapter(value: BareEntityAdapter): InviteRuntimeAda
 }
 
 function getAuthUserId(params: Record<string, unknown>): string {
-  const userId = params.authUserId;
+  const userId = params['actor.id'];
   if (typeof userId !== 'string' || userId.length === 0) {
     throw new HTTPException(401, { message: 'Unauthorized' });
   }

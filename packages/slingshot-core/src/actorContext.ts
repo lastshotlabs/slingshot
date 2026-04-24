@@ -119,3 +119,18 @@ export function getActorId(c: Context<AppEnv>): string | null {
 export function getActorTenantId(c: Context<AppEnv>): string | null {
   return getActor(c).tenantId;
 }
+
+/**
+ * Resolve the request-scoped tenant ID from the Hono context.
+ *
+ * This is the tenant context set by tenant-resolution middleware (e.g. from
+ * a header or subdomain), distinct from `getActorTenantId` which returns
+ * the tenant the actor belongs to. They usually match but can differ for
+ * cross-tenant operations.
+ *
+ * Returns `null` in single-tenant mode or when tenant resolution is not active.
+ */
+export function getRequestTenantId(c: Context<AppEnv>): string | null {
+  const value = c.get('tenantId');
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}

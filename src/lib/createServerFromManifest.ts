@@ -3,16 +3,12 @@ import { getRedisConnectionOptions } from '@lib/redis';
 import type { Server } from 'bun';
 import { existsSync, readFileSync, readdirSync } from 'fs';
 import { dirname, resolve } from 'path';
-import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import {
-  SUPER_ADMIN_ROLE,
   createEventSchemaRegistry,
-  getPermissionsStateOrNull,
 } from '@lastshotlabs/slingshot-core';
 import type {
   EventSchemaRegistry,
   KafkaConnectorHandle,
-  PermissionsAdapter,
   SlingshotEventBus,
   ValidationMode,
 } from '@lastshotlabs/slingshot-core';
@@ -20,7 +16,6 @@ import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
 } from '@lastshotlabs/slingshot-orchestration';
-import { getOrganizationsOrgServiceOrNull } from '@lastshotlabs/slingshot-organizations';
 import { type CreateServerConfig, createServer, getServerContext } from '../server';
 import { createBuiltinPluginFactory, loadBuiltinPlugin } from './builtinPlugins';
 import { validateAppManifest } from './manifest';
@@ -661,112 +656,6 @@ async function resolveManifestKafkaConnectors(
   });
 }
 
-/**
- * Apply manifest seed data after the server has started.
- *
- * Creates users and orgs that do not yet exist (idempotent — users checked by
- * email, orgs checked by slug). Safe to call on every boot.
- */
-async function runManifestSeed(
-  server: Server<object>,
-  seed: NonNullable<AppManifest['seed']>,
-): Promise<void> {
-  const ctx = getServerContext(server);
-  if (!ctx) {
-    console.warn('[manifest seed] Could not retrieve server context — seed skipped.');
-    return;
-  }
-
-  const runtime = getAuthRuntimeContext(ctx.pluginState);
-  const permsState = getPermissionsStateOrNull(ctx.pluginState) as
-    | ({ adapter: PermissionsAdapter } & object)
-    | null;
-  const orgService = getOrganizationsOrgServiceOrNull(ctx.pluginState);
-
-  // Track seeded user IDs by email for org member wiring.
-  const seededUserIds = new Map<string, string>();
-
-  // --- Users ---
-  for (const seedUser of seed.users ?? []) {
-    const existing = await runtime.adapter.findByEmail(seedUser.email);
-    if (existing) {
-      console.log(`[manifest seed] User '${seedUser.email}' already exists — skipping.`);
-      seededUserIds.set(seedUser.email, existing.id);
-      continue;
-    }
-
-    const hash = await runtime.password.hash(seedUser.password);
-    const { id } = await runtime.adapter.create(seedUser.email, hash);
-    seededUserIds.set(seedUser.email, id);
-    console.log(`[manifest seed] Created user '${seedUser.email}' (id: ${id}).`);
-
-    if (seedUser.superAdmin) {
-      if (!permsState) {
-        console.warn(
-          `[manifest seed] superAdmin requested for '${seedUser.email}' but permissions plugin is not running — grant skipped.`,
-        );
-      } else {
-        await permsState.adapter.createGrant({
-          subjectId: id,
-          subjectType: 'user',
-          tenantId: null,
-          resourceType: null,
-          resourceId: null,
-          roles: [SUPER_ADMIN_ROLE],
-          effect: 'allow',
-          grantedBy: 'manifest-seed',
-        });
-        console.log(`[manifest seed] Granted super-admin to '${seedUser.email}'.`);
-      }
-    }
-  }
-
-  // --- Orgs ---
-  if ((seed.orgs ?? []).length > 0 && !orgService) {
-    console.warn(
-      '[manifest seed] seed.orgs defined but slingshot-organizations plugin is not running — org seed skipped.',
-    );
-    return;
-  }
-
-  // orgService is guaranteed non-null here: the guard above returns early when
-  // seed.orgs is non-empty and orgService is absent.
-  if (!orgService) return;
-
-  for (const seedOrg of seed.orgs ?? []) {
-    const existing = await orgService.getOrgBySlug(seedOrg.slug);
-    if (existing) {
-      console.log(`[manifest seed] Org '${seedOrg.slug}' already exists — skipping.`);
-      continue;
-    }
-
-    const org = await orgService.createOrg({
-      name: seedOrg.name,
-      slug: seedOrg.slug,
-      tenantId: seedOrg.tenantId,
-      metadata: seedOrg.metadata,
-    });
-    console.log(`[manifest seed] Created org '${seedOrg.slug}' (id: ${org.id}).`);
-
-    for (const member of seedOrg.members ?? []) {
-      // Look up user ID: prefer seeded users, fall back to auth adapter lookup.
-      let userId = seededUserIds.get(member.email);
-      if (!userId) {
-        const found = await runtime.adapter.findByEmail(member.email);
-        if (!found) {
-          console.warn(
-            `[manifest seed] Member '${member.email}' for org '${seedOrg.slug}' not found — skipping.`,
-          );
-          continue;
-        }
-        userId = found.id;
-      }
-      await orgService.addOrgMember(org.id, userId, member.roles ?? [], 'manifest-seed');
-      console.log(`[manifest seed] Added '${member.email}' to org '${seedOrg.slug}'.`);
-    }
-  }
-}
-
 export async function resolveManifestConfig(
   manifestPathOrObject: string | Record<string, unknown>,
   registry?: ManifestHandlerRegistry,
@@ -948,7 +837,17 @@ export async function createServerFromManifest(
 
   const seed = resolved.manifest.seed;
   if (seed && (seed.users?.length || seed.orgs?.length)) {
-    await runManifestSeed(server, seed);
+    const ctx = getServerContext(server);
+    if (ctx) {
+      const { runPluginSeed } = await import('@framework/runPluginLifecycle');
+      await runPluginSeed(
+        ctx.plugins as import('@lastshotlabs/slingshot-core').SlingshotPlugin[],
+        ctx.app as import('@hono/zod-openapi').OpenAPIHono<import('@lastshotlabs/slingshot-core').AppEnv>,
+        ctx.bus,
+        ctx.events,
+        seed as Record<string, unknown>,
+      );
+    }
   }
 
   return server;

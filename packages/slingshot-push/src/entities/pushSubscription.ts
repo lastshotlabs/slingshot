@@ -25,7 +25,7 @@ export const PushSubscription = defineEntity('PushSubscription', {
     defaults: { auth: 'userAuth' },
     disable: ['get'],
     dataScope: [
-      { field: 'userId', from: 'ctx:authUserId' },
+      { field: 'userId', from: 'ctx:actor.id' },
       { field: 'tenantId', from: 'ctx:tenantId' },
     ],
   },

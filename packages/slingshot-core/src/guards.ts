@@ -63,25 +63,23 @@ function resolveScopedValue(
   binding: string,
   input: Record<string, unknown>,
   record: Record<string, unknown> | null,
-  meta: {
-    tenantId: string | null;
-    authUserId: string | null;
-    actor?: import('./identity').Actor;
-  },
+  meta: import('./handler').HandlerMeta,
 ): string | undefined {
   if (binding.startsWith('ctx:')) {
     const field = binding.slice(4);
-    // Legacy aliases — still work as before.
-    if (field === 'tenantId') return meta.actor?.tenantId ?? meta.tenantId ?? undefined;
-    if (field === 'authUserId') return meta.actor?.id ?? meta.authUserId ?? undefined;
-    // New actor-aware bindings.
-    if (field === 'actor.id') return meta.actor?.id ?? undefined;
-    if (field === 'actor.tenantId') return meta.actor?.tenantId ?? undefined;
-    if (field === 'actor.kind') return meta.actor?.kind;
-    if (field === 'actor.sessionId') return meta.actor?.sessionId ?? undefined;
+    const actor = resolveActor(meta);
+    // Legacy alias — resolves to request-scoped tenant.
+    if (field === 'tenantId') return meta.requestTenantId ?? undefined;
+    // Legacy alias — resolves to actor identity.
+    if (field === 'authUserId') return actor.id ?? undefined;
+    // Actor-aware bindings.
+    if (field === 'actor.id') return actor.id ?? undefined;
+    if (field === 'actor.tenantId') return actor.tenantId ?? undefined;
+    if (field === 'actor.kind') return actor.kind;
+    if (field === 'actor.sessionId') return actor.sessionId ?? undefined;
     if (field.startsWith('actor.claims.')) {
       const claimKey = field.slice('actor.claims.'.length);
-      const value = meta.actor?.claims[claimKey];
+      const value = actor.claims[claimKey];
       return value === undefined || value === null ? undefined : String(value);
     }
     return undefined;
@@ -128,21 +126,12 @@ function derivePermissionSubject(
   meta: import('./handler').HandlerMeta,
 ): { subjectId: string; subjectType: 'user' | 'service-account' } | null {
   const actor = resolveActor(meta);
-  if (actor.id) {
-    if (actor.kind === 'user') {
-      return { subjectId: actor.id, subjectType: 'user' };
-    }
-    if (actor.kind === 'service-account' || actor.kind === 'api-key') {
-      return { subjectId: actor.id, subjectType: 'service-account' };
-    }
+  if (!actor.id) return null;
+  if (actor.kind === 'user') {
+    return { subjectId: actor.id, subjectType: 'user' };
   }
-  // Legacy fallback for externally constructed meta without actor.
-  if (meta.authUserId) {
-    return { subjectId: meta.authUserId, subjectType: 'user' };
-  }
-  const clientId = meta.bearerClientId ?? meta.authClientId ?? null;
-  if (clientId) {
-    return { subjectId: clientId, subjectType: 'service-account' };
+  if (actor.kind === 'service-account' || actor.kind === 'api-key') {
+    return { subjectId: actor.id, subjectType: 'service-account' };
   }
   return null;
 }
@@ -211,9 +200,7 @@ export function requireBearer(): Guard {
   const guard: Guard = async ({ meta }) => {
     const actor = resolveActor(meta);
     if (actor.kind !== 'api-key' && actor.kind !== 'service-account') {
-      if (!meta.bearerClientId && !meta.authClientId) {
-        throw new HandlerError('Unauthorized', { status: 401 });
-      }
+      throw new HandlerError('Unauthorized', { status: 401 });
     }
   };
 

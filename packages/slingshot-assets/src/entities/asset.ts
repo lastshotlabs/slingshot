@@ -27,7 +27,7 @@ export const Asset = defineEntity('Asset', {
   ],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'ownerUserId', from: 'ctx:authUserId' },
+    dataScope: { field: 'ownerUserId', from: 'ctx:actor.id' },
     get: {},
     list: {},
     create: {

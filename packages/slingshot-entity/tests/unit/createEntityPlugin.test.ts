@@ -193,6 +193,35 @@ describe('createEntityPlugin', () => {
     expect(plugin.dependencies).toEqual(['slingshot-auth']);
   });
 
+  it('does not warn for package-authored entity extraRoutes or overrides', () => {
+    const warn = mock(() => {});
+    const originalWarn = console.warn;
+    console.warn = warn;
+    try {
+      createEntityPlugin({
+        name: 'package-authored',
+        entities: [
+          {
+            config: noteConfig,
+            authoringSource: 'package',
+            buildAdapter: () => createMockAdapter(),
+            extraRoutes: [
+              defineEntityRoute({
+                method: 'get',
+                path: '/tree',
+                buildExecutor: () => async exec => exec.respond.json({ ok: true }),
+              }),
+            ],
+          },
+        ],
+      });
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   describe('setupRoutes', () => {
     it('mounts a router for each entity with routes config', async () => {
       const app = createMockApp();
@@ -894,37 +923,9 @@ describe('permissions pluginState fallback', () => {
     expect(perms.registry.register).toHaveBeenCalled();
   });
 
-  it('auto-declares slingshot-permissions dependency when using manifest without permissions', () => {
-    const manifest: MultiEntityManifest = {
-      manifestVersion: 1,
-      entities: {
-        Note: {
-          fields: {
-            id: { type: 'string', primary: true, default: 'uuid' },
-            text: { type: 'string' },
-          },
-        },
-      },
-    };
-
-    const plugin = createEntityPlugin({
-      name: 'p',
-      manifest,
-    });
-
-    expect(plugin.dependencies).toContain('slingshot-permissions');
-  });
-
-  it('does not add slingshot-permissions dependency when permissions are explicit', () => {
-    const perms = createMockPermissions();
-    const plugin = createEntityPlugin({
-      name: 'p',
-      entities: [],
-      permissions: perms,
-    });
-
-    expect(plugin.dependencies).toBeUndefined();
-  });
+  // Auto-dep injection was removed — entity plugins no longer auto-declare
+  // slingshot-permissions as a dependency. Permissions are resolved from
+  // pluginState at runtime if available.
 });
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@
  */
 import type { Context, Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 import type { PollAdapter, PollVoteAdapter } from '../types/adapters';
 import { POLL_VOTE_ERRORS } from '../types/public';
 
@@ -51,11 +52,10 @@ export function buildPollVoteGuard({
     }
     const pollId = body.pollId;
     const optionIndex = body.optionIndex;
-    const authUserId = (c as { get(key: string): unknown }).get('authUserId');
-    if (typeof authUserId !== 'string' || authUserId.length === 0) {
+    const userId = getActorId(c);
+    if (!userId) {
       throw new HTTPException(401, { message: 'Unauthorized' });
     }
-    const userId = authUserId;
 
     // 1. Poll not found — race between policy eval and guard.
     const poll = await pollAdapter.getById(pollId);

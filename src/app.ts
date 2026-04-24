@@ -445,7 +445,7 @@ async function prepareBootstrap<T extends object>(
   };
 
   const compiledPackages = config.packages?.length ? compilePackages(config.packages) : null;
-  const plugins = [...(compiledPackages?.plugins ?? []), ...(config.plugins ?? [])];
+  let plugins = [...(compiledPackages?.plugins ?? []), ...(config.plugins ?? [])];
   const eventSchemaRegistry = createEventSchemaRegistry();
   const bus =
     config.eventBus ??
@@ -479,6 +479,15 @@ async function prepareBootstrap<T extends object>(
   const coreReg = createCoreRegistrar();
   const { registrar } = coreReg;
   const drain = () => coreReg.drain();
+  // Auto-synthesize permissions plugin when config.permissions is set
+  // but no explicit permissions plugin is registered.
+  if (
+    config.permissions &&
+    !plugins.some(p => p.name === 'slingshot-permissions')
+  ) {
+    const { createPermissionsPlugin } = await import('@lastshotlabs/slingshot-permissions');
+    plugins = [createPermissionsPlugin({ adapter: config.permissions.adapter }), ...plugins];
+  }
   const sortedPlugins = validateAndSortPlugins(plugins);
   const appName = appConfig.name ?? 'Bun Core API';
   const openApiVersion = appConfig.version ?? '1.0.0';
@@ -576,7 +585,6 @@ async function assembleApp<T extends object>(
       events,
       kafkaConnectors: bootstrap.kafkaConnectors,
       secretBundle,
-      permissions: config.permissions,
     });
     onContextCreated?.(slingshotCtx);
     attachContext(app, slingshotCtx);

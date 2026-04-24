@@ -32,7 +32,7 @@ export const ReadReceipt = defineEntity('ReadReceipt', {
   uniques: [{ fields: ['userId', 'messageId'] }],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {

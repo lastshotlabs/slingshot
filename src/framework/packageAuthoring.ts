@@ -44,7 +44,6 @@ import {
   evaluateRouteAuth,
   freezeEntityPolicyRegistry,
   getEntityPolicyResolver,
-  getUserAuthAccountGuardFailure,
   resolvePolicy,
   safeReadJsonBody,
 } from '@lastshotlabs/slingshot-entity';
@@ -701,6 +700,7 @@ function compileEntityEntry(module: PackageEntityModule): EntityPluginEntry {
   if (impl.wiring.mode === 'manual') {
     return {
       config: impl.config,
+      authoringSource: 'package',
       operations: impl.operations,
       extraRoutes: impl.extraRoutes,
       overrides: impl.overrides,
@@ -714,6 +714,7 @@ function compileEntityEntry(module: PackageEntityModule): EntityPluginEntry {
   if (impl.wiring.mode === 'factories') {
     return {
       config: impl.config,
+      authoringSource: 'package',
       operations: impl.operations,
       extraRoutes: impl.extraRoutes,
       overrides: impl.overrides,
@@ -728,6 +729,7 @@ function compileEntityEntry(module: PackageEntityModule): EntityPluginEntry {
 
   return {
     config: impl.config,
+    authoringSource: 'package',
     operations: impl.operations,
     extraRoutes: impl.extraRoutes,
     overrides: impl.overrides,
@@ -860,9 +862,17 @@ function createPackagePlugin(
                 }
 
                 if (routeDefinition.auth === 'userAuth') {
-                  const guardFailure = await getUserAuthAccountGuardFailure(c);
-                  if (guardFailure) {
-                    return c.json({ error: guardFailure.error }, guardFailure.status);
+                  const postGuards = getSlingshotCtx(c).routeAuth?.postGuards;
+                  if (postGuards) {
+                    for (const guard of postGuards) {
+                      const failure = await guard(c);
+                      if (failure) {
+                        return c.json(
+                          { error: failure.error, message: failure.message },
+                          failure.status,
+                        );
+                      }
+                    }
                   }
                 }
 

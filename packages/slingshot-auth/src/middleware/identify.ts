@@ -131,11 +131,14 @@ export const createIdentifyMiddleware =
 
     const authConfig = authRuntime.config;
     const sessionRepo = authRuntime.repos.session;
-    c.set('authUserId', null);
-    c.set('roles', null);
-    c.set('sessionId', null);
-    c.set('authClientId', null);
-    c.set('tokenPayload', null);
+
+    // Local identity state — accumulated during token verification, then
+    // projected onto the Hono context and frozen as the canonical actor.
+    let resolvedUserId: string | null = null;
+    let resolvedSessionId: string | null = null;
+    let resolvedRoles: string[] | null = null;
+    let resolvedClientId: string | null = null;
+    let resolvedTokenPayload: Record<string, unknown> | null = null;
 
     // cookie for browsers, x-user-token header for non-browser clients
     // Try the __Host- prefixed name first (production), then fall back to the plain name
@@ -154,12 +157,12 @@ export const createIdentifyMiddleware =
           authConfig,
           authRuntime.signing ?? c.get('slingshotCtx').signing ?? null,
         );
-        c.set('tokenPayload', payload);
+        resolvedTokenPayload = payload;
         const sessionId = payload.sid as string | undefined;
         if (!sessionId) {
           // Check for M2M token (scope present, no sid)
           if (payload.scope && payload.sub) {
-            c.set('authClientId', payload.sub);
+            resolvedClientId = payload.sub;
             log(`[identify] M2M token for clientId=${payload.sub}`);
           } else {
             log('[identify] token missing sid claim — unauthenticated');
@@ -171,7 +174,7 @@ export const createIdentifyMiddleware =
           } else {
             const stored = await sessionRepo.getSession(sessionId, authConfig);
             log('[identify] token verified, checking session...');
-            authTrace(`[identify] authUserId=${sub}`);
+            authTrace(`[identify] userId=${sub}`);
             if (timingSafeEqual(stored ?? '', token)) {
               const signingCfg = authRuntime.signing ?? c.get('slingshotCtx').signing ?? null;
               const bindingCfg = signingCfg?.sessionBinding;
@@ -192,43 +195,43 @@ export const createIdentifyMiddleware =
                   sessionRepo.setSessionFingerprint(sessionId, current).catch(() => {
                     log('[identify] failed to store session fingerprint');
                   });
-                  c.set('authUserId', sub);
-                  c.set('sessionId', sessionId);
+                  resolvedUserId = sub;
+                  resolvedSessionId = sessionId;
                 } else if (timingSafeEqual(storedFp, current)) {
-                  c.set('authUserId', sub);
-                  c.set('sessionId', sessionId);
+                  resolvedUserId = sub;
+                  resolvedSessionId = sessionId;
                 } else {
                   log(`[identify] fingerprint mismatch, onMismatch=${onMismatch}`);
                   authTrace(`[identify] sessionId=${sessionId}`);
                   if (onMismatch === 'reject') {
                     throw new HttpError(401, 'Unauthorized', 'FINGERPRINT_MISMATCH');
                   } else if (onMismatch === 'log-only') {
-                    c.set('authUserId', sub);
-                    c.set('sessionId', sessionId);
+                    resolvedUserId = sub;
+                    resolvedSessionId = sessionId;
                   }
-                  // onMismatch === "unauthenticate" — leave authUserId null (already null)
+                  // onMismatch === "unauthenticate" — leave resolvedUserId null
                 }
               } else {
-                c.set('authUserId', sub);
-                c.set('sessionId', sessionId);
+                resolvedUserId = sub;
+                resolvedSessionId = sessionId;
               }
 
-              if (c.get('authUserId')) {
+              if (resolvedUserId) {
                 if (authConfig.checkSuspensionOnIdentify) {
                   const suspensionStatus = await getSuspended(authRuntime.adapter, sub).catch(
                     () => ({ suspended: false }),
                   );
                   if (suspensionStatus.suspended) {
-                    c.set('authUserId', null);
-                    c.set('sessionId', null);
-                    c.set('roles', null);
+                    resolvedUserId = null;
+                    resolvedSessionId = null;
+                    resolvedRoles = null;
                     log(`[identify] userId=${sub} is suspended — unauthenticated`);
                   }
                 }
               }
 
-              if (c.get('authUserId')) {
-                authTrace(`[identify] authUserId=${sub} sessionId=${sessionId}`);
+              if (resolvedUserId) {
+                authTrace(`[identify] userId=${sub} sessionId=${sessionId}`);
                 // Auto-enable lastActiveAt tracking when idleTimeout is configured
                 if (authConfig.trackLastActive || authConfig.sessionPolicy.idleTimeout) {
                   sessionRepo.updateSessionLastActive(sessionId, authConfig).catch(() => {
@@ -249,17 +252,15 @@ export const createIdentifyMiddleware =
       log('[identify] no token — unauthenticated');
     }
 
-    // Construct and publish the resolved actor so downstream code can use getActor(c).
-    const resolvedUserId = c.get('authUserId');
-    const resolvedClientId = c.get('authClientId');
+    // Construct and publish the resolved actor — the canonical identity for this request.
     const resolvedTenantId = (c.get('tenantId') as string | null | undefined) ?? null;
     const actor: Actor = resolvedUserId
       ? {
           id: resolvedUserId,
           kind: 'user',
           tenantId: resolvedTenantId,
-          sessionId: c.get('sessionId') ?? null,
-          roles: c.get('roles') ?? null,
+          sessionId: resolvedSessionId,
+          roles: resolvedRoles,
           claims: {},
         }
       : resolvedClientId
@@ -268,11 +269,18 @@ export const createIdentifyMiddleware =
             kind: 'service-account',
             tenantId: resolvedTenantId,
             sessionId: null,
-            roles: c.get('roles') ?? null,
+            roles: resolvedRoles,
             claims: {},
           }
         : { ...ANONYMOUS_ACTOR, tenantId: resolvedTenantId };
     c.set('actor', Object.freeze(actor) as Actor);
+
+    // Project legacy context variables from the actor for backward compatibility.
+    c.set('authUserId', resolvedUserId);
+    c.set('roles', resolvedRoles);
+    c.set('sessionId', resolvedSessionId);
+    c.set('authClientId', resolvedClientId);
+    c.set('tokenPayload', resolvedTokenPayload);
 
     await next();
   };

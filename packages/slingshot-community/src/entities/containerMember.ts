@@ -37,7 +37,7 @@ export const ContainerMember = defineEntity('ContainerMember', {
   uniques: [{ fields: ['containerId', 'userId'] }],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
 
     list: { auth: 'none' },
 

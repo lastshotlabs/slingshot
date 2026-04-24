@@ -181,9 +181,6 @@ function resolveOperationValue(
   for (const prefix of prefixes) {
     if (!value.startsWith(prefix)) continue;
     const key = value.slice(prefix.length);
-    if (key === 'authUserId') return params['actor.id'];
-    if (key === 'tenantId') return params['actor.tenantId'];
-    if (key === 'sessionId') return params['actor.sessionId'];
     return params[key];
   }
   return value;
@@ -689,16 +686,18 @@ async function preparePlannedExecution(
       const ctxOverrides: Record<string, unknown> = {};
       if (actor.id != null) {
         ctxOverrides['actor.id'] = actor.id;
-        ctxOverrides['authUserId'] = actor.id;
       }
       if (actor.tenantId != null) {
         ctxOverrides['actor.tenantId'] = actor.tenantId;
-        ctxOverrides['tenantId'] = actor.tenantId;
       }
       ctxOverrides['actor.kind'] = actor.kind;
       if (actor.sessionId != null) {
         ctxOverrides['actor.sessionId'] = actor.sessionId;
-        ctxOverrides['sessionId'] = actor.sessionId;
+      }
+      // Request-scoped tenant for `param:tenantId` bindings.
+      const requestTenantId = (c.get('tenantId') as string | null | undefined) ?? null;
+      if (requestTenantId != null) {
+        ctxOverrides['tenantId'] = requestTenantId;
       }
       const mergedInput = {
         ...parsedQueryRecord,
@@ -987,7 +986,7 @@ function createPlannedRouteDefinition(
  * - `actor.id` / `actor.tenantId` / `actor.kind` / `actor.sessionId` — projected from the canonical request actor
  *
  * This allows transaction step bindings like `'param:actor.id'`, `'param:actor.tenantId'`,
- * `'param:authUserId'`, `'param:tenantId'`, and `'param:id'` to resolve from server-side
+ * `'param:actor.sessionId'`, and `'param:id'` to resolve from server-side
  * context or URL params rather than requiring the client to supply them in the request body.
  * Context values always win — clients cannot override them.
  * @returns The router (either `existingRouter` or the newly created one).
@@ -1198,16 +1197,18 @@ export function buildBareEntityRoutes<
       const ctxOverrides: Record<string, unknown> = {};
       if (actor.id != null) {
         ctxOverrides['actor.id'] = actor.id;
-        ctxOverrides['authUserId'] = actor.id;
       }
       if (actor.tenantId != null) {
         ctxOverrides['actor.tenantId'] = actor.tenantId;
-        ctxOverrides['tenantId'] = actor.tenantId;
       }
       ctxOverrides['actor.kind'] = actor.kind;
       if (actor.sessionId != null) {
         ctxOverrides['actor.sessionId'] = actor.sessionId;
-        ctxOverrides['sessionId'] = actor.sessionId;
+      }
+      // Request-scoped tenant for `param:tenantId` bindings.
+      const requestTenantId = (c.get('tenantId') as string | null | undefined) ?? null;
+      if (requestTenantId != null) {
+        ctxOverrides['tenantId'] = requestTenantId;
       }
       const params = { ...queryParams, ...bodyRecord, ...pathParams, ...ctxOverrides };
 

@@ -264,7 +264,9 @@ export async function createHarness(opts?: {
   const routeAuth: RouteAuthRegistry = {
     userAuth: (async (c, next) => {
       const uid = c.req.header('x-test-user') ?? userId;
-      (c as unknown as { set(k: string, v: unknown): void }).set('authUserId', uid);
+      const setter = c as unknown as { set(k: string, v: unknown): void };
+      setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
+      setter.set('authUserId', uid);
       await next();
     }) as MiddlewareHandler,
     requireRole: () => async (_c, next) => next(),
@@ -272,8 +274,10 @@ export async function createHarness(opts?: {
 
   app.use('*', async (c, next) => {
     const uid = c.req.header('x-test-user') ?? userId;
-    (c as unknown as { set(k: string, v: unknown): void }).set('authUserId', uid);
-    (c as unknown as { set(k: string, v: unknown): void }).set('slingshotCtx', { routeAuth });
+    const setter = c as unknown as { set(k: string, v: unknown): void };
+    setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
+    setter.set('authUserId', uid);
+    setter.set('slingshotCtx', { routeAuth });
     await next();
   });
 

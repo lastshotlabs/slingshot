@@ -447,11 +447,13 @@ export async function createChatTestApp(
   };
 
   app.use('*', async (c, next) => {
-    // Set authUserId from test headers for encryption stub routes.
+    // Set actor from test headers for encryption stub routes.
     // Entity routes set it via routeAuth.userAuth.
     const uid = c.req.header('x-user-id') ?? c.req.header('x-test-user');
     if (uid) {
-      (c as typeof c & { set(key: string, value: unknown): void }).set('authUserId', uid);
+      const setter = c as typeof c & { set(key: string, value: unknown): void };
+      setter.set('actor', { id: uid, kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} });
+      setter.set('authUserId', uid);
     }
     (c as typeof c & { set(key: string, value: unknown): void }).set('slingshotCtx', {
       routeAuth,

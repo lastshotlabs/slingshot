@@ -36,6 +36,26 @@ export interface PluginSetupContext {
 }
 
 /**
+ * Context passed to the `seed()` lifecycle phase.
+ *
+ * Provides `manifestSeed` (the raw manifest seed object) and `seedState` (a
+ * shared cross-plugin map for passing created IDs between plugins during seeding).
+ * Plugins access runtime services through `pluginState` on the app context.
+ */
+export interface PluginSeedContext {
+  /** The Hono app instance — used to access pluginState and other context. */
+  app: Hono<AppEnv>;
+  /** The instance-owned event bus. */
+  bus: SlingshotEventBus;
+  /** Registry-backed event publisher shared across all plugins. */
+  events: SlingshotEvents;
+  /** Raw manifest seed data. Each plugin reads the keys it owns. */
+  manifestSeed: Record<string, unknown>;
+  /** Shared cross-plugin state for seed coordination (e.g. user IDs by email). */
+  seedState: Map<string, unknown>;
+}
+
+/**
  * The core plugin contract for Slingshot framework plugins.
  *
  * Plugins extend the framework by implementing one or more lifecycle phase methods.
@@ -170,6 +190,17 @@ export interface SlingshotPlugin {
    * the framework calls only the phase methods, never `setup()`.
    */
   setup?(ctx: PluginSetupContext): void | Promise<void>;
+
+  /**
+   * Run idempotent seed operations after the server has fully started.
+   *
+   * Called in dependency order by the framework when manifest seed data is
+   * present. Each plugin reads the keys it owns from `manifestSeed` and
+   * writes cross-plugin references (e.g. created user IDs) to `seedState`.
+   *
+   * Must be idempotent — safe to call on every boot.
+   */
+  seed?(ctx: PluginSeedContext): void | Promise<void>;
 
   /**
    * Tear down plugin resources when the server shuts down.

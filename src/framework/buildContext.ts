@@ -5,7 +5,6 @@
  * accessible from all middleware and route handlers via c.get('slingshotCtx').
  * Also owns the clear() and destroy() lifecycle methods.
  */
-import type { PermissionsConfig } from '@config/types/permissions';
 import type { UploadConfig } from '@config/types/upload';
 import type { InfrastructureResult } from '@framework/createInfrastructure';
 import { closeMetricsQueues, resetMetrics } from '@framework/metrics/registry';
@@ -16,7 +15,6 @@ import { runPluginTeardown } from '@framework/runPluginLifecycle';
 import type { ResolvedSecretBundle } from '@framework/secrets/resolveSecretBundle';
 import type { OpenAPIHono } from '@hono/zod-openapi';
 import type { SigningConfig } from '@lib/signingConfig';
-import { getAuthRuntimeContextOrNull } from '@lastshotlabs/slingshot-auth';
 import type {
   CaptchaConfig,
   CoreRegistrarSnapshot,
@@ -27,10 +25,8 @@ import type {
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
-  PERMISSIONS_STATE_KEY,
   createDefaultIdentityResolver,
   deepFreeze,
-  resolveRepoAsync,
 } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
@@ -220,8 +216,6 @@ export interface BuildContextParams {
   events: SlingshotEvents;
   kafkaConnectors?: KafkaConnectorHandle;
   secretBundle: ResolvedSecretBundle;
-  /** Server-level permissions config. When set, bootstrap runs before plugin setup. */
-  permissions?: PermissionsConfig;
 }
 
 type ShutdownSignal = 'SIGTERM' | 'SIGINT';
@@ -370,42 +364,6 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
   // plugins that read frameworkConfig.storeInfra in setupRoutes/setupPost get the
   // fully-decorated version, not the bare one set during createInfrastructure.
   infra.frameworkConfig.storeInfra = storeInfra;
-
-  // Bootstrap server-level permissions if configured.
-  // Runs before context is attached to the app, so all plugin lifecycle phases
-  // (setupMiddleware, setupRoutes, setupPost, setup) can read from pluginState.
-  if (params.permissions) {
-    let slingshotPermissions: typeof import('@lastshotlabs/slingshot-permissions');
-    try {
-      slingshotPermissions = await import('@lastshotlabs/slingshot-permissions');
-    } catch {
-      throw new Error(
-        '[slingshot] permissions config requires @lastshotlabs/slingshot-permissions. ' +
-          'Run: bun add @lastshotlabs/slingshot-permissions',
-      );
-    }
-
-    const {
-      permissionsAdapterFactories,
-      createAuthGroupResolver,
-      createPermissionRegistry,
-      createPermissionEvaluator,
-    } = slingshotPermissions;
-
-    const adapter = await resolveRepoAsync(
-      permissionsAdapterFactories,
-      params.permissions.adapter,
-      storeInfra,
-    );
-    const registry = createPermissionRegistry();
-    const evaluator = createPermissionEvaluator({
-      registry,
-      adapter,
-      groupResolver: createAuthGroupResolver(() => getAuthRuntimeContextOrNull(pluginState)),
-    });
-
-    pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));
-  }
 
   const ctx: SlingshotContext = {
     app,

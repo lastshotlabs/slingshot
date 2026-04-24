@@ -17,7 +17,7 @@ import {
   requireUserAuth,
 } from '../../src/guards';
 import { defineHandler } from '../../src/handler';
-import { createDefaultIdentityResolver } from '../../src/identity';
+import { ANONYMOUS_ACTOR, createDefaultIdentityResolver, type Actor } from '../../src/identity';
 import { mount, toRoute, toRouteHandler } from '../../src/mount';
 
 function createContextFixture(overrides: Record<string, unknown> = {}) {
@@ -60,16 +60,24 @@ function createArgs(
     authUserId: string | null;
     tenantId: string | null;
     idempotencyKey: string | undefined;
+    actor: Actor;
   }> = {},
 ) {
+  const authUserId = 'authUserId' in overrides ? (overrides.authUserId ?? null) : 'user-1';
+  const tenantId = overrides.tenantId ?? 'tenant-1';
+  const actor: Actor = overrides.actor ?? (authUserId
+    ? { id: authUserId, kind: 'user', tenantId, sessionId: null, roles: null, claims: {} }
+    : ANONYMOUS_ACTOR);
   return {
     ctx,
     input,
     handlerName: 'items.update',
     meta: {
       requestId: 'req-1',
-      tenantId: overrides.tenantId ?? 'tenant-1',
-      authUserId: 'authUserId' in overrides ? (overrides.authUserId ?? null) : 'user-1',
+      actor,
+      requestTenantId: tenantId,
+      tenantId,
+      authUserId,
       correlationId: 'corr-1',
       ip: '127.0.0.1',
       ...(overrides.idempotencyKey ? { idempotencyKey: overrides.idempotencyKey } : {}),

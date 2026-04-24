@@ -26,7 +26,7 @@ import {
   type PushPluginConfig,
   pushPluginConfigSchema,
 } from './types/config';
-import { getUserAuthAccountGuardFailure } from './userAuthAccountGuard';
+import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
 
 function parseServiceAccount(value: FirebaseServiceAccount | string): FirebaseServiceAccount {
   if (typeof value !== 'string') return value;
@@ -104,30 +104,37 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
 
       const requireUserAuth: MiddlewareHandler = async (c, next) => {
         const slingshotCtx = c.get('slingshotCtx') as
-          | { routeAuth?: { userAuth?: MiddlewareHandler } }
+          | { routeAuth?: RouteAuthRegistry }
           | undefined;
-        const userAuth = slingshotCtx?.routeAuth?.userAuth;
-        if (!userAuth) {
+        const routeAuth = slingshotCtx?.routeAuth;
+        if (!routeAuth?.userAuth) {
           return c.json({ error: 'Unauthorized' }, 401);
         }
-        return userAuth(c, async () => {
-          const authUserId = getActorId(c);
-          if (typeof authUserId !== 'string' || authUserId.length === 0) {
+        return routeAuth.userAuth(c, async () => {
+          const userId = getActorId(c);
+          if (!userId) {
             c.res = c.json({ error: 'Unauthorized' }, 401);
             return;
           }
-          const guardFailure = await getUserAuthAccountGuardFailure(c);
-          if (guardFailure) {
-            c.res = c.json({ error: guardFailure.error }, guardFailure.status);
-            return;
+          if (routeAuth.postGuards) {
+            for (const guard of routeAuth.postGuards) {
+              const failure = await guard(c);
+              if (failure) {
+                c.res = c.json(
+                  { error: failure.error, message: failure.message },
+                  failure.status,
+                );
+                return;
+              }
+            }
           }
           await next();
         });
       };
 
       app.post(`${config.mountPath}/topics/:topicName/subscribe`, requireUserAuth, async c => {
-        const authUserId = getActorId(c);
-        if (typeof authUserId !== 'string' || !subscriptionsRef || !topicsRef || !membershipsRef) {
+        const userId = getActorId(c);
+        if (!userId || !subscriptionsRef || !topicsRef || !membershipsRef) {
           return c.json({ error: 'Unauthorized' }, 401);
         }
         const tenantId = getActorTenantId(c) ?? '';
@@ -140,7 +147,7 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
           name: topicName,
         });
         const subscription = await subscriptionsRef.findByDevice({
-          userId: authUserId,
+          userId,
           tenantId,
           deviceId: body.deviceId,
         });
@@ -149,15 +156,15 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
         await membershipsRef.ensureMembership({
           topicId: topic.id,
           subscriptionId: subscription.id,
-          userId: authUserId,
+          userId,
           tenantId,
         });
         return c.json({ ok: true }, 200);
       });
 
       app.post(`${config.mountPath}/topics/:topicName/unsubscribe`, requireUserAuth, async c => {
-        const authUserId = getActorId(c);
-        if (typeof authUserId !== 'string' || !subscriptionsRef || !topicsRef || !membershipsRef) {
+        const userId = getActorId(c);
+        if (!userId || !subscriptionsRef || !topicsRef || !membershipsRef) {
           return c.json({ error: 'Unauthorized' }, 401);
         }
         const tenantId = getActorTenantId(c) ?? '';
@@ -171,7 +178,7 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
         if (!topic) return c.json({ ok: true }, 200);
 
         const subscription = await subscriptionsRef.findByDevice({
-          userId: authUserId,
+          userId,
           tenantId,
           deviceId: body.deviceId,
         });
@@ -185,12 +192,12 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
       });
 
       app.post(`${config.mountPath}/ack/:deliveryId`, requireUserAuth, async c => {
-        const authUserId = getActorId(c);
-        if (typeof authUserId !== 'string' || !deliveriesRef) {
+        const userId = getActorId(c);
+        if (!userId || !deliveriesRef) {
           return c.json({ error: 'Unauthorized' }, 401);
         }
         const deliveryId = c.req.param('deliveryId');
-        const delivery = await deliveriesRef.markDelivered({ id: deliveryId, authUserId });
+        const delivery = await deliveriesRef.markDelivered({ id: deliveryId, 'actor.id': userId });
         if (!delivery) return c.json({ error: 'Not found' }, 404);
 
         if (subscriptionsRef) {

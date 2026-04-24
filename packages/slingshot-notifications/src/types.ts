@@ -40,18 +40,18 @@ export interface NotificationAdapter {
   delete(id: string): Promise<boolean>;
   list(opts?: Record<string, unknown>): Promise<PaginatedResult<NotificationRecord>>;
   clear(): Promise<void>;
-  listByUser(params: { authUserId: string }): Promise<PaginatedResult<NotificationRecord>>;
-  listUnread(params: { authUserId: string }): Promise<PaginatedResult<NotificationRecord>>;
-  markRead(params: { id: string; authUserId: string }): Promise<NotificationRecord | null>;
-  markAllRead(params: { authUserId: string }): Promise<{ count: number } | number>;
-  unreadCount(params: { authUserId: string }): Promise<{ count: number }>;
-  unreadCountBySource(params: { authUserId: string; source: string }): Promise<{ count: number }>;
+  listByUser(params: { userId: string }): Promise<PaginatedResult<NotificationRecord>>;
+  listUnread(params: { userId: string }): Promise<PaginatedResult<NotificationRecord>>;
+  markRead(params: { id: string; userId: string }): Promise<NotificationRecord | null>;
+  markAllRead(params: { userId: string }): Promise<{ count: number } | number>;
+  unreadCount(params: { userId: string }): Promise<{ count: number }>;
+  unreadCountBySource(params: { userId: string; source: string }): Promise<{ count: number }>;
   unreadCountByScope(params: {
-    authUserId: string;
+    userId: string;
     source: string;
     scopeId: string;
   }): Promise<{ count: number }>;
-  hasUnreadByDedupKey(params: { authUserId: string; dedupKey: string }): Promise<boolean>;
+  hasUnreadByDedupKey(params: { userId: string; dedupKey: string }): Promise<boolean>;
   findByDedupKey(params: { userId: string; dedupKey: string }): Promise<NotificationRecord | null>;
   listPendingDispatch(params: { limit: number; now: Date }): Promise<NotificationRecord[]>;
   markDispatched(params: { id: string; dispatchedAt: Date }): Promise<void>;
@@ -65,7 +65,7 @@ export interface NotificationPreferenceAdapter {
   list(opts?: Record<string, unknown>): Promise<PaginatedResult<NotificationPreferenceRecord>>;
   clear(): Promise<void>;
   listByUser(params: {
-    authUserId: string;
+    userId: string;
   }): Promise<PaginatedResult<NotificationPreferenceRecord>>;
   resolveForNotification(params: { userId: string }): Promise<NotificationPreferenceRecord[]>;
 }

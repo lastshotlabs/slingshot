@@ -32,7 +32,7 @@ export const pollOperations = defineOperations(Poll, {
     to: true,
     match: { id: 'param:id' },
     set: {
-      closedBy: 'param:authUserId',
+      closedBy: 'param:actor.id',
       closedAt: 'now',
     },
   }),
@@ -43,7 +43,7 @@ export const pollOperations = defineOperations(Poll, {
  *
  * - `listByPoll` — all votes for a given poll.
  * - `myVotes` — the authenticated user's votes on a specific poll.
- *   Uses `param:authUserId` (injected from Hono context by the framework)
+ *   Uses `param:actor.id` (injected from Hono context by the framework)
  *   so the userId is never taken from the URL.
  * - `countByOption` — aggregate vote count grouped by option index.
  */
@@ -54,7 +54,7 @@ export const pollVoteOperations = defineOperations(PollVote, {
   }),
 
   myVotes: op.lookup({
-    fields: { pollId: 'param:pollId', userId: 'param:authUserId' },
+    fields: { pollId: 'param:pollId', userId: 'param:actor.id' },
     returns: 'many',
   }),
 

@@ -29,6 +29,8 @@ export interface EventPublishContext {
   requestId?: string;
   correlationId?: string;
   source?: 'http' | 'system' | 'job' | 'connector';
+  /** Request-scoped tenant ID from tenant-resolution middleware. */
+  requestTenantId?: string | null;
 }
 
 export interface EventSubscriptionPrincipal {

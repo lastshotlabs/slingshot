@@ -153,6 +153,28 @@ function attachSlingshotCtx(
     if (options.authRuntime) {
       pluginState.set('slingshot-auth', options.authRuntime);
     }
+    const postGuards = options.authRuntime
+      ? [
+          async (c: Context) => {
+            const actorId = getActorId(c as Context<AppEnv>);
+            if (!actorId) return null;
+            const rt = options.authRuntime!;
+            const suspensionStatus = await rt.adapter.getSuspended(actorId);
+            if (suspensionStatus?.suspended) {
+              return { error: 'ACCOUNT_SUSPENDED', message: 'Account is suspended', status: 403 as const };
+            }
+            const requiresVerifiedEmail =
+              rt.config?.primaryField === 'email' && rt.config.emailVerification?.required === true;
+            if (requiresVerifiedEmail && rt.adapter.getEmailVerified) {
+              const verified = await rt.adapter.getEmailVerified(actorId);
+              if (!verified) {
+                return { error: 'EMAIL_NOT_VERIFIED', message: 'Email not verified', status: 403 as const };
+              }
+            }
+            return null;
+          },
+        ]
+      : undefined;
     const slingshotCtx = {
       tenantId: options.tenantId,
       pluginState,
@@ -162,6 +184,7 @@ function attachSlingshotCtx(
           await nextAuth();
         },
         requireRole: () => async (_c: Context, nextAuth: Next) => nextAuth(),
+        postGuards,
       },
       persistence: {
         idempotency: {
@@ -873,7 +896,6 @@ describe('named operation inference — HTTP round-trip', () => {
         Promise.resolve({
           actorId: params['actor.id'],
           actorTenantId: params['actor.tenantId'],
-          legacyAuthUserId: params.authUserId,
           legacyTenantId: params.tenantId,
         }),
     };
@@ -918,7 +940,6 @@ describe('named operation inference — HTTP round-trip', () => {
     expect(await res.json()).toEqual({
       actorId: 'user-1',
       actorTenantId: 'tenant-actor',
-      legacyAuthUserId: 'user-1',
       legacyTenantId: 'tenant-actor',
     });
   });
@@ -954,7 +975,7 @@ describe('named operation inference — HTTP round-trip', () => {
     );
 
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: 'Account suspended' });
+    expect(await res.json()).toEqual({ error: 'ACCOUNT_SUSPENDED', message: 'Account is suspended' });
     expect(records.size).toBe(0);
   });
 
@@ -992,7 +1013,7 @@ describe('named operation inference — HTTP round-trip', () => {
     );
 
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: 'Email not verified' });
+    expect(await res.json()).toEqual({ error: 'EMAIL_NOT_VERIFIED', message: 'Email not verified' });
     expect(records.size).toBe(0);
   });
 

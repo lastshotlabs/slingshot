@@ -316,6 +316,46 @@ export async function runPluginPost(
 }
 
 /**
+ * Run the `seed()` phase for all sorted plugins in dependency order.
+ *
+ * Called after the server is fully started when manifest seed data is present.
+ * Each plugin reads the keys it owns from `manifestSeed` and writes
+ * cross-plugin references (e.g. created user IDs) to the shared `seedState`
+ * map. Must be idempotent — safe to call on every boot.
+ *
+ * @param sortedPlugins - Plugins in topological order.
+ * @param app - The fully-assembled `OpenAPIHono` app instance.
+ * @param bus - The instance-owned `SlingshotEventBus`.
+ * @param events - The event publisher shared across all plugins.
+ * @param manifestSeed - Raw manifest seed data.
+ * @param tracer - Optional OTel tracer.
+ */
+export async function runPluginSeed(
+  sortedPlugins: readonly SlingshotPlugin[],
+  app: OpenAPIHono<AppEnv>,
+  bus: SlingshotEventBus,
+  events: SlingshotEvents,
+  manifestSeed: Record<string, unknown>,
+  tracer?: Tracer,
+): Promise<void> {
+  const seedState = new Map<string, unknown>();
+  for (const plugin of sortedPlugins) {
+    const seed = plugin.seed?.bind(plugin);
+    if (seed) {
+      if (tracer) {
+        await withSpan(tracer, `slingshot.plugin.${plugin.name}.seed`, async span => {
+          span.setAttribute('slingshot.plugin.name', plugin.name);
+          span.setAttribute('slingshot.plugin.phase', 'seed');
+          await seed({ app, bus, events, manifestSeed, seedState });
+        });
+      } else {
+        await seed({ app, bus, events, manifestSeed, seedState });
+      }
+    }
+  }
+}
+
+/**
  * Run `teardown()` for all plugins in reverse setup order (last-in, first-out).
  *
  * Every plugin's `teardown()` is called regardless of whether earlier teardowns

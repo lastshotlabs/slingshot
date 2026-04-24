@@ -62,6 +62,74 @@ Entity runtime assembly now has a few explicit invariants:
 - extra routes and generated overrides can declare typed request schemas and OpenAPI response metadata
 - the manual router escape hatch still exists in plugin `setupRoutes`, but it should be for routes that do not fit the entity shell rather than a default workaround
 
+## Consumer Shape Hardening
+
+Entity definitions support configurable system fields, storage field mapping, and storage
+conventions so consumers are not locked into first-party naming assumptions.
+
+### System Fields
+
+`systemFields` on `EntityConfig` lets consumers rename audit and ownership fields:
+
+```ts
+defineEntity('Task', {
+  fields: { ... },
+  systemFields: {
+    createdBy: 'author',
+    updatedBy: 'lastEditor',
+    ownerField: 'assignee',
+    tenantField: 'workspace',
+    version: 'rev',
+  },
+});
+```
+
+### Storage Field Mapping
+
+`storageFields` on `EntityConfig` lets consumers rename backend-specific fields:
+
+```ts
+defineEntity('Task', {
+  fields: { ... },
+  storageFields: {
+    mongoPkField: 'pk',       // default: '_id'
+    ttlField: 'expiresAt',    // default: '_expires_at'
+  },
+});
+```
+
+### Storage Conventions
+
+`conventions` on `EntityConfig` opens ID generation, on-update strategies, and Redis key
+format beyond the built-in defaults:
+
+```ts
+defineEntity('Task', {
+  fields: { ... },
+  conventions: {
+    redisKey: ({ appName, storageName, pk }) => `${appName}/${storageName}/${pk}`,
+    autoDefault: (kind) => kind === 'ulid' ? generateUlid() : undefined,
+    onUpdate: (kind) => kind === 'increment' ? computeNextVersion() : undefined,
+  },
+});
+```
+
+Built-in defaults: Redis key is `${storageName}:${appName}:${pk}`, auto-default handles
+`'uuid'`/`'cuid'`/`'now'`, on-update handles `'now'`. Custom resolvers return `undefined`
+to fall through to the built-in handler.
+
+### Manifest Helper Field Mapping
+
+`autoGrant` and `activityLog` manifest helpers resolve payload fields from entity metadata
+(`_pkField`, `_systemFields.tenantField`) instead of hardcoding `id` and `orgId`. Explicit
+config (`resourceIdField`, `tenantIdField`, `actorIdFields`) overrides resolved defaults.
+
+### Operation Registry
+
+Policy and data-scope logic resolves operation semantics through a centralized registry
+instead of scattered `CRUD_OPS` sets and switch statements. Built-in CRUD operations are
+registered by default; named operations resolve through the same pipeline.
+
 ## Relationship To Other Packages
 
 - `slingshot-core` owns the canonical contracts and shared type families.

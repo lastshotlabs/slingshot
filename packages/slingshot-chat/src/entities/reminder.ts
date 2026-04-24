@@ -29,7 +29,7 @@ export const Reminder = defineEntity('Reminder', {
   indexes: [index(['userId', 'triggered']), index(['triggerAt', 'triggered'])],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'userId', from: 'ctx:authUserId' },
+    dataScope: { field: 'userId', from: 'ctx:actor.id' },
     get: {},
     list: {},
     create: {
@@ -51,7 +51,7 @@ export const Reminder = defineEntity('Reminder', {
 export const reminderOperations = defineOperations(Reminder, {
   /** Untriggered reminders for the calling user. */
   listPending: op.lookup({
-    fields: { userId: 'param:authUserId', triggered: false },
+    fields: { userId: 'param:actor.id', triggered: false },
     returns: 'many',
   }),
 

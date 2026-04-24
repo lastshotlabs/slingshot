@@ -27,7 +27,7 @@ export const Block = defineEntity('Block', {
   indexes: [index(['blockerId', 'blockedId'], { unique: true }), index(['blockerId'])],
   routes: {
     defaults: { auth: 'userAuth' },
-    dataScope: { field: 'blockerId', from: 'ctx:authUserId' },
+    dataScope: { field: 'blockerId', from: 'ctx:actor.id' },
     get: { auth: 'userAuth' },
     list: { auth: 'userAuth' },
     create: {

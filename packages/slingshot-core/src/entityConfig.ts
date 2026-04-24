@@ -780,6 +780,12 @@ export interface EntityConfig<F extends Record<string, FieldDef> = Record<string
   /** Declarative route configuration. When set, route generation includes auth,
    *  permissions, rate limits, events, and middleware. */
   readonly routes?: import('./entityRouteConfig').EntityRouteConfig;
+  /** Consumer-configurable system field name overrides. */
+  readonly systemFields?: EntitySystemFields;
+  /** Storage-level field name overrides for backend adapters. */
+  readonly storageFields?: EntityStorageFieldMap;
+  /** Storage convention overrides (Redis key format, custom ID/default generators, etc.). */
+  readonly conventions?: EntityStorageConventions;
 }
 
 // ============================================================================
@@ -994,15 +1000,250 @@ export interface EntityAdapter<Entity, CreateInput, UpdateInput> {
 }
 
 // ============================================================================
+// Entity system fields and storage field mapping
+// ============================================================================
+
+/**
+ * Consumer-configurable system field names for an entity.
+ *
+ * Allows consumers to rename framework-assumed field names to match their
+ * domain model. All fields have sensible defaults when omitted.
+ *
+ * @example
+ * ```ts
+ * const Order = defineEntity('Order', {
+ *   systemFields: {
+ *     createdBy: 'authorId',
+ *     tenantField: 'organizationId',
+ *   },
+ *   fields: { ... },
+ * });
+ * ```
+ */
+export interface EntitySystemFields {
+  /** Created-by field name. Default: `'createdBy'`. */
+  readonly createdBy?: string;
+  /** Updated-by field name. Default: `'updatedBy'`. */
+  readonly updatedBy?: string;
+  /** Owner field name for permission checks. Default: `'ownerId'`. */
+  readonly ownerField?: string;
+  /** Tenant scoping field name. Default: derived from `tenant.field` or `'tenantId'`. */
+  readonly tenantField?: string;
+  /** Version/concurrency field name. Default: `'version'`. */
+  readonly version?: string;
+}
+
+/**
+ * Storage-level field name overrides for backend adapters.
+ *
+ * These control how domain fields are mapped to physical storage fields.
+ * All fields have sensible defaults when omitted.
+ *
+ * @example
+ * ```ts
+ * const Token = defineEntity('Token', {
+ *   storageFields: {
+ *     mongoPkField: '_tokenId',
+ *     ttlField: 'expires_at',
+ *   },
+ *   fields: { ... },
+ * });
+ * ```
+ */
+export interface EntityStorageFieldMap {
+  /** Mongo document primary key field. Default: `'_id'`. */
+  readonly mongoPkField?: string;
+  /** SQL/storage TTL expiry field. Default: `'_expires_at'`. */
+  readonly ttlField?: string;
+}
+
+/**
+ * Resolved (defaulted) system fields attached to `ResolvedEntityConfig`.
+ *
+ * All fields are guaranteed non-null — defaults are applied at definition time
+ * by `defineEntity()`. Adapters, route builders, and manifest helpers read
+ * these resolved names instead of hardcoding first-party conventions.
+ */
+export interface ResolvedEntitySystemFields {
+  /** Resolved created-by audit field name. */
+  readonly createdBy: string;
+  /** Resolved updated-by audit field name. */
+  readonly updatedBy: string;
+  /** Resolved owner field name for permission checks. */
+  readonly ownerField: string;
+  /** Resolved tenant scoping field name. */
+  readonly tenantField: string;
+  /** Resolved version/concurrency field name. */
+  readonly version: string;
+}
+
+/**
+ * Resolved (defaulted) storage field mapping attached to `ResolvedEntityConfig`.
+ *
+ * All fields are guaranteed non-null — defaults are applied at definition time
+ * by `defineEntity()`. Backend adapters read these resolved names instead of
+ * hardcoding storage-level field conventions.
+ */
+export interface ResolvedEntityStorageFieldMap {
+  /** Resolved Mongo document primary key field name. */
+  readonly mongoPkField: string;
+  /** Resolved SQL/storage TTL expiry column name. */
+  readonly ttlField: string;
+}
+
+// ============================================================================
+// Storage convention configuration
+// ============================================================================
+
+/**
+ * Custom auto-default resolver function for entity field defaults.
+ *
+ * Extends the built-in `'uuid' | 'cuid' | 'now'` auto-default sentinels with
+ * consumer-defined strategies. Called during record creation when a field's
+ * `default` value is a string that does not match a built-in sentinel.
+ *
+ * Return the generated value to use it, or `undefined` to signal that the
+ * sentinel is not recognized (which will throw an error).
+ *
+ * @param kind - The sentinel string from the field's `default` option.
+ * @returns The generated default value, or `undefined` if unrecognized.
+ *
+ * @example
+ * ```ts
+ * import { ulid } from 'ulid';
+ *
+ * const customAutoDefault: CustomAutoDefaultResolver = (kind) => {
+ *   if (kind === 'ulid') return ulid();
+ *   if (kind === 'snowflake') return generateSnowflake();
+ *   return undefined; // fall through to error for unknown sentinels
+ * };
+ * ```
+ */
+export type CustomAutoDefaultResolver = (kind: string) => unknown;
+
+/**
+ * Custom on-update resolver function for entity field update-time values.
+ *
+ * Extends the built-in `'now'` on-update sentinel with consumer-defined
+ * strategies. Called during record updates when a field's `onUpdate` value
+ * is a string that does not match `'now'`.
+ *
+ * Return the computed value to apply it, or `undefined` to skip the field.
+ *
+ * @param kind - The sentinel string from the field's `onUpdate` option.
+ * @returns The computed update-time value, or `undefined` to skip.
+ *
+ * @example
+ * ```ts
+ * const customOnUpdate: CustomOnUpdateResolver = (kind) => {
+ *   if (kind === 'increment') return 1; // adapter would add to existing
+ *   if (kind === 'timestamp') return Date.now(); // epoch millis instead of Date
+ *   return undefined;
+ * };
+ * ```
+ */
+export type CustomOnUpdateResolver = (kind: string) => unknown;
+
+/**
+ * Consumer-configurable storage convention overrides for an entity.
+ *
+ * Passed via `conventions` on `EntityConfig`. Allows consumers to customize
+ * how records are keyed in Redis, how IDs are generated, and how fields are
+ * updated without forking adapter code.
+ *
+ * All properties are optional. When omitted, the built-in defaults apply:
+ * - **Redis key format**: `${storageName}:${appName}:${pk}`
+ * - **ID generation**: `'uuid'`, `'cuid'`, `'now'` (built-in sentinels)
+ * - **On-update**: `'now'` (built-in sentinel)
+ *
+ * @example
+ * ```ts
+ * import { defineEntity, field } from '@lastshotlabs/slingshot-entity';
+ * import { ulid } from 'ulid';
+ *
+ * const Task = defineEntity('Task', {
+ *   fields: {
+ *     id: field.string({ primary: true, default: 'ulid' }),
+ *     name: field.string(),
+ *     updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
+ *   },
+ *   conventions: {
+ *     redisKey: ({ appName, storageName, pk }) => `${appName}/${storageName}/${pk}`,
+ *     autoDefault: (kind) => kind === 'ulid' ? ulid() : undefined,
+ *   },
+ * });
+ * ```
+ */
+export interface EntityStorageConventions {
+  /**
+   * Custom Redis key format function.
+   *
+   * When provided, the Redis adapter calls this function to compute the key
+   * for each record instead of using the default `${storageName}:${appName}:${pk}`
+   * format. The same function is also called with `pk: '*'` to derive the scan
+   * pattern for list/clear operations.
+   *
+   * @param args - Object containing `appName`, `storageName`, and `pk`.
+   * @returns The Redis key string.
+   */
+  readonly redisKey?: (args: {
+    appName: string;
+    storageName: string;
+    pk: string | number;
+  }) => string;
+  /**
+   * Custom auto-default resolver for non-built-in sentinel values.
+   *
+   * Called during `applyDefaults()` when a field's `default` is a string
+   * that is not one of `'uuid'`, `'cuid'`, or `'now'`.
+   *
+   * @see {@link CustomAutoDefaultResolver}
+   */
+  readonly autoDefault?: CustomAutoDefaultResolver;
+  /**
+   * Custom on-update resolver for non-built-in sentinel values.
+   *
+   * Called during `applyOnUpdate()` when a field's `onUpdate` is a string
+   * that is not `'now'`.
+   *
+   * @see {@link CustomOnUpdateResolver}
+   */
+  readonly onUpdate?: CustomOnUpdateResolver;
+}
+
+/**
+ * Resolved storage conventions attached to `ResolvedEntityConfig._conventions`.
+ *
+ * Mirrors {@link EntityStorageConventions} with the same optional shape.
+ * `undefined` fields mean "use built-in behavior". The resolved object is
+ * frozen at definition time and consumed by all backend adapters.
+ */
+export interface ResolvedEntityStorageConventions {
+  /** Resolved Redis key format function, or `undefined` for default format. */
+  readonly redisKey?: (args: {
+    appName: string;
+    storageName: string;
+    pk: string | number;
+  }) => string;
+  /** Resolved custom auto-default resolver, or `undefined` for built-in only. */
+  readonly autoDefault?: CustomAutoDefaultResolver;
+  /** Resolved custom on-update resolver, or `undefined` for built-in only. */
+  readonly onUpdate?: CustomOnUpdateResolver;
+}
+
+// ============================================================================
 // Resolved entity definition (output of defineEntity)
 // ============================================================================
 
 /**
  * The validated, frozen output of `defineEntity()`.
  *
- * Extends `EntityConfig` with two derived fields computed at definition time:
+ * Extends `EntityConfig` with derived fields computed at definition time:
  * - `_pkField` — the primary key field name
  * - `_storageName` — the table/collection name with namespace applied
+ * - `_systemFields` — resolved audit, ownership, and tenant field names
+ * - `_storageFields` — resolved Mongo PK and TTL column names
+ * - `_conventions` — resolved storage convention overrides (Redis key, ID gen, etc.)
  *
  * The object is deeply frozen — all nested configs are immutable after `defineEntity()` returns.
  *
@@ -1015,6 +1256,12 @@ export interface ResolvedEntityConfig<
   readonly _pkField: string;
   /** Table/collection name with namespace prefix applied. */
   readonly _storageName: string;
+  /** Resolved system field names with defaults applied. @see {@link ResolvedEntitySystemFields} */
+  readonly _systemFields: ResolvedEntitySystemFields;
+  /** Resolved storage field mapping with defaults applied. @see {@link ResolvedEntityStorageFieldMap} */
+  readonly _storageFields: ResolvedEntityStorageFieldMap;
+  /** Resolved storage convention overrides. @see {@link ResolvedEntityStorageConventions} */
+  readonly _conventions: ResolvedEntityStorageConventions;
 }
 
 // ============================================================================
@@ -1232,11 +1479,33 @@ export function defineEntity<F extends Record<string, FieldDef>>(
         : snake + 's';
   const storageName = namespace ? `${namespace}_${pluralName}` : pluralName;
 
+  const resolvedSystemFields: ResolvedEntitySystemFields = {
+    createdBy: config.systemFields?.createdBy ?? 'createdBy',
+    updatedBy: config.systemFields?.updatedBy ?? 'updatedBy',
+    ownerField: config.systemFields?.ownerField ?? 'ownerId',
+    tenantField: config.systemFields?.tenantField ?? config.tenant?.field ?? 'tenantId',
+    version: config.systemFields?.version ?? 'version',
+  };
+
+  const resolvedStorageFields: ResolvedEntityStorageFieldMap = {
+    mongoPkField: config.storageFields?.mongoPkField ?? '_id',
+    ttlField: config.storageFields?.ttlField ?? '_expires_at',
+  };
+
+  const resolvedConventions: ResolvedEntityStorageConventions = {
+    redisKey: config.conventions?.redisKey,
+    autoDefault: config.conventions?.autoDefault,
+    onUpdate: config.conventions?.onUpdate,
+  };
+
   const resolved: ResolvedEntityConfig<F> = {
     name,
     ...config,
     _pkField: pkField,
     _storageName: storageName,
+    _systemFields: resolvedSystemFields,
+    _storageFields: resolvedStorageFields,
+    _conventions: resolvedConventions,
   };
   deepFreezeEntity(resolved);
   return resolved;

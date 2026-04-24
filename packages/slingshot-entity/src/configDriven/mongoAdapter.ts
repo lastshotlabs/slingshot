@@ -111,6 +111,22 @@ function mongooseType(fieldType: FieldType, mg: MongooseModule): unknown {
 // Adapter implementation
 // ---------------------------------------------------------------------------
 
+/**
+ * Create a MongoDB-backed {@link EntityAdapter} for the given entity config.
+ *
+ * Lazily creates a Mongoose model from the entity config, including compound
+ * indexes, TTL expiration, soft-delete, cursor pagination, and tenant scoping.
+ * The PK field is mapped to the configured Mongo PK storage field
+ * (`config._storageFields.mongoPkField`, default `'_id'`).
+ *
+ * @param conn - The Mongoose connection to the MongoDB database.
+ * @param mongoosePkg - The Mongoose module, used to create schemas and models.
+ * @param config - The resolved entity config with fields, indexes, and conventions.
+ * @param operations - Optional named operation configs for the entity.
+ * @returns An {@link EntityAdapter} with CRUD methods backed by MongoDB.
+ *
+ * @see {@link EntityStorageFieldMap} for customising the Mongo PK field name.
+ */
 export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
   conn: Connection,
   mongoosePkg: MongooseModule,
@@ -119,7 +135,10 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
 ): EntityAdapter<Entity, CreateInput, UpdateInput> & Record<string, unknown> {
   const collectionName = storageName(config, 'mongo');
   const pkField = config._pkField;
+  const mongoPkField = config._storageFields.mongoPkField;
   const ttlSeconds = config.ttl?.defaultSeconds;
+  const customAutoDefault = config._conventions?.autoDefault;
+  const customOnUpdate = config._conventions?.onUpdate;
 
   const defaultLimit = config.pagination?.defaultLimit ?? 50;
   const maxLimit = config.pagination?.maxLimit ?? 200;
@@ -160,7 +179,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       const mType = mongooseType(def.type, mongoosePkg);
 
       if (def.primary) {
-        schemaDef['_id'] = { type: mType, required: true };
+        schemaDef[mongoPkField] = { type: mType, required: true };
         continue;
       }
 
@@ -274,7 +293,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       if (key === 'limit' || key === 'cursor' || key === 'sortDir') continue;
       if (!(key in config.fields)) continue;
 
-      const targetKey = config.fields[key].primary ? '_id' : key;
+      const targetKey = config.fields[key].primary ? mongoPkField : key;
       if (config.fields[key].type === 'date' && typeof val === 'string') {
         query[targetKey] = new Date(val);
       } else {
@@ -288,7 +307,11 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
   return {
     async create(input) {
       const Model = getModel();
-      const record = applyDefaults(input as Record<string, unknown>, config.fields);
+      const record = applyDefaults(
+        input as Record<string, unknown>,
+        config.fields,
+        customAutoDefault,
+      );
       const doc = toMongoDoc(record, config);
 
       if (ttlSeconds) {
@@ -311,7 +334,11 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       const Model = getModel();
       const query = { _id: id, ...baseFilter(), ...filterQuery(filter) };
 
-      const updatePayload = applyOnUpdate(input as Record<string, unknown>, config.fields);
+      const updatePayload = applyOnUpdate(
+        input as Record<string, unknown>,
+        config.fields,
+        customOnUpdate,
+      );
       const $set: Record<string, unknown> = {};
       for (const [name, val] of Object.entries(updatePayload)) {
         if (val !== undefined && !config.fields[name].primary) {
@@ -349,7 +376,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       const query = { _id: id, ...baseFilter(), ...filterQuery(filter) };
 
       if (config.softDelete) {
-        const onUpdatePayload = applyOnUpdate({}, config.fields);
+        const onUpdatePayload = applyOnUpdate({}, config.fields, customOnUpdate);
         const $set: Record<string, unknown> = {
           [config.softDelete.field]:
             'value' in config.softDelete ? config.softDelete.value : new Date(),
@@ -383,7 +410,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
           if (!(key in config.fields)) continue;
 
           if (config.fields[key].primary) {
-            query['_id'] = val;
+            query[mongoPkField] = val;
           } else {
             query[key] = val;
           }
@@ -397,7 +424,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
 
         if (cursorFields.length === 1) {
           const f = cursorFields[0];
-          const mongoField = config.fields[f].primary ? '_id' : f;
+          const mongoField = config.fields[f].primary ? mongoPkField : f;
           let cv = cursorValues[f];
           if (config.fields[f].type === 'date' && typeof cv === 'string') cv = new Date(cv);
           query[mongoField] = { [op]: cv };
@@ -408,13 +435,13 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
             const clause: Record<string, unknown> = {};
             for (let j = 0; j < i; j++) {
               const f = cursorFields[j];
-              const mongoField = config.fields[f].primary ? '_id' : f;
+              const mongoField = config.fields[f].primary ? mongoPkField : f;
               let cv = cursorValues[f];
               if (config.fields[f].type === 'date' && typeof cv === 'string') cv = new Date(cv);
               clause[mongoField] = cv;
             }
             const f = cursorFields[i];
-            const mongoField = config.fields[f].primary ? '_id' : f;
+            const mongoField = config.fields[f].primary ? mongoPkField : f;
             let cv = cursorValues[f];
             if (config.fields[f].type === 'date' && typeof cv === 'string') cv = new Date(cv);
             clause[mongoField] = { [op]: cv };
@@ -427,7 +454,7 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
       // Sort spec
       const sortSpec: Record<string, number> = {};
       for (const f of cursorFields) {
-        const mongoField = config.fields[f].primary ? '_id' : f;
+        const mongoField = config.fields[f].primary ? mongoPkField : f;
         sortSpec[mongoField] = sortDir === 'desc' ? -1 : 1;
       }
 

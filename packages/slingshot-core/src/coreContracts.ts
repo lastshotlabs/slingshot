@@ -1,4 +1,5 @@
-import type { MiddlewareHandler } from 'hono';
+import type { Context, MiddlewareHandler } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { IdentityResolver } from './identity';
 
 /**
@@ -45,7 +46,43 @@ export interface RouteAuthRegistry {
    * or the token is invalid/expired.
    */
   bearerAuth?: MiddlewareHandler;
+  /**
+   * Post-authentication guards invoked after `userAuth` succeeds but before
+   * the route handler runs.
+   *
+   * @remarks
+   * Guards run in registration order. The first guard that returns a non-null
+   * `PostAuthGuardFailure` short-circuits the request with that error response.
+   * If all guards return `null`, the request proceeds normally.
+   *
+   * Registered by the auth plugin during `setupPost`. Entity routes, package
+   * routes, and framework-owned routes iterate this array when `auth` is set
+   * to `'userAuth'`.
+   */
+  postGuards?: readonly PostAuthGuard[];
 }
+
+/**
+ * Result returned by a post-auth guard when the request should be rejected.
+ */
+export interface PostAuthGuardFailure {
+  /** Machine-readable error code (e.g. `'ACCOUNT_SUSPENDED'`). */
+  error: string;
+  /** Human-readable description suitable for API response bodies. */
+  message: string;
+  /** HTTP status code to return (e.g. `403`). */
+  status: ContentfulStatusCode;
+}
+
+/**
+ * A guard function invoked after auth middleware succeeds but before
+ * the route handler runs.
+ *
+ * Post-auth guards run in registration order. The first guard that returns
+ * a non-null `PostAuthGuardFailure` short-circuits the request with that
+ * error. If all guards return `null`, the request continues to the handler.
+ */
+export type PostAuthGuard = (c: Context<any, any>) => Promise<PostAuthGuardFailure | null>;
 
 /**
  * Resolves the authenticated user ID from a raw HTTP request.

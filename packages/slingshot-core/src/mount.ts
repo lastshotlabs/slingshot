@@ -1,6 +1,6 @@
 import { createRoute } from '@hono/zod-openapi';
 import type { Context, MiddlewareHandler } from 'hono';
-import { getActor } from './actorContext';
+import { getActor, getRequestTenantId } from './actorContext';
 import type { AppEnv } from './context';
 import { getSlingshotCtx } from './context';
 import type { SlingshotHandler } from './handler';
@@ -146,6 +146,7 @@ export function toRouteHandler(
     const meta: Partial<HandlerMeta> = {
       requestId: c.get('requestId'),
       actor,
+      requestTenantId: getRequestTenantId(c),
       // Legacy aliases projected from actor.
       tenantId: actor.tenantId,
       authUserId: actor.kind === 'user' ? actor.id : null,

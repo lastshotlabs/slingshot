@@ -634,6 +634,16 @@ export interface SlingshotContext {
   readonly pluginState: Map<string, unknown>;
 
   /**
+   * The sorted list of framework plugins registered with this app instance.
+   *
+   * @remarks
+   * Available after `createApp()` finishes. Used by post-startup lifecycle
+   * operations such as `runPluginSeed()`. Plugins appear in topological
+   * dependency order (same order as the framework lifecycle phases).
+   */
+  readonly plugins: readonly import('../plugin').SlingshotPlugin[];
+
+  /**
    * Frozen set of public-path patterns declared by registered plugins.
    *
    * @remarks
@@ -642,12 +652,6 @@ export interface SlingshotContext {
    * Patterns support exact matches and `*`-suffix prefix matches.
    */
   readonly publicPaths: ReadonlySet<string>;
-
-  /**
-   * Registered plugins for this application instance.
-   * Replaces the appMeta WeakMap — instance-scoped, no module-level state.
-   */
-  readonly plugins: readonly SlingshotPlugin[];
 
   /**
    * Event bus for cross-plugin communication.

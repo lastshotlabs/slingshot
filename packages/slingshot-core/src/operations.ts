@@ -813,7 +813,7 @@ export interface PipeOpConfig {
  *
  * The `value` binding is resolved at the HTTP layer before the executor is
  * called. Supported binding syntax:
- * - `'ctx:key'`   → read from Hono context (e.g. `'ctx:authUserId'`)
+ * - `'ctx:key'`   → read from Hono context (e.g. `'ctx:actor.id'`)
  * - `'param:key'` → read from URL path param
  * - `'input:key'` → read from JSON request body field
  * - literal       → constant value baked in
@@ -822,7 +822,7 @@ export interface PipeOpConfig {
  *
  * @example
  * ```ts
- * op.arrayPush({ field: 'watchers', value: 'ctx:authUserId', dedupe: true })
+ * op.arrayPush({ field: 'watchers', value: 'ctx:actor.id', dedupe: true })
  * op.arrayPush({ field: 'tags',     value: 'input:tag' })
  * ```
  */
@@ -856,7 +856,7 @@ export interface ArrayPushOpConfig {
  *
  * @example
  * ```ts
- * op.arrayPull({ field: 'watchers', value: 'ctx:authUserId' })
+ * op.arrayPull({ field: 'watchers', value: 'ctx:actor.id' })
  * op.arrayPull({ field: 'tags',     value: 'input:tag' })
  * ```
  */

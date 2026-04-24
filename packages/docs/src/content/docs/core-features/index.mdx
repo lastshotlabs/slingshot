@@ -1,0 +1,86 @@
+---
+title: Core Features
+description: Start from the thing you want to build, not the framework architecture
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+You do not need to learn the framework architecture to start building.
+
+Pick the feature you need right now. Each page shows working code you can paste, explains
+what you get for free, and links to deeper docs when you are ready.
+
+<CardGrid>
+  <LinkCard
+    title="Data and Entities"
+    href="/slingshot/core-features/data-and-entities/"
+    description="Define a model, get a full CRUD API with validation, OpenAPI docs, and swappable storage."
+  />
+  <LinkCard
+    title="Events and Fanout"
+    href="/slingshot/core-features/events-and-fanout/"
+    description="User signs up → welcome email + search index + admin notification. One event, zero coupling."
+  />
+  <LinkCard
+    title="Realtime"
+    href="/slingshot/core-features/realtime/"
+    description="Push live updates to browsers with SSE, or build chat and collaboration with WebSockets."
+  />
+  <LinkCard
+    title="Auth"
+    href="/slingshot/core-features/auth/"
+    description="Registration, login, JWT sessions, OAuth, MFA, and passkeys. Test with curl in 2 minutes."
+  />
+  <LinkCard
+    title="Permissions"
+    href="/slingshot/core-features/permissions/"
+    description="Users edit their own posts. Admins delete anything. One model across routes, entities, and realtime."
+  />
+  <LinkCard
+    title="Jobs and Orchestration"
+    href="/slingshot/core-features/jobs-and-orchestration/"
+    description="Send emails, process imports, retry API calls, run scheduled tasks — all off the request path."
+  />
+</CardGrid>
+
+## Build anything
+
+These features compose. A SaaS app uses entities + auth + permissions + events. A chat
+platform uses WebSockets + events + entities. A content pipeline uses entities + jobs +
+search. Pick the pieces you need.
+
+| You are building...                   | Start with                                                                                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A CRUD API                            | [Data and Entities](/slingshot/core-features/data-and-entities/)                                                                                  |
+| A SaaS with user accounts             | [Auth](/slingshot/core-features/auth/) + [Data and Entities](/slingshot/core-features/data-and-entities/)                                         |
+| A multi-tenant platform               | [Auth](/slingshot/core-features/auth/) + [Permissions](/slingshot/core-features/permissions/) + [Multi-Tenancy](/slingshot/guides/multi-tenancy/) |
+| A chat or collaboration app           | [Realtime](/slingshot/core-features/realtime/) + [Auth](/slingshot/core-features/auth/)                                                           |
+| A dashboard with live updates         | [Realtime](/slingshot/core-features/realtime/) + [Events](/slingshot/core-features/events-and-fanout/)                                            |
+| A platform with background processing | [Jobs](/slingshot/core-features/jobs-and-orchestration/) + [Events](/slingshot/core-features/events-and-fanout/)                                  |
+| A content or publishing platform      | [Data and Entities](/slingshot/core-features/data-and-entities/) + [Events](/slingshot/core-features/events-and-fanout/)                          |
+
+Or jump straight to a complete example: [Examples](/slingshot/examples/).
+
+## What is stable vs preview
+
+The core framework is the stable foundation:
+
+- `createServer()`, `createApp()` — app assembly
+- `definePackage(...)`, `domain(...)`, `route.*(...)` — package-first authoring
+- `defineEntity(...)`, `defineOperations(...)` — entity system
+- Events, WebSockets, SSE — built-in realtime
+
+Feature packages like auth, permissions, and orchestration are pre-1.0 and labeled **Preview**
+in the sidebar. They work and are actively used, but their API surfaces may change.
+
+Read [Maturity and Package Status](/slingshot/core-features/maturity-and-package-status/)
+before betting a product surface on a preview package.
+
+## When you want to understand the framework
+
+Once you have a feature working and want to understand how the pieces fit together:
+
+1. [Authoring Model](/slingshot/authoring-model/) — the canonical app → package → entity progression
+2. [App Roots and Runtime](/slingshot/app-authoring/) — `createServer`, config, context, middleware
+3. [Package-First Authoring](/slingshot/package-first/) — organizing code into composable packages
+4. [Entity System](/slingshot/entity-system/) — the full entity authoring and customization story

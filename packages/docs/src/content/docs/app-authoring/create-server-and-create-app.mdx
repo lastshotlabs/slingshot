@@ -1,69 +1,180 @@
 ---
 title: createServer and createApp
-description: App assembly first, server startup second
+description: How to start your app for production, testing, and custom hosting
 ---
 
-`createApp()` is the assembly step. `createServer()` is the normal production entrypoint that wraps
-that assembly in a running HTTP server.
+Every Slingshot app starts with one of two functions: `createServer()` for production, or
+`createApp()` for tests and custom hosting.
 
-## Use `createServer()` by default
+## createServer — the production entrypoint
 
 ```typescript title="src/index.ts"
 import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { blogPackage } from './packages/blog';
 
 await createServer({
   port: 3000,
-  routesDir: new URL('./routes', import.meta.url).pathname,
-  packages: [],
+  security: {
+    signing: { secret: process.env.JWT_SECRET! },
+    cors: { origin: 'https://myapp.com' },
+  },
+  db: {
+    default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
+  },
+  plugins: [
+    createAuthPlugin({ auth: { roles: ['user', 'admin'], defaultRole: 'user' } }),
+  ],
+  packages: [blogPackage],
 });
 ```
 
-This is the normal app entrypoint. It validates config, assembles the app, starts Bun's server,
-registers SSE and WebSocket transports, auto-loads workers, and wires graceful shutdown.
+`createServer()` does everything:
 
-## Use `createApp()` when you need the assembled app without the network server
+1. Validates your config
+2. Resolves secrets
+3. Connects databases
+4. Boots plugins and packages in dependency order
+5. Registers middleware, routes, and OpenAPI docs
+6. Starts the HTTP server
+7. Starts WebSocket and SSE transports
+8. Wires graceful shutdown
 
-```typescript title="test/setup.ts"
-import { createApp } from '@lastshotlabs/slingshot';
+Run it:
 
-const { app, ctx } = await createApp({
-  packages: [],
+```bash
+bun run src/index.ts
+```
+
+Your API is live at `http://localhost:3000`, docs at `http://localhost:3000/docs`.
+
+## createApp — for tests
+
+`createApp()` does everything except start the network server. Use it in tests:
+
+```typescript title="tests/blog.test.ts"
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { createApp, getContext } from '@lastshotlabs/slingshot';
+import { blogPackage } from '../src/packages/blog';
+
+describe('blog', () => {
+  let app: Awaited<ReturnType<typeof createApp>>['app'];
+  let ctx: ReturnType<typeof getContext>;
+
+  beforeEach(async () => {
+    const result = await createApp({
+      packages: [blogPackage],
+    });
+    app = result.app;
+    ctx = getContext(result.app);
+  });
+
+  test('GET /posts returns empty list', async () => {
+    const res = await app.request('/posts');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: unknown[] };
+    expect(body.items).toHaveLength(0);
+  });
+
+  test('POST /posts creates a post', async () => {
+    const res = await app.request('/posts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Hello', body: 'World' }),
+    });
+    expect(res.status).toBe(201);
+  });
 });
+```
 
-const response = await app.request('/health');
+No port binding, no network overhead. `app.request()` calls your routes in-process.
+
+## What each function returns
+
+### createServer
+
+Returns a promise that resolves when the server is running. The server process stays alive
+until shutdown (SIGTERM, SIGINT, or `ctx.destroy()`).
+
+### createApp
+
+Returns `{ app, ctx }`:
+
+| Property | What it is                                              |
+| -------- | ------------------------------------------------------- |
+| `app`    | The assembled Hono app — call `app.request()` for tests |
+| `ctx`    | The `SlingshotContext` — events, persistence, cleanup   |
+
+Use `ctx` for cleanup:
+
+```typescript
+// Reset in-memory state between tests
 await ctx.clear();
+
+// Tear down connections when done
 await ctx.destroy();
 ```
 
-This is the right choice for tests, custom hosting, or any case where you need the built app and
-its `SlingshotContext` directly.
+## When to use which
 
-## What `createApp()` owns
+| Scenario                      | Use              |
+| ----------------------------- | ---------------- |
+| Running your app in production | `createServer()` |
+| Running your app in dev        | `createServer()` |
+| Unit and integration tests     | `createApp()`    |
+| Custom server (e.g., Lambda)   | `createApp()`    |
+| Embedding in another framework | `createApp()`    |
 
-- validates app-level config
-- compiles `packages` into framework plugins
-- resolves secrets and infrastructure
-- creates the app-scoped `SlingshotContext`
-- registers middleware, routes, OpenAPI docs, and package/plugin post hooks
-- creates the default in-process event bus when you did not supply one
+## Minimal examples
 
-## What `createServer()` adds
+### Dev server with in-memory storage
 
-- Bun server startup and port binding
-- WebSocket endpoint startup and transport fan-out
-- SSE endpoint startup and registry fan-out
-- worker auto-loading
-- shutdown handling and context teardown
+```typescript
+await createServer({
+  port: 3000,
+  packages: [appPackage],
+});
+```
 
-## Rule of thumb
+No `db` config means in-memory storage. Data resets on restart.
 
-- App code should normally start at `createServer()`.
-- Tests and custom hosts should normally start at `createApp()`.
-- If you are reasoning about framework architecture, think in terms of `createApp()` first and
-  `createServer()` second.
+### Production server with Postgres
+
+```typescript
+await createServer({
+  port: Number(process.env.PORT ?? 3000),
+  security: {
+    signing: { secret: process.env.JWT_SECRET! },
+    cors: { origin: process.env.CORS_ORIGIN! },
+    csrf: { enabled: true },
+  },
+  db: {
+    default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
+  },
+  logging: { enabled: true },
+  metrics: { enabled: true },
+  plugins: [createAuthPlugin({ auth: { roles: ['user', 'admin'], defaultRole: 'user' } })],
+  packages: [blogPackage, adminPackage],
+});
+```
+
+### Lambda handler
+
+```typescript title="src/lambda.ts"
+import { createApp } from '@lastshotlabs/slingshot';
+import { blogPackage } from './packages/blog';
+
+const { app } = await createApp({
+  packages: [blogPackage],
+});
+
+export default app;
+```
+
+See [Lambda Guide](/slingshot/guides/lambda/) for the full setup.
 
 ## Next
 
-- [App Config](/slingshot/app-authoring/app-config/)
-- [Packages and Plugins](/slingshot/app-authoring/packages-and-plugins/)
-- [Context and Request Model](/slingshot/app-authoring/context-and-request-model/)
+- [App Config](/slingshot/app-authoring/app-config/) — all the config options
+- [Context and Request Model](/slingshot/app-authoring/context-and-request-model/) — app-scoped vs request-scoped state
+- [Testing](/slingshot/guides/testing/) — full testing guide with auth, entities, and SQLite

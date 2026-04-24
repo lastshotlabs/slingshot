@@ -1,0 +1,162 @@
+---
+title: Data and Entities
+description: Define a data model, get a full API — CRUD, validation, OpenAPI, and swappable storage
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+You want a backend API for your data. In most frameworks, that means writing route handlers,
+validation, error handling, and database queries for every resource by hand.
+
+In Slingshot, you define the model once and the framework generates the rest.
+
+## Your first entity
+
+```typescript
+import { createServer, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
+
+const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    done: field.boolean({ default: false }),
+  },
+});
+
+const appPackage = definePackage({
+  name: 'app',
+  entities: [entity({ config: Task })],
+});
+
+await createServer({ port: 3000, packages: [appPackage] });
+```
+
+That gives you five working routes:
+
+```bash
+# Create a task
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{ "title": "Ship v1" }'
+
+# List all tasks
+curl http://localhost:3000/tasks
+
+# Get one task
+curl http://localhost:3000/tasks/<id>
+
+# Update a task
+curl -X PATCH http://localhost:3000/tasks/<id> \
+  -H "Content-Type: application/json" \
+  -d '{ "done": true }'
+
+# Delete a task
+curl -X DELETE http://localhost:3000/tasks/<id>
+```
+
+Plus full OpenAPI docs at `http://localhost:3000/docs`.
+
+## Add domain behavior with operations
+
+CRUD is not always enough. A task tracker needs "complete" and "reopen" actions. A blog
+needs "publish" and "archive". These are operations:
+
+```typescript
+import { defineEntity, defineOperations, field, op } from '@lastshotlabs/slingshot';
+
+const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    status: field.enum(['todo', 'done'] as const, { default: 'todo' }),
+  },
+});
+
+const TaskOps = defineOperations(Task, {
+  complete: op.transition({
+    field: 'status',
+    from: 'todo',
+    to: 'done',
+    match: { id: 'param:id' },
+  }),
+  reopen: op.transition({
+    field: 'status',
+    from: 'done',
+    to: 'todo',
+    match: { id: 'param:id' },
+  }),
+});
+```
+
+```bash
+# Complete a task
+curl -X POST http://localhost:3000/tasks/<id>/complete
+
+# Reopen it
+curl -X POST http://localhost:3000/tasks/<id>/reopen
+```
+
+Operations show up in OpenAPI docs and respect the same auth and permission policies as
+generated CRUD routes.
+
+## Protect routes with auth
+
+Add `routes.defaults` to require authentication on all generated routes:
+
+```typescript
+const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    done: field.boolean({ default: false }),
+    authorId: field.string(),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' },
+  },
+});
+```
+
+Now every generated route requires a valid session. Anonymous requests get a `401`.
+
+<Aside type="tip">
+  You can set auth per-route too. See [Route Policy](/slingshot/entity-system/route-policy/) for
+  fine-grained control over auth, permissions, middleware, and rate limits on each generated route.
+</Aside>
+
+## Swap the storage backend
+
+Entities use in-memory storage by default — great for development. Switch to a real database
+with a one-line adapter change:
+
+```typescript
+entity({
+  config: Task,
+  operations: TaskOps,
+  adapter: 'sqlite', // or 'postgres', 'mongodb', 'redis'
+});
+```
+
+Your entity definition stays the same. Only the adapter changes. See
+[Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) for the full
+setup including connection config.
+
+## What you get built in
+
+- `GET`, `POST`, `PATCH`, `DELETE` CRUD routes
+- Request and response validation from your field definitions
+- OpenAPI generation
+- Route policy hooks for auth, permissions, middleware, and rate limits
+- Adapter-backed storage: memory, SQLite, Postgres, MongoDB, Redis
+
+## Go deeper
+
+- [Entity System](/slingshot/entity-system/) — the full authoring story
+- [defineEntity](/slingshot/entity-system/define-entity/) — fields, indexes, timestamps, and conventions
+- [Operations](/slingshot/entity-system/operations/) — lookups, transitions, and aggregates
+- [Route Policy](/slingshot/entity-system/route-policy/) — per-route auth, permissions, and middleware
+- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — backend setup and swapping
+- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customizing generated behavior

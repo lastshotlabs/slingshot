@@ -1,0 +1,128 @@
+---
+title: Authoring Model
+description: How Slingshot apps are structured — from app root to packages to entities
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+Every Slingshot app follows the same structure. Understanding it makes everything else click.
+
+## The three layers
+
+```
+createServer()                    ← app root: assembly, config, security
+  └── definePackage()             ← packages: feature boundaries
+        ├── entity()              ��� entities: generated CRUD + operations
+        ├── domain() + route.*()  ← routes: custom endpoints
+        └── capabilities          ← contracts: cross-package dependencies
+```
+
+**App root** — one file that assembles your app. Config covers ports, security, databases,
+secrets, and which packages to load.
+
+**Packages** — each feature area is a package. A blog package has post entities and preview
+routes. An auth package has login routes and session middleware. Packages declare their
+dependencies and compose without coupling.
+
+**Entities** — when a package owns data (posts, tasks, users, orders), define an entity.
+Slingshot generates CRUD routes, validation, OpenAPI docs, and storage wiring. Add operations
+for domain actions like `publish` or `archive`.
+
+## A real example
+
+```typescript
+import {
+  createServer,
+  defineEntity,
+  definePackage,
+  domain,
+  entity,
+  field,
+  route,
+} from '@lastshotlabs/slingshot';
+
+// Entity: generated CRUD + operations
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    published: field.boolean({ default: false }),
+  },
+});
+
+// Package: owns the blog feature boundary
+const blogPackage = definePackage({
+  name: 'blog',
+  entities: [entity({ config: Post })],
+  domains: [
+    domain({
+      name: 'preview',
+      basePath: '/preview',
+      routes: [
+        route.get({
+          path: '/:id',
+          auth: 'none',
+          summary: 'Preview a post',
+          handler: async ({ params, respond }) => {
+            const post = await getPost(params.id);
+            return respond.json({ title: post.title, excerpt: post.body.slice(0, 200) });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+
+// App root: assembly
+await createServer({
+  port: 3000,
+  packages: [blogPackage],
+});
+```
+
+The blog package owns everything blog-related. The app root just assembles it. When you add
+an auth package or a search package, they compose alongside the blog package without touching
+its code.
+
+## When to use each layer
+
+| You need...                                 | Use                        |
+| ------------------------------------------- | -------------------------- |
+| CRUD for a data model                       | Entity                     |
+| Domain actions (publish, archive, complete) | Entity operations          |
+| A custom endpoint                           | Package route              |
+| A feature boundary                          | Package                    |
+| Cross-package contracts                     | Capabilities and entityRef |
+| App-wide config (db, auth, security)        | App root                   |
+
+## Learn each layer
+
+<CardGrid>
+  <LinkCard
+    title="App Roots and Runtime"
+    href="/slingshot/app-authoring/"
+    description="createServer, createApp, config, context, middleware, and the assembly step."
+  />
+  <LinkCard
+    title="Package-First Authoring"
+    href="/slingshot/package-first/"
+    description="definePackage, domains, routes, capabilities, and entityRef."
+  />
+  <LinkCard
+    title="Entity System"
+    href="/slingshot/entity-system/"
+    description="defineEntity, operations, route policy, storage backends, and generated routes."
+  />
+</CardGrid>
+
+## Escape hatches
+
+The normal path handles most apps. When it does not fit:
+
+- [Route overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customize one generated route
+- [Extra routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route) — add routes alongside generated ones
+- [Manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual) — bring your own storage
+- [Raw plugins](/slingshot/authoring/plugin-interface/) — lower-level lifecycle control
+- [Full escape hatch guide](/slingshot/package-first/escape-hatches/) — decision guide for when to drop lower

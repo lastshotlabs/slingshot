@@ -1,59 +1,128 @@
 ---
 title: Storage and Adapter Wiring
-description: Swappable backends, factory composition, and standard vs manual wiring
+description: Swap between memory, SQLite, Postgres, MongoDB, and Redis without changing entity code
 ---
 
-The storage story is one of the core strengths of the entity system.
+The entity system separates your data model from your storage backend. Define the entity once,
+then point it at memory for development, SQLite for prototyping, or Postgres for production — the
+entity code stays the same.
 
-One entity definition can target multiple backends without changing the domain model.
+## Start with in-memory (the default)
 
-The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
-its `Post` entity.
+When you do not configure a database, entities use in-memory storage:
 
-## The default story: `createEntityFactories(...)`
+```typescript title="src/index.ts"
+import { createServer, definePackage, entity } from '@lastshotlabs/slingshot';
+import { Task } from './entities/task';
 
-```typescript title="src/blog/post-factories.ts"
-import { createEntityFactories } from '@lastshotlabs/slingshot';
-import { Post } from './post';
-import { PostOperations } from './post-operations';
-
-export const postFactories = createEntityFactories(Post, PostOperations);
-```
-
-From one entity config, the framework can resolve adapters for:
-
-- `memory`
-- `redis`
-- `sqlite`
-- `mongo`
-- `postgres`
-
-That is the core "swappable storage" story.
-
-## Wiring modes in `entity(...)`
-
-Entity modules support three wiring modes:
-
-### `standard`
-
-The default. Let the framework resolve the adapter from the entity config and active store.
-
-```typescript title="src/blog/package.ts"
-entity({
-  config: Post,
-  operations: PostOperations,
+await createServer({
+  port: 3000,
+  packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
 });
 ```
 
-### `factories`
+Data lives in memory and resets on restart. This is perfect for development and tests.
 
-Provide an explicit repo-factory set, usually from `createEntityFactories(...)` or
-`createCompositeFactories(...)`.
+## Switch to SQLite
 
-```typescript title="src/blog/package.ts"
+One config change:
+
+```typescript title="src/index.ts"
+await createServer({
+  port: 3000,
+  db: { default: { adapter: 'sqlite', url: './data/app.db' } },
+  packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
+});
+```
+
+The entity definition and all your routes stay exactly the same. Data now persists to disk.
+
+## Switch to Postgres
+
+```typescript title="src/index.ts"
+await createServer({
+  port: 3000,
+  db: { default: { adapter: 'postgres', url: process.env.DATABASE_URL! } },
+  packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
+});
+```
+
+Same entity code. Same routes. Different backend.
+
+## Switch to MongoDB
+
+```typescript title="src/index.ts"
+await createServer({
+  port: 3000,
+  db: { default: { adapter: 'mongo', url: process.env.MONGO_URL! } },
+  packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
+});
+```
+
+## Switch to Redis
+
+Best for cache-shaped entities like sessions, rate limits, or ephemeral state:
+
+```typescript title="src/index.ts"
+await createServer({
+  port: 3000,
+  db: { default: { adapter: 'redis', url: process.env.REDIS_URL! } },
+  packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
+});
+```
+
+## Mix backends in one app
+
+Different entities can use different backends:
+
+```typescript title="src/index.ts"
+await createServer({
+  port: 3000,
+  db: {
+    default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
+    cache: { adapter: 'redis', url: process.env.REDIS_URL! },
+  },
+  packages: [
+    definePackage({
+      name: 'app',
+      entities: [
+        entity({ config: Post }), // uses default (Postgres)
+        entity({ config: Session, adapter: 'cache' }), // uses Redis
+      ],
+    }),
+  ],
+});
+```
+
+## Entity factories
+
+For advanced control, use `createEntityFactories` to get a set of backend-specific adapter
+constructors:
+
+```typescript title="src/entities/post-factories.ts"
+import { createEntityFactories } from '@lastshotlabs/slingshot';
+import { Post } from './post';
+import { PostOps } from './post-operations';
+
+export const postFactories = createEntityFactories(Post, PostOps);
+```
+
+This gives you typed factory methods:
+
+```typescript
+postFactories.memory(); // in-memory adapter
+postFactories.sqlite(infra); // SQLite adapter
+postFactories.postgres(infra); // Postgres adapter
+postFactories.mongo(infra); // MongoDB adapter
+postFactories.redis(infra); // Redis adapter
+```
+
+Wire it into the entity module with `wiring: { mode: 'factories' }`:
+
+```typescript title="src/packages/blog.ts"
 entity({
   config: Post,
-  operations: PostOperations,
+  operations: PostOps,
   wiring: {
     mode: 'factories',
     factories: postFactories,
@@ -61,70 +130,65 @@ entity({
 });
 ```
 
-### `manual`
+This is useful when you need to test against a specific backend or access the adapter directly
+in test code.
 
-Fully manual adapter construction for advanced cases.
+## Composite factories
 
-```typescript title="src/blog/package.ts"
+When a package owns several related entities and you want one combined adapter:
+
+```typescript
+import { createCompositeFactories } from '@lastshotlabs/slingshot';
+import { LineItem } from './line-item';
+import { LineItemOps } from './line-item-operations';
+import { Order } from './order';
+import { OrderOps } from './order-operations';
+
+const orderFactories = createCompositeFactories({
+  orders: { config: Order, operations: OrderOps },
+  lineItems: { config: LineItem, operations: LineItemOps },
+});
+```
+
+The composite adapter gives you `orderFactories.memory().orders` and
+`orderFactories.memory().lineItems` from a single factory surface.
+
+## Manual adapter wiring
+
+For complete control over adapter construction — useful when integrating with an existing
+database or custom ORM:
+
+```typescript
 entity({
   config: Post,
   wiring: {
     mode: 'manual',
     buildAdapter: (storeType, infra) => {
-      void storeType;
-      return createMyAdapter(infra);
+      // Build your own adapter implementation
+      return createCustomPostAdapter(infra);
     },
   },
 });
-
-declare function createMyAdapter(infra: unknown): unknown;
 ```
 
-## Backend swapping at the app root
+The adapter must implement the standard entity adapter interface (get, list, create, update,
+delete, plus any operation methods).
 
-The package and entity code above does not need to change when the app changes stores.
+## The key insight
 
-```typescript title="src/index.ts"
-await createServer({
-  db: {
-    sqlite: './data/app.db',
-  },
-  packages: [blogPackage],
-});
-```
+Backend swapping works because the entity definition is a contract, not an implementation.
+Fields, indexes, operations, and route policy describe _what_ — the adapter handles _how_.
 
-Later, the same package can move to a different store strategy:
+That separation means:
 
-```typescript title="src/index.ts"
-await createServer({
-  db: {
-    postgres: process.env.DATABASE_URL,
-    redis: process.env.REDIS_URL,
-  },
-  packages: [blogPackage],
-});
-```
+- Your dev environment uses memory (fast, no setup)
+- Your CI uses SQLite (persistent, no Docker)
+- Your staging uses Postgres (production-like)
+- Your production uses Postgres + Redis (performance)
 
-That is the main point of the storage story: the domain model stays stable while persistence
-changes around it.
-
-## Composite factories
-
-Use `createCompositeFactories(...)` when a package owns several related entities and you want one
-combined factory surface for cross-entity behavior.
-
-## Swappable storage is not just backend swapping
-
-The advanced part of the story is that consumers can also shape:
-
-- field naming conventions
-- system-field conventions
-- TTL field mapping
-- default generation and update conventions
-
-That is why the entity docs need to explain backend swapping and consumer shape hardening together.
+All running the same entity code.
 
 ## Next
 
-- [defineEntity](/slingshot/entity-system/define-entity/)
-- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/)
+- [defineEntity](/slingshot/entity-system/define-entity/) — the entity model contract
+- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customize generated routes

@@ -1,47 +1,205 @@
 ---
 title: Escape Hatches
-description: Raw plugins, lower-level lifecycle work, and when to drop below the package surface
+description: When to drop below the package surface — raw plugins, executor overrides, manual wiring
 ---
 
-Package-first authoring is the default. Escape hatches still matter.
+Package-first authoring covers most apps. When it does not fit, the framework has escape
+hatches at every level.
+
+## Decision guide
+
+| You need...                                          | Escape hatch                 |
+| ---------------------------------------------------- | ---------------------------- |
+| Custom logic in a generated CRUD route               | Executor override            |
+| A new route inside the entity shell                  | Extra route                  |
+| Full control over entity storage construction        | Manual adapter wiring        |
+| Direct lifecycle control (middleware, teardown)      | Raw plugin                   |
+| Custom system field names for an existing database   | Entity `systemFields` config |
+| Custom storage conventions (Redis keys, table names) | Entity `conventions` config  |
+
+## Executor overrides
+
+Replace the handler behind a generated route without changing its identity:
+
+```typescript
+import { defineEntityExecutor, entity } from '@lastshotlabs/slingshot-entity';
+
+entity({
+  config: Post,
+  operations: PostOps,
+  overrides: {
+    get: defineEntityExecutor({
+      summary: 'Get post with view tracking',
+      build:
+        ({ entityAdapter }) =>
+        async ({ params, respond }) => {
+          const post = await entityAdapter.get(params.id);
+          if (!post) return respond.notFound();
+          // Track the view
+          await entityAdapter.update(params.id, { views: (post.views ?? 0) + 1 });
+          return respond.json(post);
+        },
+    }),
+  },
+});
+```
+
+See [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) for full details.
+
+## Extra routes
+
+Add routes that live alongside generated entity routes:
+
+```typescript
+import { defineEntityRoute, entity } from '@lastshotlabs/slingshot-entity';
+
+entity({
+  config: Post,
+  extraRoutes: [
+    defineEntityRoute({
+      key: 'archive-all',
+      method: 'post',
+      path: '/archive-all',
+      auth: 'userAuth',
+      permission: { requires: 'blog:post.moderate' },
+      buildExecutor:
+        ({ entityAdapter }) =>
+        async ({ respond }) => {
+          // Custom batch operation
+          const all = await entityAdapter.list({});
+          for (const post of all.items) {
+            await entityAdapter.update(post.id, { status: 'archived' });
+          }
+          return respond.json({ archived: all.items.length });
+        },
+    }),
+  ],
+});
+```
+
+## Manual adapter wiring
+
+Build your own storage adapter when the generated ones do not fit:
+
+```typescript
+entity({
+  config: Post,
+  wiring: {
+    mode: 'manual',
+    buildAdapter: (storeType, infra) => {
+      // Use your own ORM, raw SQL, or external API
+      return {
+        get: async id => {
+          /* ... */
+        },
+        list: async opts => {
+          /* ... */
+        },
+        create: async data => {
+          /* ... */
+        },
+        update: async (id, data) => {
+          /* ... */
+        },
+        delete: async id => {
+          /* ... */
+        },
+      };
+    },
+  },
+});
+```
+
+See [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) for the factories and manual wiring modes.
 
 ## Raw plugins
 
-Use `plugins` when you need direct lifecycle control:
+Use a raw plugin when you need direct lifecycle control:
 
-- `setupMiddleware`
-- `setupRoutes`
-- `setupPost`
-- `teardown`
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 
-That is still the right layer for some infrastructure integrations and lower-level framework work.
+const metricsPlugin: SlingshotPlugin = {
+  name: 'metrics',
+  setupMiddleware({ app }) {
+    app.use('*', async (c, next) => {
+      const start = Date.now();
+      await next();
+      const ms = Date.now() - start;
+      console.log(`${c.req.method} ${c.req.path} ${c.res.status} ${ms}ms`);
+    });
+  },
+  setupPost({ ctx }) {
+    console.log(`Metrics plugin ready. ${ctx.plugins.length} plugins loaded.`);
+  },
+  teardown() {
+    console.log('Metrics plugin shutting down');
+  },
+};
+```
 
-## Entity-level escape hatches
+Register it in the app root:
 
-Inside the entity system, the main escape hatches are:
+```typescript
+await createServer({
+  port: 3000,
+  plugins: [metricsPlugin],
+  packages: [blogPackage],
+});
+```
 
-- [Generated-route executor overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route) — replace the executor behind a CRUD or named-operation route
-- [Extra routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route) — add routes alongside generated entity routes
-- [Factory-backed adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#factories) — custom repos while keeping the entity shell
-- [Manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual) — full control over adapter construction
-- [Consumer field and naming conventions](/slingshot/entity-system/define-entity/#system-fields-storage-fields-and-conventions) — rename system fields, storage columns, and ID strategies
-- [`createEntityPlugin()`](/slingshot/examples/config-driven-domain/#build-the-plugin) — lower-level orchestration work
+### Plugin lifecycle hooks
 
-These are part of the normal advanced authoring path, not internals. Full examples live in the linked pages.
+| Hook              | When it runs                                   |
+| ----------------- | ---------------------------------------------- |
+| `setupMiddleware` | During middleware registration (before routes) |
+| `setupRoutes`     | During route registration                      |
+| `setupPost`       | After all routes are registered                |
+| `seed`            | During seed phase (for initial data setup)     |
+| `teardown`        | During graceful shutdown                       |
 
-## `inspectPackage(...)`
+## Entity system field conventions
 
-When a package gets large, `inspectPackage(...)` is a useful structural escape hatch. It lets you
-reason about the effective package graph without reading framework internals directly.
+Override generated field names to match an existing database schema:
+
+```typescript
+const LegacyPost = defineEntity('LegacyPost', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true }),
+    title: field.string(),
+  },
+  systemFields: {
+    ownerField: 'author_id', // not 'authorId'
+    tenantField: 'organization_id', // not 'orgId'
+  },
+  storageFields: {
+    ttlField: '_expires_at',
+  },
+  storage: {
+    postgres: { tableName: 'blog_posts_v2' },
+    redis: { keyPrefix: 'bp' },
+  },
+  conventions: {
+    redisKey: ({ storageName, id }) => `${storageName}:v2:${id}`,
+  },
+});
+```
 
 ## The rule
 
-Stay on the package-first surface until you have a concrete reason to leave it.
+Stay on the package surface until you have a concrete reason to leave it. The escape hatches
+exist so you never hit a wall — not so you start at the lowest level.
 
-Do not drop to raw plugins just because the plugin lifecycle existed first.
+Typical progression:
+
+1. **Start with packages, entities, and route policy** — covers 90% of apps
+2. **Add overrides or extra routes** — when generated behavior needs tweaking
+3. **Use capabilities and entityRef** — when packages need to talk to each other
+4. **Drop to raw plugins** — only for infrastructure concerns like metrics, tracing, or custom middleware registration
 
 ## Next
 
-- [Entity System](/slingshot/entity-system/) — the next section in the learning path: data-shaped domains with generated routes
-- [Examples](/slingshot/examples/) — complete apps that combine packages and entities
-- [Plugin Interface](/slingshot/authoring/plugin-interface/) — lower-level reference for raw plugin authoring
+- [Entity System](/slingshot/entity-system/) — the entity authoring and customization story
+- [Examples](/slingshot/examples/) — complete apps that combine packages, entities, and custom routes
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — full reference for raw plugin authoring

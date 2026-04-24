@@ -1,22 +1,124 @@
 ---
 title: defineEntity
-description: Fields, indexes, conventions, and the core entity contract
+description: Fields, indexes, timestamps, relations, and the core data model contract
 ---
 
-`defineEntity(...)` is the canonical domain-model entrypoint.
+`defineEntity` turns a data model into a full API. You define the shape once — the framework
+generates routes, validation, OpenAPI docs, and storage wiring.
 
-It validates the config, resolves storage naming and primary-key metadata, and returns a frozen
-entity definition the rest of the runtime can trust.
+## Start with three fields
 
-The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
-its `Post` entity.
+Every entity needs at least an `id` and one data field:
 
-## A real entity definition
+```typescript title="src/entities/task.ts"
+import { defineEntity, field } from '@lastshotlabs/slingshot';
 
-```typescript title="src/blog/post.ts"
-import { defineEntity, field, index, relation } from '@lastshotlabs/slingshot';
+export const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    done: field.boolean({ default: false }),
+  },
+});
+```
 
-export const Post = defineEntity('Post', {
+That gives you `GET /tasks`, `POST /tasks`, `GET /tasks/:id`, `PATCH /tasks/:id`,
+`DELETE /tasks/:id` — all validated, all in OpenAPI docs.
+
+## Field types
+
+Every field type maps to a Zod schema under the hood. Here is what is available:
+
+```typescript
+fields: {
+  // Strings
+  name: field.string(),
+  email: field.string({ format: 'email' }),
+  slug: field.string({ immutable: true }),
+
+  // Numbers
+  price: field.number(),
+  quantity: field.integer(),
+
+  // Booleans
+  active: field.boolean({ default: true }),
+
+  // Dates
+  createdAt: field.date({ default: 'now' }),
+  updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
+
+  // Enums — use `as const` for type safety
+  status: field.enum(['draft', 'published', 'archived'] as const, { default: 'draft' }),
+
+  // JSON blobs
+  metadata: field.json({ optional: true }),
+
+  // Arrays of strings
+  tags: field.stringArray({ optional: true }),
+}
+```
+
+### Field options
+
+| Option      | What it does                                                        | Example                           |
+| ----------- | ------------------------------------------------------------------- | --------------------------------- |
+| `primary`   | Marks this field as the primary key                                 | `field.string({ primary: true })` |
+| `default`   | Auto-generates on create: `'uuid'`, `'cuid'`, `'now'`, or a literal | `default: 'uuid'`                 |
+| `onUpdate`  | Auto-sets on update                                                 | `onUpdate: 'now'`                 |
+| `optional`  | Field is not required on create                                     | `optional: true`                  |
+| `immutable` | Cannot be changed after creation                                    | `immutable: true`                 |
+| `format`    | String format hint for validation                                   | `format: 'email'`                 |
+
+## Add timestamps
+
+Most entities need `createdAt` and `updatedAt`:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    createdAt: field.date({ default: 'now' }),
+    updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
+  },
+});
+```
+
+`default: 'now'` sets the field on creation. `onUpdate: 'now'` refreshes it on every update.
+
+## Add an enum for status
+
+Enums are the foundation for transitions (publish, archive, complete):
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    authorId: field.string(),
+    status: field.enum(['draft', 'published', 'archived'] as const, { default: 'draft' }),
+    createdAt: field.date({ default: 'now' }),
+    updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
+  },
+});
+```
+
+The `as const` gives you type-safe transition checks. When you add an `op.transition` later,
+the framework validates `from` and `to` against these exact values.
+
+## Add indexes
+
+Indexes tell the storage backend to optimize queries on specific fields:
+
+```typescript
+import { defineEntity, field, index } from '@lastshotlabs/slingshot';
+
+const Post = defineEntity('Post', {
   namespace: 'blog',
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
@@ -24,90 +126,281 @@ export const Post = defineEntity('Post', {
     authorId: field.string(),
     title: field.string(),
     body: field.string(),
+    status: field.enum(['draft', 'published', 'archived'] as const, { default: 'draft' }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  indexes: [
+    index(['slug']), // look up posts by slug
+    index(['authorId', 'createdAt']), // list posts by author, sorted by date
+    index(['status']), // filter by publication status
+  ],
+});
+```
+
+Indexes also serve as documentation for your team — they show which query patterns the entity
+is designed to support.
+
+## Add unique constraints
+
+Use `uniques` when a field (or combination of fields) must be globally unique:
+
+```typescript
+const User = defineEntity('User', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    email: field.string(),
+    username: field.string(),
+  },
+  uniques: [{ fields: ['email'] }, { fields: ['username'] }],
+});
+```
+
+Add `upsert: true` when you want create-or-update behavior:
+
+```typescript
+uniques: [{ fields: ['email'], upsert: true }],
+```
+
+## Add relations
+
+Relations declare foreign-key relationships for documentation and future query planning:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    authorId: field.string(),
+    title: field.string(),
+    body: field.string(),
+  },
+  relations: {
+    author: { field: 'authorId', references: { entity: 'User', field: 'id' } },
+  },
+});
+```
+
+## Protect routes with auth
+
+Use `routes` to control auth, permissions, and behavior per generated route:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    authorId: field.string(),
+    title: field.string(),
+    body: field.string(),
     status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' }, // all routes require login
+    list: { auth: 'none' }, // except browsing
+    get: { auth: 'none' }, // and reading
+    update: {
+      permission: {
+        requires: 'blog:post.write',
+        ownerField: 'authorId', // only the author can edit
+      },
+    },
+  },
+});
+```
+
+See [Route Policy](/slingshot/entity-system/route-policy/) for the full set of per-route options.
+
+## System fields
+
+`systemFields` tells the framework which fields represent ownership and tenancy. This powers
+automatic owner-based permission checks and multi-tenant data isolation:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    authorId: field.string(),
+    orgId: field.string({ optional: true }),
+    title: field.string(),
+    body: field.string(),
+  },
+  systemFields: {
+    ownerField: 'authorId', // who owns this record
+    tenantField: 'orgId', // which tenant this belongs to
+  },
+});
+```
+
+## Multi-tenant entities
+
+For SaaS apps with per-tenant data isolation:
+
+```typescript
+const Invoice = defineEntity('Invoice', {
+  namespace: 'billing',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    orgId: field.string(),
+    customerId: field.string(),
+    amount: field.number(),
+    status: field.enum(['draft', 'sent', 'paid'] as const, { default: 'draft' }),
+  },
+  tenant: { field: 'orgId' },
+  systemFields: { tenantField: 'orgId' },
+});
+```
+
+The `tenant` config tells the framework to automatically scope queries to the current
+tenant — a `GET /invoices` from org A never returns org B's data.
+
+## Default sorting and pagination
+
+Control how list endpoints return data:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    createdAt: field.date({ default: 'now' }),
+  },
+  defaultSort: { field: 'createdAt', direction: 'desc' },
+  pagination: {
+    cursor: { fields: ['createdAt', 'id'] },
+    defaultLimit: 20,
+    maxLimit: 100,
+  },
+});
+```
+
+## Soft delete
+
+Keep records around instead of permanently deleting them:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    deletedAt: field.date({ optional: true }),
+  },
+  softDelete: { field: 'deletedAt' },
+});
+```
+
+`DELETE /posts/:id` now sets `deletedAt` instead of removing the record. List and get
+endpoints automatically filter out soft-deleted records.
+
+## TTL (auto-expiry)
+
+For records that should expire automatically:
+
+```typescript
+const Session = defineEntity('Session', {
+  namespace: 'auth',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    userId: field.string(),
+    token: field.string(),
+    createdAt: field.date({ default: 'now' }),
+  },
+  ttl: { defaultSeconds: 86400 }, // 24 hours
+});
+```
+
+## Storage-specific config
+
+Override table names, key prefixes, and collection names when you need to match an existing schema:
+
+```typescript
+const LegacyUser = defineEntity('LegacyUser', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true }),
+    name: field.string(),
+  },
+  storage: {
+    postgres: { tableName: 'users_v1' },
+    sqlite: { tableName: 'users_v1' },
+    mongo: { collectionName: 'legacy_users' },
+    redis: { keyPrefix: 'usr' },
+  },
+});
+```
+
+## A complete real-world entity
+
+Here is a blog post entity with everything wired up:
+
+```typescript title="src/entities/post.ts"
+import { defineEntity, field, index } from '@lastshotlabs/slingshot';
+
+export const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    slug: field.string({ immutable: true }),
+    authorId: field.string(),
+    title: field.string(),
+    body: field.string(),
+    excerpt: field.string({ optional: true }),
+    status: field.enum(['draft', 'published', 'archived'] as const, { default: 'draft' }),
+    tags: field.stringArray({ optional: true }),
+    metadata: field.json({ optional: true }),
     createdAt: field.date({ default: 'now' }),
     updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
   },
-  indexes: [index(['slug']), index(['authorId', 'createdAt'])],
-  relations: [relation('authorId', 'User', 'id')],
+  indexes: [index(['slug']), index(['authorId', 'createdAt']), index(['status'])],
+  relations: {
+    author: { field: 'authorId', references: { entity: 'User', field: 'id' } },
+  },
   systemFields: {
     ownerField: 'authorId',
   },
-  storageFields: {
-    ttlField: '_expires_at',
-  },
-  conventions: {
-    redisKey: ({ storageName, id }) => `${storageName}:post:${id}`,
+  defaultSort: { field: 'createdAt', direction: 'desc' },
+  pagination: {
+    cursor: { fields: ['createdAt', 'id'] },
+    defaultLimit: 20,
+    maxLimit: 100,
   },
   routes: {
     defaults: { auth: 'userAuth' },
     list: { auth: 'none' },
     get: { auth: 'none' },
+    create: {
+      permission: { requires: 'blog:post.write' },
+      event: { key: 'blog:post.created', payload: ['id', 'authorId', 'title'] },
+    },
+    update: {
+      permission: { requires: 'blog:post.write', ownerField: 'authorId' },
+    },
+    delete: {
+      permission: {
+        requires: 'blog:post.delete',
+        ownerField: 'authorId',
+        or: 'blog:post.moderate',
+      },
+    },
   },
 });
 ```
 
-That one definition covers:
+That single definition gives you:
 
-- data shape
-- storage naming
-- indexing
-- ownership conventions
-- route defaults
-- backend-specific conventions when needed
-
-## What `defineEntity(...)` resolves for you
-
-The resolved config includes:
-
-- the entity name
-- the primary-key field
-- the storage name
-- normalized system-field names
-- normalized storage-field names
-- normalized conventions
-
-That is important because the storage and routing layers depend on consistent resolved metadata.
-
-## System fields, storage fields, and conventions
-
-These are some of the highest-value advanced features in the entity system because they let
-consumers harden the generated shape without rewriting the system.
-
-Examples include:
-
-- `systemFields` for owner, tenant, version, and actor-related field names
-- `storageFields` for backend-specific naming like TTL fields
-- `conventions` for Redis key naming, defaults, and update conventions
-
-## What a new author should usually do
-
-Start with:
-
-- fields
-- indexes
-- route defaults
-
-Then add:
-
-- `systemFields` when you need ownership or tenant naming to match an existing schema
-- `storageFields` when a backend needs a specific field name
-- `conventions` when you need stable generated naming or update behavior
-
-That is part of the swappable storage story, not an unrelated detail.
-
-## What this page does not do
-
-`defineEntity(...)` defines the model. It does not, by itself, explain:
-
-- named operations
-- route policy
-- backend wiring
-- route overrides and extra routes
-
-Those are separate docs homes because they are substantial topics on their own.
+- Five CRUD routes with auth and permissions
+- Events on create
+- Cursor-based pagination
+- Slug and author indexes
+- Owner-based access control
+- OpenAPI docs with full request/response schemas
 
 ## Next
 
-- [Operations](/slingshot/entity-system/operations/)
-- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/)
+- [Operations](/slingshot/entity-system/operations/) — add domain actions like publish, lookup, search
+- [Route Policy](/slingshot/entity-system/route-policy/) — full auth, permissions, rate limits, and event config
+- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — swap backends without changing entity code

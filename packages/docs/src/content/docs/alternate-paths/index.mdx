@@ -1,38 +1,36 @@
 ---
 title: Alternate Paths
-description: Supported secondary flows that are not the primary docs narrative
+description: Other ways to build with Slingshot beyond the code-first path
 ---
 
-Slingshot still supports flows that should not lead the public docs narrative.
+The main docs teach the code-first path: `createServer(...)`, packages, entities, typed routes.
 
-This section is where they belong.
+That is not the only way to use Slingshot.
 
-## What is primary vs alternate
+## Manifest authoring
 
-Primary:
+The manifest is a JSON file that assembles your app declaratively. Use it when:
 
-- code-first app roots
-- package-first composition
-- code-first entity authoring
+- you want zero-code app assembly for standard plugin combinations
+- your app is mostly configuration, not custom authoring
+- you want a serialized app root that maps cleanly to deployment tooling
 
-Alternate:
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "port": 3000,
+  "security": {
+    "signing": { "secret": "${secret:JWT_SECRET}" }
+  },
+  "plugins": [{ "plugin": "slingshot-auth" }]
+}
+```
 
-- manifest authoring
-- older or lower-level plugin-only flows
-- compatibility-oriented docs that remain supported but should not define the mental model
+Custom behavior (middleware, event handlers, tenant resolvers) goes in `slingshot.handlers.ts`.
+The manifest references these functions by name, and the framework auto-loads them at boot.
 
-## Why this split exists
+Both paths produce identical runtime behavior. The manifest is not deprecated — it is a
+real authoring surface for apps that fit the declarative model.
 
-The framework has strong code-first surfaces now. The docs should teach those surfaces directly
-instead of making them feel like the advanced path.
-
-That does not mean alternate paths are deprecated. It means they should be documented honestly:
-
-- supported
-- useful in some situations
-- not the main way new users should learn the framework
-
-## Next
-
-- [Manifest Authoring](/slingshot/alternate-paths/manifest-authoring/)
-- [Manifest vs Code](/slingshot/manifest-vs-code/)
+See [Manifest Authoring](/slingshot/alternate-paths/manifest-authoring/) for the full walkthrough
+and [Manifest vs Code](/slingshot/manifest-vs-code/) for a side-by-side comparison.

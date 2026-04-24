@@ -1,43 +1,62 @@
 ---
 title: Capabilities and entityRef
-description: Typed cross-package contracts for services and entity adapters
+description: Cross-package contracts for services and entity access without hard coupling
 ---
 
-Capabilities and entity refs are how packages depend on each other without hard-coding adapter bags
-or global singletons.
+Packages should not import each other's internals. When one package needs something from
+another, use a **capability** (for services) or an **entityRef** (for entity data access).
 
-These examples extend the [starter app](/slingshot/app-authoring/starter-app/) with a mail package
-and a search package that read from `blogPackage`.
+## The problem
 
-## Capabilities
+Your notification package needs to send email. Your blog package defines the Post entity. Without
+cross-package contracts, you end up with tight coupling:
 
-Use a capability when one package wants to publish a typed service for another package to consume.
+```typescript
+// BAD — notification package directly imports from mail package internals
+// BAD — search package directly imports blog package adapter
+import { postAdapter } from '../blog/runtime';
+import { sendEmail } from '../mail/mailer';
+```
 
-```typescript title="src/mail/package.ts"
-import {
-  defineCapability,
-  definePackage,
-  domain,
-  provideCapability,
-  route,
-} from '@lastshotlabs/slingshot';
+This breaks when packages are reordered, extracted into separate repos, or swapped for
+alternatives.
 
-const Mailer = defineCapability<{ send(to: string, body: string): Promise<void> }>('mailer');
+## Capabilities: cross-package services
 
-const mailPackage = definePackage({
+A capability is a typed contract. One package provides it, another consumes it.
+
+### Step 1: Define and provide the capability
+
+```typescript title="src/packages/mail.ts"
+import { defineCapability, definePackage, provideCapability } from '@lastshotlabs/slingshot';
+
+// The contract — a typed interface
+export const Mailer = defineCapability<{
+  send(to: string, subject: string, body: string): Promise<void>;
+}>('mailer');
+
+export const mailPackage = definePackage({
   name: 'mail',
   capabilities: {
     provides: [
       provideCapability(Mailer, () => ({
-        send: async (to, body) => {
-          console.log('sending mail', { to, body });
+        send: async (to, subject, body) => {
+          console.log(`Sending "${subject}" to ${to}`);
+          // In production: call SendGrid, Postmark, etc.
         },
       })),
     ],
   },
 });
+```
 
-const notificationsPackage = definePackage({
+### Step 2: Require and use the capability
+
+```typescript title="src/packages/notifications.ts"
+import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+import { Mailer } from './mail';
+
+export const notificationPackage = definePackage({
   name: 'notifications',
   dependencies: ['mail'],
   capabilities: {
@@ -46,13 +65,15 @@ const notificationsPackage = definePackage({
   domains: [
     domain({
       name: 'notifications',
+      basePath: '/notifications',
       routes: [
         route.post({
-          path: '/notify',
-          auth: 'none',
-          handler: async ({ capabilities, respond }) => {
-            await capabilities.require(Mailer).send('user@example.com', 'A post was published');
-            return respond.noContent();
+          path: '/send',
+          auth: 'userAuth',
+          handler: async ({ body, capabilities, respond }) => {
+            const mailer = capabilities.require(Mailer);
+            await mailer.send('user@example.com', 'New notification', 'You have updates');
+            return respond.json({ sent: true });
           },
         }),
       ],
@@ -61,17 +82,40 @@ const notificationsPackage = definePackage({
 });
 ```
 
-## `entityRef(...)`
+### What happens at boot
 
-Use an entity ref when one package needs a typed handle to another package's entity adapter.
+1. The framework boots packages in dependency order (`mail` before `notifications`)
+2. `mail` registers its `Mailer` capability
+3. `notifications` can resolve `Mailer` via `capabilities.require(Mailer)`
+4. If `mail` is not loaded, the framework throws a clear error at boot time — not at request time
 
-```typescript title="src/search/package.ts"
+### `require` vs `maybe`
+
+```typescript
+// Throws if the capability is not provided — use when the dependency is mandatory
+const mailer = capabilities.require(Mailer);
+
+// Returns undefined if not provided — use for optional integrations
+const analytics = capabilities.maybe(Analytics);
+if (analytics) {
+  analytics.track('notification.sent');
+}
+```
+
+## entityRef: cross-package data access
+
+When one package needs to read or write another package's entity data, use `entityRef`.
+
+### Scenario: search package reads blog posts
+
+```typescript title="src/packages/search.ts"
 import { definePackage, domain, entityRef, route } from '@lastshotlabs/slingshot';
 import type { PackageEntityAdapterFor } from '@lastshotlabs/slingshot-entity';
-import { Post } from '../blog/post';
-import { PostOperations } from '../blog/post-operations';
+import { Post } from '../entities/post';
+import { PostOps } from '../entities/post-operations';
 
-type PostAdapter = PackageEntityAdapterFor<typeof Post, typeof PostOperations.operations>;
+// Create a typed reference to the blog package's Post entity
+type PostAdapter = PackageEntityAdapterFor<typeof Post, typeof PostOps.operations>;
 
 const PostRef = entityRef<PostAdapter>({
   plugin: 'blog',
@@ -87,12 +131,29 @@ export const searchPackage = definePackage({
       basePath: '/search',
       routes: [
         route.get({
+          path: '/posts',
+          auth: 'none',
+          summary: 'Search posts by keyword',
+          handler: async ({ query, entities, respond }) => {
+            const posts = entities.get(PostRef);
+            const results = await posts.list({});
+            // Filter by query in-memory for simplicity
+            const keyword = String(query?.q ?? '').toLowerCase();
+            const filtered = results.items.filter((p: any) =>
+              p.title.toLowerCase().includes(keyword),
+            );
+            return respond.json({ results: filtered });
+          },
+        }),
+        route.get({
           path: '/posts/by-slug/:slug',
           auth: 'none',
-          handler: async ({ entities, request, respond }) => {
+          summary: 'Look up a post by slug',
+          handler: async ({ params, entities, respond }) => {
             const posts = entities.get(PostRef);
-            const result = await posts.bySlug({ slug: request.req.param('slug') });
-            return respond.json({ result });
+            const result = await posts.bySlug({ slug: params.slug });
+            if (!result) return respond.notFound();
+            return respond.json({ post: result });
           },
         }),
       ],
@@ -101,23 +162,129 @@ export const searchPackage = definePackage({
 });
 ```
 
-Then package routes can resolve the adapter through `ctx.entities.get(...)` without coupling the
-packages through direct imports of runtime state.
+### What the entity ref gives you
 
-## Why these are separate concepts
+`entities.get(PostRef)` returns a fully typed adapter with:
 
-- capabilities are for service-like contracts
-- entity refs are for framework-managed entity adapters
+- Standard methods: `get`, `list`, `create`, `update`, `delete`
+- Operation methods: `byAuthor`, `bySlug`, `publish` (from `PostOps`)
+- Full TypeScript autocompletion
 
-That split keeps cross-package contracts explicit.
+### entityRef without type imports
 
-## When to use them
+If you do not have access to the entity type (e.g., the entity is in a third-party package),
+you can create an untyped ref:
 
-Use a capability when the dependency is behavior.
+```typescript
+const PostRef = entityRef({ plugin: 'blog', entity: 'Post' });
+```
 
-Use an entity ref when the dependency is data access through a framework-managed entity surface.
+The adapter will work at runtime but will not have TypeScript autocompletion for operation methods.
+
+## Real-world example: a SaaS app
+
+```typescript title="src/packages/billing.ts"
+import {
+  defineCapability,
+  definePackage,
+  domain,
+  entityRef,
+  provideCapability,
+  route,
+} from '@lastshotlabs/slingshot';
+import { getActorId, getRequestTenantId } from '@lastshotlabs/slingshot';
+
+// Billing provides a payment service
+export const PaymentService = defineCapability<{
+  charge(userId: string, amount: number, currency: string): Promise<{ transactionId: string }>;
+  refund(transactionId: string): Promise<void>;
+}>('payment-service');
+
+// Billing reads from the organizations package
+const OrgRef = entityRef({ plugin: 'organizations', entity: 'Organization' });
+
+export const billingPackage = definePackage({
+  name: 'billing',
+  mountPath: '/billing',
+  dependencies: ['slingshot-auth', 'organizations'],
+  capabilities: {
+    provides: [
+      provideCapability(PaymentService, () => ({
+        charge: async (userId, amount, currency) => {
+          // Stripe integration here
+          return { transactionId: `tx_${Date.now()}` };
+        },
+        refund: async transactionId => {
+          // Stripe refund here
+        },
+      })),
+    ],
+  },
+  domains: [
+    domain({
+      name: 'billing',
+      routes: [
+        route.post({
+          path: '/charge',
+          auth: 'userAuth',
+          handler: async ({ body, capabilities, entities, request, respond }) => {
+            const org = entities.get(OrgRef);
+            const tenantId = getRequestTenantId(request);
+            const orgData = tenantId ? await org.get(tenantId) : null;
+
+            const payment = capabilities.require(PaymentService);
+            const result = await payment.charge(
+              getActorId(request),
+              body.amount,
+              orgData?.currency ?? 'usd',
+            );
+            return respond.json(result, 201);
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+Other packages can now consume the payment service:
+
+```typescript title="src/packages/orders.ts"
+import { PaymentService } from './billing';
+
+const orderPackage = definePackage({
+  name: 'orders',
+  dependencies: ['billing'],
+  capabilities: { requires: [PaymentService] },
+  domains: [
+    domain({
+      name: 'orders',
+      basePath: '/orders',
+      routes: [
+        route.post({
+          path: '/:id/pay',
+          auth: 'userAuth',
+          handler: async ({ params, capabilities, respond }) => {
+            const payment = capabilities.require(PaymentService);
+            const result = await payment.charge(params.id, 99_99, 'usd');
+            return respond.json({ paid: true, transaction: result.transactionId });
+          },
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+## When to use which
+
+| Dependency is...                         | Use        |
+| ---------------------------------------- | ---------- |
+| A service (send email, charge card, log) | Capability |
+| Data access (read posts, list users)     | entityRef  |
+| Both                                     | Both       |
 
 ## Next
 
-- [definePackage](/slingshot/package-first/define-package/)
-- [Entity System: Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/)
+- [definePackage](/slingshot/package-first/define-package/) — the full package contract
+- [Entity System: Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — how entity adapters resolve across backends

@@ -1,0 +1,122 @@
+---
+title: Jobs and Orchestration
+description: Run background work — emails, imports, retries, scheduled tasks, and durable workflows
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Preview">
+  The orchestration packages are pre-1.0 (`0.0.2`). The API surface is evolving.
+</Aside>
+
+Some work does not belong in a request handler. Sending a welcome email should not make the
+registration endpoint slower. Importing 10,000 rows should not time out an HTTP request.
+Retrying a flaky external API call needs its own lifecycle.
+
+Move that work into tasks and workflows.
+
+## Define a task
+
+A task is a named, retryable unit of work:
+
+```typescript
+import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+
+const sendWelcomeEmail = defineTask({
+  name: 'send-welcome-email',
+  handler: async ({ input }) => {
+    await emailService.send({
+      to: input.email,
+      subject: 'Welcome!',
+      body: `Hi ${input.name}, welcome to the platform.`,
+    });
+  },
+});
+```
+
+## Trigger it from a route or event
+
+```typescript
+// From a route handler
+route.post({
+  path: '/users',
+  auth: 'userAuth',
+  handler: async ({ body, respond }) => {
+    const user = await createUser(body);
+
+    // Fire and forget — runs in the background
+    await orchestrator.enqueue(sendWelcomeEmail, {
+      email: user.email,
+      name: user.name,
+    });
+
+    return respond.json(user, 201);
+  },
+});
+
+// Or from an event subscriber
+bus.on('auth:user.created', async ({ userId, email }) => {
+  await orchestrator.enqueue(sendWelcomeEmail, { email, name: userId });
+});
+```
+
+The request returns immediately. The task runs in the background.
+
+## Compose tasks into workflows
+
+When work has multiple steps that depend on each other:
+
+```typescript
+import { defineWorkflow } from '@lastshotlabs/slingshot-orchestration';
+
+const onboardUser = defineWorkflow({
+  name: 'onboard-user',
+  steps: [
+    { task: sendWelcomeEmail },
+    { task: createDefaultWorkspace, delay: '5s' },
+    { task: scheduleCheckIn, delay: '7d' },
+  ],
+});
+```
+
+Workflows handle retries, delays, and failure recovery. If `createDefaultWorkspace` fails,
+it retries without re-sending the welcome email.
+
+## Choose the right adapter
+
+Orchestration adapters control where and how tasks execute:
+
+| Adapter    | Best for                     |
+| ---------- | ---------------------------- |
+| `memory`   | Development and testing      |
+| `sqlite`   | Single-instance production   |
+| `bullmq`   | Multi-instance with Redis    |
+| `temporal` | Enterprise durable workflows |
+
+```typescript
+import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+
+createOrchestrationPlugin({
+  adapter: 'sqlite', // swap to 'bullmq' when you need multi-instance
+  tasks: [sendWelcomeEmail],
+  workflows: [onboardUser],
+});
+```
+
+Your task and workflow definitions stay the same. Only the adapter changes.
+
+## Common use cases
+
+- **Emails**: send welcome emails, password resets, notifications
+- **Imports**: process CSV uploads, sync external data
+- **Retries**: call external APIs with exponential backoff
+- **Scheduling**: run cleanup jobs, send reminders, generate reports
+- **Pipelines**: multi-step onboarding, approval flows, data processing
+
+## Go deeper
+
+- [Orchestration Overview](/slingshot/orchestration/overview/) — architecture and concepts
+- [Code-First Guide](/slingshot/orchestration/code-first/) — detailed task and workflow authoring
+- [Tasks and Workflows](/slingshot/orchestration/tasks-and-workflows/) — full API reference
+- [Adapters](/slingshot/orchestration/adapters/) — adapter setup and configuration
+- [Orchestration Example](/slingshot/examples/orchestration/) — complete working app

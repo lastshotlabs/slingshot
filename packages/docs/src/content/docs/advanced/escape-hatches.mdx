@@ -1,0 +1,39 @@
+---
+title: Escape Hatches
+description: The lower-level seams Slingshot exposes when packages, entities, and built-ins are not enough
+---
+
+The docs are intentionally optimized for the normal path:
+
+- app roots
+- packages
+- entities
+- built-in events and realtime
+
+But real apps eventually hit cases that do not fit the default path cleanly.
+
+## Reach for these in order
+
+1. Customize route or entity policy before rewriting the feature
+2. Override generated entity behavior before abandoning the entity model
+3. Add package routes beside an entity before dropping to raw plugins
+4. Use raw plugins only when package-first composition is genuinely the wrong layer
+5. Use manual adapter wiring only when the provided wiring modes do not fit
+
+## Common escape hatches
+
+- [Generated route overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route)
+- [Extra routes inside the entity shell](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route)
+- [Manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual)
+- [Package routes outside the entity shell](/slingshot/package-first/domain-and-route/)
+- [Raw plugins and plugin lifecycle hooks](/slingshot/authoring/plugin-interface/)
+
+## Use them deliberately
+
+The point of these seams is not to bypass the framework at the first inconvenience.
+
+They exist so you can:
+
+- keep the normal path for most of the app
+- isolate custom behavior where it is actually needed
+- avoid inventing a fully custom architecture when one targeted override is enough

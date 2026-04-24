@@ -1,12 +1,12 @@
 ---
 title: Quick Start
-description: Build a working backend in under 5 minutes
+description: Build a working backend in 3 steps — a route, a data model, and auth
 ---
 
 ## Install
 
 ```bash
-bun add @lastshotlabs/slingshot zod
+bun add @lastshotlabs/slingshot hono zod
 ```
 
 ## Step 1: A route that works
@@ -25,7 +25,6 @@ const appPackage = definePackage({
       routes: [
         route.get({
           path: '/',
-          auth: 'none',
           summary: 'Health check',
           handler: ({ respond }) => respond.json({ ok: true }),
         }),
@@ -60,17 +59,17 @@ with one route. The route is typed, shows up in OpenAPI docs, and can be tested 
 
 ## Step 2: Add a data model
 
-Most backends need CRUD for a data model. Instead of writing five routes by hand, define an entity:
+Instead of writing five route handlers by hand, define one entity:
 
-```typescript title="src/entities/post.ts"
+```typescript title="src/entities/task.ts"
 import { defineEntity, field } from '@lastshotlabs/slingshot';
 
-export const Post = defineEntity('Post', {
-  namespace: 'blog',
+export const Task = defineEntity('Task', {
+  namespace: 'app',
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
     title: field.string(),
-    body: field.string(),
+    done: field.boolean({ default: false }),
   },
 });
 ```
@@ -79,57 +78,108 @@ Wire it into your package:
 
 ```typescript title="src/index.ts"
 import { createServer, definePackage, entity } from '@lastshotlabs/slingshot';
-import { Post } from './entities/post';
+import { Task } from './entities/task';
 
-const blogPackage = definePackage({
-  name: 'blog',
-  entities: [entity({ config: Post })],
+const appPackage = definePackage({
+  name: 'app',
+  entities: [entity({ config: Task })],
 });
 
 await createServer({
   port: 3000,
-  packages: [blogPackage],
+  packages: [appPackage],
 });
 ```
 
-That's it. You now have:
+Five routes, generated from one definition:
 
 ```bash
-curl -X POST http://localhost:3000/posts \
+# Create
+curl -X POST http://localhost:3000/tasks \
   -H "Content-Type: application/json" \
-  -d '{ "title": "Hello", "body": "World" }'
-# → { "id": "01J...", "title": "Hello", "body": "World" }
+  -d '{ "title": "Ship v1" }'
 
-curl http://localhost:3000/posts
-# → [{ "id": "01J...", "title": "Hello", "body": "World" }]
+# List
+curl http://localhost:3000/tasks
+
+# Get one
+curl http://localhost:3000/tasks/<id>
+
+# Update
+curl -X PATCH http://localhost:3000/tasks/<id> \
+  -H "Content-Type: application/json" \
+  -d '{ "done": true }'
+
+# Delete
+curl -X DELETE http://localhost:3000/tasks/<id>
 ```
 
-Five routes generated from one definition: `GET /posts`, `GET /posts/:id`, `POST /posts`,
-`PATCH /posts/:id`, `DELETE /posts/:id`. All with input validation and OpenAPI docs.
+All five routes show up in OpenAPI docs with request/response schemas.
 
-## Step 3: Add auth to some routes
+## Step 3: Add auth
 
-Most apps need some routes to require login. Add route defaults:
+```bash
+bun add @lastshotlabs/slingshot-auth
+```
 
-```typescript title="src/entities/post.ts"
-export const Post = defineEntity('Post', {
-  namespace: 'blog',
+Update your entity to require login:
+
+```typescript title="src/entities/task.ts"
+import { defineEntity, field } from '@lastshotlabs/slingshot';
+
+export const Task = defineEntity('Task', {
+  namespace: 'app',
   fields: {
     id: field.string({ primary: true, default: 'uuid' }),
     title: field.string(),
-    body: field.string(),
+    done: field.boolean({ default: false }),
   },
   routes: {
-    defaults: { auth: 'userAuth' }, // all routes require login by default
-    list: { auth: 'none' }, // anyone can list posts
-    get: { auth: 'none' }, // anyone can read a post
+    defaults: { auth: 'userAuth' }, // protect all CRUD routes
   },
 });
 ```
 
-Now `POST`, `PATCH`, and `DELETE` require a valid JWT. `GET` routes are public.
+Then add the auth plugin to your server:
 
-To actually issue JWTs, add the auth package — see [Auth Setup](/slingshot/examples/with-auth/).
+```typescript title="src/index.ts"
+import { createServer, definePackage, entity } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { Task } from './entities/task';
+
+const appPackage = definePackage({
+  name: 'app',
+  entities: [entity({ config: Task })],
+});
+
+await createServer({
+  port: 3000,
+  security: { signing: { secret: 'dev-secret-change-in-prod' } },
+  plugins: [createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } })],
+  packages: [appPackage],
+});
+```
+
+Now your entity routes require a valid session, and you get auth routes for free:
+
+```bash
+# Register
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "alice@example.com", "password": "supersecret" }'
+
+# Login — returns a JWT
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "alice@example.com", "password": "supersecret" }'
+
+# Use the JWT on protected routes
+curl http://localhost:3000/tasks \
+  -H "Authorization: Bearer <token>"
+```
+
+Already have auth upstream or want to use your own? You don't need `slingshot-auth` — see
+[Bring Your Own Auth](/slingshot/core-features/auth/#bring-your-own-auth).
 
 ## What to learn next
 
@@ -142,52 +192,63 @@ To actually issue JWTs, add the auth package — see [Auth Setup](/slingshot/exa
   </thead>
   <tbody>
     <tr>
-      <td>Understand the app model</td>
+      <td>Add domain operations (publish, archive, complete)</td>
       <td>
-        <a href="/slingshot/app-authoring/">App Authoring</a>
+        <a href="/slingshot/core-features/data-and-entities/">Data and Entities</a>
       </td>
     </tr>
     <tr>
-      <td>See the full starter example</td>
+      <td>Send events across packages (welcome email, search sync)</td>
       <td>
-        <a href="/slingshot/app-authoring/starter-app/">Starter App</a>
+        <a href="/slingshot/core-features/events-and-fanout/">Events and Fanout</a>
       </td>
     </tr>
     <tr>
-      <td>Organize code into packages</td>
+      <td>Push live updates to the browser</td>
+      <td>
+        <a href="/slingshot/core-features/realtime/">Realtime</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Add OAuth, MFA, or passkeys</td>
+      <td>
+        <a href="/slingshot/core-features/auth/">Auth</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Control who can do what</td>
+      <td>
+        <a href="/slingshot/core-features/permissions/">Permissions</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Run background jobs</td>
+      <td>
+        <a href="/slingshot/core-features/jobs-and-orchestration/">Jobs and Orchestration</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Use Postgres, SQLite, or MongoDB</td>
+      <td>
+        <a href="/slingshot/examples/production-databases/">Production Databases</a>
+      </td>
+    </tr>
+    <tr>
+      <td>Organize code as the app grows</td>
       <td>
         <a href="/slingshot/package-first/">Package-First Authoring</a>
       </td>
     </tr>
     <tr>
-      <td>Generate routes from data models</td>
+      <td>See a complete app</td>
       <td>
-        <a href="/slingshot/entity-system/">Entity System</a>
+        <a href="/slingshot/examples/">Examples</a>
       </td>
     </tr>
     <tr>
-      <td>Add login and sessions</td>
+      <td>Understand the framework model</td>
       <td>
-        <a href="/slingshot/examples/with-auth/">Auth Setup</a>
-      </td>
-    </tr>
-    <tr>
-      <td>Send events between features</td>
-      <td>
-        <a href="/slingshot/app-authoring/events-and-the-event-bus/">Events</a>
-      </td>
-    </tr>
-    <tr>
-      <td>Add realtime (WebSockets/SSE)</td>
-      <td>
-        <a href="/slingshot/app-authoring/websockets/">WebSockets</a> or{' '}
-        <a href="/slingshot/app-authoring/server-sent-events/">SSE</a>
-      </td>
-    </tr>
-    <tr>
-      <td>Use manifests instead of code</td>
-      <td>
-        <a href="/slingshot/alternate-paths/">Alternate Paths</a>
+        <a href="/slingshot/authoring-model/">Authoring Model</a>
       </td>
     </tr>
   </tbody>

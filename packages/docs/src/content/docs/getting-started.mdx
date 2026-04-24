@@ -1,103 +1,80 @@
 ---
 title: Introduction
-description: What Slingshot is and how to think about the framework from the core outward
+description: What Slingshot is and why it exists
 ---
 
 ## What Slingshot is
 
-Slingshot is a backend framework for assembling real applications out of coherent domain surfaces
-instead of scattered route files and ad hoc service glue.
+Slingshot is a backend framework that generates the boring parts so you can focus on the
+interesting parts.
 
-The core idea is simple:
+Define a data model — you get CRUD routes, validation, OpenAPI docs, and storage wiring.
+Write custom routes where you need them. Organize everything into typed packages that compose
+cleanly as your app grows.
 
-- start at the app root
-- compose packages
-- author data-shaped domains through the entity system
-- let routes, permissions, events, docs, and runtime behavior stay attached to that model
+```typescript
+import { createServer, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
 
-## The main mental model
+const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    done: field.boolean({ default: false }),
+  },
+});
 
-Start with code:
+await createServer({
+  port: 3000,
+  packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
+});
+```
 
-1. `createServer()` or `createApp()`
-2. top-level app config
-3. package-first composition with `definePackage(...)`
-4. entity authoring with `defineEntity(...)`, `defineOperations(...)`, and `entity(...)`
+That is a working API with five routes, request validation, and OpenAPI docs. No boilerplate.
 
-That is the public path the docs are optimized for.
+## What you get
 
-## The core layers
+- **Generated CRUD** — define a model, get `GET`, `POST`, `PATCH`, `DELETE` routes
+- **Operations** — add domain actions like `publish`, `archive`, `complete` alongside CRUD
+- **Typed events** — packages communicate through typed events, not imports
+- **Realtime** — WebSockets and SSE are built-in, not bolted on
+- **Auth and permissions** — sessions, OAuth, MFA, RBAC, and resource-level access control
+- **Background jobs** — tasks and workflows that run off the request path
+- **Swappable storage** — memory, SQLite, Postgres, MongoDB, Redis — change one line
+- **OpenAPI** — every route shows up in generated API docs automatically
 
-### App layer
+## How it is organized
 
-This is the framework root:
+```
+App root (createServer)
+  └── Packages (definePackage)
+        ├── Entities (defineEntity) → generated CRUD, operations, storage
+        ├── Domain routes (route.*) → custom endpoints
+        └── Capabilities → typed cross-package contracts
+```
 
-- app assembly
-- runtime context
-- security and middleware
-- event bus
-- WebSockets
-- SSE
-- OpenAPI and validation
-- runtime and infrastructure
+1. **App root** — `createServer()` assembles your app. Config covers security, databases,
+   runtime, and secrets.
+2. **Packages** — each feature area is a package with its own routes, middleware, and entities.
+3. **Entities** — define a model, get generated routes, operations, and storage that works
+   across backends.
+4. **Core features** — events, realtime, auth, permissions, and jobs plug into the same model.
 
-### Package-first authoring
+## Where to start
 
-This is the canonical authoring surface for app modules:
+If you learn best by doing:
 
-- `definePackage(...)`
-- `domain(...)`
-- `route.*(...)`
-- `defineCapability(...)`
-- `provideCapability(...)`
-- `entityRef(...)`
+1. [Quick Start](/slingshot/quick-start/) — paste, run, curl, done
+2. [Core Features](/slingshot/core-features/) — pick the feature you need
 
-### Entity system
+If you learn best by understanding the model:
 
-This is the canonical path for data-shaped domains:
+1. [Authoring Model](/slingshot/authoring-model/) — how apps, packages, and entities fit together
+2. [App Roots and Runtime](/slingshot/app-authoring/) — the framework assembly layer
+3. [Package-First Authoring](/slingshot/package-first/) — organizing code into packages
+4. [Entity System](/slingshot/entity-system/) — the entity authoring and customization story
 
-- `defineEntity(...)`
-- `defineOperations(...)`
-- `op.*(...)`
-- `entity(...)`
-- generated routes and named operations
-- swappable storage and adapter wiring
+If you learn best from examples:
 
-### Lower-level escape hatches
-
-These still exist:
-
-- [raw plugins](/slingshot/authoring/plugin-interface/)
-- [manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual)
-- [extra routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route)
-- [route executor overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route)
-
-They matter, but they should not be the first thing people learn. See [Escape Hatches](/slingshot/config-driven/escape-hatches/) for the full guide.
-
-## How the docs are organized
-
-The docs follow the real authoring experience:
-
-1. Core API surface and package-first composition first
-2. Entity system and config-driven patterns second
-3. Plugin internals and manifests only when you need them
-
-## What not to miss
-
-There are a few core features that must be understood early because they affect almost every real
-app:
-
-- the event bus
-- WebSockets
-- SSE
-- packages vs plugins
-- the entity storage story
-
-Those all have first-class docs homes now.
-
-## Where to go next
-
-- [Quick Start](/slingshot/quick-start/)
-- [App Authoring](/slingshot/app-authoring/)
-- [Package-First Authoring](/slingshot/package-first/)
-- [Entity System](/slingshot/entity-system/)
+1. [Examples](/slingshot/examples/) — complete apps covering SaaS, forums, collaboration, and more
+2. [Guides](/slingshot/guides/) — production concerns like security, testing, deployment, and scaling

@@ -1,17 +1,12 @@
 ---
 title: Manifest Authoring
-description: Supported, but secondary to the code-first docs path
+description: Build a Slingshot app from a JSON manifest instead of a TypeScript entry point
 ---
 
-Manifest authoring is still supported. It is just no longer the primary docs story.
+import { Aside } from '@astrojs/starlight/components';
 
-## The role of the manifest
-
-The manifest is useful when you want:
-
-- zero- or low-code app assembly
-- declarative package selection and infrastructure wiring
-- a serialized app root that maps cleanly to deployment tooling
+A manifest app uses `app.manifest.json` as its root instead of a TypeScript file calling
+`createServer(...)`. The framework reads the manifest, wires plugins, and boots the server.
 
 ## A minimal manifest
 
@@ -26,27 +21,57 @@ The manifest is useful when you want:
 }
 ```
 
-## Why the main docs do not start here anymore
+```bash
+slingshot start
+```
 
-The manifest is not the best way to teach:
+That gives you a running server with auth routes, session management, and OpenAPI docs.
 
-- package-first authoring
-- typed routes
-- the entity system
-- event definitions
-- package-owned capabilities
-- code-level escape hatches
+## Adding custom behavior
 
-Those are easier to understand from the code surfaces directly.
+Custom middleware, event handlers, tenant resolvers, and lifecycle hooks live in
+`slingshot.handlers.ts`. The manifest references them by name:
 
-## When to use it
+```json title="app.manifest.json"
+{
+  "manifestVersion": 1,
+  "port": 3000,
+  "tenantResolver": "resolveTenant",
+  "plugins": [{ "plugin": "slingshot-auth" }]
+}
+```
 
-Use the manifest when the app is mostly assembly and configuration.
+```typescript title="slingshot.handlers.ts"
+export function resolveTenant(c: Context): string | undefined {
+  return c.req.header('x-tenant-id') ?? undefined;
+}
+```
 
-Switch to the code-first app root when the app needs substantial custom authoring, stronger typing,
-or package/entity work that deserves to be expressed directly in code.
+The framework auto-loads the handlers file and registers its exports before boot.
 
-## Related pages
+## When to use the manifest
 
-- [Manifest vs Code](/slingshot/manifest-vs-code/)
-- [Quick Start](/slingshot/quick-start/)
+Use it when your app is mostly **assembly and configuration**: selecting plugins, wiring
+databases, setting security options. The manifest handles that cleanly without boilerplate.
+
+Switch to the code-first app root when your app needs:
+
+- package-first authoring with `definePackage(...)`
+- typed routes with `domain(...)` and `route.*(...)`
+- entity definitions with `defineEntity(...)`
+- code-level escape hatches or dynamic composition
+
+## Both paths produce the same runtime
+
+A manifest app and a code-first app run the same plugin lifecycle, the same middleware
+pipeline, and the same route registration. The difference is how you express the assembly step.
+
+<Aside>
+  All built-in plugins are fully configurable via the manifest. See the [Manifest
+  Schema](/slingshot/internals/manifest/) for the complete config surface.
+</Aside>
+
+## See also
+
+- [Manifest vs Code](/slingshot/manifest-vs-code/) — side-by-side comparison
+- [Quick Start](/slingshot/quick-start/) — the code-first starting point

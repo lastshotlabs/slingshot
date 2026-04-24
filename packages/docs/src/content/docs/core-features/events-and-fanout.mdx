@@ -1,0 +1,125 @@
+---
+title: Events and Fanout
+description: Publish typed events from anywhere, subscribe from anywhere else — no coupling required
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+You want your auth system to send a welcome email when a user signs up. But the auth package
+should not know that a mail package exists.
+
+That is what the event bus solves. Auth publishes a typed event. Mail subscribes and sends
+the email. No imports between them, no tight coupling.
+
+## Define and publish an event
+
+```typescript
+import { defineEvent } from '@lastshotlabs/slingshot-core';
+
+// Type-safe event definition
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'user.created': { userId: string; email: string };
+    'user.deleted': { userId: string };
+  }
+}
+
+// In a route handler or operation:
+bus.emit('user.created', { userId: 'usr_123', email: 'alice@example.com' });
+```
+
+## Subscribe to events
+
+Subscribe in the `setupPost` lifecycle hook — this guarantees all publishers are wired
+before any subscriber starts listening:
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+const mailPlugin: SlingshotPlugin = {
+  name: 'mail',
+  setupPost({ bus }) {
+    bus.on('user.created', async ({ email }) => {
+      await sendWelcomeEmail(email);
+    });
+
+    bus.on('user.deleted', async ({ userId }) => {
+      await cancelAllScheduledMail(userId);
+    });
+  },
+};
+```
+
+No dependency between auth and mail. Auth fires the event, mail handles it.
+
+## One event, multiple effects
+
+This is what "fanout" means. One `user.created` event can trigger:
+
+```
+user.created
+  ├── mail plugin     → sends welcome email
+  ├── search plugin   → indexes the new user profile
+  ├── SSE endpoint    → notifies the admin dashboard in realtime
+  ├── webhook service → POSTs to a Zapier integration
+  └── orchestration   → enqueues a 7-day onboarding workflow
+```
+
+You define the event once. Each subscriber does its own thing.
+
+## Stream events to browsers with SSE
+
+Mark an event as client-safe and it flows to browser clients over SSE automatically:
+
+```typescript
+events.register(
+  defineEvent('task.completed', {
+    ownerPlugin: 'app',
+    exposure: ['client-safe'],
+    resolveScope(payload) {
+      return { userId: payload.userId };
+    },
+  }),
+);
+```
+
+Browser clients receive the event through the built-in SSE endpoint. Internal events like
+auth tokens and security signals never reach the browser regardless of configuration.
+
+See [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) for the full SSE setup.
+
+## Built-in events
+
+These fire automatically — no setup needed:
+
+| Event                          | When it fires             |
+| ------------------------------ | ------------------------- |
+| `auth:user.created`            | A new user registers      |
+| `auth:user.deleted`            | A user account is deleted |
+| `auth:login`                   | A user logs in            |
+| `auth:logout`                  | A user logs out           |
+| `app:ready`                    | All plugins have booted   |
+| `app:shutdown`                 | Server is shutting down   |
+| `security.rate_limit.exceeded` | A rate limit was hit      |
+
+## Scale beyond one process
+
+The default bus delivers events in-process. For multi-instance deployments, swap to a
+shared transport:
+
+```typescript
+await createServer({
+  eventBus: 'bullmq', // events cross instance boundaries
+  // ...
+});
+```
+
+Your event definitions and subscribers stay the same. Only the transport changes.
+
+## Go deeper
+
+- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) — detailed authoring guide
+- [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) — streaming events to browsers
+- [Custom Event Bus](/slingshot/examples/custom-event-bus/) — BullMQ and Redis transport setup
+- [Event Bus Reference](/slingshot/authoring/event-bus/) — plugin-level event bus API
+- [Internals: Event Bus](/slingshot/internals/event-bus/) — transport contract and adapter details

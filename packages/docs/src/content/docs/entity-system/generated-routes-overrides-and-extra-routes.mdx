@@ -1,110 +1,245 @@
 ---
 title: Generated Routes, Overrides, and Extra Routes
-description: Defaults, executor overrides, collision rules, and custom routes inside the entity shell
+description: What the framework generates, how to customize it, and how to add more
 ---
 
-Generated routes are the normal path. Overrides and extra routes are the main customization seams.
-
-The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
-its `Post` entity module.
+The entity system generates routes by default. When the default behavior is not enough, you
+have two escape hatches: overrides (replace a generated route) and extra routes (add new ones).
 
 ## What you get by default
 
-When an entity has route config, Slingshot can generate:
+An entity with route config generates up to five CRUD routes plus one route per operation:
 
-- `create`
-- `list`
-- `get`
-- `update`
-- `delete`
-- named-operation routes
+```
+POST   /posts            ← create
+GET    /posts            ← list
+GET    /posts/:id        ← get
+PATCH  /posts/:id        ← update
+DELETE /posts/:id        ← delete
+GET    /posts/by-author/:authorId  ← lookup operation
+POST   /posts/:id/publish         ← transition operation
+```
 
-That is the baseline behavior.
-
-For the starter app's `Post` entity, that usually means routes like:
-
-- `POST /blog/posts`
-- `GET /blog/posts`
-- `GET /blog/posts/:id`
-- `PATCH /blog/posts/:id`
-- `DELETE /blog/posts/:id`
-- `GET /blog/posts/by-author/:authorId`
-- `GET /blog/posts/by-slug/:slug`
-- `POST /blog/posts/:id/publish`
+Every route gets request validation, response schemas, and OpenAPI documentation.
 
 ## Override a generated route
 
-Use overrides when you want to keep the generated route identity but replace its executor or docs
-metadata.
+Use an override when you want to keep the route identity (same method, same path, same OpenAPI
+entry) but replace the handler logic.
 
-```typescript title="src/blog/package.ts"
-import { defineEntityExecutor, entity } from '@lastshotlabs/slingshot-entity';
+**Scenario:** The default `GET /posts/:id` returns the raw record. You want to add a view count:
 
-const PostModule = entity({
-  config: Post,
-  operations: PostOperations,
-  overrides: {
-    get: defineEntityExecutor({
-      summary: 'Get a post with viewer metadata',
-      build:
-        ({ entityAdapter }) =>
-        async ({ params, respond }) => {
-          const post = await entityAdapter.get(params.id);
-          return respond.json({ post, viewerCanEdit: true });
-        },
+```typescript title="src/packages/blog.ts"
+import { definePackage, entity } from '@lastshotlabs/slingshot';
+import { defineEntityExecutor } from '@lastshotlabs/slingshot-entity';
+import { Post } from '../entities/post';
+import { PostOps } from '../entities/post-operations';
+
+export const blogPackage = definePackage({
+  name: 'blog',
+  entities: [
+    entity({
+      config: Post,
+      operations: PostOps,
+      overrides: {
+        get: defineEntityExecutor({
+          summary: 'Get a post and increment view count',
+          build:
+            ({ entityAdapter }) =>
+            async ({ params, respond }) => {
+              const post = await entityAdapter.get(params.id);
+              if (!post) return respond.notFound();
+
+              // Custom logic: increment view count
+              await entityAdapter.update(params.id, {
+                viewCount: (post.viewCount ?? 0) + 1,
+              });
+
+              return respond.json({ ...post, viewCount: (post.viewCount ?? 0) + 1 });
+            },
+        }),
+      },
     }),
-  },
+  ],
 });
+```
+
+### What the executor builder receives
+
+The `build` function receives an `EntityRouteExecutorBuilderContext`:
+
+| Property           | What it is                                                                    |
+| ------------------ | ----------------------------------------------------------------------------- |
+| `entity`           | The resolved entity config                                                    |
+| `entityAdapter`    | The entity's storage adapter (get, list, create, update, delete + operations) |
+| `routeKey`         | Which route this is (`'get'`, `'create'`, etc.)                               |
+| `getEntityAdapter` | Access another entity's adapter by plugin + entity name                       |
+
+### What the handler receives
+
+The handler function receives the route execution context:
+
+| Property            | What it is                                               |
+| ------------------- | -------------------------------------------------------- |
+| `params`            | URL parameters                                           |
+| `request`           | The Hono `Context` object                                |
+| `entity`            | Resolved entity config                                   |
+| `entityAdapter`     | The entity's storage adapter                             |
+| `respond`           | Typed response helpers (json, notFound, noContent, etc.) |
+| `filter`            | Any filters applied by middleware or route policy        |
+| `dataScopeBindings` | Resolved data scope bindings                             |
+
+### Override with custom request/response schemas
+
+You can also override the OpenAPI schema for the route:
+
+```typescript
+overrides: {
+  get: defineEntityExecutor({
+    summary: 'Get a post with related data',
+    request: {
+      query: z.object({
+        include: z.enum(['author', 'comments']).optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Post with optional related data',
+        schema: z.object({
+          post: z.any(),
+          author: z.any().optional(),
+          comments: z.array(z.any()).optional(),
+        }),
+      },
+    },
+    build:
+      ({ entityAdapter, getEntityAdapter }) =>
+      async ({ params, query, respond }) => {
+        const post = await entityAdapter.get(params.id);
+        if (!post) return respond.notFound();
+
+        const result: Record<string, unknown> = { post };
+        if (query?.include === 'author') {
+          const users = getEntityAdapter({ plugin: 'auth', entity: 'User' });
+          result.author = await users.get(post.authorId);
+        }
+        return respond.json(result);
+      },
+  }),
+},
 ```
 
 ## Add an extra route
 
-Use an extra route when the route should live beside the entity shell but is not one of the
-generated defaults.
+Use extra routes when you want a new endpoint that lives alongside the generated entity routes
+but is not one of the defaults.
 
-```typescript title="src/blog/package.ts"
+**Scenario:** Add a `POST /posts/:id/preview` endpoint that returns a rendered preview:
+
+```typescript title="src/packages/blog.ts"
 import { defineEntityRoute, entity } from '@lastshotlabs/slingshot-entity';
 
-const PostModule = entity({
+entity({
   config: Post,
+  operations: PostOps,
   extraRoutes: [
     defineEntityRoute({
       key: 'preview',
       method: 'post',
       path: '/:id/preview',
       auth: 'userAuth',
+      summary: 'Preview a post with rendered markdown',
       buildExecutor:
         ({ entityAdapter }) =>
         async ({ params, respond }) => {
           const post = await entityAdapter.get(params.id);
-          return respond.json({ id: params.id, preview: post?.body?.slice(0, 140) });
+          if (!post) return respond.notFound();
+          return respond.json({
+            title: post.title,
+            html: `<article><h1>${post.title}</h1>${post.body}</article>`,
+          });
+        },
+    }),
+    defineEntityRoute({
+      key: 'stats',
+      method: 'get',
+      path: '/stats',
+      auth: 'userAuth',
+      permission: { requires: 'blog:post.admin' },
+      summary: 'Get post statistics',
+      buildExecutor:
+        ({ entityAdapter }) =>
+        async ({ respond }) => {
+          const all = await entityAdapter.list({});
+          const published = all.items.filter((p: any) => p.status === 'published').length;
+          return respond.json({
+            total: all.items.length,
+            published,
+            draft: all.items.length - published,
+          });
         },
     }),
   ],
 });
 ```
 
+Extra routes can use the same policy options as generated routes: `auth`, `permission`,
+`rateLimit`, `middleware`, `event`, and typed `request`/`responses`.
+
+## Extra route with events
+
+```typescript
+defineEntityRoute({
+  key: 'feature',
+  method: 'post',
+  path: '/:id/feature',
+  auth: 'userAuth',
+  permission: { requires: 'blog:post.moderate' },
+  event: {
+    key: 'blog:post.featured',
+    payload: ['id'],
+    exposure: ['client-safe'],
+  },
+  buildExecutor:
+    ({ entityAdapter }) =>
+    async ({ params, respond }) => {
+      await entityAdapter.update(params.id, { featured: true });
+      return respond.json({ featured: true });
+    },
+});
+```
+
 ## Collision rules
 
-Extra routes cannot silently collide with generated routes.
+The framework does not allow ambiguous routes. If you create an extra route with the same
+method and path as a generated route, the runtime throws an error at boot time.
 
-If you want to replace a generated route, use an override. Do not create an extra route that
-matches the same method and path and hope the framework picks the right one.
+To replace a generated route, use an **override**, not an extra route. This makes the intent
+explicit and avoids silent shadowing.
 
-That distinction is important enough that the runtime throws on invalid collisions.
+## Disable generated routes
+
+If you do not want certain CRUD routes at all:
+
+```typescript
+routes: {
+  disable: ['delete'],            // no DELETE endpoint
+},
+```
+
+Disabled routes are not registered — they do not appear in OpenAPI docs.
 
 ## When to use what
 
-Use:
-
-- generated routes for the default case
-- overrides when the route identity should stay the same
-- extra routes when you want a new route inside the entity shell
+| You want to...                          | Use                                   |
+| --------------------------------------- | ------------------------------------- |
+| Use the default generated behavior      | Nothing — it works                    |
+| Change how a generated route works      | `overrides`                           |
+| Add a new route inside the entity shell | `extraRoutes`                         |
+| Remove a generated route                | `routes.disable`                      |
+| Add a route outside the entity shell    | `domain()` + `route.*` in the package |
 
 ## Next
 
-You have now seen the full entity system surface. From here:
-
-- [Config-Driven Domain example](/slingshot/examples/config-driven-domain/) — see entities, operations, overrides, and extra routes in a complete app
-- [Examples](/slingshot/examples/) — product-shaped apps that combine what you have learned
-- [Escape Hatches](/slingshot/config-driven/escape-hatches/) — the full decision guide for when you need to drop lower
+- [Config-Driven Domain example](/slingshot/examples/config-driven-domain/) — entities, operations, overrides, and extra routes in a complete app
+- [Package-First Authoring](/slingshot/package-first/) — when the route belongs to the package, not the entity

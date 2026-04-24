@@ -1,51 +1,62 @@
 ---
 title: Examples
-description: Complete Slingshot app compositions for auth, collaboration, SaaS, rendering, and package-first or entity authoring
+description: Complete app compositions — find the one that looks like what you are building
 ---
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-These are the highest-signal starting points for the platform.
+Every example is a complete, working app. Pick the one closest to what you are building
+and use it as a starting point.
 
-Use them in two different ways:
+All examples use in-memory storage by default. Swap to Postgres, SQLite, MongoDB, or
+Redis with a one-line change. See [Production Databases](/slingshot/examples/production-databases/).
 
-- by product shape: "which example looks like my app?"
-- by learning stage: "what example should I read after the docs spine?"
+## What are you building?
 
-All examples use in-memory adapters by default. Swapping to SQLite, Postgres, MongoDB, or Redis is
-a one-line change. See [Production Databases](/slingshot/examples/production-databases/).
+| I am building...                                  | Start with                                                              |
+| ------------------------------------------------- | ----------------------------------------------------------------------- |
+| A CRUD API with user accounts                     | [Auth Setup](/slingshot/examples/with-auth/)                            |
+| A forum, comments, or discussion feature          | [Forum App](/slingshot/examples/forum-app/)                             |
+| A multi-tenant SaaS                               | [SaaS Foundations](/slingshot/examples/saas-foundations/)               |
+| A chat, team, or collaboration product            | [Collaboration Workspace](/slingshot/examples/collaboration-workspace/) |
+| A CMS, blog, or publishing platform               | [Content Platform](/slingshot/examples/content-platform/)               |
+| An entity-driven domain (inventory, tickets, CRM) | [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       |
+| A platform with background jobs or pipelines      | [Orchestration](/slingshot/examples/orchestration/)                     |
+| A marketplace or e-commerce backend               | [SaaS Foundations](/slingshot/examples/saas-foundations/) + entities    |
+| An internal tool or admin dashboard               | [Auth Setup](/slingshot/examples/with-auth/) + custom routes            |
+| A game backend or realtime app                    | [Game Engine](/slingshot/examples/game-engine/)                         |
+| An API-first product                              | [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       |
+| A notification system                             | [Forum App](/slingshot/examples/forum-app/) (includes notifications)    |
+| Something with live browser updates               | [Realtime with SSE](/slingshot/examples/realtime-sse/)                  |
+| Something with search                             | [Adding Search](/slingshot/examples/adding-search/)                     |
 
-Source-backed example apps live in the repo under `examples/`. The current source-backed set is
-`with-auth`, `config-driven-domain`, `collaboration-workspace`, `content-platform`, and
-`orchestration`.
-
-## App compositions
+## Complete app compositions
 
 <CardGrid>
   <LinkCard
     title="Auth Setup"
     href="/slingshot/examples/with-auth/"
-    description="Email/password, JWT sessions, OAuth, MFA, passkeys. The identity baseline."
+    description="Email/password, JWT sessions, OAuth, MFA, passkeys. The identity baseline every app needs."
   />
   <LinkCard
     title="Forum App"
     href="/slingshot/examples/forum-app/"
-    description="Auth + community + permissions + notifications for a discussion product."
+    description="Auth + community + permissions + notifications. A working discussion product."
   />
   <LinkCard
     title="SaaS Foundations"
     href="/slingshot/examples/saas-foundations/"
-    description="Auth + organizations + per-resource permissions + search. Multi-tenant from the start."
+    description="Auth + organizations + per-resource permissions + search. Multi-tenant from day one."
   />
   <LinkCard
     title="Collaboration Workspace"
     href="/slingshot/examples/collaboration-workspace/"
-    description="Chat + community + polls + interactions + assets + emoji + embeds + GIFs + deep links."
+    description="Chat + community + polls + reactions + assets + emoji + embeds + GIFs + deep links."
   />
   <LinkCard
     title="Content Platform"
     href="/slingshot/examples/content-platform/"
-    description="Search + assets + SSR + SSG + edge-ready delivery for docs, media, or publishing products."
+    description="Search + assets + SSR + SSG + edge-ready delivery for docs, media, or publishing."
   />
   <LinkCard
     title="Config-Driven Domain"
@@ -55,37 +66,16 @@ Source-backed example apps live in the repo under `examples/`. The current sourc
   <LinkCard
     title="Orchestration"
     href="/slingshot/examples/orchestration/"
-    description="Code-first tasks, workflows, protected routes, and runtime access from app code."
+    description="Background tasks, workflows, protected routes, and runtime job management."
+  />
+  <LinkCard
+    title="Game Engine"
+    href="/slingshot/examples/game-engine/"
+    description="Realtime game state, player sessions, and server-authoritative logic."
   />
 </CardGrid>
 
-## Recommended progression
-
-If you want the learning path to stay coherent, use examples in this order:
-
-1. [Config-Driven Domain](/slingshot/examples/config-driven-domain/) after [Quick Start](/slingshot/quick-start/)
-2. one product-shaped example that matches your app
-3. a focused advanced example like [Realtime with SSE](/slingshot/examples/realtime-sse/) or
-   [Custom Event Bus](/slingshot/examples/custom-event-bus/)
-4. [Custom Plugin](/slingshot/examples/custom-plugin/) only when you actually need escape hatches
-
-## Choose by use case
-
-This is the fastest way to find the right example.
-
-## Capability map
-
-| Example                                                                 | Auth | Community | Chat | Media | Search   | SSR/SSG | Config-driven |
-| ----------------------------------------------------------------------- | ---- | --------- | ---- | ----- | -------- | ------- | ------------- |
-| [Auth Setup](/slingshot/examples/with-auth/)                            | x    |           |      |       |          |         |               |
-| [Forum App](/slingshot/examples/forum-app/)                             | x    | x         |      |       |          |         | x             |
-| [SaaS Foundations](/slingshot/examples/saas-foundations/)               | x    |           |      |       | x        |         | x             |
-| [Collaboration Workspace](/slingshot/examples/collaboration-workspace/) | x    | x         | x    | x     |          |         | x             |
-| [Content Platform](/slingshot/examples/content-platform/)               | x    | x         |      | x     | x        | x       |               |
-| [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       | x    |           |      |       | optional |         | x             |
-| [Orchestration](/slingshot/examples/orchestration/)                     | x    |           |      |       |          |         |               |
-
-## How-tos
+## How-to recipes
 
 <CardGrid>
   <LinkCard
@@ -101,12 +91,12 @@ This is the fastest way to find the right example.
   <LinkCard
     title="Production Databases"
     href="/slingshot/examples/production-databases/"
-    description="Switch from in-memory to SQLite, Postgres, MongoDB, or Redis with minimal config changes."
+    description="Switch from in-memory to SQLite, Postgres, MongoDB, or Redis with one line."
   />
   <LinkCard
     title="Realtime with SSE"
     href="/slingshot/examples/realtime-sse/"
-    description="Stream events from your entities and plugins to browser clients."
+    description="Stream entity events to browser clients in real time."
   />
   <LinkCard
     title="Custom Event Bus"
@@ -115,38 +105,28 @@ This is the fastest way to find the right example.
   />
 </CardGrid>
 
-| If you need...                     | Start with                                                              |
-| ---------------------------------- | ----------------------------------------------------------------------- |
-| User accounts and sessions         | [Auth Setup](/slingshot/examples/with-auth/)                            |
-| Forum or discussion features       | [Forum App](/slingshot/examples/forum-app/)                             |
-| Multi-tenant SaaS                  | [SaaS Foundations](/slingshot/examples/saas-foundations/)               |
-| Collaboration product surface      | [Collaboration Workspace](/slingshot/examples/collaboration-workspace/) |
-| Publishing or docs platform        | [Content Platform](/slingshot/examples/content-platform/)               |
-| Your own entity-driven package     | [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       |
-| Background jobs and workflows      | [Orchestration](/slingshot/examples/orchestration/)                     |
-| Custom routes and event handling   | [Custom Plugin](/slingshot/examples/custom-plugin/)                     |
-| Full-text search                   | [Adding Search](/slingshot/examples/adding-search/)                     |
-| Live updates in the browser        | [Realtime with SSE](/slingshot/examples/realtime-sse/)                  |
-| Events that cross server instances | [Custom Event Bus](/slingshot/examples/custom-event-bus/)               |
+## Capability map
+
+| Example                                                                 | Auth | Entities | Events | Realtime | Permissions | Search | Jobs |
+| ----------------------------------------------------------------------- | ---- | -------- | ------ | -------- | ----------- | ------ | ---- |
+| [Auth Setup](/slingshot/examples/with-auth/)                            | x    |          |        |          |             |        |      |
+| [Forum App](/slingshot/examples/forum-app/)                             | x    | x        | x      |          | x           |        |      |
+| [SaaS Foundations](/slingshot/examples/saas-foundations/)               | x    | x        | x      |          | x           | x      |      |
+| [Collaboration Workspace](/slingshot/examples/collaboration-workspace/) | x    | x        | x      | x        | x           |        |      |
+| [Content Platform](/slingshot/examples/content-platform/)               | x    | x        | x      |          |             | x      |      |
+| [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       | x    | x        |        |          |             |        |      |
+| [Orchestration](/slingshot/examples/orchestration/)                     | x    |          |        |          |             |        | x    |
+| [Game Engine](/slingshot/examples/game-engine/)                         |      | x        | x      | x        |             |        |      |
+
+## Recommended progression
+
+1. [Quick Start](/slingshot/quick-start/) — get something running
+2. The example closest to your app — study the composition
+3. [Guides](/slingshot/guides/) — production concerns before you ship
 
 ## Ready for production
 
-Once you have a working app modeled after an example, the guides cover what you need to ship:
-
-- [Security](/slingshot/guides/security/) — CORS, CSRF, rate limits, helmet, secrets rotation
-- [Testing](/slingshot/guides/testing/) — unit, integration, and entity route testing patterns
-- [Deployment](/slingshot/guides/deployment/) — Docker, serverless, and managed hosting
-- [Multi-Tenancy](/slingshot/guides/multi-tenancy/) — tenant resolution, scoped data, and isolation
-- [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) — stateless workers, external event buses, and session stores
-
-Browse all guides under [Guides](/slingshot/guides/).
-
-## How these fit the docs spine
-
-- fundamentals: [Quick Start](/slingshot/quick-start/), [App Authoring](/slingshot/app-authoring/)
-- canonical package and entity path: [Package-First Authoring](/slingshot/package-first/),
-  [Entity System](/slingshot/entity-system/)
-- product-shaped references: the examples on this page
-- production and operational: [Guides](/slingshot/guides/)
-- advanced and escape-hatch references: [Custom Plugin](/slingshot/examples/custom-plugin/),
-  [Custom Event Bus](/slingshot/examples/custom-event-bus/)
+- [Security](/slingshot/guides/security/) — CORS, CSRF, rate limits, secrets
+- [Testing](/slingshot/guides/testing/) — unit, integration, and entity route testing
+- [Deployment](/slingshot/guides/deployment/) — Docker, serverless, managed hosting
+- [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) — stateless workers, external event buses

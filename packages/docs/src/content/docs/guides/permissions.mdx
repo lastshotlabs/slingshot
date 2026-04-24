@@ -1,70 +1,245 @@
 ---
 title: Permissions
-description: Server-level permissions bootstrap and how route and entity policy use it
+description: Server-level permissions setup, grant patterns, and evaluation across routes and realtime
 ---
 
-Permissions are a core app concern because the framework can bootstrap shared permissions state for
-the whole application.
+import { Aside } from '@astrojs/starlight/components';
 
-## Server-level bootstrap
+<Aside type="caution" title="Preview">
+  `@lastshotlabs/slingshot-permissions` is pre-1.0 (`0.0.2`). Start with [Core Features:
+  Permissions](/slingshot/core-features/permissions/) for a quick overview before diving into this
+  guide.
+</Aside>
 
-Use the root `permissions` config when you want a shared adapter, registry, and evaluator available
-to the rest of the app.
+## Setup
 
-```typescript
+Install and register the permissions plugin alongside auth:
+
+```bash
+bun add @lastshotlabs/slingshot-permissions
+```
+
+```typescript title="src/index.ts"
 import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
 
 await createServer({
-  permissions: {
-    enabled: true,
+  port: 3000,
+  security: { signing: { secret: process.env.JWT_SECRET! } },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
+    }),
+    createPermissionsPlugin(),
+  ],
+  packages: [blogPackage],
+});
+```
+
+The permissions plugin provides a shared evaluator that all packages can use. It depends on
+auth — auth identifies the actor, permissions decide what they can do.
+
+## Grant patterns
+
+Grants connect roles to actions. They are typically set during seed or admin operations.
+
+### Simple action grants
+
+```typescript
+// All users can read posts
+await permissions.grant({ role: 'user', action: 'post:read' });
+
+// Editors can create and update posts
+await permissions.grant({ role: 'editor', action: 'post:create' });
+await permissions.grant({ role: 'editor', action: 'post:update' });
+
+// Admins can do everything with posts
+await permissions.grant({ role: 'admin', action: 'post:*' });
+```
+
+### Owner-scoped grants
+
+Grants can be scoped so they only apply when the user owns the resource:
+
+```typescript
+// Users can update their own posts
+await permissions.grant({
+  role: 'user',
+  action: 'post:update',
+  scope: { authorId: '{{actor.id}}' },
+});
+
+// Users can delete their own posts
+await permissions.grant({
+  role: 'user',
+  action: 'post:delete',
+  scope: { authorId: '{{actor.id}}' },
+});
+```
+
+`{{actor.id}}` is resolved at evaluation time to the current user's ID.
+
+### Tenant-scoped grants
+
+For multi-tenant apps, scope grants to the tenant:
+
+```typescript
+// Org members can read projects in their org
+await permissions.grant({
+  role: 'member',
+  action: 'project:read',
+  scope: { orgId: '{{actor.tenantId}}' },
+});
+
+// Org admins can manage projects
+await permissions.grant({
+  role: 'org-admin',
+  action: 'project:*',
+  scope: { orgId: '{{actor.tenantId}}' },
+});
+```
+
+## Entity route policy
+
+The most common way to use permissions is in entity route policy. The evaluator runs
+automatically — no manual checks needed:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    authorId: field.string(),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' },
+    list: { auth: 'none' },
+    get: { auth: 'none' },
+    create: {
+      permission: { requires: 'post:create' },
+    },
+    update: {
+      permission: {
+        requires: 'post:update',
+        ownerField: 'authorId', // checks: actor owns this record
+      },
+    },
+    delete: {
+      permission: {
+        requires: 'post:delete',
+        ownerField: 'authorId',
+        or: 'post:moderate', // OR: actor has moderator permission
+      },
+    },
   },
 });
 ```
 
-That shared runtime is published into app context so packages and routes can use the same evaluator
-instead of each package inventing its own permissions bootstrap.
+### How evaluation works
 
-## Where permissions show up
+For `update` with `ownerField`:
 
-Permissions are then consumed by higher-level authoring surfaces:
+1. Framework fetches the existing record
+2. Checks: does the actor have `post:update`?
+3. Checks: is `record.authorId === actor.id`?
+4. Both must pass. If either fails, the request gets a `403`.
 
-- package-owned routes
-- entity route config
-- WebSocket subscribe guards
-- package capabilities and integrations that need subject checks
+For `delete` with `or`:
 
-## Package and entity policy
+1. First checks: `(has 'post:delete' AND is owner)`
+2. If that fails, checks: `has 'post:moderate'`
+3. If either path passes, the request proceeds.
 
-A typical entity route config might require a permission directly:
+## Package route permissions
+
+Package routes use the same `permission` option:
 
 ```typescript
-routes: {
-  defaults: { auth: 'userAuth' },
-  create: {
-    permission: { requires: 'post:write' },
+route.post({
+  path: '/posts/:id/feature',
+  auth: 'userAuth',
+  permission: { requires: 'post:feature' },
+  handler: async ({ params, respond }) => {
+    await featurePost(params.id);
+    return respond.json({ featured: true });
   },
-  update: {
-    permission: {
-      requires: 'post:write',
-      ownerField: 'authorId',
-      or: 'post:moderate',
-    },
-  },
-}
+});
 ```
 
-That works because the app has a shared permission model available at runtime.
+### Scoped permissions on routes
 
-## Separate concerns
+Pass dynamic values from the URL into the permission check:
 
-Keep these concerns separate when writing docs or app code:
+```typescript
+route.post({
+  path: '/orgs/:orgId/projects',
+  auth: 'userAuth',
+  permission: {
+    requires: 'project:create',
+    scope: { orgId: 'param:orgId' },
+  },
+  handler: async ({ body, params, respond }) => {
+    const project = await createProject(params.orgId, body);
+    return respond.json(project, 201);
+  },
+});
+```
 
-- bootstrap the shared permissions system at the app root
-- declare route or entity permissions where the behavior lives
+This checks: "Does this user have `project:create` scoped to this specific org?"
 
-Do not collapse those into one vague "auth" story.
+## Manual evaluation
 
-## Next
+When the declarative `permission` option is not flexible enough, use the evaluator directly:
 
-- [App Config](/slingshot/app-authoring/app-config/)
-- [Entity System: Route Policy](/slingshot/entity-system/route-policy/)
+```typescript
+route.post({
+  path: '/posts/:id/transfer',
+  auth: 'userAuth',
+  handler: async ({ actor, params, respond }) => {
+    const post = await getPost(params.id);
+
+    // Custom check: must own the post AND have transfer permission
+    const canTransfer = await evaluator.can(
+      { subjectId: actor.id!, subjectType: 'user' },
+      'post:transfer',
+      { authorId: post.authorId },
+    );
+
+    if (!canTransfer) return respond.json({ error: 'Forbidden' }, 403);
+
+    await transferPost(post.id, params.newOwnerId);
+    return respond.noContent();
+  },
+});
+```
+
+## WebSocket permissions
+
+The same evaluator works for realtime subscriptions:
+
+```typescript
+ws: {
+  endpoints: {
+    '/ws': {
+      onRoomSubscribe: async (ws, room) => {
+        const allowed = await evaluator.can(
+          { subjectId: ws.data.actorId, subjectType: 'user' },
+          'room:join',
+          { roomId: room },
+        );
+        return allowed;
+      },
+    },
+  },
+},
+```
+
+## See also
+
+- [Core Features: Permissions](/slingshot/core-features/permissions/) — quick overview
+- [Route Policy](/slingshot/entity-system/route-policy/) — per-route auth and permission config
+- [Auth](/slingshot/core-features/auth/) — identity and sessions
+- [SaaS Foundations](/slingshot/examples/saas-foundations/) — auth + orgs + permissions end-to-end

@@ -1,73 +1,123 @@
 ---
 title: Packages and Plugins
-description: Why packages are the canonical app-builder surface and where plugins still fit
+description: Why packages are the canonical composition surface and when to use raw plugins
 ---
 
-`packages` are the canonical code-first composition surface for Slingshot apps.
+Slingshot has two composition mechanisms: **packages** (the normal path) and **plugins**
+(the escape hatch). Most app code should be packages.
 
-`plugins` still exist, but they are the lower-level lifecycle contract.
+## Packages: the normal path
 
-## Prefer packages at the app root
+A package is a self-contained feature module. It owns entities, routes, middleware, and
+cross-package contracts:
 
 ```typescript
 import { createServer } from '@lastshotlabs/slingshot';
-import { blogPackage } from './blog/package';
+import { blogPackage } from './packages/blog';
+import { commentPackage } from './packages/comments';
 
 await createServer({
+  port: 3000,
+  packages: [blogPackage, commentPackage],
+});
+```
+
+Packages give you:
+
+- **Entity modules** — generated CRUD + operations from `defineEntity`
+- **Domain routes** — typed custom routes from `domain()` + `route.*()`
+- **Named middleware** — scoped to the package
+- **Capabilities** — typed cross-package service contracts
+- **Entity refs** — cross-package data access without coupling
+- **Dependency ordering** — packages boot in the right order
+
+The app root reads like a table of contents. Feature logic lives in packages.
+
+## Plugins: the escape hatch
+
+Plugins give you direct lifecycle hooks. Use them for infrastructure concerns that do not
+fit the package model:
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+
+const metricsPlugin: SlingshotPlugin = {
+  name: 'metrics',
+  setupMiddleware({ app }) {
+    // Runs before any routes — global timing middleware
+    app.use('*', async (c, next) => {
+      const start = Date.now();
+      await next();
+      console.log(`${c.req.method} ${c.req.path} ${Date.now() - start}ms`);
+    });
+  },
+  setupPost({ ctx }) {
+    // Runs after all routes are registered
+    console.log('Server ready');
+  },
+  teardown() {
+    // Runs on graceful shutdown
+    console.log('Shutting down');
+  },
+};
+
+await createServer({
+  port: 3000,
+  plugins: [metricsPlugin],
   packages: [blogPackage],
 });
 ```
 
-Packages let the app root compose higher-level domain modules directly:
+## When to use which
 
-- entity modules
-- package-owned domain routes
-- package middleware
-- typed capabilities
-- package dependency ordering
+| You are building...                        | Use                       |
+| ------------------------------------------ | ------------------------- |
+| A feature with entities and routes         | Package                   |
+| A feature with only custom routes          | Package                   |
+| A cross-cutting middleware (logging, CORS) | Plugin                    |
+| A framework integration (metrics, tracing) | Plugin                    |
+| Auth (sessions, OAuth, MFA)                | `createAuthPlugin`        |
+| Permissions (RBAC, grants)                 | `createPermissionsPlugin` |
 
-## What happens under the hood
+The built-in auth and permissions plugins are pre-built — you configure them, not write them.
+Custom infrastructure work is where raw plugins make sense.
 
-`createApp()` compiles packages into framework plugins internally.
+## How they relate
 
-That is an implementation detail, but it matters because it explains the split:
+Packages compile to plugins under the hood. When you call `createServer({ packages: [...] })`,
+the framework:
 
-- author packages for the normal code-first path
-- use raw plugins when you need direct lifecycle work
+1. Validates package dependencies
+2. Sorts packages in dependency order
+3. Converts each package into an internal plugin
+4. Runs all plugins (both raw plugins and package-derived) in order
 
-## When raw plugins are still correct
+This is an implementation detail, but it explains why packages and plugins coexist: they
+share the same lifecycle but present different authoring surfaces.
 
-Use `plugins` when you need:
+## Mixing packages and plugins
 
-- direct lifecycle hooks like `setupMiddleware`, `setupRoutes`, or `setupPost`
-- compatibility with older plugin-only surfaces
-- low-level integration work that does not fit the package authoring contracts
+You can use both in the same app:
 
-## Packages vs plugins
+```typescript
+await createServer({
+  port: 3000,
+  plugins: [
+    metricsPlugin,                // infrastructure: raw plugin
+    createAuthPlugin({ ... }),    // auth: pre-built plugin
+  ],
+  packages: [
+    blogPackage,                  // feature: package
+    commentPackage,               // feature: package
+    adminPackage,                 // feature: package
+  ],
+});
+```
 
-| Use case                                        | Prefer               |
-| ----------------------------------------------- | -------------------- |
-| Build an app from domain modules                | `packages`           |
-| Author entity- or route-centric product modules | `definePackage(...)` |
-| Register low-level lifecycle behavior directly  | `plugins`            |
-| Escape hatch for framework integrations         | `plugins`            |
-
-## Why the docs lead with packages
-
-Packages keep the public authoring surface aligned with the framework's DX work:
-
-- `definePackage(...)`
-- `domain(...)`
-- `route.*(...)`
-- `entity(...)`
-- `defineCapability(...)`
-- `provideCapability(...)`
-- `entityRef(...)`
-
-That is the surface app builders should learn first.
+Plugins run first (in order), then packages boot in dependency order.
 
 ## Next
 
-- [Package-First Authoring](/slingshot/package-first/)
-- [Entity System](/slingshot/entity-system/)
-- [Plugin Interface](/slingshot/authoring/plugin-interface/)
+- [Package-First Authoring](/slingshot/package-first/) — the full package authoring guide
+- [Entity System](/slingshot/entity-system/) — defining data models inside packages
+- [Plugin Interface](/slingshot/authoring/plugin-interface/) — the raw plugin lifecycle API

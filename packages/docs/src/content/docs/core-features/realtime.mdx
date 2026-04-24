@@ -1,0 +1,135 @@
+---
+title: Realtime
+description: Push live updates to browsers with SSE or build interactive features with WebSockets
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+You want your UI to update the moment something changes on the server. A new message appears
+in the chat. A task gets completed and the board updates. A live cursor shows where another
+user is typing.
+
+Slingshot has two built-in transports for this. Pick the one that matches your use case.
+
+## Choose your transport
+
+| You want to...                                                       | Use            |
+| -------------------------------------------------------------------- | -------------- |
+| Show live updates when data changes (dashboard, feed, notifications) | **SSE**        |
+| Build chat, collaborative editing, or live cursors                   | **WebSockets** |
+| Stream event-bus events to browser clients                           | **SSE**        |
+| Manage rooms, presence, or connection state                          | **WebSockets** |
+| Keep infrastructure simple                                           | **SSE**        |
+
+## SSE: live updates from the event bus
+
+SSE streams server events to browser clients over a simple HTTP connection. It plugs directly
+into the event bus — publish an event, mark it as client-safe, and browsers receive it
+automatically.
+
+```typescript
+import { createServer, defineEvent } from '@lastshotlabs/slingshot';
+
+// Mark events as client-safe so they reach browsers
+events.register(
+  defineEvent('task.completed', {
+    ownerPlugin: 'app',
+    exposure: ['client-safe'],
+    resolveScope(payload) {
+      return { userId: payload.userId };
+    },
+  }),
+);
+```
+
+Browser side:
+
+```javascript
+const es = new EventSource('/events?token=...');
+es.onmessage = event => {
+  const data = JSON.parse(event.data);
+  console.log('Live update:', data);
+};
+```
+
+That is it. No WebSocket server, no rooms, no connection management. The event bus does the
+heavy lifting.
+
+See [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) for the full setup
+including auth, scoping, and filtering.
+
+## WebSockets: bidirectional communication
+
+WebSockets are for features where clients send messages back. Chat, collaborative editing,
+live cursors, multiplayer — anything that needs low-latency two-way communication.
+
+```typescript
+await createServer({
+  port: 3000,
+  ws: {
+    endpoints: {
+      '/ws/chat': {
+        upgrade: async req => {
+          const token = new URL(req.url).searchParams.get('token');
+          if (!token) return new Response('Unauthorized', { status: 401 });
+          const userId = verifyToken(token);
+          if (!userId) return new Response('Unauthorized', { status: 401 });
+          return { actorId: userId };
+        },
+        on: {
+          open: ws => {
+            ws.subscribe('general');
+          },
+          message: (ws, message) => {
+            ws.publish('general', message);
+          },
+          close: ws => {
+            ws.unsubscribe('general');
+          },
+        },
+      },
+    },
+  },
+});
+```
+
+Browser side:
+
+```javascript
+const ws = new WebSocket('ws://localhost:3000/ws/chat?token=...');
+ws.onmessage = event => console.log('Message:', event.data);
+ws.send(JSON.stringify({ text: 'Hello everyone' }));
+```
+
+Bun's built-in pub/sub handles rooms. Clients subscribe to named rooms and publish to them
+without any external dependencies.
+
+See [WebSockets](/slingshot/app-authoring/websockets/) for rooms, presence, auth guards,
+entity channels, and scaling.
+
+## How they relate to events
+
+SSE is tightly coupled to the event model. You publish events and SSE exposes selected ones
+to browsers.
+
+WebSockets are a separate transport. They have their own connection lifecycle, rooms, and
+message handling. They _can_ participate in the event model, but they are not just "events
+over another wire."
+
+## Scaling
+
+- **SSE** scales with your event bus. Switch to BullMQ or Redis and SSE events cross instance
+  boundaries automatically.
+- **WebSockets** need explicit planning. Bun's pub/sub is in-process — for multi-instance
+  deployments, add a Redis transport.
+
+Read [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) when you move beyond a single
+instance.
+
+## Go deeper
+
+- [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) — full SSE authoring guide
+- [WebSockets](/slingshot/app-authoring/websockets/) — rooms, presence, entity channels, scaling
+- [WebSockets Guide](/slingshot/guides/websockets/) — advanced entity-channel and scaling patterns
+- [Realtime with SSE Example](/slingshot/examples/realtime-sse/) — complete working example
+- [Horizontal Scaling](/slingshot/guides/horizontal-scaling/) — multi-instance transport setup

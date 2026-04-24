@@ -1,130 +1,264 @@
 ---
 title: definePackage
-description: The top-level package contract for code-first app modules
+description: Package config, mount paths, dependencies, middleware, and composition
 ---
 
-`definePackage(...)` is the canonical package boundary.
+A package is a self-contained feature module. It owns its entities, routes, middleware, and
+mount path. The app root composes packages — it does not implement features.
 
-The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and its
-`blogPackage`.
+## A blog package
 
-## A package you can actually ship
-
-```typescript title="src/blog/package.ts"
+```typescript title="src/packages/blog.ts"
 import { z } from 'zod';
-import { definePackage, domain, entity, route } from '@lastshotlabs/slingshot';
-import { Post } from './post';
-import { PostOperations } from './post-operations';
+import {
+  defineEntity,
+  defineOperations,
+  definePackage,
+  domain,
+  entity,
+  field,
+  index,
+  op,
+  route,
+} from '@lastshotlabs/slingshot';
 
-const previewBody = z.object({
-  markdown: z.string(),
+// --- Entity ---
+
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    slug: field.string({ immutable: true }),
+    authorId: field.string(),
+    title: field.string(),
+    body: field.string(),
+    status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  indexes: [index(['slug']), index(['authorId'])],
+  routes: {
+    defaults: { auth: 'userAuth' },
+    list: { auth: 'none' },
+    get: { auth: 'none' },
+  },
 });
+
+const PostOps = defineOperations(Post, {
+  byAuthor: op.lookup({ fields: { authorId: 'param:authorId' }, returns: 'many' }),
+  bySlug: op.lookup({ fields: { slug: 'param:slug' }, returns: 'one' }),
+  publish: op.transition({
+    field: 'status',
+    from: 'draft',
+    to: 'published',
+    match: { id: 'param:id' },
+  }),
+});
+
+// --- Custom routes ---
+
+const previewBody = z.object({ markdown: z.string() });
+
+// --- Package ---
 
 export const blogPackage = definePackage({
   name: 'blog',
   mountPath: '/blog',
   dependencies: ['slingshot-auth'],
-  entities: [
-    entity({
-      config: Post,
-      operations: PostOperations,
+  entities: [entity({ config: Post, operations: PostOps })],
+  domains: [
+    domain({
+      name: 'extras',
+      basePath: '/extras',
+      routes: [
+        route.post({
+          path: '/preview',
+          auth: 'userAuth',
+          summary: 'Preview rendered markdown',
+          request: { body: previewBody },
+          handler: ({ body, respond }) =>
+            respond.json({ html: `<article>${body.markdown}</article>` }),
+        }),
+        route.get({
+          path: '/health',
+          auth: 'none',
+          summary: 'Blog package health check',
+          handler: ({ respond }) => respond.json({ ok: true }),
+        }),
+      ],
     }),
   ],
+  publicPaths: ['/blog/extras/health'],
+});
+```
+
+This package produces:
+
+- Five CRUD routes for posts at `/blog/posts/*`
+- Three operation routes (`by-author`, `by-slug`, `publish`)
+- Two custom routes (`/blog/extras/preview`, `/blog/extras/health`)
+- All auth-protected except reads and health
+
+## Package options reference
+
+| Field               | Required | What it does                                                |
+| ------------------- | -------- | ----------------------------------------------------------- |
+| `name`              | yes      | Stable identity for ordering, diagnostics, and dependencies |
+| `mountPath`         | no       | Base path for all package routes (default: `/`)             |
+| `dependencies`      | no       | Other packages or plugins that must boot first              |
+| `entities`          | no       | Entity modules owned by this package                        |
+| `domains`           | no       | Non-entity route groups owned by this package               |
+| `middleware`        | no       | Named middleware available to package routes                |
+| `capabilities`      | no       | Published and required cross-package contracts              |
+| `tenantExemptPaths` | no       | Paths that bypass tenant resolution                         |
+| `csrfExemptPaths`   | no       | Paths that bypass CSRF enforcement                          |
+| `publicPaths`       | no       | Paths exposed without auth                                  |
+
+## Mount paths
+
+The `mountPath` prefix applies to all routes in the package:
+
+```typescript
+const adminPackage = definePackage({
+  name: 'admin',
+  mountPath: '/admin',
+  domains: [
+    domain({
+      name: 'dashboard',
+      basePath: '/dashboard',
+      routes: [
+        route.get({
+          path: '/stats', // final path: /admin/dashboard/stats
+          auth: 'userAuth',
+          handler: ({ respond }) => respond.json({ users: 42 }),
+        }),
+      ],
+    }),
+  ],
+});
+```
+
+Entity routes also respect the mount path: a `Post` entity in a package with `mountPath: '/blog'`
+generates routes at `/blog/posts/*`.
+
+## Dependencies
+
+Packages can declare dependencies on other packages or plugins:
+
+```typescript
+const commentPackage = definePackage({
+  name: 'comments',
+  dependencies: ['blog', 'slingshot-auth'],
+  entities: [entity({ config: Comment })],
+});
+```
+
+Dependencies ensure:
+
+- Packages boot in the correct order
+- A clear error if a required dependency is missing
+- Cross-package contracts are explicit
+
+## Package middleware
+
+Middleware defined in a package is available to that package's routes by name:
+
+```typescript
+import { getActor } from '@lastshotlabs/slingshot';
+
+const adminPackage = definePackage({
+  name: 'admin',
   middleware: {
-    requireEditor: async (c, next) => {
-      if (c.get('actor')?.role !== 'editor') {
-        return c.json({ error: 'forbidden' }, 403);
+    requireAdmin: async (c, next) => {
+      const actor = getActor(c);
+      if (!actor.roles?.includes('admin')) {
+        return c.json({ error: 'Forbidden' }, 403);
       }
+      await next();
+    },
+    auditLog: async (c, next) => {
+      console.log(`[audit] ${c.req.method} ${c.req.path}`);
       await next();
     },
   },
   domains: [
     domain({
-      name: 'preview',
-      basePath: '/preview',
+      name: 'admin',
       routes: [
         route.post({
-          path: '/',
+          path: '/users/:id/ban',
           auth: 'userAuth',
-          middleware: ['requireEditor'],
-          request: { body: previewBody },
-          responses: {
-            200: { description: 'Rendered markdown preview' },
+          middleware: ['requireAdmin', 'auditLog'],
+          handler: async ({ params, respond }) => {
+            // ban user logic
+            return respond.json({ banned: params.id });
           },
-          handler: ({ body, respond }) =>
-            respond.json({
-              html: `<article>${body.markdown}</article>`,
-            }),
-        }),
-      ],
-    }),
-    domain({
-      name: 'health',
-      basePath: '/health',
-      routes: [
-        route.get({
-          path: '/',
-          auth: 'none',
-          handler: ({ respond }) => respond.json({ ok: true, package: 'blog' }),
         }),
       ],
     }),
   ],
-  publicPaths: ['/blog/health'],
 });
 ```
 
-That is a realistic package:
+## Composing packages in the app root
 
-- entity-backed routes live in `entities`
-- one-off but package-owned routes live in `domains`
-- package-local middleware stays package-owned
-- the app root only composes the package; it does not need to know the route internals
+The app root reads like a table of contents:
 
-## What it declares
+```typescript title="src/index.ts"
+import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { adminPackage } from './packages/admin';
+import { blogPackage } from './packages/blog';
+import { commentPackage } from './packages/comments';
 
-| Field               | Purpose                                                |
-| ------------------- | ------------------------------------------------------ |
-| `name`              | Stable package identity for ordering and diagnostics   |
-| `mountPath`         | Base path shared by the package's entities and domains |
-| `dependencies`      | Other packages or plugins that must be installed first |
-| `entities`          | Package-owned entity modules                           |
-| `domains`           | Package-owned non-entity route groups                  |
-| `middleware`        | Named middleware available to package routes           |
-| `capabilities`      | Published and required typed capabilities              |
-| `tenantExemptPaths` | Paths that bypass tenant resolution                    |
-| `csrfExemptPaths`   | Paths that bypass CSRF enforcement                     |
-| `publicPaths`       | Paths the package exposes publicly                     |
+await createServer({
+  port: 3000,
+  security: { signing: { secret: process.env.JWT_SECRET! } },
+  db: { default: { adapter: 'postgres', url: process.env.DATABASE_URL! } },
+  plugins: [createAuthPlugin({ auth: { roles: ['user', 'admin'], defaultRole: 'user' } })],
+  packages: [blogPackage, commentPackage, adminPackage],
+});
+```
 
-## Why this exists instead of "just plugins"
+Each package is self-contained. Adding a new feature means adding a new package to the array.
 
-Packages give the framework a stronger authoring contract:
+## Inspect a package
 
-- package-owned entities stay package-owned
-- route and middleware naming stays package-owned
-- capability wiring is explicit and typed
-- apps compose product modules directly instead of hand-wiring lifecycle code
-
-## Inspecting a package
-
-Use `inspectPackage(...)` when you want the effective route and module graph without dropping into
-framework internals.
+Use `inspectPackage` to see the effective routes and structure without reading framework internals:
 
 ```typescript
 import { inspectPackage } from '@lastshotlabs/slingshot';
-import { blogPackage } from './package';
+import { blogPackage } from './packages/blog';
 
 const inspection = inspectPackage(blogPackage);
 
+console.log(inspection.name); // 'blog'
 console.log(inspection.mountPath); // '/blog'
-console.log(inspection.entities.map(entity => entity.resolvedPath));
-console.log(inspection.domains.flatMap(domain => domain.routes));
+console.log(inspection.dependencies); // ['slingshot-auth']
+
+// See all entities
+for (const e of inspection.entities) {
+  console.log(e.entityName, e.resolvedPath, e.wiringMode);
+}
+
+// See all routes
+for (const d of inspection.domains) {
+  for (const r of d.routeDetails) {
+    console.log(r.method.toUpperCase(), r.resolvedPath, r.auth ?? 'default');
+  }
+}
+
+// See capabilities
+console.log(inspection.capabilities.provides);
+console.log(inspection.capabilities.requires);
 ```
 
-That is useful for docs tooling, tests, and sanity checks when a package is large enough to need a
-structural overview.
+This is useful for:
+
+- Tests that verify package structure
+- Docs tooling that generates route maps
+- Debugging boot issues in large apps
 
 ## Next
 
-- [domain and route](/slingshot/package-first/domain-and-route/)
-- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/)
+- [domain and route](/slingshot/package-first/domain-and-route/) — typed custom routes inside packages
+- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — cross-package contracts

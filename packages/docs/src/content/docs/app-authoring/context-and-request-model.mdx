@@ -3,76 +3,173 @@ title: Context and Request Model
 description: App-scoped runtime state, request-scoped identity, and where to read each one
 ---
 
-Slingshot separates app-scoped state from request-scoped state.
-
-That distinction matters because the framework supports multiple app instances in one process, and
-because auth, events, persistence, and realtime all cross route boundaries.
+Slingshot separates app-scoped state (things that exist for the lifetime of the process) from
+request-scoped state (things that exist for one HTTP request). Understanding the split makes
+everything from testing to middleware to realtime click.
 
 ## App-scoped state: `SlingshotContext`
 
-Use `getContext(app)` when you need runtime state for a specific assembled app instance.
+`SlingshotContext` is the runtime state for one assembled app instance. Access it with
+`getContext(app)`:
 
 ```typescript
 import { createApp, getContext } from '@lastshotlabs/slingshot';
 
-const { app } = await createApp({ packages: [] });
+const { app } = await createApp({ packages: [blogPackage] });
 const ctx = getContext(app);
-
-ctx.events.publish('app:ready', { plugins: [] });
 ```
 
-`SlingshotContext` is where the framework keeps:
+### What lives on the context
 
-- the frozen resolved config
-- the event bus and event publisher
-- persistence handles
-- plugin and package runtime state
-- runtime WebSocket state
-- cleanup helpers like `clear()` and `destroy()`
+| Property          | What it is                                   |
+| ----------------- | -------------------------------------------- |
+| `ctx.config`      | The frozen, resolved app config              |
+| `ctx.events`      | The event bus — `publish`, `on`, `off`       |
+| `ctx.persistence` | Database and storage handles                 |
+| `ctx.plugins`     | Registered plugin runtime state              |
+| `ctx.ws`          | WebSocket room state and broadcast helpers   |
+| `ctx.clear()`     | Resets in-memory state (for tests)           |
+| `ctx.destroy()`   | Tears down connections and runtime (cleanup) |
 
-## Request-scoped state
+### Use it in plugins
 
-Use the route context for request data and `getActor(...)` when you need the authenticated actor.
+Plugins get the context in their lifecycle hooks:
 
 ```typescript
-import { createRouter, getActor } from '@lastshotlabs/slingshot';
+const analyticsPlugin: SlingshotPlugin = {
+  name: 'analytics',
+  setupPost({ ctx }) {
+    // Access the event bus from app context
+    ctx.events.on('auth:user.created', async ({ userId }) => {
+      await trackSignup(userId);
+    });
+  },
+  teardown({ ctx }) {
+    // Clean up on shutdown
+    console.log('Analytics shutting down');
+  },
+};
+```
 
-export const router = createRouter();
+### Use it in tests
 
-router.get('/me', c => {
-  const actor = getActor(c);
-  return c.json({ actorId: actor.id });
+```typescript
+import { createApp, getContext } from '@lastshotlabs/slingshot';
+
+let app: Awaited<ReturnType<typeof createApp>>['app'];
+let ctx: ReturnType<typeof getContext>;
+
+beforeEach(async () => {
+  const result = await createApp({ packages: [blogPackage] });
+  app = result.app;
+  ctx = getContext(app);
+});
+
+afterEach(async () => {
+  await ctx.destroy();
+});
+
+test('creates a post', async () => {
+  const res = await app.request('/posts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: 'Test Post' }),
+  });
+  expect(res.status).toBe(201);
+});
+
+test('state is isolated between tests', async () => {
+  // ctx.clear() is called implicitly — each test starts fresh
+  const res = await app.request('/posts');
+  const data = await res.json();
+  expect(data.items).toHaveLength(0);
 });
 ```
 
-Request-scoped data is where things like params, query, headers, request id, and the authenticated
-actor belong.
+## Request-scoped state: the actor
+
+Every HTTP request has an identity — who is making it. In Slingshot, that is the **actor**.
+
+### In package route handlers
+
+Package route handlers receive the actor directly:
+
+```typescript
+route.get({
+  path: '/dashboard',
+  auth: 'userAuth',
+  handler: ({ actor, respond }) => {
+    return respond.json({
+      userId: actor.id,
+      roles: actor.roles,
+      tenantId: actor.tenantId,
+    });
+  },
+});
+```
+
+### In middleware or raw Hono routes
+
+Use `getActor(c)` and related helpers:
+
+```typescript
+import { getActor, getActorId, getRequestTenantId } from '@lastshotlabs/slingshot-core';
+
+// Full actor object
+const actor = getActor(c);
+// actor.id         — user ID (or null for anonymous)
+// actor.kind       — 'user', 'service', 'anonymous'
+// actor.roles      — role strings
+// actor.tenantId   — the actor's home tenant
+// actor.sessionId  — current session
+// actor.claims     — JWT claims
+
+// Just the user ID
+const userId = getActorId(c);
+
+// The request-scoped tenant (from URL, header, or resolver)
+const tenantId = getRequestTenantId(c);
+```
+
+### The Actor shape
+
+```typescript
+interface Actor {
+  id: string | null;
+  kind: 'user' | 'service' | 'anonymous';
+  roles?: string[];
+  tenantId?: string;
+  sessionId?: string;
+  claims?: Record<string, unknown>;
+}
+```
 
 ## What belongs where
 
-| Use case                             | Read from                              |
-| ------------------------------------ | -------------------------------------- |
-| Authenticated caller for one request | `getActor(c)` or route handler context |
-| Event publishing infrastructure      | `SlingshotContext`                     |
-| Shared persistence handles           | `SlingshotContext`                     |
-| WebSocket room state                 | `SlingshotContext.ws`                  |
-| Route params and JSON body           | request or typed route context         |
-| App config                           | `SlingshotContext.config`              |
+| You need...                              | Read from                 |
+| ---------------------------------------- | ------------------------- |
+| Who is making this request               | `actor` or `getActor(c)`  |
+| Just the user ID                         | `getActorId(c)`           |
+| The current tenant                       | `getRequestTenantId(c)`   |
+| Route params, query string, request body | `params`, `query`, `body` |
+| Event bus                                | `ctx.events` (app-scoped) |
+| Database handles                         | `ctx.persistence`         |
+| WebSocket rooms                          | `ctx.ws`                  |
+| App config                               | `ctx.config` (frozen)     |
 
 ## Common mistakes
 
-- Do not stash context in a module-global variable. Use `getContext(app)` for the specific app
-  instance you are working with.
-- Do not treat request identity as app-scoped state.
-- Do not mutate `ctx.config`. It is frozen on purpose.
+- **Do not stash `ctx` in a module-global variable.** Use `getContext(app)` for the specific
+  app instance. This matters when running multiple app instances in one process (common in tests).
 
-## Tests
+- **Do not treat request identity as app state.** The actor belongs to the request, not the
+  app. If you need to correlate across requests, use event payloads or database state.
 
-`ctx.clear()` resets in-memory state between tests. `ctx.destroy()` tears down connections and
-runtime resources when the app is done.
+- **Do not mutate `ctx.config`.** It is frozen after assembly. If you need dynamic config,
+  use a secret provider or environment variables at boot time.
 
 ## Next
 
-- [createServer and createApp](/slingshot/app-authoring/create-server-and-create-app/)
-- [Middleware](/slingshot/app-authoring/middleware/)
-- [Plugin and Authoring Reference: SlingshotContext](/slingshot/authoring/context/)
+- [createServer and createApp](/slingshot/app-authoring/create-server-and-create-app/) — the assembly step
+- [Middleware](/slingshot/app-authoring/middleware/) — where request-scoped state intersects middleware chains
+- [SlingshotContext reference](/slingshot/authoring/context/) — full context API for plugin authors

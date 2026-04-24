@@ -1,88 +1,272 @@
 ---
 title: App Config
-description: The top-level config surface every Slingshot app is built from
+description: Every config option for createServer and createApp — security, databases, events, realtime, and more
 ---
 
-The root config is large because it owns real application concerns, not just route registration.
+The app root config controls everything your app needs to run. Here is the full surface.
 
-## A representative app root
+## A production-ready app root
 
 ```typescript title="src/index.ts"
 import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import { blogPackage } from './packages/blog';
+import { adminPackage } from './packages/admin';
 
 await createServer({
-  port: 3000,
-  routesDir: new URL('./routes', import.meta.url).pathname,
-  modelSchemas: new URL('./schemas', import.meta.url).pathname,
-  meta: { name: 'Acme', version: '1.0.0' },
+  // --- Server ---
+  port: Number(process.env.PORT ?? 3000),
+
+  // --- App metadata ---
+  meta: { name: 'My App', version: '1.0.0' },
+
+  // --- Security ---
   security: {
     signing: { secret: process.env.JWT_SECRET! },
-    cors: ['http://localhost:4321'],
+    cors: { origin: ['https://myapp.com', 'https://admin.myapp.com'] },
+    csrf: { enabled: true },
+    rateLimit: { windowMs: 60_000, max: 100 },
+    helmet: { enabled: true },
   },
+
+  // --- Database ---
   db: {
-    sqlite: './data/app.db',
-    redis: process.env.REDIS_URL,
+    default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
+    cache: { adapter: 'redis', url: process.env.REDIS_URL! },
   },
-  packages: [],
-  ws: { endpoints: {} },
-  sse: { endpoints: {} },
+
+  // --- Plugins ---
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
+    }),
+    createPermissionsPlugin(),
+  ],
+
+  // --- Packages ---
+  packages: [blogPackage, adminPackage],
+
+  // --- Events ---
+  eventBus: 'bullmq', // or 'memory' (default), 'redis'
+
+  // --- WebSockets ---
+  ws: {
+    endpoints: {
+      '/ws': {
+        onConnect: async (ws) => { console.log('Connected:', ws.data.actorId); },
+        onMessage: async (ws, message) => { /* handle message */ },
+        onClose: async (ws) => { console.log('Disconnected'); },
+      },
+    },
+  },
+
+  // --- SSE ---
+  sse: {
+    endpoints: {
+      '/events': { heartbeatMs: 30_000 },
+    },
+  },
+
+  // --- Jobs ---
+  jobs: { enabled: true },
+
+  // --- Operations ---
+  logging: { enabled: true },
+  metrics: { enabled: true },
+  observability: { serviceName: 'my-app' },
+
+  // --- Secrets ---
   secrets: { provider: 'env' },
 });
 ```
 
-## The config categories
+## Config reference
 
-| Category            | Keys                                              | What it controls                                                          |
-| ------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
-| App metadata        | `meta`, `routesDir`, `modelSchemas`, `versioning` | Route discovery, docs metadata, schema preload, versioned APIs            |
-| Request pipeline    | `security`, `middleware`, `validation`            | CORS, signing, rate limiting, request middleware, validation output       |
-| Infrastructure      | `db`, `upload`, `jobs`, `runtime`, `secrets`      | Databases, uploads, job endpoints, runtime abstraction, secret resolution |
-| Composition         | `packages`, `plugins`, `permissions`              | Package-first app structure, raw plugins, shared permissions bootstrap    |
-| Events and realtime | `eventBus`, `kafkaConnectors`, `ws`, `sse`        | Cross-package events, Kafka bridge, WebSockets, SSE                       |
-| Operations          | `logging`, `metrics`, `observability`, `tenancy`  | Logging, `/metrics`, tracing, tenant resolution                           |
+### Server
 
-## The keys that matter first
+| Key    | Type     | Default | What it does      |
+| ------ | -------- | ------- | ----------------- |
+| `port` | `number` | `3000`  | HTTP server port  |
 
-### `packages`
+### App metadata
 
-The canonical code-first composition surface. Prefer this for app roots.
+| Key             | What it does                                         |
+| --------------- | ---------------------------------------------------- |
+| `meta`          | App name and version for OpenAPI docs                |
+| `routesDir`     | Directory for auto-discovered route files            |
+| `modelSchemas`  | Directory for shared Zod schemas preloaded at boot   |
+| `versioning`    | API versioning config for versioned route trees      |
 
-### `plugins`
+### Security
 
-Still supported, but lower-level. Use it when you need direct lifecycle hooks or compatibility with
-older/plugin-only surfaces.
+```typescript
+security: {
+  signing: {
+    secret: 'min-32-char-secret',
+    previousSecrets: ['old-secret'],    // for zero-downtime rotation
+  },
+  cors: {
+    origin: ['https://myapp.com'],      // allowed origins
+    credentials: true,
+  },
+  csrf: { enabled: true },
+  rateLimit: {
+    windowMs: 60_000,                   // 1 minute window
+    max: 100,                           // max requests per window
+  },
+  helmet: { enabled: true },           // security headers
+}
+```
 
-### `eventBus`
+### Database
 
-Every app has one. Omit it and Slingshot creates a default in-process bus. Supply your own when you
-need shared multi-instance event delivery or custom transport behavior.
+```typescript
+// Single database
+db: {
+  default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
+}
 
-### `ws` and `sse`
+// Multiple named databases
+db: {
+  default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
+  cache: { adapter: 'redis', url: process.env.REDIS_URL! },
+  analytics: { adapter: 'mongo', url: process.env.MONGO_URL! },
+}
 
-These are separate transport surfaces. They are both core and both documented separately because
-they solve different problems.
+// SQLite for development
+db: {
+  default: { adapter: 'sqlite', url: './data/app.db' },
+}
+```
 
-### `secrets` and `runtime`
+Supported adapters: `postgres`, `sqlite`, `mongo`, `redis`. Entities use the `default`
+connection unless they specify a named connection with `adapter: 'cache'`.
 
-These are bootstrap concerns, not package-level details. They belong at the app root because the
-framework resolves them before most of the app is assembled.
+### Composition
 
-## Do not treat the root config as a dump
+| Key           | What it does                                          |
+| ------------- | ----------------------------------------------------- |
+| `packages`    | Feature packages to load (the main composition surface) |
+| `plugins`     | Raw plugins for auth, permissions, and infrastructure |
+| `permissions` | Shared permissions bootstrap config                   |
 
-The app root should answer a few clear questions:
+### Events
 
-- how the app is composed
-- how identity and security work
-- where state is stored
-- how events are transported
-- what realtime surfaces exist
-- what runtime and operational features are turned on
+| Key               | What it does                                        |
+| ----------------- | --------------------------------------------------- |
+| `eventBus`        | Event transport: `'memory'` (default), `'bullmq'`, `'redis'` |
+| `kafkaConnectors` | Kafka bridge config for external event streaming    |
 
-If those concerns are scattered across multiple ad hoc entry files, the app becomes harder to
-operate.
+### Realtime
+
+```typescript
+// WebSocket endpoints
+ws: {
+  endpoints: {
+    '/ws': {
+      onConnect: async (ws) => { },
+      onMessage: async (ws, message) => { },
+      onClose: async (ws) => { },
+    },
+  },
+}
+
+// SSE endpoints
+sse: {
+  endpoints: {
+    '/events': { heartbeatMs: 30_000 },
+  },
+}
+```
+
+### Infrastructure
+
+| Key             | What it does                                       |
+| --------------- | -------------------------------------------------- |
+| `upload`        | File upload config (provider, directory, limits)   |
+| `jobs`          | Background job orchestration config                |
+| `runtime`       | Runtime abstraction (Bun, Node, edge, Lambda)      |
+| `secrets`       | Secret provider: `'env'`, `'ssm'`, `'file'`       |
+
+### Operations
+
+| Key             | What it does                                       |
+| --------------- | -------------------------------------------------- |
+| `logging`       | Structured logging config                          |
+| `metrics`       | Metrics endpoint (`/metrics`)                      |
+| `observability` | OpenTelemetry tracing config                       |
+| `tenancy`       | Tenant resolver for multi-tenant apps              |
+| `middleware`     | Global middleware array                            |
+| `validation`    | Request/response validation behavior               |
+
+## Config by use case
+
+### Minimal dev server
+
+```typescript
+await createServer({
+  port: 3000,
+  packages: [appPackage],
+});
+```
+
+### API with auth
+
+```typescript
+await createServer({
+  port: 3000,
+  security: { signing: { secret: 'dev-secret-change-in-prod' } },
+  plugins: [createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } })],
+  packages: [appPackage],
+});
+```
+
+### Multi-tenant SaaS
+
+```typescript
+await createServer({
+  port: 3000,
+  security: { signing: { secret: process.env.JWT_SECRET! } },
+  db: { default: { adapter: 'postgres', url: process.env.DATABASE_URL! } },
+  tenancy: {
+    resolver: 'header',
+    headerName: 'x-tenant-id',
+  },
+  plugins: [
+    createAuthPlugin({ auth: { roles: ['user', 'admin'], defaultRole: 'user' } }),
+    createPermissionsPlugin(),
+  ],
+  packages: [appPackage],
+});
+```
+
+### Realtime app with WebSockets
+
+```typescript
+await createServer({
+  port: 3000,
+  security: { signing: { secret: process.env.JWT_SECRET! } },
+  plugins: [createAuthPlugin({ auth: { roles: ['user'], defaultRole: 'user' } })],
+  ws: {
+    endpoints: {
+      '/ws': {
+        onConnect: async (ws) => {
+          console.log('User connected:', ws.data.actorId);
+        },
+        onMessage: async (ws, message) => {
+          // Echo back
+          ws.send(JSON.stringify({ echo: message }));
+        },
+      },
+    },
+  },
+  packages: [chatPackage],
+});
+```
 
 ## Next
 
-- [Middleware](/slingshot/app-authoring/middleware/)
-- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)
-- [Runtime and Infrastructure](/slingshot/app-authoring/runtime-and-infrastructure/)
+- [Middleware](/slingshot/app-authoring/middleware/) — global and package middleware
+- [Runtime and Infrastructure](/slingshot/app-authoring/runtime-and-infrastructure/) — databases, secrets, uploads
+- [Security Guide](/slingshot/guides/security/) — CORS, CSRF, rate limits, and headers in depth

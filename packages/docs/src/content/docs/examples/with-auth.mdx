@@ -5,6 +5,11 @@ description: Email/password login, JWT sessions, OAuth, MFA, passkeys — the fu
 
 import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
 
+> Preview: `@lastshotlabs/slingshot-auth` is currently pre-1.0 (`0.0.2`) in this worktree. Read
+> [Auth](/slingshot/core-features/auth/) and
+> [Maturity and Package Status](/slingshot/core-features/maturity-and-package-status/) before you
+> commit to this package in a product.
+
 Add `slingshot-auth` and you get registration, login, session management, password reset, OAuth, MFA, and passkeys. All from one plugin, zero boilerplate.
 
 Source-backed example app: `examples/with-auth/`
@@ -18,6 +23,26 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth hono zod
 ## Minimum setup
 
 <Tabs>
+  <TabItem label="Code">
+    ```typescript title="src/index.ts"
+    import { createServer } from '@lastshotlabs/slingshot';
+    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+    await createServer({
+      port: 3000,
+      security: {
+        signing: { secret: process.env.JWT_SECRET! },
+      },
+      plugins: [
+        createAuthPlugin({
+          auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
+        }),
+      ],
+    });
+    ```
+
+  </TabItem>
   <TabItem label="Manifest">
     ```json title="app.manifest.json"
     {
@@ -40,26 +65,6 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth hono zod
 
     ```bash
     slingshot start
-    ```
-
-  </TabItem>
-  <TabItem label="Code">
-    ```typescript title="src/index.ts"
-    import { createServer } from '@lastshotlabs/slingshot';
-    import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-
-    await createServer({
-      port: 3000,
-      security: {
-        signing: { secret: process.env.JWT_SECRET! },
-      },
-      plugins: [
-        createAuthPlugin({
-          auth: { roles: ['user', 'admin'], defaultRole: 'user' },
-          db: { auth: 'memory', sessions: 'memory', oauthState: 'memory' },
-        }),
-      ],
-    });
     ```
 
   </TabItem>
@@ -121,7 +126,7 @@ router.openapi(
     },
   }),
   // @ts-expect-error -- simplified doc example, handler type is narrower than openapi expects
-  c => c.json({ userId: getActor(c).id!, roles: (c.get('roles') as string[]) ?? [] }),
+  c => c.json({ userId: getActor(c).id!, roles: getActor(c).roles ?? [] }),
 );
 
 // Require a specific role — returns 403 if the user doesn't have it
@@ -359,7 +364,7 @@ auth: {
 
 ## Multiple roles
 
-Declare all roles upfront. Auth stores them in the JWT and sets `c.get('roles')` on every request:
+Declare all roles upfront. Auth stores them in the JWT. Access them via `getActor(c).roles`:
 
 ```typescript
 auth: { roles: ['user', 'moderator', 'admin'], defaultRole: 'user' }

@@ -9,7 +9,7 @@ Slingshot has a first-class tenant model. Every request carries a `tenantId` on 
 
 ## How it works
 
-The framework calls your `tenantResolver` on every request before any routes run. The returned string becomes `c.get('tenantId')`, available in all middleware and route handlers. Plugins read it automatically.
+The framework calls your `tenantResolver` on every request before any routes run. The returned string is available via `getRequestTenantId(c)` in all middleware and route handlers. Plugins read it automatically.
 
 For single-tenant apps: `tenantResolver: () => 'default'`.
 
@@ -162,7 +162,7 @@ import { createRouter } from '@lastshotlabs/slingshot-core';
 const router = createRouter();
 
 router.get('/my-data', c => {
-  const tenantId = c.get('tenantId'); // string | null
+  const tenantId = getRequestTenantId(c); // string | null
   return c.json({ tenantId });
 });
 ```
@@ -205,7 +205,7 @@ Plugins that support multi-tenancy scope all queries by `tenantId` automatically
 | `slingshot-push`          | Push subscriptions                            |
 | `slingshot-organizations` | Organizations and memberships                 |
 
-No extra config needed. They read `c.get('tenantId')` from the request context.
+No extra config needed. They read the tenant from the request context automatically.
 
 <Aside type="tip" title="dataScope vs policy">
   `dataScope` handles tenant isolation (row-level filtering by `tenantId` or `authorId`). For
@@ -227,7 +227,7 @@ declare const adapter: AuthAdapter & {
 await adapter.addTenantRole('usr_123', 'acme', 'member');
 ```
 
-With tenant roles enabled, `c.get('tenantRoles')` holds the user's roles scoped to `c.get('tenantId')`.
+With tenant roles enabled, `getActor(c).roles` holds the user's roles scoped to the current tenant.
 
 ## Organizations as tenants
 

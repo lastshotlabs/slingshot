@@ -1,39 +1,84 @@
 ---
 title: Package-First Authoring
-description: Organize your backend into reusable modules with typed routes, middleware, and capabilities
+description: Organize your backend into composable packages that own their routes, entities, and middleware
 ---
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-Most backend apps start simple and get messy fast — routes scattered across files, middleware applied
-inconsistently, shared logic duplicated between features. Packages solve this by giving each feature
-area a clear boundary.
+Your app starts as one file with a few routes. Then it grows. You add auth, then blog posts,
+then comments, then notifications, then admin endpoints.
 
-A package owns its routes, middleware, entities, and capabilities. The app root just composes them.
+At some point, having everything in one file stops working. That is when you reach for packages.
 
-## What you'll learn
+## What a package gives you
 
-- How to define a package and mount it at a path
-- How to write typed routes inside a package
-- How to share capabilities between packages
-- When to use packages vs raw plugins
+A package is a feature boundary. It owns:
+
+- its routes
+- its entities
+- its middleware
+- its mount path
+
+The app root just composes packages. It does not implement features.
+
+## Before and after
+
+**Without packages** — everything is tangled:
+
+```typescript
+await createServer({
+  port: 3000,
+  // 200 lines of routes, middleware, entities mixed together
+});
+```
+
+**With packages** — each feature is self-contained:
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+import { adminPackage } from './packages/admin';
+import { authPackage } from './packages/auth';
+import { blogPackage } from './packages/blog';
+
+await createServer({
+  port: 3000,
+  packages: [blogPackage, authPackage, adminPackage],
+});
+```
+
+Each package file is focused. The app root reads like a table of contents.
 
 ## Your first package
 
-```typescript
-import { definePackage, domain, route } from '@lastshotlabs/slingshot';
+```typescript title="src/packages/blog.ts"
+import { defineEntity, definePackage, domain, entity, field, route } from '@lastshotlabs/slingshot';
 
-export const healthPackage = definePackage({
-  name: 'health',
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+    published: field.boolean({ default: false }),
+  },
+});
+
+export const blogPackage = definePackage({
+  name: 'blog',
+  entities: [entity({ config: Post })],
   domains: [
     domain({
-      name: 'health',
-      basePath: '/health',
+      name: 'blog-extras',
+      basePath: '/blog',
       routes: [
         route.get({
-          path: '/',
+          path: '/featured',
           auth: 'none',
-          handler: ({ respond }) => respond.json({ ok: true }),
+          summary: 'Get featured posts',
+          handler: async ({ respond }) => {
+            // Custom logic that does not fit the entity model
+            return respond.json({ posts: [] });
+          },
         }),
       ],
     }),
@@ -41,42 +86,68 @@ export const healthPackage = definePackage({
 });
 ```
 
-Register it in your app:
+The blog package owns entity routes (generated CRUD for posts) AND custom routes
+(`/blog/featured`). Both live inside the same package boundary.
+
+## What should be a package
+
+| You are building... | Package structure                            |
+| ------------------- | -------------------------------------------- |
+| A blog feature      | Post entity + custom routes for preview/feed |
+| User profiles       | Profile entity + avatar upload route         |
+| An admin dashboard  | Admin routes + middleware for role checks    |
+| Payment processing  | Custom routes + webhook handler              |
+| Notifications       | Notification entity + SSE delivery routes    |
+| A search feature    | Custom search routes + event subscribers     |
+
+## Packages with dependencies
+
+Packages can declare dependencies on other packages:
 
 ```typescript
-import { createServer } from '@lastshotlabs/slingshot';
-import { healthPackage } from './packages/health';
-
-await createServer({
-  port: 3000,
-  packages: [healthPackage],
+export const commentPackage = definePackage({
+  name: 'comments',
+  dependencies: ['blog', 'slingshot-auth'],
+  entities: [entity({ config: Comment })],
 });
 ```
 
-That's it. The package mounts at `/health`, the route responds at `GET /health/`, and the app root
-doesn't need to know anything about the route internals.
+Dependencies ensure packages boot in the right order and make cross-package contracts explicit.
 
-## When to use packages
+## When NOT to use a package
 
-| Situation                                       | Use                                                                         |
-| ----------------------------------------------- | --------------------------------------------------------------------------- |
-| Feature area with its own routes                | Package with `domain(...)`                                                  |
-| Data-shaped domain (posts, users, orders)       | Package with `entity(...)` — see [Entity System](/slingshot/entity-system/) |
-| Shared middleware or services                   | Package with capabilities                                                   |
-| One-off infrastructure (custom health, metrics) | Package with a single domain                                                |
-| Framework-level lifecycle work                  | Raw plugin — see [Escape Hatches](/slingshot/package-first/escape-hatches/) |
+- **One-off routes** — if you just need a health check, put it in the app root
+- **Framework-level hooks** — use a raw plugin for lifecycle work like custom middleware registration
+- **A single entity with no custom routes** — a package with just one entity is fine,
+  but do not create package boundaries for complexity's sake
 
-## Learn this section in order
+## Read in order
 
-1. [definePackage](/slingshot/package-first/define-package/) — declare the boundary, mount path, and dependencies
-2. [domain and route](/slingshot/package-first/domain-and-route/) — write typed routes that belong to the package
-3. [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — share services across packages
-4. [Escape Hatches](/slingshot/package-first/escape-hatches/) — when to drop to raw plugins
+<CardGrid>
+  <LinkCard
+    title="definePackage"
+    href="/slingshot/package-first/define-package/"
+    description="Package config, mount paths, dependencies, middleware, and composition."
+  />
+  <LinkCard
+    title="domain and route"
+    href="/slingshot/package-first/domain-and-route/"
+    description="Typed custom routes with auth, validation, and OpenAPI — owned by the package."
+  />
+  <LinkCard
+    title="Capabilities and entityRef"
+    href="/slingshot/package-first/capabilities-and-entity-ref/"
+    description="Cross-package contracts and entity references for loose coupling."
+  />
+  <LinkCard
+    title="Escape Hatches"
+    href="/slingshot/package-first/escape-hatches/"
+    description="When to drop to raw plugins or lower-level patterns."
+  />
+</CardGrid>
 
 ## Where entities fit
 
-If your package owns data (posts, comments, orders), the entity system generates CRUD routes,
-operations, and storage wiring from a single definition. You add `entity(...)` modules inside
-`definePackage(...)`.
-
-See [Entity System](/slingshot/entity-system/) next.
+If your package owns data (posts, users, orders, comments), define an entity inside it.
+The [Entity System](/slingshot/entity-system/) generates CRUD routes and operations from
+a single definition.

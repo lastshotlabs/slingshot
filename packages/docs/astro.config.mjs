@@ -75,82 +75,59 @@ export default defineConfig({
           ],
         },
         {
-          label: 'App Authoring',
+          label: 'Core Features',
           items: [
-            { label: 'Overview', slug: 'app-authoring' },
+            {
+              label: 'Overview',
+              slug: 'core-features',
+            },
+            { label: 'Data and Entities', slug: 'core-features/data-and-entities' },
+            { label: 'Events and Fanout', slug: 'core-features/events-and-fanout' },
+            { label: 'Realtime', slug: 'core-features/realtime' },
+            {
+              label: 'Auth',
+              slug: 'core-features/auth',
+              badge: { text: 'Preview', variant: 'caution' },
+            },
+            {
+              label: 'Permissions',
+              slug: 'core-features/permissions',
+              badge: { text: 'Preview', variant: 'caution' },
+            },
+            {
+              label: 'Jobs and Orchestration',
+              slug: 'core-features/jobs-and-orchestration',
+              badge: { text: 'Preview', variant: 'caution' },
+            },
+            {
+              label: 'Maturity and Package Status',
+              slug: 'core-features/maturity-and-package-status',
+            },
+          ],
+        },
+        {
+          label: 'Authoring Model',
+          items: [
+            { label: 'Overview', slug: 'authoring-model' },
+            { label: 'App Roots and Runtime', slug: 'app-authoring' },
             {
               label: 'createServer and createApp',
               slug: 'app-authoring/create-server-and-create-app',
             },
             { label: 'Starter App', slug: 'app-authoring/starter-app' },
             { label: 'App Config', slug: 'app-authoring/app-config' },
-            {
-              label: 'Context and Request Model',
-              slug: 'app-authoring/context-and-request-model',
-            },
-            { label: 'Middleware', slug: 'app-authoring/middleware' },
             { label: 'Packages and Plugins', slug: 'app-authoring/packages-and-plugins' },
-            {
-              label: 'OpenAPI and Validation',
-              slug: 'app-authoring/openapi-and-validation',
-            },
-            {
-              label: 'Runtime and Infrastructure',
-              slug: 'app-authoring/runtime-and-infrastructure',
-            },
-          ],
-        },
-        {
-          label: 'Core Features',
-          items: [
-            {
-              label: 'Events and the Event Bus',
-              slug: 'app-authoring/events-and-the-event-bus',
-            },
-            { label: 'WebSockets', slug: 'app-authoring/websockets' },
-            { label: 'Server-Sent Events', slug: 'app-authoring/server-sent-events' },
-            {
-              label: 'Auth',
-              slug: 'examples/with-auth',
-              badge: { text: 'Preview', variant: 'caution' },
-            },
-            {
-              label: 'Permissions',
-              slug: 'guides/permissions',
-              badge: { text: 'Preview', variant: 'caution' },
-            },
-            {
-              label: 'Multi-Tenancy',
-              slug: 'guides/multi-tenancy',
-              badge: { text: 'Preview', variant: 'caution' },
-            },
-            {
-              label: 'Jobs and Orchestration',
-              slug: 'orchestration/overview',
-              badge: { text: 'Preview', variant: 'caution' },
-            },
-          ],
-        },
-        {
-          label: 'Package-First Authoring',
-          items: [
-            { label: 'Overview', slug: 'package-first' },
+            { label: 'Package-First Authoring', slug: 'package-first' },
             { label: 'definePackage', slug: 'package-first/define-package' },
             { label: 'domain and route', slug: 'package-first/domain-and-route' },
             {
               label: 'Capabilities and entityRef',
               slug: 'package-first/capabilities-and-entity-ref',
             },
-            { label: 'Escape Hatches', slug: 'package-first/escape-hatches' },
-          ],
-        },
-        {
-          label: 'Entity System',
-          items: [
-            { label: 'Overview', slug: 'entity-system' },
+            { label: 'Entity System', slug: 'entity-system' },
             { label: 'defineEntity', slug: 'entity-system/define-entity' },
-            { label: 'Route Policy', slug: 'entity-system/route-policy' },
             { label: 'Operations', slug: 'entity-system/operations' },
+            { label: 'Route Policy', slug: 'entity-system/route-policy' },
             {
               label: 'Storage and Adapter Wiring',
               slug: 'entity-system/storage-and-adapter-wiring',
@@ -159,19 +136,20 @@ export default defineConfig({
               label: 'Generated Routes, Overrides, and Extra Routes',
               slug: 'entity-system/generated-routes-overrides-and-extra-routes',
             },
-          ],
-        },
-        {
-          label: 'Orchestration',
-          badge: { text: 'Preview', variant: 'caution' },
-          collapsed: true,
-          items: [
-            { label: 'Overview', slug: 'orchestration/overview' },
-            { label: 'Code-First Guide', slug: 'orchestration/code-first' },
-            { label: 'Tasks and Workflows', slug: 'orchestration/tasks-and-workflows' },
-            { label: 'Adapters', slug: 'orchestration/adapters' },
-            { label: 'HTTP API', slug: 'orchestration/http-api' },
-            { label: 'Events', slug: 'orchestration/events' },
+            { label: 'Middleware', slug: 'app-authoring/middleware' },
+            {
+              label: 'Context and Request Model',
+              slug: 'app-authoring/context-and-request-model',
+            },
+            {
+              label: 'OpenAPI and Validation',
+              slug: 'app-authoring/openapi-and-validation',
+            },
+            {
+              label: 'Runtime and Infrastructure',
+              slug: 'app-authoring/runtime-and-infrastructure',
+            },
+            { label: 'Escape Hatches', slug: 'package-first/escape-hatches' },
           ],
         },
         {
@@ -219,12 +197,39 @@ export default defineConfig({
           ],
         },
         {
+          label: 'Advanced',
+          items: [
+            { label: 'Overview', slug: 'advanced' },
+            { label: 'Escape Hatches', slug: 'advanced/escape-hatches' },
+            { label: 'Alternate Paths', slug: 'alternate-paths' },
+            { label: 'Manifest Authoring', slug: 'alternate-paths/manifest-authoring' },
+            { label: 'Manifest vs Code', slug: 'manifest-vs-code' },
+            { label: 'Plugin Interface', slug: 'authoring/plugin-interface' },
+            { label: 'SlingshotContext', slug: 'authoring/context' },
+            { label: 'CoreRegistrar', slug: 'authoring/registrar' },
+          ],
+        },
+        {
+          label: 'Jobs and Orchestration Reference',
+          badge: { text: 'Preview', variant: 'caution' },
+          collapsed: true,
+          items: [
+            { label: 'Overview', slug: 'orchestration/overview' },
+            { label: 'Code-First Guide', slug: 'orchestration/code-first' },
+            { label: 'Tasks and Workflows', slug: 'orchestration/tasks-and-workflows' },
+            { label: 'Adapters', slug: 'orchestration/adapters' },
+            { label: 'HTTP API', slug: 'orchestration/http-api' },
+            { label: 'Events', slug: 'orchestration/events' },
+          ],
+        },
+        {
           label: 'Packages',
           collapsed: true,
           autogenerate: { directory: 'packages' },
         },
         {
           label: 'Alternate Paths',
+          collapsed: true,
           items: [
             { label: 'Overview', slug: 'alternate-paths' },
             { label: 'Manifest Authoring', slug: 'alternate-paths/manifest-authoring' },
@@ -232,11 +237,11 @@ export default defineConfig({
           ],
         },
         {
-          label: 'Contributor Flows',
+          label: 'Workflow Guides',
           collapsed: true,
           items: [
-            { label: 'Framework Contributor', slug: 'agent-flows/framework-contributor' },
             { label: 'App Builder', slug: 'agent-flows/app-builder' },
+            { label: 'Framework Contributor', slug: 'agent-flows/framework-contributor' },
           ],
         },
         {

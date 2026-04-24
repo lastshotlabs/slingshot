@@ -1,20 +1,20 @@
 ---
 title: Slingshot
-description: Code-first backend framework for app assembly, package authoring, entities, events, and realtime.
+description: Backend framework that generates CRUD, validation, and OpenAPI from your data model — then scales to events, realtime, auth, and jobs.
 template: splash
 hero:
-  tagline: Code-first backend framework for packages, entities, events, WebSockets, and SSE.
+  tagline: Define a data model. Get a full API. Scale to events, realtime, auth, permissions, and jobs.
   actions:
     - text: Quick Start
       link: /slingshot/quick-start/
       icon: right-arrow
       variant: primary
-    - text: App Authoring
-      link: /slingshot/app-authoring/
+    - text: Core Features
+      link: /slingshot/core-features/
       icon: right-arrow
       variant: secondary
-    - text: Entity System
-      link: /slingshot/entity-system/
+    - text: Examples
+      link: /slingshot/examples/
       icon: document
       variant: minimal
 ---
@@ -24,151 +24,86 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 ## Start with code
 
 ```typescript title="src/index.ts"
-import { createServer, definePackage, domain, route } from '@lastshotlabs/slingshot';
+import { createServer, defineEntity, definePackage, entity, field } from '@lastshotlabs/slingshot';
 
-const appPackage = definePackage({
-  name: 'app',
-  domains: [
-    domain({
-      name: 'health',
-      basePath: '/health',
-      routes: [
-        route.get({
-          path: '/',
-          auth: 'none',
-          handler: ({ respond }) => respond.json({ ok: true }),
-        }),
-      ],
-    }),
-  ],
+const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    done: field.boolean({ default: false }),
+  },
 });
 
 await createServer({
   port: 3000,
-  packages: [appPackage],
+  packages: [definePackage({ name: 'app', entities: [entity({ config: Task })] })],
 });
 ```
 
-That is the main docs path:
+Five routes, request validation, OpenAPI docs, and swappable storage — from one definition.
 
-- app root with `createServer()`
-- package-first composition with `definePackage(...)`
-- deeper domain authoring through the entity system when the package owns data-shaped behavior
-
-Manifest authoring is still supported, but it now lives under [Alternate Paths](/slingshot/alternate-paths/).
-
-## Use the docs in this order
-
-If you are new to the framework, this is the intended path:
-
-1. [Quick Start](/slingshot/quick-start/)
-2. [App Authoring](/slingshot/app-authoring/)
-3. [Package-First Authoring](/slingshot/package-first/)
-4. [Entity System](/slingshot/entity-system/)
-5. [Examples](/slingshot/examples/) — see complete apps
-6. [Guides](/slingshot/guides/) — production and operational concerns
-
-## Find your use case
+## What are you building?
 
 <CardGrid>
   <LinkCard
-    title="Basic app scaffold"
+    title="Quick Start"
     href="/slingshot/quick-start/"
-    description="Get a minimal app running with the canonical code-first shape."
+    description="Paste, run, curl, done. A route, an entity, and auth in 3 steps."
   />
   <LinkCard
-    title="Learn the core API"
-    href="/slingshot/app-authoring/"
-    description="Understand createServer, app config, context, events, WebSockets, SSE, and packages vs plugins."
+    title="I need a feature"
+    href="/slingshot/core-features/"
+    description="Data, events, realtime, auth, permissions, or jobs — pick one, get working code."
   />
   <LinkCard
-    title="Author package modules"
-    href="/slingshot/package-first/"
-    description="Build packages with domains, routes, capabilities, and entity refs."
-  />
-  <LinkCard
-    title="Author data-shaped domains"
-    href="/slingshot/entity-system/"
-    description="Use entities, operations, generated routes, and swappable storage."
-  />
-  <LinkCard
-    title="Use built-in advanced features"
-    href="/slingshot/app-authoring/runtime-and-infrastructure/"
-    description="Jobs, uploads, metrics, observability, runtime, secrets, and scaling-related runtime features."
-  />
-  <LinkCard
-    title="Drop to escape hatches"
-    href="/slingshot/package-first/escape-hatches/"
-    description="Use raw plugins, manual adapter wiring, overrides, and lower-level lifecycle seams when needed."
-  />
-</CardGrid>
-
-## The docs spine
-
-<CardGrid>
-  <LinkCard
-    title="App Authoring"
-    href="/slingshot/app-authoring/"
-    description="The core app model: createServer, app config, context, events, WebSockets, SSE, and packages vs plugins."
-  />
-  <LinkCard
-    title="Package-First Authoring"
-    href="/slingshot/package-first/"
-    description="The canonical code-first authoring surface for package-owned routes, middleware, capabilities, and entity modules."
-  />
-  <LinkCard
-    title="Entity System"
-    href="/slingshot/entity-system/"
-    description="The canonical authoring path for data-shaped domains, generated routes, operations, and swappable storage."
-  />
-  <LinkCard
-    title="Examples"
+    title="I want complete app examples"
     href="/slingshot/examples/"
-    description="Source-backed example apps that combine the core pieces into complete products."
+    description="SaaS, forum, collaboration, content platform, game engine — find your use case."
   />
   <LinkCard
-    title="Guides"
-    href="/slingshot/guides/"
-    description="Production and operational topics — security, testing, deployment, scaling, and more."
-  />
-  <LinkCard
-    title="Alternate Paths"
-    href="/slingshot/alternate-paths/"
-    description="Supported secondary workflows like manifest authoring."
+    title="I want to understand the model"
+    href="/slingshot/authoring-model/"
+    description="How app roots, packages, and entities fit together."
   />
 </CardGrid>
 
-## What Slingshot gives you by default
+## What you get
 
 <CardGrid>
-  <Card title="App Assembly" icon="seti:config">
-    `createApp()` assembles the app and runtime context. `createServer()` adds the network server,
-    workers, shutdown behavior, WebSockets, and SSE.
+  <Card title="Generated CRUD" icon="seti:config">
+    Define a model with `defineEntity`. Get `GET`, `POST`, `PATCH`, `DELETE` routes with validation
+    and OpenAPI docs.
   </Card>
-  <Card title="Events" icon="comment-alt">
-    Every app gets an event bus. Typed event definitions drive canonical publishing, SSE, and other
-    external delivery surfaces.
+  <Card title="Operations" icon="seti:config">
+    Add domain actions like `publish`, `archive`, `complete` alongside CRUD. Each generates a typed,
+    documented route.
+  </Card>
+  <Card title="Events and Fanout" icon="comment-alt">
+    One event triggers many effects — welcome email, search index, admin notification. No coupling
+    between packages.
   </Card>
   <Card title="Realtime" icon="seti:html">
-    WebSockets and SSE are both core, but they are different transports with different scaling and
-    authoring concerns.
+    SSE for live updates. WebSockets for chat and collaboration. Both built in.
   </Card>
-  <Card title="Generated Docs" icon="seti:config">
-    Validation and OpenAPI are part of the normal authoring path, not an afterthought.
+  <Card title="Auth and Permissions" icon="seti:config">
+    Sessions, OAuth, MFA, passkeys, RBAC, and resource-level access control.
   </Card>
   <Card title="Swappable Storage" icon="seti:config">
-    The entity system can target memory, Redis, SQLite, MongoDB, and Postgres from one domain model.
-  </Card>
-  <Card title="Escape Hatches" icon="seti:config">
-    Raw plugins, manual adapter wiring, generated route overrides, and custom routes are all still
-    available when you need them.
+    Memory for dev, SQLite for prototyping, Postgres for production. Same entity code.
   </Card>
 </CardGrid>
 
-## Built-in product surface
+## Learn in order
 
-Slingshot also ships larger product packages for auth, community, chat, organizations, search,
-rendering, assets, and integrations. Those packages are important, but the docs now start with the
-core framework model they are built on.
+1. [Quick Start](/slingshot/quick-start/) — build something in 3 steps
+2. [Core Features](/slingshot/core-features/) — add the capabilities you need
+3. [Authoring Model](/slingshot/authoring-model/) — understand the architecture
+4. [Examples](/slingshot/examples/) — study complete apps
+5. [Guides](/slingshot/guides/) — ship to production
 
-Browse package pages under [Packages](/slingshot/packages/).
+## More
+
+- [Introduction](/slingshot/getting-started/) — what Slingshot is and why it exists
+- [Alternate Paths](/slingshot/alternate-paths/) — manifest authoring and other approaches
+- [Packages](/slingshot/packages/) — built-in packages for auth, community, chat, search, and more

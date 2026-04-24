@@ -339,7 +339,7 @@ const { app } = await createApp({
 app.onError((err: Error, c: Context) => {
   reportError(err, {
     requestId: c.get('requestId'),
-    userId: c.get('userId'),
+    userId: getActorId(c),
     url: c.req.url,
     method: c.req.method,
   });

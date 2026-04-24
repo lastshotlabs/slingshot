@@ -1,85 +1,359 @@
 ---
 title: Route Policy
-description: Auth, permissions, rate limits, idempotency, events, and per-route customization
+description: Auth, permissions, rate limits, events, idempotency, and middleware per generated route
 ---
 
-Entity route policy is where the generated route shell becomes real application behavior.
+Route policy is where your entity goes from "open CRUD" to "production API." Every generated
+route — CRUD and operations — can be individually configured.
 
-## A representative route policy block
+## Start with defaults
+
+The most common pattern is "private by default, public reads":
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    authorId: field.string(),
+    title: field.string(),
+    body: field.string(),
+    status: field.enum(['draft', 'published'] as const, { default: 'draft' }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' },
+    list: { auth: 'none' },
+    get: { auth: 'none' },
+  },
+});
+```
+
+`defaults` sets the base policy for all routes. Per-route entries override it. Here,
+`list` and `get` are public while `create`, `update`, and `delete` require a valid session.
+
+## Auth modes
+
+| Mode         | What it checks                                 |
+| ------------ | ---------------------------------------------- |
+| `'userAuth'` | Requires a valid user session (JWT or cookie)  |
+| `'bearer'`   | Requires a valid bearer token (API key or M2M) |
+| `'none'`     | No authentication required                     |
+
+## Permissions
+
+### Simple role-based
+
+Require a permission string. The permissions plugin checks if the actor has been granted it:
+
+```typescript
+routes: {
+  defaults: { auth: 'userAuth' },
+  create: {
+    permission: { requires: 'blog:post.write' },
+  },
+},
+```
+
+### Owner-based
+
+Only the record owner can perform the action:
+
+```typescript
+routes: {
+  update: {
+    permission: {
+      requires: 'blog:post.write',
+      ownerField: 'authorId',
+    },
+  },
+},
+```
+
+The framework checks: "Does this user have `blog:post.write`, AND is their user ID the
+value in the record's `authorId` field?" Both must pass.
+
+### Owner OR moderator
+
+Let the owner edit their own post, OR let a moderator edit anyone's:
+
+```typescript
+routes: {
+  update: {
+    permission: {
+      requires: 'blog:post.write',
+      ownerField: 'authorId',
+      or: 'blog:post.moderate',
+    },
+  },
+  delete: {
+    permission: {
+      requires: 'blog:post.delete',
+      ownerField: 'authorId',
+      or: 'blog:post.moderate',
+    },
+  },
+},
+```
+
+Logic: `(has 'blog:post.write' AND is owner) OR (has 'blog:post.moderate')`.
+
+### Scoped permissions
+
+Pass dynamic values from the request into the permission check:
+
+```typescript
+routes: {
+  update: {
+    permission: {
+      requires: 'project:task.write',
+      scope: { projectId: 'param:projectId' },
+    },
+  },
+},
+```
+
+This checks: "Does this user have `project:task.write` scoped to this specific project ID?"
+
+## Rate limits
+
+Throttle specific routes to prevent abuse:
 
 ```typescript
 routes: {
   defaults: {
-    auth: 'userAuth',
-    rateLimit: { windowMs: 60_000, max: 60 },
-  },
-  list: {
-    auth: 'none',
+    rateLimit: { windowMs: 60_000, max: 60 },     // 60 requests per minute
   },
   create: {
-    permission: { requires: 'post:write' },
+    rateLimit: { windowMs: 60_000, max: 10 },     // tighter limit for writes
+  },
+  list: {
+    rateLimit: { windowMs: 60_000, max: 120 },    // more generous for reads
+  },
+},
+```
+
+## Events
+
+Publish an event when a route completes successfully. This is how entity routes participate
+in the app's event system:
+
+```typescript
+routes: {
+  create: {
     event: {
       key: 'blog:post.created',
       payload: ['id', 'authorId', 'title'],
     },
   },
   update: {
-    permission: {
-      requires: 'post:write',
-      ownerField: 'authorId',
-      or: 'post:moderate',
+    event: {
+      key: 'blog:post.updated',
+      payload: ['id', 'title'],
     },
-    idempotency: { scope: 'tenant' },
   },
+  delete: {
+    event: {
+      key: 'blog:post.deleted',
+      payload: ['id'],
+    },
+  },
+},
+```
+
+Listeners anywhere in the app can subscribe:
+
+```typescript
+bus.on('blog:post.created', async ({ payload }) => {
+  await indexForSearch(payload.id);
+  await notifyFollowers(payload.authorId, payload.title);
+});
+```
+
+### Client-safe events for realtime
+
+Make events available to browser clients via SSE:
+
+```typescript
+routes: {
+  create: {
+    event: {
+      key: 'blog:post.created',
+      payload: ['id', 'title'],
+      exposure: ['client-safe'],
+    },
+  },
+},
+```
+
+### Event scoping
+
+Control who receives the event in multi-tenant or per-user scenarios:
+
+```typescript
+routes: {
+  create: {
+    event: {
+      key: 'chat:message.sent',
+      payload: ['id', 'channelId', 'body'],
+      scope: { tenantId: 'record:orgId', resourceId: 'record:channelId' },
+    },
+  },
+},
+```
+
+## Idempotency
+
+Protect write endpoints from duplicate submissions:
+
+```typescript
+routes: {
+  create: {
+    idempotency: {
+      scope: 'user',       // one idempotency key per user
+      ttl: 86400,          // key expires after 24 hours
+    },
+  },
+},
+```
+
+Clients send an `Idempotency-Key` header. If the same key is sent twice within the TTL,
+the second request returns the cached response without executing again.
+
+| Scope      | Deduplication boundary       |
+| ---------- | ---------------------------- |
+| `'user'`   | Per authenticated user       |
+| `'tenant'` | Per tenant                   |
+| `'global'` | Across all users and tenants |
+
+Shorthand: `idempotency: true` uses the defaults (`scope: 'user'`, `ttl: 86400`).
+
+## Middleware
+
+Apply named middleware to specific routes:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    /* ... */
+  },
+  routes: {
+    middleware: {
+      logSlowQueries: async (c, next) => {
+        const start = Date.now();
+        await next();
+        const ms = Date.now() - start;
+        if (ms > 500) console.warn(`Slow query: ${c.req.path} took ${ms}ms`);
+      },
+    },
+    defaults: { auth: 'userAuth' },
+    list: {
+      auth: 'none',
+      middleware: ['logSlowQueries'],
+    },
+  },
+});
+```
+
+## Operation route policy
+
+Named operations get the same policy options as CRUD routes. Configure them under
+`routes.operations`:
+
+```typescript
+routes: {
+  defaults: { auth: 'userAuth' },
   operations: {
     publish: {
       method: 'post',
       path: '/:id/publish',
-      permission: { requires: 'post:publish' },
+      permission: { requires: 'blog:post.publish' },
+      event: { key: 'blog:post.published', payload: ['id', 'title'] },
+    },
+    byAuthor: {
+      auth: 'none',    // public lookups
+    },
+    bySlug: {
+      auth: 'none',
     },
   },
-}
+},
 ```
 
-## What the generated shell can enforce
+You can also override the HTTP method and path for any operation.
 
-Entity routes can declare:
+## Disable routes
 
-- `auth`
-- `permission`
-- `rateLimit`
-- `idempotency`
-- `middleware`
-- `event`
-- per-operation method and path overrides
+Turn off specific generated routes entirely:
 
-That applies both to generated CRUD routes and named operations.
+```typescript
+routes: {
+  disable: ['delete'],    // no DELETE endpoint
+},
+```
 
-## Defaults first, then overrides
+## Complete example: a SaaS task board
 
-`routes.defaults` is the canonical way to set the base policy once and only override where needed.
+```typescript title="src/entities/task.ts"
+import { defineEntity, field, index } from '@lastshotlabs/slingshot';
 
-That is usually the right pattern for:
+export const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    projectId: field.string(),
+    assigneeId: field.string({ optional: true }),
+    title: field.string(),
+    description: field.string({ optional: true }),
+    status: field.enum(['todo', 'in_progress', 'done'] as const, { default: 'todo' }),
+    priority: field.integer({ default: 0 }),
+    createdAt: field.date({ default: 'now' }),
+  },
+  indexes: [index(['projectId', 'status'])],
+  tenant: { field: 'projectId' },
+  routes: {
+    defaults: {
+      auth: 'userAuth',
+      rateLimit: { windowMs: 60_000, max: 60 },
+    },
+    list: {
+      rateLimit: { windowMs: 60_000, max: 120 },
+    },
+    create: {
+      permission: { requires: 'task:write', scope: { projectId: 'param:projectId' } },
+      event: { key: 'task:task.created', payload: ['id', 'projectId', 'title'] },
+      idempotency: { scope: 'user' },
+    },
+    update: {
+      permission: {
+        requires: 'task:write',
+        ownerField: 'assigneeId',
+        or: 'task:manage',
+      },
+      event: { key: 'task:task.updated', payload: ['id', 'title', 'status'] },
+    },
+    delete: {
+      permission: { requires: 'task:manage' },
+    },
+    operations: {
+      start: {
+        permission: { requires: 'task:write' },
+        event: { key: 'task:task.started', payload: ['id'] },
+      },
+      complete: {
+        permission: { requires: 'task:write' },
+        event: { key: 'task:task.completed', payload: ['id'], exposure: ['client-safe'] },
+      },
+    },
+  },
+});
+```
 
-- private-by-default entities with public `list` or `get`
-- shared rate limiting with a few stricter mutations
-- common middleware with a few operation-specific additions
-
-## Policy resolvers
-
-The route policy surface also supports richer policy evaluation than simple permission strings.
-
-Use policy resolvers when you need record-aware or operation-aware authorization decisions that are
-too complex for a simple `requires` check.
-
-## Events are part of route policy
-
-Generated route events are not incidental. They are one of the main ways entity routes participate
-in the wider app event model.
-
-That is why event publication belongs in route policy docs rather than only in the event bus docs.
+Every route is locked down. Events flow on write operations. Rate limits protect against
+abuse. Idempotency prevents duplicate task creation. And it is all in one place.
 
 ## Next
 
-- [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)
-- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/)
+- [Events and Fanout](/slingshot/core-features/events-and-fanout/) — subscribe to entity events
+- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customize generated routes

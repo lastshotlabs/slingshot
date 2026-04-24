@@ -61,8 +61,7 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
 
     export async function communityAuthBridge(c: Context, next: Next) {
       const actor = getActor(c);
-      const roles = c.get('roles') ?? [];
-      if (actor.kind !== 'anonymous') c.set('communityPrincipal', { subject: actor.id, roles });
+      if (actor.kind !== 'anonymous') c.set('communityPrincipal', { subject: actor.id, roles: actor.roles ?? [] });
       await next();
     }
     ```
@@ -79,8 +78,7 @@ bun add @lastshotlabs/slingshot @lastshotlabs/slingshot-auth @lastshotlabs/sling
 
     const communityAuthBridge = async (c: Context, next: Next) => {
       const actor = getActor(c);
-      const roles = c.get('roles') ?? [];
-      if (actor.kind !== 'anonymous') c.set('communityPrincipal', { subject: actor.id, roles });
+      if (actor.kind !== 'anonymous') c.set('communityPrincipal', { subject: actor.id, roles: actor.roles ?? [] });
       await next();
     };
 

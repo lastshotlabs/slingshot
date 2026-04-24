@@ -1,225 +1,148 @@
 ---
-title: App Authoring
-description: The code-first core of every Slingshot app
+title: App Roots and Runtime
+description: How createServer works, what you can configure, and what the framework does for you
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-Slingshot should be learned from the app root inward.
+Every Slingshot app starts at the app root. This is where you assemble your packages, set
+config, and start the server.
 
-Start with `createServer()` or `createApp()`. Then learn the top-level config, the runtime context,
-the event bus, realtime transports, and the package-first composition model those apps are built
-from.
+If you have not built anything yet, start with the [Quick Start](/slingshot/quick-start/).
+Come back here when you want to understand what `createServer(...)` actually does.
 
-## Start here if you want a real app quickly
-
-If your goal is basic scaffolding, use this path:
-
-1. [Quick Start](/slingshot/quick-start/)
-2. [createServer and createApp](/slingshot/app-authoring/create-server-and-create-app/)
-3. [Starter App](/slingshot/app-authoring/starter-app/)
-4. [Packages and Plugins](/slingshot/app-authoring/packages-and-plugins/)
-5. [Package-First Authoring](/slingshot/package-first/)
-
-## The canonical shape
+## The app root
 
 ```typescript title="src/index.ts"
-import { createServer, definePackage, domain, route } from '@lastshotlabs/slingshot';
-
-const healthPackage = definePackage({
-  name: 'health',
-  domains: [
-    domain({
-      name: 'health',
-      basePath: '/health',
-      routes: [
-        route.get({
-          path: '/',
-          auth: 'none',
-          summary: 'Health check',
-          handler: ({ respond }) => respond.json({ ok: true }),
-        }),
-      ],
-    }),
-  ],
-});
+import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+import { adminPackage } from './packages/admin';
+import { blogPackage } from './packages/blog';
 
 await createServer({
   port: 3000,
-  packages: [healthPackage],
+  security: {
+    signing: { secret: process.env.JWT_SECRET! },
+    cors: { origin: 'https://myapp.com' },
+  },
+  db: {
+    default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+    }),
+  ],
+  packages: [blogPackage, adminPackage],
 });
 ```
 
-That one file already demonstrates the core model:
+This one file controls:
 
-- the app root is code
-- packages are the canonical composition surface
-- routes, auth, permissions, events, OpenAPI, and runtime concerns assemble around that root
+- **What runs** — which packages and plugins to load
+- **How it connects** — database, secrets, ports
+- **How it is secured** — auth, CORS, rate limits
+- **What it supports** — events, WebSockets, SSE, jobs
 
-## What every app has
+The app root stays small. Feature logic lives in packages.
 
-<CardGrid>
-  <Card title="Assembly" icon="seti:config">
-    `createApp()` assembles the app. `createServer()` adds the network server, workers, WebSockets,
-    SSE, and shutdown behavior.
-  </Card>
-  <Card title="Config" icon="seti:config">
-    Top-level config covers security, db, versioning, runtime, secrets, metrics, jobs, and realtime.
-  </Card>
-  <Card title="Context" icon="seti:config">
-    `SlingshotContext` holds the frozen resolved config, event bus, persistence handles,
-    plugin/package state, and runtime helpers.
-  </Card>
-  <Card title="Events" icon="comment-alt">
-    Every app gets an event bus. SSE, webhooks, and many cross-package behaviors build on that
-    model.
-  </Card>
-  <Card title="Realtime" icon="seti:html">
-    WebSockets and SSE are separate core transports with separate docs homes and scaling concerns.
-  </Card>
-  <Card title="Composition" icon="seti:config">
-    App roots should prefer `packages`. Raw `plugins` are still available for lower-level lifecycle
-    control and escape hatches.
-  </Card>
-</CardGrid>
+## What createServer does
 
-## Learn in this order
+When you call `createServer(...)`, the framework:
+
+1. Validates your config
+2. Resolves secrets from the configured provider
+3. Connects databases and infrastructure
+4. Boots plugins and packages in dependency order
+5. Registers middleware, routes, and OpenAPI docs
+6. Starts the HTTP server, WebSocket endpoints, and SSE
+7. Wires graceful shutdown
+
+You get all of this from one function call.
+
+## createApp vs createServer
+
+| Function         | Use when                                     |
+| ---------------- | -------------------------------------------- |
+| `createServer()` | Starting a production server                 |
+| `createApp()`    | Testing, custom hosting, or programmatic use |
+
+`createApp()` does everything except start the network server. Use it in tests:
+
+```typescript
+const { app, ctx } = await createApp({ packages: [blogPackage] });
+const response = await app.request('/posts');
+await ctx.destroy();
+```
+
+## What you can configure
+
+The top-level config covers everything your app needs:
+
+| Config area    | What it controls                                      |
+| -------------- | ----------------------------------------------------- |
+| `port`         | Server port                                           |
+| `security`     | JWT signing, CORS, CSRF, rate limits, helmet          |
+| `db`           | Database connections (Postgres, SQLite, MongoDB, etc) |
+| `packages`     | Feature packages to load                              |
+| `plugins`      | Raw plugins (auth, permissions, etc)                  |
+| `ws`           | WebSocket endpoints                                   |
+| `eventBus`     | Event bus adapter (in-process, BullMQ, Redis)         |
+| `secrets`      | Secret provider (env, vault, etc)                     |
+| `jobs`         | Orchestration adapter                                 |
+| `multiTenancy` | Tenant resolver and isolation settings                |
+
+See [App Config](/slingshot/app-authoring/app-config/) for the full reference.
+
+## Learn this section
 
 <CardGrid>
   <LinkCard
     title="createServer and createApp"
     href="/slingshot/app-authoring/create-server-and-create-app/"
-    description="What the app assembly step does, what the server adds, and when to use each."
+    description="What the assembly step does, what the server adds, and when to use each."
   />
   <LinkCard
     title="App Config"
     href="/slingshot/app-authoring/app-config/"
-    description="The top-level config categories every serious app ends up using."
+    description="Security, database, events, WebSockets, secrets, and more."
   />
   <LinkCard
     title="Starter App"
     href="/slingshot/app-authoring/starter-app/"
-    description="A full starter app that the rest of the docs keep extending."
-  />
-  <LinkCard
-    title="Events and the Event Bus"
-    href="/slingshot/app-authoring/events-and-the-event-bus/"
-    description="Typed events, canonical publishing, scopes, exposure, and scaling."
-  />
-  <LinkCard
-    title="WebSockets"
-    href="/slingshot/app-authoring/websockets/"
-    description="Endpoint config, incoming events, rooms, presence, recovery, and transport."
-  />
-  <LinkCard
-    title="Server-Sent Events"
-    href="/slingshot/app-authoring/server-sent-events/"
-    description="Registry-backed event streaming for browser clients."
+    description="A complete starter app with entities, operations, and route policy."
   />
   <LinkCard
     title="Packages and Plugins"
     href="/slingshot/app-authoring/packages-and-plugins/"
-    description="Why packages are the canonical app-builder surface and where plugins still fit."
-  />
-</CardGrid>
-
-## Fundamentals of the core API
-
-These are the pages that explain the framework's core API, in order:
-
-1. [createServer and createApp](/slingshot/app-authoring/create-server-and-create-app/)
-2. [App Config](/slingshot/app-authoring/app-config/)
-3. [Context and Request Model](/slingshot/app-authoring/context-and-request-model/)
-4. [Middleware](/slingshot/app-authoring/middleware/)
-5. [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)
-6. [Packages and Plugins](/slingshot/app-authoring/packages-and-plugins/)
-
-## Common app use cases
-
-<CardGrid>
-  <LinkCard
-    title="HTTP app scaffold"
-    href="/slingshot/app-authoring/create-server-and-create-app/"
-    description="Start a server, mount routes, and understand the normal app entrypoint."
+    description="Why packages are the canonical composition surface."
   />
   <LinkCard
-    title="Typed routes and docs"
+    title="Context and Request Model"
+    href="/slingshot/app-authoring/context-and-request-model/"
+    description="How to access config, events, and request state in handlers."
+  />
+  <LinkCard
+    title="Middleware"
+    href="/slingshot/app-authoring/middleware/"
+    description="Global and per-package middleware chains."
+  />
+  <LinkCard
+    title="OpenAPI and Validation"
     href="/slingshot/app-authoring/openapi-and-validation/"
-    description="Define request and response shapes and get generated OpenAPI docs."
-  />
-  <LinkCard
-    title="Cross-package events"
-    href="/slingshot/app-authoring/events-and-the-event-bus/"
-    description="Publish and subscribe to typed events with the canonical event model."
-  />
-  <LinkCard
-    title="Package composition"
-    href="/slingshot/package-first/"
-    description="Compose the app from packages instead of wiring raw plugin lifecycle code."
-  />
-</CardGrid>
-
-## Built-in features for less common cases
-
-<CardGrid>
-  <LinkCard
-    title="WebSockets"
-    href="/slingshot/app-authoring/websockets/"
-    description="Incoming events, rooms, presence, recovery, and shared transport."
-  />
-  <LinkCard
-    title="Server-Sent Events"
-    href="/slingshot/app-authoring/server-sent-events/"
-    description="Client-safe event streaming for browsers."
+    description="Generated API docs and request/response validation."
   />
   <LinkCard
     title="Runtime and Infrastructure"
     href="/slingshot/app-authoring/runtime-and-infrastructure/"
-    description="DB config, uploads, jobs, logging, metrics, tracing, secrets, and runtime."
-  />
-  <LinkCard
-    title="Orchestration"
-    href="/slingshot/orchestration/overview/"
-    description="Background tasks, durable workflows, retries, and async job processing."
-  />
-  <LinkCard
-    title="Guides"
-    href="/slingshot/guides/"
-    description="Security, multi-tenancy, permissions, monitoring, runtime, deployment, and scaling."
+    description="DB connections, uploads, logging, metrics, tracing, and secrets."
   />
 </CardGrid>
 
-## Full core feature map
+## Where to go from here
 
-Use this when you want to understand the full feature set of the framework core rather than only the
-happy path.
-
-- app assembly: `createApp()` and `createServer()`
-- top-level app config: routes, schemas, security, db, jobs, tenancy, logging, metrics,
-  observability, validation, upload, versioning, packages, plugins, event bus, WebSockets, secrets,
-  runtime, permissions
-- runtime context: config, events, persistence, plugin/package state, WebSocket state
-- request pipeline: middleware, auth, permissions, rate limits, idempotency, event publication
-- realtime: WebSockets and SSE
-- package-first composition: packages, domains, typed routes, capabilities, entity refs
-- entity system: generated CRUD, named operations, storage backends, route overrides, extra routes
-
-## Escape hatches
-
-These are still first-class, but they should come after the canonical path:
-
-- raw `plugins` and [lower-level plugin lifecycle work](/slingshot/authoring/plugin-interface/)
-- [manual adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#manual)
-- [factory-backed adapter wiring](/slingshot/entity-system/storage-and-adapter-wiring/#factories)
-- [generated-route executor overrides](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#override-a-generated-route)
-- [extra routes inside the entity shell](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/#add-an-extra-route)
-
-See [Escape Hatches](/slingshot/config-driven/escape-hatches/) for the full decision guide.
-
-## Where this leads next
-
-- [Package-First Authoring](/slingshot/package-first/) — build packages the app root composes
-- [Entity System](/slingshot/entity-system/) — data-shaped product domains with generated routes and operations
-- [Orchestration](/slingshot/orchestration/overview/) — background tasks, durable workflows, and async job processing
-- [Examples](/slingshot/examples/) — complete apps that combine what you have learned
-- [Guides](/slingshot/guides/) — production concerns like security, testing, deployment, and scaling
+- [Core Features](/slingshot/core-features/) — events, realtime, auth, permissions, jobs
+- [Package-First Authoring](/slingshot/package-first/) — organizing code into packages
+- [Entity System](/slingshot/entity-system/) — generating routes from data models
+- [Examples](/slingshot/examples/) — complete apps to study
+- [Guides](/slingshot/guides/) — production concerns

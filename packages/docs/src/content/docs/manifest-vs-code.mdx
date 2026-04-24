@@ -1,36 +1,13 @@
 ---
 title: Manifest vs Code
-description: Code-first is the main docs path; manifests remain a supported alternate path
+description: Side-by-side comparison of the two app assembly paths
 ---
 
-Both paths are supported. They do not deserve equal weight in the docs narrative.
+Both paths are supported and produce the same runtime behavior.
 
-## The recommendation
+## Code-first
 
-Start with code unless your app is mostly declarative assembly.
-
-Use:
-
-- code when you want to learn Slingshot's core public API surface
-- manifests when you want a serialized configuration root with minimal code
-
-## Why code leads the docs
-
-The code-first path is where the framework's main authoring surfaces are most visible:
-
-- `createServer()` and `createApp()`
-- `definePackage(...)`
-- `domain(...)` and `route.*(...)`
-- `defineEntity(...)`
-- `defineOperations(...)`
-- `entity(...)`
-- explicit event definitions and runtime escape hatches
-
-That is the real framework model. The docs should teach it directly.
-
-## Code path
-
-```typescript
+```typescript title="src/index.ts"
 import { createServer, definePackage, domain, route } from '@lastshotlabs/slingshot';
 
 const appPackage = definePackage({
@@ -54,7 +31,10 @@ await createServer({
 });
 ```
 
-## Manifest path
+Best when you are **authoring behavior**: custom routes, typed packages, entities, events,
+and escape hatches. The full framework API surface is available.
+
+## Manifest
 
 ```json title="app.manifest.json"
 {
@@ -68,13 +48,16 @@ await createServer({
 slingshot start
 ```
 
-## Choosing honestly
+Best when you are **assembling and configuring**: selecting plugins, wiring databases,
+setting security options. Custom behavior goes in `slingshot.handlers.ts`.
 
-Use code when you are authoring the app's behavior.
+## When to switch
 
-Use a manifest when you are mostly selecting and configuring behavior that already exists.
+Start with whichever matches your app today. If a manifest app grows into substantial
+custom authoring, migrate to a code-first app root. If a code-first app is mostly
+configuration, a manifest can simplify it.
 
-## Next
+## See also
 
-- [Quick Start](/slingshot/quick-start/)
-- [Alternate Paths: Manifest Authoring](/slingshot/alternate-paths/manifest-authoring/)
+- [Quick Start](/slingshot/quick-start/) — code-first starting point
+- [Manifest Authoring](/slingshot/alternate-paths/manifest-authoring/) — full manifest walkthrough

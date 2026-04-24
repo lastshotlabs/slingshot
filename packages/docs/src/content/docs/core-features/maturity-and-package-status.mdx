@@ -1,0 +1,38 @@
+---
+title: Maturity and Package Status
+description: How to read package maturity in the current Slingshot worktree
+---
+
+All published packages in this worktree are currently pre-1.0 and versioned `0.0.2`.
+
+That matters.
+
+## What the docs assume
+
+The safest path today is:
+
+- learn the framework through `createServer(...)`, packages, entities, events, WebSockets, and SSE
+- treat add-on product packages as feature packs that may still evolve
+- look for explicit `Preview` badges in the sidebar and on feature pages
+
+## Current feature-pack signaling
+
+| Feature                | Package(s)                                                       | Status    | Notes                                        |
+| ---------------------- | ---------------------------------------------------------------- | --------- | -------------------------------------------- |
+| Core app model         | `@lastshotlabs/slingshot-core`, `@lastshotlabs/slingshot-entity` | Core path | These are the canonical docs path.           |
+| Auth                   | `@lastshotlabs/slingshot-auth`                                   | Preview   | Identity, sessions, OAuth, MFA, passkeys.    |
+| Permissions            | `@lastshotlabs/slingshot-permissions`                            | Preview   | Shared permissions bootstrap and evaluation. |
+| Organizations          | `@lastshotlabs/slingshot-organizations`                          | Preview   | Depends on auth and entity surfaces.         |
+| Jobs and orchestration | `@lastshotlabs/slingshot-orchestration*`                         | Preview   | Task/workflow runtime and adapters.          |
+
+## How to use this in practice
+
+- If you are getting started, stay on the core path first.
+- If you need a preview feature, read its feature page and package overview before adopting it.
+- If you need long-term stability around a preview feature, expect some API churn while the package is still pre-1.0.
+
+## Next
+
+- [Core Features](/slingshot/core-features/)
+- [Authoring Model](/slingshot/authoring-model/)
+- [Packages](/slingshot/packages/)

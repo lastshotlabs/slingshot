@@ -3,25 +3,24 @@ title: 'Legacy: Realtime'
 description: Bridge page for the canonical WebSockets and Server-Sent Events docs
 ---
 
-Realtime is now documented as two separate first-class core features:
+Realtime is now documented in the [Core Features: Realtime](/slingshot/core-features/realtime/) page.
 
-- [WebSockets](/slingshot/app-authoring/websockets/)
-- [Server-Sent Events](/slingshot/app-authoring/server-sent-events/)
-
-That split is intentional. They are different transports with different runtime models, scaling
-concerns, and authoring patterns.
+That page covers the transport choice between WebSockets and SSE, and links forward to the
+detailed authoring guides.
 
 ## Use this page as a chooser
 
-| If you need...                                                                  | Go here                                                                        |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Bidirectional communication, rooms, presence, recovery, client-to-server events | [WebSockets](/slingshot/app-authoring/websockets/)                             |
-| Server-to-client event streams for browsers                                     | [Server-Sent Events](/slingshot/app-authoring/server-sent-events/)             |
-| The shared event model behind SSE and other consumers                           | [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) |
-| Multi-instance delivery and operational scaling                                 | [Horizontal Scaling](/slingshot/guides/horizontal-scaling/)                    |
+| If you need...                                                                  | Go here                                                            |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Choosing between WebSockets and SSE                                             | [Realtime](/slingshot/core-features/realtime/)                     |
+| Bidirectional communication, rooms, presence, recovery, client-to-server events | [WebSockets](/slingshot/app-authoring/websockets/)                 |
+| Server-to-client event streams for browsers                                     | [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) |
+| The shared event model behind SSE and other consumers                           | [Events and Fanout](/slingshot/core-features/events-and-fanout/)   |
+| Multi-instance delivery and operational scaling                                 | [Horizontal Scaling](/slingshot/guides/horizontal-scaling/)        |
 
 ## Recommended order
 
-1. [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/)
-2. [WebSockets](/slingshot/app-authoring/websockets/) or [Server-Sent Events](/slingshot/app-authoring/server-sent-events/)
-3. [Examples](/slingshot/examples/) for a product-shaped reference
+1. [Realtime](/slingshot/core-features/realtime/) — choose the transport
+2. [Events and Fanout](/slingshot/core-features/events-and-fanout/) — understand the event model
+3. [WebSockets](/slingshot/app-authoring/websockets/) or [Server-Sent Events](/slingshot/app-authoring/server-sent-events/) — deep guides
+4. [Examples](/slingshot/examples/) — product-shaped references

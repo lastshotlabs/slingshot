@@ -1,16 +1,25 @@
 ---
 title: Operations
-description: Named behaviors beyond CRUD, from lookups to transitions and search
+description: Lookups, transitions, field updates, search, aggregates, and more
 ---
 
-Operations are how the entity system models behavior beyond basic CRUD.
+CRUD routes are a starting point. Operations are how your entity becomes a real domain model.
 
-The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
-its `Post` entity.
+## Your blog needs more than CRUD
 
-## Define operations next to the entity
+You have a `Post` entity with five generated routes. Now you need:
 
-```typescript title="src/blog/post-operations.ts"
+- "Get all posts by this author"
+- "Look up a post by its slug"
+- "Publish this draft"
+- "Search posts by keyword"
+
+Each of these is an operation — a named, typed behavior that generates its own route
+and adapter method.
+
+## Define operations alongside the entity
+
+```typescript title="src/entities/post-operations.ts"
 import { defineOperations, op } from '@lastshotlabs/slingshot';
 import { Post } from './post';
 
@@ -23,82 +32,394 @@ export const PostOps = defineOperations(Post, {
     fields: { slug: 'param:slug' },
     returns: 'one',
   }),
-  existsBySlug: op.exists({
-    fields: { slug: 'param:slug' },
-  }),
   publish: op.transition({
     field: 'status',
     from: 'draft',
     to: 'published',
     match: { id: 'param:id' },
   }),
-  retitle: op.fieldUpdate({
+});
+```
+
+Wire them into your entity module:
+
+```typescript title="src/packages/blog.ts"
+import { definePackage, entity } from '@lastshotlabs/slingshot';
+import { Post } from '../entities/post';
+import { PostOps } from '../entities/post-operations';
+
+export const blogPackage = definePackage({
+  name: 'blog',
+  entities: [entity({ config: Post, operations: PostOps })],
+});
+```
+
+This generates three new routes alongside the existing CRUD:
+
+```
+GET  /posts/by-author/:authorId    ← byAuthor lookup
+GET  /posts/by-slug/:slug          ← bySlug lookup
+POST /posts/:id/publish            ← publish transition
+```
+
+Test them:
+
+```bash
+# Get all posts by an author
+curl http://localhost:3000/posts/by-author/user_abc123
+
+# Look up a post by slug
+curl http://localhost:3000/posts/by-slug/my-first-post
+
+# Publish a draft
+curl -X POST http://localhost:3000/posts/abc123/publish \
+  -H "Authorization: Bearer <token>"
+```
+
+## Operation reference
+
+### Lookups
+
+Find records by field values. The most common operation.
+
+```typescript
+// Find one record by a unique field
+bySlug: op.lookup({
+  fields: { slug: 'param:slug' },
+  returns: 'one',
+}),
+
+// Find many records by a shared field
+byAuthor: op.lookup({
+  fields: { authorId: 'param:authorId' },
+  returns: 'many',
+}),
+
+// Multi-field lookup
+byAuthorAndStatus: op.lookup({
+  fields: { authorId: 'param:authorId', status: 'param:status' },
+  returns: 'many',
+}),
+```
+
+Generated routes: `GET /posts/by-slug/:slug`, `GET /posts/by-author/:authorId`
+
+### Existence checks
+
+Check if a record exists without returning it — useful for validation:
+
+```typescript
+slugTaken: op.exists({
+  fields: { slug: 'param:slug' },
+}),
+```
+
+Generated route: `GET /posts/exists-by-slug/:slug` → `{ "exists": true }`
+
+### Transitions
+
+Move a record through a state machine. The framework validates that the current state
+matches `from` before allowing the change:
+
+```typescript
+publish: op.transition({
+  field: 'status',
+  from: 'draft',
+  to: 'published',
+  match: { id: 'param:id' },
+}),
+
+archive: op.transition({
+  field: 'status',
+  from: 'published',
+  to: 'archived',
+  match: { id: 'param:id' },
+}),
+
+// Transition from multiple states
+restore: op.transition({
+  field: 'status',
+  from: ['archived', 'draft'],
+  to: 'published',
+  match: { id: 'param:id' },
+}),
+
+// Set additional fields during transition
+publishWithTimestamp: op.transition({
+  field: 'status',
+  from: 'draft',
+  to: 'published',
+  match: { id: 'param:id' },
+  set: { publishedAt: 'now' },
+}),
+```
+
+Generated route: `POST /posts/:id/publish`. Returns `400` if the record is not in the
+expected `from` state.
+
+### Field updates
+
+Update specific fields by name. Use this when you want a focused endpoint instead of
+the generic `PATCH`:
+
+```typescript
+retitle: op.fieldUpdate({
+  match: { id: 'param:id' },
+  set: ['title'],
+}),
+
+updateProfile: op.fieldUpdate({
+  match: { id: 'param:id' },
+  set: ['displayName', 'bio', 'avatarUrl'],
+  partial: true,      // not all fields are required
+  nullable: true,     // fields can be set to null
+}),
+```
+
+Generated route: `PATCH /posts/:id/retitle` with body `{ "title": "New Title" }`
+
+### Search
+
+Full-text search across string fields:
+
+```typescript
+searchPublished: op.search({
+  fields: ['title', 'body'],
+  filter: { status: 'published' },
+}),
+
+searchAll: op.search({
+  fields: ['title', 'body', 'tags'],
+  paginate: true,
+}),
+```
+
+Generated route: `GET /posts/search-published?q=slingshot`
+
+For production search (Meilisearch, Elasticsearch, Typesense), add `useSearchProvider: true`
+and configure the search adapter. See [Adding Search](/slingshot/examples/adding-search/).
+
+### Aggregates
+
+Compute summaries across records:
+
+```typescript
+postStats: op.aggregate({
+  groupBy: 'authorId',
+  compute: {
+    total: { fn: 'count' },
+    published: { fn: 'count', filter: { status: 'published' } },
+  },
+}),
+
+revenueByMonth: op.aggregate({
+  groupBy: { field: 'createdAt', truncate: 'month' },
+  compute: {
+    total: { fn: 'sum', field: 'amount' },
+    average: { fn: 'avg', field: 'amount' },
+    count: { fn: 'count' },
+  },
+}),
+```
+
+### Batch operations
+
+Update or delete multiple records at once:
+
+```typescript
+archiveOld: op.batch({
+  action: 'update',
+  filter: { status: 'draft', createdAt: { $lt: 'param:before' } },
+  set: { status: 'archived' },
+  returns: 'count',
+}),
+
+purgeExpired: op.batch({
+  action: 'delete',
+  filter: { expiresAt: { $lt: 'now' } },
+  returns: 'count',
+}),
+```
+
+### Upserts
+
+Create-or-update based on a unique match:
+
+```typescript
+upsertByEmail: op.upsert({
+  match: ['email'],
+  set: ['name', 'avatarUrl'],
+  onCreate: { role: 'user' },
+}),
+```
+
+### Increment
+
+Atomic counter operations:
+
+```typescript
+incrementViews: op.increment({
+  field: 'viewCount',
+  match: { id: 'param:id' },
+}),
+
+decrementStock: op.increment({
+  field: 'stock',
+  by: -1,
+  match: { id: 'param:id' },
+}),
+```
+
+### Array operations
+
+Push, pull, and set items in array fields:
+
+```typescript
+addTag: op.arrayPush({
+  field: 'tags',
+  value: 'param:tag',
+  dedupe: true,
+}),
+
+removeTag: op.arrayPull({
+  field: 'tags',
+  value: 'param:tag',
+}),
+```
+
+### Collections
+
+Manage nested sub-items within a record (e.g., line items in an order):
+
+```typescript
+lineItems: op.collection({
+  parentKey: 'orderId',
+  itemFields: {
+    productId: field.string(),
+    quantity: field.integer(),
+    price: field.number(),
+  },
+  operations: ['list', 'add', 'remove', 'update'],
+  identifyBy: 'productId',
+  maxItems: 50,
+}),
+```
+
+### Custom operations
+
+When none of the built-in kinds fit, write backend-specific logic:
+
+```typescript
+nearbyStores: op.custom({
+  http: { method: 'get', path: '/nearby' },
+  postgres: (pool) => async ({ lat, lng, radius }) => {
+    const result = await pool.query(
+      `SELECT * FROM stores WHERE ST_DWithin(location, ST_MakePoint($1, $2), $3)`,
+      [lng, lat, radius],
+    );
+    return result.rows;
+  },
+  memory: (store) => async ({ lat, lng, radius }) => {
+    // In-memory fallback for tests
+    return [...store.values()];
+  },
+}),
+```
+
+## Real-world example: a task management entity
+
+```typescript title="src/entities/task.ts"
+import { defineEntity, defineOperations, field, index, op } from '@lastshotlabs/slingshot';
+
+export const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    description: field.string({ optional: true }),
+    assigneeId: field.string({ optional: true }),
+    projectId: field.string(),
+    status: field.enum(['todo', 'in_progress', 'done', 'cancelled'] as const, { default: 'todo' }),
+    priority: field.enum(['low', 'medium', 'high', 'urgent'] as const, { default: 'medium' }),
+    tags: field.stringArray({ optional: true }),
+    createdAt: field.date({ default: 'now' }),
+    updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
+  },
+  indexes: [index(['projectId', 'status']), index(['assigneeId', 'status'])],
+});
+
+export const TaskOps = defineOperations(Task, {
+  // Lookups
+  byProject: op.lookup({ fields: { projectId: 'param:projectId' }, returns: 'many' }),
+  byAssignee: op.lookup({ fields: { assigneeId: 'param:assigneeId' }, returns: 'many' }),
+
+  // Transitions
+  start: op.transition({
+    field: 'status',
+    from: 'todo',
+    to: 'in_progress',
     match: { id: 'param:id' },
-    set: ['title'],
   }),
-  searchPublished: op.search({
-    fields: ['title', 'body'],
-    filter: { status: 'published' },
+  complete: op.transition({
+    field: 'status',
+    from: 'in_progress',
+    to: 'done',
+    match: { id: 'param:id' },
+  }),
+  cancel: op.transition({
+    field: 'status',
+    from: ['todo', 'in_progress'],
+    to: 'cancelled',
+    match: { id: 'param:id' },
+  }),
+  reopen: op.transition({
+    field: 'status',
+    from: ['done', 'cancelled'],
+    to: 'todo',
+    match: { id: 'param:id' },
+  }),
+
+  // Field updates
+  assign: op.fieldUpdate({
+    match: { id: 'param:id' },
+    set: ['assigneeId'],
+  }),
+  reprioritize: op.fieldUpdate({
+    match: { id: 'param:id' },
+    set: ['priority'],
+  }),
+
+  // Search
+  search: op.search({ fields: ['title', 'description'] }),
+
+  // Stats
+  projectStats: op.aggregate({
+    groupBy: 'projectId',
+    compute: {
+      total: { fn: 'count' },
+      done: { fn: 'count', filter: { status: 'done' } },
+      inProgress: { fn: 'count', filter: { status: 'in_progress' } },
+    },
   }),
 });
 ```
 
-That gives the package:
+That generates 16 routes from two declarations — five CRUD routes plus eleven operation routes.
 
-- adapter methods like `byAuthor(...)`, `bySlug(...)`, and `publish(...)`
-- generated named-operation routes
-- generated docs for those routes
-- a single place to evolve domain behavior without scattering helpers
+## Bindings: where values come from
 
-## What the generated routes usually look like
+Operation configs use binding strings to specify where values come from at runtime:
 
-For the `PostOps` above, the generated route shell usually includes routes like:
-
-- `GET /blog/posts/by-author/:authorId`
-- `GET /blog/posts/by-slug/:slug`
-- `GET /blog/posts/exists-by-slug/:slug`
-- `POST /blog/posts/:id/publish`
-- `PATCH /blog/posts/:id/retitle`
-
-## What operations are for
-
-Use operations when the behavior is still adapter-shaped and belongs to the domain model:
-
-- lookups
-- existence checks
-- transitions
-- field updates
-- search
-- aggregates
-- batches
-- transactions
-- derived or computed behaviors
-
-## Why operations matter to the docs structure
-
-They are the point where the entity system stops being "CRUD generation" and becomes a real domain
-runtime.
-
-That is why operations need their own first-class docs home instead of being buried inside generic
-entity examples.
-
-## Where they show up
-
-Operations affect:
-
-- generated adapter methods
-- generated named-op routes
-- OpenAPI
-- route policy
-- backend delegation such as search-provider integration
-
-## Use the right level
-
-If the behavior belongs to the entity adapter surface, make it an operation.
-
-If it is really a package-owned route with different semantics, make it a domain route instead.
+| Binding           | Source                     | Example                       |
+| ----------------- | -------------------------- | ----------------------------- |
+| `param:fieldName` | URL path parameter         | `'param:id'`                  |
+| `ctx:actor.id`    | Current authenticated user | `'ctx:actor.id'`              |
+| `input:fieldName` | Request body               | `'input:tag'`                 |
+| `'now'`           | Current timestamp          | `set: { publishedAt: 'now' }` |
+| literal           | A static value             | `{ role: 'user' }`            |
 
 ## Next
 
-- [Route Policy](/slingshot/entity-system/route-policy/)
-- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/)
+- [Route Policy](/slingshot/entity-system/route-policy/) — auth, permissions, rate limits per route
+- [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wiring/) — swap backends
+- [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/generated-routes-overrides-and-extra-routes/) — customize the generated routes

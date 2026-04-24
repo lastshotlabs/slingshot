@@ -1,80 +1,60 @@
 ---
 title: Start Here
-description: 'Choose the right Slingshot workflow before reading anything else: contribute to Slingshot itself, or build an app with Slingshot.'
+description: Build an app with Slingshot — from zero to production in minutes.
 ---
 
-Slingshot has two distinct agent and developer workflows.
-
-Do not mix them.
-
-## Working on Slingshot Itself
-
-Use this flow when you are modifying the Slingshot framework, packages, docs tooling, manifest
-system, examples, or generated reference.
-
-Read in this order:
-
-1. `slingshot-docs/engineering-rules.md`
-2. root `CLAUDE.md`
-3. owning package `CLAUDE.md`
-4. package `src/index.ts`
-5. one schema/config file
-6. one primary runtime/plugin file
-
-Then implement the change and publish it to the downstream surfaces that future app-building
-agents will rely on:
-
-- JSDoc
-- Zod `.describe()` strings
-- package human guides
-- top-level docs
-- source-backed examples
-- `CLAUDE.md` when ownership or routing changes
-
-Required verification:
-
-```bash
-bun run typecheck
-bun run format:check
-bun run docs:ci
-```
-
-Next page:
-
-- [/agent-flows/framework-contributor/](/slingshot/agent-flows/framework-contributor/)
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 ## Building an App with Slingshot
 
-Use this flow when you are consuming Slingshot to build a product or internal app.
+Start from the docs and examples. Don't read framework internals.
 
-Start from the docs and examples, not Slingshot internals.
+<CardGrid>
+  <LinkCard
+    title="Quick Start"
+    href="/slingshot/quick-start/"
+    description="Define an entity, start the server, curl your API. Three steps."
+  />
+  <LinkCard
+    title="Core Features"
+    href="/slingshot/core-features/"
+    description="Data, events, realtime, auth, permissions, jobs — pick what you need."
+  />
+  <LinkCard
+    title="Authoring Model"
+    href="/slingshot/authoring-model/"
+    description="How app roots, packages, and entities fit together."
+  />
+  <LinkCard
+    title="Examples"
+    href="/slingshot/examples/"
+    description="SaaS, forum, chat, content platform, game engine — find your use case."
+  />
+</CardGrid>
 
-Read in this order:
+### Recommended read order
 
-1. [docs home](/slingshot/)
-2. [Quick Start](/slingshot/quick-start/)
-3. [App Authoring](/slingshot/app-authoring/)
-4. [Package-First Authoring](/slingshot/package-first/)
-5. [Entity System](/slingshot/entity-system/)
-6. [examples index](/slingshot/examples/)
-7. the closest source-backed example
-8. relevant package overview pages
-9. package reference pages only for the packages you are actually composing
+1. [Quick Start](/slingshot/quick-start/) — build something in 3 steps
+2. [Core Features](/slingshot/core-features/) — add capabilities one at a time
+3. [Authoring Model](/slingshot/authoring-model/) — understand the architecture
+4. [Examples](/slingshot/examples/) — study complete apps
+5. [Guides](/slingshot/guides/) — ship to production
 
-Only read Slingshot internals if you are:
+### Jump to your use case
 
-- authoring a custom plugin
-- debugging lifecycle behavior
-- debugging manifest conversion
-- debugging runtime or SSR behavior
+| You want to build...      | Start here                                                              |
+| ------------------------- | ----------------------------------------------------------------------- |
+| API with auth             | [Auth Setup](/slingshot/examples/with-auth/)                            |
+| Multi-tenant SaaS         | [SaaS Foundations](/slingshot/examples/saas-foundations/)               |
+| Forum or community        | [Forum App](/slingshot/examples/forum-app/)                             |
+| Collaboration workspace   | [Collaboration Workspace](/slingshot/examples/collaboration-workspace/) |
+| Content platform with SSR | [Content Platform](/slingshot/examples/content-platform/)               |
+| Game backend              | [Game Engine](/slingshot/examples/game-engine/)                         |
+| Config-driven domain      | [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       |
 
-Next pages:
+---
 
-- [/quick-start/](/slingshot/quick-start/)
-- [/app-authoring/](/slingshot/app-authoring/)
-- [/examples/](/slingshot/examples/)
+## Contributing to Slingshot
 
-## Rule Of Thumb
-
-- If you are changing Slingshot, start with repo guidance and code.
-- If you are using Slingshot, start with docs, packages, and examples.
+If you are modifying the Slingshot framework itself — packages, plugins, docs tooling, manifest
+system, or generated reference — see the [Framework Contributor Flow](/slingshot/agent-flows/framework-contributor/).

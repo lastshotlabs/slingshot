@@ -1,0 +1,237 @@
+---
+title: Auth
+description: Add registration, login, sessions, OAuth, MFA, and passkeys to your app
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Preview">
+  `@lastshotlabs/slingshot-auth` is pre-1.0 (`0.0.2`). The API surface is evolving — verify fit
+  before building critical product dependencies on it.
+</Aside>
+
+You want users to create accounts, log in, and access protected resources. Slingshot's auth
+package gives you registration, login, JWT sessions, and route protection out of the box.
+
+## Add auth to your app
+
+```bash
+bun add @lastshotlabs/slingshot-auth
+```
+
+```typescript
+import { createServer } from '@lastshotlabs/slingshot';
+import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
+
+await createServer({
+  port: 3000,
+  security: {
+    signing: { secret: process.env.JWT_SECRET! },
+  },
+  plugins: [
+    createAuthPlugin({
+      auth: { roles: ['user', 'admin'], defaultRole: 'user' },
+    }),
+  ],
+  packages: [
+    // your packages here
+  ],
+});
+```
+
+That registers these routes automatically:
+
+| Route                 | What it does            |
+| --------------------- | ----------------------- |
+| `POST /auth/register` | Create a new account    |
+| `POST /auth/login`    | Log in, get a JWT token |
+| `POST /auth/logout`   | End the session         |
+| `GET /auth/me`        | Get the current user    |
+
+## Test it
+
+```bash
+# Register
+curl -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "alice@example.com", "password": "supersecret" }'
+
+# Login — returns a JWT token
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "alice@example.com", "password": "supersecret" }'
+
+# Use the token on protected routes
+curl http://localhost:3000/auth/me \
+  -H "Authorization: Bearer <token>"
+```
+
+## Protect your routes
+
+Once auth is mounted, use `auth: 'userAuth'` on any route to require a valid session:
+
+```typescript
+route.get({
+  path: '/dashboard',
+  auth: 'userAuth',
+  handler: ({ actor, respond }) => {
+    return respond.json({ userId: actor.id, roles: actor.roles });
+  },
+});
+```
+
+For entities, set `routes.defaults` to protect all generated routes at once:
+
+```typescript
+const Task = defineEntity('Task', {
+  namespace: 'app',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    done: field.boolean({ default: false }),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' },
+  },
+});
+```
+
+## Access the current user
+
+The auth middleware sets the actor on every request. Read it with `getActor(c)`:
+
+```typescript
+import { getActor, getActorId } from '@lastshotlabs/slingshot-core';
+
+// Full actor object — id, roles, tenantId, sessionId, claims
+const actor = getActor(c);
+
+// Just the user ID (null for anonymous requests)
+const userId = getActorId(c);
+```
+
+## Add OAuth, MFA, and passkeys
+
+These are opt-in. Enable them in the auth config when you need them:
+
+```typescript
+createAuthPlugin({
+  auth: {
+    roles: ['user', 'admin'],
+    defaultRole: 'user',
+    oauth: {
+      google: {
+        clientId: process.env.GOOGLE_CLIENT_ID!,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      },
+    },
+    mfa: { enabled: true },
+    passkeys: { enabled: true, rpName: 'My App', rpId: 'myapp.com' },
+  },
+});
+```
+
+## Role-based access
+
+Require a specific role with `requireRole`:
+
+```typescript
+import { requireRole } from '@lastshotlabs/slingshot-auth';
+
+router.use('/admin/*', requireRole('admin'));
+```
+
+For entity routes, use route policy:
+
+```typescript
+const Post = defineEntity('Post', {
+  namespace: 'blog',
+  fields: {
+    id: field.string({ primary: true, default: 'uuid' }),
+    title: field.string(),
+    body: field.string(),
+  },
+  routes: {
+    defaults: { auth: 'userAuth' },
+    delete: { middleware: ['requireAdmin'] },
+  },
+});
+```
+
+## Bring your own auth
+
+You don't need `slingshot-auth`. If you already have auth upstream (API gateway, reverse proxy,
+your own JWT verification) or want to use a different auth library, write a plugin that:
+
+1. Sets the `actor` on the Hono context
+2. Registers a `RouteAuthRegistry` so entity routes and framework features can enforce `auth: 'userAuth'`
+
+```typescript
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type { Actor } from '@lastshotlabs/slingshot-core';
+
+export function createMyAuthPlugin(): SlingshotPlugin {
+  return {
+    name: 'my-auth',
+    setupMiddleware({ app }) {
+      // Run on every request — resolve identity from your upstream
+      app.use('*', async (c, next) => {
+        const token = c.req.header('Authorization')?.replace('Bearer ', '');
+        if (token) {
+          const payload = await verifyMyToken(token); // your verification
+          const actor: Actor = {
+            id: payload.sub,
+            kind: 'user',
+            tenantId: payload.tenantId ?? null,
+            sessionId: null,
+            roles: payload.roles ?? [],
+            claims: payload,
+          };
+          c.set('actor', actor);
+        }
+        await next();
+      });
+    },
+    setupPost({ registrar }) {
+      // Register the auth registry so entity routes can use auth: 'userAuth'
+      registrar.setRouteAuth({
+        userAuth: async (c, next) => {
+          const actor = c.get('actor');
+          if (!actor?.id) return c.json({ error: 'Unauthorized' }, 401);
+          await next();
+        },
+        requireRole(...roles) {
+          return async (c, next) => {
+            const actor = c.get('actor');
+            if (!actor?.roles?.some((r: string) => roles.includes(r))) {
+              return c.json({ error: 'Forbidden' }, 403);
+            }
+            await next();
+          };
+        },
+      });
+    },
+  };
+}
+```
+
+Then use it like `slingshot-auth`:
+
+```typescript
+await createServer({
+  port: 3000,
+  plugins: [createMyAuthPlugin()],
+  packages: [appPackage],
+});
+```
+
+Entity routes with `auth: 'userAuth'` will call your `userAuth` middleware. `getActor(c)`,
+`getActorId(c)`, and all actor-based features (permissions, data scoping, audit) work
+automatically because they read from `c.get('actor')`.
+
+## Go deeper
+
+- [Auth Setup Example](/slingshot/examples/with-auth/) — end-to-end auth walkthrough with OAuth, MFA, and passkeys
+- [Permissions](/slingshot/core-features/permissions/) — add resource-level access control on top of auth
+- [SaaS Foundations](/slingshot/examples/saas-foundations/) — auth + organizations + permissions for multi-tenant
+- [Maturity and Package Status](/slingshot/core-features/maturity-and-package-status/) — current package stability expectations

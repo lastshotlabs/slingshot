@@ -114,7 +114,7 @@ bun add @lastshotlabs/slingshot \
           providers: {
             default: { provider: 'db-native' },
           },
-          tenantResolver: c => c.get('tenantId'),
+          tenantResolver: c => getRequestTenantId(c),
           tenantField: 'organizationId',
         }),
       ],
@@ -346,7 +346,7 @@ declare function getOrgId(c: Context): string | undefined;
  */
 export async function requireOrgMember(c: Context, next: Next) {
   const orgId = getOrgId(c);
-  const userId = c.get('userId') as string | undefined; // set by the auth identify middleware
+  const userId = getActorId(c); // from the auth identify middleware
 
   if (!orgId || !userId) {
     throw new HTTPException(401, { message: 'Unauthorized' });
@@ -409,7 +409,7 @@ The auth plugin embeds `tenantId` in the JWT when a user logs in with an org con
 
 ```typescript
 // In a route handler — tenantId comes from the verified JWT, not from user input
-const tenantId = c.get('tenantId'); // set by slingshot-auth's identify middleware
+const tenantId = getRequestTenantId(c); // from slingshot-auth's identify middleware
 
 // Always query with tenantId, not the raw body field
 const projects = await db
@@ -494,7 +494,7 @@ createSearchPlugin({
   providers: {
     default: { provider: 'db-native' },
   },
-  tenantResolver: c => c.get('tenantId'),
+  tenantResolver: c => getRequestTenantId(c),
   tenantField: 'organizationId',
 });
 ```

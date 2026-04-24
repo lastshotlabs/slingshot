@@ -1,24 +1,20 @@
 ---
 title: domain and route
-description: Typed non-entity routes owned by a package
+description: Typed custom routes with auth, validation, OpenAPI, and events — owned by the package
 ---
 
-Not every package route should be generated from an entity.
+Not every route should be generated from an entity. When your package needs endpoints that do not
+map to CRUD — webhooks, preview rendering, third-party callbacks, health checks, dashboards — use
+`domain()` and `route.*()`.
 
-For package-owned HTTP surfaces that are still part of the package contract, use `domain(...)` and
-`route.*(...)`.
+## A route with typed input and output
 
-The examples on this page continue the [starter app](/slingshot/app-authoring/starter-app/) and
-its `blogPackage`.
-
-## A typed route that belongs to the package, not the entity
-
-```typescript title="src/blog/package.ts"
+```typescript title="src/packages/blog.ts"
 import { z } from 'zod';
 import { definePackage, domain, route } from '@lastshotlabs/slingshot';
 
 const previewBody = z.object({
-  markdown: z.string(),
+  markdown: z.string().min(1),
 });
 
 const previewResponse = z.object({
@@ -30,31 +26,23 @@ export const blogPackage = definePackage({
   name: 'blog',
   domains: [
     domain({
-      name: 'preview',
-      basePath: '/preview',
-      services: {
-        renderMarkdown(markdown: string) {
-          return `<article>${markdown}</article>`;
-        },
-      },
+      name: 'content',
+      basePath: '/content',
       routes: [
         route.post({
-          path: '/',
+          path: '/preview',
           auth: 'userAuth',
-          summary: 'Preview rendered post content',
+          summary: 'Preview rendered markdown',
           request: { body: previewBody },
           responses: {
-            201: {
-              description: 'Rendered preview',
-              schema: previewResponse,
-            },
+            200: { description: 'Rendered preview', schema: previewResponse },
           },
-          handler: async ({ body, services, respond }) => {
-            const html = services.renderMarkdown(body.markdown);
-            return respond.json(
-              { html, wordCount: body.markdown.trim().split(/\s+/).filter(Boolean).length },
-              201,
-            );
+          handler: ({ body, respond }) => {
+            const words = body.markdown.trim().split(/\s+/).filter(Boolean).length;
+            return respond.json({
+              html: `<article>${body.markdown}</article>`,
+              wordCount: words,
+            });
           },
         }),
       ],
@@ -63,78 +51,241 @@ export const blogPackage = definePackage({
 });
 ```
 
-## What route definitions can declare
+The `request` and `responses` Zod schemas:
 
-Package routes can carry:
+- Validate incoming requests (400 on bad input)
+- Generate OpenAPI docs with full request/response schemas
+- Give you typed `body`, `params`, and `query` in the handler
 
-- `auth`
-- `permission`
-- `rateLimit`
-- `idempotency`
-- `middleware`
-- `event`
-- typed `request`
-- typed `responses`
-- `summary` and `description`
+## Route methods
 
-That makes package routes a first-class authoring surface, not a low-level escape hatch.
+```typescript
+route.get({ path, handler, ... })
+route.post({ path, handler, ... })
+route.put({ path, handler, ... })
+route.patch({ path, handler, ... })
+route.delete({ path, handler, ... })
+```
+
+## Route options
+
+| Option        | What it does                                           |
+| ------------- | ------------------------------------------------------ |
+| `path`        | URL path (supports `:param` placeholders)              |
+| `handler`     | The route handler function                             |
+| `auth`        | `'userAuth'`, `'bearer'`, or `'none'`                  |
+| `permission`  | Permission check (same options as entity route policy) |
+| `rateLimit`   | `{ windowMs, max }` throttle config                    |
+| `middleware`  | Named middleware from the package                      |
+| `idempotency` | Duplicate request protection                           |
+| `event`       | Publish an event on success                            |
+| `summary`     | One-line description for OpenAPI                       |
+| `description` | Detailed description for OpenAPI                       |
+| `request`     | Zod schemas for `body`, `params`, `query`              |
+| `responses`   | Zod schemas per status code for OpenAPI                |
+
+## What the handler receives
+
+```typescript
+handler: ({
+  params,           // URL parameters (typed if request.params is set)
+  query,            // Query string (typed if request.query is set)
+  body,             // Request body (typed if request.body is set)
+  input,            // Merged params + query + body
+  request,          // The raw Hono Context (c)
+  actor,            // Current authenticated actor
+  packageName,      // Name of the owning package
+  capabilities,     // Cross-package capability reader
+  entities,         // Cross-package entity adapter reader
+  services,         // Domain-local services
+  requestContext,    // Request-scoped context
+  respond,          // Typed response helpers
+}) => { ... }
+```
+
+### Response helpers
+
+```typescript
+respond.json(data); // 200 JSON response
+respond.json(data, 201); // JSON with custom status
+respond.text('ok'); // Plain text
+respond.html('<h1>Hello</h1>'); // HTML
+respond.noContent(); // 204
+respond.notFound(); // 404
+respond.body(readableStream); // Raw body
+```
+
+## Real scenarios
+
+### Webhook receiver
+
+```typescript
+const webhookBody = z.object({
+  event: z.string(),
+  data: z.record(z.unknown()),
+  signature: z.string(),
+});
+
+route.post({
+  path: '/stripe/webhook',
+  auth: 'none',
+  summary: 'Stripe webhook receiver',
+  request: { body: webhookBody },
+  event: { key: 'payments:webhook.received', payload: ['event'] },
+  handler: async ({ body, respond }) => {
+    // Verify signature, process event
+    console.log('Webhook event:', body.event);
+    return respond.noContent();
+  },
+});
+```
+
+### File upload endpoint
+
+```typescript
+route.post({
+  path: '/upload',
+  auth: 'userAuth',
+  rateLimit: { windowMs: 60_000, max: 10 },
+  summary: 'Upload a file',
+  handler: async ({ request, actor, respond }) => {
+    const formData = await request.req.formData();
+    const file = formData.get('file');
+    if (!file || typeof file === 'string') return respond.json({ error: 'No file' }, 400);
+    // Process file...
+    return respond.json({ uploaded: true, userId: actor.id });
+  },
+});
+```
+
+### Protected admin endpoint
+
+```typescript
+route.get({
+  path: '/users',
+  auth: 'userAuth',
+  permission: { requires: 'admin:users.read' },
+  rateLimit: { windowMs: 60_000, max: 30 },
+  summary: 'List all users (admin only)',
+  handler: async ({ entities, respond }) => {
+    // Access another package's entity
+    const users = entities.get(UserRef);
+    const all = await users.list({});
+    return respond.json({ users: all.items });
+  },
+});
+```
+
+### Route with URL params
+
+```typescript
+const inviteParams = z.object({ teamId: z.string() });
+const inviteBody = z.object({ email: z.string().email() });
+
+route.post({
+  path: '/teams/:teamId/invite',
+  auth: 'userAuth',
+  permission: { requires: 'team:invite', scope: { teamId: 'param:teamId' } },
+  request: { params: inviteParams, body: inviteBody },
+  event: { key: 'teams:invite.sent', payload: ['teamId', 'email'] },
+  handler: async ({ params, body, respond }) => {
+    // Send invite...
+    return respond.json({ invited: body.email, team: params.teamId }, 201);
+  },
+});
+```
 
 ## Domain-local services
 
-`domain(...)` can also publish a service bag that route handlers receive as `ctx.services`.
+A domain can publish helper functions that its routes receive as `services`:
 
 ```typescript
-const postsDomain = domain({
-  name: 'posts',
+const analyticsDomain = domain({
+  name: 'analytics',
+  basePath: '/analytics',
   services: {
-    now: () => new Date().toISOString(),
+    calculateRetention(signups: number, active: number) {
+      return active / signups;
+    },
+    formatPercentage(value: number) {
+      return `${(value * 100).toFixed(1)}%`;
+    },
   },
   routes: [
-    route.withServices<{ now: () => string }>().get({
-      path: '/clock',
-      auth: 'none',
-      handler: ({ services, respond }) => respond.json({ now: services.now() }),
+    route.get({
+      path: '/retention',
+      auth: 'userAuth',
+      handler: ({ services, respond }) => {
+        const rate = services.calculateRetention(1000, 450);
+        return respond.json({ retention: services.formatPercentage(rate) });
+      },
     }),
   ],
 });
 ```
 
-Use this for domain-local helpers that belong to the route group itself.
+Services are scoped to the domain. They do not leak into other domains or packages.
 
-## A route with params, permissions, and events
+## Domains group related routes
 
-```typescript title="src/blog/package.ts"
-const publishParams = z.object({
-  id: z.string(),
-});
+Use multiple domains when a package has distinct route groups:
 
-route.post({
-  path: '/posts/:id/publish-now',
-  auth: 'userAuth',
-  permission: { requires: 'blog:post.publish' },
-  request: { params: publishParams },
-  event: {
-    key: 'blog:post.publishRequested',
-    payload: ['id'],
-  },
-  handler: ({ params, respond }) => respond.json({ queued: true, postId: params.id }),
+```typescript
+export const appPackage = definePackage({
+  name: 'app',
+  domains: [
+    domain({
+      name: 'health',
+      basePath: '/health',
+      routes: [
+        route.get({
+          path: '/',
+          auth: 'none',
+          handler: ({ respond }) => respond.json({ ok: true }),
+        }),
+      ],
+    }),
+    domain({
+      name: 'admin',
+      basePath: '/admin',
+      routes: [
+        route.get({
+          path: '/stats',
+          auth: 'userAuth',
+          middleware: ['requireAdmin'],
+          handler: ({ respond }) => respond.json({ users: 42, posts: 128 }),
+        }),
+      ],
+    }),
+    domain({
+      name: 'webhooks',
+      basePath: '/webhooks',
+      routes: [
+        route.post({
+          path: '/stripe',
+          auth: 'none',
+          handler: ({ body, respond }) => respond.noContent(),
+        }),
+      ],
+    }),
+  ],
 });
 ```
 
-That is the canonical package-route shape when the behavior belongs to the package but not to one
-entity's generated route shell.
-
 ## When to use package routes vs entity routes
 
-Use package routes when the behavior is:
-
-- not naturally CRUD or named-op shaped
-- not centered on one entity adapter
-- still part of the package's public HTTP surface
-
-Use the entity system when the route semantics should be generated from the domain model.
+| The route...                                   | Use              |
+| ---------------------------------------------- | ---------------- |
+| Does CRUD on a data model                      | Entity           |
+| Looks up, transitions, or searches entity data | Entity operation |
+| Receives webhooks                              | Package route    |
+| Renders previews, transforms data              | Package route    |
+| Handles file uploads                           | Package route    |
+| Serves a dashboard or admin panel              | Package route    |
+| Proxies to an external API                     | Package route    |
+| Does something that is not data-shaped         | Package route    |
 
 ## Next
 
-- [Entity System](/slingshot/entity-system/)
-- [OpenAPI and Validation](/slingshot/app-authoring/openapi-and-validation/)
+- [Capabilities and entityRef](/slingshot/package-first/capabilities-and-entity-ref/) — cross-package service contracts and entity access
+- [Entity System](/slingshot/entity-system/) — when the route should be generated from a data model

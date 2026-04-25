@@ -3,13 +3,8 @@ title: Permissions
 description: Server-level permissions setup, grant patterns, and evaluation across routes and realtime
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
-<Aside type="caution" title="Preview">
-  `@lastshotlabs/slingshot-permissions` is pre-1.0 (`0.0.2`). Start with [Core Features:
-  Permissions](/slingshot/core-features/permissions/) for a quick overview before diving into this
-  guide.
-</Aside>
+Start with [Core Features: Permissions](/slingshot/core-features/permissions/) for a quick
+overview before diving into this guide.
 
 ## Setup
 
@@ -22,7 +17,11 @@ bun add @lastshotlabs/slingshot-permissions
 ```typescript title="src/index.ts"
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import {
+  createPermissionsPlugin,
+  createAuthGroupResolver,
+} from '@lastshotlabs/slingshot-permissions';
+import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
 
 await createServer({
   port: 3000,
@@ -31,79 +30,160 @@ await createServer({
     createAuthPlugin({
       auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
     }),
-    createPermissionsPlugin(),
+    createPermissionsPlugin({
+      groupResolver: (pluginState) =>
+        createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
+    }),
   ],
   packages: [blogPackage],
 });
 ```
 
-The permissions plugin provides a shared evaluator that all packages can use. It depends on
-auth — auth identifies the actor, permissions decide what they can do.
+The permissions plugin is standalone by default — group expansion is disabled unless you
+wire it explicitly. Passing `groupResolver` with `createAuthGroupResolver` enables user →
+group membership resolution from `slingshot-auth`, which is how role-based grants apply to
+users. Omit `groupResolver` if you are not using auth groups or if you are wiring a custom
+group source.
 
-## Grant patterns
+**Auth is required for route-level enforcement.** Permission checks on entity routes and
+package routes depend on `actor.id`, which is resolved by `slingshot-auth` from the request's
+JWT or session. Routes with `permission` must also have `auth: 'userAuth'` (directly or via
+`defaults`) — without an authenticated actor, the permission guard returns 403 immediately.
 
-Grants connect roles to actions. They are typically set during seed or admin operations.
+## Register resource types
 
-### Simple action grants
-
-```typescript
-// All users can read posts
-await permissions.grant({ role: 'user', action: 'post:read' });
-
-// Editors can create and update posts
-await permissions.grant({ role: 'editor', action: 'post:create' });
-await permissions.grant({ role: 'editor', action: 'post:update' });
-
-// Admins can do everything with posts
-await permissions.grant({ role: 'admin', action: 'post:*' });
-```
-
-### Owner-scoped grants
-
-Grants can be scoped so they only apply when the user owns the resource:
+Define what roles exist for each resource type and which actions they grant. Register this
+during plugin setup:
 
 ```typescript
-// Users can update their own posts
-await permissions.grant({
-  role: 'user',
-  action: 'post:update',
-  scope: { authorId: '{{actor.id}}' },
-});
+import { getPermissionsState } from '@lastshotlabs/slingshot-core';
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 
-// Users can delete their own posts
-await permissions.grant({
-  role: 'user',
-  action: 'post:delete',
-  scope: { authorId: '{{actor.id}}' },
-});
+const blogPermissionsPlugin: SlingshotPlugin = {
+  name: 'blog-permissions',
+  setupPost({ app }) {
+    const { registry } = getPermissionsState(app);
+
+    registry.register({
+      resourceType: 'post',
+      actions: ['post:read', 'post:create', 'post:update', 'post:delete', 'post:moderate'],
+      roles: {
+        reader: ['post:read'],
+        author: ['post:read', 'post:create', 'post:update', 'post:delete'],
+        moderator: ['post:read', 'post:update', 'post:delete', 'post:moderate'],
+        admin: ['*'],
+      },
+    });
+  },
+};
 ```
 
-`{{actor.id}}` is resolved at evaluation time to the current user's ID.
+## Create grants
+
+Grants connect subjects (users or groups) to roles on a resource type. Create them during
+seed or from admin operations:
+
+```typescript
+import { getPermissionsState } from '@lastshotlabs/slingshot-core';
+
+const { adapter } = getPermissionsState(app);
+
+// Grant the 'editor' auth group the 'author' role on all posts
+await adapter.createGrant({
+  subjectId: 'editor',    // auth group ID
+  subjectType: 'group',
+  tenantId: null,         // applies across all tenants
+  resourceType: 'post',
+  resourceId: null,       // applies to all posts
+  roles: ['author'],
+  effect: 'allow',
+  grantedBy: 'system',
+});
+
+// Grant a specific user the 'moderator' role on all posts
+await adapter.createGrant({
+  subjectId: userId,
+  subjectType: 'user',
+  tenantId: null,
+  resourceType: 'post',
+  resourceId: null,
+  roles: ['moderator'],
+  effect: 'allow',
+  grantedBy: adminUserId,
+});
+```
 
 ### Tenant-scoped grants
 
-For multi-tenant apps, scope grants to the tenant:
+For multi-tenant apps, scope a grant to a tenant so it only applies within that org:
 
 ```typescript
-// Org members can read projects in their org
-await permissions.grant({
-  role: 'member',
-  action: 'project:read',
-  scope: { orgId: '{{actor.tenantId}}' },
-});
-
-// Org admins can manage projects
-await permissions.grant({
-  role: 'org-admin',
-  action: 'project:*',
-  scope: { orgId: '{{actor.tenantId}}' },
+// Grant an org-admin role within a specific tenant
+await adapter.createGrant({
+  subjectId: userId,
+  subjectType: 'user',
+  tenantId: orgId,         // scoped to this tenant
+  resourceType: 'project',
+  resourceId: null,
+  roles: ['admin'],
+  effect: 'allow',
+  grantedBy: 'system',
 });
 ```
 
+### Resource-specific grants
+
+Grant access to a single resource — for example, when a user creates a document they own:
+
+```typescript
+// On document creation, give the author explicit access to that document
+await adapter.createGrant({
+  subjectId: userId,
+  subjectType: 'user',
+  tenantId: orgId,
+  resourceType: 'document',
+  resourceId: documentId,   // scoped to this exact document
+  roles: ['author'],
+  effect: 'allow',
+  grantedBy: 'system',
+});
+```
+
+### Deny grants
+
+Explicitly deny an action regardless of other grants — deny always wins:
+
+```typescript
+await adapter.createGrant({
+  subjectId: userId,
+  subjectType: 'user',
+  tenantId: null,
+  resourceType: 'post',
+  resourceId: null,
+  roles: ['author'],
+  effect: 'deny',           // overrides any allow grant
+  grantedBy: adminUserId,
+});
+```
+
+## Grant scope cascade
+
+The evaluator resolves grants using a cascade:
+
+```
+global          → tenantId: null, resourceType: null, resourceId: null
+tenant-wide     → tenantId: X,    resourceType: null, resourceId: null
+resource-type   → tenantId: X,    resourceType: 'post', resourceId: null
+specific record → tenantId: X,    resourceType: 'post', resourceId: 'post-123'
+```
+
+A grant matches when its stored scope is satisfied by the scope passed to `can()`. Narrower
+scopes do not match broader evaluations — a resource-specific grant only applies when you
+pass the matching `resourceId`.
+
 ## Entity route policy
 
-The most common way to use permissions is in entity route policy. The evaluator runs
-automatically — no manual checks needed:
+The most common pattern — declarative, no manual checks needed:
 
 ```typescript
 const Post = defineEntity('Post', {
@@ -124,7 +204,7 @@ const Post = defineEntity('Post', {
     update: {
       permission: {
         requires: 'post:update',
-        ownerField: 'authorId', // checks: actor owns this record
+        ownerField: 'authorId', // checks: record.authorId === actor.id
       },
     },
     delete: {
@@ -138,20 +218,26 @@ const Post = defineEntity('Post', {
 });
 ```
 
+`ownerField` tells the framework which record field holds the owner's ID. It fetches the
+record and checks `record[ownerField] === actor.id` — no extra code in your handler.
+
 ### How evaluation works
 
 For `update` with `ownerField`:
 
 1. Framework fetches the existing record
-2. Checks: does the actor have `post:update`?
-3. Checks: is `record.authorId === actor.id`?
-4. Both must pass. If either fails, the request gets a `403`.
+2. Checks: is `record.authorId === actor.id`? If yes — pass immediately, no evaluator call
+3. Otherwise: does the actor have `post:update`? If yes — pass
+4. If neither — `403`
 
-For `delete` with `or`:
+For `delete` with `ownerField` and `or`:
 
-1. First checks: `(has 'post:delete' AND is owner)`
-2. If that fails, checks: `has 'post:moderate'`
-3. If either path passes, the request proceeds.
+1. Checks: is `record.authorId === actor.id`? If yes — pass immediately
+2. Otherwise: does the actor have `post:delete`? If yes — pass
+3. Otherwise: does the actor have `post:moderate`? If yes — pass
+4. If none — `403`
+
+Ownership is an early exit, not a requirement alongside the permission check.
 
 ## Package route permissions
 
@@ -169,52 +255,45 @@ route.post({
 });
 ```
 
-### Scoped permissions on routes
+### Custom evaluation in handlers
 
-Pass dynamic values from the URL into the permission check:
+When the declarative `permission` option is not flexible enough, inject the evaluator as a
+domain service and use `actor.id` directly:
 
 ```typescript
-route.post({
-  path: '/orgs/:orgId/projects',
-  auth: 'userAuth',
-  permission: {
-    requires: 'project:create',
-    scope: { orgId: 'param:orgId' },
-  },
-  handler: async ({ body, params, respond }) => {
-    const project = await createProject(params.orgId, body);
-    return respond.json(project, 201);
-  },
+import { getPermissionsState } from '@lastshotlabs/slingshot-core';
+
+const { evaluator } = getPermissionsState(app);
+
+domain({
+  name: 'posts',
+  basePath: '/posts',
+  services: { evaluator },
+  routes: [
+    route.post({
+      path: '/:id/transfer',
+      auth: 'userAuth',
+      handler: async ({ actor, params, body, services, respond }) => {
+        const post = await getPost(params.id);
+
+        const canTransfer = await services.evaluator.can(
+          { subjectId: actor.id!, subjectType: 'user' },
+          'post:transfer',
+          { tenantId: actor.tenantId ?? undefined, resourceType: 'post', resourceId: post.id },
+        );
+
+        if (!canTransfer) return respond.json({ error: 'Forbidden' }, 403);
+
+        await transferPost(post.id, body.newOwnerId);
+        return respond.noContent();
+      },
+    }),
+  ],
 });
 ```
 
-This checks: "Does this user have `project:create` scoped to this specific org?"
-
-## Manual evaluation
-
-When the declarative `permission` option is not flexible enough, use the evaluator directly:
-
-```typescript
-route.post({
-  path: '/posts/:id/transfer',
-  auth: 'userAuth',
-  handler: async ({ actor, params, respond }) => {
-    const post = await getPost(params.id);
-
-    // Custom check: must own the post AND have transfer permission
-    const canTransfer = await evaluator.can(
-      { subjectId: actor.id!, subjectType: 'user' },
-      'post:transfer',
-      { authorId: post.authorId },
-    );
-
-    if (!canTransfer) return respond.json({ error: 'Forbidden' }, 403);
-
-    await transferPost(post.id, params.newOwnerId);
-    return respond.noContent();
-  },
-});
-```
+`actor.id` is resolved by the framework from the request's auth token — no extra setup.
+Pass it directly to `evaluator.can()`.
 
 ## WebSocket permissions
 
@@ -228,7 +307,7 @@ ws: {
         const allowed = await evaluator.can(
           { subjectId: ws.data.actorId, subjectType: 'user' },
           'room:join',
-          { roomId: room },
+          { tenantId: ws.data.tenantId ?? undefined, resourceType: 'room', resourceId: room },
         );
         return allowed;
       },
@@ -236,6 +315,15 @@ ws: {
   },
 },
 ```
+
+## Revoke a grant
+
+```typescript
+await adapter.revokeGrant(grantId, revokedByUserId);
+```
+
+Revoked grants are retained in storage (soft delete) — they stop matching immediately but
+remain for audit purposes.
 
 ## See also
 

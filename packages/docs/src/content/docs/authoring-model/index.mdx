@@ -12,7 +12,7 @@ Every Slingshot app follows the same structure. Understanding it makes everythin
 ```
 createServer()                    ← app root: assembly, config, security
   └── definePackage()             ← packages: feature boundaries
-        ├── entity()              ��� entities: generated CRUD + operations
+        ├── entity()              ← entities: generated CRUD + operations
         ├── domain() + route.*()  ← routes: custom endpoints
         └── capabilities          ← contracts: cross-package dependencies
 ```

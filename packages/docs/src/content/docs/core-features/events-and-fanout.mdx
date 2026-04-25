@@ -13,20 +13,30 @@ the email. No imports between them, no tight coupling.
 
 ## Define and publish an event
 
-```typescript
-import { defineEvent } from '@lastshotlabs/slingshot-core';
+Augment the event map once to get typed emit and subscribe calls everywhere:
 
-// Type-safe event definition
+```typescript
 declare module '@lastshotlabs/slingshot-core' {
   interface SlingshotEventMap {
     'user.created': { userId: string; email: string };
     'user.deleted': { userId: string };
   }
 }
-
-// In a route handler or operation:
-bus.emit('user.created', { userId: 'usr_123', email: 'alice@example.com' });
 ```
+
+Publish through the app context — accessible via `getContext(app)` after `createServer`:
+
+```typescript
+import { getContext } from '@lastshotlabs/slingshot';
+
+const { app } = await createServer({ /* ... */ });
+const ctx = getContext(app);
+
+ctx.events.publish('user.created', { userId: 'usr_123', email: 'alice@example.com' });
+```
+
+See [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) for the full
+authoring guide, including plugin-level access and the canonical `ctx.events` vs raw `bus` distinction.
 
 ## Subscribe to events
 
@@ -69,18 +79,27 @@ You define the event once. Each subscriber does its own thing.
 
 ## Stream events to browsers with SSE
 
-Mark an event as client-safe and it flows to browser clients over SSE automatically:
+Mark an event as client-safe and it flows to browser clients over SSE automatically.
+Register event definitions in a plugin's `setupMiddleware` hook:
 
 ```typescript
-events.register(
-  defineEvent('task.completed', {
-    ownerPlugin: 'app',
-    exposure: ['client-safe'],
-    resolveScope(payload) {
-      return { userId: payload.userId };
-    },
-  }),
-);
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { defineEvent } from '@lastshotlabs/slingshot-core';
+
+const appEventsPlugin: SlingshotPlugin = {
+  name: 'app-events',
+  setupMiddleware({ events }) {
+    events.register(
+      defineEvent('task.completed', {
+        ownerPlugin: 'app',
+        exposure: ['client-safe'],
+        resolveScope(payload) {
+          return { userId: payload.userId };
+        },
+      }),
+    );
+  },
+};
 ```
 
 Browser clients receive the event through the built-in SSE endpoint. Internal events like

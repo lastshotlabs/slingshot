@@ -1,19 +1,19 @@
 import type {
+  GroupResolver,
   PluginSeedContext,
   PluginSetupContext,
+  PluginStateMap,
   SlingshotPlugin,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
   PERMISSIONS_STATE_KEY,
   SUPER_ADMIN_ROLE,
-  getAuthRuntimePeerOrNull,
   getPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import type { PermissionsState } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from './factories';
-import { createAuthGroupResolver } from './lib/authGroupResolver';
 import { createPermissionEvaluator } from './lib/evaluator';
 import { createPermissionRegistry } from './lib/registry';
 
@@ -23,6 +23,29 @@ export interface PermissionsPluginConfig {
    * When omitted the plugin falls back to `frameworkConfig.resolvedStores.authStore`.
    */
   adapter?: 'sqlite' | 'postgres' | 'mongo' | 'memory';
+
+  /**
+   * Optional group resolver for expanding user → group membership during permission checks.
+   * Receives the plugin state map so it can lazily read peer plugin runtime.
+   *
+   * When omitted, group expansion is disabled — grants to groups never apply to users.
+   *
+   * To integrate with `slingshot-auth`, pass `createAuthGroupResolver`:
+   * @example
+   * ```ts
+   * import {
+   *   createPermissionsPlugin,
+   *   createAuthGroupResolver,
+   * } from '@lastshotlabs/slingshot-permissions';
+   * import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
+   *
+   * createPermissionsPlugin({
+   *   groupResolver: (pluginState) =>
+   *     createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
+   * });
+   * ```
+   */
+  groupResolver?: (pluginState: PluginStateMap) => GroupResolver;
 }
 
 /**
@@ -36,19 +59,38 @@ export interface PermissionsPluginConfig {
  * as a dependency and read the shared state from `pluginState` instead of
  * constructing their own instances.
  *
+ * Group expansion is disabled by default. To resolve user → group membership
+ * from `slingshot-auth`, pass a `groupResolver` factory via config.
+ *
  * Registration order: declare this plugin before any consumer plugin so the
  * framework's topological sort places its `setupMiddleware` first.
  *
  * @returns A `SlingshotPlugin` ready to register with `createApp()`.
  *
- * @example
+ * @example Standalone (no auth integration)
  * ```ts
  * import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
  *
  * const { app } = await createApp({
+ *   plugins: [createPermissionsPlugin()],
+ * });
+ * ```
+ *
+ * @example With slingshot-auth group resolution
+ * ```ts
+ * import {
+ *   createPermissionsPlugin,
+ *   createAuthGroupResolver,
+ * } from '@lastshotlabs/slingshot-permissions';
+ * import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
+ *
+ * const { app } = await createApp({
  *   plugins: [
- *     createPermissionsPlugin(),
- *     createCommunityPlugin({ containerCreation: 'admin' }),
+ *     createAuthPlugin({ auth: { roles: ['user', 'admin'] } }),
+ *     createPermissionsPlugin({
+ *       groupResolver: (pluginState) =>
+ *         createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
+ *     }),
  *   ],
  * });
  * ```
@@ -76,11 +118,8 @@ export function createPermissionsPlugin(config?: PermissionsPluginConfig): Sling
       const adapter = await Promise.resolve(
         resolveRepo(permissionsAdapterFactories, storeType, infra),
       );
-      const evaluator = createPermissionEvaluator({
-        registry,
-        adapter,
-        groupResolver: createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
-      });
+      const groupResolver = config?.groupResolver?.(pluginState);
+      const evaluator = createPermissionEvaluator({ registry, adapter, groupResolver });
 
       pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));
     },

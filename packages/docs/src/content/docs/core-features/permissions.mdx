@@ -3,12 +3,6 @@ title: Permissions
 description: Control who can do what — RBAC, resource-level checks, and entity route policy
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
-<Aside type="caution" title="Preview">
-  `@lastshotlabs/slingshot-permissions` is pre-1.0 (`0.0.2`). The API surface is evolving.
-</Aside>
-
 Auth tells you _who_ is making the request. Permissions tell you _whether they are allowed_
 to do what they are asking.
 
@@ -41,7 +35,7 @@ admins can delete.
 ## Resource-level permissions
 
 When you need "users can only edit _their own_ posts" or "org members can access _their
-org's_ data," you need the permissions package:
+org's_ data," add the permissions plugin:
 
 ```bash
 bun add @lastshotlabs/slingshot-permissions
@@ -50,41 +44,31 @@ bun add @lastshotlabs/slingshot-permissions
 ```typescript
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
+import {
+  createPermissionsPlugin,
+  createAuthGroupResolver,
+} from '@lastshotlabs/slingshot-permissions';
+import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
 
 await createServer({
   port: 3000,
   security: { signing: { secret: process.env.JWT_SECRET! } },
-  plugins: [createAuthPlugin({ auth: { roles: ['user'] } }), createPermissionsPlugin()],
+  plugins: [
+    createAuthPlugin({ auth: { roles: ['user'] } }),
+    createPermissionsPlugin({
+      groupResolver: (pluginState) =>
+        createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
+    }),
+  ],
   packages: [
     /* your packages */
   ],
 });
 ```
 
-Then declare what each role can do:
-
-```typescript
-// Grant "user" role permission to read and update their own posts
-await permissions.grant({
-  role: 'user',
-  action: 'post:read',
-  scope: { authorId: '{{actor.id}}' },
-});
-
-await permissions.grant({
-  role: 'user',
-  action: 'post:update',
-  scope: { authorId: '{{actor.id}}' },
-});
-
-// Grant "admin" role full access
-await permissions.grant({ role: 'admin', action: 'post:*' });
-```
-
 ## Permissions in entity route policy
 
-Wire permission checks into generated entity routes with route policy:
+The most common use case — declare what is required per route, the framework enforces it:
 
 ```typescript
 const Post = defineEntity('Post', {
@@ -96,10 +80,9 @@ const Post = defineEntity('Post', {
     authorId: field.string(),
   },
   routes: {
-    defaults: {
-      auth: 'userAuth',
-      permission: { requires: 'post:read' },
-    },
+    defaults: { auth: 'userAuth' },
+    list: { auth: 'none' },
+    get: { auth: 'none' },
     create: { permission: { requires: 'post:create' } },
     update: {
       permission: { requires: 'post:update', ownerField: 'authorId' },
@@ -111,11 +94,12 @@ const Post = defineEntity('Post', {
 });
 ```
 
-The permission evaluator runs automatically on every request to a generated route.
+`ownerField: 'authorId'` checks that `record.authorId === actor.id`. No extra code needed —
+the framework fetches the record and checks ownership automatically.
 
 ## Permissions in custom routes
 
-For package routes, use the `permission` option directly — same syntax as entity routes:
+For package routes, the same `permission` option applies:
 
 ```typescript
 route.delete({
@@ -130,25 +114,37 @@ route.delete({
 });
 ```
 
-For more complex checks, use the evaluator in the handler:
+For checks that depend on runtime values, inject the evaluator via `services` and use
+`actor.id` from the handler context directly:
 
 ```typescript
-route.delete({
-  path: '/posts/:id',
-  auth: 'userAuth',
-  handler: async ({ actor, params, respond }) => {
-    const post = await getPost(params.id);
+import { getPermissionsState } from '@lastshotlabs/slingshot-core';
 
-    const allowed = await evaluator.can(
-      { subjectId: actor.id!, subjectType: 'user' },
-      'post:delete',
-      { authorId: post.authorId },
-    );
+const { evaluator } = getPermissionsState(app);
 
-    if (!allowed) return respond.json({ error: 'Forbidden' }, 403);
-    await deletePost(post.id);
-    return respond.noContent();
-  },
+domain({
+  name: 'posts',
+  basePath: '/posts',
+  services: { evaluator },
+  routes: [
+    route.delete({
+      path: '/:id',
+      auth: 'userAuth',
+      handler: async ({ actor, params, services, respond }) => {
+        const post = await getPost(params.id);
+
+        const allowed = await services.evaluator.can(
+          { subjectId: actor.id!, subjectType: 'user' },
+          'post:delete',
+          { tenantId: actor.tenantId ?? undefined, resourceType: 'post', resourceId: post.id },
+        );
+
+        if (!allowed) return respond.json({ error: 'Forbidden' }, 403);
+        await deletePost(post.id);
+        return respond.noContent();
+      },
+    }),
+  ],
 });
 ```
 
@@ -161,7 +157,7 @@ onRoomSubscribe: async (ws, room) => {
   const allowed = await evaluator.can(
     { subjectId: ws.data.actorId, subjectType: 'user' },
     'room:join',
-    { roomId: room },
+    { tenantId: ws.data.tenantId ?? undefined, resourceType: 'room', resourceId: room },
   );
   return allowed;
 };

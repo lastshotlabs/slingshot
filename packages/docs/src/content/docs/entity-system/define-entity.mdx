@@ -164,7 +164,7 @@ uniques: [{ fields: ['email'], upsert: true }],
 
 ## Add relations
 
-Relations declare foreign-key relationships for documentation and future query planning:
+Relations declare foreign-key relationships for storage-level enforcement and query planning:
 
 ```typescript
 const Post = defineEntity('Post', {

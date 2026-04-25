@@ -7,11 +7,22 @@ import type {
   PermissionsAdapter,
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
+import { SUPER_ADMIN_ROLE } from '@lastshotlabs/slingshot-core';
 
 interface EvaluatorConfig {
   registry: PermissionRegistry;
   adapter: PermissionsAdapter;
   groupResolver?: GroupResolver;
+  /**
+   * Maximum number of groups to expand per `can()` call for a user.
+   *
+   * When a user belongs to more groups than this limit, the excess groups are silently
+   * ignored and a console.warn is emitted. Defaults to 50.
+   *
+   * Set this to a value appropriate for your group model. A low limit protects against
+   * pathological N+1 amplification; a high limit supports deep org hierarchies.
+   */
+  maxGroups?: number;
 }
 
 function grantMatchesScope(grant: PermissionGrant, scope?: EvaluationScope): boolean {
@@ -80,6 +91,7 @@ function grantMatchesScope(grant: PermissionGrant, scope?: EvaluationScope): boo
  */
 export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEvaluator {
   const { registry, adapter, groupResolver } = config;
+  const maxGroups = config.maxGroups ?? 50;
 
   async function collectGrantsForSubject(
     subject: SubjectRef,
@@ -96,7 +108,16 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
       // Group expansion for users — fetch all groups concurrently
       if (subject.subjectType === 'user' && groupResolver) {
         const tenantId = scope?.tenantId ?? null;
-        const groupIds = await groupResolver.getGroupsForUser(subject.subjectId, tenantId);
+        const allGroupIds = await groupResolver.getGroupsForUser(subject.subjectId, tenantId);
+        const groupIds =
+          allGroupIds.length > maxGroups ? allGroupIds.slice(0, maxGroups) : allGroupIds;
+        if (allGroupIds.length > maxGroups) {
+          console.warn(
+            `[slingshot-permissions] evaluator.can() truncated group expansion for user '${subject.subjectId}' ` +
+              `from ${allGroupIds.length} to ${maxGroups} groups. ` +
+              `Increase maxGroups in createPermissionEvaluator() config if needed.`,
+          );
+        }
         if (groupIds.length > 0) {
           const groupGrantArrays = await Promise.all(
             groupIds.map(groupId =>
@@ -121,11 +142,26 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
 
       const resourceType = scope?.resourceType ?? '';
 
+      if (!resourceType && activeGrants.length > 0) {
+        console.warn(
+          `[slingshot-permissions] evaluator.can('${action}') called without scope.resourceType — ` +
+            "registry lookup uses '' which matches no registered type. " +
+            "Add scope: { resourceType: 'your-type' } to the permission config or can() call.",
+        );
+      }
+
       // Separate allow and deny grants
       const denyGrants = activeGrants.filter(g => g.effect === 'deny');
       const allowGrants = activeGrants.filter(g => g.effect === 'allow');
 
-      // CRITICAL: deny always wins — check deny grants first
+      // Super-admin early exit — evaluated before deny so it cannot be blocked.
+      // Super-admin is the system's ultimate authority; deny grants apply only to
+      // named roles, not to the super-admin principal itself.
+      for (const grant of allowGrants) {
+        if (grant.roles.includes(SUPER_ADMIN_ROLE)) return true;
+      }
+
+      // CRITICAL: deny always wins for all non-super-admin roles
       for (const grant of denyGrants) {
         for (const role of grant.roles) {
           const actions = registry.getActionsForRole(resourceType, role);

@@ -46,6 +46,14 @@ export interface PermissionsPluginConfig {
    * ```
    */
   groupResolver?: (pluginState: PluginStateMap) => GroupResolver;
+
+  /**
+   * Maximum number of groups to expand per permission check for a user.
+   *
+   * Passed to `createPermissionEvaluator` as `maxGroups`. Defaults to `50`.
+   * Increase this for org models where users can belong to many groups.
+   */
+  maxGroups?: number;
 }
 
 /**
@@ -119,9 +127,23 @@ export function createPermissionsPlugin(config?: PermissionsPluginConfig): Sling
         resolveRepo(permissionsAdapterFactories, storeType, infra),
       );
       const groupResolver = config?.groupResolver?.(pluginState);
-      const evaluator = createPermissionEvaluator({ registry, adapter, groupResolver });
+      const evaluator = createPermissionEvaluator({
+        registry,
+        adapter,
+        groupResolver,
+        maxGroups: config?.maxGroups,
+      });
 
       pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));
+    },
+
+    setupPost({ app, bus }: PluginSetupContext) {
+      const pluginState = getPluginState(app);
+      const permsState = pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
+      if (!permsState?.adapter) return;
+      bus.on('auth:user.deleted', async ({ userId }) => {
+        await permsState.adapter.deleteAllGrantsForSubject({ subjectId: userId, subjectType: 'user' });
+      });
     },
 
     async seed({ app, seedState }: PluginSeedContext) {
@@ -136,6 +158,20 @@ export function createPermissionsPlugin(config?: PermissionsPluginConfig): Sling
         if (!userId) {
           console.warn(
             `[slingshot-permissions seed] superAdmin requested for '${email}' but no user ID found in seedState — grant skipped.`,
+          );
+          continue;
+        }
+        const existing = await permsState.adapter.getGrantsForSubject(userId, 'user', {
+          tenantId: null,
+          resourceType: null,
+          resourceId: null,
+        });
+        const alreadyAdmin = existing.some(
+          g => g.roles.includes(SUPER_ADMIN_ROLE) && g.effect === 'allow' && !g.revokedAt,
+        );
+        if (alreadyAdmin) {
+          console.log(
+            `[slingshot-permissions seed] '${email}' already has super-admin — skipped.`,
           );
           continue;
         }

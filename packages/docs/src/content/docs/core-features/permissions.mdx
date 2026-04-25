@@ -83,12 +83,14 @@ const Post = defineEntity('Post', {
     defaults: { auth: 'userAuth' },
     list: { auth: 'none' },
     get: { auth: 'none' },
-    create: { permission: { requires: 'post:create' } },
+    create: {
+      permission: { requires: 'post:create', scope: { resourceType: 'post' } },
+    },
     update: {
-      permission: { requires: 'post:update', ownerField: 'authorId' },
+      permission: { requires: 'post:update', ownerField: 'authorId', scope: { resourceType: 'post' } },
     },
     delete: {
-      permission: { requires: 'post:delete', ownerField: 'authorId', or: 'post:moderate' },
+      permission: { requires: 'post:delete', ownerField: 'authorId', or: 'post:moderate', scope: { resourceType: 'post' } },
     },
   },
 });
@@ -105,7 +107,7 @@ For package routes, the same `permission` option applies:
 route.delete({
   path: '/posts/:id/archive',
   auth: 'userAuth',
-  permission: { requires: 'post:archive' },
+  permission: { requires: 'post:archive', scope: { resourceType: 'post' } },
   handler: async ({ params, respond }) => {
     // Permission check already passed — safe to proceed
     await archivePost(params.id);

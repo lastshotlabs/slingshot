@@ -94,8 +94,19 @@ const MIGRATIONS: Migration[] = [
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_permission_grants_resource ON permission_grants (resource_type, resource_id)`,
     );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_permission_grants_tenant ON permission_grants (tenant_id)`,
+    );
   },
-  // Add future migrations here.
+  // v2: revocation audit field + composite lookup index
+  async pool => {
+    await pool.query(
+      `ALTER TABLE permission_grants ADD COLUMN IF NOT EXISTS revoked_reason TEXT`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_permission_grants_subject_tenant ON permission_grants (subject_id, subject_type, tenant_id)`,
+    );
+  },
 ];
 
 const MIGRATION_LOCK_KEY1 = 5412;
@@ -290,6 +301,7 @@ function rowToGrant(row: PgRow): PermissionGrant {
     expiresAt: dateOrUndef(row.expires_at),
     revokedBy: typeof row.revoked_by === 'string' ? row.revoked_by : undefined,
     revokedAt: dateOrUndef(row.revoked_at),
+    revokedReason: typeof row.revoked_reason === 'string' ? row.revoked_reason : undefined,
   };
 }
 
@@ -354,15 +366,23 @@ export async function createPermissionsPostgresAdapter(
       return id;
     },
 
-    async revokeGrant(grantId: string, revokedBy: string, tenantScope?: string): Promise<boolean> {
-      const tenantClause = tenantScope !== undefined ? ' AND tenant_id = $3' : '';
-      const params: PgParam[] =
-        tenantScope !== undefined ? [revokedBy, grantId, tenantScope] : [revokedBy, grantId];
-      const { rowCount } = await pool.query(
-        `UPDATE permission_grants SET revoked_by = $1, revoked_at = NOW()
-         WHERE id = $2 AND revoked_at IS NULL${tenantClause}`,
-        params,
-      );
+    async revokeGrant(
+      grantId: string,
+      revokedBy: string,
+      tenantScope?: string,
+      revokedReason?: string,
+    ): Promise<boolean> {
+      if (revokedReason !== undefined && revokedReason.length > 1024) {
+        throw new Error('revokedReason exceeds maximum length of 1024');
+      }
+      const params: PgParam[] = [revokedBy, revokedReason ?? null, grantId];
+      let sql = `UPDATE permission_grants SET revoked_by = $1, revoked_at = NOW(), revoked_reason = $2
+         WHERE id = $3 AND revoked_at IS NULL`;
+      if (tenantScope !== undefined) {
+        sql += ` AND tenant_id = $4`;
+        params.push(tenantScope);
+      }
+      const { rowCount } = await pool.query(sql, params);
       return (rowCount ?? 0) > 0;
     },
 
@@ -468,6 +488,8 @@ export async function createPermissionsPostgresAdapter(
       resourceType: string,
       resourceId: string,
       tenantId?: string | null,
+      limit?: number,
+      offset?: number,
     ): Promise<PermissionGrant[]> {
       const conditions: string[] = [
         'resource_type = $1',
@@ -476,21 +498,69 @@ export async function createPermissionsPostgresAdapter(
         '(expires_at IS NULL OR expires_at > NOW())',
       ];
       const params: PgParam[] = [resourceType, resourceId];
+      let idx = 3;
 
       if (tenantId !== undefined) {
         if (tenantId === null) {
           conditions.push('tenant_id IS NULL');
         } else {
-          conditions.push('tenant_id = $3');
+          conditions.push(`tenant_id = $${idx++}`);
           params.push(tenantId);
         }
       }
 
-      const { rows } = await pool.query(
-        `SELECT * FROM permission_grants WHERE ${conditions.join(' AND ')}`,
-        params,
-      );
+      let sql = `SELECT * FROM permission_grants WHERE ${conditions.join(' AND ')}`;
+      if (limit !== undefined) {
+        sql += ` LIMIT $${idx++}`;
+        params.push(limit);
+      }
+      if (offset !== undefined && offset > 0) {
+        sql += ` OFFSET $${idx}`;
+        params.push(offset);
+      }
+
+      const { rows } = await pool.query(sql, params);
       return rows.map(rowToGrant);
+    },
+
+    async createGrants(
+      grantInputs: Omit<PermissionGrant, 'id' | 'grantedAt'>[],
+    ): Promise<string[]> {
+      for (const g of grantInputs) validateGrant(g);
+      const client = await pool.connect();
+      const ids: string[] = [];
+      try {
+        await client.query('BEGIN');
+        for (const grant of grantInputs) {
+          const id = crypto.randomUUID();
+          await client.query(
+            `INSERT INTO permission_grants
+             (id, subject_id, subject_type, tenant_id, resource_type, resource_id, roles, effect, granted_by, reason, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [
+              id,
+              grant.subjectId,
+              grant.subjectType,
+              grant.tenantId,
+              grant.resourceType,
+              grant.resourceId,
+              JSON.stringify(grant.roles),
+              grant.effect,
+              grant.grantedBy,
+              grant.reason ?? null,
+              grant.expiresAt ?? null,
+            ],
+          );
+          ids.push(id);
+        }
+        await client.query('COMMIT');
+        return ids;
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
     },
 
     async deleteAllGrantsForSubject(subject: SubjectRef): Promise<void> {
@@ -498,6 +568,29 @@ export async function createPermissionsPostgresAdapter(
         'DELETE FROM permission_grants WHERE subject_id = $1 AND subject_type = $2',
         [subject.subjectId, subject.subjectType],
       );
+    },
+
+    async deleteAllGrantsOnResource(
+      resourceType: string,
+      resourceId: string,
+      tenantId?: string | null,
+    ): Promise<void> {
+      if (tenantId === undefined) {
+        await pool.query(
+          'DELETE FROM permission_grants WHERE resource_type = $1 AND resource_id = $2',
+          [resourceType, resourceId],
+        );
+      } else if (tenantId === null) {
+        await pool.query(
+          'DELETE FROM permission_grants WHERE resource_type = $1 AND resource_id = $2 AND tenant_id IS NULL',
+          [resourceType, resourceId],
+        );
+      } else {
+        await pool.query(
+          'DELETE FROM permission_grants WHERE resource_type = $1 AND resource_id = $2 AND tenant_id = $3',
+          [resourceType, resourceId, tenantId],
+        );
+      }
     },
 
     async clear(): Promise<void> {

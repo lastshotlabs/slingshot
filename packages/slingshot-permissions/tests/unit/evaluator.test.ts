@@ -372,7 +372,37 @@ describe('PermissionEvaluator', () => {
     expect(fail).toBe(false);
   });
 
-  test('super-admin deny grant blocks super-admin access', async () => {
+  test('super-admin allow grant is immune to deny grants — super-admin cannot be blocked', async () => {
+    await adapter.createGrant({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['super-admin'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+    // An explicit deny on the super-admin role does NOT block them —
+    // super-admin is evaluated first in the allow pass before any deny check.
+    await adapter.createGrant({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['super-admin'],
+      effect: 'deny',
+      grantedBy: 'system',
+    });
+    const result = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'delete', {
+      resourceType: 'post',
+    });
+    expect(result).toBe(true);
+  });
+
+  test('deny grant on a regular role still blocks a user who also has super-admin', async () => {
+    // deny on a non-super-admin role doesn't matter — super-admin wins
     await adapter.createGrant({
       subjectId: 'user-1',
       subjectType: 'user',
@@ -389,15 +419,14 @@ describe('PermissionEvaluator', () => {
       tenantId: null,
       resourceType: null,
       resourceId: null,
-      roles: ['super-admin'],
+      roles: ['editor'],
       effect: 'deny',
       grantedBy: 'system',
     });
-    // deny wins over allow even for super-admin
     const result = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'delete', {
       resourceType: 'post',
     });
-    expect(result).toBe(false);
+    expect(result).toBe(true);
   });
 
   test('scope mismatch: grant with specific resourceType rejected when scope lacks resourceType', async () => {
@@ -502,5 +531,101 @@ describe('PermissionEvaluator', () => {
       'read',
     );
     expect(superAdminResult).toBe(true);
+  });
+
+  test('can() without scope.resourceType emits a console.warn when active grants exist', async () => {
+    await adapter.createGrant({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+    const originalWarn = console.warn;
+    let warnMessage: string | undefined;
+    console.warn = (msg: string) => {
+      warnMessage = msg;
+    };
+    try {
+      await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read');
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(warnMessage).toMatch(/scope\.resourceType/);
+  });
+
+  test('tenant-a grant does not satisfy a tenant-b scope evaluation', async () => {
+    await adapter.createGrant({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: 'tenant-a',
+      resourceType: null,
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+    const resultA = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+      tenantId: 'tenant-a',
+      resourceType: 'post',
+    });
+    expect(resultA).toBe(true);
+
+    const resultB = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+      tenantId: 'tenant-b',
+      resourceType: 'post',
+    });
+    expect(resultB).toBe(false);
+  });
+
+  test('maxGroups cap truncates group expansion and emits console.warn', async () => {
+    const capAdapter = createMemoryPermissionsAdapter();
+    const capRegistry = createPermissionRegistry();
+    capRegistry.register(postDef);
+
+    // Create a group grant for group-5 (which is beyond the cap of 3)
+    await capAdapter.createGrant({
+      subjectId: 'group-4',
+      subjectType: 'group',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+
+    // User belongs to groups 1-4 (4 groups), but cap is 3
+    const groupResolver = {
+      getGroupsForUser: async () => ['group-1', 'group-2', 'group-3', 'group-4'],
+    };
+    const cappedEvaluator = createPermissionEvaluator({
+      registry: capRegistry,
+      adapter: capAdapter,
+      groupResolver,
+      maxGroups: 3,
+    });
+
+    const originalWarn = console.warn;
+    let warnMessage: string | undefined;
+    console.warn = (msg: string) => {
+      if (msg.includes('truncated')) warnMessage = msg;
+    };
+    try {
+      const result = await cappedEvaluator.can(
+        { subjectId: 'user-1', subjectType: 'user' },
+        'read',
+        { resourceType: 'post' },
+      );
+      // group-4 was truncated, so no editor grant → false
+      expect(result).toBe(false);
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(warnMessage).toMatch(/truncated/);
+    expect(warnMessage).toMatch(/4.*3|maxGroups/);
   });
 });

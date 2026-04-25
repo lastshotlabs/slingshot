@@ -45,6 +45,21 @@ group membership resolution from `slingshot-auth`, which is how role-based grant
 users. Omit `groupResolver` if you are not using auth groups or if you are wiring a custom
 group source.
 
+**Group expansion N+1 note.** When a user belongs to N groups, each `can()` call fires
+1 + N adapter queries (1 for the user, one per group). These run concurrently via
+`Promise.all`, so latency scales with the slowest group query, not the total count. The
+evaluator caps expansion at **50 groups by default**; users in more groups than the cap will
+have excess groups silently ignored and a `console.warn` emitted. Raise the cap via
+`maxGroups` in `createPermissionEvaluator()` if your org model requires it:
+
+```typescript
+createPermissionsPlugin({
+  groupResolver: (pluginState) =>
+    createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
+  maxGroups: 200,
+});
+```
+
 **Auth is required for route-level enforcement.** Permission checks on entity routes and
 package routes depend on `actor.id`, which is resolved by `slingshot-auth` from the request's
 JWT or session. Routes with `permission` must also have `auth: 'userAuth'` (directly or via
@@ -183,7 +198,12 @@ pass the matching `resourceId`.
 
 ## Entity route policy
 
-The most common pattern — declarative, no manual checks needed:
+The most common pattern — declarative, no manual checks needed.
+
+**`scope: { resourceType }` is required.** The evaluator uses `scope.resourceType` to look up
+which actions a role grants in the registry. Without it, the lookup returns no actions and
+every permission check silently denies. Always include `scope: { resourceType: 'your-type' }`
+in every `permission` config.
 
 ```typescript
 const Post = defineEntity('Post', {
@@ -199,12 +219,13 @@ const Post = defineEntity('Post', {
     list: { auth: 'none' },
     get: { auth: 'none' },
     create: {
-      permission: { requires: 'post:create' },
+      permission: { requires: 'post:create', scope: { resourceType: 'post' } },
     },
     update: {
       permission: {
         requires: 'post:update',
         ownerField: 'authorId', // checks: record.authorId === actor.id
+        scope: { resourceType: 'post' },
       },
     },
     delete: {
@@ -212,6 +233,7 @@ const Post = defineEntity('Post', {
         requires: 'post:delete',
         ownerField: 'authorId',
         or: 'post:moderate', // OR: actor has moderator permission
+        scope: { resourceType: 'post' },
       },
     },
   },
@@ -247,7 +269,7 @@ Package routes use the same `permission` option:
 route.post({
   path: '/posts/:id/feature',
   auth: 'userAuth',
-  permission: { requires: 'post:feature' },
+  permission: { requires: 'post:feature', scope: { resourceType: 'post' } },
   handler: async ({ params, respond }) => {
     await featurePost(params.id);
     return respond.json({ featured: true });
@@ -294,6 +316,38 @@ domain({
 
 `actor.id` is resolved by the framework from the request's auth token — no extra setup.
 Pass it directly to `evaluator.can()`.
+
+## Resource lifecycle management
+
+When a resource is permanently deleted, clean up its grants to prevent unbounded accumulation
+of orphaned records:
+
+```typescript
+import { getPermissionsState } from '@lastshotlabs/slingshot-core';
+
+const { adapter } = getPermissionsState(app);
+
+// Hard-delete all grants for a specific document when the document is removed
+await adapter.deleteAllGrantsOnResource('document', documentId);
+
+// Scope to a specific tenant — only removes that tenant's grants on the resource
+await adapter.deleteAllGrantsOnResource('document', documentId, orgId);
+```
+
+`deleteAllGrantsOnResource` is a hard delete — grants are permanently removed. Call it from
+your delete handler or from a cleanup job after the primary resource is gone. Passing
+`tenantId` restricts deletion to a single tenant's grants; passing `null` removes only global
+grants; omitting it removes all grants across all tenants for that resource.
+
+### Revocation audit trail
+
+```typescript
+await adapter.revokeGrant(grantId, revokedByUserId, undefined, 'violated terms of service');
+```
+
+The fourth argument to `revokeGrant` is an optional `revokedReason` string, stored alongside
+`revokedBy` and `revokedAt`. Retrieve full grant history including revoked grants via
+`adapter.listGrantHistory(subjectId, subjectType)`.
 
 ## WebSocket permissions
 

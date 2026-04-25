@@ -61,8 +61,15 @@ const MIGRATIONS: Migration[] = [
     db.run(
       'CREATE INDEX IF NOT EXISTS idx_perm_resource ON permission_grants(resource_type, resource_id)',
     );
+    db.run('CREATE INDEX IF NOT EXISTS idx_perm_tenant ON permission_grants(tenant_id)');
   },
-  // Add future migrations here.
+  // v2: revocation audit field + composite lookup index
+  db => {
+    db.run('ALTER TABLE permission_grants ADD COLUMN revoked_reason TEXT');
+    db.run(
+      'CREATE INDEX IF NOT EXISTS idx_perm_subject_tenant ON permission_grants(subject_id, subject_type, tenant_id)',
+    );
+  },
 ];
 
 /**
@@ -126,6 +133,7 @@ interface GrantRow {
   revoked_by: string | null;
   /** Unix milliseconds or `null` — converted to `Date | undefined` by `rowToGrant`. */
   revoked_at: number | null;
+  revoked_reason: string | null;
 }
 
 function resolveSync<T>(operation: () => T): Promise<T> {
@@ -170,6 +178,7 @@ function rowToGrant(row: GrantRow): PermissionGrant {
     expiresAt: row.expires_at !== null ? new Date(row.expires_at) : undefined,
     revokedBy: row.revoked_by ?? undefined,
     revokedAt: row.revoked_at !== null ? new Date(row.revoked_at) : undefined,
+    revokedReason: row.revoked_reason ?? undefined,
   };
 }
 
@@ -238,17 +247,26 @@ export function createSqlitePermissionsAdapter(
       });
     },
 
-    revokeGrant(grantId: string, revokedBy: string, tenantScope?: string): Promise<boolean> {
+    revokeGrant(
+      grantId: string,
+      revokedBy: string,
+      tenantScope?: string,
+      revokedReason?: string,
+    ): Promise<boolean> {
       return resolveSync(() => {
+        if (revokedReason !== undefined && revokedReason.length > 1024) {
+          throw new Error('revokedReason exceeds maximum length of 1024');
+        }
         const existing = db
           .query<GrantRow>('SELECT * FROM permission_grants WHERE id = ?')
           .get(grantId);
         if (!existing || existing.revoked_at !== null) return false;
         if (tenantScope !== undefined && existing.tenant_id !== tenantScope) return false;
         db.run(
-          'UPDATE permission_grants SET revoked_by = ?, revoked_at = ? WHERE id = ?',
+          'UPDATE permission_grants SET revoked_by = ?, revoked_at = ?, revoked_reason = ? WHERE id = ?',
           revokedBy,
           Date.now(),
+          revokedReason ?? null,
           grantId,
         );
         return true;
@@ -349,6 +367,8 @@ export function createSqlitePermissionsAdapter(
       resourceType: string,
       resourceId: string,
       tenantId?: string | null,
+      limit?: number,
+      offset?: number,
     ): Promise<PermissionGrant[]> {
       return resolveSync(() => {
         const conditions: string[] = [
@@ -368,11 +388,51 @@ export function createSqlitePermissionsAdapter(
           }
         }
 
-        const where = conditions.join(' AND ');
-        const rows = db
-          .query<GrantRow>(`SELECT * FROM permission_grants WHERE ${where}`)
-          .all(...params);
+        let sql = `SELECT * FROM permission_grants WHERE ${conditions.join(' AND ')}`;
+        // SQLite requires LIMIT before OFFSET; use LIMIT -1 when only offset is given.
+        if (limit !== undefined || (offset !== undefined && offset > 0)) {
+          sql += ' LIMIT ?';
+          params.push(limit ?? -1);
+        }
+        if (offset !== undefined && offset > 0) {
+          sql += ' OFFSET ?';
+          params.push(offset);
+        }
+
+        const rows = db.query<GrantRow>(sql).all(...params);
         return rows.map(rowToGrant);
+      });
+    },
+
+    createGrants(grantInputs: Omit<PermissionGrant, 'id' | 'grantedAt'>[]): Promise<string[]> {
+      return resolveSync(() => {
+        for (const g of grantInputs) validateGrant(g);
+        const ids: string[] = grantInputs.map(() => crypto.randomUUID());
+        const now = Date.now();
+        const insertAll = db.transaction(() => {
+          for (let i = 0; i < grantInputs.length; i++) {
+            const grant = grantInputs[i];
+            db.run(
+              `INSERT INTO permission_grants
+               (id, subject_id, subject_type, tenant_id, resource_type, resource_id, roles, effect, granted_by, granted_at, reason, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              ids[i],
+              grant.subjectId,
+              grant.subjectType,
+              grant.tenantId,
+              grant.resourceType,
+              grant.resourceId,
+              JSON.stringify(grant.roles),
+              grant.effect,
+              grant.grantedBy,
+              now,
+              grant.reason ?? null,
+              grant.expiresAt ? grant.expiresAt.getTime() : null,
+            );
+          }
+        });
+        insertAll();
+        return ids;
       });
     },
 
@@ -383,6 +443,26 @@ export function createSqlitePermissionsAdapter(
           subject.subjectId,
           subject.subjectType,
         );
+      });
+    },
+
+    deleteAllGrantsOnResource(
+      resourceType: string,
+      resourceId: string,
+      tenantId?: string | null,
+    ): Promise<void> {
+      return resolveSync(() => {
+        let sql = 'DELETE FROM permission_grants WHERE resource_type = ? AND resource_id = ?';
+        const params: unknown[] = [resourceType, resourceId];
+        if (tenantId !== undefined) {
+          if (tenantId === null) {
+            sql += ' AND tenant_id IS NULL';
+          } else {
+            sql += ' AND tenant_id = ?';
+            params.push(tenantId);
+          }
+        }
+        db.run(sql, ...params);
       });
     },
 

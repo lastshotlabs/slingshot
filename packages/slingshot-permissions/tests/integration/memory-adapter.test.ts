@@ -218,6 +218,99 @@ describe('MemoryPermissionsAdapter', () => {
     expect(user2).toHaveLength(0);
   });
 
+  test('deleteAllGrantsOnResource removes all grants on the specified resource', async () => {
+    await adapter.createGrant(
+      baseGrant({ subjectId: 'user-1', resourceType: 'doc', resourceId: 'doc-1' }),
+    );
+    await adapter.createGrant(
+      baseGrant({ subjectId: 'user-2', resourceType: 'doc', resourceId: 'doc-1' }),
+    );
+    await adapter.createGrant(
+      baseGrant({ subjectId: 'user-3', resourceType: 'doc', resourceId: 'doc-2' }),
+    );
+    await adapter.deleteAllGrantsOnResource('doc', 'doc-1');
+    const doc1 = await adapter.listGrantsOnResource('doc', 'doc-1');
+    expect(doc1).toHaveLength(0);
+    const doc2 = await adapter.listGrantsOnResource('doc', 'doc-2');
+    expect(doc2).toHaveLength(1);
+  });
+
+  test('deleteAllGrantsOnResource with tenantId scopes removal to matching tenant', async () => {
+    await adapter.createGrant(
+      baseGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: 'tenant-a' }),
+    );
+    await adapter.createGrant(
+      baseGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: 'tenant-b' }),
+    );
+    await adapter.deleteAllGrantsOnResource('doc', 'doc-1', 'tenant-a');
+    const remaining = await adapter.listGrantsOnResource('doc', 'doc-1');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].tenantId).toBe('tenant-b');
+  });
+
+  test('deleteAllGrantsOnResource with tenantId=null removes only global grants on that resource', async () => {
+    await adapter.createGrant(
+      baseGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: null }),
+    );
+    await adapter.createGrant(
+      baseGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: 'tenant-a' }),
+    );
+    await adapter.deleteAllGrantsOnResource('doc', 'doc-1', null);
+    const remaining = await adapter.listGrantsOnResource('doc', 'doc-1');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].tenantId).toBe('tenant-a');
+  });
+
+  test('listGrantsOnResource respects limit and offset', async () => {
+    for (let i = 1; i <= 5; i++) {
+      await adapter.createGrant(
+        baseGrant({ subjectId: `user-${i}`, resourceType: 'post', resourceId: 'post-1' }),
+      );
+    }
+    const page1 = await adapter.listGrantsOnResource('post', 'post-1', undefined, 2, 0);
+    expect(page1).toHaveLength(2);
+    const page2 = await adapter.listGrantsOnResource('post', 'post-1', undefined, 2, 2);
+    expect(page2).toHaveLength(2);
+    const page3 = await adapter.listGrantsOnResource('post', 'post-1', undefined, 2, 4);
+    expect(page3).toHaveLength(1);
+    const allIds = [...page1, ...page2, ...page3].map(g => g.subjectId);
+    expect(new Set(allIds).size).toBe(5);
+  });
+
+  test('revokeGrant stores revokedReason and it is returned in grant history', async () => {
+    const id = await adapter.createGrant(baseGrant());
+    await adapter.revokeGrant(id, 'admin-1', undefined, 'violated ToS');
+    const history = await adapter.listGrantHistory('user-1', 'user');
+    expect(history[0].revokedReason).toBe('violated ToS');
+  });
+
+  test('createGrants creates all grants atomically and returns IDs in order', async () => {
+    const inputs = [
+      baseGrant({ subjectId: 'user-a', roles: ['admin'] }),
+      baseGrant({ subjectId: 'user-b', roles: ['reader'] }),
+      baseGrant({ subjectId: 'user-c', roles: ['editor'] }),
+    ];
+    const ids = await adapter.createGrants(inputs);
+    expect(ids).toHaveLength(3);
+    expect(new Set(ids).size).toBe(3);
+    const grantsA = await adapter.getGrantsForSubject('user-a');
+    expect(grantsA).toHaveLength(1);
+    expect(grantsA[0].roles).toEqual(['admin']);
+    const grantsC = await adapter.getGrantsForSubject('user-c');
+    expect(grantsC[0].roles).toEqual(['editor']);
+  });
+
+  test('createGrants validates all grants before writing — rejects on first invalid grant', async () => {
+    const inputs = [
+      baseGrant({ subjectId: 'user-a' }),
+      { ...baseGrant({ subjectId: 'user-b' }), roles: [] }, // invalid: empty roles
+    ];
+    await expect(adapter.createGrants(inputs)).rejects.toThrow();
+    // No grants should have been written
+    const grantsA = await adapter.getGrantsForSubject('user-a');
+    expect(grantsA).toHaveLength(0);
+  });
+
   test('listGrantsOnResource with tenantId=null returns only global grants', async () => {
     await adapter.createGrant(
       baseGrant({

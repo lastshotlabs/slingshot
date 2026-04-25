@@ -128,15 +128,6 @@
         "samlify",
       ],
     },
-    "../resumaxx": {
-      "name": "resumaxx",
-      "version": "0.1.0",
-      "dependencies": {
-        "@lastshotlabs/slingshot-auth": "workspace:*",
-        "@lastshotlabs/slingshot-core": "workspace:*",
-        "@lastshotlabs/slingshot-entity": "workspace:*",
-      },
-    },
     "packages/docs": {
       "name": "@lastshotlabs/slingshot-docs",
       "dependencies": {
@@ -2840,8 +2831,6 @@
     "resolve-pkg-maps": ["resolve-pkg-maps@1.0.0", "", {}, "sha512-seS2Tj26TBVOC2NIc2rOe2y2ZO7efxITtLZcGSOnHHNOQ7CkiUBfw0Iw2ck6xkIhPwLhKNLS8BO+hEpngQlqzw=="],
 
     "responselike": ["responselike@3.0.0", "", { "dependencies": { "lowercase-keys": "^3.0.0" } }, "sha512-40yHxbNcl2+rzXvZuVkrYohathsSJlMTXKryG5y8uciHv1+xDLHQpgjG64JUO9nrEq2jGLH6IZ8BcZyw3wrweg=="],
-
-    "resumaxx": ["resumaxx@workspace:../resumaxx"],
 
     "retext": ["retext@9.0.0", "", { "dependencies": { "@types/nlcst": "^2.0.0", "retext-latin": "^4.0.0", "retext-stringify": "^4.0.0", "unified": "^11.0.0" } }, "sha512-sbMDcpHCNjvlheSgMfEcVrZko3cDzdbe1x/e7G66dFp0Ff7Mldvi2uv6JkJQzdRcvLYE8CA8Oe8siQx8ZOgTcA=="],
 

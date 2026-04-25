@@ -30,6 +30,7 @@ interface StoredRow {
   expires_at: Date | null;
   revoked_by: string | null;
   revoked_at: Date | null;
+  revoked_reason: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,7 @@ const STORED_ROW_KEYS = new Set<string>([
   'expires_at',
   'revoked_by',
   'revoked_at',
+  'revoked_reason',
 ]);
 
 function isStoredRowKey(col: string): boolean {
@@ -60,6 +62,21 @@ function isStoredRowKey(col: string): boolean {
 // ---------------------------------------------------------------------------
 // Filter helper — parses WHERE clause and filters StoredRow array
 // ---------------------------------------------------------------------------
+
+function applyPagination(rows: StoredRow[], sql: string, params: PgParam[]): StoredRow[] {
+  const offsetMatch = sql.match(/OFFSET\s+\$(\d+)/i);
+  const limitMatch = sql.match(/LIMIT\s+\$(\d+)/i);
+  let result = rows;
+  if (offsetMatch) {
+    const offset = Number(params[parseInt(offsetMatch[1]) - 1]);
+    if (!isNaN(offset) && offset > 0) result = result.slice(offset);
+  }
+  if (limitMatch) {
+    const limit = Number(params[parseInt(limitMatch[1]) - 1]);
+    if (!isNaN(limit)) result = result.slice(0, limit);
+  }
+  return result;
+}
 
 function applyFilter(rows: StoredRow[], sql: string, params: PgParam[]): StoredRow[] {
   const whereMatch = sql.match(/WHERE\s+(.+)$/is);
@@ -138,6 +155,8 @@ class MockPool implements PoolLike {
     if (s.startsWith('CREATE TABLE IF NOT EXISTS permission_grants'))
       return { rows: [], rowCount: 0 };
     if (s.startsWith('CREATE INDEX IF NOT EXISTS')) return { rows: [], rowCount: 0 };
+    if (s.startsWith('ALTER TABLE permission_grants ADD COLUMN IF NOT EXISTS'))
+      return { rows: [], rowCount: 0 };
 
     // --- INSERT INTO permission_grants ---
     if (s.startsWith('INSERT INTO permission_grants')) {
@@ -175,20 +194,23 @@ class MockPool implements PoolLike {
               : null,
         revoked_by: null,
         revoked_at: null,
+        revoked_reason: null,
       });
       return { rows: [], rowCount: 1 };
     }
 
     // --- UPDATE permission_grants SET revoked_by (revokeGrant) ---
+    // Params: $1=revokedBy, $2=revokedReason|null, $3=grantId, $4?=tenantScope
     if (s.startsWith('UPDATE permission_grants SET revoked_by')) {
       if (!params) throw new Error('MockPool: UPDATE missing params');
-      const [revokedBy, grantId, tenantScope] = params;
+      const [revokedBy, revokedReason, grantId, tenantScope] = params;
       const grant = this.grants.get(String(grantId));
       if (!grant || grant.revoked_at !== null) return { rows: [], rowCount: 0 };
       if (tenantScope !== undefined && grant.tenant_id !== tenantScope)
         return { rows: [], rowCount: 0 };
       grant.revoked_by = String(revokedBy);
       grant.revoked_at = new Date();
+      grant.revoked_reason = typeof revokedReason === 'string' ? revokedReason : null;
       return { rows: [], rowCount: 1 };
     }
 
@@ -255,7 +277,7 @@ class MockPool implements PoolLike {
     if (s.startsWith('SELECT * FROM permission_grants WHERE')) {
       const now = new Date();
       // Pre-filter revoked and expired rows, mirroring the adapter's WHERE conditions.
-      // Strip those clauses from the SQL before passing to applyFilter so they aren't double-processed.
+      // Strip those clauses + pagination from the SQL before passing to applyFilter.
       const active = Array.from(this.grants.values()).filter(
         row => row.revoked_at === null && (row.expires_at === null || row.expires_at > now),
       );
@@ -263,21 +285,23 @@ class MockPool implements PoolLike {
         .replace(/\s+AND\s+revoked_at\s+IS\s+NULL/gi, '')
         .replace(/\s+AND\s+\(expires_at\s+IS\s+NULL\s+OR\s+expires_at\s*>\s*NOW\(\)\)/gi, '');
       const filtered = applyFilter(active, sqlForFilter, params ?? []);
-      return { rows: filtered, rowCount: filtered.length };
+      const paginated = applyPagination(filtered, sqlForFilter, params ?? []);
+      return { rows: paginated, rowCount: paginated.length };
     }
 
-    // --- DELETE FROM permission_grants WHERE subject_id = $1 AND subject_type = $2 ---
+    // --- DELETE FROM permission_grants WHERE ... ---
+    if (s.startsWith('DELETE FROM permission_grants WHERE')) {
+      const allRows = Array.from(this.grants.values());
+      const fakeSql = s.replace(/^DELETE FROM permission_grants/, 'SELECT * FROM permission_grants');
+      const toDelete = applyFilter(allRows, fakeSql, params ?? []);
+      for (const row of toDelete) this.grants.delete(row.id as string);
+      return { rows: [], rowCount: toDelete.length };
+    }
+
+    // --- DELETE FROM permission_grants (no WHERE — TRUNCATE equivalent) ---
     if (s.startsWith('DELETE FROM permission_grants')) {
-      if (!params) throw new Error('MockPool: DELETE missing params');
-      const [subjectId, subjectType] = params;
-      let count = 0;
-      for (const [id, row] of this.grants) {
-        if (row.subject_id === subjectId && row.subject_type === subjectType) {
-          this.grants.delete(id);
-          count++;
-        }
-      }
-      return { rows: [], rowCount: count };
+      this.grants.clear();
+      return { rows: [], rowCount: 0 };
     }
 
     // --- TRUNCATE permission_grants CASCADE ---
@@ -335,12 +359,13 @@ describe('Postgres permissions adapter — migrations', () => {
     );
     expect(versionUpdate).toBeDefined();
     expect(versionUpdate.sql).toContain('UPDATE _permission_schema_version');
-    expect(versionUpdate.params).toEqual([1]);
+    // Two migrations applied — final version is 2
+    expect(versionUpdate.params).toEqual([2]);
   });
 
   test('skips migrations when database is already at current version', async () => {
     const pool = new MockPool();
-    pool.schemaVersion = 1; // already migrated
+    pool.schemaVersion = 2; // already at current version (2 migrations applied)
     await makeAdapter(pool);
 
     expect(pool.captured.some(q => q.sql === 'BEGIN')).toBe(true);
@@ -376,10 +401,10 @@ describe('Postgres permissions adapter — migrations', () => {
 
   test('fails closed when the database schema version is newer than this binary supports', async () => {
     const pool = new MockPool();
-    pool.schemaVersion = 2;
+    pool.schemaVersion = 3; // beyond the 2 migrations this binary supports
 
     await expect(makeAdapter(pool)).rejects.toThrow(
-      'Database schema version 2 is newer than this binary supports (1)',
+      'Database schema version 3 is newer than this binary supports (2)',
     );
     expect(pool.captured.some(q => q.sql === 'ROLLBACK')).toBe(true);
   });

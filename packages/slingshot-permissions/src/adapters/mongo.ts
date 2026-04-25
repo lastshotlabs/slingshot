@@ -32,6 +32,7 @@ export interface GrantDoc {
   expiresAt: Date | null;
   revokedBy: string | null;
   revokedAt: Date | null;
+  revokedReason: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,17 +100,28 @@ export type GrantQuery = GrantFilter & {
 // ---------------------------------------------------------------------------
 
 /**
+ * Chainable query object returned by `GrantsModel.find()`.
+ * Supports skip/limit for pagination and lean() for raw document retrieval.
+ */
+export interface GrantsCursor {
+  skip(n: number): this;
+  limit(n: number): this;
+  lean(): Promise<GrantDoc[]>;
+}
+
+/**
  * Minimal Mongoose model interface for the `PermissionGrant` collection.
  * Satisfied by a real Mongoose model; also useful for testing with mock objects.
  */
 export interface GrantsModel {
   create(doc: GrantDoc): Promise<{ _id: string }>;
+  insertMany(docs: GrantDoc[]): Promise<unknown>;
   findOneAndUpdate(
     filter: GrantFilter,
     update: { $set: Partial<GrantDoc> },
     opts: { new: boolean },
   ): Promise<GrantDoc | null>;
-  find(filter: GrantQuery): { lean(): Promise<GrantDoc[]> };
+  find(filter: GrantQuery): GrantsCursor;
   deleteMany(filter: GrantQuery): Promise<{ deletedCount: number }>;
 }
 
@@ -157,11 +169,12 @@ const grantSchema = new Schema<GrantDoc>(
     expiresAt: { type: Date, default: null },
     revokedBy: { type: String, default: null },
     revokedAt: { type: Date, default: null },
+    revokedReason: { type: String, default: null },
   },
   { timestamps: false, autoIndex: false },
 );
 
-grantSchema.index({ subjectType: 1, subjectId: 1 });
+grantSchema.index({ subjectType: 1, subjectId: 1, tenantId: 1 });
 grantSchema.index({ resourceType: 1, resourceId: 1 });
 grantSchema.index({ tenantId: 1 });
 
@@ -201,6 +214,7 @@ function toGrant(doc: GrantDoc): PermissionGrant {
     expiresAt: doc.expiresAt ?? undefined,
     revokedBy: doc.revokedBy ?? undefined,
     revokedAt: doc.revokedAt ?? undefined,
+    revokedReason: doc.revokedReason ?? undefined,
   };
 }
 
@@ -259,14 +273,20 @@ export function createMongoPermissionsAdapter(conn: MongoConnectionLike): Permis
       return id;
     },
 
-    async revokeGrant(grantId: string, revokedBy: string, tenantScope?: string): Promise<boolean> {
+    async revokeGrant(
+      grantId: string,
+      revokedBy: string,
+      tenantScope?: string,
+      revokedReason?: string,
+    ): Promise<boolean> {
+      if (revokedReason !== undefined && revokedReason.length > 1024) {
+        throw new Error('revokedReason exceeds maximum length of 1024');
+      }
       const filter: GrantFilter = { _id: grantId, revokedAt: null };
       if (tenantScope !== undefined) filter.tenantId = tenantScope;
-      const result = await Grant.findOneAndUpdate(
-        filter,
-        { $set: { revokedBy, revokedAt: new Date() } },
-        { new: false },
-      );
+      const $set: Partial<GrantDoc> = { revokedBy, revokedAt: new Date() };
+      if (revokedReason !== undefined) $set.revokedReason = revokedReason;
+      const result = await Grant.findOneAndUpdate(filter, { $set }, { new: false });
       return result !== null;
     },
 
@@ -337,6 +357,8 @@ export function createMongoPermissionsAdapter(conn: MongoConnectionLike): Permis
       resourceType: string,
       resourceId: string,
       tenantId?: string | null,
+      limit?: number,
+      offset?: number,
     ): Promise<PermissionGrant[]> {
       const filter: GrantFilter = { resourceType, resourceId, revokedAt: null };
       if (tenantId !== undefined) filter.tenantId = tenantId;
@@ -345,12 +367,50 @@ export function createMongoPermissionsAdapter(conn: MongoConnectionLike): Permis
         ...filter,
         $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
       };
-      const docs = await Grant.find(query).lean();
+      let cursor = Grant.find(query);
+      if (offset !== undefined && offset > 0) cursor = cursor.skip(offset);
+      if (limit !== undefined) cursor = cursor.limit(limit);
+      const docs = await cursor.lean();
       return docs.map(toGrant);
+    },
+
+    async createGrants(
+      grantInputs: Omit<PermissionGrant, 'id' | 'grantedAt'>[],
+    ): Promise<string[]> {
+      for (const g of grantInputs) validateGrant(g);
+      const docs: GrantDoc[] = grantInputs.map(grant => ({
+        _id: crypto.randomUUID(),
+        subjectId: grant.subjectId,
+        subjectType: grant.subjectType,
+        tenantId: grant.tenantId ?? null,
+        resourceType: grant.resourceType ?? null,
+        resourceId: grant.resourceId ?? null,
+        roles: grant.roles,
+        effect: grant.effect,
+        grantedBy: grant.grantedBy,
+        grantedAt: new Date(),
+        reason: grant.reason ?? null,
+        expiresAt: grant.expiresAt ?? null,
+        revokedBy: null,
+        revokedAt: null,
+        revokedReason: null,
+      }));
+      await Grant.insertMany(docs);
+      return docs.map(d => d._id);
     },
 
     async deleteAllGrantsForSubject(subject: SubjectRef): Promise<void> {
       await Grant.deleteMany({ subjectId: subject.subjectId, subjectType: subject.subjectType });
+    },
+
+    async deleteAllGrantsOnResource(
+      resourceType: string,
+      resourceId: string,
+      tenantId?: string | null,
+    ): Promise<void> {
+      const filter: GrantFilter = { resourceType, resourceId };
+      if (tenantId !== undefined) filter.tenantId = tenantId;
+      await Grant.deleteMany(filter);
     },
 
     async clear(): Promise<void> {

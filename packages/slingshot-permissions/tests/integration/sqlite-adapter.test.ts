@@ -518,6 +518,162 @@ describe('Permissions SQLite adapter', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // deleteAllGrantsOnResource
+  // ---------------------------------------------------------------------------
+
+  describe('deleteAllGrantsOnResource', () => {
+    test('removes all grants on the specified resource across tenants', async () => {
+      await adapter.createGrant(
+        makeGrant({ subjectId: 'u1', resourceType: 'doc', resourceId: 'doc-1', tenantId: 'ta' }),
+      );
+      await adapter.createGrant(
+        makeGrant({ subjectId: 'u2', resourceType: 'doc', resourceId: 'doc-1', tenantId: 'tb' }),
+      );
+      await adapter.createGrant(
+        makeGrant({ subjectId: 'u3', resourceType: 'doc', resourceId: 'doc-2', tenantId: 'ta' }),
+      );
+      await adapter.deleteAllGrantsOnResource('doc', 'doc-1');
+      const doc1 = await adapter.listGrantsOnResource('doc', 'doc-1');
+      expect(doc1.length).toBe(0);
+      const doc2 = await adapter.listGrantsOnResource('doc', 'doc-2');
+      expect(doc2.length).toBe(1);
+    });
+
+    test('scopes removal to matching tenantId', async () => {
+      await adapter.createGrant(
+        makeGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: 'ta' }),
+      );
+      await adapter.createGrant(
+        makeGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: 'tb' }),
+      );
+      await adapter.deleteAllGrantsOnResource('doc', 'doc-1', 'ta');
+      const remaining = await adapter.listGrantsOnResource('doc', 'doc-1');
+      expect(remaining.length).toBe(1);
+      expect(remaining[0].tenantId).toBe('tb');
+    });
+
+    test('tenantId=null removes only global grants on that resource', async () => {
+      await adapter.createGrant(
+        makeGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: null }),
+      );
+      await adapter.createGrant(
+        makeGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: 'ta' }),
+      );
+      await adapter.deleteAllGrantsOnResource('doc', 'doc-1', null);
+      const remaining = await adapter.listGrantsOnResource('doc', 'doc-1');
+      expect(remaining.length).toBe(1);
+      expect(remaining[0].tenantId).toBe('ta');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // createGrants (batch)
+  // ---------------------------------------------------------------------------
+
+  describe('createGrants', () => {
+    test('creates all grants and returns IDs in order', async () => {
+      const ids = await adapter.createGrants([
+        makeGrant({ subjectId: 'u-a', roles: ['admin'] }),
+        makeGrant({ subjectId: 'u-b', roles: ['reader'] }),
+      ]);
+      expect(ids.length).toBe(2);
+      expect(new Set(ids).size).toBe(2);
+      const gA = await adapter.getGrantsForSubject('u-a');
+      expect(gA[0].roles).toEqual(['admin']);
+      const gB = await adapter.getGrantsForSubject('u-b');
+      expect(gB[0].roles).toEqual(['reader']);
+    });
+
+    test('empty input returns empty array without inserting anything', async () => {
+      const ids = await adapter.createGrants([]);
+      expect(ids).toEqual([]);
+    });
+
+    test('validates all grants atomically — invalid grant rolls back all inserts', async () => {
+      await expect(
+        adapter.createGrants([
+          makeGrant({ subjectId: 'u-good' }),
+          { ...makeGrant({ subjectId: 'u-bad' }), roles: [] }, // invalid: empty roles
+        ]),
+      ).rejects.toThrow();
+      // Nothing should have been written
+      expect(await adapter.getGrantsForSubject('u-good')).toHaveLength(0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // listGrantsOnResource pagination
+  // ---------------------------------------------------------------------------
+
+  describe('listGrantsOnResource — pagination', () => {
+    test('limit restricts the number of results', async () => {
+      for (let i = 1; i <= 5; i++) {
+        await adapter.createGrant(
+          makeGrant({ subjectId: `user-${i}`, resourceType: 'post', resourceId: 'p1' }),
+        );
+      }
+      const page = await adapter.listGrantsOnResource('post', 'p1', undefined, 2);
+      expect(page.length).toBe(2);
+    });
+
+    test('offset skips the first N results', async () => {
+      for (let i = 1; i <= 5; i++) {
+        await adapter.createGrant(
+          makeGrant({ subjectId: `user-${i}`, resourceType: 'post', resourceId: 'p1' }),
+        );
+      }
+      const all = await adapter.listGrantsOnResource('post', 'p1');
+      const paged = await adapter.listGrantsOnResource('post', 'p1', undefined, undefined, 2);
+      expect(paged.length).toBe(3);
+      expect(paged[0].subjectId).toBe(all[2].subjectId);
+    });
+
+    test('limit + offset return a page window', async () => {
+      for (let i = 1; i <= 5; i++) {
+        await adapter.createGrant(
+          makeGrant({ subjectId: `user-${i}`, resourceType: 'post', resourceId: 'p1' }),
+        );
+      }
+      const page1 = await adapter.listGrantsOnResource('post', 'p1', undefined, 2, 0);
+      const page2 = await adapter.listGrantsOnResource('post', 'p1', undefined, 2, 2);
+      const page3 = await adapter.listGrantsOnResource('post', 'p1', undefined, 2, 4);
+      expect(page1.length).toBe(2);
+      expect(page2.length).toBe(2);
+      expect(page3.length).toBe(1);
+      const ids = [...page1, ...page2, ...page3].map(g => g.subjectId);
+      expect(new Set(ids).size).toBe(5);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // revokeGrant with revokedReason
+  // ---------------------------------------------------------------------------
+
+  describe('revokeGrant — revokedReason', () => {
+    test('stores revokedReason and returns it in listGrantHistory', async () => {
+      const id = await adapter.createGrant(makeGrant());
+      await adapter.revokeGrant(id, 'admin-1', undefined, 'account suspended');
+      const history = await adapter.listGrantHistory('user-1', 'user');
+      expect(history[0].revokedReason).toBe('account suspended');
+      expect(history[0].revokedBy).toBe('admin-1');
+    });
+
+    test('revokedReason is undefined when not provided', async () => {
+      const id = await adapter.createGrant(makeGrant());
+      await adapter.revokeGrant(id, 'admin-1');
+      const history = await adapter.listGrantHistory('user-1', 'user');
+      expect(history[0].revokedReason).toBeUndefined();
+    });
+
+    test('throws when revokedReason exceeds 1024 characters', async () => {
+      const id = await adapter.createGrant(makeGrant());
+      await expect(
+        adapter.revokeGrant(id, 'admin-1', undefined, 'x'.repeat(1025)),
+      ).rejects.toThrow('revokedReason exceeds maximum length of 1024');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // parseRoles error branches
   // ---------------------------------------------------------------------------
 

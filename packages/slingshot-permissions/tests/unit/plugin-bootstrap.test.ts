@@ -1,7 +1,8 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { Hono } from 'hono';
-import { PERMISSIONS_STATE_KEY, attachContext } from '@lastshotlabs/slingshot-core';
+import { PERMISSIONS_STATE_KEY, attachContext, getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from '../../src/factories';
+import { createAuthGroupResolver } from '../../src/lib/authGroupResolver';
 import { seedSuperAdmin } from '../../src/lib/bootstrap';
 import { createPermissionsPlugin } from '../../src/plugin';
 
@@ -24,8 +25,9 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       });
       return 'grant-1';
     });
+    const getGrantsForSubject = mock(async () => []);
 
-    const grantId = await seedSuperAdmin(asNever({ createGrant }), {
+    const grantId = await seedSuperAdmin(asNever({ createGrant, getGrantsForSubject }), {
       subjectId: 'user-1',
     });
 
@@ -42,14 +44,39 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       });
       return 'grant-2';
     });
+    const getGrantsForSubject = mock(async () => []);
 
     await expect(
-      seedSuperAdmin(asNever({ createGrant }), {
+      seedSuperAdmin(asNever({ createGrant, getGrantsForSubject }), {
         subjectId: 'svc-1',
         subjectType: 'service-account',
         grantedBy: 'migration',
       }),
     ).resolves.toBe('grant-2');
+  });
+
+  test('seedSuperAdmin is idempotent — returns existing grant ID without creating a duplicate', async () => {
+    const existingGrant = {
+      id: 'existing-grant-id',
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['super-admin'],
+      effect: 'allow',
+      grantedBy: 'bootstrap',
+      grantedAt: new Date(),
+    };
+    const createGrant = mock(async () => 'new-grant-id');
+    const getGrantsForSubject = mock(async () => [existingGrant]);
+
+    const grantId = await seedSuperAdmin(asNever({ createGrant, getGrantsForSubject }), {
+      subjectId: 'user-1',
+    });
+
+    expect(grantId).toBe('existing-grant-id');
+    expect(createGrant).not.toHaveBeenCalled();
   });
 
   test('permissionsAdapterFactories reject redis stores instead of silently falling back', async () => {
@@ -138,7 +165,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     expect(ctx.pluginState.get(PERMISSIONS_STATE_KEY)).toBe(sentinel);
   });
 
-  test('createPermissionsPlugin wires auth-backed group resolution into the evaluator', async () => {
+  test('createPermissionsPlugin with no groupResolver disables group expansion', async () => {
     const app = new Hono();
     const ctx = {
       pluginState: new Map([
@@ -158,41 +185,24 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     };
     attachContext(app, ctx as never);
 
+    // No groupResolver — auth peer is ignored even though it's in pluginState
     const plugin = createPermissionsPlugin();
 
     await plugin.setupMiddleware?.(
       asNever({
         app,
-        config: {
-          resolvedStores: { authStore: 'memory' },
-          storeInfra: {},
-        },
+        config: { resolvedStores: { authStore: 'memory' }, storeInfra: {} },
         bus: {},
       }),
     );
 
-    const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as
-      | {
-          evaluator: {
-            can: (
-              subject: { subjectId: string; subjectType: 'user' },
-              action: string,
-              scope?: object,
-            ) => Promise<boolean>;
-          };
-          registry: {
-            register: (def: { resourceType: string; roles: Record<string, string[]> }) => void;
-          };
-          adapter: { createGrant: (grant: Record<string, unknown>) => Promise<string> };
-        }
-      | undefined;
-    expect(state).toBeDefined();
-
-    state!.registry.register({
+    const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as any;
+    state.registry.register({
       resourceType: 'post',
+      actions: ['read'],
       roles: { editor: ['read'] },
     });
-    await state!.adapter.createGrant({
+    await state.adapter.createGrant({
       subjectId: 'group-alpha',
       subjectType: 'group',
       tenantId: null,
@@ -203,8 +213,67 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       grantedBy: 'system',
     });
 
+    // Group grant exists but group expansion is disabled — user-1 cannot access
     await expect(
-      state!.evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+      state.evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      }),
+    ).resolves.toBe(false);
+  });
+
+  test('createPermissionsPlugin with groupResolver wires auth-backed group expansion', async () => {
+    const app = new Hono();
+    const ctx = {
+      pluginState: new Map([
+        [
+          'slingshot-auth',
+          {
+            adapter: {
+              async getUserGroups(userId: string) {
+                return userId === 'user-1'
+                  ? [{ group: { id: 'group-alpha' }, membershipRoles: [] }]
+                  : [];
+              },
+            },
+          },
+        ],
+      ]),
+    };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin({
+      groupResolver: pluginState =>
+        createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
+    });
+
+    await plugin.setupMiddleware?.(
+      asNever({
+        app,
+        config: { resolvedStores: { authStore: 'memory' }, storeInfra: {} },
+        bus: {},
+      }),
+    );
+
+    const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as any;
+    state.registry.register({
+      resourceType: 'post',
+      actions: ['read'],
+      roles: { editor: ['read'] },
+    });
+    await state.adapter.createGrant({
+      subjectId: 'group-alpha',
+      subjectType: 'group',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+
+    // Group resolver is wired — user-1 is in group-alpha, group-alpha has editor role
+    await expect(
+      state.evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
         resourceType: 'post',
       }),
     ).resolves.toBe(true);

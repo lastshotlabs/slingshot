@@ -63,13 +63,22 @@ export function createMemoryPermissionsAdapter(options?: {
       });
     },
 
-    revokeGrant(grantId: string, revokedBy: string, tenantScope?: string): Promise<boolean> {
+    revokeGrant(
+      grantId: string,
+      revokedBy: string,
+      tenantScope?: string,
+      revokedReason?: string,
+    ): Promise<boolean> {
       return resolveSync(() => {
+        if (revokedReason !== undefined && revokedReason.length > 1024) {
+          throw new Error('revokedReason exceeds maximum length of 1024');
+        }
         const grant = grants.find(g => g.id === grantId);
         if (!grant || grant.revokedAt) return false;
         if (tenantScope !== undefined && grant.tenantId !== tenantScope) return false;
         grant.revokedBy = revokedBy;
         grant.revokedAt = new Date();
+        if (revokedReason !== undefined) grant.revokedReason = revokedReason;
         return true;
       });
     },
@@ -138,10 +147,12 @@ export function createMemoryPermissionsAdapter(options?: {
       resourceType: string,
       resourceId: string,
       tenantId?: string | null,
+      limit?: number,
+      offset?: number,
     ): Promise<PermissionGrant[]> {
       return resolveSync(() => {
         const now = new Date();
-        return grants.filter(g => {
+        let result = grants.filter(g => {
           if (g.resourceType !== resourceType) return false;
           if (g.resourceId !== resourceId) return false;
           if (g.revokedAt) return false;
@@ -149,6 +160,24 @@ export function createMemoryPermissionsAdapter(options?: {
           if (g.expiresAt && g.expiresAt < now) return false;
           return true;
         });
+        if (offset !== undefined && offset > 0) result = result.slice(offset);
+        if (limit !== undefined) result = result.slice(0, limit);
+        return result;
+      });
+    },
+
+    createGrants(grantInputs: Omit<PermissionGrant, 'id' | 'grantedAt'>[]): Promise<string[]> {
+      return resolveSync(() => {
+        for (const g of grantInputs) validateGrant(g);
+        const ids: string[] = [];
+        for (const grant of grantInputs) {
+          const id = crypto.randomUUID();
+          const fullGrant: PermissionGrant = { ...grant, id, grantedAt: new Date() };
+          evictOldestArray(grants, maxEntries);
+          grants.push(fullGrant);
+          ids.push(id);
+        }
+        return ids;
       });
     },
 
@@ -157,6 +186,24 @@ export function createMemoryPermissionsAdapter(options?: {
         const toRemove = grants.filter(
           g => g.subjectId === subject.subjectId && g.subjectType === subject.subjectType,
         );
+        for (const grant of toRemove) {
+          const idx = grants.indexOf(grant);
+          if (idx !== -1) grants.splice(idx, 1);
+        }
+      });
+    },
+
+    deleteAllGrantsOnResource(
+      resourceType: string,
+      resourceId: string,
+      tenantId?: string | null,
+    ): Promise<void> {
+      return resolveSync(() => {
+        const toRemove = grants.filter(g => {
+          if (g.resourceType !== resourceType || g.resourceId !== resourceId) return false;
+          if (tenantId !== undefined && g.tenantId !== tenantId) return false;
+          return true;
+        });
         for (const grant of toRemove) {
           const idx = grants.indexOf(grant);
           if (idx !== -1) grants.splice(idx, 1);

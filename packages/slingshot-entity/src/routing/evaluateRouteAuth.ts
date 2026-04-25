@@ -128,8 +128,16 @@ export async function evaluateRouteAuth(
     }
 
     const parent = (await deps.parentAdapter.getById(parentId)) as Record<string, unknown> | null;
-    const tenantId = getActorTenantId(c) ?? undefined;
-    if (!parent || parent[permission.parentAuth.tenantField] !== tenantId) {
+    const actorTenantId = getActorTenantId(c);
+    const actor = getActor(c);
+    // Authenticated global principals (service-account, api-key, system — non-anonymous with
+    // tenantId === null) operate across all tenants and bypass the parentAuth tenant check.
+    // Anonymous actors and tenant-scoped actors must match the parent record's tenant.
+    const isGlobalPrincipal = actorTenantId === null && actor.kind !== 'anonymous';
+    if (
+      !parent ||
+      (!isGlobalPrincipal && parent[permission.parentAuth.tenantField] !== actorTenantId)
+    ) {
       return {
         authorized: false,
         response: c.json({ error: 'Not found' }, 404),

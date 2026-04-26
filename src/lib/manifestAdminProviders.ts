@@ -221,6 +221,12 @@ export function createDeferredAdminProviders(config: Record<string, unknown>): {
       deleteAllGrantsForSubject(subject) {
         return requirePerms().adapter.deleteAllGrantsForSubject(subject);
       },
+      createGrants(grants) {
+        return requirePerms().adapter.createGrants(grants);
+      },
+      deleteAllGrantsOnResource(resourceType, resourceId, tenantId) {
+        return requirePerms().adapter.deleteAllGrantsOnResource(resourceType, resourceId, tenantId);
+      },
     };
 
     result.permissions = {

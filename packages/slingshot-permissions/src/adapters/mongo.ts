@@ -269,6 +269,7 @@ export function createMongoPermissionsAdapter(conn: MongoConnectionLike): Permis
         expiresAt: grant.expiresAt ?? null,
         revokedBy: null,
         revokedAt: null,
+        revokedReason: null,
       });
       return id;
     },

@@ -53,8 +53,8 @@ export function createMemoryAuditLogProvider(
 
       let filtered = memoryLogs.slice();
       if (query.userId !== undefined) filtered = filtered.filter(e => e.userId === query.userId);
-      if (query.tenantId !== undefined)
-        filtered = filtered.filter(e => e.tenantId === query.tenantId);
+      if (query.requestTenantId !== undefined)
+        filtered = filtered.filter(e => e.requestTenantId === query.requestTenantId);
       if (after) filtered = filtered.filter(e => e.createdAt >= after);
       if (before) filtered = filtered.filter(e => e.createdAt < before);
       filtered.sort((a, b) =>

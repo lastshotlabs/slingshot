@@ -22,15 +22,20 @@ export interface EventScope {
 }
 
 export interface EventPublishContext {
-  tenantId?: string | null;
+  /**
+   * Request-scoped tenant ID captured by tenant-resolution middleware
+   * (pre-auth). REQUIRED on every publish — set explicitly to `null` for
+   * system-source / background emissions that have no originating HTTP
+   * request. This field is the canonical request-tenant carrier; callers
+   * must never reuse `actor.tenantId` (identity-bound) here.
+   */
+  requestTenantId: string | null;
   userId?: string | null;
   appId?: string | null;
   actorId?: string | null;
   requestId?: string;
   correlationId?: string;
   source?: 'http' | 'system' | 'job' | 'connector';
-  /** Request-scoped tenant ID from tenant-resolution middleware. */
-  requestTenantId?: string | null;
 }
 
 export interface EventSubscriptionPrincipal {

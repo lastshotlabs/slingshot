@@ -1,14 +1,13 @@
 import {
   ANONYMOUS_ACTOR,
-  type Actor,
   type FunctionsHooks,
   HandlerError,
   type HandlerMeta,
+  type IdentityResolver,
   type RecordOutcome,
   type SlingshotContext,
   type SlingshotHandler,
   type TriggerAdapter,
-  type TriggerExtractedMeta,
   type TriggerOpts,
   type TriggerRecord,
   ValidationError,
@@ -33,35 +32,31 @@ function buildMeta(
   adapter: TriggerAdapter,
   event: unknown,
   record: TriggerRecord,
+  identityResolver: IdentityResolver,
   lambdaContext?: LambdaContextLike,
 ): HandlerMeta {
   const extracted = adapter.extractMeta(event, record);
   const requestId = extracted.requestId ?? lambdaContext?.awsRequestId ?? crypto.randomUUID();
-
   const tenantId = extracted.tenantId ?? null;
-  const authUserId = extracted.authUserId ?? null;
-  const authClientId = extracted.authClientId ?? null;
-  const bearerClientId = extracted.bearerClientId ?? null;
-  const roles = extracted.roles ?? null;
 
-  // Build the canonical actor from the extracted fields.
-  let actor: Actor;
-  if (authUserId) {
-    actor = { id: authUserId, kind: 'user', tenantId, sessionId: null, roles, claims: {} };
-  } else if (bearerClientId) {
-    actor = { id: bearerClientId, kind: 'api-key', tenantId, sessionId: null, roles, claims: {} };
-  } else if (authClientId) {
-    actor = {
-      id: authClientId,
-      kind: 'service-account',
-      tenantId,
+  // Triggers may either set `actor` directly (preferred for actor-aware sources
+  // like API Gateway with a JWT authorizer) or supply raw identity fields and
+  // let the configured `IdentityResolver` map them into the canonical Actor.
+  const resolved =
+    extracted.actor ??
+    identityResolver.resolve({
+      userId: extracted.userId ?? null,
+      serviceAccountId: extracted.serviceAccountId ?? null,
+      apiKeyId: extracted.apiKeyId ?? null,
       sessionId: null,
-      roles,
-      claims: {},
-    };
-  } else {
-    actor = { ...ANONYMOUS_ACTOR, tenantId };
-  }
+      roles: extracted.roles ?? null,
+      tenantId,
+      tokenPayload: null,
+    });
+  // Freeze actor at the meta boundary (Rule 10). Trigger-supplied actors and
+  // resolver outputs may be mutable objects.
+  const safe = resolved ?? ANONYMOUS_ACTOR;
+  const actor = Object.isFrozen(safe) ? safe : Object.freeze(safe);
 
   return {
     requestId,
@@ -109,7 +104,7 @@ export async function invokeWithAdapter(
   const outcomes: RecordOutcome[] = [];
 
   for (const record of records) {
-    const meta = buildMeta(adapter, event, record, lambdaContext);
+    const meta = buildMeta(adapter, event, record, ctx.identityResolver, lambdaContext);
     const startedAt = Date.now();
     let output: unknown;
     let capturedError: Error | undefined;

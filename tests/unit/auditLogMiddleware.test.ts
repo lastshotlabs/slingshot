@@ -133,7 +133,7 @@ describe('auditLog middleware', () => {
     expect(provider.entries.length).toBe(1);
   });
 
-  test('entry includes userId, sessionId, tenantId from context', async () => {
+  test('entry includes userId + sessionId from actor and requestTenantId from request context', async () => {
     const provider = makeMockProvider();
     const middleware = auditLog({ store: 'memory', provider });
 
@@ -145,11 +145,12 @@ describe('auditLog middleware', () => {
         actor: {
           id: 'user-123',
           kind: 'user',
-          tenantId: 'tenant-789',
+          tenantId: 'actor-tenant', // identity-bound, must NOT appear on the entry
           sessionId: 'sess-456',
           roles: null,
           claims: {},
         } satisfies Actor,
+        tenantId: 'tenant-789', // request-scoped, this is what the entry records
       },
     });
     await middleware(ctx, async () => {});
@@ -157,7 +158,7 @@ describe('auditLog middleware', () => {
     await new Promise(r => setTimeout(r, 0));
     expect(provider.entries[0].userId).toBe('user-123');
     expect(provider.entries[0].sessionId).toBe('sess-456');
-    expect(provider.entries[0].tenantId).toBe('tenant-789');
+    expect(provider.entries[0].requestTenantId).toBe('tenant-789');
   });
 
   test('entry includes user-agent header', async () => {

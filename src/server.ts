@@ -393,7 +393,7 @@ export const createServer = async <T extends object = object>(
       async open(socket) {
         const ep = endpoints[socket.data.endpoint];
         if (ep.heartbeat) registerSocket(wsState, socket, socket.data.id, socket.data.endpoint);
-        if (ep.presence) trackSocket(wsState, socket.data.id, socket.data.actorId);
+        if (ep.presence) trackSocket(wsState, socket.data.id, socket.data.actor.id);
         wsState.socketRegistry.set(socket.data.id, socket);
         if (ep.recovery) {
           socket.data.sessionId = crypto.randomUUID();

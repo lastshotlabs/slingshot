@@ -149,7 +149,7 @@ describe('eventWiring', () => {
     events.publish('test:webhook.tenant.created', {
       tenantId: 'tenant-a',
       documentId: 'doc-1',
-    });
+    }, { requestTenantId: null });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
@@ -176,7 +176,7 @@ describe('eventWiring', () => {
     events.publish('test:webhook.tenant.created', {
       tenantId: 'tenant-a',
       documentId: 'doc-1',
-    });
+    }, { requestTenantId: null });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
@@ -199,7 +199,7 @@ describe('eventWiring', () => {
     events.publish('test:webhook.tenant.created', {
       tenantId: 'tenant-a',
       documentId: 'doc-1',
-    });
+    }, { requestTenantId: null });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
@@ -228,7 +228,7 @@ describe('eventWiring', () => {
     events.publish('test:webhook.tenant.created', {
       tenantId: 'tenant-a',
       documentId: 'doc-1',
-    });
+    }, { requestTenantId: null });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     for (const unsub of unsubs) unsub();
@@ -256,7 +256,7 @@ describe('eventWiring', () => {
     events.publish('test:webhook.tenant.created', {
       tenantId: 'tenant-a',
       documentId: 'doc-1',
-    });
+    }, { requestTenantId: null });
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();

@@ -25,7 +25,9 @@ function includeMeta(
   if (!include) return payload;
 
   const actor = resolveActor(meta);
-  if (include.includes('tenantId')) payload.tenantId = actor.tenantId;
+  // `tenantId` is the request-scoped tenant (per route event payload spec). Actor-bound
+  // tenant must be referenced explicitly via the actor instead.
+  if (include.includes('tenantId')) payload.tenantId = meta.requestTenantId ?? null;
   if (include.includes('actorId')) payload.actorId = actor.id;
   if (include.includes('requestId')) payload.requestId = meta.requestId;
   if (include.includes('ip')) payload.ip = meta.ip;
@@ -82,7 +84,7 @@ export function auditLog(action: string): AfterHook {
       id: crypto.randomUUID(),
       userId: actor.id,
       sessionId: actor.sessionId,
-      tenantId: actor.tenantId,
+      requestTenantId: meta.requestTenantId ?? null,
       method: 'HANDLER',
       path: handlerName,
       status: 200,

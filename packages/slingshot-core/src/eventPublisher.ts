@@ -17,7 +17,7 @@ export interface SlingshotEvents {
   publish<K extends EventKey>(
     key: K,
     payload: SlingshotEventMap[K],
-    ctx?: EventPublishContext,
+    ctx: EventPublishContext,
   ): EventEnvelope<K>;
 }
 
@@ -79,7 +79,7 @@ export function createEventPublisher(options: CreateEventPublisherOptions): Slin
     publish<K extends EventKey>(
       key: K,
       payload: SlingshotEventMap[K],
-      ctx: EventPublishContext = {},
+      ctx: EventPublishContext,
     ): EventEnvelope<K> {
       const definition = options.definitions.get(key);
       if (!definition) {

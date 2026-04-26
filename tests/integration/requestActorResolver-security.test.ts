@@ -39,13 +39,13 @@ describe('auth RequestActorResolver upgrade security', () => {
     const runtime = getRuntime(app);
 
     expect(
-      await resolver.resolveActorId(new Request(`http://localhost/__ws/chat?token=${token}`)),
+      (await resolver.resolveActor(new Request(`http://localhost/__ws/chat?token=${token}`))).id,
     ).toBe(userId);
 
     await runtime.adapter.setSuspended?.(userId, true, 'security hold');
 
     expect(
-      await resolver.resolveActorId(new Request(`http://localhost/__ws/chat?token=${token}`)),
+      (await resolver.resolveActor(new Request(`http://localhost/__ws/chat?token=${token}`))).id,
     ).toBeNull();
   });
 
@@ -75,13 +75,13 @@ describe('auth RequestActorResolver upgrade security', () => {
     const resolver = getRequestActorResolver(app);
 
     expect(
-      await resolver.resolveActorId(new Request(`http://localhost/__sse/feed?token=${token}`)),
+      (await resolver.resolveActor(new Request(`http://localhost/__sse/feed?token=${token}`))).id,
     ).toBe(userId);
 
     await runtime.adapter.setEmailVerified?.(userId, false);
 
     expect(
-      await resolver.resolveActorId(new Request(`http://localhost/__sse/feed?token=${token}`)),
+      (await resolver.resolveActor(new Request(`http://localhost/__sse/feed?token=${token}`))).id,
     ).toBeNull();
   });
 
@@ -113,11 +113,11 @@ describe('auth RequestActorResolver upgrade security', () => {
     const matchingReq = new Request(`http://localhost/__ws/chat?token=${token}`, {
       headers: { 'user-agent': 'Browser-A' },
     });
-    expect(await resolver.resolveActorId(matchingReq)).toBe(userId);
+    expect((await resolver.resolveActor(matchingReq)).id).toBe(userId);
 
     const mismatchedReq = new Request(`http://localhost/__ws/chat?token=${token}`, {
       headers: { 'user-agent': 'Browser-B' },
     });
-    expect(await resolver.resolveActorId(mismatchedReq)).toBeNull();
+    expect((await resolver.resolveActor(mismatchedReq)).id).toBeNull();
   });
 });

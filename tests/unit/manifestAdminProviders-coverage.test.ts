@@ -594,7 +594,7 @@ describe('createInMemoryAuditLog — coverage', () => {
       action: 'create',
       path: '/api/items',
       method: 'POST',
-      tenantId: 't1',
+      requestTenantId: 't1',
       timestamp: new Date().toISOString(),
     };
     const entry = entryData as unknown as never;
@@ -606,7 +606,7 @@ describe('createInMemoryAuditLog — coverage', () => {
     const byMethod = await log.getLogs({ method: 'POST' });
     expect(byMethod.items).toHaveLength(1);
 
-    const byTenant = await log.getLogs({ tenantId: 't1' });
+    const byTenant = await log.getLogs({ requestTenantId: 't1' });
     expect(byTenant.items).toHaveLength(1);
 
     const noMatch = await log.getLogs({ userId: 'nonexistent' });

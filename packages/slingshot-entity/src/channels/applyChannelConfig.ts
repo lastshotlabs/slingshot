@@ -7,6 +7,7 @@
  * 2. Event forwarding: wires bus events to WS room publish calls
  */
 import type {
+  Actor,
   ChannelIncomingEventDeclaration,
   EntityChannelConfig,
   EntityChannelDeclaration,
@@ -32,9 +33,13 @@ import { isValidRoomName } from '@lastshotlabs/slingshot-core';
  * import type { ChannelConfigDeps } from '@lastshotlabs/slingshot-entity';
  *
  * const deps: ChannelConfigDeps = {
- *   getIdentity: (ws) => (ws as MyWs).user ?? null,
- *   checkPermission: async (userId, perm, scope) =>
- *     permEvaluator.can({ subjectId: userId, subjectType: 'user' }, perm, scope),
+ *   getActor: (ws) => (ws as MyWs).data?.actor ?? null,
+ *   checkPermission: async (actor, perm, scope) =>
+ *     permEvaluator.can(
+ *       { subjectId: actor.id ?? '', subjectType: actor.kind === 'user' ? 'user' : 'service' },
+ *       perm,
+ *       scope,
+ *     ),
  *   middleware: {
  *     requireRoomMember: async (ws, { entityId }) => isMember(ws, entityId),
  *   },
@@ -44,23 +49,29 @@ import { isValidRoomName } from '@lastshotlabs/slingshot-core';
  */
 export interface ChannelConfigDeps {
   /**
-   * Resolve the authenticated identity from a WebSocket connection.
+   * Resolve the authenticated `Actor` from a WebSocket connection.
    *
    * @param ws - The WebSocket connection object (opaque).
-   * @returns `{ userId }` when the connection is authenticated, `null` otherwise.
+   * @returns The connecting `Actor`, or `null` when the connection is anonymous.
+   *   Returning `null` denies any subscription that requires identity.
    */
-  getIdentity: (ws: unknown) => { userId: string } | null;
+  getActor: (ws: unknown) => Actor | null;
 
   /**
-   * Check whether a user has a specific permission, optionally scoped.
+   * Check whether the actor has a specific permission, optionally scoped.
    *
-   * @param userId - The authenticated user's ID.
+   * Permission backends decide how to map the actor onto their subject model
+   * (e.g. `subjectType: 'user'` when `actor.kind === 'user'`,
+   * `subjectType: 'service'` for service accounts). The channel runtime does
+   * not hardcode a subject type at this boundary.
+   *
+   * @param actor - The connecting `Actor` (already non-anonymous when this is called).
    * @param requires - The permission string to check (e.g. `'message:read'`).
    * @param scope - Optional scope parameters for the permission check.
-   * @returns `true` when the user is authorized, `false` otherwise.
+   * @returns `true` when the actor is authorized, `false` otherwise.
    */
   checkPermission: (
-    userId: string,
+    actor: Actor,
     requires: string,
     scope?: Record<string, string>,
   ) => boolean | Promise<boolean>;
@@ -106,9 +117,9 @@ export interface ChannelConfigDeps {
  * import type { ChannelMiddlewareHandler } from '@lastshotlabs/slingshot-entity';
  *
  * const requireRoomMember: ChannelMiddlewareHandler = async (ws, { entityId }) => {
- *   const userId = (ws as MyWs).user?.userId;
- *   if (!userId) return false;
- *   return roomMembershipStore.isMember(entityId, userId);
+ *   const actorId = (ws as MyWs).data?.actor?.id;
+ *   if (!actorId) return false;
+ *   return roomMembershipStore.isMember(entityId, actorId);
  * };
  * ```
  */
@@ -177,10 +188,11 @@ function parseRoomName(room: string): ParsedRoom | null {
  * 1. Parse room name → `{ storageName, entityId, channelName }` — deny if malformed.
  * 2. Look up `channelConfigs.get(storageName)` — deny if not registered.
  * 3. Look up `channels[channelName]` — deny if not declared.
- * 4. If `auth === 'userAuth'` or `'bearer'`: call `deps.getIdentity(ws)` — deny if `null`.
- * 5. If `permission` present: call `deps.checkPermission()` — deny if `false`.
+ * 4. If `auth === 'userAuth'` or `'bearer'`: call `deps.getActor(ws)` — deny if `null`
+ *    or `actor.kind === 'anonymous'`.
+ * 5. If `permission` present: call `deps.checkPermission(actor, ...)` — deny if `false`.
  *    If `permission.ownerField` is set: load entity via `deps.getEntity()` and
- *    compare `entity[ownerField]` to `userId` — deny if mismatch.
+ *    compare `entity[ownerField]` to `actor.id` — deny if mismatch.
  * 6. For each name in `declaration.middleware`: call `deps.middleware[name]` — deny if `false`.
  * 7. Return `true`.
  *
@@ -197,8 +209,12 @@ function parseRoomName(room: string): ParsedRoom | null {
  *
  * // Typically called via EntityPlugin.buildSubscribeGuard():
  * const guard = chatPlugin.buildSubscribeGuard({
- *   getIdentity: (ws) => (ws as MyWs).user ?? null,
- *   checkPermission: (userId, perm) => permEvaluator.can({ subjectId: userId, subjectType: 'user' }, perm),
+ *   getActor: (ws) => (ws as MyWs).data?.actor ?? null,
+ *   checkPermission: (actor, perm) =>
+ *     permEvaluator.can(
+ *       { subjectId: actor.id ?? '', subjectType: actor.kind === 'user' ? 'user' : 'service' },
+ *       perm,
+ *     ),
  *   middleware: {},
  *   getEntity: (storageName, id) => db.get(storageName, id),
  * });
@@ -230,25 +246,22 @@ export function buildSubscribeGuard(
 
     // Auth check
     const auth = declaration.auth ?? 'none';
-    let userId: string | undefined;
+    let actor: Actor | null = null;
     if (auth === 'userAuth' || auth === 'bearer') {
-      const identity = deps.getIdentity(ws);
-      if (!identity) return false;
-      userId = identity.userId;
+      actor = deps.getActor(ws);
+      if (!actor || actor.kind === 'anonymous' || !actor.id) return false;
     }
 
     // Permission check
     if (declaration.permission) {
-      if (!userId) {
-        // Permission requires identity but auth was 'none' — still try to get identity
-        const identity = deps.getIdentity(ws);
-        if (!identity) return false;
-        userId = identity.userId;
+      if (!actor) {
+        actor = deps.getActor(ws);
+        if (!actor || actor.kind === 'anonymous' || !actor.id) return false;
       }
       let allowed: boolean;
       try {
         allowed = await deps.checkPermission(
-          userId,
+          actor,
           declaration.permission.requires,
           declaration.permission.scope,
         );
@@ -258,7 +271,7 @@ export function buildSubscribeGuard(
       if (!allowed && declaration.permission.or) {
         try {
           allowed = await deps.checkPermission(
-            userId,
+            actor,
             declaration.permission.or,
             declaration.permission.scope,
           );
@@ -268,7 +281,7 @@ export function buildSubscribeGuard(
       }
       if (!allowed) return false;
 
-      // Ownership check — entity[ownerField] must match the subscriber's userId.
+      // Ownership check — entity[ownerField] must match the subscriber's actor id.
       // Requires deps.getEntity to resolve the entity by parsed room id.
       if (declaration.permission.ownerField) {
         if (!deps.getEntity) return false;
@@ -279,7 +292,7 @@ export function buildSubscribeGuard(
           return false;
         }
         if (!entity) return false;
-        if (entity[declaration.permission.ownerField] !== userId) return false;
+        if (entity[declaration.permission.ownerField] !== actor.id) return false;
       }
     }
 

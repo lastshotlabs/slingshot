@@ -329,6 +329,7 @@ Register this plugin in `createServer` before other plugins — it has no setup 
 ```typescript
 import type { Context } from 'hono';
 import { createApp } from '@lastshotlabs/slingshot';
+import { getActorId } from '@lastshotlabs/slingshot-core';
 
 declare function reportError(err: Error, context: Record<string, unknown>): void;
 

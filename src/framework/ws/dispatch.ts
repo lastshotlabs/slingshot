@@ -35,7 +35,8 @@ export async function handleIncomingEvent(
 
   const context: WsEventContext = {
     socketId: ws.data.id,
-    actorId: state.socketUsers.get(ws.data.id) ?? null,
+    actor: ws.data.actor,
+    requestTenantId: ws.data.requestTenantId,
     endpoint: ws.data.endpoint,
     publish(room: string, data: unknown): void {
       publish(state, ws.data.endpoint, room, data);
@@ -50,7 +51,7 @@ export async function handleIncomingEvent(
 
   // 3. Auth check
   if (config.auth === 'userAuth' || config.auth === 'bearer') {
-    if (!context.actorId) {
+    if (!context.actor.id) {
       sendAck(ws, ackId, { error: 'unauthenticated' });
       return true;
     }

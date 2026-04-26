@@ -21,7 +21,8 @@ export function buildDispatchRoute(
       return c.json({ error: 'unauthenticated' }, 401);
     }
 
-    const tenantId = getRequestTenantId(c) ?? '';
+    const requestTenantId = getRequestTenantId(c);
+    const tenantId = requestTenantId ?? '';
     const raw: unknown = await c.req.json().catch(() => null);
     if (raw === null) {
       return c.json({ error: 'invalid json body' }, 400);
@@ -43,7 +44,7 @@ export function buildDispatchRoute(
       },
       parsed.data,
       userId,
-      tenantId,
+      requestTenantId,
     );
 
     try {
@@ -81,9 +82,9 @@ export function buildDispatchRoute(
       },
       {
         source: 'http',
-        tenantId,
         userId,
         actorId: userId,
+        requestTenantId,
       },
     );
 

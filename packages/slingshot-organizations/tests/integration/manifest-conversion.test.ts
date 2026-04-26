@@ -30,6 +30,7 @@ import {
   type SlingshotContext,
   type SlingshotResolvedConfig,
   attachContext,
+  createDefaultIdentityResolver,
   createEntityRegistry,
   getActor,
 } from '@lastshotlabs/slingshot-core';
@@ -324,7 +325,8 @@ function createTestContext(args: {
     plugins: [],
     bus: args.bus,
     routeAuth: args.routeAuth,
-    userResolver: null,
+    actorResolver: null,
+    identityResolver: createDefaultIdentityResolver(),
     rateLimitAdapter: null,
     fingerprintBuilder: null,
     cacheAdapters: new Map(),

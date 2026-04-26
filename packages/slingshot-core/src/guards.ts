@@ -68,11 +68,7 @@ function resolveScopedValue(
   if (binding.startsWith('ctx:')) {
     const field = binding.slice(4);
     const actor = resolveActor(meta);
-    // Legacy alias — resolves to request-scoped tenant.
     if (field === 'tenantId') return meta.requestTenantId ?? undefined;
-    // Legacy alias — resolves to actor identity.
-    if (field === 'authUserId') return actor.id ?? undefined;
-    // Actor-aware bindings.
     if (field === 'actor.id') return actor.id ?? undefined;
     if (field === 'actor.tenantId') return actor.tenantId ?? undefined;
     if (field === 'actor.kind') return actor.kind;

@@ -694,11 +694,6 @@ async function preparePlannedExecution(
       if (actor.sessionId != null) {
         ctxOverrides['actor.sessionId'] = actor.sessionId;
       }
-      // Request-scoped tenant for `param:tenantId` bindings.
-      const requestTenantId = (c.get('tenantId') as string | null | undefined) ?? null;
-      if (requestTenantId != null) {
-        ctxOverrides['tenantId'] = requestTenantId;
-      }
       const mergedInput = {
         ...parsedQueryRecord,
         ...asObjectRecord(body),
@@ -1204,11 +1199,6 @@ export function buildBareEntityRoutes<
       ctxOverrides['actor.kind'] = actor.kind;
       if (actor.sessionId != null) {
         ctxOverrides['actor.sessionId'] = actor.sessionId;
-      }
-      // Request-scoped tenant for `param:tenantId` bindings.
-      const requestTenantId = (c.get('tenantId') as string | null | undefined) ?? null;
-      if (requestTenantId != null) {
-        ctxOverrides['tenantId'] = requestTenantId;
       }
       const params = { ...queryParams, ...bodyRecord, ...pathParams, ...ctxOverrides };
 

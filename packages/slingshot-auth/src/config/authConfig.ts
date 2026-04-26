@@ -584,11 +584,12 @@ export interface EmailTemplatesConfig {
  * A named bearer token client for machine-to-machine or server-to-server auth.
  *
  * When the request presents this client's `token` in the `Authorization: Bearer` header,
- * `bearerClientId` is set on the Hono context to `clientId` for downstream handlers.
- * Set `revoked: true` to soft-revoke a client without removing it from config.
+ * the framework publishes an `'api-key'` `Actor` whose `id` is `clientId` for downstream
+ * handlers (`getActor(c)`). Set `revoked: true` to soft-revoke a client without removing
+ * it from config.
  */
 export interface BearerAuthClient {
-  /** Stable identifier for this API client (set on Hono context as `bearerClientId`). */
+  /** Stable identifier for this API client. Becomes `actor.id` for matched requests. */
   clientId: string;
   /** The bearer token value. */
   token: string;

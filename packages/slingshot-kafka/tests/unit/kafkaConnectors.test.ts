@@ -148,7 +148,7 @@ describe('kafkaConnectors', () => {
     });
 
     await connectors.start(bus);
-    events.publish('auth:user.created', { userId: 42 } as never);
+    events.publish('auth:user.created', { userId: 42 } as never, { requestTenantId: null });
     await flushAsyncWork();
 
     expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
@@ -343,7 +343,7 @@ describe('kafkaConnectors', () => {
     });
 
     await connectors.start(bus);
-    events.publish('auth:user.created', { userId: 'abc' } as never);
+    events.publish('auth:user.created', { userId: 'abc' } as never, { requestTenantId: null });
     await flushAsyncWork();
 
     expect(

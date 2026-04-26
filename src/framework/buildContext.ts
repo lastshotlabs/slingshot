@@ -236,7 +236,7 @@ export function publishAppShutdownOnce(
     value: true,
   });
 
-  ctx.events.publish('app:shutdown', { signal }, { source: 'system' });
+  ctx.events.publish('app:shutdown', { signal }, { source: 'system', requestTenantId: null });
 }
 
 /**

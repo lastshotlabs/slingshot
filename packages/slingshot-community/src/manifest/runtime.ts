@@ -99,7 +99,7 @@ type ContainerInviteAdapter = {
   update(id: string, input: Record<string, unknown>): Promise<InviteRecord | null>;
 };
 
-function getAuthUserId(params: Record<string, unknown>): string {
+function getUserId(params: Record<string, unknown>): string {
   const userId = params['actor.id'];
   if (typeof userId !== 'string' || userId.length === 0) {
     throw new HTTPException(401, { message: 'Unauthorized' });
@@ -335,7 +335,7 @@ export function createCommunityManifestRuntime(args: {
     () => () => async (input: unknown) => {
       const params = (input ?? {}) as Record<string, unknown>;
       const token = typeof params.token === 'string' ? params.token : '';
-      const userId = getAuthUserId(params);
+      const userId = getUserId(params);
       if (!token) {
         throw new HTTPException(400, { message: 'token is required' });
       }

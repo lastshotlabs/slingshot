@@ -1,16 +1,6 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test';
-import { getClientIpFromRequest } from '@lastshotlabs/slingshot-core';
-
-const resolveActorIdMock = mock(async () => null as string | null);
-
-async function loadCreateWsUpgradeHandler() {
-  mock.module('@framework/lib/resolveActorId', () => ({
-    resolveActorId: resolveActorIdMock,
-  }));
-
-  const mod = await import(`../../src/framework/ws/index.ts?ws-upgrade=${Date.now()}`);
-  return mod.createWsUpgradeHandler;
-}
+import { describe, expect, it } from 'bun:test';
+import { ANONYMOUS_ACTOR, type Actor, getClientIpFromRequest } from '@lastshotlabs/slingshot-core';
+import { createWsUpgradeHandler } from '../../src/framework/ws/index';
 
 function createMockServer(overrides?: {
   requestIP?: (req: Request) => { address: string } | null;
@@ -22,17 +12,12 @@ function createMockServer(overrides?: {
   } as any;
 }
 
-afterEach(() => {
-  mock.restore();
-  resolveActorIdMock.mockReset();
-});
+const anonResolver = { resolveActor: async () => ANONYMOUS_ACTOR };
 
 describe('createWsUpgradeHandler', () => {
   it('returns undefined on successful upgrade', async () => {
-    resolveActorIdMock.mockImplementation(async () => null);
-    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const server = createMockServer();
-    const handler = createWsUpgradeHandler(server, '/chat');
+    const handler = createWsUpgradeHandler(server, '/chat', anonResolver);
     const req = new Request('http://localhost/chat');
 
     const result = await handler(req);
@@ -41,12 +26,10 @@ describe('createWsUpgradeHandler', () => {
   });
 
   it('returns 400 response when upgrade fails', async () => {
-    resolveActorIdMock.mockImplementation(async () => null);
-    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const server = createMockServer({
       upgrade: () => false,
     });
-    const handler = createWsUpgradeHandler(server, '/chat');
+    const handler = createWsUpgradeHandler(server, '/chat', anonResolver);
     const req = new Request('http://localhost/chat');
 
     const result = await handler(req);
@@ -57,14 +40,12 @@ describe('createWsUpgradeHandler', () => {
   });
 
   it('catches requestIP throwing without affecting upgrade', async () => {
-    resolveActorIdMock.mockImplementation(async () => null);
-    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const server = createMockServer({
       requestIP: () => {
         throw new Error('requestIP not supported');
       },
     });
-    const handler = createWsUpgradeHandler(server, '/ws');
+    const handler = createWsUpgradeHandler(server, '/ws', anonResolver);
     const req = new Request('http://localhost/ws');
 
     const result = await handler(req);
@@ -72,9 +53,14 @@ describe('createWsUpgradeHandler', () => {
     expect(getClientIpFromRequest(req, false)).toBe('unknown');
   });
 
-  it('resolves actorId via the default resolver', async () => {
-    resolveActorIdMock.mockImplementation(async () => 'user-42');
-    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
+  it('attaches resolved actor and request tenant on successful upgrade', async () => {
+    const userActor: Actor = {
+      ...ANONYMOUS_ACTOR,
+      id: 'user-42',
+      kind: 'user',
+      tenantId: 'tenant-9',
+    };
+    const resolver = { resolveActor: async () => userActor };
     let capturedData: any = null;
     const server = createMockServer({
       upgrade: (_req: Request, opts: any) => {
@@ -82,56 +68,40 @@ describe('createWsUpgradeHandler', () => {
         return true;
       },
     });
-    const handler = createWsUpgradeHandler(server, '/chat');
+    const handler = createWsUpgradeHandler(server, '/chat', resolver);
     const req = new Request('http://localhost/chat');
 
     await handler(req);
 
     expect(capturedData).toBeDefined();
-    expect(capturedData.actorId).toBe('user-42');
+    expect(capturedData.actor).toBe(userActor);
+    expect(capturedData.requestTenantId).toBe('tenant-9');
     expect(capturedData.endpoint).toBe('/chat');
     expect(capturedData.rooms).toBeInstanceOf(Set);
     expect(typeof capturedData.id).toBe('string');
   });
 
-  it('passes custom actorResolver to resolveActorId', async () => {
-    let receivedResolver: unknown = null;
-    resolveActorIdMock.mockImplementation(async (_req, resolver) => {
-      receivedResolver = resolver;
-      return 'custom-user';
+  it('falls back to ANONYMOUS_ACTOR when actorResolver is null', async () => {
+    let capturedData: any = null;
+    const server = createMockServer({
+      upgrade: (_req: Request, opts: any) => {
+        capturedData = opts?.data;
+        return true;
+      },
     });
-    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
-    const customResolver = { resolveActorId: async () => 'custom-user' };
-    const server = createMockServer();
-    const handler = createWsUpgradeHandler(server, '/ws', customResolver as any);
-    const req = new Request('http://localhost/ws');
-
-    await handler(req);
-    expect(receivedResolver).toBe(customResolver);
-  });
-
-  it('passes null to resolveActorId when actorResolver is null', async () => {
-    let receivedResolver: unknown = 'sentinel';
-    resolveActorIdMock.mockImplementation(async (_req, resolver) => {
-      receivedResolver = resolver;
-      return null;
-    });
-    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
-    const server = createMockServer();
     const handler = createWsUpgradeHandler(server, '/ws', null);
     const req = new Request('http://localhost/ws');
 
     await handler(req);
-    expect(receivedResolver).toBeNull();
+    expect(capturedData.actor).toBe(ANONYMOUS_ACTOR);
+    expect(capturedData.requestTenantId).toBeNull();
   });
 
   it('does not attach a client IP when requestIP returns null', async () => {
-    resolveActorIdMock.mockImplementation(async () => null);
-    const createWsUpgradeHandler = await loadCreateWsUpgradeHandler();
     const server = createMockServer({
       requestIP: () => null,
     });
-    const handler = createWsUpgradeHandler(server, '/ws');
+    const handler = createWsUpgradeHandler(server, '/ws', anonResolver);
     const req = new Request('http://localhost/ws');
 
     await handler(req);

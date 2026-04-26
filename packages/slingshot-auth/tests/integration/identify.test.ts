@@ -42,7 +42,7 @@ function buildApp(signingOverride?: Record<string, unknown>) {
     return c.json({
       actorId: actor.kind === 'user' ? actor.id : null,
       sessionId: actor.sessionId,
-      authClientId: actor.kind === 'service-account' ? actor.id : null,
+      serviceAccountId: actor.kind === 'service-account' ? actor.id : null,
     });
   });
   return app;
@@ -65,7 +65,7 @@ describe('token extraction', () => {
     const body = await res.json();
     expect(body.actorId).toBeNull();
     expect(body.sessionId).toBeNull();
-    expect(body.authClientId).toBeNull();
+    expect(body.serviceAccountId).toBeNull();
   });
 
   test('valid token in x-user-token header resolves identity', async () => {
@@ -193,7 +193,7 @@ describe('session mismatch', () => {
 // ---------------------------------------------------------------------------
 
 describe('M2M token detection', () => {
-  test('token with scope but no sid — sets authClientId', async () => {
+  test('token with scope but no sid — sets serviceAccountId', async () => {
     const app = buildApp();
     const token = await signToken(
       { sub: 'client-123', scope: 'read:data write:data' },
@@ -206,7 +206,7 @@ describe('M2M token detection', () => {
       headers: { 'x-user-token': token },
     });
     const body = await res.json();
-    expect(body.authClientId).toBe('client-123');
+    expect(body.serviceAccountId).toBe('client-123');
     expect(body.actorId).toBeNull();
     expect(body.sessionId).toBeNull();
   });
@@ -229,7 +229,7 @@ describe('M2M token detection', () => {
     const body = await res.json();
     expect(body.actorId).toBe(userId);
     expect(body.sessionId).toBe(sessionId);
-    expect(body.authClientId).toBeNull();
+    expect(body.serviceAccountId).toBeNull();
   });
 });
 

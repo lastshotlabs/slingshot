@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { attachContext, getContextOrNull } from '../../src/context/contextStore';
+import { createDefaultIdentityResolver } from '../../src/identity';
 import { getFingerprintBuilder, getRateLimitAdapter } from '../../src/rateLimit';
 
 /**
@@ -12,7 +13,8 @@ function createBrandedContext(overrides: Record<string, unknown> = {}) {
     config: {},
     persistence: {},
     routeAuth: null,
-    userResolver: null,
+    actorResolver: null,
+    identityResolver: createDefaultIdentityResolver(),
     rateLimitAdapter: null,
     fingerprintBuilder: null,
     cacheAdapters: new Map(),

@@ -290,6 +290,10 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
                     {
                       source: 'system',
                       userId: typeof payload.authorId === 'string' ? payload.authorId : null,
+                      // System-source emission with no originating HTTP request — no
+                      // request-tenant exists. Set explicitly so downstream consumers
+                      // can distinguish "absent" from "unknown".
+                      requestTenantId: null,
                     },
                   );
                 }
@@ -329,6 +333,8 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
                   events.publish('chat:message.scheduled.delivered', msg, {
                     source: 'system',
                     userId: msg.authorId ?? null,
+                    // System-source scheduler — no originating HTTP request.
+                    requestTenantId: null,
                   });
                   await rmAdapter
                     .updateLastMessage(
@@ -363,7 +369,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
                 let ackResult: unknown = null;
 
                 await handler.handler({
-                  actorId: context.actorId ?? '',
+                  actorId: context.actor.id ?? '',
                   socketId: context.socketId,
                   roomId:
                     typeof payload === 'object' &&

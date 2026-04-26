@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getActor, getClientIp } from '@lastshotlabs/slingshot-core';
+import { getActor, getClientIp, getRequestTenantId } from '@lastshotlabs/slingshot-core';
 
 /**
  * Severity level for a structured request log entry.
@@ -42,8 +42,11 @@ export interface RequestLogEntry {
   userId: string | null;
   /** Session ID from the resolved actor, or `null` if not set. */
   sessionId: string | null;
-  /** Tenant ID from the resolved actor, or `null` in non-multi-tenant apps. */
-  tenantId: string | null;
+  /**
+   * Request-scoped tenant set by tenant middleware (pre-auth). Distinct from
+   * `actor.tenantId` (identity-bound scope). `null` in non-multi-tenant apps.
+   */
+  requestTenantId: string | null;
   /** OTel trace ID when distributed tracing is active, or `null` otherwise. */
   traceId: string | null;
   /** OTel span ID when distributed tracing is active, or `null` otherwise. */
@@ -183,7 +186,7 @@ export const requestLogger = (options: RequestLoggerOptions = {}): MiddlewareHan
       userAgent: c.req.header('user-agent') ?? null,
       userId: actor.id,
       sessionId: actor.sessionId,
-      tenantId: actor.tenantId,
+      requestTenantId: getRequestTenantId(c),
       traceId: spanContext?.traceId ?? null,
       spanId: spanContext?.spanId ?? null,
     };

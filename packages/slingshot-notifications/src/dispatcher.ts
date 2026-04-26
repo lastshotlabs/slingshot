@@ -77,10 +77,11 @@ export function createIntervalDispatcher(
           preferences,
         };
         options.events.publish('notifications:notification.created', payload, {
-          tenantId: row.tenantId ?? null,
           userId: row.userId,
           actorId: row.actorId ?? row.userId,
           source: 'system',
+          // Background dispatcher — no originating HTTP request.
+          requestTenantId: null,
         });
       }
 

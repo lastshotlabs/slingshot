@@ -18,7 +18,7 @@ config handles this automatically:
 }
 ```
 
-When `authBridge` is `"auto"`, the plugin registers middleware that reads `authUserId` and
+When `authBridge` is `"auto"`, the plugin registers middleware that reads `actor.id` and
 `roles` from the framework auth context and sets `communityPrincipal` for community routes.
 This eliminates the most common handler file pattern. Use `"none"` (default) to wire the
 bridge yourself.

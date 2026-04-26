@@ -905,7 +905,7 @@ describe('named operation inference — HTTP round-trip', () => {
     expect(sawActorId).toBe('user-1');
   });
 
-  it('injects param:actor.id and param:actor.tenantId for named operations', async () => {
+  it('injects param:actor.id and param:actor.tenantId for named operations (no synthetic param:tenantId)', async () => {
     records.clear();
     idCounter = 0;
     const adapter = {
@@ -914,7 +914,9 @@ describe('named operation inference — HTTP round-trip', () => {
         Promise.resolve({
           actorId: params['actor.id'],
           actorTenantId: params['actor.tenantId'],
-          legacyTenantId: params.tenantId,
+          // `param:tenantId` resolves only from real request input now (path/query/body).
+          // Since the body is empty and there's no :tenantId path param, this stays undefined.
+          legacyTenantId: params.tenantId ?? null,
         }),
     };
     const { OpenAPIHono } = await import('@hono/zod-openapi');
@@ -958,7 +960,7 @@ describe('named operation inference — HTTP round-trip', () => {
     expect(await res.json()).toEqual({
       actorId: 'user-1',
       actorTenantId: 'tenant-actor',
-      legacyTenantId: 'tenant-actor',
+      legacyTenantId: null,
     });
   });
 

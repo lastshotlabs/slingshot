@@ -60,48 +60,59 @@ export const ANONYMOUS_ACTOR: Actor = Object.freeze({
 });
 
 /**
- * Raw identity variables available to the resolver.
+ * Identity values extracted from the request, passed to the configured
+ * `IdentityResolver` to produce a canonical `Actor`.
  *
- * These are the values set by whatever auth middleware ran before the resolver
- * executes (identify, bearerAuth, gateway auth, custom middleware, etc.).
+ * Field names map to the actor kind they produce in the default resolver:
+ * - `userId`            → `'user'` actor
+ * - `serviceAccountId`  → `'service-account'` actor (M2M / OAuth client)
+ * - `apiKeyId`          → `'api-key'` actor (static bearer-token client)
+ *
+ * Custom auth integrations populate whichever of these fields they recognize
+ * before invoking the resolver.
  */
 export interface IdentityResolverInput {
-  authUserId: string | null;
+  /** Authenticated user ID (subject of an interactive session). */
+  userId: string | null;
+  /** Session identifier when the user is session-bound. */
   sessionId: string | null;
+  /** Effective roles assigned to the principal. */
   roles: string[] | null;
-  authClientId: string | null;
-  bearerClientId: string | null;
+  /** Service-account / M2M client ID (e.g. JWT `azp` / `client_id`). */
+  serviceAccountId: string | null;
+  /** Static API-key client ID (e.g. matched bearer-token client). */
+  apiKeyId: string | null;
+  /** Tenant scope captured at extraction time. */
   tenantId: string | null;
   /** The raw, already-verified token payload (JWT claims, gateway context, etc.). */
   tokenPayload: unknown;
 }
 
 /**
- * Maps raw auth context into a canonical `Actor`.
+ * Maps raw identity input into a canonical `Actor`.
  *
  * Configured on the app via `CoreRegistrar.setIdentityResolver()` or the
  * `identity.resolver` option in `createApp()` / `createServer()`. When no
- * custom resolver is registered the framework uses the default resolver which
- * preserves existing behavior exactly.
+ * custom resolver is registered the framework uses the default resolver.
  */
 export interface IdentityResolver {
   resolve(input: IdentityResolverInput): Actor;
 }
 
 /**
- * Default resolver that preserves the framework's existing identity behavior.
+ * Default resolver. Selection order:
  *
- * - If `authUserId` is set, the actor is a `'user'`.
- * - If only `bearerClientId` is set, the actor is an `'api-key'`.
- * - If only `authClientId` is set, the actor is a `'service-account'`.
- * - Otherwise, the actor is `'anonymous'` (with tenantId carried through).
+ * - If `userId` is set, the actor is a `'user'`.
+ * - If only `apiKeyId` is set, the actor is an `'api-key'`.
+ * - If only `serviceAccountId` is set, the actor is a `'service-account'`.
+ * - Otherwise, the actor is `'anonymous'` (with `tenantId` carried through).
  */
 export function createDefaultIdentityResolver(): IdentityResolver {
   return {
     resolve(input: IdentityResolverInput): Actor {
-      if (input.authUserId) {
+      if (input.userId) {
         return {
-          id: input.authUserId,
+          id: input.userId,
           kind: 'user',
           tenantId: input.tenantId,
           sessionId: input.sessionId,
@@ -109,9 +120,9 @@ export function createDefaultIdentityResolver(): IdentityResolver {
           claims: {},
         };
       }
-      if (input.bearerClientId) {
+      if (input.apiKeyId) {
         return {
-          id: input.bearerClientId,
+          id: input.apiKeyId,
           kind: 'api-key',
           tenantId: input.tenantId,
           sessionId: null,
@@ -119,9 +130,9 @@ export function createDefaultIdentityResolver(): IdentityResolver {
           claims: {},
         };
       }
-      if (input.authClientId) {
+      if (input.serviceAccountId) {
         return {
-          id: input.authClientId,
+          id: input.serviceAccountId,
           kind: 'service-account',
           tenantId: input.tenantId,
           sessionId: null,

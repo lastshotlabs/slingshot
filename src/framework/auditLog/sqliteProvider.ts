@@ -65,7 +65,7 @@ export function createSqliteAuditLogProvider(
           entry.id,
           entry.userId ?? null,
           entry.sessionId ?? null,
-          entry.tenantId ?? null,
+          entry.requestTenantId ?? null,
           entry.method,
           entry.path,
           entry.status,
@@ -100,9 +100,9 @@ export function createSqliteAuditLogProvider(
         conditions.push('userId = ?');
         params.push(query.userId);
       }
-      if (query.tenantId !== undefined) {
+      if (query.requestTenantId !== undefined) {
         conditions.push('tenantId = ?');
-        params.push(query.tenantId);
+        params.push(query.requestTenantId);
       }
       if (after) {
         conditions.push('createdAt >= ?');
@@ -131,7 +131,7 @@ export function createSqliteAuditLogProvider(
         id: row.id as string,
         userId: (row.userId as string | null) ?? null,
         sessionId: (row.sessionId as string | null) ?? null,
-        tenantId: (row.tenantId as string | null) ?? null,
+        requestTenantId: (row.tenantId as string | null) ?? null,
         method: row.method as string,
         path: row.path as string,
         status: row.status as number,

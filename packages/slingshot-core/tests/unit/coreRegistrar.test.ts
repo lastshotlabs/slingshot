@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createCoreRegistrar } from '../../src/coreRegistrar';
+import { ANONYMOUS_ACTOR } from '../../src/identity';
 
 function asNever<T>(v: T): never {
   return v as never;
@@ -34,8 +35,8 @@ describe('createCoreRegistrar', () => {
       bearerAuth: createMiddleware(),
     };
     const actorResolver = {
-      async resolveActorId(): Promise<string | null> {
-        return 'user-1';
+      async resolveActor() {
+        return { ...ANONYMOUS_ACTOR, id: 'user-1', kind: 'user' as const };
       },
     };
     const rateLimitAdapter = {

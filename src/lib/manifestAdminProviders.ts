@@ -274,7 +274,8 @@ export function createInMemoryAuditLog(): AuditLogProvider {
       let filtered = entries;
 
       if (query.userId) filtered = filtered.filter(e => e.userId === query.userId);
-      if (query.tenantId) filtered = filtered.filter(e => e.tenantId === query.tenantId);
+      if (query.requestTenantId)
+        filtered = filtered.filter(e => e.requestTenantId === query.requestTenantId);
       if (query.path) filtered = filtered.filter(e => e.path === query.path);
       if (query.method) filtered = filtered.filter(e => e.method === query.method);
 

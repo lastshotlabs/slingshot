@@ -8,6 +8,8 @@ import type {
   StandalonePlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
+  ANONYMOUS_ACTOR,
+  type Actor,
   COOKIE_TOKEN,
   HttpError,
   getClientIpFromRequest,
@@ -479,7 +481,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
         ctx.pluginState.set(AUTH_RUNTIME_KEY, result.runtime);
       }
 
-      // RequestActorResolver — provides resolveActorId to framework WS/SSE upgrade
+      // RequestActorResolver — provides resolveActor to framework WS/SSE upgrade
       const runtime = result.runtime;
       const trustProxy = frameworkConfig.trustProxy;
       const computeResolverFingerprint = (
@@ -494,7 +496,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
         return sha256(parts.join(':'));
       };
       registrar.setRequestActorResolver({
-        async resolveActorId(req: Request): Promise<string | null> {
+        async resolveActor(req: Request): Promise<Actor> {
           try {
             const url = new URL(req.url);
             const token =
@@ -503,13 +505,13 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
                 ?.match(new RegExp(`(?:^|;\\s*)${COOKIE_TOKEN}=([^;]+)`))?.[1] ??
               url.searchParams.get('token') ??
               null;
-            if (!token) return null;
+            if (!token) return ANONYMOUS_ACTOR;
             const payload = await verifyToken(token, runtime.config, runtime.signing);
             const sessionId = payload.sid as string | undefined;
             const userId = payload.sub;
-            if (!sessionId || !userId) return null;
+            if (!sessionId || !userId) return ANONYMOUS_ACTOR;
             const stored = await runtime.repos.session.getSession(sessionId, runtime.config);
-            if (!timingSafeEqual(stored ?? '', token)) return null;
+            if (!timingSafeEqual(stored ?? '', token)) return ANONYMOUS_ACTOR;
 
             const bindingCfg = runtime.signing?.sessionBinding;
             if (bindingCfg) {
@@ -532,7 +534,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
                     `[slingshot-auth] session binding mismatch during upgrade auth for user ${userId}`,
                   );
                 } else {
-                  return null;
+                  return ANONYMOUS_ACTOR;
                 }
               }
             }
@@ -540,20 +542,35 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
             const suspensionStatus = await getSuspended(runtime.adapter, userId).catch(() => ({
               suspended: false,
             }));
-            if (suspensionStatus.suspended) return null;
+            if (suspensionStatus.suspended) return ANONYMOUS_ACTOR;
 
             try {
               await assertLoginEmailVerified(userId, runtime);
             } catch (err) {
               if (err instanceof HttpError && err.status === 403) {
-                return null;
+                return ANONYMOUS_ACTOR;
               }
               throw err;
             }
 
-            return userId;
+            const tenantId =
+              typeof payload['tenantId'] === 'string'
+                ? (payload['tenantId'] as string)
+                : typeof payload['tid'] === 'string'
+                  ? (payload['tid'] as string)
+                  : null;
+            const roles = Array.isArray(payload['roles']) ? (payload['roles'] as string[]) : null;
+
+            return {
+              id: userId,
+              kind: 'user',
+              tenantId,
+              sessionId,
+              roles,
+              claims: {},
+            };
           } catch {
-            return null;
+            return ANONYMOUS_ACTOR;
           }
         },
       });

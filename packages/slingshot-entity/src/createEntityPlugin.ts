@@ -1510,7 +1510,7 @@ function registerEntityEventDefinitions(
             return buildRouteEventScope(
               event,
               payload as Record<string, unknown>,
-              publishContext as Record<string, unknown>,
+              publishContext as unknown as Record<string, unknown>,
             );
           },
         },

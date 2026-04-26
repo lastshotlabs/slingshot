@@ -86,6 +86,7 @@ bun add @lastshotlabs/slingshot \
   <TabItem label="Code">
     ```typescript title="src/index.ts"
     import { createServer } from '@lastshotlabs/slingshot';
+    import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
     import { createOrganizationsPlugin } from '@lastshotlabs/slingshot-organizations';
     import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
@@ -334,7 +335,7 @@ Add middleware to any router that handles org-scoped resources. It verifies the 
 ```typescript title="src/middleware/requireOrgMember.ts"
 import type { Context, Next } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { type AppEnv, getSlingshotCtx } from '@lastshotlabs/slingshot-core';
+import { type AppEnv, getActorId, getSlingshotCtx } from '@lastshotlabs/slingshot-core';
 
 declare function getOrgId(c: Context): string | undefined;
 
@@ -408,6 +409,8 @@ router.post('/organizations/:orgId/projects', async c => {
 The auth plugin embeds `tenantId` in the JWT when a user logs in with an org context. The `identify` middleware decodes it on every request and sets `c.var.tenantId`. That value is your authoritative scope — never query with `organizationId` taken directly from the request body.
 
 ```typescript
+import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
+
 // In a route handler — tenantId comes from the verified JWT, not from user input
 const tenantId = getRequestTenantId(c); // from slingshot-auth's identify middleware
 
@@ -488,6 +491,7 @@ Mounts at `/scim/v2`. Handles `Users` and `Groups` provisioning automatically. W
 Register entities with the search plugin and scope queries to an `orgId`:
 
 ```typescript
+import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
 import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
 
 createSearchPlugin({

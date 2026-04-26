@@ -10,6 +10,7 @@
  */
 import { describe, expect, it, mock } from 'bun:test';
 import type {
+  Actor,
   EntityChannelConfig,
   EntityRegistry,
   ResolvedEntityConfig,
@@ -19,7 +20,10 @@ import type {
   StoreType,
   WsState,
 } from '@lastshotlabs/slingshot-core';
+import { ANONYMOUS_ACTOR } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
+
+const userActor = (id: string): Actor => ({ ...ANONYMOUS_ACTOR, id, kind: 'user' });
 import type { WsPublishFn } from '../src/channels/applyChannelConfig';
 import { createEntityPlugin } from '../src/createEntityPlugin';
 import type { EntityPluginEntry } from '../src/createEntityPlugin';
@@ -191,7 +195,7 @@ describe('createEntityPlugin channel lifecycle', () => {
     const plugin = createEntityPlugin({ name: 'test', entities: [entry] });
 
     const guard = plugin.buildSubscribeGuard({
-      getIdentity: () => ({ userId: 'user-1' }),
+      getActor: () => userActor('user-1'),
       checkPermission: () => Promise.resolve(true),
       middleware: {},
     });
@@ -204,7 +208,7 @@ describe('createEntityPlugin channel lifecycle', () => {
     const plugin = createEntityPlugin({ name: 'test', entities: [makeEntry(threadConfig)] });
 
     const guard = plugin.buildSubscribeGuard({
-      getIdentity: () => ({ userId: 'user-1' }),
+      getActor: () => userActor('user-1'),
       checkPermission: () => Promise.resolve(true),
       middleware: {},
     });
@@ -350,7 +354,7 @@ describe('createEntityPlugin channel lifecycle', () => {
     expect(bus.handlers.get('entity:threads.updated')!.length).toBe(1);
 
     const guard = plugin.buildSubscribeGuard({
-      getIdentity: () => ({ userId: 'user-1' }),
+      getActor: () => userActor('user-1'),
       checkPermission: () => Promise.resolve(true),
       middleware: {},
     });

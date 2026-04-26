@@ -11,7 +11,7 @@ import {
 } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import type { ChatEncryptionProvider } from '../encryption/types';
-import { getAuthUserId } from '../lib/ctx';
+import { getUserId } from '../lib/ctx';
 import { createUnreadCountHandler } from '../lib/unreadCount';
 import { now } from '../lib/utils';
 import type { ChatPluginState, CreateMessageInput, Message, UpdateMessageInput } from '../types';
@@ -343,7 +343,7 @@ export function createChatManifestRuntime(args: {
 
   customHandlers.register('chat.room.findOrCreateDm', () => () => async (input: unknown) => {
     const params = (input ?? {}) as Record<string, unknown>;
-    const userId = getAuthUserId(params);
+    const userId = getUserId(params);
     const targetUserId = typeof params.targetUserId === 'string' ? params.targetUserId : '';
     const roomAdapter = roomAdapterRef;
     const memberAdapter = memberAdapterRef;
@@ -456,7 +456,7 @@ export function createChatManifestRuntime(args: {
 
   customHandlers.register('chat.message.forward', () => () => async (input: unknown) => {
     const params = (input ?? {}) as Record<string, unknown>;
-    const userId = getAuthUserId(params);
+    const userId = getUserId(params);
     const messageId = typeof params.messageId === 'string' ? params.messageId : '';
     const targetRoomId = typeof params.targetRoomId === 'string' ? params.targetRoomId : '';
     const messageAdapter = messageAdapterRef;
@@ -508,7 +508,7 @@ export function createChatManifestRuntime(args: {
 
   customHandlers.register('chat.invite.redeem', () => () => async (input: unknown) => {
     const params = (input ?? {}) as Record<string, unknown>;
-    const userId = getAuthUserId(params);
+    const userId = getUserId(params);
     const token = typeof params.token === 'string' ? params.token : '';
     const memberAdapter = memberAdapterRef;
     const roomAdapter = roomAdapterRef;

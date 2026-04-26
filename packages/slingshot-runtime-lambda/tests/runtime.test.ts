@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import type { SlingshotContext, SlingshotHandler } from '@lastshotlabs/slingshot-core';
+import { createDefaultIdentityResolver } from '@lastshotlabs/slingshot-core';
 
 const runtimeState = {
   bootstrapCalls: 0,
@@ -56,7 +57,8 @@ function createContextFixture(): SlingshotContext {
     },
     adapters: {},
     routeAuth: null,
-    userResolver: null,
+    actorResolver: null,
+    identityResolver: createDefaultIdentityResolver(),
     rateLimitAdapter: {
       async trackAttempt() {
         return false;

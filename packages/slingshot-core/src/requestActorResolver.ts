@@ -30,7 +30,7 @@ export type { RequestActorResolver };
  * import { getRequestActorResolver, getContext } from '@lastshotlabs/slingshot-core';
  *
  * const resolver = getRequestActorResolver(getContext(app));
- * const actorId = await resolver.resolveActorId(request);
+ * const actor = await resolver.resolveActor(request);
  * ```
  */
 export function getRequestActorResolver(input: ContextCarrier): RequestActorResolver {
@@ -59,7 +59,7 @@ export function getRequestActorResolver(input: ContextCarrier): RequestActorReso
  * ```ts
  * const resolver = getRequestActorResolverOrNull(ctx);
  * if (resolver) {
- *   const actorId = await resolver.resolveActorId(req);
+ *   const actor = await resolver.resolveActor(req);
  *   // enable auth-gated feature
  * } else {
  *   // degrade gracefully — no auth plugin installed

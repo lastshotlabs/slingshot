@@ -1,6 +1,6 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import type { IdentityResolver } from './identity';
+import type { Actor, IdentityResolver } from './identity';
 
 /**
  * Auth middleware registry provided by the auth plugin to the framework.
@@ -85,29 +85,30 @@ export interface PostAuthGuardFailure {
 export type PostAuthGuard = (c: Context<any, any>) => Promise<PostAuthGuardFailure | null>;
 
 /**
- * Resolves the authenticated actor ID from a raw HTTP request.
+ * Resolves the authenticated `Actor` from a raw HTTP request.
  *
- * Used by framework WebSocket and SSE upgrade handlers to identify the connecting actor
- * without depending on the auth plugin. Registered by the auth plugin during `setupPost`.
+ * Used by framework WebSocket and SSE upgrade handlers to identify the connecting
+ * actor without depending on the auth plugin. Registered by the auth plugin during
+ * `setupPost`.
  */
 export interface RequestActorResolver {
   /**
-   * Extract the authenticated actor ID from the request.
+   * Extract the authenticated `Actor` from the request.
    *
    * @param req - The raw inbound `Request`. Implementations inspect whichever
    *   credential source is appropriate for the auth plugin's configuration —
    *   typically a signed session cookie, a `Cookie` header containing a session
    *   token, or an `Authorization: Bearer` header for token-based setups.
-   * @returns The authenticated actor's ID string if a valid credential is found,
-   *   or `null` if the request is unauthenticated, the credential is expired, or
-   *   the session cannot be verified.
+   * @returns The authenticated `Actor`. Unauthenticated, expired, or unverifiable
+   *   requests resolve to `ANONYMOUS_ACTOR` (`{ id: null, kind: 'anonymous', ... }`),
+   *   never `null`.
    * @remarks
-   * Auth failure is signalled by returning `null`, not by throwing. Callers
-   * (WebSocket / SSE upgrade handlers) treat a `null` result as a 401 and close
-   * the connection. Implementations must not throw on invalid/missing credentials —
+   * Auth failure is signalled by resolving to `ANONYMOUS_ACTOR`, not by throwing.
+   * Callers (WebSocket / SSE upgrade handlers) decide whether anonymous connections
+   * are allowed. Implementations must not throw on invalid/missing credentials —
    * only on unexpected infrastructure errors (e.g., a Redis connection failure).
    */
-  resolveActorId(req: Request): Promise<string | null>;
+  resolveActor(req: Request): Promise<Actor>;
 }
 
 /**
@@ -345,11 +346,12 @@ export interface CoreRegistrar {
   /**
    * Register the request actor resolver used by WebSocket and SSE upgrade handlers.
    *
-   * @param resolver - A `RequestActorResolver` whose `resolveActorId` extracts the
-   *   authenticated actor ID from a raw `Request`.
+   * @param resolver - A `RequestActorResolver` whose `resolveActor` returns the
+   *   authenticated `Actor` for a raw `Request` (or `ANONYMOUS_ACTOR` for
+   *   unauthenticated requests).
    * @remarks
    * Called by the auth plugin during `setupPost`. The framework's WebSocket and
-   * SSE upgrade paths call `resolveActorId()` to identify the connecting actor before
+   * SSE upgrade paths call `resolveActor()` to identify the connecting actor before
    * upgrading the connection. Calling this a second time replaces the previous resolver.
    */
   setRequestActorResolver(resolver: RequestActorResolver): void;

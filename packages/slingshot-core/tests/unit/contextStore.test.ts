@@ -5,13 +5,15 @@ import {
   getContextOrNull,
   isContextObject,
 } from '../../src/context/contextStore';
+import { createDefaultIdentityResolver } from '../../src/identity';
 
 function createContextFixture(overrides: Record<string, unknown> = {}) {
   return {
     config: {},
     persistence: {},
     routeAuth: null,
-    userResolver: null,
+    actorResolver: null,
+    identityResolver: createDefaultIdentityResolver(),
     rateLimitAdapter: null,
     fingerprintBuilder: null,
     cacheAdapters: new Map(),

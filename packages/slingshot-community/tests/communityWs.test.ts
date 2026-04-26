@@ -92,7 +92,7 @@ describe('createCommunityPlugin WS wiring', () => {
   it('buildSubscribeGuard returns a function that resolves true when ws not configured', async () => {
     const plugin = createCommunityPlugin(baseConfig);
     const guard = plugin.buildSubscribeGuard({
-      getIdentity: () => null,
+      getActor: () => null,
       checkPermission: async () => false,
       middleware: {},
     });
@@ -110,7 +110,7 @@ describe('createCommunityPlugin WS wiring', () => {
       },
     });
     const guard = plugin.buildSubscribeGuard({
-      getIdentity: () => null,
+      getActor: () => null,
       checkPermission: async () => false,
       middleware: {},
     });

@@ -30,7 +30,7 @@ depends on providers for all of that and should remain a thin route-and-guard as
 In manifest mode, the admin plugin supports string strategies that wire providers automatically
 from other plugins:
 
-- **`accessProvider: "slingshot-auth"`** — verifies admin access by reading `authUserId` and
+- **`accessProvider: "slingshot-auth"`** — verifies admin access by reading `actor.id` and
   `roles` from the framework auth context. Only users with the `super-admin` role are
   granted admin access. Adds `slingshot-auth` as a plugin dependency.
 

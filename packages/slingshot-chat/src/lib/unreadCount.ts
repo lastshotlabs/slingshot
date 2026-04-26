@@ -16,7 +16,7 @@
  */
 import type { PaginatedResult } from '@lastshotlabs/slingshot-core';
 import type { Message, RoomMember, UnreadCountEntry, UnreadCountResponse } from '../types';
-import { getAuthUserId } from './ctx';
+import { getUserId } from './ctx';
 
 interface UnreadCountDeps {
   memberAdapter: {
@@ -50,7 +50,7 @@ export function createUnreadCountHandler(
   deps: UnreadCountDeps,
 ): (params: Record<string, unknown>) => Promise<UnreadCountResponse> {
   return async (params: Record<string, unknown>): Promise<UnreadCountResponse> => {
-    const userId = getAuthUserId(params);
+    const userId = getUserId(params);
 
     // 1. Get all rooms the user belongs to
     const memberships = await deps.memberAdapter.listByUser({ userId });

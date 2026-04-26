@@ -768,7 +768,8 @@ export function createGameEnginePlugin(
               payload: unknown,
               context: {
                 socketId: string;
-                actorId: string | null;
+                actor: import('@lastshotlabs/slingshot-core').Actor;
+                requestTenantId: string | null;
                 endpoint: string;
                 publish(room: string, data: unknown): void;
                 subscribe(room: string): void;
@@ -777,7 +778,7 @@ export function createGameEnginePlugin(
             ) => {
               const wsSocket = ws as { send(data: string): void };
               const wsCtx: IncomingHandlerContext = {
-                actorId: context.actorId ?? '',
+                actorId: context.actor.id ?? '',
                 socketId: context.socketId,
                 payload,
                 ack: data => wsSocket.send(JSON.stringify(data)),
@@ -799,9 +800,9 @@ export function createGameEnginePlugin(
         endpoint.on ??= {};
         endpoint.on.close = async ws => {
           const wsData = ws as {
-            data: { actorId: string | null; id: string; rooms: Set<string>; endpoint: string };
+            data: { actor: { id: string | null }; id: string; rooms: Set<string>; endpoint: string };
           };
-          const userId = wsData.data.actorId;
+          const userId = wsData.data.actor.id;
           if (!userId) return;
 
           // Find which active session this player is in and trigger disconnect.

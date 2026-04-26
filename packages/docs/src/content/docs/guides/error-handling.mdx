@@ -80,6 +80,7 @@ Use `HttpError` when your handler needs to fail with a specific status code and 
 
 ```typescript title="src/routes/posts.ts"
 import { HttpError, createRouter } from '@lastshotlabs/slingshot';
+import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
 import { userAuth } from '@lastshotlabs/slingshot-auth';
 
 type Post = {

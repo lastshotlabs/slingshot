@@ -756,7 +756,8 @@ async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
       ctx.events.publish(
         'app:ready',
         { plugins: activeFrameworkPlugins.map(plugin => plugin.name) },
-        { source: 'system' },
+        // Lifecycle event — no originating request.
+        { source: 'system', requestTenantId: null },
       );
     }
     return Promise.resolve();

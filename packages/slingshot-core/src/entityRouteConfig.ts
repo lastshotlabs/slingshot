@@ -842,8 +842,11 @@ export interface EntityPermissionConfig {
 /**
  * Source prefix for an {@link EntityRouteDataScopeConfig.from} binding.
  *
- * - `'ctx:'` reads from request context (for example, `'ctx:actor.id'` reads the
- *   resolved actor ID and `'ctx:tenantId'` remains a legacy alias).
+ * - `'ctx:'` reads from request context. `'ctx:actor.id'` (and other
+ *   `ctx:actor.*` paths) read the resolved actor; `'ctx:tenantId'` reads the
+ *   request-scoped tenant set by tenant middleware. Custom keys fall through
+ *   to whatever app-defined Hono context var was set (e.g.
+ *   `'ctx:inviteExpiresAt'`).
  * - `'param:'` reads from a URL path parameter (for example, `'param:orgId'` reads
  *   `c.req.param('orgId')`).
  *

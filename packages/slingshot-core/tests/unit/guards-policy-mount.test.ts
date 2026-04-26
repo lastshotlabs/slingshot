@@ -33,7 +33,7 @@ function createContextFixture(overrides: Record<string, unknown> = {}) {
     persistence: { idempotency },
     identityResolver: createDefaultIdentityResolver(),
     routeAuth: null,
-    userResolver: null,
+    actorResolver: null,
     rateLimitAdapter: null,
     fingerprintBuilder: null,
     cacheAdapters: new Map(),
@@ -170,7 +170,7 @@ describe('entity policy, guards, and mounting', () => {
         await next();
       },
       bearerAuth: async (c: Context<AppEnv>, next: () => Promise<void>) => {
-        c.set('bearerClientId', 'client-1');
+        c.set('apiKeyId', 'client-1');
         await next();
       },
       requireRole: () => async (_c: Context<AppEnv>, next: () => Promise<void>) => {

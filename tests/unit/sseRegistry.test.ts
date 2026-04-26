@@ -1,10 +1,11 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { ANONYMOUS_ACTOR } from '@lastshotlabs/slingshot-core';
 import { createSseRegistry, createSseUpgradeHandler } from '../../src/framework/sse/index';
 
 const endpoint = '/__sse/test';
 
 function makeClient(id = 'client-1') {
-  return { id, actorId: null, endpoint };
+  return { id, actor: ANONYMOUS_ACTOR, requestTenantId: null, endpoint };
 }
 
 describe('createSseRegistry', () => {
@@ -266,24 +267,31 @@ describe('createSseRegistry', () => {
 });
 
 describe('createSseUpgradeHandler', () => {
-  test('returns a function that resolves client data with id, actorId, endpoint', async () => {
+  test('returns a function that resolves client data with id, actor, requestTenantId, endpoint', async () => {
     const upgrade = createSseUpgradeHandler('/events');
     const req = new Request('http://localhost/events');
     const clientData = await upgrade(req);
     expect(typeof clientData.id).toBe('string');
     expect(clientData.id.length).toBeGreaterThan(0);
     expect(clientData.endpoint).toBe('/events');
-    expect(clientData.actorId).toBeNull();
+    expect(clientData.actor).toBe(ANONYMOUS_ACTOR);
+    expect(clientData.requestTenantId).toBeNull();
   });
 
   test('uses custom actorResolver when provided', async () => {
     const actorResolver = {
-      resolveActorId: async () => 'user-abc',
+      resolveActor: async () => ({
+        ...ANONYMOUS_ACTOR,
+        id: 'user-abc',
+        kind: 'user' as const,
+        tenantId: 'tenant-z',
+      }),
     };
     const upgrade = createSseUpgradeHandler('/events', actorResolver);
     const req = new Request('http://localhost/events');
     const clientData = await upgrade(req);
-    expect(clientData.actorId).toBe('user-abc');
+    expect(clientData.actor.id).toBe('user-abc');
+    expect(clientData.requestTenantId).toBe('tenant-z');
     expect(clientData.endpoint).toBe('/events');
   });
 

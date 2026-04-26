@@ -5,7 +5,7 @@ import { ErrorResponse } from '@auth/schemas/error';
 import { SuccessResponse } from '@auth/schemas/success';
 import { z } from 'zod';
 import { createRoute, errorResponse } from '@lastshotlabs/slingshot-core';
-import { createRouter, getClientIp } from '@lastshotlabs/slingshot-core';
+import { createRouter, getClientIp, getRequestTenantId } from '@lastshotlabs/slingshot-core';
 import type {
   AuthRateLimitConfig,
   EmailVerificationConfig,
@@ -125,7 +125,7 @@ export const createEmailVerificationRouter = (
         runtime.events,
         'auth:email.verified',
         { userId: entry.userId, email: entry.email },
-        { userId: entry.userId, actorId: entry.userId },
+        { userId: entry.userId, actorId: entry.userId, requestTenantId: getRequestTenantId(c) },
       );
       if (getConfig().csrfEnabled) refreshCsrfToken(c);
       return c.json({ ok: true as const }, 200);

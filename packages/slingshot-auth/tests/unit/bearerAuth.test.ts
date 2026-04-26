@@ -119,7 +119,7 @@ describe('createBearerAuth — named clients (BearerAuthClient[])', () => {
     { clientId: 'legacy', token: 'legacy-token', revoked: true },
   ]);
 
-  test('valid client token grants access and sets bearerClientId', async () => {
+  test('valid client token grants access and sets apiKeyId', async () => {
     const res = await req(app, 'Bearer token-a');
     expect(res.status).toBe(200);
     const body = await res.json();

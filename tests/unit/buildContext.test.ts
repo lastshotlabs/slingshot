@@ -276,7 +276,16 @@ describe('finalizeContext', () => {
 
     const snapshot = {
       routeAuth: { userAuth: async () => {} },
-      actorResolver: { resolveActorId: async () => 'user-1' },
+      actorResolver: {
+        resolveActor: async () => ({
+          id: 'user-1',
+          kind: 'user' as const,
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        }),
+      },
       rateLimitAdapter: {
         trackAttempt: async () => false,
         resetAttempts: async () => {},

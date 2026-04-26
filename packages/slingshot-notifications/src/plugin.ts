@@ -93,9 +93,12 @@ export function createNotificationsPlugin(
           defineEvent('notifications:notification.created', {
             ownerPlugin: NOTIFICATIONS_PLUGIN_STATE_KEY,
             exposure: ['client-safe', 'tenant-webhook', 'user-webhook'],
-            resolveScope(_payload, publishContext) {
+            resolveScope(payload, publishContext) {
+              // Notification's own tenantId comes from the notification record (in payload).
+              // Delivery scope mirrors the notification's tenant; envelope.requestTenantId
+              // separately carries the originating-request tenant when applicable.
               return {
-                tenantId: publishContext.tenantId ?? null,
+                tenantId: payload.notification?.tenantId ?? publishContext.requestTenantId ?? null,
                 userId: publishContext.userId ?? null,
                 actorId: publishContext.actorId ?? publishContext.userId ?? null,
               };

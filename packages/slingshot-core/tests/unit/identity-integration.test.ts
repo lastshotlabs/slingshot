@@ -93,7 +93,7 @@ function createContextFixture(overrides: Record<string, unknown> = {}) {
     },
     identityResolver: createDefaultIdentityResolver(),
     routeAuth: null,
-    userResolver: null,
+    actorResolver: null,
     rateLimitAdapter: {
       trackAttempt: mock(async () => false),
     },
@@ -429,11 +429,11 @@ describe('enforceDataScope with actor bindings', () => {
     expect(input.level).toBe('42');
   });
 
-  test('legacy ctx:authUserId still works with explicit actor', async () => {
+  test('ctx:actor.id resolves from explicit actor', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
     await enforceDataScope(
-      { field: 'userId', from: 'ctx:authUserId' },
+      { field: 'userId', from: 'ctx:actor.id' },
       { op: 'create' },
     )({
       ctx,
@@ -450,7 +450,7 @@ describe('enforceDataScope with actor bindings', () => {
     expect(input.userId).toBe('user-1');
   });
 
-  test('legacy ctx:tenantId still works with explicit actor', async () => {
+  test('ctx:tenantId resolves from request tenant on meta', async () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
     await enforceDataScope(
@@ -471,7 +471,7 @@ describe('enforceDataScope with actor bindings', () => {
     expect(input.tenantId).toBe('tenant-1');
   });
 
-  test('legacy ctx:authUserId resolves from actor.id (prefers actor)', async () => {
+  test('ctx:actor.id resolves to actor identity from meta', async () => {
     const actorWithDifferentId: Actor = {
       ...userActor,
       id: 'actor-id-wins',
@@ -479,7 +479,7 @@ describe('enforceDataScope with actor bindings', () => {
     const { ctx } = createContextFixture();
     const input: Record<string, unknown> = {};
     await enforceDataScope(
-      { field: 'userId', from: 'ctx:authUserId' },
+      { field: 'userId', from: 'ctx:actor.id' },
       { op: 'create' },
     )({
       ctx,
@@ -493,7 +493,6 @@ describe('enforceDataScope with actor bindings', () => {
         ip: null,
       },
     } as never);
-    // Actor takes precedence:
     expect(input.userId).toBe('actor-id-wins');
   });
 
@@ -666,7 +665,6 @@ describe('guards with explicit actor', () => {
           requestId: 'r',
           actor: ANONYMOUS_ACTOR,
           requestTenantId: null,
-          requestTenantId: null,
           correlationId: 'r',
           ip: null,
         },
@@ -710,7 +708,7 @@ describe('guards with explicit actor', () => {
     ).resolves.toBeUndefined();
   });
 
-  test('requireBearer rejects user actor without bearerClientId', async () => {
+  test('requireBearer rejects user actor without apiKeyId', async () => {
     const { ctx } = createContextFixture();
     await expect(
       requireBearer()({
@@ -942,7 +940,6 @@ describe('after hooks with actor', () => {
         requestId: 'r',
         actor: userActor,
         requestTenantId: 'tenant-1',
-        requestTenantId: 'tenant-1',
         correlationId: 'r',
         ip: null,
       },
@@ -974,7 +971,7 @@ describe('after hooks with actor', () => {
     expect(auditEntries).toHaveLength(1);
     const entry = auditEntries[0] as Record<string, unknown>;
     expect(entry.userId).toBe('user-1');
-    expect(entry.tenantId).toBe('tenant-1');
+    expect(entry.requestTenantId).toBe('tenant-1');
     expect(entry.sessionId).toBe('sess-1');
     expect(entry.action).toBe('item.created');
   });
@@ -1006,7 +1003,7 @@ describe('after hooks with actor', () => {
 
     const entry = auditEntries[0] as Record<string, unknown>;
     expect(entry.userId).toBe('user-2');
-    expect(entry.tenantId).toBe('tenant-2');
+    expect(entry.requestTenantId).toBe('tenant-2');
     expect(entry.sessionId).toBeNull();
   });
 
@@ -1029,7 +1026,7 @@ describe('after hooks with actor', () => {
 
     const entry = auditEntries[0] as Record<string, unknown>;
     expect(entry.userId).toBe('svc-xyz');
-    expect(entry.tenantId).toBeNull();
+    expect(entry.requestTenantId).toBeNull();
     expect(entry.sessionId).toBeNull();
   });
 });
@@ -1085,7 +1082,7 @@ describe('toRouteHandler identity resolution', () => {
     });
   });
 
-  test('resolves api-key actor from bearerClientId context var', async () => {
+  test('resolves api-key actor from apiKeyId context var', async () => {
     const { app, ctx } = createContextFixture();
 
     const handler = defineHandler({

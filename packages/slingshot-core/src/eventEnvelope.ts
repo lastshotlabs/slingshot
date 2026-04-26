@@ -11,8 +11,12 @@ export interface EventEnvelopeMeta {
   requestId?: string;
   correlationId?: string;
   source?: EventPublishContext['source'];
-  /** Request-scoped tenant ID from tenant-resolution middleware. */
-  requestTenantId?: string | null;
+  /**
+   * Request-scoped tenant ID captured by tenant-resolution middleware (pre-auth).
+   * REQUIRED on every envelope — `null` for system / background emissions with
+   * no originating HTTP request. Distinct from `scope.tenantId` (delivery filter).
+   */
+  requestTenantId: string | null;
 }
 
 export interface EventEnvelope<K extends EventKey = EventKey> {
@@ -30,7 +34,7 @@ export interface CreateEventEnvelopeParams<K extends EventKey> {
   requestId?: string;
   correlationId?: string;
   source?: EventPublishContext['source'];
-  requestTenantId?: string | null;
+  requestTenantId: string | null;
 }
 
 export function createEventEnvelope<K extends EventKey>(
@@ -64,6 +68,8 @@ export function createRawEventEnvelope<K extends EventKey>(
     exposure: ['internal'],
     scope: null,
     source: 'system',
+    // Raw bus emit — no originating request context available.
+    requestTenantId: null,
   });
 }
 

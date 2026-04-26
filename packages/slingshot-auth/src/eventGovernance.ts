@@ -39,7 +39,7 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
     exposure: ['internal'],
     resolveScope(payload, ctx) {
       return {
-        tenantId: payload.tenantId ?? ctx.tenantId ?? null,
+        tenantId: payload.tenantId ?? ctx.requestTenantId ?? null,
         userId: payload.userId,
         actorId: ctx.actorId ?? payload.userId,
       };
@@ -50,7 +50,7 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
     exposure: ['internal'],
     resolveScope(payload, ctx) {
       return {
-        tenantId: payload.tenantId ?? ctx.tenantId ?? null,
+        tenantId: payload.tenantId ?? ctx.requestTenantId ?? null,
         userId: payload.userId,
         actorId: ctx.actorId ?? payload.userId,
       };
@@ -61,7 +61,7 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
     exposure: ['user-webhook'],
     resolveScope(payload, ctx) {
       return {
-        tenantId: payload.tenantId ?? ctx.tenantId ?? null,
+        tenantId: payload.tenantId ?? ctx.requestTenantId ?? null,
         userId: payload.userId,
         actorId: ctx.actorId ?? payload.userId,
       };
@@ -72,7 +72,7 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
     exposure: ['user-webhook'],
     resolveScope(payload, ctx) {
       return {
-        tenantId: payload.userId ? (ctx.tenantId ?? null) : null,
+        tenantId: payload.userId ? (ctx.requestTenantId ?? null) : null,
         userId: payload.userId,
         actorId: ctx.actorId ?? payload.userId,
       };
@@ -83,7 +83,7 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
     exposure: ['user-webhook'],
     resolveScope(payload, ctx) {
       return {
-        tenantId: ctx.tenantId ?? null,
+        tenantId: ctx.requestTenantId ?? null,
         userId: payload.userId,
         actorId: ctx.actorId ?? payload.userId,
       };
@@ -94,7 +94,7 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
     exposure: ['internal'],
     resolveScope(payload, ctx) {
       return {
-        tenantId: ctx.tenantId ?? null,
+        tenantId: ctx.requestTenantId ?? null,
         userId: payload.userId,
         actorId: ctx.actorId ?? payload.userId,
       };
@@ -105,7 +105,7 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
     exposure: ['internal'],
     resolveScope(payload, ctx) {
       return {
-        tenantId: ctx.tenantId ?? null,
+        tenantId: ctx.requestTenantId ?? null,
         userId: payload.userId,
         actorId: ctx.actorId ?? payload.userId,
       };
@@ -116,7 +116,7 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
     exposure: ['user-webhook'],
     resolveScope(payload, ctx) {
       return {
-        tenantId: ctx.tenantId ?? null,
+        tenantId: ctx.requestTenantId ?? null,
         userId: payload.userId,
         actorId: ctx.actorId ?? payload.userId,
       };
@@ -127,7 +127,7 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
     exposure: ['user-webhook'],
     resolveScope(payload, ctx) {
       return {
-        tenantId: ctx.tenantId ?? null,
+        tenantId: ctx.requestTenantId ?? null,
         userId: payload.userId,
         actorId: ctx.actorId ?? payload.userId,
       };
@@ -153,11 +153,19 @@ export function registerAuthEventDefinitions(events: SlingshotEvents): void {
   }
 }
 
+/**
+ * Auth-specific publish helper. Many auth `delivery.*` events fire from
+ * non-HTTP code paths (background workers, retry queues) where no request
+ * tenant exists, so this wrapper defaults `requestTenantId` to `null` and
+ * accepts a partial context. HTTP-route callers should always pass
+ * `{ requestTenantId: getRequestTenantId(c), ... }` so request-scoped
+ * tenant flows through the envelope.
+ */
 export function publishAuthEvent<K extends AuthManagedEventKey>(
   events: SlingshotEvents,
   key: K,
   payload: SlingshotEventMap[K],
-  ctx?: EventPublishContext,
+  ctx?: Partial<EventPublishContext>,
 ): void {
-  events.publish(key, payload, ctx);
+  events.publish(key, payload, { requestTenantId: null, ...ctx });
 }

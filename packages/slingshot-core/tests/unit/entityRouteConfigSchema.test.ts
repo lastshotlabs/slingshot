@@ -85,7 +85,7 @@ describe('entityRouteConfigSchema — valid configs', () => {
     const result = entityRouteConfigSchema.safeParse({
       defaults: { auth: 'userAuth' },
       dataScope: [
-        { field: 'userId', from: 'ctx:authUserId' },
+        { field: 'userId', from: 'ctx:userId' },
         { field: 'orgId', from: 'param:orgId', applyTo: ['list', 'get'] },
       ],
     });
@@ -252,7 +252,7 @@ describe('validateEntityRouteConfig', () => {
 
   test('rejects dataScope without auth', () => {
     const result = validateEntityRouteConfig({
-      dataScope: { field: 'userId', from: 'ctx:authUserId' },
+      dataScope: { field: 'userId', from: 'ctx:userId' },
     });
     expect(result.success).toBe(false);
     if (!result.success) {

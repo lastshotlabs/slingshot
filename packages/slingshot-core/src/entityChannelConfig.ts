@@ -5,6 +5,7 @@
 // and named middleware onto WebSocket channel subscriptions, plus event
 // forwarding from the bus to channel subscribers.
 // ============================================================================
+import type { Actor } from './identity';
 
 /**
  * Authentication strategy enforced at WebSocket channel subscribe time.
@@ -230,13 +231,18 @@ export interface ChannelIncomingEventDeclaration {
   /**
    * The event handler. Called with the WebSocket connection (opaque), the raw payload,
    * and a context object containing connection identity plus room helpers.
+   *
+   * The context shape mirrors `WsEventContext` from `src/config/types/ws.ts`. `actor` is
+   * the canonical identity (`ANONYMOUS_ACTOR` for unauthenticated sockets); `requestTenantId`
+   * is the request-scoped tenant captured at upgrade and is distinct from `actor.tenantId`.
    */
   handler: (
     ws: unknown,
     payload: unknown,
     context: {
       socketId: string;
-      actorId: string | null;
+      actor: Actor;
+      requestTenantId: string | null;
       endpoint: string;
       publish(room: string, data: unknown): void;
       subscribe(room: string): void;

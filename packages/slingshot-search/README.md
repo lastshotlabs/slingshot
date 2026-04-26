@@ -32,7 +32,7 @@ The search plugin supports built-in strategy strings in manifest mode:
   `super-admin` role.
 
 - **`adminGate: "authenticated"`** — allows access to admin routes for any authenticated
-  user (checks `authUserId` is present).
+  user (checks `actor.id` is present).
 
 These strategies are resolved before the plugin factory runs, so the plugin itself never
 sees the string values.

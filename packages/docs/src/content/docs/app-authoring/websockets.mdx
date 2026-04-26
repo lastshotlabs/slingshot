@@ -26,12 +26,12 @@ await createServer({
         heartbeat: true,
         rateLimit: { windowMs: 10_000, maxMessages: 50, onExceeded: 'close' },
         onRoomSubscribe: async (ws, room) =>
-          room === `post:${ws.data.actorId}:drafts` || room.startsWith('post:public:'),
+          room === `post:${ws.data.actor.id}:drafts` || room.startsWith('post:public:'),
         incoming: {
           'post:typing': {
             auth: 'userAuth',
             handler: (_ws, payload, ctx) => {
-              const room = `post:${ctx.actorId}:drafts`;
+              const room = `post:${ctx.actor.id}:drafts`;
               ctx.publish(room, { type: 'post:typing', payload });
               return { delivered: true };
             },

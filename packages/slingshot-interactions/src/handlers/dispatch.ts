@@ -61,15 +61,15 @@ function findComponentByActionId(
  *
  * @param deps - Resolved runtime dependencies.
  * @param request - Dispatch request payload.
- * @param userId - Authenticated user ID performing the interaction.
- * @param tenantId - Current tenant ID.
+ * @param userId - Authenticated actor ID performing the interaction.
+ * @param requestTenantId - Request-scoped tenant ID. `null` for untenanted apps.
  * @returns Structured outcome with HTTP status, semantic status, and response body.
  */
 export async function dispatchInteraction(
   deps: DispatchDeps,
   request: DispatchRequest,
   userId: string,
-  tenantId: string,
+  requestTenantId: string | null,
 ): Promise<DispatchOutcome> {
   const startedAt = Date.now();
   const peer = selectPeer(request.messageKind, deps.peers);
@@ -126,7 +126,7 @@ export async function dispatchInteraction(
       { subjectId: userId, subjectType: 'user' },
       component.permission,
       {
-        tenantId,
+        tenantId: requestTenantId ?? undefined,
         resourceType: request.messageKind,
         resourceId: request.messageId,
       },
@@ -177,7 +177,7 @@ export async function dispatchInteraction(
       messageKind: request.messageKind,
       messageId: request.messageId,
       userId: userId,
-      tenantId,
+      tenantId: requestTenantId ?? '',
       values: request.values,
     });
   } catch (error) {

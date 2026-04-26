@@ -66,7 +66,7 @@ export function createPostgresAuditLogProvider(pool: PgPool, ttlDays?: number): 
             entry.id,
             entry.userId ?? null,
             entry.sessionId ?? null,
-            entry.tenantId ?? null,
+            entry.requestTenantId ?? null,
             entry.method,
             entry.path,
             entry.status,
@@ -99,9 +99,9 @@ export function createPostgresAuditLogProvider(pool: PgPool, ttlDays?: number): 
         conditions.push(`user_id = $${n++}`);
         params.push(query.userId);
       }
-      if (query.tenantId !== undefined) {
+      if (query.requestTenantId !== undefined) {
         conditions.push(`tenant_id = $${n++}`);
-        params.push(query.tenantId);
+        params.push(query.requestTenantId);
       }
       if (query.after) {
         conditions.push(`created_at >= $${n++}`);
@@ -131,7 +131,7 @@ export function createPostgresAuditLogProvider(pool: PgPool, ttlDays?: number): 
         id: row['id'] as string,
         userId: (row['user_id'] as string | null) ?? null,
         sessionId: (row['session_id'] as string | null) ?? null,
-        tenantId: (row['tenant_id'] as string | null) ?? null,
+        requestTenantId: (row['tenant_id'] as string | null) ?? null,
         method: row['method'] as string,
         path: row['path'] as string,
         status: row['status'] as number,

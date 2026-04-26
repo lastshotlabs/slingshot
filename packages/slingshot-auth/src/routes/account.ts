@@ -11,7 +11,7 @@ import { SuccessResponse } from '@auth/schemas/success';
 import * as AuthService from '@auth/services/auth';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { createRoute, errorResponse, withSecurity } from '@lastshotlabs/slingshot-core';
+import { createRoute, errorResponse, getRequestTenantId, withSecurity } from '@lastshotlabs/slingshot-core';
 import {
   COOKIE_REFRESH_TOKEN,
   COOKIE_TOKEN,
@@ -463,7 +463,7 @@ export const createAccountRouter = (
               cancelToken,
               gracePeriodSeconds: accountDeletion.gracePeriod ?? 0,
             },
-            { userId: userId, actorId: userId },
+            { userId: userId, actorId: userId, requestTenantId: getRequestTenantId(c) },
           );
           const user = adapter.getUser ? await adapter.getUser(userId) : null;
           const email = user?.email ?? '';
@@ -486,6 +486,7 @@ export const createAccountRouter = (
             {
               userId: userId,
               actorId: userId,
+              requestTenantId: getRequestTenantId(c),
             },
           );
         }

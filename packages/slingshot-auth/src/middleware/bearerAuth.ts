@@ -8,12 +8,13 @@ import type { BearerAuthClient, BearerAuthConfig } from '../config/authConfig';
  *
  * Supports three forms of bearer auth:
  * - **Static secret** (`string`): a single shared token. All callers must present this exact
- *   token. No `clientId` is set on the context.
+ *   token. No actor identity is published.
  * - **Rotating secrets** (`string[]`): multiple valid tokens, any of which grants access
- *   (useful for secret rotation — deploy new + old simultaneously). No `clientId` is set.
+ *   (useful for secret rotation — deploy new + old simultaneously). No actor identity is published.
  * - **Named clients** (`BearerAuthClient[]`): each entry has a `clientId`, `token`, and
- *   optional `revoked` flag. On match, `bearerClientId` is set on the Hono context so
- *   downstream handlers can identify the caller. Revoked entries are skipped entirely.
+ *   optional `revoked` flag. On match, an `'api-key'` `Actor` carrying `clientId` as its
+ *   `id` is published on the Hono context — downstream handlers read it via
+ *   `getActor(c)`. Revoked entries are skipped entirely.
  *
  * All token comparisons use `timingSafeEqual` to prevent timing-oracle attacks.
  * Config is required — there is no `process.env` or fallback resolution.

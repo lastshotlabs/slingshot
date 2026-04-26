@@ -563,6 +563,17 @@ function toPrincipal(subscriber: WebhookSubscriber): EventSubscriptionPrincipal 
   };
 }
 
+/**
+ * Webhook subscriber tenant gate.
+ *
+ * Subscribers scoped to a tenant only receive deliveries whose event scope
+ * matches that tenant. This compares against `EventScope.tenantId` — the
+ * delivery/projection scope produced by the event's `resolveScope`, which is
+ * intentionally distinct from `EventEnvelopeMeta.requestTenantId` (the
+ * request-tenant captured at publish time). Subscriber filtering is an
+ * authorization concern (which tenants may receive this event), not a
+ * provenance concern (which tenant the originating request belonged to).
+ */
 function tenantCompatible(subscriber: WebhookSubscriber, scope: EventScope | null): boolean {
   if (subscriber.tenantId === undefined || subscriber.tenantId === null) {
     return true;

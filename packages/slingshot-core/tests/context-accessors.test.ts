@@ -5,6 +5,7 @@ import { getCacheAdapter, getCacheAdapterOrNull } from '../src/cache';
 import { resolveContext } from '../src/context/contextAccess';
 import { attachContext, getContext, getContextOrNull } from '../src/context/contextStore';
 import { createCoreRegistrar } from '../src/coreRegistrar';
+import { ANONYMOUS_ACTOR } from '../src/identity';
 import { getEmailTemplate, getEmailTemplates } from '../src/emailTemplates';
 import { getEmbedsPeer, getEmbedsPeerOrNull } from '../src/embedsPeer';
 import { getNotificationsState, getNotificationsStateOrNull } from '../src/notificationsPeer';
@@ -68,8 +69,8 @@ describe('slingshot-core context accessors', () => {
       bearerAuth: createMiddleware(),
     };
     const actorResolver = {
-      async resolveActorId(): Promise<string | null> {
-        return 'user-1';
+      async resolveActor() {
+        return { ...ANONYMOUS_ACTOR, id: 'user-1', kind: 'user' as const };
       },
     };
     const rateLimitAdapter = {
@@ -349,8 +350,8 @@ describe('slingshot-core context accessors', () => {
       bearerAuth: createMiddleware(),
     };
     const actorResolver = {
-      async resolveActorId(): Promise<string | null> {
-        return 'user-42';
+      async resolveActor() {
+        return { ...ANONYMOUS_ACTOR, id: 'user-42', kind: 'user' as const };
       },
     };
     const rateLimitAdapter = {
@@ -392,9 +393,9 @@ describe('slingshot-core context accessors', () => {
     expect(getEmailTemplate(ctx as never, 'password-reset')).toEqual(template);
     expect(getEmailTemplate(ctx as never, 'missing')).toBeNull();
 
-    await expect(actorResolver.resolveActorId(new Request('http://example.com'))).resolves.toBe(
-      'user-42',
-    );
+    await expect(
+      actorResolver.resolveActor(new Request('http://example.com')),
+    ).resolves.toMatchObject({ id: 'user-42' });
     await expect(
       rateLimitAdapter.trackAttempt('login:127.0.0.1', { windowMs: 1000, max: 1 }),
     ).resolves.toBe(true);

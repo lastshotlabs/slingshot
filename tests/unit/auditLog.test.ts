@@ -17,7 +17,7 @@ function makeEntry(overrides?: Partial<AuditLogEntry>): AuditLogEntry {
     id: crypto.randomUUID(),
     userId: null,
     sessionId: null,
-    tenantId: null,
+    requestTenantId: null,
     method: 'GET',
     path: '/test',
     status: 200,
@@ -59,14 +59,14 @@ describe('auditLog — memory store', () => {
     expect(items[0].userId).toBe('alice');
   });
 
-  test('filter by tenantId', async () => {
-    await provider.logEntry(makeEntry({ tenantId: 't1' }));
-    await provider.logEntry(makeEntry({ tenantId: 't2' }));
-    await provider.logEntry(makeEntry({ tenantId: 't1' }));
+  test('filter by requestTenantId', async () => {
+    await provider.logEntry(makeEntry({ requestTenantId: 't1' }));
+    await provider.logEntry(makeEntry({ requestTenantId: 't2' }));
+    await provider.logEntry(makeEntry({ requestTenantId: 't1' }));
 
-    const { items } = await provider.getLogs({ tenantId: 't1' });
+    const { items } = await provider.getLogs({ requestTenantId: 't1' });
     expect(items.length).toBe(2);
-    expect(items.every(e => e.tenantId === 't1')).toBe(true);
+    expect(items.every(e => e.requestTenantId === 't1')).toBe(true);
   });
 
   test('filter by after/before date range', async () => {
@@ -280,13 +280,13 @@ describe('auditLog — SQLite store', () => {
     db2.close();
   });
 
-  test('filter by tenantId (lines 94-95)', async () => {
-    await provider.logEntry(makeEntry({ tenantId: 'tenant-a' }));
-    await provider.logEntry(makeEntry({ tenantId: 'tenant-b' }));
+  test('filter by requestTenantId (lines 94-95)', async () => {
+    await provider.logEntry(makeEntry({ requestTenantId: 'tenant-a' }));
+    await provider.logEntry(makeEntry({ requestTenantId: 'tenant-b' }));
 
-    const { items } = await provider.getLogs({ tenantId: 'tenant-a' });
+    const { items } = await provider.getLogs({ requestTenantId: 'tenant-a' });
     expect(items.length).toBe(1);
-    expect(items[0].tenantId).toBe('tenant-a');
+    expect(items[0].requestTenantId).toBe('tenant-a');
   });
 
   test('filter by after date (lines 98-99)', async () => {
@@ -464,7 +464,7 @@ describe('getAuditLogModel', () => {
       const model1 = getAuditLogModel(mockConn as any);
       expect(model1).toBe(mockModel);
       expect(mockConn.model).toHaveBeenCalledTimes(1);
-      expect(mockSchema.index).toHaveBeenCalledTimes(3); // userId, tenantId, path indexes
+      expect(mockSchema.index).toHaveBeenCalledTimes(3); // userId, requestTenantId, path indexes
 
       // Second call: returns cached model
       const model2 = getAuditLogModel(mockConn as any);

@@ -18,7 +18,7 @@ function makeEntry(overrides: Partial<AuditLogEntry> = {}): AuditLogEntry {
     requestId: undefined,
     userId: null,
     sessionId: null,
-    tenantId: null,
+    requestTenantId: null,
     method: 'POST',
     path: '/api/test',
     status: 200,
@@ -90,7 +90,7 @@ describe('createPostgresAuditLogProvider', () => {
       id: 'entry-id-1',
       userId: 'user-1',
       sessionId: 'sess-1',
-      tenantId: 'tenant-1',
+      requestTenantId: 'tenant-1',
       method: 'GET',
       path: '/api/items',
       status: 200,
@@ -203,11 +203,11 @@ describe('createPostgresAuditLogProvider', () => {
     expect(selectQuery?.params).toContain('alice');
   });
 
-  test('getLogs filters by tenantId', async () => {
+  test('getLogs filters by requestTenantId', async () => {
     const pool = makeMockPool([]);
     const provider = createPostgresAuditLogProvider(pool);
 
-    await provider.getLogs({ tenantId: 't1' });
+    await provider.getLogs({ requestTenantId: 't1' });
 
     const selectQuery = pool.queries.find(q => q.sql.includes('SELECT *'));
     expect(selectQuery?.sql).toContain('tenant_id');
@@ -474,6 +474,7 @@ describe('createMongoAuditLogProvider', () => {
         id: 'doc-1',
         userId: 'u1',
         sessionId: 'sess-1',
+        // Mongo doc field name is `tenantId` (storage); the public TS contract maps it to `requestTenantId`.
         tenantId: 'tenant-1',
         method: 'POST',
         path: '/api/create',
@@ -495,7 +496,7 @@ describe('createMongoAuditLogProvider', () => {
     expect(items[0].id).toBe('doc-1');
     expect(items[0].userId).toBe('u1');
     expect(items[0].sessionId).toBe('sess-1');
-    expect(items[0].tenantId).toBe('tenant-1');
+    expect(items[0].requestTenantId).toBe('tenant-1');
     expect(items[0].method).toBe('POST');
     expect(items[0].path).toBe('/api/create');
     expect(items[0].status).toBe(201);
@@ -528,7 +529,7 @@ describe('createMongoAuditLogProvider', () => {
     expect((capturedFilter as any).userId).toBe('alice');
   });
 
-  test('getLogs filters by tenantId', async () => {
+  test('getLogs filters by requestTenantId', async () => {
     let capturedFilter: object = {};
     const { provider } = await makeRealMongoProvider({
       captureFilter: f => {
@@ -536,7 +537,8 @@ describe('createMongoAuditLogProvider', () => {
       },
     });
 
-    await provider.getLogs({ tenantId: 't1' });
+    // Public contract uses requestTenantId; the mongo provider maps it to the doc field `tenantId`.
+    await provider.getLogs({ requestTenantId: 't1' });
     expect((capturedFilter as any).tenantId).toBe('t1');
   });
 
@@ -712,7 +714,7 @@ describe('createMongoAuditLogProvider', () => {
 
     expect(items[0].userId).toBeNull();
     expect(items[0].sessionId).toBeNull();
-    expect(items[0].tenantId).toBeNull();
+    expect(items[0].requestTenantId).toBeNull();
     expect(items[0].ip).toBeNull();
     expect(items[0].userAgent).toBeNull();
     expect(items[0].action).toBeUndefined();

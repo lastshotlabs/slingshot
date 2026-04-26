@@ -1,7 +1,7 @@
 import { SpanStatusCode, context, propagation } from '@opentelemetry/api';
 import type { Span, Tracer } from '@opentelemetry/api';
 import type { MiddlewareHandler } from 'hono';
-import { getActor } from '@lastshotlabs/slingshot-core';
+import { getActor, getRequestTenantId } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -68,7 +68,8 @@ export function otelRequestMiddleware(
 
           const actor = getActor(c);
           if (actor.id) span.setAttribute('slingshot.user_id', actor.id);
-          if (actor.tenantId) span.setAttribute('slingshot.tenant_id', actor.tenantId);
+          const requestTenantId = getRequestTenantId(c);
+          if (requestTenantId) span.setAttribute('slingshot.request_tenant_id', requestTenantId);
 
           if (status >= 500) {
             span.setStatus({ code: SpanStatusCode.ERROR });

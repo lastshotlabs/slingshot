@@ -11,8 +11,11 @@ export interface AuditLogEntry {
   userId: string | null;
   /** Session ID, or `null` for M2M/unauthenticated requests. */
   sessionId: string | null;
-  /** Tenant ID scope, or `null` for global or unauthenticated requests. */
-  tenantId: string | null;
+  /**
+   * Request-scoped tenant captured by tenant middleware (pre-auth). Distinct
+   * from the actor's identity-bound tenant. `null` for global or untenanted requests.
+   */
+  requestTenantId: string | null;
   /** HTTP method (e.g. `'POST'`). */
   method: string;
   /** Request path (e.g. `'/api/users/usr_123'`). */
@@ -80,8 +83,8 @@ export interface AuditLogEntry {
 export interface AuditLogQuery {
   /** Filter by user ID. */
   userId?: string;
-  /** Filter by tenant ID. */
-  tenantId?: string;
+  /** Filter by request-scoped tenant ID. */
+  requestTenantId?: string;
   /** Filter by request path (exact match). */
   path?: string;
   /** Filter by HTTP method. */

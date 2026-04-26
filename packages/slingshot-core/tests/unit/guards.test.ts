@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { AUTH_PLUGIN_STATE_KEY } from '../../src/authPeer';
 import { requireBearer, requireUserAuth } from '../../src/guards';
 import { HandlerError, type HandlerMeta } from '../../src/handler';
-import { ANONYMOUS_ACTOR, type Actor } from '../../src/identity';
+import { ANONYMOUS_ACTOR, type Actor, createDefaultIdentityResolver } from '../../src/identity';
 
 function createContextFixture() {
   return {
@@ -42,7 +42,8 @@ function createContextFixture() {
     },
     adapters: {},
     routeAuth: null,
-    userResolver: null,
+    actorResolver: null,
+    identityResolver: createDefaultIdentityResolver(),
     rateLimitAdapter: {
       async trackAttempt() {
         return false;

@@ -1,9 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { attachContext } from '../../src/context/contextStore';
+import { ANONYMOUS_ACTOR, type Actor } from '../../src/identity';
 import {
   getRequestActorResolver,
   getRequestActorResolverOrNull,
 } from '../../src/requestActorResolver';
+
+const userActor = (id: string): Actor => ({
+  ...ANONYMOUS_ACTOR,
+  id,
+  kind: 'user',
+});
 
 /**
  * Create a minimal branded SlingshotContext-like object with just the fields
@@ -11,23 +18,19 @@ import {
  * then pass the context directly to the resolver helpers.
  */
 function createBrandedContext(
-  actorResolver: { resolveActorId(req: Request): Promise<string | null> } | null,
+  actorResolver: { resolveActor(req: Request): Promise<Actor> } | null,
 ) {
-  // Build a minimal context object that satisfies the shape resolveContext checks.
   const ctxData = { actorResolver };
   const ctx = ctxData as unknown as Record<string, unknown>;
-  // We need a carrier (app) to brand the context through attachContext.
   const app = {};
   attachContext(app, ctx as never);
-  // After attachContext, ctx now carries the brand symbol and can be recognized
-  // by isContextObject, so resolveContext(ctx) will return ctx directly.
   return ctx;
 }
 
 describe('getRequestActorResolver', () => {
   test('returns the resolver when one is registered', () => {
     const fakeResolver = {
-      resolveActorId: async () => 'user-123',
+      resolveActor: async () => userActor('user-123'),
     };
     const ctx = createBrandedContext(fakeResolver);
     const result = getRequestActorResolver(ctx);
@@ -41,21 +44,22 @@ describe('getRequestActorResolver', () => {
     );
   });
 
-  test('resolves user from the returned resolver', async () => {
+  test('resolves actor from the returned resolver', async () => {
     const fakeResolver = {
-      resolveActorId: async () => 'user-456',
+      resolveActor: async () => userActor('user-456'),
     };
     const ctx = createBrandedContext(fakeResolver);
     const resolver = getRequestActorResolver(ctx);
-    const userId = await resolver.resolveActorId(new Request('http://localhost/'));
-    expect(userId).toBe('user-456');
+    const actor = await resolver.resolveActor(new Request('http://localhost/'));
+    expect(actor.id).toBe('user-456');
+    expect(actor.kind).toBe('user');
   });
 });
 
 describe('getRequestActorResolverOrNull', () => {
   test('returns the resolver when one is registered', () => {
     const fakeResolver = {
-      resolveActorId: async () => 'user-789',
+      resolveActor: async () => userActor('user-789'),
     };
     const ctx = createBrandedContext(fakeResolver);
     const result = getRequestActorResolverOrNull(ctx);
@@ -72,13 +76,12 @@ describe('getRequestActorResolverOrNull', () => {
 describe('getRequestActorResolver with app carrier', () => {
   test('resolves from an app object that has a context attached', () => {
     const fakeResolver = {
-      resolveActorId: async () => 'user-app',
+      resolveActor: async () => userActor('user-app'),
     };
     const ctxData = { actorResolver: fakeResolver };
     const ctx = ctxData as unknown as Record<string, unknown>;
     const app = {};
     attachContext(app, ctx as never);
-    // Pass the app (not the context) — resolveContext will call getContext(app)
     const result = getRequestActorResolver(app);
     expect(result).toBe(fakeResolver);
   });

@@ -12,7 +12,8 @@ That means route handlers and config-driven bindings should treat `actor` as can
 - `actor.kind`
 - `actor.claims.*`
 
-Legacy aliases like `authUserId` and `tenantId` still exist for compatibility in some bindings, but they are not the documented authoring model.
+Use `actor.id` for identity, `actor.tenantId` for actor-owned tenant scope, and
+`ctx:tenantId` for request-tenant bindings. That is the documented authoring model.
 
 ## Entity route auth
 

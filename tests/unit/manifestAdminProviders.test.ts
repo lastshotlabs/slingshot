@@ -511,7 +511,7 @@ describe('createInMemoryAuditLog', () => {
     expect(result.items.every(e => e.userId === 'u1')).toBe(true);
   });
 
-  it('filters by tenantId', async () => {
+  it('filters by requestTenantId', async () => {
     const log = createInMemoryAuditLog();
 
     const t1EntryData = {
@@ -519,7 +519,7 @@ describe('createInMemoryAuditLog', () => {
       action: 'a',
       path: '/a',
       method: 'GET',
-      tenantId: 't1',
+      requestTenantId: 't1',
     };
     const t1Entry = t1EntryData as unknown as never;
     const t2EntryData = {
@@ -527,15 +527,15 @@ describe('createInMemoryAuditLog', () => {
       action: 'b',
       path: '/b',
       method: 'GET',
-      tenantId: 't2',
+      requestTenantId: 't2',
     };
     const t2Entry = t2EntryData as unknown as never;
     await log.logEntry(t1Entry);
     await log.logEntry(t2Entry);
 
-    const result = await log.getLogs({ tenantId: 't1' });
+    const result = await log.getLogs({ requestTenantId: 't1' });
     expect(result.items).toHaveLength(1);
-    expect(result.items[0].tenantId).toBe('t1');
+    expect(result.items[0].requestTenantId).toBe('t1');
   });
 
   it('paginates with cursor', async () => {

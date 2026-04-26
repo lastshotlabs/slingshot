@@ -49,7 +49,7 @@ void plugin;
 If your plugin provides user lookup (for WebSocket auth, admin, etc.), publish it during `setupPost` via `config.registrar`:
 
 ```typescript
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { ANONYMOUS_ACTOR, type Actor, type SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 
 const adapter = {
   async verifyToken(token: string): Promise<{ id: string } | null> {
@@ -61,11 +61,12 @@ const plugin: SlingshotPlugin = {
   name: 'example',
   setupPost({ config }) {
     config.registrar.setRequestActorResolver({
-      async resolveActorId(req: Request): Promise<string | null> {
+      async resolveActor(req: Request): Promise<Actor> {
         const token = req.headers.get('authorization')?.replace('Bearer ', '');
-        if (!token) return null;
+        if (!token) return ANONYMOUS_ACTOR;
         const user = await adapter.verifyToken(token);
-        return user?.id ?? null;
+        if (!user) return ANONYMOUS_ACTOR;
+        return { ...ANONYMOUS_ACTOR, id: user.id, kind: 'user' };
       },
     });
   },

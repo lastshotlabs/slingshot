@@ -1,19 +1,29 @@
 import type { EventKey } from './eventDefinition';
+import type { Actor } from './identity';
 
 /**
  * Data attached to each active SSE connection.
  *
  * The generic parameter `T` allows endpoint-specific metadata to be added at
- * upgrade time (e.g., tenant scope, subscription filters). The base fields
- * (`id`, `actorId`, `endpoint`) are always present.
+ * upgrade time (e.g., subscription filters). The base fields (`id`, `actor`,
+ * `requestTenantId`, `endpoint`) are always present.
  *
  * @template T - Additional per-connection metadata attached during upgrade.
  */
 export type SseClientData<T extends object = object> = {
   /** Unique connection identifier (nanoid). */
   id: string;
-  /** Authenticated actor ID, or `null` for unauthenticated connections. */
-  actorId: string | null;
+  /**
+   * Authenticated `Actor` for this connection. Resolves to `ANONYMOUS_ACTOR`
+   * (`{ id: null, kind: 'anonymous', ... }`) for unauthenticated connections.
+   */
+  actor: Actor;
+  /**
+   * Request-scoped tenant identifier captured at upgrade time, or `null` when
+   * no tenant context applies. Distinct from `actor.tenantId` (identity-bound
+   * tenant scope).
+   */
+  requestTenantId: string | null;
   /** The SSE endpoint name this connection belongs to. */
   endpoint: string;
 } & T;
@@ -51,7 +61,7 @@ export type SseFilter<T extends object = object> = (
  *   events: ['community:notification.created'],
  *   heartbeat: 30_000,
  *   filter: (client, _event, payload) => {
- *     return (payload as any).userId === client.actorId;
+ *     return (payload as any).userId === client.actor.id;
  *   },
  * };
  * ```
@@ -62,8 +72,8 @@ export interface SseEndpointConfig<T extends object = object> {
   /**
    * Auth hook called when a client opens an SSE connection.
    * Return `SseClientData<T>` to accept the connection; return a `Response` to reject.
-   * When omitted, the framework resolves `actorId` from the session cookie/token
-   * (permissive — `actorId: null` on auth failure, connection still accepted).
+   * When omitted, the framework resolves `actor` from the session cookie/token
+   * (permissive — anonymous on auth failure, connection still accepted).
    */
   upgrade?: (req: Request) => Promise<SseClientData<T> | Response>;
   /**

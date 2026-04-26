@@ -23,8 +23,8 @@ import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 // 1. Event bus — listener error isolation
 // ---------------------------------------------------------------------------
 
-import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
-import type { WsState } from '@lastshotlabs/slingshot-core';
+import { ANONYMOUS_ACTOR, createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import type { Actor, WsState } from '@lastshotlabs/slingshot-core';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------
 // 5. Plugin setupMiddleware throwing halts startup
@@ -125,8 +125,8 @@ describe('SSE registry — failure modes', () => {
     const registry = createSseRegistry();
 
     // Connect two clients
-    const clientA: SseClientData<object> = { id: 'a', actorId: 'u1', endpoint: '/feed' };
-    const clientB: SseClientData<object> = { id: 'b', actorId: 'u2', endpoint: '/feed' };
+    const clientA: SseClientData<object> = { id: 'a', actor: { ...ANONYMOUS_ACTOR, id: 'u1', kind: 'user' as const } satisfies Actor, requestTenantId: null, endpoint: '/feed' };
+    const clientB: SseClientData<object> = { id: 'b', actor: { ...ANONYMOUS_ACTOR, id: 'u2', kind: 'user' as const } satisfies Actor, requestTenantId: null, endpoint: '/feed' };
 
     const streamA = registry.createClientStream('/feed', clientA, false);
     const streamB = registry.createClientStream('/feed', clientB, false);
@@ -157,8 +157,8 @@ describe('SSE registry — failure modes', () => {
     const consoleSpy = spyOn(console, 'error').mockImplementation(() => {});
     const registry = createSseRegistry();
 
-    const clientA: SseClientData<object> = { id: 'a', actorId: 'u1', endpoint: '/feed' };
-    const clientB: SseClientData<object> = { id: 'b', actorId: 'u2', endpoint: '/feed' };
+    const clientA: SseClientData<object> = { id: 'a', actor: { ...ANONYMOUS_ACTOR, id: 'u1', kind: 'user' as const } satisfies Actor, requestTenantId: null, endpoint: '/feed' };
+    const clientB: SseClientData<object> = { id: 'b', actor: { ...ANONYMOUS_ACTOR, id: 'u2', kind: 'user' as const } satisfies Actor, requestTenantId: null, endpoint: '/feed' };
 
     const streamA = registry.createClientStream('/feed', clientA, false);
     const streamB = registry.createClientStream('/feed', clientB, false);
@@ -201,7 +201,7 @@ describe('SSE registry — failure modes', () => {
 
   test('closeAll is idempotent — double close does not throw', () => {
     const registry = createSseRegistry();
-    const client: SseClientData<object> = { id: 'x', actorId: null, endpoint: '/feed' };
+    const client: SseClientData<object> = { id: 'x', actor: ANONYMOUS_ACTOR, requestTenantId: null, endpoint: '/feed' };
     registry.createClientStream('/feed', client, false);
 
     expect(() => {
@@ -212,7 +212,7 @@ describe('SSE registry — failure modes', () => {
 
   test('fanout after closeAll is a no-op', () => {
     const registry = createSseRegistry();
-    const client: SseClientData<object> = { id: 'x', actorId: null, endpoint: '/feed' };
+    const client: SseClientData<object> = { id: 'x', actor: ANONYMOUS_ACTOR, requestTenantId: null, endpoint: '/feed' };
     registry.createClientStream('/feed', client, false);
     registry.closeAll();
 

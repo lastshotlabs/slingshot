@@ -19,6 +19,7 @@ import {
   defineEvent,
   getActor,
   getContextOrNull,
+  getRequestTenantId,
   getPermissionsStateOrNull,
   getSlingshotCtx,
   hmacSign,
@@ -453,7 +454,7 @@ function registerPackageRouteEvents(
             return buildRouteEventScope(
               event,
               payload as Record<string, unknown>,
-              publishContext as Record<string, unknown>,
+              publishContext as unknown as Record<string, unknown>,
             );
           },
         }),
@@ -561,13 +562,14 @@ function buildScopedIdempotencyKey(
     signingConfig?.idempotencyKeys && signingSecret ? hmacSign(rawKey, signingSecret) : rawKey;
   const actor = getActor(c);
 
+  const requestTenantId = getRequestTenantId(c);
   const parts = ['package-idempotency', routeKey];
   switch (config.scope) {
     case 'global':
       parts.push('global');
       break;
     case 'tenant':
-      parts.push(`tenant:${actor.tenantId ?? 'none'}`);
+      parts.push(`tenant:${requestTenantId ?? 'none'}`);
       break;
     case 'user':
       if (!actor.id) {
@@ -575,7 +577,7 @@ function buildScopedIdempotencyKey(
           `Package route idempotency for '${routeKey}' requires actor.id when scope is 'user'`,
         );
       }
-      if (actor.tenantId) parts.push(`tenant:${actor.tenantId}`);
+      parts.push(`tenant:${requestTenantId ?? 'none'}`);
       parts.push(`user:${actor.id}`);
       break;
   }
@@ -668,10 +670,11 @@ function emitRouteEvent(
     Object.assign(payload, result);
   }
   const actor = getActor(c);
+  const requestTenantId = getRequestTenantId(c);
   for (const includeField of normalized.include ?? []) {
     switch (includeField) {
       case 'tenantId':
-        payload.tenantId = actor.tenantId;
+        payload.tenantId = requestTenantId;
         break;
       case 'actorId':
         payload.actorId = actor.id;
@@ -686,9 +689,9 @@ function emitRouteEvent(
   }
   const actorId = actor.kind === 'anonymous' ? undefined : actor.id;
   events.publish(normalized.key as never, payload as never, {
-    tenantId: actor.tenantId ?? null,
     userId: actor.kind === 'user' ? actor.id : undefined,
     actorId,
+    requestTenantId,
     requestId: c.get('requestId' as never) as string | undefined,
     correlationId: c.get('requestId' as never) as string | undefined,
     source: 'http',

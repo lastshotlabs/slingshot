@@ -9,7 +9,7 @@ import * as AuthService from '@auth/services/auth';
 import { emitLoginSuccess, runPreLoginHook } from '@auth/services/auth';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { createRoute, errorResponse } from '@lastshotlabs/slingshot-core';
+import { createRoute, errorResponse, getRequestTenantId } from '@lastshotlabs/slingshot-core';
 import {
   COOKIE_REFRESH_TOKEN,
   COOKIE_TOKEN,
@@ -373,7 +373,7 @@ export const createRegisterRouter = (
           runtime.events,
           'auth:email.verified',
           { userId: entry.userId, email: entry.email },
-          { userId: entry.userId, actorId: entry.userId },
+          { userId: entry.userId, actorId: entry.userId, requestTenantId: getRequestTenantId(c) },
         );
         const { getSuspended } = await import('@auth/lib/suspension');
         const suspensionStatus = await getSuspended(adapter, entry.userId);

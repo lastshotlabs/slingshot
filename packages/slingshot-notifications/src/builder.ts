@@ -94,10 +94,12 @@ export function createNotificationBuilder(
               changes: { count: nextCount },
             },
             {
-              tenantId: input.tenantId ?? null,
               userId: input.userId,
               actorId: input.actorId ?? input.userId,
               source: 'system',
+              // System-source emit (called from notify() helper, not an HTTP route).
+              // Notification's own tenantId is on the payload + scope, not here.
+              requestTenantId: null,
             },
           );
         }
@@ -134,10 +136,12 @@ export function createNotificationBuilder(
         preferences,
       };
       options.events.publish('notifications:notification.created', payload, {
-        tenantId: notification.tenantId ?? null,
         userId: notification.userId,
         actorId: notification.actorId ?? notification.userId,
         source: 'system',
+        // System-source emit (called from notify() helper, not an HTTP route).
+        // Notification's own tenantId is on the payload + scope, not here.
+        requestTenantId: null,
       });
     }
 

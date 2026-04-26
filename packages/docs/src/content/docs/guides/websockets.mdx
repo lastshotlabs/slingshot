@@ -54,7 +54,7 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
     }
 
     export async function wsOpen(ws: ServerWebSocket<{ actorId: string }>) {
-      console.log('Connected:', ws.data.actorId);
+      console.log('Connected:', ws.data.actor.id);
     }
 
     export async function wsMessage(ws: ServerWebSocket<{ actorId: string }>, message: string | Buffer) {
@@ -63,7 +63,7 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
     }
 
     export async function wsClose(ws: ServerWebSocket<{ actorId: string }>) {
-      console.log('Disconnected:', ws.data.actorId);
+      console.log('Disconnected:', ws.data.actor.id);
     }
     ```
 
@@ -86,13 +86,13 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
             },
             on: {
               open: (ws) => {
-                console.log('Connected:', ws.data.actorId);
+                console.log('Connected:', ws.data.actor.id);
               },
               message: (ws, message) => {
                 ws.send(message);
               },
               close: (ws) => {
-                console.log('Disconnected:', ws.data.actorId);
+                console.log('Disconnected:', ws.data.actor.id);
               },
             },
           },
@@ -118,7 +118,7 @@ export async function wsOpen(ws: ServerWebSocket<{ actorId: string; roomId: stri
     ws.data.roomId,
     JSON.stringify({
       type: 'joined',
-      userId: ws.data.actorId,
+      userId: ws.data.actor.id,
     }),
   );
 }
@@ -134,7 +134,7 @@ export async function wsMessage(
     ws.data.roomId,
     JSON.stringify({
       type: 'message',
-      userId: ws.data.actorId,
+      userId: ws.data.actor.id,
       text: data.text,
     }),
   );
@@ -146,7 +146,7 @@ export async function wsClose(ws: ServerWebSocket<{ actorId: string; roomId: str
     ws.data.roomId,
     JSON.stringify({
       type: 'left',
-      userId: ws.data.actorId,
+      userId: ws.data.actor.id,
     }),
   );
 }
@@ -202,7 +202,7 @@ export async function wsRoomSubscribe(
 ): Promise<boolean> {
   // Return true to allow, false to deny
   const [resourceType, resourceId] = room.split(':');
-  return checkPermission(ws.data.actorId, 'read', resourceType, resourceId);
+  return checkPermission(ws.data.actor.id, 'read', resourceType, resourceId);
 }
 ```
 

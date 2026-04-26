@@ -157,7 +157,7 @@ tenantResolver: async c => {
 
 ```typescript
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { createRouter } from '@lastshotlabs/slingshot-core';
+import { createRouter, getRequestTenantId } from '@lastshotlabs/slingshot-core';
 
 const router = createRouter();
 

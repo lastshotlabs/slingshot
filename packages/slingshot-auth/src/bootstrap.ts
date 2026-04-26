@@ -610,7 +610,12 @@ export async function bootstrapAuth(
 
         if (workerAdapter.deleteUser) await workerAdapter.deleteUser(userId);
         bus.emit('security.auth.account.deleted', { userId });
-        events.publish('auth:user.deleted', { userId }, { userId, actorId: userId, source: 'job' });
+        events.publish(
+          'auth:user.deleted',
+          { userId },
+          // Background queue worker — no originating HTTP request, set explicitly.
+          { userId, actorId: userId, source: 'job', requestTenantId: null },
+        );
 
         if (deletionConfig.onAfterDelete) await deletionConfig.onAfterDelete(userId);
         const postDeleteHook = authHooks?.postDeleteAccount;

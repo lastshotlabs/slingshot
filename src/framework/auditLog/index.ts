@@ -37,8 +37,8 @@ export interface AuditLogOptions {
 export interface AuditLogQuery {
   /** Filter entries by acting user ID. */
   userId?: string;
-  /** Filter entries by tenant ID. */
-  tenantId?: string;
+  /** Filter entries by request-scoped tenant ID. */
+  requestTenantId?: string;
   /** Return entries after this date. */
   after?: Date | string;
   /** Return entries before this date. */

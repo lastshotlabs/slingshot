@@ -597,14 +597,18 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         if (endpointMap) {
           const ep = (endpointMap[config.ws.wsEndpoint] ??= {});
           ep.onRoomSubscribe = innerPlugin.buildSubscribeGuard({
-            getIdentity: (ws: unknown) => {
-              const data = (ws as { data?: { userId?: string } }).data;
-              return data?.userId ? { userId: data.userId } : null;
+            getActor: (ws: unknown) => {
+              const data = (ws as { data?: { actor?: import('@lastshotlabs/slingshot-core').Actor } }).data;
+              return data?.actor ?? null;
             },
-            checkPermission: (userId, requires, scope) => {
-              if (!permissionsRef) return Promise.resolve(false);
+            checkPermission: (actor, requires, scope) => {
+              if (!permissionsRef || !actor.id) return Promise.resolve(false);
               return permissionsRef.evaluator.can(
-                { subjectId: userId, subjectType: 'user' },
+                {
+                  subjectId: actor.id,
+                  subjectType:
+                    actor.kind === 'service-account' ? 'service-account' : 'user',
+                },
                 requires,
                 scope,
               );

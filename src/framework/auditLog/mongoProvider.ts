@@ -12,8 +12,10 @@ export function createMongoAuditLogProvider(conn: Connection, ttlDays?: number):
       try {
         const expiresAt =
           ttlDays !== undefined ? new Date(Date.now() + ttlDays * 86_400_000) : undefined;
+        const { requestTenantId, ...rest } = entry;
         await AuditLog.create({
-          ...entry,
+          ...rest,
+          tenantId: requestTenantId,
           createdAt: new Date(entry.createdAt),
           ...(expiresAt !== undefined ? { expiresAt } : {}),
         });
@@ -29,7 +31,7 @@ export function createMongoAuditLogProvider(conn: Connection, ttlDays?: number):
       const filter: Record<string, unknown> = {};
 
       if (query.userId !== undefined) filter.userId = query.userId;
-      if (query.tenantId !== undefined) filter.tenantId = query.tenantId;
+      if (query.requestTenantId !== undefined) filter.tenantId = query.requestTenantId;
 
       // Build date constraints as independent $and clauses so before and cursor
       // can coexist without one silently overwriting the other.
@@ -58,7 +60,7 @@ export function createMongoAuditLogProvider(conn: Connection, ttlDays?: number):
           id: doc.id as string,
           userId: (doc.userId as string | null) ?? null,
           sessionId: (doc.sessionId as string | null) ?? null,
-          tenantId: (doc.tenantId as string | null) ?? null,
+          requestTenantId: (doc.tenantId as string | null) ?? null,
           method: doc.method as string,
           path: doc.path as string,
           status: doc.status as number,

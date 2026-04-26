@@ -942,3 +942,175 @@ describe('Postgres permissions adapter — clear', () => {
     expect(truncateQuery).toBeDefined();
   });
 });
+
+describe('Postgres permissions adapter — deleteAllGrantsOnResource', () => {
+  let pool: MockPool;
+  let adapter: Awaited<ReturnType<typeof makeAdapter>>;
+
+  beforeEach(async () => {
+    pool = new MockPool();
+    pool.schemaVersion = 1;
+    adapter = await makeAdapter(pool);
+  });
+
+  test('removes all grants on the specified resource across tenants', async () => {
+    await adapter.createGrant(
+      baseGrant({ subjectId: 'u1', resourceType: 'doc', resourceId: 'doc-1', tenantId: 'ta' }),
+    );
+    await adapter.createGrant(
+      baseGrant({ subjectId: 'u2', resourceType: 'doc', resourceId: 'doc-1', tenantId: 'tb' }),
+    );
+    await adapter.createGrant(
+      baseGrant({ subjectId: 'u3', resourceType: 'doc', resourceId: 'doc-2', tenantId: 'ta' }),
+    );
+    await adapter.deleteAllGrantsOnResource('doc', 'doc-1');
+    expect(await adapter.listGrantsOnResource('doc', 'doc-1')).toHaveLength(0);
+    expect(await adapter.listGrantsOnResource('doc', 'doc-2')).toHaveLength(1);
+  });
+
+  test('scopes removal to matching tenantId', async () => {
+    await adapter.createGrant(
+      baseGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: 'ta' }),
+    );
+    await adapter.createGrant(
+      baseGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: 'tb' }),
+    );
+    await adapter.deleteAllGrantsOnResource('doc', 'doc-1', 'ta');
+    const remaining = await adapter.listGrantsOnResource('doc', 'doc-1');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].tenantId).toBe('tb');
+  });
+
+  test('tenantId=null removes only global grants on that resource', async () => {
+    await adapter.createGrant(
+      baseGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: null }),
+    );
+    await adapter.createGrant(
+      baseGrant({ resourceType: 'doc', resourceId: 'doc-1', tenantId: 'ta' }),
+    );
+    await adapter.deleteAllGrantsOnResource('doc', 'doc-1', null);
+    const remaining = await adapter.listGrantsOnResource('doc', 'doc-1');
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].tenantId).toBe('ta');
+  });
+});
+
+describe('Postgres permissions adapter — createGrants (batch)', () => {
+  let pool: MockPool;
+  let adapter: Awaited<ReturnType<typeof makeAdapter>>;
+
+  beforeEach(async () => {
+    pool = new MockPool();
+    pool.schemaVersion = 1;
+    adapter = await makeAdapter(pool);
+  });
+
+  test('creates all grants and returns IDs in order', async () => {
+    const ids = await adapter.createGrants([
+      baseGrant({ subjectId: 'u-a', roles: ['admin'] }),
+      baseGrant({ subjectId: 'u-b', roles: ['reader'] }),
+    ]);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    expect(await adapter.getGrantsForSubject('u-a')).toHaveLength(1);
+    expect(await adapter.getGrantsForSubject('u-b')).toHaveLength(1);
+  });
+
+  test('empty input returns empty array', async () => {
+    const ids = await adapter.createGrants([]);
+    expect(ids).toEqual([]);
+  });
+
+  test('validates all grants before inserting — invalid input rejects without side effects', async () => {
+    await expect(
+      adapter.createGrants([
+        baseGrant({ subjectId: 'u-good' }),
+        { ...baseGrant({ subjectId: 'u-bad' }), roles: [] },
+      ]),
+    ).rejects.toThrow();
+    // Validation runs before the transaction begins — nothing inserted
+    expect(await adapter.getGrantsForSubject('u-good')).toHaveLength(0);
+  });
+
+  test('wraps inserts in a transaction — BEGIN and COMMIT are captured', async () => {
+    await adapter.createGrants([baseGrant()]);
+    const capturedAfterSeed = pool.captured.slice(
+      pool.captured.findLastIndex(q => q.sql === 'COMMIT') + 1,
+    );
+    // The transaction-scoped queries should include BEGIN, INSERT, COMMIT
+    expect(pool.captured.some(q => q.sql === 'BEGIN')).toBe(true);
+    expect(pool.captured.some(q => q.sql === 'COMMIT')).toBe(true);
+    // Exactly one INSERT was executed (single grant)
+    const inserts = pool.captured.filter(q => q.sql.startsWith('INSERT INTO permission_grants'));
+    expect(inserts.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('Postgres permissions adapter — listGrantsOnResource pagination', () => {
+  let pool: MockPool;
+  let adapter: Awaited<ReturnType<typeof makeAdapter>>;
+
+  beforeEach(async () => {
+    pool = new MockPool();
+    pool.schemaVersion = 1;
+    adapter = await makeAdapter(pool);
+  });
+
+  test('limit restricts the result count', async () => {
+    for (let i = 1; i <= 5; i++) {
+      await adapter.createGrant(
+        baseGrant({ subjectId: `user-${i}`, resourceType: 'post', resourceId: 'p1' }),
+      );
+    }
+    const page = await adapter.listGrantsOnResource('post', 'p1', undefined, 2);
+    expect(page).toHaveLength(2);
+  });
+
+  test('limit + offset returns a page window', async () => {
+    for (let i = 1; i <= 5; i++) {
+      await adapter.createGrant(
+        baseGrant({ subjectId: `user-${i}`, resourceType: 'post', resourceId: 'p1' }),
+      );
+    }
+    const page1 = await adapter.listGrantsOnResource('post', 'p1', undefined, 2, 0);
+    const page2 = await adapter.listGrantsOnResource('post', 'p1', undefined, 2, 2);
+    const page3 = await adapter.listGrantsOnResource('post', 'p1', undefined, 2, 4);
+    expect(page1).toHaveLength(2);
+    expect(page2).toHaveLength(2);
+    expect(page3).toHaveLength(1);
+    const ids = [...page1, ...page2, ...page3].map(g => g.subjectId);
+    expect(new Set(ids).size).toBe(5);
+  });
+});
+
+describe('Postgres permissions adapter — revokeGrant revokedReason', () => {
+  let pool: MockPool;
+  let adapter: Awaited<ReturnType<typeof makeAdapter>>;
+
+  beforeEach(async () => {
+    pool = new MockPool();
+    pool.schemaVersion = 1;
+    adapter = await makeAdapter(pool);
+  });
+
+  test('stores revokedReason and returns it in listGrantHistory', async () => {
+    const id = await adapter.createGrant(baseGrant());
+    await adapter.revokeGrant(id, 'admin-1', undefined, 'account suspended');
+    const history = await adapter.listGrantHistory('user-1', 'user');
+    expect(history[0].revokedReason).toBe('account suspended');
+  });
+
+  test('revokedReason is undefined when not provided', async () => {
+    const id = await adapter.createGrant(baseGrant());
+    await adapter.revokeGrant(id, 'admin-1');
+    const history = await adapter.listGrantHistory('user-1', 'user');
+    expect(history[0].revokedReason).toBeUndefined();
+  });
+
+  test('throws when revokedReason exceeds 1024 characters', async () => {
+    const id = await adapter.createGrant(baseGrant());
+    await expect(
+      adapter.revokeGrant(id, 'admin-1', undefined, 'x'.repeat(1025)),
+    ).rejects.toThrow('revokedReason exceeds maximum length of 1024');
+  });
+});

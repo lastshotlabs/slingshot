@@ -98,8 +98,9 @@ Guards, permissions, data scoping, audit, entity routes, and transport helpers a
 through the actor shape. Auth middleware (`identify`) publishes the frozen actor on the Hono context;
 downstream consumers read it via the helpers above.
 
-`RequestActorResolver` (registered via `CoreRegistrar.setRequestActorResolver()`) resolves an actor
-ID from raw HTTP requests for WS/SSE upgrade paths where full middleware hasn't run.
+`RequestActorResolver` (registered via `CoreRegistrar.setRequestActorResolver()`) resolves the
+canonical `Actor` from a raw HTTP request — used by WS/SSE upgrade paths where full middleware
+hasn't run. Unauthenticated requests resolve to `ANONYMOUS_ACTOR`, never `null`.
 
 ### Event governance
 

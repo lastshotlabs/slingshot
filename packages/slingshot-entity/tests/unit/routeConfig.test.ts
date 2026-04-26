@@ -144,7 +144,7 @@ describe('entityConfigSchema routes cross-field validation', () => {
         fields: baseFields,
         routes: {
           defaults: { auth: 'userAuth' },
-          dataScope: { field: 'authorId', from: 'ctx:authUserId' },
+          dataScope: { field: 'authorId', from: 'ctx:actor.id' },
         },
       }),
     ).not.toThrow();
@@ -156,7 +156,7 @@ describe('entityConfigSchema routes cross-field validation', () => {
         fields: baseFields,
         routes: {
           defaults: { auth: 'userAuth' },
-          dataScope: { field: 'nonExistent', from: 'ctx:authUserId' },
+          dataScope: { field: 'nonExistent', from: 'ctx:actor.id' },
         },
       }),
     ).toThrow(/routes\.dataScope\[0\]\.field.*does not exist/i);
@@ -284,9 +284,9 @@ describe('resolveDataScope helpers', () => {
   }
 
   it('normalizes single and array scopes', () => {
-    const single = normalizeDataScopes({ field: 'authorId', from: 'ctx:authUserId' });
+    const single = normalizeDataScopes({ field: 'authorId', from: 'ctx:actor.id' });
     const many = normalizeDataScopes([
-      { field: 'authorId', from: 'ctx:authUserId' },
+      { field: 'authorId', from: 'ctx:actor.id' },
       { field: 'orgId', from: 'param:orgId', applyTo: ['list'] },
     ]);
     expect(single).toHaveLength(1);
@@ -294,29 +294,39 @@ describe('resolveDataScope helpers', () => {
   });
 
   it('resolves ctx and param sources', () => {
-    const c = createContext({ authUserId: 'user-1' }, { orgId: 'org-2' });
-    expect(resolveDataScopeValue('ctx:authUserId', c)).toBe('user-1');
+    const c = createContext(
+      { actor: { id: 'user-1', kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} } },
+      { orgId: 'org-2' },
+    );
+    expect(resolveDataScopeValue('ctx:actor.id', c)).toBe('user-1');
     expect(resolveDataScopeValue('param:orgId', c)).toBe('org-2');
   });
 
-  it('preserves legacy empty-string tenant context for ctx:tenantId', () => {
+  it('preserves empty-string tenant context for ctx:tenantId', () => {
     const c = createContext({ tenantId: '' }, {});
     expect(resolveDataScopeValue('ctx:tenantId', c)).toBe('');
   });
 
   it('returns missing when a scope source is absent', () => {
     const c = createContext({}, {});
-    const result = resolveDataScopes([{ field: 'authorId', from: 'ctx:authUserId' }], 'get', c);
+    const result = resolveDataScopes(
+      [{ field: 'authorId', from: 'ctx:actor.id' }],
+      'get',
+      c,
+    );
     expect(result.status).toBe('missing');
     if (result.status === 'missing') {
-      expect(result.source).toBe('ctx:authUserId');
+      expect(result.source).toBe('ctx:actor.id');
     }
   });
 
   it('builds bindings and respects applyTo', () => {
-    const c = createContext({ authUserId: 'user-1' }, { orgId: 'org-2' });
+    const c = createContext(
+      { actor: { id: 'user-1', kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} } },
+      { orgId: 'org-2' },
+    );
     const scopes: readonly EntityRouteDataScopeConfig[] = [
-      { field: 'authorId', from: 'ctx:authUserId' },
+      { field: 'authorId', from: 'ctx:actor.id' },
       { field: 'orgId', from: 'param:orgId', applyTo: ['list', 'get'] as const },
     ];
     const list = resolveDataScopes(scopes, 'list', c);
@@ -333,7 +343,7 @@ describe('resolveDataScope helpers', () => {
 
   it('finds the first scoped field present in the body', () => {
     const scopes: readonly EntityRouteDataScopeConfig[] = [
-      { field: 'authorId', from: 'ctx:authUserId' },
+      { field: 'authorId', from: 'ctx:actor.id' },
       { field: 'orgId', from: 'param:orgId' },
     ];
     expect(findScopedFieldInBody(scopes, { authorId: 'user-2' })).toBe('authorId');

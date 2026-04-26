@@ -101,10 +101,14 @@ describe('eventPublisher', () => {
       definitions: registry,
       bus: createInProcessAdapter(),
     });
-    const envelope = publisher.publish('auth:login', {
-      userId: 'user-1',
-      sessionId: 'session-1',
-    });
+    const envelope = publisher.publish(
+      'auth:login',
+      {
+        userId: 'user-1',
+        sessionId: 'session-1',
+      },
+      { requestTenantId: null },
+    );
 
     expect(
       authorizeEventSubscriber(definition, { kind: 'user', ownerId: 'user-1' }, envelope),

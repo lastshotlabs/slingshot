@@ -4,6 +4,7 @@ import {
   type AppEnv,
   type StorageAdapter,
   attachContext,
+  createDefaultIdentityResolver,
   createRouter,
 } from '@lastshotlabs/slingshot-core';
 import { memoryStorage } from '../../src/adapters/memory';
@@ -22,7 +23,8 @@ function makeUploadRuntime(adapter: StorageAdapter | null = memoryStorage(), con
     config: {},
     upload: { adapter, config },
     routeAuth: null,
-    userResolver: null,
+    actorResolver: null,
+    identityResolver: createDefaultIdentityResolver(),
     rateLimitAdapter: null,
     fingerprintBuilder: null,
     cacheAdapters: new Map(),

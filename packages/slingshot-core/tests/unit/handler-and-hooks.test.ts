@@ -115,7 +115,7 @@ describe('handler primitives and after hooks', () => {
     expect(logEntry).toHaveBeenCalledTimes(1);
     expect(logEntry.mock.calls[0]?.[0]).toMatchObject({
       userId: 'user-1',
-      tenantId: 'tenant-1',
+      requestTenantId: 'tenant-1',
       method: 'HANDLER',
       path: 'items.create',
       status: 200,

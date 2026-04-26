@@ -81,7 +81,13 @@ export function resolveDataScopeValue(
     if (key.startsWith('actor.claims.')) {
       return resolveDotPath(actor.claims, key.slice('actor.claims.'.length));
     }
-    // Generic context variable fallthrough (e.g. ctx:tenantId → c.get('tenantId')).
+    // Request-scoped tenant from tenant middleware (set by tenant middleware before auth).
+    // Distinct from `ctx:actor.tenantId` which reads identity-bound tenant from the actor.
+    // Empty string is preserved as a sentinel for "no tenant" — only null/undefined collapses.
+    //
+    // App-set Hono context vars (e.g. feature plugins setting `c.set('inviteExpiresAt', ...)`)
+    // also fall through here. Identity-shaped keys are not recognized; use `ctx:actor.*`
+    // for identity bindings.
     const value = getContextValue(key);
     return value == null ? undefined : value;
   }

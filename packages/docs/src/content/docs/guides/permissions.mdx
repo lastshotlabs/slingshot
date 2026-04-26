@@ -359,9 +359,9 @@ ws: {
     '/ws': {
       onRoomSubscribe: async (ws, room) => {
         const allowed = await evaluator.can(
-          { subjectId: ws.data.actorId, subjectType: 'user' },
+          { subjectId: ws.data.actor.id, subjectType: 'user' },
           'room:join',
-          { tenantId: ws.data.tenantId ?? undefined, resourceType: 'room', resourceId: room },
+          { tenantId: ws.data.requestTenantId ?? undefined, resourceType: 'room', resourceId: room },
         );
         return allowed;
       },

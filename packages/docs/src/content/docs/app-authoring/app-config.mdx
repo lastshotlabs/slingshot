@@ -54,7 +54,7 @@ await createServer({
   ws: {
     endpoints: {
       '/ws': {
-        onConnect: async (ws) => { console.log('Connected:', ws.data.actorId); },
+        onConnect: async (ws) => { console.log('Connected:', ws.data.actor.id); },
         onMessage: async (ws, message) => { /* handle message */ },
         onClose: async (ws) => { console.log('Disconnected'); },
       },
@@ -252,7 +252,7 @@ await createServer({
     endpoints: {
       '/ws': {
         onConnect: async (ws) => {
-          console.log('User connected:', ws.data.actorId);
+          console.log('User connected:', ws.data.actor.id);
         },
         onMessage: async (ws, message) => {
           // Echo back

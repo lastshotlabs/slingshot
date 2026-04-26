@@ -3,7 +3,7 @@ import type { SocketData } from '@framework/ws/index';
 import type { WsMessageDefaults } from '@framework/ws/messages';
 import type { WsTransportAdapter } from '@framework/ws/transport';
 import type { Server, ServerWebSocket } from 'bun';
-import type { WsRateLimitConfig, WsRecoveryConfig } from '@lastshotlabs/slingshot-core';
+import type { Actor, WsRateLimitConfig, WsRecoveryConfig } from '@lastshotlabs/slingshot-core';
 
 type WsMessageStore = 'redis' | 'mongo' | 'sqlite' | 'memory';
 
@@ -31,8 +31,16 @@ export type WsMiddlewareHandler = (
 export interface WsEventContext {
   /** Stable socket ID assigned by the framework on open. Also the sender ID for exclude. */
   socketId: string;
-  /** Authenticated actorId from socketUsers map. Null for unauthenticated sockets. */
-  actorId: string | null;
+  /**
+   * Authenticated `Actor` for this connection. Resolves to `ANONYMOUS_ACTOR`
+   * (`{ id: null, kind: 'anonymous', ... }`) for unauthenticated sockets.
+   */
+  actor: Actor;
+  /**
+   * Request-scoped tenant identifier captured at upgrade time, or `null` when no
+   * tenant context applies. Distinct from `actor.tenantId` (identity-bound scope).
+   */
+  requestTenantId: string | null;
   /** Endpoint name this socket is connected to. */
   endpoint: string;
   /** Publish a JSON-serialisable payload to a room on this endpoint. */

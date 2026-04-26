@@ -38,12 +38,12 @@ function deriveKey(
   const actor = resolveActor(meta);
   const parts = ['functions-idempotency', handlerName];
   if (scope === 'tenant') {
-    parts.push(`tenant:${meta.requestTenantId ?? actor.tenantId ?? 'none'}`);
+    parts.push(`tenant:${meta.requestTenantId ?? 'none'}`);
   } else if (scope === 'user') {
     if (!actor.id) {
       throw new Error(`Idempotency scope 'user' requires an authenticated subject`);
     }
-    parts.push(`tenant:${meta.requestTenantId ?? actor.tenantId ?? 'none'}`);
+    parts.push(`tenant:${meta.requestTenantId ?? 'none'}`);
     parts.push(`subject:${actor.id}`);
   }
   parts.push(rawKey);

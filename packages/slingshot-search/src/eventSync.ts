@@ -342,7 +342,8 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
         error: err instanceof Error ? err.message : String(err),
         syncMode: 'event-bus',
       },
-      { source: 'system' },
+      // System-source background sync — no originating HTTP request, no actor.
+      { source: 'system', requestTenantId: null },
     );
   }
 

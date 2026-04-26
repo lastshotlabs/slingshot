@@ -48,7 +48,7 @@ describe('requestLogger middleware', () => {
     expect(entry.userAgent).toBe('test-agent');
     expect(entry.userId).toBeNull();
     expect(entry.sessionId).toBeNull();
-    expect(entry.tenantId).toBeNull();
+    expect(entry.requestTenantId).toBeNull();
     expect(entry.err).toBeUndefined();
   });
 

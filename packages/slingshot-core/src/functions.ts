@@ -26,19 +26,22 @@ export interface RecordOutcome {
  * Metadata extracted from a trigger event by a {@link TriggerAdapter}.
  *
  * Extends `Partial<HandlerMeta>` with raw identity fields that the Lambda
- * runtime uses to construct the canonical {@link Actor}. Trigger adapters
- * can either set the `actor` field directly or provide the raw identity
- * fields and let `buildMeta` derive the actor.
+ * runtime hands to the configured `IdentityResolver` to construct the
+ * canonical {@link Actor}. Trigger adapters can either set the `actor` field
+ * directly or supply the raw identity fields and let `buildMeta` derive the
+ * actor through the resolver.
+ *
+ * Field names mirror {@link IdentityResolverInput}.
  */
 export interface TriggerExtractedMeta extends Partial<HandlerMeta> {
   /** Tenant context from the trigger event metadata. */
   tenantId?: string | null;
-  /** User ID from the trigger event metadata. */
-  authUserId?: string | null;
-  /** M2M client ID from the trigger event metadata. */
-  authClientId?: string | null;
-  /** Bearer client ID from the trigger event metadata. */
-  bearerClientId?: string | null;
+  /** Authenticated user ID from the trigger event metadata. */
+  userId?: string | null;
+  /** Service-account / M2M client ID from the trigger event metadata. */
+  serviceAccountId?: string | null;
+  /** Static API-key client ID from the trigger event metadata. */
+  apiKeyId?: string | null;
   /** Effective roles from the trigger event metadata. */
   roles?: string[] | null;
 }

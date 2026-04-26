@@ -20,7 +20,7 @@ import {
   getActor,
   getActorId,
 } from '@lastshotlabs/slingshot-core';
-import { getClientIp } from '@lastshotlabs/slingshot-core';
+import { getClientIp, getRequestTenantId } from '@lastshotlabs/slingshot-core';
 import type { HookContext } from '../config/authConfig';
 import type { AuthRateLimitConfig } from '../config/authConfig';
 import { publishAuthEvent } from '../eventGovernance';
@@ -322,6 +322,7 @@ export const createMfaRouter = (
         {
           userId,
           actorId: userId,
+          requestTenantId: getRequestTenantId(c),
         },
       );
       return c.json({ ok: true as const, recoveryCodes }, 200);
@@ -629,6 +630,7 @@ export const createMfaRouter = (
         {
           userId,
           actorId: userId,
+          requestTenantId: getRequestTenantId(c),
         },
       );
       return c.json({ ok: true as const }, 200);
@@ -833,6 +835,7 @@ export const createMfaRouter = (
         {
           userId,
           actorId: userId,
+          requestTenantId: getRequestTenantId(c),
         },
       );
       return c.json({ ok: true as const, recoveryCodes: recoveryCodes ?? undefined }, 200);
@@ -928,6 +931,7 @@ export const createMfaRouter = (
         {
           userId,
           actorId: userId,
+          requestTenantId: getRequestTenantId(c),
         },
       );
       return c.json({ ok: true as const }, 200);
@@ -1192,6 +1196,7 @@ export const createMfaRouter = (
           {
             userId,
             actorId: userId,
+            requestTenantId: getRequestTenantId(c),
           },
         );
         return c.json({ ok: true as const, ...result }, 200);

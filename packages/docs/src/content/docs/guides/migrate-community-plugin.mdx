@@ -58,6 +58,5 @@ tables / collections:
 ### `threads` list route — dataScope auth required
 
 `GET /community/threads` and `GET /community/threads/:id` use `dataScope: { field: 'authorId',
-from: 'ctx:actor.id' }`. The canonical binding is `ctx:actor.id`; the legacy alias `ctx:authUserId`
-still works for backwards compatibility. Ensure your auth middleware (or test harness) sets the
-actor before the route handler runs, even on `auth: 'none'` routes.
+from: 'ctx:actor.id' }`. The canonical binding is `ctx:actor.id`. Ensure your auth middleware (or
+test harness) sets the actor before the route handler runs, even on `auth: 'none'` routes.

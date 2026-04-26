@@ -24,6 +24,7 @@ import type {
 import {
   HEADER_IDEMPOTENCY_KEY,
   getActor,
+  getRequestTenantId,
   getSlingshotCtx,
   hmacSign,
   resolveOpConfig,
@@ -130,13 +131,14 @@ function buildScopedIdempotencyKey(
     signingConfig?.idempotencyKeys && signingSecret ? hmacSign(rawKey, signingSecret) : rawKey;
   const actor = getActor(c);
 
+  const requestTenantId = getRequestTenantId(c);
   const parts = ['entity-idempotency', entityName, opName];
   switch (config.scope) {
     case 'global':
       parts.push('global');
       break;
     case 'tenant':
-      parts.push(`tenant:${actor.tenantId ?? 'none'}`);
+      parts.push(`tenant:${requestTenantId ?? 'none'}`);
       break;
     case 'user':
       if (!actor.id) {
@@ -144,7 +146,7 @@ function buildScopedIdempotencyKey(
           `Entity route idempotency for ${entityName}.${opName} requires actor.id when scope is 'user'`,
         );
       }
-      if (actor.tenantId) parts.push(`tenant:${actor.tenantId}`);
+      parts.push(`tenant:${requestTenantId ?? 'none'}`);
       parts.push(`user:${actor.id}`);
       break;
   }
@@ -546,11 +548,12 @@ export function applyRouteConfig(
         } else {
           Object.assign(payload, result);
         }
+        const requestTenantId = getRequestTenantId(c);
         for (const includeField of evt.include ?? []) {
           const actor = getActor(c);
           switch (includeField) {
             case 'tenantId':
-              payload.tenantId = actor.tenantId;
+              payload.tenantId = requestTenantId;
               break;
             case 'actorId':
               payload.actorId = actor.id;
@@ -567,9 +570,9 @@ export function applyRouteConfig(
           const actor = getActor(c);
           const actorId = actor.kind === 'anonymous' ? undefined : actor.id;
           capturedEvents.publish(evt.key as keyof SlingshotEventMap, payload, {
-            tenantId: actor.tenantId ?? null,
             userId: actor.kind === 'user' ? actor.id : undefined,
             actorId,
+            requestTenantId,
             requestId: c.get('requestId') as string | undefined,
             correlationId: c.get('requestId') as string | undefined,
             source: 'http',
@@ -730,11 +733,12 @@ export function applyRouteConfig(
       } else {
         Object.assign(payload, result);
       }
+      const requestTenantId = getRequestTenantId(c);
       for (const includeField of evt.include ?? []) {
         const actor = getActor(c);
         switch (includeField) {
           case 'tenantId':
-            payload.tenantId = actor.tenantId;
+            payload.tenantId = requestTenantId;
             break;
           case 'actorId':
             payload.actorId = actor.id;
@@ -751,9 +755,9 @@ export function applyRouteConfig(
         const actor = getActor(c);
         const actorId = actor.kind === 'anonymous' ? undefined : actor.id;
         capturedEvents.publish(evt.key as keyof SlingshotEventMap, payload, {
-          tenantId: actor.tenantId ?? null,
           userId: actor.kind === 'user' ? actor.id : undefined,
           actorId,
+          requestTenantId,
           requestId: c.get('requestId') as string | undefined,
           correlationId: c.get('requestId') as string | undefined,
           source: 'http',

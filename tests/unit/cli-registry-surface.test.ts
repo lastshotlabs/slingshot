@@ -32,7 +32,7 @@ function captureLogs<T extends LoggableCommand>(command: T): string[] {
 }
 
 function requireTsupObjectConfig(
-  config: typeof import('../../tsup.cli.config')['default'],
+  config: (typeof import('../../tsup.cli.config'))['default'],
 ): Exclude<typeof config, unknown[] | ((...args: never[]) => unknown)> {
   if (Array.isArray(config) || typeof config === 'function') {
     throw new Error('Expected tsup CLI config to export an object');
@@ -52,7 +52,9 @@ describe('root cli registry/platform surface', () => {
 
     const entry = tsupConfig.entry as Record<string, string> | undefined;
     const banner =
-      typeof tsupConfig.banner === 'function' ? tsupConfig.banner({ format: 'esm' }) : tsupConfig.banner;
+      typeof tsupConfig.banner === 'function'
+        ? tsupConfig.banner({ format: 'esm' })
+        : tsupConfig.banner;
     expect(entry?.['cli/index']).toBe('src/cli/index.ts');
     expect(banner?.js).toContain('#!/usr/bin/env node');
     expect(vitest.default.test?.environment).toBe('node');

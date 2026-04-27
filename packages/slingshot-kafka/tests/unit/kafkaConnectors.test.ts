@@ -154,6 +154,37 @@ describe('kafkaConnectors', () => {
     expect(connectors.health().started).toBe(false);
   });
 
+  test('can be started again after a partial start failure', async () => {
+    const bus = createInProcessAdapter();
+    const connectors = createKafkaConnectors({
+      brokers: ['localhost:19092'],
+      inbound: [
+        {
+          topic: 'incoming.a',
+          groupId: 'group-a',
+          handler: mock(async () => {}),
+        },
+        {
+          topic: 'incoming.b',
+          groupId: 'group-b',
+          handler: mock(async () => {}),
+        },
+      ],
+    });
+
+    fakeKafkaState.consumerConnectErrors.push(new Error('connect failed once'));
+
+    await expect(connectors.start(bus)).rejects.toThrow('connect failed once');
+    expect(connectors.health().started).toBe(false);
+    expect(fakeKafkaState.consumers[0]?.disconnectCalls).toBe(1);
+
+    await expect(connectors.start(bus)).resolves.toBeUndefined();
+    expect(connectors.health().started).toBe(true);
+    expect(fakeKafkaState.consumers).toHaveLength(3);
+
+    await connectors.stop();
+  });
+
   test('outbound connectors subscribe to the bus and publish transformed payloads', async () => {
     const { bus, events } = createPublishedBus();
     const connectors = createKafkaConnectors({

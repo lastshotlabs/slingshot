@@ -16,9 +16,7 @@ declare module '@lastshotlabs/slingshot-core' {
 const TEST_SSE_EVENT = 'test:sse.item.created';
 const TEST_SSE_OTHER_EVENT = 'test:sse.item.updated';
 
-function createSseDefinitionPlugin(
-  keys: EventKey[] = [TEST_SSE_EVENT, TEST_SSE_OTHER_EVENT],
-) {
+function createSseDefinitionPlugin(keys: EventKey[] = [TEST_SSE_EVENT, TEST_SSE_OTHER_EVENT]) {
   return {
     name: 'test-sse-definitions',
     setupMiddleware({ events }: PluginSetupContext) {

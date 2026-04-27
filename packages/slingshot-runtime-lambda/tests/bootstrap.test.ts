@@ -73,11 +73,9 @@ describe('bootstrap', () => {
 
   test('passes handlersPath option through to resolveManifestConfig', async () => {
     await bootstrap({ manifest: { manifestVersion: 1 }, handlersPath: './handlers' });
-    expect(fakeResolveManifestConfig).toHaveBeenCalledWith(
-      expect.anything(),
-      undefined,
-      { handlersPath: './handlers' },
-    );
+    expect(fakeResolveManifestConfig).toHaveBeenCalledWith(expect.anything(), undefined, {
+      handlersPath: './handlers',
+    });
   });
 
   test('teardown calls ctx.destroy()', async () => {

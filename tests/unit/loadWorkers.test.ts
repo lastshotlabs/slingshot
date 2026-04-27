@@ -72,7 +72,7 @@ describe('loadWorkers', () => {
     expect(save).toHaveBeenCalledTimes(1);
 
     const savedNames = [
-      ...(((save.mock.calls as unknown as Array<[ReadonlySet<string>]>)[0]?.[0]) ?? []),
+      ...((save.mock.calls as unknown as Array<[ReadonlySet<string>]>)[0]?.[0] ?? []),
     ].sort();
     expect(savedNames).toEqual(['keep-b', 'new-c']);
 
@@ -124,7 +124,7 @@ describe('loadWorkers', () => {
     expect(createQueueFactory).toHaveBeenCalledTimes(1);
     // Workers were not initialized — queueFactory is null — so no scheduler names collected
     const savedNames = [
-      ...(((save.mock.calls as unknown as Array<[ReadonlySet<string>]>)[0]?.[0]) ?? []),
+      ...((save.mock.calls as unknown as Array<[ReadonlySet<string>]>)[0]?.[0] ?? []),
     ];
     expect(savedNames).toEqual([]);
   });
@@ -209,7 +209,7 @@ describe('loadWorkers', () => {
     expect(createQueueFactory).not.toHaveBeenCalled();
     expect(save).toHaveBeenCalledTimes(1);
     const savedNames = [
-      ...(((save.mock.calls as unknown as Array<[ReadonlySet<string>]>)[0]?.[0]) ?? []),
+      ...((save.mock.calls as unknown as Array<[ReadonlySet<string>]>)[0]?.[0] ?? []),
     ];
     expect(savedNames).toEqual([]);
   });

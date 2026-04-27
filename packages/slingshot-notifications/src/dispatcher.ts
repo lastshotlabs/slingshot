@@ -78,15 +78,9 @@ export function createIntervalDispatcher(
         now: dispatchedAt,
       });
 
-      const safeRows = rows.slice(0, maxPerTick * 4);
-      if (rows.length > safeRows.length) {
-        console.warn(
-          `[slingshot-notifications] Dropped ${rows.length - safeRows.length} pending notifications above dispatcher safety cap.`,
-        );
-      }
+      let dispatchedCount = 0;
 
-      for (const row of safeRows.slice(0, maxPerTick)) {
-        await options.notifications.markDispatched({ id: row.id, dispatchedAt });
+      for (const row of rows.slice(0, maxPerTick)) {
         const preferences = await resolvePreferences(
           options.preferences,
           row.userId,
@@ -98,16 +92,37 @@ export function createIntervalDispatcher(
           notification: row,
           preferences,
         };
-        options.events.publish('notifications:notification.created', payload, {
-          userId: row.userId,
-          actorId: row.actorId ?? row.userId,
-          source: 'system',
-          // Background dispatcher — no originating HTTP request.
-          requestTenantId: null,
-        });
+
+        await options.notifications.markDispatched({ id: row.id, dispatchedAt });
+        try {
+          options.events.publish('notifications:notification.created', payload, {
+            userId: row.userId,
+            actorId: row.actorId ?? row.userId,
+            source: 'system',
+            // Background dispatcher — no originating HTTP request.
+            requestTenantId: null,
+          });
+          dispatchedCount += 1;
+        } catch (err) {
+          try {
+            await options.notifications.update(row.id, {
+              dispatched: false,
+              dispatchedAt: null,
+            });
+          } catch (rollbackErr) {
+            console.error(
+              `[slingshot-notifications] Failed to roll back dispatched state for notification '${row.id}'`,
+              rollbackErr,
+            );
+          }
+          console.error(
+            `[slingshot-notifications] Failed to publish notification '${row.id}' after marking it dispatched`,
+            err,
+          );
+        }
       }
 
-      return Math.min(safeRows.length, maxPerTick);
+      return dispatchedCount;
     },
   };
 

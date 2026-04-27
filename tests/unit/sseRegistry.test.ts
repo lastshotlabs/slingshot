@@ -3,6 +3,7 @@ import { ANONYMOUS_ACTOR } from '@lastshotlabs/slingshot-core';
 import { createSseRegistry, createSseUpgradeHandler } from '../../src/framework/sse/index';
 
 const endpoint = '/__sse/test';
+type ConsoleErrorCalls = Array<[string, ...unknown[]]>;
 
 function makeClient(id = 'client-1') {
   return { id, actor: ANONYMOUS_ACTOR, requestTenantId: null, endpoint };
@@ -128,7 +129,9 @@ describe('createSseRegistry', () => {
     await new Promise(r => setTimeout(r, 10));
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy.mock.calls[0][0]).toContain('[sse] fanout rejected');
+    expect((errorSpy.mock.calls as unknown as ConsoleErrorCalls)[0][0]).toContain(
+      '[sse] fanout rejected',
+    );
 
     console.error = originalError;
     reader.releaseLock();
@@ -232,7 +235,9 @@ describe('createSseRegistry', () => {
     await new Promise(r => setTimeout(r, 20));
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy.mock.calls[0][0]).toContain('[sse] filter error for client');
+    expect((errorSpy.mock.calls as unknown as ConsoleErrorCalls)[0][0]).toContain(
+      '[sse] filter error for client',
+    );
 
     console.error = originalError;
     reader.releaseLock();

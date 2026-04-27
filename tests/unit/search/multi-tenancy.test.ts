@@ -36,7 +36,7 @@ function makeEntity(
     },
     search: searchConfig,
   };
-  return entity as ResolvedEntityConfig;
+  return entity as unknown as ResolvedEntityConfig;
 }
 
 // ============================================================================

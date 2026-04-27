@@ -24,7 +24,7 @@ import { validateWebhookUrl } from './validateWebhookUrl';
  * - `X-Webhook-Event` — the event key that triggered the delivery (e.g. `entity:post.created`).
  * - `X-Webhook-Delivery` — a unique delivery ID for idempotency and tracing (`job.deliveryId`).
  */
-export async function deliverWebhook(job: WebhookJob): Promise<void> {
+export async function deliverWebhook(job: WebhookJob, timeoutMs = 30_000): Promise<void> {
   // Defense-in-depth: reject private/loopback targets even if validation was
   // bypassed at registration time (e.g. direct adapter writes, migrated rows).
   validateWebhookUrl(job.url);
@@ -42,7 +42,7 @@ export async function deliverWebhook(job: WebhookJob): Promise<void> {
       'X-Webhook-Delivery': job.deliveryId,
     },
     body: job.payload,
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) {
     const retryable = res.status >= 500 || res.status === 429;

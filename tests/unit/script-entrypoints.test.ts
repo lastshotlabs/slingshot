@@ -116,7 +116,7 @@ describe('script entrypoints', () => {
       { error() {}, log: (message: string) => writes.push(message) },
       {
         root: tempDir,
-        stdout: { write: message => writes.push(String(message)) },
+        stdout: { write: (message: string | Uint8Array) => writes.push(String(message)) },
         importModuleFn: async (entrypoint: string) => {
           if (entrypoint.endsWith('index.ts')) {
             return {

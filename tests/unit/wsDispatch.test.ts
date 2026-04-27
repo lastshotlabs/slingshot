@@ -4,6 +4,8 @@ import { handleIncomingEvent } from '../../src/framework/ws/dispatch';
 import { wsEndpointKey } from '../../src/framework/ws/namespace';
 
 const userActor = (id: string): Actor => ({ ...ANONYMOUS_ACTOR, id, kind: 'user' });
+type PublishCalls = Array<[string, string, ...unknown[]]>;
+type SubscriptionCalls = Array<[string, ...unknown[]]>;
 
 function createWsState(overrides?: Partial<WsState>): WsState {
   return {
@@ -355,8 +357,9 @@ describe('wsDispatch — handleIncomingEvent', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(serverPublish).toHaveBeenCalledTimes(1);
-    expect(serverPublish.mock.calls[0][0]).toBe(wsEndpointKey('/ws', 'myroom'));
-    expect(JSON.parse(serverPublish.mock.calls[0][1])).toEqual({ hello: 'world' });
+    const publishCalls = serverPublish.mock.calls as unknown as PublishCalls;
+    expect(publishCalls[0][0]).toBe(wsEndpointKey('/ws', 'myroom'));
+    expect(JSON.parse(publishCalls[0][1])).toEqual({ hello: 'world' });
   });
 
   it('context.subscribe is callable from handler (line 43)', async () => {
@@ -375,7 +378,9 @@ describe('wsDispatch — handleIncomingEvent', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(subscribeSpy).toHaveBeenCalledTimes(1);
-    expect(subscribeSpy.mock.calls[0][0]).toBe(wsEndpointKey('/ws', 'myroom'));
+    expect((subscribeSpy.mock.calls as unknown as SubscriptionCalls)[0][0]).toBe(
+      wsEndpointKey('/ws', 'myroom'),
+    );
     expect(ws.data.rooms.has('myroom')).toBe(true);
     expect(state.roomRegistry.get(wsEndpointKey('/ws', 'myroom'))).toEqual(new Set(['s1']));
   });
@@ -398,7 +403,9 @@ describe('wsDispatch — handleIncomingEvent', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect(unsubscribeSpy).toHaveBeenCalledTimes(1);
-    expect(unsubscribeSpy.mock.calls[0][0]).toBe(wsEndpointKey('/ws', 'myroom'));
+    expect((unsubscribeSpy.mock.calls as unknown as SubscriptionCalls)[0][0]).toBe(
+      wsEndpointKey('/ws', 'myroom'),
+    );
     expect(ws.data.rooms.has('myroom')).toBe(false);
     expect(state.roomRegistry.has(wsEndpointKey('/ws', 'myroom'))).toBe(false);
   });

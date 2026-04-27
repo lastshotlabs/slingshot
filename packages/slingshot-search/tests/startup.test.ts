@@ -62,4 +62,45 @@ describe('search manager startup cleanup', () => {
 
     await manager.teardown();
   });
+
+  test('teardown clears provider connection state so the same manager can initialize again', async () => {
+    const localSpy = spyOn(realDbNative, 'createDbNativeProvider').mockImplementation(() => {
+      const id = providerState.factoryCalls++;
+      const connect = mock(async () => {});
+      const teardown = mock(async () => {});
+      providerState.instances.push({ connect, teardown });
+      return {
+        name: `db-native-${id}`,
+        connect,
+        teardown,
+      } as SearchProvider;
+    });
+
+    try {
+      const manager = createSearchManager({
+        pluginConfig: {
+          providers: {
+            default: { provider: 'db-native' },
+          },
+        },
+        transformRegistry: createSearchTransformRegistry(),
+      });
+
+      await manager.initialize([]);
+      expect(providerState.factoryCalls).toBe(1);
+      expect(providerState.instances).toHaveLength(1);
+      expect(providerState.instances[0]?.connect).toHaveBeenCalledTimes(1);
+
+      await manager.teardown();
+
+      await manager.initialize([]);
+      expect(providerState.factoryCalls).toBe(2);
+      expect(providerState.instances).toHaveLength(2);
+      expect(providerState.instances[1]?.connect).toHaveBeenCalledTimes(1);
+
+      await manager.teardown();
+    } finally {
+      localSpy.mockRestore();
+    }
+  });
 });

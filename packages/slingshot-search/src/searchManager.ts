@@ -914,7 +914,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
       providers.clear();
       entityStates.clear();
       entityNameToStorageName.clear();
+      pendingEntityInitializations.clear();
       createdTenantIndexes.clear();
+      providersConnected = false;
       initialized = false;
     },
   };

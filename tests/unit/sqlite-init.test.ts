@@ -27,6 +27,7 @@ function createMockDb(options?: {
         all() {
           return [] as T[];
         },
+        run() {},
       };
     },
     prepare<T>(_sql: string) {

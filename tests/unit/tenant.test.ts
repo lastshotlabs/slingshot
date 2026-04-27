@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { Hono } from 'hono';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import {
   createTenantMiddleware,
   getTenantCacheFromApp,
@@ -16,7 +17,7 @@ import type {
 
 function buildApp(config: Parameters<typeof createTenantMiddleware>[0]) {
   const carrier: TenantCacheCarrier = { cache: null };
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   app.use('/*', createTenantMiddleware(config, carrier));
   app.get('/*', c => c.json({ tenantId: c.get('tenantId') }));
   return { app, carrier };

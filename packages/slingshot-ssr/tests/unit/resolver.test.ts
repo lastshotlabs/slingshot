@@ -75,6 +75,12 @@ describe('resolveRoute — dynamic segments', () => {
     const match = resolveRoute('/hello%20world', TMP);
     expect(match?.params.slug).toBe('hello world');
   });
+
+  it('returns null for malformed percent-encoding instead of throwing', () => {
+    createRouteFile('[slug].ts');
+    initRouteTree(TMP);
+    expect(resolveRoute('/hello%ZZworld', TMP)).toBeNull();
+  });
 });
 
 describe('resolveRoute — directory form', () => {

@@ -467,9 +467,7 @@ describe('plugin setupMiddleware — failure halts startup', () => {
 
     await expect(
       runPluginMiddleware(sorted, {} as any, {} as any, {} as any, dummyEvents),
-    ).rejects.toThrow(
-      'plugin-a exploded',
-    );
+    ).rejects.toThrow('plugin-a exploded');
 
     // Plugin B should never have run
     expect(calls).toEqual(['a']);
@@ -487,9 +485,7 @@ describe('plugin setupMiddleware — failure halts startup', () => {
 
     await expect(
       runPluginMiddleware(sorted, {} as any, {} as any, {} as any, dummyEvents),
-    ).rejects.toThrow(
-      'setup failed',
-    );
+    ).rejects.toThrow('setup failed');
   });
 
   test('plugins with only setup() are excluded from framework lifecycle', () => {

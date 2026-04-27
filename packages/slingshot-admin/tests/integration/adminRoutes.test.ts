@@ -417,10 +417,7 @@ describe('userId and sessionId param validation', () => {
 // 501 — unsupported optional provider methods
 // ---------------------------------------------------------------------------
 
-function buildAppWithPartialProvider(
-  missingMethod: string,
-  tenantId = 'tenant-a',
-) {
+function buildAppWithPartialProvider(missingMethod: string, tenantId = 'tenant-a') {
   const app = new Hono<AdminEnv>();
   app.use('*', async (c, next) => {
     c.set('adminPrincipal', { subject: 'actor', provider: 'memory', tenantId });

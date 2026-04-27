@@ -122,6 +122,15 @@ export const webhookPluginConfigSchema = z.object({
     .describe(
       'Custom persistence adapter for webhook endpoints and deliveries. When provided, slingshot-entity is not required and entity-backed CRUD routes are skipped.',
     ),
+  /** Timeout in milliseconds for outbound webhook delivery requests. Default: 30000. */
+  deliveryTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Timeout in milliseconds for outbound webhook HTTP delivery requests. Omit to use the default of 30000.',
+    ),
   /** Route groups to skip mounting. */
   disableRoutes: disableRoutesSchema(Object.values(WEBHOOK_ROUTES)).describe(
     'Route groups to skip when mounting webhook routes. Omit to mount all webhook routes.',

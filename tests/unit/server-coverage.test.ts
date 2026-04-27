@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { defineEvent } from '@lastshotlabs/slingshot-core';
+import { type StorageAdapter, defineEvent } from '@lastshotlabs/slingshot-core';
 import { stopHeartbeat } from '../../src/framework/ws/heartbeat';
 import { createServer, getServerContext } from '../../src/server';
 
@@ -24,6 +24,16 @@ const baseConfig = {
     },
   },
   logging: { onLog: () => {} },
+};
+
+const uploadStorage: StorageAdapter = {
+  async put(key) {
+    return { url: `memory://${key}` };
+  },
+  async get() {
+    return null;
+  },
+  async delete() {},
 };
 
 function createSseDefinitionPlugin(key: string) {
@@ -208,6 +218,7 @@ describe('createServer HTTP-only', () => {
       hostname: '127.0.0.1',
       port: 0,
       upload: {
+        storage: uploadStorage,
         maxFileSize: 5 * 1024 * 1024,
         maxFiles: 3,
       },
@@ -222,6 +233,7 @@ describe('createServer HTTP-only', () => {
       port: 0,
       maxRequestBodySize: 999,
       upload: {
+        storage: uploadStorage,
         maxFileSize: 5 * 1024 * 1024,
         maxFiles: 3,
       },
@@ -338,7 +350,7 @@ describe('createServer with WS config', () => {
           '/ws-persist': {
             persistence: {
               store: 'memory',
-              defaults: { ttl: 60_000 },
+              defaults: { ttlSeconds: 60 },
             },
           },
         },
@@ -616,7 +628,7 @@ describe('createServer with WS rate limit', () => {
           '/ws-rl': {
             rateLimit: {
               windowMs: 1000,
-              max: 5,
+              maxMessages: 5,
             },
           },
         },

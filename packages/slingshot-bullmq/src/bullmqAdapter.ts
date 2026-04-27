@@ -289,10 +289,14 @@ export type BullMQAdapterDropReason = 'buffer-full' | 'max-attempts';
  * ```
  */
 export function createBullMQAdapter(
-  rawOpts: BullMQAdapterOptions & EventBusSerializationOptions & {
-    onDrop?: (event: string, reason: BullMQAdapterDropReason) => void;
-  },
-): SlingshotEventBus & { _drainPendingBuffer: () => Promise<void>; getHealth: () => BullMQAdapterHealth } {
+  rawOpts: BullMQAdapterOptions &
+    EventBusSerializationOptions & {
+      onDrop?: (event: string, reason: BullMQAdapterDropReason) => void;
+    },
+): SlingshotEventBus & {
+  _drainPendingBuffer: () => Promise<void>;
+  getHealth: () => BullMQAdapterHealth;
+} {
   const { serializer, schemaRegistry, onDrop, ...adapterOpts } = rawOpts;
   const opts = validatePluginConfig('slingshot-bullmq', adapterOpts, bullmqAdapterOptionsSchema);
   const prefix = opts.prefix ?? 'slingshot:events';

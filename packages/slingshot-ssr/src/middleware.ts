@@ -190,7 +190,11 @@ export function buildSsrMiddleware(
               regeneratePage(cacheKey, url, query, config, assetTags, staleBsCtx, isrAdapter),
               new Promise<never>((_, reject) => {
                 isrTimeout.addEventListener('abort', () => {
-                  reject(new Error(`[slingshot-ssr] ISR background regen timed out after ${config.isr?.backgroundRegenTimeoutMs ?? 30_000}ms`));
+                  reject(
+                    new Error(
+                      `[slingshot-ssr] ISR background regen timed out after ${config.isr?.backgroundRegenTimeoutMs ?? 30_000}ms`,
+                    ),
+                  );
                 });
               }),
             ]).catch((err: unknown) => {

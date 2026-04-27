@@ -5,6 +5,7 @@ import { publish } from '../../src/framework/ws/rooms';
 
 const ENDPOINT = '/ws';
 const ROOM = 'lobby';
+type PublishCalls = Array<[string, string, ...unknown[]]>;
 
 function createWsState(overrides?: Partial<WsState>): WsState {
   return {
@@ -58,7 +59,7 @@ describe('publish() options', () => {
     publish(state, ENDPOINT, ROOM, { hello: 'world' });
 
     expect(serverPublish).toHaveBeenCalledTimes(1);
-    expect(serverPublish.mock.calls[0][0]).toBe(key);
+    expect((serverPublish.mock.calls as unknown as PublishCalls)[0][0]).toBe(key);
     expect(sock.calls).toHaveLength(0); // per-socket NOT used
   });
 

@@ -86,7 +86,9 @@ export function resolvePageDeclaration(
     for (const name of declaration.paramNames) {
       const value = match.groups?.[name];
       if (value !== undefined) {
-        params[name] = decodeURIComponent(value);
+        const decoded = safeDecodeParam(value);
+        if (decoded === null) return null;
+        params[name] = decoded;
       }
     }
 
@@ -246,4 +248,12 @@ function validateParamName(name: string, path: string): void {
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function safeDecodeParam(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }

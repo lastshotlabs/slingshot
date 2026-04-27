@@ -11,7 +11,6 @@
  * and idempotency, which are implemented in the adapter layer and can be fully
  * exercised with mocks.
  */
-
 import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
 import { defineTask } from '@lastshotlabs/slingshot-orchestration';
@@ -84,7 +83,11 @@ class MockQueue {
 
   async add(name: string, data: Record<string, unknown>, opts?: Record<string, unknown>) {
     // Respect opts.jobId so that Job.fromId can find jobs by their idempotency key
-    const id = String((opts?.['jobId'] as string | undefined) ?? data['runId'] ?? `${this.name}-${this.jobs.length + 1}`);
+    const id = String(
+      (opts?.['jobId'] as string | undefined) ??
+        data['runId'] ??
+        `${this.name}-${this.jobs.length + 1}`,
+    );
     const job = new MockJob({ queue: this, id, name, data, opts });
     this.jobs.push(job);
     return job;
@@ -204,11 +207,11 @@ describe('task queue separation', () => {
     await adapter.runTask(taskB.name, { value: 'b' });
 
     // Each task should route to its own named queue
-    const highPriorityQueue = MockQueue.instances.find(q =>
-      q.name === 'queue-sep:high-priority:tasks',
+    const highPriorityQueue = MockQueue.instances.find(
+      q => q.name === 'queue-sep:high-priority:tasks',
     );
-    const lowPriorityQueue = MockQueue.instances.find(q =>
-      q.name === 'queue-sep:low-priority:tasks',
+    const lowPriorityQueue = MockQueue.instances.find(
+      q => q.name === 'queue-sep:low-priority:tasks',
     );
 
     expect(highPriorityQueue).toBeDefined();
@@ -282,8 +285,16 @@ describe('idempotency', () => {
 
     adapter.registerTask(task);
 
-    const handle1 = await adapter.runTask(task.name, { value: 'first' }, { idempotencyKey: 'key-abc' });
-    const handle2 = await adapter.runTask(task.name, { value: 'second' }, { idempotencyKey: 'key-abc' });
+    const handle1 = await adapter.runTask(
+      task.name,
+      { value: 'first' },
+      { idempotencyKey: 'key-abc' },
+    );
+    const handle2 = await adapter.runTask(
+      task.name,
+      { value: 'second' },
+      { idempotencyKey: 'key-abc' },
+    );
 
     // Both handles should refer to the same run
     expect(handle1.id).toBe(handle2.id);
@@ -315,8 +326,16 @@ describe('idempotency', () => {
 
     adapter.registerTask(task);
 
-    const handle1 = await adapter.runTask(task.name, { value: 'first' }, { idempotencyKey: 'key-1' });
-    const handle2 = await adapter.runTask(task.name, { value: 'second' }, { idempotencyKey: 'key-2' });
+    const handle1 = await adapter.runTask(
+      task.name,
+      { value: 'first' },
+      { idempotencyKey: 'key-1' },
+    );
+    const handle2 = await adapter.runTask(
+      task.name,
+      { value: 'second' },
+      { idempotencyKey: 'key-2' },
+    );
 
     // Different keys → different run ids
     expect(handle1.id).not.toBe(handle2.id);

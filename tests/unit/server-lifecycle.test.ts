@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type { EventKey, SlingshotPlugin, StorageAdapter } from '@lastshotlabs/slingshot-core';
 import { defineEvent, getContext } from '@lastshotlabs/slingshot-core';
 import { createServer, getServerContext } from '../../src/server';
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'test:item.created': { id: string };
+    'test:sd': { id?: string };
+    'test:x': Record<string, unknown>;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -45,12 +53,22 @@ function waitForClose(ws: WebSocket): Promise<{ code: number; reason: string }> 
   });
 }
 
-function createSseDefinitionPlugin(key: string): SlingshotPlugin {
+const uploadStorage: StorageAdapter = {
+  async put() {
+    return {};
+  },
+  async get() {
+    return null;
+  },
+  async delete() {},
+};
+
+function createSseDefinitionPlugin(key: EventKey): SlingshotPlugin {
   return {
     name: `sse-def-${key}`,
     setupMiddleware({ events }) {
       events.register(
-        defineEvent(key as never, {
+        defineEvent(key, {
           ownerPlugin: 'server-lifecycle-test',
           exposure: ['client-safe'],
           resolveScope() {
@@ -213,7 +231,7 @@ describe('SSE endpoints', () => {
 
     // Emit an event via the bus and verify it arrives
     const ctx = getServerContext(server)!;
-    ctx.events.publish(eventKey as never, { id: 'abc' } as never, { source: 'system' });
+    ctx.events.publish(eventKey, { id: 'abc' }, { requestTenantId: null, source: 'system' });
 
     const { value: v2 } = await withTimeout(reader.read(), 2000, 'SSE event');
     const text = decoder.decode(v2);
@@ -340,7 +358,7 @@ describe('maxRequestBodySize from upload', () => {
       ...baseConfig,
       hostname: '127.0.0.1',
       port: 0,
-      upload: { maxFileSize: 1024, maxFiles: 5 },
+      upload: { storage: uploadStorage, maxFileSize: 1024, maxFiles: 5 },
     });
     expect(server.port).toBeGreaterThan(0);
   });
@@ -350,7 +368,7 @@ describe('maxRequestBodySize from upload', () => {
       ...baseConfig,
       hostname: '127.0.0.1',
       port: 0,
-      upload: { maxFileSize: 2048, maxFiles: 3 },
+      upload: { storage: uploadStorage, maxFileSize: 2048, maxFiles: 3 },
       ws: { endpoints: { '/ws': {} } },
     });
     expect(server.port).toBeGreaterThan(0);
@@ -605,7 +623,7 @@ describe('WS hooks', () => {
     await withTimeout(waitForMessage(ws), 2_000, 'connected');
     ws.send('hello raw');
     await new Promise(r => setTimeout(r, 100));
-    expect(received).toBe('hello raw');
+    expect(received ?? '').toBe('hello raw');
   });
 
   test('on.message error is caught gracefully', async () => {
@@ -847,7 +865,7 @@ describe('WS persistence defaults', () => {
       ws: {
         endpoints: {
           '/ws-pd': {
-            persistence: { store: 'memory', defaults: { maxMessages: 100, ttlMs: 60_000 } },
+            persistence: { store: 'memory', defaults: { maxCount: 100, ttlSeconds: 60 } },
           },
         },
       },

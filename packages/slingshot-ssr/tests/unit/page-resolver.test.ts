@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { buildPageRouteTable, resolvePageDeclaration } from '../../src/pageResolver';
 import type { PageDeclaration } from '../../src/pageDeclarations';
+import { buildPageRouteTable, resolvePageDeclaration } from '../../src/pageResolver';
 
 // Helper to create a minimal custom page declaration
 function customPage(path: string): PageDeclaration {
@@ -67,20 +67,14 @@ describe('buildPageRouteTable', () => {
   });
 
   it('extracts correct paramNames for /posts/[id]', () => {
-    const table = buildPageRouteTable(
-      { postById: customPage('/posts/[id]') },
-      emptyEntityConfigs,
-    );
+    const table = buildPageRouteTable({ postById: customPage('/posts/[id]') }, emptyEntityConfigs);
 
     expect(table).toHaveLength(1);
     expect(Array.from(table[0].paramNames)).toEqual(['id']);
   });
 
   it('extracts correct paramNames for catch-all route', () => {
-    const table = buildPageRouteTable(
-      { docs: customPage('/docs/[...slug]') },
-      emptyEntityConfigs,
-    );
+    const table = buildPageRouteTable({ docs: customPage('/docs/[...slug]') }, emptyEntityConfigs);
 
     expect(Array.from(table[0].paramNames)).toEqual(['slug']);
   });
@@ -92,10 +86,7 @@ describe('buildPageRouteTable', () => {
 
 describe('resolvePageDeclaration', () => {
   it('matches an exact static route', () => {
-    const table = buildPageRouteTable(
-      { about: customPage('/about') },
-      emptyEntityConfigs,
-    );
+    const table = buildPageRouteTable({ about: customPage('/about') }, emptyEntityConfigs);
 
     const result = resolvePageDeclaration('/about', table);
     expect(result).not.toBeNull();
@@ -104,10 +95,7 @@ describe('resolvePageDeclaration', () => {
   });
 
   it('matches a dynamic route and extracts params', () => {
-    const table = buildPageRouteTable(
-      { postById: customPage('/posts/[id]') },
-      emptyEntityConfigs,
-    );
+    const table = buildPageRouteTable({ postById: customPage('/posts/[id]') }, emptyEntityConfigs);
 
     const result = resolvePageDeclaration('/posts/123', table);
     expect(result).not.toBeNull();
@@ -115,10 +103,7 @@ describe('resolvePageDeclaration', () => {
   });
 
   it('matches a catch-all route and extracts the rest segment', () => {
-    const table = buildPageRouteTable(
-      { docs: customPage('/docs/[...slug]') },
-      emptyEntityConfigs,
-    );
+    const table = buildPageRouteTable({ docs: customPage('/docs/[...slug]') }, emptyEntityConfigs);
 
     const result = resolvePageDeclaration('/docs/a/b/c', table);
     expect(result).not.toBeNull();
@@ -126,10 +111,7 @@ describe('resolvePageDeclaration', () => {
   });
 
   it('returns null for an unknown path', () => {
-    const table = buildPageRouteTable(
-      { about: customPage('/about') },
-      emptyEntityConfigs,
-    );
+    const table = buildPageRouteTable({ about: customPage('/about') }, emptyEntityConfigs);
 
     const result = resolvePageDeclaration('/does-not-exist', table);
     expect(result).toBeNull();
@@ -150,21 +132,21 @@ describe('resolvePageDeclaration', () => {
   });
 
   it('URL-decodes extracted param values', () => {
-    const table = buildPageRouteTable(
-      { postById: customPage('/posts/[id]') },
-      emptyEntityConfigs,
-    );
+    const table = buildPageRouteTable({ postById: customPage('/posts/[id]') }, emptyEntityConfigs);
 
     const result = resolvePageDeclaration('/posts/hello%20world', table);
     expect(result).not.toBeNull();
     expect(result!.params).toEqual({ id: 'hello world' });
   });
 
+  it('returns null for malformed percent-encoding instead of throwing', () => {
+    const table = buildPageRouteTable({ postById: customPage('/posts/[id]') }, emptyEntityConfigs);
+
+    expect(resolvePageDeclaration('/posts/hello%ZZworld', table)).toBeNull();
+  });
+
   it('strips trailing slash before matching', () => {
-    const table = buildPageRouteTable(
-      { about: customPage('/about') },
-      emptyEntityConfigs,
-    );
+    const table = buildPageRouteTable({ about: customPage('/about') }, emptyEntityConfigs);
 
     const result = resolvePageDeclaration('/about/', table);
     expect(result).not.toBeNull();

@@ -63,6 +63,49 @@ describe('createIntervalDispatcher', () => {
     expect(persisted?.dispatchedAt).toBeTruthy();
   });
 
+  test('rolls back dispatched state when publish fails after marking the row', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const originalPublish = events.publish.bind(events);
+    events.publish = (key: unknown, ...args: unknown[]) => {
+      if (String(key) === 'notifications:notification.created') {
+        throw new Error('publish failed');
+      }
+      return (originalPublish as (...publishArgs: unknown[]) => unknown)(key, ...args);
+    };
+
+    const builder = adapters.createBuilder('community');
+    const notification = await builder.schedule({
+      userId: 'user-1',
+      type: 'community:mention',
+      targetType: 'community:thread',
+      targetId: 'thread-1',
+      deliverAt: new Date(Date.now() - 1_000),
+    });
+
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      intervalMs: 1_000,
+      maxPerTick: 10,
+    });
+
+    const dispatched = await dispatcher.tick();
+    await bus.drain();
+
+    expect(dispatched).toBe(0);
+    const persisted = await adapters.notifications.getById(notification.id);
+    expect(persisted?.dispatched).toBe(false);
+    expect(persisted?.dispatchedAt).toBeNull();
+    expect(errorSpy).toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+
   test('logs dispatcher tick failures instead of surfacing unhandled rejections', async () => {
     const adapters = createNotificationsTestAdapters();
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
@@ -191,11 +234,10 @@ describe('createIntervalDispatcher', () => {
     await expect(dispatcher.stop()).resolves.toBeUndefined();
   });
 
-  test('safety cap drops rows above maxPerTick * 4 and logs a warning', async () => {
+  test('processes only maxPerTick rows when the adapter over-returns pending notifications', async () => {
     const adapters = createNotificationsTestAdapters();
     const bus = new InProcessAdapter();
     const events = createNotificationsTestEvents(bus);
-    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
     const oversizeRows = Array.from({ length: 5 }, (_, i) => ({
       id: `n-${i}`,
@@ -230,8 +272,7 @@ describe('createIntervalDispatcher', () => {
 
     await dispatcher.tick();
 
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Dropped'));
-    warnSpy.mockRestore();
+    expect(listPendingDispatch).toHaveBeenCalledTimes(1);
   });
 
   test('does not re-enter while a dispatcher tick is already running', async () => {

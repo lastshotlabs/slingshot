@@ -375,8 +375,9 @@ describe('QueueFactory methods', () => {
     expect(mockDlqAdd).toHaveBeenCalledTimes(1);
     // Second arg (opts) should not have delay/priority
     const callOpts =
-      ((mockDlqAdd.mock.calls as unknown as Array<[unknown, unknown, Record<string, unknown>]>)[0]?.[2]) ??
-      {};
+      (
+        mockDlqAdd.mock.calls as unknown as Array<[unknown, unknown, Record<string, unknown>]>
+      )[0]?.[2] ?? {};
     expect(callOpts.delay).toBeUndefined();
   });
 

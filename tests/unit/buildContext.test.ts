@@ -7,8 +7,8 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import type { CacheAdapter, EmailTemplate, SecretRepository } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
-import { buildContext, finalizeContext } from '../../src/framework/buildContext';
 import { createMemoryAuditLogProvider } from '../../src/framework/auditLog/memoryProvider';
+import { buildContext, finalizeContext } from '../../src/framework/buildContext';
 import { createMetricsState } from '../../src/framework/metrics/registry';
 import { createMemoryCronRegistry } from '../../src/framework/persistence/cronRegistry';
 import { createMemoryIdempotencyAdapter } from '../../src/framework/persistence/idempotency';

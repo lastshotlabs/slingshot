@@ -1,3 +1,4 @@
+import { type SQLQueryBindings } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import {
   createMemoryUploadRegistry,
@@ -148,7 +149,7 @@ describe('createSqliteUploadRegistry', () => {
     const { Database } = await import('bun:sqlite');
     const db = new Database(':memory:');
     return {
-      run(sql: string, params?: unknown[]) {
+      run(sql: string, params?: SQLQueryBindings[]) {
         if (params && params.length > 0) {
           db.prepare(sql).run(...params);
         } else {
@@ -158,10 +159,10 @@ describe('createSqliteUploadRegistry', () => {
       query<T>(sql: string) {
         const stmt = db.prepare(sql);
         return {
-          get(...args: unknown[]): T | null {
+          get(...args: SQLQueryBindings[]): T | null {
             return stmt.get(...args) as T | null;
           },
-          all(...args: unknown[]): T[] {
+          all(...args: SQLQueryBindings[]): T[] {
             return stmt.all(...args) as T[];
           },
         };

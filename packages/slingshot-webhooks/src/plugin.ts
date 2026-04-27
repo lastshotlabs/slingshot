@@ -107,7 +107,7 @@ async function activate(
     const attemptedAt = new Date().toISOString();
     const start = Date.now();
     try {
-      await deliverWebhook(job);
+      await deliverWebhook(job, config.deliveryTimeoutMs ?? 30_000);
       const durationMs = Date.now() - start;
       await runtime.updateDelivery(job.deliveryId, {
         status: 'delivered',

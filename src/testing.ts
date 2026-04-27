@@ -29,13 +29,13 @@ export interface E2EServerHandle {
  * HTTP-only — cannot be used for WS upgrade flows.
  */
 export async function wrapAppAsTestServer(app: {
-  fetch: (...args: unknown[]) => unknown;
+  fetch(request: Request, env?: unknown): Response | Promise<Response>;
 }): Promise<E2EServerHandle> {
   const { bunRuntime } = await import('@lastshotlabs/slingshot-runtime-bun');
   const rt = bunRuntime();
   const server = await rt.server.listen({
     port: 0,
-    fetch: app.fetch as (req: Request) => Response | Promise<Response>,
+    fetch: app.fetch,
   });
   const baseUrl = `http://localhost:${server.port}`;
   const wsUrl = `ws://localhost:${server.port}`;

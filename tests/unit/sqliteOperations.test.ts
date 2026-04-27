@@ -97,6 +97,9 @@ type MessageEntity = InferEntity<typeof Message.fields>;
 type MessageUpdateInput = InferUpdateInput<typeof Message.fields>;
 type MessageAdapter = EntityAdapter<MessageEntity, Partial<MessageEntity>, MessageUpdateInput> &
   Record<string, unknown>;
+type OperationRecord = Record<string, (...args: unknown[]) => unknown>;
+type AggregateRow = Record<string, unknown>;
+type EntityListResult = { items: Array<Record<string, unknown>> };
 
 describe('SQLite Operations Integration', () => {
   let db: Database;
@@ -369,14 +372,12 @@ describe('SQLite Operations Integration', () => {
 
     it('respects filter operators and computes sum by group', async () => {
       await seed();
-      const result = await (
-        adapter as Record<string, (...args: unknown[]) => unknown>
-      ).filteredCountByRoom({});
+      const result = (await (adapter as OperationRecord).filteredCountByRoom({})) as AggregateRow[];
       expect(Array.isArray(result)).toBe(true);
       expect(result).toHaveLength(1);
-      expect((result[0] as Record<string, unknown>).roomId).toBe('r1');
-      expect(Number((result[0] as Record<string, unknown>).count)).toBe(1);
-      expect(Number((result[0] as Record<string, unknown>).totalScore)).toBe(2);
+      expect(result[0].roomId).toBe('r1');
+      expect(Number(result[0].count)).toBe(1);
+      expect(Number(result[0].totalScore)).toBe(2);
     });
   });
 
@@ -406,15 +407,13 @@ describe('SQLite Operations Integration', () => {
 
   describe('op.upsert', () => {
     it('creates when no match exists', async () => {
-      const result = await (
-        adapter as Record<string, (...args: unknown[]) => unknown>
-      ).upsertByRoomAuthor({
+      const result = (await (adapter as OperationRecord).upsertByRoomAuthor({
         roomId: 'r1',
         authorId: 'u1',
         content: 'first',
         status: 'sent',
         score: 0,
-      });
+      })) as Record<string, unknown>;
       expect(result.roomId).toBe('r1');
       expect(result.content).toBe('first');
 
@@ -471,9 +470,9 @@ describe('SQLite Operations Integration', () => {
       expect(fetched!.status).toBe('delivered');
 
       // Verify via lookup operation
-      const byRoom = await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({
+      const byRoom = (await (adapter as OperationRecord).getByRoom({
         roomId: 'r1',
-      });
+      })) as EntityListResult;
       expect(byRoom.items.length).toBe(1);
       expect(byRoom.items[0].status).toBe('delivered');
     });

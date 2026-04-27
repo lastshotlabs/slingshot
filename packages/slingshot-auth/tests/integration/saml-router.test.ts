@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { HttpError } from '@lastshotlabs/slingshot-core';
 import { verifyToken } from '../../src/lib/jwt';
+import type { SamlProfile, SamlifySpInstance } from '../../src/lib/saml';
 import {
   createMemorySamlRequestIdRepository,
   storeSamlRequestId,
@@ -9,7 +10,6 @@ import {
 import { createSamlRouter } from '../../src/routes/saml';
 import { makeEventBus, makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
 import type { MutableTestRuntime } from '../helpers/runtime';
-import type { SamlProfile, SamlifySpInstance } from '../../src/lib/saml';
 
 function buildApp(runtime: MutableTestRuntime) {
   const app = wrapWithRuntime(runtime);

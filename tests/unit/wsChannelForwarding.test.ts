@@ -28,7 +28,7 @@ function makeEntityConfig(overrides: Partial<ResolvedEntityConfig> = {}): Resolv
     _pkField: 'id',
     _storageName: 'threads',
     ...overrides,
-  };
+  } as unknown as ResolvedEntityConfig;
 }
 
 function makeMockWsState(): WsState {

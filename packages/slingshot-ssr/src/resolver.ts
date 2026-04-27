@@ -94,7 +94,11 @@ export function resolveRoute(pathname: string, serverRoutesDir: string): SsrRout
     const params: Record<string, string> = {};
     for (const name of entry.paramNames) {
       const value = match.groups?.[name];
-      if (value !== undefined) params[name] = decodeURIComponent(value);
+      if (value !== undefined) {
+        const decoded = safeDecodeParam(value);
+        if (decoded === null) return null;
+        params[name] = decoded;
+      }
     }
 
     return {
@@ -328,6 +332,14 @@ function buildPattern(
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function safeDecodeParam(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 // ─── Route chain resolution ───────────────────────────────────────────────────
@@ -742,7 +754,11 @@ function resolveRouteInDir(
     const params: Record<string, string> = {};
     for (const name of entry.paramNames) {
       const value = match.groups?.[name];
-      if (value !== undefined) params[name] = decodeURIComponent(value);
+      if (value !== undefined) {
+        const decoded = safeDecodeParam(value);
+        if (decoded === null) return null;
+        params[name] = decoded;
+      }
     }
 
     return {

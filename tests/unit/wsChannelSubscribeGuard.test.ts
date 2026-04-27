@@ -162,7 +162,7 @@ describe('buildSubscribeGuard', () => {
         },
       },
     });
-    const checkPermission = mock(async (_userId: string, perm: string) => {
+    const checkPermission = mock(async (_actor: Actor, perm: string) => {
       return perm === 'thread:admin';
     });
     const deps = makeDeps({ checkPermission });

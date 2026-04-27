@@ -91,11 +91,7 @@ class FakeWorker {
   readonly failedHandlers: FailedHandler[] = [];
   closed = false;
 
-  constructor(
-    queueName: string,
-    processor: (job: FakeBullJob) => Promise<void>,
-    _opts?: unknown,
-  ) {
+  constructor(queueName: string, processor: (job: FakeBullJob) => Promise<void>, _opts?: unknown) {
     this.queueName = queueName;
     this.processor = processor;
     lastCreatedWorker = this;

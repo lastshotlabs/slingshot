@@ -353,9 +353,7 @@ describe('Group entity', () => {
   });
 
   test('has unique compound index on tenantId + slug', () => {
-    const idx = Group.indexes?.find(
-      i => i.fields[0] === 'tenantId' && i.fields[1] === 'slug',
-    );
+    const idx = Group.indexes?.find(i => i.fields[0] === 'tenantId' && i.fields[1] === 'slug');
     expect(idx).toBeDefined();
     expect(idx?.unique).toBe(true);
   });

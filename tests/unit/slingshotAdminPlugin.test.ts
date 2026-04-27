@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { AUTH_RUNTIME_KEY } from '@lastshotlabs/slingshot-auth/testing';
-import { PERMISSIONS_STATE_KEY } from '@lastshotlabs/slingshot-core';
+import { PERMISSIONS_STATE_KEY, createEventDefinitionRegistry } from '@lastshotlabs/slingshot-core';
 import type { PluginSetupContext } from '@lastshotlabs/slingshot-core';
 
 const mockAdminSetupRoutes = mock(async () => {});
@@ -51,6 +51,12 @@ function createAuthRuntime() {
   };
 }
 
+function firstAdminPluginArg(): Record<string, unknown> {
+  return (
+    (mockCreateAdminPlugin.mock.calls as unknown as Array<[Record<string, unknown>]>)[0]?.[0] ?? {}
+  );
+}
+
 function makeCtx(existingPermissions?: unknown): {
   ctx: PluginSetupContext;
   pluginState: Map<string | symbol, unknown>;
@@ -72,6 +78,7 @@ function makeCtx(existingPermissions?: unknown): {
       emit: () => {},
     } as unknown as PluginSetupContext['bus'],
     events: {
+      definitions: createEventDefinitionRegistry(),
       publish() {
         return null as never;
       },
@@ -82,7 +89,7 @@ function makeCtx(existingPermissions?: unknown): {
       list() {
         return [];
       },
-    } as PluginSetupContext['events'],
+    } as unknown as PluginSetupContext['events'],
   };
 
   return { ctx, pluginState };
@@ -121,7 +128,7 @@ describe('createSlingshotAdminPlugin', () => {
     await plugin.setupPost!(ctx);
 
     expect(mockCreateAdminPlugin).toHaveBeenCalledTimes(1);
-    const callArg = mockCreateAdminPlugin.mock.calls[0][0] as Record<string, unknown>;
+    const callArg = firstAdminPluginArg();
     expect(callArg.permissions).toBe(fakePermissions);
   });
 
@@ -134,7 +141,7 @@ describe('createSlingshotAdminPlugin', () => {
     const plugin = createSlingshotAdminPlugin({ permissions: explicitPermissions as never });
     await plugin.setupPost!(ctx);
 
-    const callArg = mockCreateAdminPlugin.mock.calls[0][0] as Record<string, unknown>;
+    const callArg = firstAdminPluginArg();
     expect(callArg.permissions).toBe(explicitPermissions);
   });
 
@@ -191,7 +198,7 @@ describe('createSlingshotAdminPlugin', () => {
     const plugin = createSlingshotAdminPlugin({});
     await plugin.setupPost!(ctx);
 
-    const callArg = mockCreateAdminPlugin.mock.calls[0][0] as Record<string, unknown>;
+    const callArg = firstAdminPluginArg();
     expect(callArg.accessProvider).toBeDefined();
     expect(callArg.managedUserProvider).toBeDefined();
   });
@@ -207,7 +214,7 @@ describe('createSlingshotAdminPlugin', () => {
     });
     await plugin.setupPost!(ctx);
 
-    const callArg = mockCreateAdminPlugin.mock.calls[0][0] as Record<string, unknown>;
+    const callArg = firstAdminPluginArg();
     expect(callArg.accessProvider).toBe(customProvider);
   });
 
@@ -222,7 +229,7 @@ describe('createSlingshotAdminPlugin', () => {
     });
     await plugin.setupPost!(ctx);
 
-    const callArg = mockCreateAdminPlugin.mock.calls[0][0] as Record<string, unknown>;
+    const callArg = firstAdminPluginArg();
     expect(callArg.managedUserProvider).toBe(customManagedUserProvider);
   });
 });

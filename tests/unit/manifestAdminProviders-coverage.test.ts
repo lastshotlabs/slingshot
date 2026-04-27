@@ -420,7 +420,7 @@ describe('createDeferredAdminProviders — coverage', () => {
     const pluginState = new Map<string, unknown>();
     pluginState.set('slingshot-auth', mockAuthRuntime({}));
     result.bind(pluginState);
-    await expect(result.managedUserProvider!.deleteUser('u1')).rejects.toThrow(
+    await expect(result.managedUserProvider!.deleteUser!('u1')).rejects.toThrow(
       'does not support deleteUser',
     );
   });

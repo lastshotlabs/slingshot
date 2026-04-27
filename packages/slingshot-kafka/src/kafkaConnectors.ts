@@ -772,6 +772,44 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
     }
   }
 
+  async function cleanupAfterStartFailure(): Promise<void> {
+    started = false;
+
+    if (drainTimer) {
+      clearInterval(drainTimer);
+      drainTimer = null;
+    }
+
+    if (boundBus) {
+      for (const runtime of outboundRuntimes) {
+        try {
+          boundBus.offEnvelope(runtime.config.event, runtime.listener);
+        } catch {
+          // Best-effort cleanup after a failed start.
+        }
+      }
+    }
+
+    for (const runtime of inboundRuntimes) {
+      await runtime.consumer.disconnect().catch(() => {});
+    }
+
+    if (producer) {
+      await producer.disconnect().catch(() => {});
+      producer = null;
+    }
+    if (admin) {
+      await admin.disconnect().catch(() => {});
+      admin = null;
+    }
+
+    inboundRuntimes.length = 0;
+    outboundRuntimes.length = 0;
+    pendingBuffer.length = 0;
+    pendingCountByTopic.clear();
+    boundBus = null;
+  }
+
   return {
     name: 'slingshot-kafka-connectors',
 
@@ -958,7 +996,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
 
         started = true;
       } catch (err) {
-        await stopConnector();
+        await cleanupAfterStartFailure();
         throw err;
       }
     },

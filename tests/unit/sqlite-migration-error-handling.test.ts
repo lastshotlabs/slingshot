@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite';
+import { Database, type SQLQueryBindings } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import type { RuntimeSqliteDatabase } from '@lastshotlabs/slingshot-core';
 import { createSqliteAuthAdapter } from '../../packages/slingshot-auth/src/adapters/sqliteAuth';
@@ -11,10 +11,10 @@ function createInterceptedDb(
 ): RuntimeSqliteDatabase {
   const run = db.run.bind(db);
   return {
-    run(sql: string, ...params: unknown[]) {
+    run(sql: string, ...params: SQLQueryBindings[]) {
       const failure = failForSql(sql);
       if (failure) throw failure;
-      return run(sql, ...params);
+      return params.length > 0 ? run(sql, params) : run(sql);
     },
     query: db.query.bind(db),
     prepare: db.prepare.bind(db),
@@ -51,7 +51,10 @@ describe('SQLite migration error handling', () => {
     );
 
     const version = db
-      .query<{ version: number }>('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
+      .query<
+        { version: number },
+        [string]
+      >('SELECT version FROM _slingshot_migrations WHERE subsystem = ?')
       .get('auth');
     expect(version?.version).toBe(2);
   });

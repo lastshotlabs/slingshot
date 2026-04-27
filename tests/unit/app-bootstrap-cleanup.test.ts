@@ -73,7 +73,7 @@ describe('cleanupBootstrapFailure', () => {
   test('bus.shutdown error does not prevent secrets.destroy from running', async () => {
     const secretDestroy = mock(async () => {});
     const bus = makeTestBus(async () => {
-        throw new Error('bus shutdown failed');
+      throw new Error('bus shutdown failed');
     });
     const secrets: SecretRepository = {
       name: 'test-secrets',

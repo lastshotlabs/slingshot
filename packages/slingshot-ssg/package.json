@@ -32,7 +32,11 @@
     "lint": "eslint src/ --cache"
   },
   "dependencies": {
+    "@lastshotlabs/slingshot-core": "workspace:*",
     "@lastshotlabs/slingshot-ssr": "workspace:*"
+  },
+  "peerDependencies": {
+    "zod": ">=4.0 <5"
   },
   "engines": {
     "node": ">=20"

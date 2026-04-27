@@ -33,11 +33,12 @@ bun add @lastshotlabs/slingshot-ssg
 
 ## Dependencies
 
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-ssr`: `workspace:*`
 
 ## Peer Dependencies
 
-- None
+- `zod`: `>=4.0 <5`
 
 ## Related Docs
 

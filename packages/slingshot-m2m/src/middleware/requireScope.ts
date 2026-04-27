@@ -47,9 +47,12 @@ export const requireScope =
       throw new HttpError(403, 'M2M token required', 'M2M_REQUIRED');
     }
     // Read raw JWT payload for scope verification
-    const payload = c.get('tokenPayload');
+    const payload = c.get('tokenPayload') as Record<string, unknown> | undefined;
+    if (!payload) {
+      throw new HttpError(403, 'Insufficient scope', 'INSUFFICIENT_SCOPE');
+    }
 
-    const rawScope = (payload as Record<string, unknown>).scope;
+    const rawScope = payload.scope;
     if (!rawScope || typeof rawScope !== 'string') {
       throw new HttpError(403, 'Insufficient scope', 'INSUFFICIENT_SCOPE');
     }

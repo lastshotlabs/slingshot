@@ -74,7 +74,7 @@ describe('zodToMongoose — basic field type conversion', () => {
   });
 
   test('unknown Zod type maps to Mixed', () => {
-    const schema = z.object({ data: z.record(z.unknown()) });
+    const schema = z.object({ data: z.record(z.string(), z.unknown()) });
     const result = zodToMongoose(schema);
 
     expect((result.data as any).type).toBe('Mixed');

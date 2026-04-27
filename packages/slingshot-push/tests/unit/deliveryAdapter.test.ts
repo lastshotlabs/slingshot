@@ -103,7 +103,10 @@ describe('createPushDeliveryAdapter', () => {
     formatters.format = formatFn;
 
     const adapter = createPushDeliveryAdapter({
-      router: { sendToUser: mock(async () => ({ sent: 1 })), sendToUsers: mock(async () => ({ sent: 0 })) } as never,
+      router: {
+        sendToUser: mock(async () => ({ sent: 1 })),
+        sendToUsers: mock(async () => ({ sent: 0 })),
+      } as never,
       formatters,
       defaults: { defaultUrl: '/fallback', icon: '/icon.png' },
     });
@@ -120,7 +123,10 @@ describe('createPushDeliveryAdapter', () => {
     formatters.format = formatFn;
 
     const adapter = createPushDeliveryAdapter({
-      router: { sendToUser: mock(async () => ({ sent: 1 })), sendToUsers: mock(async () => ({ sent: 0 })) } as never,
+      router: {
+        sendToUser: mock(async () => ({ sent: 1 })),
+        sendToUsers: mock(async () => ({ sent: 0 })),
+      } as never,
       formatters,
       defaults: { defaultUrl: '/home', icon: '/icon.png' },
     });

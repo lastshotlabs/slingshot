@@ -25,7 +25,9 @@ function makeSetupContext() {
     bus: {} as unknown,
     events: { get: () => null, register: () => {} } as unknown,
   };
-  return context as unknown as Parameters<NonNullable<ReturnType<typeof createSearchPlugin>['setupRoutes']>>[0];
+  return context as unknown as Parameters<
+    NonNullable<ReturnType<typeof createSearchPlugin>['setupRoutes']>
+  >[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -53,9 +55,9 @@ describe('createSearchPlugin — adminGate startup warning', () => {
     plugin.setupRoutes!(makeSetupContext());
 
     const warnMessages = warnSpy.mock.calls.map(c => String(c[0]));
-    expect(warnMessages.some(m => m.includes('[slingshot-search]') && m.includes('adminGate'))).toBe(
-      true,
-    );
+    expect(
+      warnMessages.some(m => m.includes('[slingshot-search]') && m.includes('adminGate')),
+    ).toBe(true);
   });
 
   it('does not emit a warning when adminGate IS set', () => {

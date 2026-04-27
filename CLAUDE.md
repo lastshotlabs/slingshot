@@ -11,8 +11,8 @@ Backend framework for config-driven full-stack apps. Hono-based, plugin-driven, 
 ## Capability Map
 
 - **Core path** - `slingshot-core`, `slingshot-entity`
-- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration-plugin`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-runtime-lambda`
-- **Experimental** - `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`, `slingshot-postgres`
+- **Prod path** - `slingshot-permissions`, `slingshot-organizations`, `slingshot-orchestration`, `slingshot-orchestration-bullmq`, `slingshot-orchestration-temporal`, `slingshot-orchestration-plugin`, `slingshot-bullmq`, `slingshot-assets`, `slingshot-search`, `slingshot-webhooks`, `slingshot-kafka`, `slingshot-admin`, `slingshot-mail`, `slingshot-notifications`, `slingshot-push`, `slingshot-ssr`, `slingshot-ssg`, `slingshot-runtime-bun`, `slingshot-runtime-node`, `slingshot-runtime-edge`, `slingshot-runtime-lambda`, `slingshot-postgres`
+- **Experimental** - `slingshot-auth`, `slingshot-oauth`, `slingshot-oidc`, `slingshot-scim`, `slingshot-m2m`
 - **Deferred** - `slingshot-community`, `slingshot-chat`, `slingshot-polls`, `slingshot-image`, `slingshot-emoji`, `slingshot-embeds`, `slingshot-gifs`, `slingshot-deep-links`, `slingshot-interactions`, `slingshot-game-engine`, `slingshot-infra`
 
 ## Manifest-First

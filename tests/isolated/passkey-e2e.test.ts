@@ -89,6 +89,16 @@ const storage = {
 
 type TokenStorage = typeof storage;
 
+class TestApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'TestApiError';
+  }
+}
+
 class TestApiClient {
   private storage: TokenStorage | null = null;
 
@@ -114,7 +124,7 @@ class TestApiClient {
     }
     const token = this.storage?.get();
     if (token) {
-      headers.set('authorization', `Bearer ${token}`);
+      headers.set('x-user-token', token);
     }
 
     const response = await fetch(`${this.apiUrl}${path}`, {
@@ -123,7 +133,23 @@ class TestApiClient {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (!response.ok) {
-      throw new Error(`Request ${method} ${path} failed with HTTP ${response.status}`);
+      const payload = await response.text();
+      let detail = payload;
+      try {
+        const parsed = JSON.parse(payload) as { error?: unknown; message?: unknown };
+        detail =
+          typeof parsed.error === 'string'
+            ? parsed.error
+            : typeof parsed.message === 'string'
+              ? parsed.message
+              : payload;
+      } catch {
+        // Non-JSON error responses are still useful in the thrown message.
+      }
+      throw new TestApiError(
+        `Request ${method} ${path} failed with HTTP ${response.status}: ${detail}`,
+        response.status,
+      );
     }
     return (await response.json()) as T;
   }

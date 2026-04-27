@@ -59,7 +59,11 @@ describe('slingshot-assets image cache fallback', () => {
       } as AssetsPluginConfig);
 
       const calls = warnSpy.mock.calls.map(c => String(c[0]));
-      expect(calls.some(m => m.includes('[slingshot-assets] image.cache is not a valid ImageCacheAdapter'))).toBe(true);
+      expect(
+        calls.some(m =>
+          m.includes('[slingshot-assets] image.cache is not a valid ImageCacheAdapter'),
+        ),
+      ).toBe(true);
       expect(calls.some(m => m.includes('falling back to in-memory cache'))).toBe(true);
     } finally {
       warnSpy.mockRestore();
@@ -73,7 +77,9 @@ describe('slingshot-assets image cache fallback', () => {
         storage: { adapter: 'memory' },
         image: {
           cache: {
-            async get() { return null; },
+            async get() {
+              return null;
+            },
             async set() {},
           },
         },

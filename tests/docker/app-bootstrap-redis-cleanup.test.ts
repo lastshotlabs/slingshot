@@ -110,7 +110,7 @@ describe('cleanupBootstrapFailure with live Redis', () => {
 
   test('Redis cleanup happens even with custom bus that fails shutdown', async () => {
     const bus = makeTestBus(async () => {
-        throw new Error('bus shutdown failed');
+      throw new Error('bus shutdown failed');
     });
 
     let error: unknown;

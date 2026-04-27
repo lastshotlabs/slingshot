@@ -148,7 +148,10 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
             if (onDeadLetter) {
               try {
                 void Promise.resolve(
-                  onDeadLetter(oldest, new Error('[slingshot-webhooks] Memory queue at capacity — job evicted')),
+                  onDeadLetter(
+                    oldest,
+                    new Error('[slingshot-webhooks] Memory queue at capacity — job evicted'),
+                  ),
                 ).catch(err => {
                   console.error('[slingshot-webhooks] onDeadLetter handler failed', err);
                 });

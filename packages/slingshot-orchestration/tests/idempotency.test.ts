@@ -54,14 +54,8 @@ describe('createIdempotencyScope', () => {
   });
 
   test('different task names produce different scopes for the same key', () => {
-    const a = createIdempotencyScope(
-      { type: 'task', name: 'task-a' },
-      { idempotencyKey: 'key-1' },
-    );
-    const b = createIdempotencyScope(
-      { type: 'task', name: 'task-b' },
-      { idempotencyKey: 'key-1' },
-    );
+    const a = createIdempotencyScope({ type: 'task', name: 'task-a' }, { idempotencyKey: 'key-1' });
+    const b = createIdempotencyScope({ type: 'task', name: 'task-b' }, { idempotencyKey: 'key-1' });
     expect(a).not.toBe(b);
   });
 

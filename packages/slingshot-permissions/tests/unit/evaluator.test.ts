@@ -788,15 +788,15 @@ describe('PermissionEvaluator', () => {
 
   describe('queryTimeoutMs config validation', () => {
     test('throws when queryTimeoutMs is 0', () => {
-      expect(() =>
-        createPermissionEvaluator({ registry, adapter, queryTimeoutMs: 0 }),
-      ).toThrow('[slingshot-permissions] queryTimeoutMs must be a positive number');
+      expect(() => createPermissionEvaluator({ registry, adapter, queryTimeoutMs: 0 })).toThrow(
+        '[slingshot-permissions] queryTimeoutMs must be a positive number',
+      );
     });
 
     test('throws when queryTimeoutMs is negative', () => {
-      expect(() =>
-        createPermissionEvaluator({ registry, adapter, queryTimeoutMs: -100 }),
-      ).toThrow('[slingshot-permissions] queryTimeoutMs must be a positive number');
+      expect(() => createPermissionEvaluator({ registry, adapter, queryTimeoutMs: -100 })).toThrow(
+        '[slingshot-permissions] queryTimeoutMs must be a positive number',
+      );
     });
 
     test('accepts a positive queryTimeoutMs', () => {
@@ -808,21 +808,19 @@ describe('PermissionEvaluator', () => {
 
   describe('maxGroups config validation', () => {
     test('throws when maxGroups is 0', () => {
-      expect(() =>
-        createPermissionEvaluator({ registry, adapter, maxGroups: 0 }),
-      ).toThrow('[slingshot-permissions] maxGroups must be a positive number');
+      expect(() => createPermissionEvaluator({ registry, adapter, maxGroups: 0 })).toThrow(
+        '[slingshot-permissions] maxGroups must be a positive number',
+      );
     });
 
     test('throws when maxGroups is negative', () => {
-      expect(() =>
-        createPermissionEvaluator({ registry, adapter, maxGroups: -10 }),
-      ).toThrow('[slingshot-permissions] maxGroups must be a positive number');
+      expect(() => createPermissionEvaluator({ registry, adapter, maxGroups: -10 })).toThrow(
+        '[slingshot-permissions] maxGroups must be a positive number',
+      );
     });
 
     test('accepts a positive maxGroups', () => {
-      expect(() =>
-        createPermissionEvaluator({ registry, adapter, maxGroups: 100 }),
-      ).not.toThrow();
+      expect(() => createPermissionEvaluator({ registry, adapter, maxGroups: 100 })).not.toThrow();
     });
   });
 });

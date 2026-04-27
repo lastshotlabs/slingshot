@@ -2,8 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import type {
   Actor,
+  PackageDomainRouteContext,
   PluginSetupContext,
-  ResolvedEntityConfig,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
@@ -51,16 +51,13 @@ afterEach(async () => {
   }
 });
 
-const NoteEntity: ResolvedEntityConfig = {
-  name: 'Note',
+const NoteEntity = defineEntity('Note', {
   fields: {
-    id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
-    text: { type: 'string', primary: false, immutable: false, optional: false },
+    id: field.string({ primary: true, default: 'uuid' }),
+    text: field.string(),
   },
-  _pkField: 'id',
-  _storageName: 'notes',
   routes: {},
-};
+});
 
 describe('package-first authoring', () => {
   test('inspects package modules and capabilities without booting the app', () => {
@@ -76,7 +73,7 @@ describe('package-first authoring', () => {
           routes: [
             route.get({
               path: '/summary',
-              handler(ctx) {
+              handler(ctx: PackageDomainRouteContext) {
                 return ctx.respond.json({ packageName: ctx.packageName });
               },
             }),
@@ -142,7 +139,7 @@ describe('package-first authoring', () => {
                   }),
                 },
               },
-              async handler(ctx) {
+              async handler(ctx: PackageDomainRouteContext) {
                 const reporter = ctx.capabilities.require(noteCapability);
                 const adapter = ctx.entities.get(noteModule);
                 const list = await adapter.list({});
@@ -208,7 +205,7 @@ describe('package-first authoring', () => {
           routes: [
             route.get({
               path: '/notes',
-              async handler(ctx) {
+              async handler(ctx: PackageDomainRouteContext) {
                 const notes = ctx.entities.get(entityRef(noteModule, { plugin: 'notes' }));
                 const list = await notes.list({});
                 return ctx.respond.json({ count: list.items.length });
@@ -269,7 +266,7 @@ describe('package-first authoring', () => {
                   }),
                 },
               },
-              async handler(ctx) {
+              async handler(ctx: PackageDomainRouteContext) {
                 executions += 1;
                 return ctx.respond.json({
                   actorId: ctx.actor.id,
@@ -338,7 +335,7 @@ describe('package-first authoring', () => {
             route.get({
               path: '/report.txt',
               idempotency: { scope: 'global', ttl: 60 },
-              async handler(ctx) {
+              async handler(ctx: PackageDomainRouteContext) {
                 executions += 1;
                 return ctx.respond.text(`report-${executions}`);
               },
@@ -383,7 +380,7 @@ describe('package-first authoring', () => {
             route.get({
               path: '/report.bin',
               idempotency: { scope: 'global', ttl: 60 },
-              async handler(ctx) {
+              async handler(ctx: PackageDomainRouteContext) {
                 executions += 1;
                 return ctx.respond.body(bytes, 200, {
                   'content-type': 'application/octet-stream',
@@ -447,7 +444,12 @@ describe('package-first authoring', () => {
                   }),
                 },
               },
-              async handler(ctx) {
+              async handler(
+                ctx: PackageDomainRouteContext<
+                  { body: z.ZodArray<z.ZodString> },
+                  { clock: () => string }
+                >,
+              ) {
                 const tags = ctx.body ?? [];
                 return ctx.respond.json({
                   count: tags.length,
@@ -487,8 +489,8 @@ describe('package-first authoring', () => {
       request: {
         params: z.object({ id: z.string() }),
       },
-      handler(ctx) {
-        const noteId: string = ctx.params.id;
+      handler(ctx: PackageDomainRouteContext) {
+        const noteId = (ctx.params as { id: string }).id;
         return ctx.respond.json({ noteId });
       },
     });
@@ -523,7 +525,7 @@ describe('package-first authoring', () => {
 
     route.get({
       path: '/contacts/by-email',
-      handler(ctx) {
+      handler(ctx: PackageDomainRouteContext) {
         const contacts = ctx.entities.get(contactModule);
         void contacts.byEmail({ email: 'person@example.com' });
         return ctx.respond.noContent();
@@ -557,7 +559,7 @@ describe('package-first authoring', () => {
                   }),
                 },
               },
-              async handler(ctx) {
+              async handler(ctx: PackageDomainRouteContext) {
                 const input = ctx.input as { id: string; mode: string; label: string };
                 return ctx.respond.json(input);
               },
@@ -591,7 +593,7 @@ describe('package-first authoring', () => {
     const serviceRoute = route.withServices<{ clock: () => string }>();
     const serviceRouteDef = serviceRoute.get({
       path: '/health',
-      handler(ctx) {
+      handler(ctx: PackageDomainRouteContext<{}, { clock: () => string }>) {
         return ctx.respond.json({ now: ctx.services.clock() });
       },
     });
@@ -637,7 +639,7 @@ describe('package-first authoring', () => {
                   schema: z.object({ ok: z.literal(true) }),
                 },
               },
-              handler(ctx) {
+              handler(ctx: PackageDomainRouteContext) {
                 return ctx.respond.json({ ok: true });
               },
             }),

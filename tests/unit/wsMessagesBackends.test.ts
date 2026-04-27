@@ -233,7 +233,7 @@ describe('createSqliteWsMessageRepository', () => {
       sender_id: string | null;
       payload: string;
     }
-    const row = db.query<Row>('SELECT * FROM ws_messages WHERE id = ?').get(msg.id);
+    const row = db.query<Row, [string]>('SELECT * FROM ws_messages WHERE id = ?').get(msg.id);
     expect(row).not.toBeNull();
     expect(row?.endpoint).toBe(ENDPOINT);
     expect(row?.room).toBe('chat');

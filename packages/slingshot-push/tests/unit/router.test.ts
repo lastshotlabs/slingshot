@@ -564,7 +564,12 @@ describe('createPushRouter — retry behavior', () => {
       callCount += 1;
       callTimestamps.push(Date.now());
       if (callCount === 1) {
-        return { ok: false as const, reason: 'transient' as const, retryAfterMs: 10, error: 'rate-limited' };
+        return {
+          ok: false as const,
+          reason: 'transient' as const,
+          retryAfterMs: 10,
+          error: 'rate-limited',
+        };
       }
       return { ok: true };
     });

@@ -42,7 +42,11 @@ describe('bullmq task processor error handling', () => {
       },
     });
 
-    const job = createFakeJob({ taskName: task.name, input: { value: 'ok' }, runId: 'run_prog_err' });
+    const job = createFakeJob({
+      taskName: task.name,
+      input: { value: 'ok' },
+      runId: 'run_prog_err',
+    });
     job.updateProgress = mock(async () => {
       throw new Error('redis connection lost');
     });

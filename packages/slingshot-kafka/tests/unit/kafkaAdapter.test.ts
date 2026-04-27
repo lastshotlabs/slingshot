@@ -243,12 +243,8 @@ describe('kafkaAdapter', () => {
         autoCreateTopics: false,
       });
 
-      expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('broker1:9092'),
-      );
-      expect(infoSpy).toHaveBeenCalledWith(
-        expect.stringContaining('broker2:9092'),
-      );
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('broker1:9092'));
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('broker2:9092'));
       expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining('broker connectivity will be validated on first connect'),
       );
@@ -291,9 +287,9 @@ describe('kafkaAdapter', () => {
     const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
     bus.on('auth:login', () => {}, { durable: true, name: 'dup-worker' });
     await flushAsyncWork();
-    expect(() =>
-      bus.on('auth:login', () => {}, { durable: true, name: 'dup-worker' }),
-    ).toThrow('a durable subscription named "dup-worker" for event "auth:login" already exists.');
+    expect(() => bus.on('auth:login', () => {}, { durable: true, name: 'dup-worker' })).toThrow(
+      'a durable subscription named "dup-worker" for event "auth:login" already exists.',
+    );
   });
 
   test('throws when calling off() on a durable subscription', async () => {
@@ -324,9 +320,7 @@ describe('kafkaAdapter', () => {
       });
 
       expect(listener).not.toHaveBeenCalled();
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('null message value'),
-      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('null message value'));
     } finally {
       warnSpy.mockRestore();
       infoSpy.mockRestore();

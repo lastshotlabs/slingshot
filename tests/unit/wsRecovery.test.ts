@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { WsState } from '@lastshotlabs/slingshot-core';
+import type { StoredMessage, WsState } from '@lastshotlabs/slingshot-core';
 
 type RecoveryModule = typeof import('../../src/framework/ws/recovery');
 
-const getMessageHistoryMock = mock(() => Promise.resolve([]));
+const getMessageHistoryMock = mock<() => Promise<StoredMessage[]>>(async () => []);
 
 async function loadRecoveryModule(): Promise<RecoveryModule> {
   const actualWsMessages = await import('../../src/framework/ws/messages');

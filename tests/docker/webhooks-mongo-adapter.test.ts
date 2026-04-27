@@ -10,6 +10,7 @@ import {
 } from '../setup-docker';
 
 const originalFetch = globalThis.fetch;
+const TEST_EVENT = 'auth:login';
 
 function adminHeaders(tenantId: string): Record<string, string> {
   return {
@@ -94,7 +95,7 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
         body: JSON.stringify({
           url: 'https://example.com/hooks/mongo',
           secret: 'super-secret-token',
-          events: [eventName],
+          subscriptions: [{ event: TEST_EVENT }],
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -108,7 +109,11 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
 
       const delivery = await runtime.createDelivery({
         endpointId: created.id,
-        event: eventName,
+        event: TEST_EVENT,
+        eventId: crypto.randomUUID(),
+        occurredAt: new Date().toISOString(),
+        subscriber: { ownerType: 'tenant', ownerId: tenantId, tenantId },
+        sourceScope: { tenantId, userId: 'admin-user' },
         payload: JSON.stringify({ tenantId, kind: 'mongo-test' }),
         maxAttempts: 5,
       });
@@ -119,10 +124,10 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
       });
 
       const deliveries = await waitForDeliveries(app, created.id, tenantId);
-      const matchingDeliveries = deliveries.filter(delivery => delivery.event === eventName);
+      const matchingDeliveries = deliveries.filter(delivery => delivery.event === TEST_EVENT);
       expect(matchingDeliveries).toHaveLength(1);
       expect(matchingDeliveries[0]).toMatchObject({
-        event: eventName,
+        event: TEST_EVENT,
         status: 'delivered',
         attempts: 1,
       });
@@ -131,11 +136,10 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
     }
   });
 
-  test('findEndpointsForEvent respects event globs and disabled endpoints', async () => {
+  test('listEnabledEndpoints respects resolved subscriptions and disabled endpoints', async () => {
     const tenantId = `tenant-mongo-${crypto.randomUUID()}`;
-    const event = `auth:user.created:${crypto.randomUUID()}`;
     const { app, runtime, teardown } = await createWebhooksTestApp(
-      { events: [event] },
+      { events: [TEST_EVENT] },
       { storeType: 'mongo', storeInfra: createMongoInfra() },
     );
 
@@ -146,7 +150,7 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
         body: JSON.stringify({
           url: 'https://example.com/hooks/matching',
           secret: 'matching-secret',
-          events: [event],
+          subscriptions: [{ pattern: 'auth:*' }],
         }),
       });
       const matching = (await matchingResponse.json()) as { id: string; url: string };
@@ -157,7 +161,7 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
         body: JSON.stringify({
           url: 'https://example.com/hooks/disabled',
           secret: 'disabled-secret',
-          events: [event],
+          subscriptions: [{ event: TEST_EVENT }],
         }),
       });
       const disabled = (await disabledResponse.json()) as { id: string };
@@ -169,7 +173,11 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
       });
       expect(disableUpdateResponse.status).toBe(200);
 
-      const urls = (await runtime.findEndpointsForEvent(event)).map(entry => entry.url);
+      const urls = (await runtime.listEnabledEndpoints())
+        .filter(endpoint =>
+          endpoint.subscriptions.some(subscription => subscription.event === TEST_EVENT),
+        )
+        .map(endpoint => endpoint.url);
       expect(urls).toContain(matching.url);
       expect(urls).not.toContain('https://example.com/hooks/disabled');
     } finally {

@@ -1,18 +1,30 @@
 import { describe, expect, test } from 'bun:test';
 import { defineEvent } from '@lastshotlabs/slingshot-core';
+import type { EventKey, PluginSetupContext, SlingshotEventMap } from '@lastshotlabs/slingshot-core';
 import { getServerContext } from '../../src/server';
 import { createTestFullServer } from '../setup-e2e';
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'content:document.created': Record<string, unknown>;
+    'content:test.document.created': Record<string, unknown>;
+    'test:sse.item.created': Record<string, unknown>;
+    'test:sse.item.updated': Record<string, unknown>;
+  }
+}
 
 const TEST_SSE_EVENT = 'test:sse.item.created';
 const TEST_SSE_OTHER_EVENT = 'test:sse.item.updated';
 
-function createSseDefinitionPlugin(keys: string[] = [TEST_SSE_EVENT, TEST_SSE_OTHER_EVENT]) {
+function createSseDefinitionPlugin(
+  keys: EventKey[] = [TEST_SSE_EVENT, TEST_SSE_OTHER_EVENT],
+) {
   return {
     name: 'test-sse-definitions',
-    setupMiddleware({ events }) {
+    setupMiddleware({ events }: PluginSetupContext) {
       for (const key of keys) {
         events.register(
-          defineEvent(key as never, {
+          defineEvent(key, {
             ownerPlugin: 'test-sse-definitions',
             exposure: ['client-safe'],
             resolveScope() {
@@ -61,14 +73,14 @@ async function readSseEvents(
 
 function publishRegisteredEvent(
   server: { stop(close?: boolean): void | Promise<void> },
-  event: string,
-  payload: Record<string, unknown>,
+  event: EventKey,
+  payload: SlingshotEventMap[typeof event],
 ): void {
   const ctx = getServerContext(server as object);
   if (!ctx) {
     throw new Error('SSE test server context is unavailable');
   }
-  ctx.events.publish(event as never, payload as never, { source: 'system' });
+  ctx.events.publish(event, payload, { requestTenantId: null, source: 'system' });
 }
 
 describe('SSE E2E — startup validation', () => {

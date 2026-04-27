@@ -7,7 +7,11 @@ import {
   createKafkaConnectors,
   getKafkaAdapterIntrospectionOrNull,
 } from '@lastshotlabs/slingshot-kafka';
-import { Kafka, type KafkaMessage } from '../../packages/slingshot-kafka/node_modules/kafkajs';
+import {
+  Kafka,
+  type KafkaMessage,
+  type SASLOptions,
+} from '../../packages/slingshot-kafka/node_modules/kafkajs';
 import { createServerFromManifest } from '../../src/lib/createServerFromManifest';
 import { createManifestHandlerRegistry } from '../../src/lib/manifestHandlerRegistry';
 import { getServerContext } from '../../src/server';
@@ -16,11 +20,10 @@ process.env.KAFKAJS_NO_PARTITIONER_WARNING = '1';
 
 const KAFKA_SASL_BROKER = 'localhost:29093';
 const SASL_TEST_TIMEOUT_MS = 30_000;
-type SupportedSaslConfig = {
-  mechanism: 'plain' | 'scram-sha-256' | 'scram-sha-512';
-  username: string;
-  password: string;
-};
+type SupportedSaslConfig = Extract<
+  SASLOptions,
+  { mechanism: 'plain' | 'scram-sha-256' | 'scram-sha-512' }
+>;
 
 const KAFKA_SASL: SupportedSaslConfig = {
   mechanism: 'scram-sha-256' as const,

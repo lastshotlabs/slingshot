@@ -6,6 +6,7 @@ import { createWebhooksTestApp } from '../../packages/slingshot-webhooks/src/tes
 const CONNECTION =
   process.env.TEST_POSTGRES_URL ?? 'postgresql://postgres:postgres@localhost:5433/slingshot_test';
 const originalFetch = globalThis.fetch;
+const TEST_EVENT = 'auth:login';
 
 function adminHeaders(tenantId: string): Record<string, string> {
   return {
@@ -64,7 +65,7 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
         body: JSON.stringify({
           url: 'https://example.com/hooks/postgres',
           secret: 'super-secret-token',
-          events: [eventName],
+          subscriptions: [{ event: TEST_EVENT }],
           bindingKeys: ['tenant'],
         }),
       });
@@ -79,7 +80,11 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
 
       const delivery = await runtime.createDelivery({
         endpointId: created.id,
-        event: eventName,
+        event: TEST_EVENT,
+        eventId: crypto.randomUUID(),
+        occurredAt: new Date().toISOString(),
+        subscriber: { ownerType: 'tenant', ownerId: tenantId, tenantId },
+        sourceScope: { tenantId, userId: 'admin-user' },
         payload: JSON.stringify({ tenantId, kind: 'postgres-test' }),
         maxAttempts: 5,
       });
@@ -96,10 +101,10 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
       const deliveries = (await deliveriesResponse.json()) as {
         items: Array<{ event: string; status: string; attempts: number }>;
       };
-      const matchingDeliveries = deliveries.items.filter(delivery => delivery.event === eventName);
+      const matchingDeliveries = deliveries.items.filter(delivery => delivery.event === TEST_EVENT);
       expect(matchingDeliveries).toHaveLength(1);
       expect(matchingDeliveries[0]).toMatchObject({
-        event: eventName,
+        event: TEST_EVENT,
         status: 'delivered',
         attempts: 1,
       });
@@ -108,11 +113,10 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
     }
   });
 
-  test('findEndpointsForEvent respects event globs and disabled endpoints', async () => {
+  test('listEnabledEndpoints respects resolved subscriptions and disabled endpoints', async () => {
     const tenantId = `tenant-postgres-${crypto.randomUUID()}`;
-    const event = `auth:user.created:${crypto.randomUUID()}`;
     const { app, runtime, teardown } = await createWebhooksTestApp(
-      { events: [event] },
+      { events: [TEST_EVENT] },
       { storeType: 'postgres', storeInfra: createPostgresInfra(pool) },
     );
 
@@ -123,7 +127,7 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
         body: JSON.stringify({
           url: 'https://example.com/hooks/matching',
           secret: 'matching-secret',
-          events: [event],
+          subscriptions: [{ pattern: 'auth:*' }],
           bindingKeys: ['tenant'],
         }),
       });
@@ -135,7 +139,7 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
         body: JSON.stringify({
           url: 'https://example.com/hooks/disabled',
           secret: 'disabled-secret',
-          events: [event],
+          subscriptions: [{ event: TEST_EVENT }],
           bindingKeys: ['tenant'],
         }),
       });
@@ -148,7 +152,11 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
       });
       expect(disableUpdateResponse.status).toBe(200);
 
-      const urls = (await runtime.findEndpointsForEvent(event)).map(entry => entry.url);
+      const urls = (await runtime.listEnabledEndpoints())
+        .filter(endpoint =>
+          endpoint.subscriptions.some(subscription => subscription.event === TEST_EVENT),
+        )
+        .map(endpoint => endpoint.url);
       expect(urls).toContain(matching.url);
       expect(urls).not.toContain('https://example.com/hooks/disabled');
     } finally {

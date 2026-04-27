@@ -192,4 +192,58 @@ describe('createNotificationBuilder', () => {
     expect(errorSpy).toHaveBeenCalled();
     expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('[notifications]');
   });
+
+  test('dedup event publish failure does not propagate — deduplicated notification is still returned', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+
+    // Make events.publish throw for the updated event (dedup path)
+    const events = createNotificationsTestEvents(bus);
+    const originalPublish = events.publish.bind(events);
+    events.publish = (key: unknown, ...args: unknown[]) => {
+      if (String(key) === 'notifications:notification.updated') {
+        throw new Error('event bus down during dedup');
+      }
+      return (originalPublish as (...a: unknown[]) => unknown)(key, ...args);
+    };
+
+    const errorSpy = mock(() => {});
+    const originalConsoleError = console.error;
+    console.error = errorSpy;
+
+    let collapsed: unknown;
+    try {
+      const builder = createNotificationBuilder({
+        source: 'community',
+        notifications: adapters.notifications,
+        preferences: adapters.preferences,
+        bus,
+        events,
+        rateLimitBackend: createNoopRateLimitBackend(),
+        defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+        rateLimit: { limit: 100, windowMs: 60_000 },
+      });
+
+      // First notify creates the notification
+      await builder.notify({
+        userId: 'user-1',
+        type: 'community:mention',
+        dedupKey: 'thread-dedup-publish-err',
+      });
+
+      // Second notify with same dedupKey triggers the dedup + updated event
+      collapsed = await builder.notify({
+        userId: 'user-1',
+        type: 'community:mention',
+        dedupKey: 'thread-dedup-publish-err',
+      });
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    // Dedup returned the existing notification despite the event publish failure
+    expect(collapsed).not.toBeNull();
+    expect(errorSpy).toHaveBeenCalled();
+    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('[notifications]');
+  });
 });

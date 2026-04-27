@@ -128,6 +128,15 @@ export interface IsrConfig {
    * the cache across instances.
    */
   readonly adapter?: IsrCacheAdapter;
+  /**
+   * Maximum time to allow a stale-while-revalidate background regeneration to run.
+   *
+   * The stale response is returned immediately; this only bounds the detached
+   * regeneration task so hung renderers do not keep worker resources alive forever.
+   *
+   * @default 30000
+   */
+  readonly backgroundRegenTimeoutMs?: number;
 }
 
 /**

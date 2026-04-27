@@ -38,6 +38,14 @@ export const isrConfigSchema = z
       .custom<IsrCacheAdapter>()
       .optional()
       .describe('Incremental static regeneration cache adapter. Omit to disable ISR caching.'),
+    backgroundRegenTimeoutMs: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Maximum milliseconds to wait for a background ISR regeneration before abandoning it. Default: 30000.',
+      ),
   })
   .optional();
 

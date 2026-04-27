@@ -150,13 +150,14 @@ export function createOrganizationsPlugin(
           '[slingshot-organizations] RouteAuthRegistry is not available. Ensure slingshot-auth setupMiddleware runs before slingshot-organizations.',
         );
       }
+      const invitationTtlSeconds = config.organizations?.invitationTtlSeconds ?? 7 * 24 * 60 * 60;
       innerPlugin = createEntityPlugin({
         name: 'slingshot-organizations',
         mountPath,
         manifest,
         manifestRuntime: createOrganizationsManifestRuntime({
           authRuntime,
-          invitationTtlSeconds: config.organizations?.invitationTtlSeconds ?? 7 * 24 * 60 * 60,
+          invitationTtlSeconds,
           defaultMemberRole: config.organizations?.defaultMemberRole ?? 'member',
           onAdaptersCaptured(adapters) {
             orgAdapterRef = adapters.organizations as typeof orgAdapterRef;
@@ -168,10 +169,7 @@ export function createOrganizationsPlugin(
             const setContextValue = c.set as (key: string, value: string) => void;
             setContextValue(
               'inviteExpiresAt',
-              new Date(
-                Date.now() +
-                  (config.organizations?.invitationTtlSeconds ?? 7 * 24 * 60 * 60) * 1000,
-              ).toISOString(),
+              new Date(Date.now() + invitationTtlSeconds * 1000).toISOString(),
             );
             await next();
           },

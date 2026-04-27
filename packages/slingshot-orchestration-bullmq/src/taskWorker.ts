@@ -61,11 +61,18 @@ export function createBullMQTaskProcessor(options: {
         log: console,
         tenantId,
         reportProgress: data => {
-          void job.updateProgress(data);
+          job.updateProgress(data).catch((err: unknown) => {
+            console.error('[slingshot-orchestration-bullmq] Failed to update job progress:', err);
+          });
           void options.eventSink?.emit('orchestration.task.progress', {
             runId,
             task: taskName,
             data,
+          })?.catch?.((err: unknown) => {
+            console.error(
+              '[slingshot-orchestration-bullmq] Failed to emit progress event:',
+              err,
+            );
           });
         },
       };

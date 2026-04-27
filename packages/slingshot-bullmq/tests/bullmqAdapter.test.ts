@@ -353,6 +353,45 @@ describe('createBullMQAdapter — _drainPendingBuffer', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Health introspection
+// ---------------------------------------------------------------------------
+
+describe('createBullMQAdapter — getHealth()', () => {
+  test('returns zeroed counts before any subscriptions', () => {
+    const bus = createBullMQAdapter({ connection: {} });
+    expect(bus.getHealth()).toEqual({
+      queueCount: 0,
+      workerCount: 0,
+      pendingBufferSize: 0,
+    });
+  });
+
+  test('queueCount and workerCount increment after a durable subscription', () => {
+    const bus = createBullMQAdapter({ connection: {} });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'health-check' });
+    const health = bus.getHealth();
+    expect(health.queueCount).toBe(1);
+    expect(health.workerCount).toBe(1);
+    expect(health.pendingBufferSize).toBe(0);
+  });
+
+  test('pendingBufferSize reflects buffered events after a Redis failure', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const bus = createBullMQAdapter({ connection: {} });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'health-buffer' });
+
+    fakeBullMQState.nextAddError(new Error('Redis down'));
+    bus.emit('auth:login' as any, { userId: 'u1' } as any);
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(bus.getHealth().pendingBufferSize).toBe(1);
+
+    errorSpy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Options validation at creation time
 // ---------------------------------------------------------------------------
 

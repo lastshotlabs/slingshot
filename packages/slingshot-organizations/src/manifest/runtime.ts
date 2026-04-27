@@ -377,9 +377,13 @@ export function createOrganizationsManifestRuntime(args: {
     })) as OrganizationMemberRecord;
     const revealed = await inviteRuntime.reveal(invite.id);
     if (revealed) {
-      await inviteAdapter.update(revealed.id, {
-        acceptedAt: new Date().toISOString(),
-      });
+      try {
+        await inviteAdapter.update(revealed.id, {
+          acceptedAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('[slingshot-organizations] Failed to mark invite as accepted:', err);
+      }
     }
     const organization = (await organizationAdapter.getById(
       invite.orgId,

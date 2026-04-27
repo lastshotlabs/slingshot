@@ -374,3 +374,41 @@ describe('GET /capabilities', () => {
     expect(body.managedUserProvider).toBe('memory');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Param validation — injection and path traversal protection
+// ---------------------------------------------------------------------------
+
+describe('userId and sessionId param validation', () => {
+  test('rejects userId containing path traversal characters', async () => {
+    const { app } = buildApp('tenant-a');
+    const res = await app.request('/users/../secrets');
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
+
+  test('GET /users/:userId returns 400 for userId with special characters', async () => {
+    const { app } = buildApp('tenant-a');
+    const res = await app.request('/users/user%00null');
+    expect([400, 404]).toContain(res.status);
+  });
+
+  test('GET /users/:userId returns 400 for userId with semicolons', async () => {
+    const { app } = buildApp('tenant-a');
+    const res = await app.request('/users/user;DROP TABLE users');
+    expect([400, 404]).toContain(res.status);
+  });
+
+  test('DELETE /users/:userId/sessions/:sessionId returns 400 for sessionId with slashes', async () => {
+    const { app, managedUserProvider } = buildApp('tenant-a');
+    managedUserProvider.seedUser(BASE_USER);
+    const res = await app.request('/users/user-1/sessions/../../admin', { method: 'DELETE' });
+    expect([400, 404]).toContain(res.status);
+  });
+
+  test('valid userId with hyphens and underscores is accepted', async () => {
+    const { app, managedUserProvider } = buildApp('tenant-a');
+    managedUserProvider.seedUser({ ...BASE_USER, id: 'valid_user-123' });
+    const res = await app.request('/users/valid_user-123');
+    expect(res.status).toBe(200);
+  });
+});

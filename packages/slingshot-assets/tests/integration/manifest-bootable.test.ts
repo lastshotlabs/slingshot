@@ -5,7 +5,7 @@
  * config object — no function references, no class instances — so
  * manifest-mode bootstrap succeeds.
  */
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { createAssetsPlugin } from '../../src/plugin';
 import type { AssetsPluginConfig } from '../../src/types';
 
@@ -46,5 +46,58 @@ describe('slingshot-assets manifest bootability', () => {
         mountPath: 'assets',
       } as AssetsPluginConfig),
     ).toThrow(/mountPath must start with '\//i);
+  });
+});
+
+describe('slingshot-assets image cache fallback', () => {
+  test('logs console.warn when image.cache is not a valid ImageCacheAdapter', () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      createAssetsPlugin({
+        storage: { adapter: 'memory' },
+        image: { cache: { notAnAdapter: true } as unknown },
+      } as AssetsPluginConfig);
+
+      const calls = warnSpy.mock.calls.map(c => String(c[0]));
+      expect(calls.some(m => m.includes('[slingshot-assets] image.cache is not a valid ImageCacheAdapter'))).toBe(true);
+      expect(calls.some(m => m.includes('falling back to in-memory cache'))).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('does not warn when image.cache is a valid ImageCacheAdapter', () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      createAssetsPlugin({
+        storage: { adapter: 'memory' },
+        image: {
+          cache: {
+            async get() { return null; },
+            async set() {},
+          },
+        },
+      } as AssetsPluginConfig);
+
+      const calls = warnSpy.mock.calls.map(c => String(c[0]));
+      expect(calls.some(m => m.includes('[slingshot-assets] image.cache'))).toBe(false);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('does not warn when image is configured but cache is omitted', () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      createAssetsPlugin({
+        storage: { adapter: 'memory' },
+        image: { maxWidth: 800, maxHeight: 600 },
+      } as AssetsPluginConfig);
+
+      const calls = warnSpy.mock.calls.map(c => String(c[0]));
+      expect(calls.some(m => m.includes('[slingshot-assets] image.cache'))).toBe(false);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

@@ -3,6 +3,7 @@
 import { Hono } from 'hono';
 import type {
   AppEnv,
+  EventPublishContext,
   ResolvedStores,
   SlingshotContext,
   SlingshotEventBus,
@@ -89,7 +90,11 @@ function makeEvents(getBus: () => SlingshotEventBus): SlingshotEvents {
     list() {
       return [];
     },
-    publish<K extends keyof SlingshotEventMap>(key: K, payload: SlingshotEventMap[K]) {
+    publish<K extends keyof SlingshotEventMap>(
+      key: K,
+      payload: SlingshotEventMap[K],
+      ctx: EventPublishContext,
+    ) {
       getBus().emit(key, payload);
       return {
         key,
@@ -100,6 +105,7 @@ function makeEvents(getBus: () => SlingshotEventBus): SlingshotEvents {
           ownerPlugin: 'slingshot-auth-test',
           exposure: ['internal'] as const,
           scope: null,
+          requestTenantId: ctx.requestTenantId,
         },
       };
     },
@@ -126,6 +132,7 @@ export function makeTestRuntime(
   const base: Omit<MutableTestRuntime, 'securityGate'> = {
     adapter,
     config: createAuthResolvedConfig(configOverrides),
+    evaluateUserAccess: async () => undefined,
     eventBus: makeEventBus(),
     events: undefined as unknown as SlingshotEvents,
     password: passwordRuntime,

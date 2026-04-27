@@ -214,4 +214,42 @@ describe('createLambdaRuntime', () => {
       onceSpy.mockRestore();
     }
   });
+
+  test('SIGTERM does not hang when onShutdown exceeds shutdownTimeoutMs', async () => {
+    const { createLambdaRuntime } = await import('../src/runtime');
+
+    let shutdownResolved = false;
+    const onShutdown = mock(async () => {
+      await new Promise(resolve => setTimeout(resolve, 200)); // outlasts timeout
+      shutdownResolved = true;
+    });
+
+    let capturedListener: (() => void) | undefined;
+    const onceSpy = spyOn(process, 'once').mockImplementation(((event, listener) => {
+      if (event === 'SIGTERM') {
+        capturedListener = listener as () => void;
+      }
+      return process;
+    }) as typeof process.once);
+
+    try {
+      const runtime = createLambdaRuntime({
+        manifest: { manifestVersion: 1 },
+        hooks: { onShutdown },
+        shutdownTimeoutMs: 10, // very short timeout
+      });
+
+      await runtime.getContext();
+      capturedListener?.();
+
+      // Wait slightly beyond the timeout but well short of onShutdown's 200ms
+      await new Promise(resolve => setTimeout(resolve, 30));
+
+      // onShutdown was called but hasn't resolved yet — timeout won
+      expect(onShutdown).toHaveBeenCalledTimes(1);
+      expect(shutdownResolved).toBe(false);
+    } finally {
+      onceSpy.mockRestore();
+    }
+  });
 });

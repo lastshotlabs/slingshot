@@ -185,12 +185,12 @@ export function buildSsrMiddleware(
           // A 30-second timeout guards against hung renderers blocking worker resources.
           try {
             const staleBsCtx = getContext(app);
-            const isrTimeout = AbortSignal.timeout(30_000);
+            const isrTimeout = AbortSignal.timeout(config.isr?.backgroundRegenTimeoutMs ?? 30_000);
             Promise.race([
               regeneratePage(cacheKey, url, query, config, assetTags, staleBsCtx, isrAdapter),
               new Promise<never>((_, reject) => {
                 isrTimeout.addEventListener('abort', () => {
-                  reject(new Error('[slingshot-ssr] ISR background regen timed out after 30s'));
+                  reject(new Error(`[slingshot-ssr] ISR background regen timed out after ${config.isr?.backgroundRegenTimeoutMs ?? 30_000}ms`));
                 });
               }),
             ]).catch((err: unknown) => {

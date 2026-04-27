@@ -1,5 +1,5 @@
 import type { Job } from 'bullmq';
-import { describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import { defineTask } from '@lastshotlabs/slingshot-orchestration';
 import type {
@@ -19,6 +19,50 @@ function createFakeJob(data: Record<string, unknown>): Job<Record<string, unknow
 
   return partial as unknown as Job<Record<string, unknown>>;
 }
+
+describe('bullmq task processor error handling', () => {
+  let consoleErrorSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('logs and does not crash when job.updateProgress rejects', async () => {
+    const task = defineTask({
+      name: 'progress-error-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input, ctx) {
+        ctx.reportProgress({ percent: 50 });
+        return input;
+      },
+    });
+
+    const job = createFakeJob({ taskName: task.name, input: { value: 'ok' }, runId: 'run_prog_err' });
+    job.updateProgress = mock(async () => {
+      throw new Error('redis connection lost');
+    });
+
+    const processor = createBullMQTaskProcessor({
+      taskRegistry: new Map([[task.name, task]]),
+    });
+
+    // Task should still complete successfully despite updateProgress throwing
+    await expect(processor(job)).resolves.toEqual({ value: 'ok' });
+
+    // Give the rejected promise a chance to settle and call .catch
+    await Promise.resolve();
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[slingshot-orchestration-bullmq] Failed to update job progress:',
+      expect.any(Error),
+    );
+  });
+});
 
 describe('bullmq task processor', () => {
   test('emits started, progress, and completed events', async () => {

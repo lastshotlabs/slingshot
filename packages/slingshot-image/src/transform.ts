@@ -48,7 +48,7 @@ async function loadSharp(): Promise<SharpConstructor | null> {
 
 /**
  * Resolve the `Content-Type` for a given format string.
- * Falls back to `'application/octet-stream'` for unrecognised formats.
+ * Returns the original content type when format is `'original'`.
  * @internal
  */
 function resolveContentType(format: ImageFormat, originalContentType: string): string {

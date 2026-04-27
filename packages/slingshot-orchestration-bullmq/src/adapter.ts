@@ -130,7 +130,8 @@ function deserializeRunSnapshot(value: string): Run | WorkflowRun | null {
       };
     }
     return base;
-  } catch {
+  } catch (err) {
+    console.error('[slingshot-orchestration-bullmq] Failed to deserialize run snapshot:', err);
     return null;
   }
 }

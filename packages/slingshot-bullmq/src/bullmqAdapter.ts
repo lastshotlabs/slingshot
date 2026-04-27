@@ -74,6 +74,18 @@ export const bullmqAdapterOptionsSchema = z.object({
 export type BullMQAdapterOptions = z.infer<typeof bullmqAdapterOptionsSchema>;
 
 /**
+ * Health snapshot for the BullMQ event bus adapter.
+ */
+export interface BullMQAdapterHealth {
+  /** Number of durable queues currently registered. */
+  queueCount: number;
+  /** Number of durable workers currently running. */
+  workerCount: number;
+  /** Number of events currently buffered for retry (waiting for Redis to recover). */
+  pendingBufferSize: number;
+}
+
+/**
  * Replaces all colons in `raw` with underscores so the result is safe to use
  * as a BullMQ queue name.
  *
@@ -262,7 +274,7 @@ function isSerializedBullMQEnvelope(value: unknown): value is SerializedBullMQEn
  */
 export function createBullMQAdapter(
   rawOpts: BullMQAdapterOptions & EventBusSerializationOptions,
-): SlingshotEventBus & { _drainPendingBuffer: () => Promise<void> } {
+): SlingshotEventBus & { _drainPendingBuffer: () => Promise<void>; getHealth: () => BullMQAdapterHealth } {
   const { serializer, schemaRegistry, ...adapterOpts } = rawOpts;
   const opts = validatePluginConfig('slingshot-bullmq', adapterOpts, bullmqAdapterOptionsSchema);
   const prefix = opts.prefix ?? 'slingshot:events';
@@ -648,5 +660,13 @@ export function createBullMQAdapter(
 
     /** @internal — exposed for testing only; do not use in application code */
     _drainPendingBuffer: drainPendingBuffer,
+
+    getHealth(): BullMQAdapterHealth {
+      return {
+        queueCount: queues.length,
+        workerCount: workers.length,
+        pendingBufferSize: pendingBuffer.length,
+      };
+    },
   };
 }

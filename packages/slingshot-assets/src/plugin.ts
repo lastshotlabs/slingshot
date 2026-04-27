@@ -55,7 +55,15 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
     imageConfig != null
       ? isImageCacheAdapter(config.image?.cache)
         ? config.image.cache
-        : createMemoryImageCache()
+        : (() => {
+            if (config.image?.cache !== undefined) {
+              console.warn(
+                '[slingshot-assets] image.cache is not a valid ImageCacheAdapter — falling back to in-memory cache. ' +
+                  'This cache is not shared across processes.',
+              );
+            }
+            return createMemoryImageCache();
+          })()
       : null;
 
   type LazyMiddleware = { handler: import('hono').MiddlewareHandler };

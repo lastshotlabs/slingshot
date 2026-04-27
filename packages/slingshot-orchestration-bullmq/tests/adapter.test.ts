@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import { type ProgressCapability, defineTask } from '@lastshotlabs/slingshot-orchestration';
 
@@ -418,6 +418,39 @@ describe('bullmq orchestration adapter', () => {
     expect(listed.runs[0]?.id).toBe(handle.id);
 
     await restartedAdapter.shutdown();
+  });
+
+  test('logs console.error when a stored run snapshot contains invalid JSON', async () => {
+    let consoleErrorSpy: ReturnType<typeof spyOn> | undefined;
+
+    try {
+      consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+      // Manually write corrupt JSON into the redis mock so the adapter reads it back
+      // when listing cancelled runs via listPersistedCancelledSnapshots.
+      const corruptRunId = 'corrupt-run-id';
+      const prefix = 'corrupt-snapshot';
+      await mockRedis.set(`${prefix}:cancelled:run:${corruptRunId}`, '{not valid json');
+      await mockRedis.zadd(`${prefix}:cancelled:runs`, Date.now(), corruptRunId);
+
+      const adapter = createBullMQOrchestrationAdapter({
+        connection: { host: '127.0.0.1', port: 6379 },
+        prefix,
+      });
+
+      const result = await adapter.listRuns({ status: 'cancelled' });
+      // The corrupt entry should be silently dropped from results
+      expect(result.total).toBe(0);
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[slingshot-orchestration-bullmq] Failed to deserialize run snapshot:',
+        expect.anything(),
+      );
+
+      await adapter.shutdown();
+    } finally {
+      consoleErrorSpy?.mockRestore();
+    }
   });
 
   test('does not report cancelled when active cancellation fails', async () => {

@@ -6,22 +6,14 @@ import { mountOpenApiDocs, mountRoutes } from '../../src/framework/mountRoutes';
 // Minimal RuntimeGlob that returns no files (empty routes dir simulation)
 function makeEmptyGlob() {
   return {
-    scan: async () => {
-      async function* empty() {}
-      return empty();
-    },
+    scan: async () => [],
   };
 }
 
 // RuntimeGlob that returns a specific list of files
 function makeFilesGlob(files: string[]) {
   return {
-    scan: async () => {
-      async function* gen() {
-        for (const f of files) yield f;
-      }
-      return gen();
-    },
+    scan: async () => files,
   };
 }
 
@@ -208,8 +200,7 @@ describe('mountRoutes — versioned', () => {
     const glob = {
       scan: async (pattern: string, opts: { cwd: string }) => {
         scannedDirs.push(opts.cwd);
-        async function* empty() {}
-        return empty();
+        return [];
       },
     };
     await mountRoutes(app, '/routes', { versions: ['v1'], sharedDir: false }, 'API', '1.0.0', glob);
@@ -225,19 +216,12 @@ describe('mountRoutes — versioned', () => {
     const glob = {
       scan: async (_pattern: string, opts: { cwd: string }) => {
         if (opts.cwd.endsWith('/v1')) {
-          async function* gen() {
-            yield 'hello.ts';
-          }
-          return gen();
+          return ['hello.ts'];
         }
         if (opts.cwd.endsWith('/shared')) {
-          async function* gen() {
-            yield 'health.ts';
-          }
-          return gen();
+          return ['health.ts'];
         }
-        async function* empty() {}
-        return empty();
+        return [];
       },
     };
 
@@ -264,11 +248,9 @@ describe('mountRoutes — versioned', () => {
           throw new Error('shared dir does not exist');
         }
         if (opts.cwd.endsWith('/v1')) {
-          async function* empty() {}
-          return empty();
+          return [];
         }
-        async function* empty() {}
-        return empty();
+        return [];
       },
     };
 
@@ -285,8 +267,7 @@ describe('mountRoutes — versioned', () => {
         if (opts.cwd.endsWith('/v1')) {
           throw new Error('version dir does not exist');
         }
-        async function* empty() {}
-        return empty();
+        return [];
       },
     };
 

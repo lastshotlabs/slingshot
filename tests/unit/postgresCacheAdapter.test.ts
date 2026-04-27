@@ -209,10 +209,10 @@ describe('postgresCacheAdapter', () => {
     const originalSetInterval = globalThis.setInterval;
     const mockTimer = { unref: () => {} };
 
-    globalThis.setInterval = (fn: TimerHandler) => {
+    globalThis.setInterval = ((fn: TimerHandler) => {
       capturedCallback = fn as () => Promise<void>;
       return mockTimer as unknown as ReturnType<typeof setInterval>;
-    };
+    }) as unknown as typeof setInterval;
 
     const fresh = createMockPool();
     const { createPostgresCacheAdapter } =
@@ -239,10 +239,10 @@ describe('postgresCacheAdapter', () => {
     const originalSetInterval = globalThis.setInterval;
     const mockTimer = { unref: () => {} };
 
-    globalThis.setInterval = (fn: TimerHandler) => {
+    globalThis.setInterval = ((fn: TimerHandler) => {
       capturedCallback = fn as () => Promise<void>;
       return mockTimer as unknown as ReturnType<typeof setInterval>;
-    };
+    }) as unknown as typeof setInterval;
 
     const fresh = createMockPool();
     // Make pool.query throw on the cleanup DELETE call

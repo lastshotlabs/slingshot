@@ -116,6 +116,7 @@ describe('s3Storage — put', () => {
     const adapter = s3Storage({ bucket: 'b', publicUrl: 'https://cdn.example.com/' });
     const result = await adapter.put('images/photo.jpg', Buffer.from('data'), {
       mimeType: 'image/jpeg',
+      size: 4,
     });
     expect(result).toEqual({ url: 'https://cdn.example.com/images/photo.jpg' });
   });
@@ -129,7 +130,7 @@ describe('s3Storage — put', () => {
         controller.close();
       },
     });
-    await adapter.put('stream.txt', stream as never, { mimeType: 'text/plain' });
+    await adapter.put('stream.txt', stream as never, { mimeType: 'text/plain', size: 11 });
     expect(sentCommands).toHaveLength(1);
   });
 
@@ -137,7 +138,7 @@ describe('s3Storage — put', () => {
     resetCommands();
     const adapter = s3Storage({ bucket: 'b' });
     const blob = new Blob(['blob data'], { type: 'text/plain' });
-    await adapter.put('blob.txt', blob as never, { mimeType: 'text/plain' });
+    await adapter.put('blob.txt', blob as never, { mimeType: 'text/plain', size: blob.size });
     expect(sentCommands).toHaveLength(1);
   });
 
@@ -150,7 +151,10 @@ describe('s3Storage — put', () => {
         controller.close();
       },
     });
-    await adapter.put('large.bin', stream as never, { mimeType: 'application/octet-stream' });
+    await adapter.put('large.bin', stream as never, {
+      mimeType: 'application/octet-stream',
+      size: 9,
+    });
     expect(uploadDoneMock).toHaveBeenCalledTimes(1);
   });
 

@@ -11,6 +11,13 @@ import { requireCaptcha } from '../../src/framework/middleware/captcha';
 // verifyCaptcha tests
 // ---------------------------------------------------------------------------
 
+function mockFetchOnce(impl: (...args: Parameters<typeof fetch>) => Promise<Response>) {
+  const replacement = Object.assign(impl, {
+    preconnect: globalThis.fetch.preconnect,
+  }) satisfies typeof fetch;
+  return spyOn(globalThis, 'fetch').mockImplementationOnce(replacement);
+}
+
 describe('verifyCaptcha', () => {
   test('returns success: true for hcaptcha success response', async () => {
     const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
@@ -102,20 +109,20 @@ describe('verifyCaptcha', () => {
 
   test('includes ip in POST body when provided', async () => {
     let capturedBody: string | null = null;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async (_url, init) => {
+    const fetchSpy = mockFetchOnce(async (_url, init) => {
       capturedBody = (init?.body as URLSearchParams).toString();
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     });
 
     await verifyCaptcha('token', { provider: 'hcaptcha', secretKey: 'secret' }, '1.2.3.4');
 
-    expect(capturedBody).toContain('remoteip=1.2.3.4');
+    expect(capturedBody ?? '').toContain('remoteip=1.2.3.4');
     fetchSpy.mockRestore();
   });
 
   test('does not include remoteip when ip is not provided', async () => {
     let capturedBody: string | null = null;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async (_url, init) => {
+    const fetchSpy = mockFetchOnce(async (_url, init) => {
       capturedBody = (init?.body as URLSearchParams).toString();
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     });
@@ -176,40 +183,40 @@ describe('verifyCaptcha', () => {
 
   test('calls recaptcha verify URL', async () => {
     let calledUrl: string | null = null;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async url => {
+    const fetchSpy = mockFetchOnce(async url => {
       calledUrl = url as string;
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     });
 
     await verifyCaptcha('token', { provider: 'recaptcha', secretKey: 'secret' });
 
-    expect(calledUrl).toBe('https://www.google.com/recaptcha/api/siteverify');
+    expect(calledUrl ?? '').toBe('https://www.google.com/recaptcha/api/siteverify');
     fetchSpy.mockRestore();
   });
 
   test('calls hcaptcha verify URL', async () => {
     let calledUrl: string | null = null;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async url => {
+    const fetchSpy = mockFetchOnce(async url => {
       calledUrl = url as string;
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     });
 
     await verifyCaptcha('token', { provider: 'hcaptcha', secretKey: 'secret' });
 
-    expect(calledUrl).toBe('https://hcaptcha.com/siteverify');
+    expect(calledUrl ?? '').toBe('https://hcaptcha.com/siteverify');
     fetchSpy.mockRestore();
   });
 
   test('calls turnstile verify URL', async () => {
     let calledUrl: string | null = null;
-    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementationOnce(async url => {
+    const fetchSpy = mockFetchOnce(async url => {
       calledUrl = url as string;
       return new Response(JSON.stringify({ success: true }), { status: 200 });
     });
 
     await verifyCaptcha('token', { provider: 'turnstile', secretKey: 'secret' });
 
-    expect(calledUrl).toBe('https://challenges.cloudflare.com/turnstile/v0/siteverify');
+    expect(calledUrl ?? '').toBe('https://challenges.cloudflare.com/turnstile/v0/siteverify');
     fetchSpy.mockRestore();
   });
 });

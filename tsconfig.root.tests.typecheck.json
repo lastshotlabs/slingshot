@@ -9,13 +9,15 @@
     "emitDeclarationOnly": true,
     "rootDir": ".",
     "outDir": ".tmp/typecheck/root-tests",
-    "noEmit": false
+    "noEmit": false,
+    "allowImportingTsExtensions": true
   },
   "include": [
     "tests",
     "packages/slingshot-auth/tests/helpers/runtime.ts",
     "scripts/build.ts",
     "scripts/publish.ts",
+    "scripts/postgres-capacity-smoke.ts",
     "tsup.cli.config.ts",
     "vitest.config.ts"
   ],

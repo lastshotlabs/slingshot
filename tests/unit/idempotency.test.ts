@@ -289,8 +289,7 @@ describe('idempotency write-collision paths', () => {
     const callCount = { n: 0 };
     const app = new Hono();
     const app2 = app as unknown as object;
-    const persistence = createTestPersistence();
-    persistence.idempotency = mockAdapter as any;
+    const persistence = { ...createTestPersistence(), idempotency: mockAdapter as any };
     const ctx = {
       app: app2,
       config: {
@@ -370,8 +369,7 @@ describe('idempotency write-collision paths', () => {
     const callCount = { n: 0 };
     const app = new Hono();
     const app2 = app as unknown as object;
-    const persistence = createTestPersistence();
-    persistence.idempotency = mockAdapter as any;
+    const persistence = { ...createTestPersistence(), idempotency: mockAdapter as any };
     const ctx = {
       app: app2,
       config: {

@@ -397,6 +397,6 @@ describe('maybeSignCursor', () => {
     const signing = { config: { cursors: true }, secret };
     const signed = maybeSignCursor('page-3', signing as any);
     expect(typeof signed).toBe('string');
-    expect(verifyCursor(signed, secret)).toBe('page-3');
+    expect(verifyCursor(signed ?? '', secret)).toBe('page-3');
   });
 });

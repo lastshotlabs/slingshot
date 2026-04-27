@@ -83,7 +83,7 @@ describe('connectAuthMongo', () => {
       host: 'myhost.mongodb.net',
       db: 'mydb',
     });
-    const uri = mockAuthConn.openUri.mock.calls[0][0] as string;
+    const uri = (mockAuthConn.openUri.mock.calls as unknown as Array<[string]>)[0]?.[0] ?? '';
     expect(uri).toContain('mongodb+srv://');
     expect(uri).toContain('myhost.mongodb.net');
     expect(uri).toContain('mydb');
@@ -162,7 +162,7 @@ describe('connectAuthMongo — URI with query params', () => {
       host: 'cluster.mongodb.net?retryWrites=true&w=majority',
       db: 'auth',
     });
-    const uri = mockAuthConn.openUri.mock.calls[0][0] as string;
+    const uri = (mockAuthConn.openUri.mock.calls as unknown as Array<[string]>)[0]?.[0] ?? '';
     expect(uri).toContain('?retryWrites=true&w=majority');
     expect(uri).toContain('/auth');
   });

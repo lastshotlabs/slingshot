@@ -15,7 +15,7 @@ beforeEach(() => {
 
 describe('metricsCollector middleware', () => {
   test('records counter and histogram for requests', async () => {
-    const app = new Hono();
+    const app = new Hono<{ Variables: { tenantId: string } }>();
     app.use(metricsCollector({ state }));
     app.get('/users', c => c.json({ ok: true }));
 
@@ -58,7 +58,7 @@ describe('metricsCollector middleware', () => {
   test('tenant label included when tenantId in context', async () => {
     const app = new Hono();
     app.use(async (c, next) => {
-      c.set('tenantId' as any, 'acme');
+      (c as unknown as { set(key: 'tenantId', value: string): void }).set('tenantId', 'acme');
       await next();
     });
     app.use(metricsCollector({ state }));

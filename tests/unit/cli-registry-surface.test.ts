@@ -17,12 +17,27 @@ function makeOclifConfig() {
   };
 }
 
-function captureLogs<T extends { log: (...args: unknown[]) => void }>(command: T): string[] {
+type LoggableCommand = { log(message?: string, ...args: unknown[]): void };
+
+function captureLogs<T extends LoggableCommand>(command: T): string[] {
   const logs: string[] = [];
-  spyOn(command, 'log').mockImplementation((...args: unknown[]) => {
-    logs.push(args.map(String).join(' '));
+  const logSpy = spyOn(command, 'log') as unknown as {
+    mockImplementation(fn: LoggableCommand['log']): unknown;
+  };
+  logSpy.mockImplementation((message?: string, ...args: unknown[]) => {
+    if (message === undefined) return;
+    logs.push([message, ...args].map(String).join(' '));
   });
   return logs;
+}
+
+function requireTsupObjectConfig(
+  config: typeof import('../../tsup.cli.config')['default'],
+): Exclude<typeof config, unknown[] | ((...args: never[]) => unknown)> {
+  if (Array.isArray(config) || typeof config === 'function') {
+    throw new Error('Expected tsup CLI config to export an object');
+  }
+  return config;
 }
 
 afterEach(() => {
@@ -33,9 +48,13 @@ describe('root cli registry/platform surface', () => {
   test('loads build/runtime config modules', async () => {
     const tsup = await import('../../tsup.cli.config');
     const vitest = await import('../../vitest.config');
+    const tsupConfig = requireTsupObjectConfig(tsup.default);
 
-    expect(tsup.default.entry['cli/index']).toBe('src/cli/index.ts');
-    expect(tsup.default.banner?.js).toContain('#!/usr/bin/env node');
+    const entry = tsupConfig.entry as Record<string, string> | undefined;
+    const banner =
+      typeof tsupConfig.banner === 'function' ? tsupConfig.banner({ format: 'esm' }) : tsupConfig.banner;
+    expect(entry?.['cli/index']).toBe('src/cli/index.ts');
+    expect(banner?.js).toContain('#!/usr/bin/env node');
     expect(vitest.default.test?.environment).toBe('node');
     expect(vitest.default.test?.include).toEqual(['tests/node-runtime/**/*.test.ts']);
   });

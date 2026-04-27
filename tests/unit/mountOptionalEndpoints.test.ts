@@ -152,7 +152,7 @@ describe('mountOptionalEndpoints', () => {
       undefined,
       undefined,
       {
-        presignedUrls: { basePath: '/my-uploads' },
+        presignedUrls: { path: '/my-uploads' },
         storage: {} as any,
       },
       createMetricsState(),

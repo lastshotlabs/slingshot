@@ -380,17 +380,17 @@ describe('Manifest → Runtime Integration', () => {
     const byRoom = await (adapter as Record<string, (...args: unknown[]) => unknown>).getByRoom({
       roomId: 'r1',
     });
-    expect(byRoom.items.length).toBe(1);
+    expect((byRoom as { items: unknown[] }).items.length).toBe(1);
 
     const delivered = await (
       adapter as Record<string, (...args: unknown[]) => unknown>
     ).markDelivered({ id: m1.id });
-    expect(delivered.status).toBe('delivered');
+    expect((delivered as { status: string }).status).toBe('delivered');
 
     const searchResults = await (
       adapter as Record<string, (...args: unknown[]) => unknown>
     ).searchContent('hello');
-    expect(searchResults.length).toBe(1);
+    expect((searchResults as unknown[]).length).toBe(1);
   });
 
   it('audits work on manifest-resolved configs', () => {
@@ -426,7 +426,7 @@ describe('Manifest → Runtime Integration', () => {
     const fn = (adapter as Record<string, (...args: unknown[]) => unknown>).doubleScore;
     expect(typeof fn).toBe('function');
     const result = await fn(item);
-    expect(result.score).toBe(10);
+    expect((result as { score: number }).score).toBe(10);
   });
 });
 

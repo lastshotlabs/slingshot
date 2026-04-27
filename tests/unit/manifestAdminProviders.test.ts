@@ -352,7 +352,7 @@ describe('createDeferredAdminProviders', () => {
     const pluginState = new Map<string, unknown>();
     pluginState.set('slingshot-auth', mockAuthRuntime({}));
     result.bind(pluginState);
-    await expect(result.managedUserProvider!.deleteUser('u1')).rejects.toThrow(
+    await expect(result.managedUserProvider!.deleteUser!('u1')).rejects.toThrow(
       'does not support deleteUser',
     );
   });
@@ -370,7 +370,7 @@ describe('createDeferredAdminProviders', () => {
       }),
     );
     result.bind(pluginState);
-    await result.managedUserProvider!.deleteUser('u1');
+    await result.managedUserProvider!.deleteUser!('u1');
     expect(deleted).toBe('u1');
   });
 
@@ -406,7 +406,10 @@ describe('createDeferredAdminProviders', () => {
     const pluginState = new Map<string, unknown>();
     pluginState.set('slingshot-permissions', perms);
     result.bind(pluginState);
-    const canResult = await result.permissions!.evaluator.can({ id: 'u1', type: 'user' }, 'read');
+    const canResult = await result.permissions!.evaluator.can(
+      { subjectId: 'u1', subjectType: 'user' },
+      'read',
+    );
     expect(typeof canResult).toBe('boolean');
   });
 
@@ -444,9 +447,9 @@ describe('createDeferredAdminProviders', () => {
     const grantData = { id: 'g1' };
     const grant = grantData as unknown as never;
     await adapter.createGrant(grant);
-    await adapter.revokeGrant('g1', 'u1', null);
-    await adapter.getGrantsForSubject('u1', 'user', null);
-    await adapter.getEffectiveGrantsForSubject('u1', 'user', null);
+    await adapter.revokeGrant('g1', 'u1', undefined);
+    await adapter.getGrantsForSubject('u1', 'user', undefined);
+    await adapter.getEffectiveGrantsForSubject('u1', 'user', undefined);
     await adapter.listGrantHistory('u1', 'user');
     await adapter.listGrantsOnResource('resource', 'r1', null);
     const deleteSubjectData = { id: 'u1', type: 'user' };

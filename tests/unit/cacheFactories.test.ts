@@ -382,8 +382,8 @@ describe('createMongoBoundaryCacheAdapter', () => {
     const { adapter, cacheModel } = await createTestMongoAdapter();
     await adapter.delPattern('session:*');
     expect(cacheModel.deleteMany).toHaveBeenCalled();
-    const call = cacheModel.deleteMany.mock.calls[0];
+    const call = (cacheModel.deleteMany.mock.calls as unknown as Array<[{ key: unknown }]>)[0];
     // The filter should have a key field that is a regex
-    expect((call?.[0] as { key: unknown } | undefined)?.key).toBeInstanceOf(RegExp);
+    expect(call?.[0].key).toBeInstanceOf(RegExp);
   });
 });

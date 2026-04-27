@@ -4,7 +4,9 @@ import { router } from '../../src/framework/routes/home';
 
 describe('home route handler', () => {
   test('GET / returns appName from slingshotCtx', async () => {
-    const app = new Hono();
+    const app = new Hono<{
+      Variables: { slingshotCtx: { config: { appName: string } } };
+    }>();
 
     // Set up slingshotCtx middleware before mounting the router
     app.use('/*', async (c, next) => {

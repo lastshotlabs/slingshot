@@ -2,11 +2,17 @@ import { describe, expect, it } from 'bun:test';
 import { writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import { ANONYMOUS_ACTOR, createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import type { SecretRepository, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import type { AppManifest } from '../../src/lib/manifest';
 import { createManifestHandlerRegistry } from '../../src/lib/manifestHandlerRegistry';
 import { manifestToAppConfig } from '../../src/lib/manifestToAppConfig';
+
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'entity:user.created': Record<string, unknown>;
+  }
+}
 
 // Minimal valid manifest
 const minimalManifest: AppManifest = {
@@ -544,7 +550,7 @@ describe('manifestToAppConfig', () => {
 
     it('resolves ws endpoint upgrade handler ref (lines 206-211)', () => {
       const reg = createManifestHandlerRegistry();
-      const upgradeFn = () => {};
+      const upgradeFn = async () => undefined;
       reg.registerHandler('wsUpgrade', () => upgradeFn);
 
       const manifest: AppManifest = {
@@ -564,7 +570,7 @@ describe('manifestToAppConfig', () => {
 
     it('resolves ws endpoint onRoomSubscribe handler ref (lines 216-221)', () => {
       const reg = createManifestHandlerRegistry();
-      const onRoomSubscribeFn = () => {};
+      const onRoomSubscribeFn = () => true;
       reg.registerHandler('wsRoomSub', () => onRoomSubscribeFn);
 
       const manifest: AppManifest = {
@@ -588,7 +594,12 @@ describe('manifestToAppConfig', () => {
       const reg = createManifestHandlerRegistry();
       const upgradeHandler = (req: Request) => {
         void req;
-        return Promise.resolve({ id: '1', userId: null, endpoint: '/sse/events' });
+        return Promise.resolve({
+          id: '1',
+          actor: ANONYMOUS_ACTOR,
+          requestTenantId: null,
+          endpoint: '/sse/events',
+        });
       };
       reg.registerHandler('sseUpgrade', () => upgradeHandler);
 

@@ -6,10 +6,11 @@ import { validateManifestCrossFields } from '../../src/lib/manifest/validation';
 function collectIssues(manifest: Record<string, unknown>): z.ZodIssue[] {
   const issues: z.ZodIssue[] = [];
   const ctx: z.RefinementCtx = {
+    value: manifest,
+    issues: issues as never,
     addIssue: (issue: z.IssueData) => {
       issues.push(issue as unknown as z.ZodIssue);
     },
-    path: [],
   };
   validateManifestCrossFields(manifest, ctx);
   return issues;

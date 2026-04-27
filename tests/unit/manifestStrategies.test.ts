@@ -157,7 +157,7 @@ describe('resolveLoggingStrategy', () => {
     try {
       fn({ method: 'GET', path: '/', statusCode: 200, responseTime: 10 });
       expect(spy).toHaveBeenCalledTimes(1);
-      const output = spy.mock.calls[0][0] as string;
+      const output = (spy.mock.calls as unknown as Array<[string]>)[0]?.[0] ?? '';
       expect(() => JSON.parse(output)).not.toThrow();
       const parsed = JSON.parse(output);
       expect(parsed.method).toBe('GET');
@@ -175,7 +175,9 @@ describe('resolveLoggingStrategy', () => {
     try {
       fn({ method: 'POST', path: '/api/users', statusCode: 201, responseTime: 42 });
       expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy.mock.calls[0][0]).toBe('POST /api/users 201 42ms');
+      expect((spy.mock.calls as unknown as Array<[string]>)[0]?.[0]).toBe(
+        'POST /api/users 201 42ms',
+      );
     } finally {
       console.log = origLog;
     }

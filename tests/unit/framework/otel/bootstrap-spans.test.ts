@@ -1,6 +1,6 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { describe, expect, mock, test } from 'bun:test';
-import type { AppEnv, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, SlingshotEvents, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import { withSpan, withSpanSync } from '../../../../src/framework/otel/spans';
 import { getTracer, isTracingEnabled } from '../../../../src/framework/otel/tracer';
@@ -107,6 +107,7 @@ describe('bootstrap span helpers with no-op tracer', () => {
 describe('plugin lifecycle spans', () => {
   // Minimal framework config stub — plugins in these tests don't use it
   const frameworkConfig = {} as unknown as Parameters<typeof runPluginMiddleware>[2];
+  const events = {} as SlingshotEvents;
 
   function makePlugin(name: string, deps?: string[]): SlingshotPlugin {
     return {
@@ -124,9 +125,9 @@ describe('plugin lifecycle spans', () => {
     const app = new OpenAPIHono<AppEnv>();
     const plugin = makePlugin('test-plugin');
 
-    await runPluginMiddleware([plugin], app, frameworkConfig, bus, tracer);
-    await runPluginRoutes([plugin], app, frameworkConfig, bus, tracer);
-    await runPluginPost([plugin], app, frameworkConfig, bus, tracer);
+    await runPluginMiddleware([plugin], app, frameworkConfig, bus, events, tracer);
+    await runPluginRoutes([plugin], app, frameworkConfig, bus, events, tracer);
+    await runPluginPost([plugin], app, frameworkConfig, bus, events, tracer);
 
     expect(plugin.setupMiddleware).toHaveBeenCalledTimes(1);
     expect(plugin.setupRoutes).toHaveBeenCalledTimes(1);
@@ -138,9 +139,9 @@ describe('plugin lifecycle spans', () => {
     const app = new OpenAPIHono<AppEnv>();
     const plugin = makePlugin('test-plugin');
 
-    await runPluginMiddleware([plugin], app, frameworkConfig, bus);
-    await runPluginRoutes([plugin], app, frameworkConfig, bus);
-    await runPluginPost([plugin], app, frameworkConfig, bus);
+    await runPluginMiddleware([plugin], app, frameworkConfig, bus, events);
+    await runPluginRoutes([plugin], app, frameworkConfig, bus, events);
+    await runPluginPost([plugin], app, frameworkConfig, bus, events);
 
     expect(plugin.setupMiddleware).toHaveBeenCalledTimes(1);
     expect(plugin.setupRoutes).toHaveBeenCalledTimes(1);
@@ -154,7 +155,7 @@ describe('plugin lifecycle spans', () => {
     const pluginA = makePlugin('plugin-a');
     const pluginB = makePlugin('plugin-b', ['plugin-a']);
 
-    await runPluginMiddleware([pluginA, pluginB], app, frameworkConfig, bus, tracer);
+    await runPluginMiddleware([pluginA, pluginB], app, frameworkConfig, bus, events, tracer);
 
     expect(pluginA.setupMiddleware).toHaveBeenCalledTimes(1);
     expect(pluginB.setupMiddleware).toHaveBeenCalledTimes(1);
@@ -171,8 +172,8 @@ describe('plugin lifecycle spans', () => {
       }),
     };
 
-    await expect(runPluginMiddleware([plugin], app, frameworkConfig, bus, tracer)).rejects.toThrow(
-      'plugin setup failed',
-    );
+    await expect(
+      runPluginMiddleware([plugin], app, frameworkConfig, bus, events, tracer),
+    ).rejects.toThrow('plugin setup failed');
   });
 });

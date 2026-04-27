@@ -52,16 +52,16 @@ describe('script entrypoints', () => {
 
     const logs: string[] = [];
     ensurePagefindLink(paths, {
-      log: message => logs.push(message),
-      warn: message => logs.push(message),
+      log: (message: string) => logs.push(message),
+      warn: (message: string) => logs.push(message),
     });
 
     expect(existsSync(paths.expectedLink)).toBe(true);
     expect(logs.join('\n')).toContain('Linked');
 
     ensurePagefindLink(paths, {
-      log: message => logs.push(message),
-      warn: message => logs.push(message),
+      log: (message: string) => logs.push(message),
+      warn: (message: string) => logs.push(message),
     });
     expect(existsSync(paths.expectedLink)).toBe(true);
   });
@@ -113,7 +113,7 @@ describe('script entrypoints', () => {
     const destroyed: string[] = [];
     await smokeModule.runExamplesSmoke(
       registry as never,
-      { error() {}, log: message => writes.push(message) },
+      { error() {}, log: (message: string) => writes.push(message) },
       {
         root: tempDir,
         stdout: { write: message => writes.push(String(message)) },
@@ -448,15 +448,15 @@ describe('script entrypoints', () => {
 
     expect(
       await runCoverageModule.runCoverage(coverageSuites as never, spawnFn, {
-        log: message => logs.push(message),
+        log: (message: string) => logs.push(message),
         stdout: {
-          write: chunk =>
+          write: (chunk: string | Uint8Array) =>
             stdoutChunks.push(
               typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true }),
             ),
         },
         stderr: {
-          write: chunk =>
+          write: (chunk: string | Uint8Array) =>
             stderrChunks.push(
               typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true }),
             ),

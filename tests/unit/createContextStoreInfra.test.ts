@@ -82,7 +82,7 @@ describe('createContextStoreInfra', () => {
       entityRegistry,
     });
 
-    expect(infra.getRedis()).toBe(mockRedis);
+    expect(infra.getRedis()).toBe(mockRedis as unknown as ReturnType<typeof infra.getRedis>);
   });
 
   test('getMongo throws when mongo is not configured', () => {
@@ -110,8 +110,8 @@ describe('createContextStoreInfra', () => {
     });
 
     const result = infra.getMongo();
-    expect(result.conn).toBe(mockMongo.app);
-    expect(result.mg).toBe(mockMongo.mongoose);
+    expect(result.conn).toBe(mockMongo.app as ReturnType<typeof infra.getMongo>['conn']);
+    expect(result.mg).toBe(mockMongo.mongoose as ReturnType<typeof infra.getMongo>['mg']);
   });
 
   test('getSqliteDb throws when sqlite is not configured', () => {
@@ -138,7 +138,7 @@ describe('createContextStoreInfra', () => {
       entityRegistry,
     });
 
-    expect(infra.getSqliteDb()).toBe(mockDb);
+    expect(infra.getSqliteDb()).toBe(mockDb as unknown as ReturnType<typeof infra.getSqliteDb>);
   });
 
   test('getPostgres throws when postgres is not configured', () => {
@@ -155,7 +155,7 @@ describe('createContextStoreInfra', () => {
   });
 
   test('getPostgres returns pool when configured', () => {
-    const mockPg = { pool: { query: () => {} } };
+    const mockPg = { pool: { query: () => {} }, db: null };
     const entityRegistry = createEntityRegistry();
     const infra = createContextStoreInfra({
       appName: 'test',
@@ -165,7 +165,7 @@ describe('createContextStoreInfra', () => {
       entityRegistry,
     });
 
-    expect(infra.getPostgres()).toBe(mockPg);
+    expect(infra.getPostgres()).toBe(mockPg as unknown as ReturnType<typeof infra.getPostgres>);
   });
 
   test('REGISTER_ENTITY registers an entity config in the registry', () => {
@@ -574,7 +574,7 @@ describe('search integration (via symbols)', () => {
       entityRegistry,
     });
 
-    const resolveFn = infra[RESOLVE_REINDEX_SOURCE] as (storageName: string) => any;
+    const resolveFn = Reflect.get(infra, RESOLVE_REINDEX_SOURCE) as (storageName: string) => null;
     expect(resolveFn('any-entity')).toBeNull();
   });
 
@@ -588,8 +588,8 @@ describe('search integration (via symbols)', () => {
       entityRegistry,
     });
 
-    expect(typeof infra[RESOLVE_ENTITY_FACTORIES]).toBe('function');
-    expect(typeof infra[RESOLVE_COMPOSITE_FACTORIES]).toBe('function');
+    expect(typeof Reflect.get(infra, RESOLVE_ENTITY_FACTORIES)).toBe('function');
+    expect(typeof Reflect.get(infra, RESOLVE_COMPOSITE_FACTORIES)).toBe('function');
   });
 
   test('event-bus sync returns undefined when bus has no emit function (line 150 branch)', () => {

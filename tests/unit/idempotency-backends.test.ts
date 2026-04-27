@@ -152,6 +152,9 @@ describe('createSqliteIdempotencyAdapter', () => {
           all(...args: unknown[]): T[] {
             return stmt.all(...args) as T[];
           },
+          run(...args: unknown[]): void {
+            stmt.run(...args);
+          },
         };
       },
       close() {

@@ -83,7 +83,20 @@ function createMockTracer(mockSpan: Span): Tracer {
 // ---------------------------------------------------------------------------
 
 function buildApp(tracer: Tracer, handler?: (c: any) => any) {
-  const app = new Hono();
+  const app = new Hono<{
+    Variables: {
+      requestId: string;
+      tenantId: string;
+      actor: {
+        id: string;
+        kind: 'user';
+        tenantId: string;
+        sessionId: null;
+        roles: string[] | null;
+        claims: Record<string, unknown>;
+      };
+    };
+  }>();
 
   // Provide default context variables the middleware reads after next()
   app.use('/*', async (c, next) => {

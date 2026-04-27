@@ -24,7 +24,7 @@ import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 // ---------------------------------------------------------------------------
 
 import { ANONYMOUS_ACTOR, createInProcessAdapter } from '@lastshotlabs/slingshot-core';
-import type { Actor, WsState } from '@lastshotlabs/slingshot-core';
+import type { Actor, SlingshotEvents, WsState } from '@lastshotlabs/slingshot-core';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 // ---------------------------------------------------------------------------
 // 5. Plugin setupMiddleware throwing halts startup
@@ -443,6 +443,8 @@ describe('concurrent MFA challenge — sqlite', () => {
 });
 
 describe('plugin setupMiddleware — failure halts startup', () => {
+  const dummyEvents = {} as SlingshotEvents;
+
   test('throwing plugin prevents subsequent plugins from running', async () => {
     const calls: string[] = [];
 
@@ -463,7 +465,9 @@ describe('plugin setupMiddleware — failure halts startup', () => {
 
     const sorted = validateAndSortPlugins([pluginA, pluginB]);
 
-    await expect(runPluginMiddleware(sorted, {} as any, {} as any, {} as any)).rejects.toThrow(
+    await expect(
+      runPluginMiddleware(sorted, {} as any, {} as any, {} as any, dummyEvents),
+    ).rejects.toThrow(
       'plugin-a exploded',
     );
 
@@ -481,7 +485,9 @@ describe('plugin setupMiddleware — failure halts startup', () => {
 
     const sorted = validateAndSortPlugins([plugin]);
 
-    await expect(runPluginMiddleware(sorted, {} as any, {} as any, {} as any)).rejects.toThrow(
+    await expect(
+      runPluginMiddleware(sorted, {} as any, {} as any, {} as any, dummyEvents),
+    ).rejects.toThrow(
       'setup failed',
     );
   });

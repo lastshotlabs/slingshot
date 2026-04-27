@@ -18,10 +18,16 @@ function makeOclifConfig() {
   };
 }
 
-function captureLogs<T extends { log: (...args: unknown[]) => void }>(command: T): string[] {
+type LoggableCommand = { log(message?: string, ...args: unknown[]): void };
+
+function captureLogs<T extends LoggableCommand>(command: T): string[] {
   const logs: string[] = [];
-  spyOn(command, 'log').mockImplementation((...args: unknown[]) => {
-    logs.push(args.map(String).join(' '));
+  const logSpy = spyOn(command, 'log') as unknown as {
+    mockImplementation(fn: LoggableCommand['log']): unknown;
+  };
+  logSpy.mockImplementation((message?: string, ...args: unknown[]) => {
+    if (message === undefined) return;
+    logs.push([message, ...args].map(String).join(' '));
   });
   return logs;
 }

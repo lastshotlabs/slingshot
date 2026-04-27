@@ -285,7 +285,7 @@ describe('QueueFactory methods', () => {
       maxSize: 2,
     });
     const dlqQueue = result.dlqQueue as unknown as MockQueue;
-    dlqQueue.add = mockDlqAdd as typeof dlqQueue.add;
+    dlqQueue.add = mockDlqAdd as unknown as typeof dlqQueue.add;
     // After adding, getWaitingCount returns a number > maxSize
     dlqQueue.getWaitingCount = mock(async () => 5) as typeof dlqQueue.getWaitingCount;
     dlqQueue.getWaiting = mock(async () => [
@@ -324,7 +324,7 @@ describe('QueueFactory methods', () => {
       data: { payload: 42 },
       opts: { delay: 1000, priority: 5, attempts: 3, backoff: { type: 'exponential' } },
       remove: removeMock,
-    })) as typeof dlqQueue.getJob;
+    })) as unknown as typeof dlqQueue.getJob;
 
     await result.retryJob('dlq:job-retry');
     expect(removeMock).toHaveBeenCalledTimes(1);
@@ -346,7 +346,7 @@ describe('QueueFactory methods', () => {
       data: { payload: 99 },
       opts: { delay: 500 },
       remove: removeMock,
-    })) as typeof dlqQueue.getJob;
+    })) as unknown as typeof dlqQueue.getJob;
 
     await result.retryJob('dlq:job-retry2');
     expect(removeMock).toHaveBeenCalledTimes(1);
@@ -374,7 +374,9 @@ describe('QueueFactory methods', () => {
     await new Promise(r => setImmediate(r));
     expect(mockDlqAdd).toHaveBeenCalledTimes(1);
     // Second arg (opts) should not have delay/priority
-    const callOpts = mockDlqAdd.mock.calls[0][2] as Record<string, unknown>;
+    const callOpts =
+      ((mockDlqAdd.mock.calls as unknown as Array<[unknown, unknown, Record<string, unknown>]>)[0]?.[2]) ??
+      {};
     expect(callOpts.delay).toBeUndefined();
   });
 
@@ -391,9 +393,7 @@ describe('QueueFactory methods', () => {
           throw new Error('callback error');
         },
       });
-      (result.dlqQueue as unknown as { add: mock<() => Promise<unknown>> }).add = mock(
-        async () => ({}),
-      );
+      (result.dlqQueue as unknown as { add: unknown }).add = mock(async () => ({}));
 
       const failedJob = {
         id: 'job-err',
@@ -419,9 +419,7 @@ describe('QueueFactory methods', () => {
     const result = factory.createDLQHandler(sourceWorker as never, 'source-queue', {
       onDeadLetter,
     });
-    (result.dlqQueue as unknown as { add: mock<() => Promise<unknown>> }).add = mock(
-      async () => ({}),
-    );
+    (result.dlqQueue as unknown as { add: unknown }).add = mock(async () => ({}));
 
     const failedJob = {
       id: 'job-3',

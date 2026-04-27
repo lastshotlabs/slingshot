@@ -412,3 +412,73 @@ describe('userId and sessionId param validation', () => {
     expect(res.status).toBe(200);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 501 — unsupported optional provider methods
+// ---------------------------------------------------------------------------
+
+function buildAppWithPartialProvider(
+  missingMethod: string,
+  tenantId = 'tenant-a',
+) {
+  const app = new Hono<AdminEnv>();
+  app.use('*', async (c, next) => {
+    c.set('adminPrincipal', { subject: 'actor', provider: 'memory', tenantId });
+    await next();
+  });
+  const provider = createMemoryManagedUserProvider();
+  provider.seedUser(BASE_USER);
+  provider.seedSession(BASE_SESSION);
+  const partialProvider = { ...provider, [missingMethod]: undefined };
+  app.route(
+    '/',
+    createAdminRouter({
+      managedUserProvider: partialProvider,
+      bus: createInProcessAdapter(),
+      evaluator: { can: async () => true },
+    }),
+  );
+  return app;
+}
+
+describe('501 responses for unsupported optional methods', () => {
+  test('POST /users/:userId/suspend returns 501 when suspendUser not supported', async () => {
+    const app = buildAppWithPartialProvider('suspendUser');
+    const res = await app.request('/users/user-1/suspend', { method: 'POST' });
+    expect(res.status).toBe(501);
+  });
+
+  test('POST /users/:userId/unsuspend returns 501 when unsuspendUser not supported', async () => {
+    const app = buildAppWithPartialProvider('unsuspendUser');
+    const res = await app.request('/users/user-1/unsuspend', { method: 'POST' });
+    expect(res.status).toBe(501);
+  });
+
+  test('PUT /users/:userId/roles returns 501 when setRoles not supported', async () => {
+    const app = buildAppWithPartialProvider('setRoles');
+    const res = await app.request('/users/user-1/roles', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roles: ['admin'] }),
+    });
+    expect(res.status).toBe(501);
+  });
+
+  test('DELETE /users/:userId returns 501 when deleteUser not supported', async () => {
+    const app = buildAppWithPartialProvider('deleteUser');
+    const res = await app.request('/users/user-1', { method: 'DELETE' });
+    expect(res.status).toBe(501);
+  });
+
+  test('DELETE /users/:userId/sessions returns 501 when revokeAllSessions not supported', async () => {
+    const app = buildAppWithPartialProvider('revokeAllSessions');
+    const res = await app.request('/users/user-1/sessions', { method: 'DELETE' });
+    expect(res.status).toBe(501);
+  });
+
+  test('DELETE /users/:userId/sessions/:sessionId returns 501 when revokeSession not supported', async () => {
+    const app = buildAppWithPartialProvider('revokeSession');
+    const res = await app.request('/users/user-1/sessions/session-1', { method: 'DELETE' });
+    expect(res.status).toBe(501);
+  });
+});

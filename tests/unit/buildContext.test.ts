@@ -1,17 +1,23 @@
 import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test';
 import {
   RESOLVE_REINDEX_SOURCE,
+  createCoreRegistrar,
   createEntityRegistry,
   createRouter,
 } from '@lastshotlabs/slingshot-core';
-import type { SecretRepository } from '@lastshotlabs/slingshot-core';
+import type { CacheAdapter, EmailTemplate, SecretRepository } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
 import { buildContext, finalizeContext } from '../../src/framework/buildContext';
+import { createMemoryAuditLogProvider } from '../../src/framework/auditLog/memoryProvider';
 import { createMetricsState } from '../../src/framework/metrics/registry';
+import { createMemoryCronRegistry } from '../../src/framework/persistence/cronRegistry';
+import { createMemoryIdempotencyAdapter } from '../../src/framework/persistence/idempotency';
 import {
   CONTEXT_STORE_INFRA,
   getContextStoreInfra,
 } from '../../src/framework/persistence/internalRepoResolution';
+import { createMemoryUploadRegistry } from '../../src/framework/persistence/uploadRegistry';
+import { createMemoryWsMessageRepository } from '../../src/framework/persistence/wsMessages';
 
 const disconnectRedisMock = mock(async () => {});
 const disconnectMongoMock = mock(async () => {});
@@ -314,7 +320,6 @@ describe('finalizeContext', () => {
 describe('buildContext lifecycle', () => {
   async function createDirectContext(overrides?: {
     infra?: Partial<Parameters<typeof buildContext>[0]['infra']>;
-    permissions?: unknown;
     plugins?: Parameters<typeof buildContext>[0]['plugins'];
     secretDestroy?: ReturnType<typeof mock>;
     busShutdown?: ReturnType<typeof mock>;
@@ -363,9 +368,32 @@ describe('buildContext lifecycle', () => {
     };
     const app = createRouter();
     const entityRegistry = createEntityRegistry();
+    const { registrar } = createCoreRegistrar();
+    const resolvedStores = {
+      sessions: 'memory' as const,
+      oauthState: 'memory' as const,
+      cache: 'memory' as const,
+      authStore: 'memory' as const,
+      sqlite: undefined,
+    };
     const infra: Parameters<typeof buildContext>[0]['infra'] = {
       frameworkConfig: {
+        resolvedStores,
+        logging: {
+          enabled: false,
+          verbose: false,
+          authTrace: false,
+          auditWarnings: false,
+        },
+        security: { cors: '*' },
+        signing: null,
+        dataEncryptionKeys: [],
+        redis: undefined,
+        mongo: undefined,
+        captcha: null,
+        registrar,
         entityRegistry,
+        password: Bun.password,
         trustProxy: false,
         storeInfra: {
           appName: 'direct-app',
@@ -383,23 +411,17 @@ describe('buildContext lifecycle', () => {
           },
         },
       },
-      resolvedStores: {
-        sessions: 'memory',
-        oauthState: 'memory',
-        cache: 'memory',
-        authStore: 'memory',
-        sqlite: undefined,
-      },
+      resolvedStores,
       redisEnabled: false,
       mongoMode: false,
       dataEncryptionKeys: [],
       corsOrigins: '*',
       persistence: {
-        idempotency: { clear: async () => {} },
-        uploadRegistry: { clear: async () => {} },
-        wsMessages: { clear: async () => {} },
-        auditLog: {},
-        cronRegistry: {},
+        idempotency: createMemoryIdempotencyAdapter(),
+        uploadRegistry: createMemoryUploadRegistry(),
+        wsMessages: createMemoryWsMessageRepository(),
+        auditLog: createMemoryAuditLogProvider(),
+        cronRegistry: createMemoryCronRegistry(),
         configureRoom() {},
         getRoomConfig() {
           return null;
@@ -437,7 +459,6 @@ describe('buildContext lifecycle', () => {
         app: null as any,
         merged: (overrides?.mergedSecrets ?? {}) as any,
       },
-      permissions: overrides?.permissions as any,
     });
 
     createdContexts.push(ctx);
@@ -741,18 +762,18 @@ describe('buildContext lifecycle', () => {
       cacheAdapters: new Map([
         ['memory', cacheAdapter1],
         ['redis', cacheAdapter2],
-      ]),
+      ] satisfies Array<['memory' | 'redis', CacheAdapter]>),
       emailTemplates: new Map([
-        ['welcome', { subject: 'Hi' }],
-        ['reset', { subject: 'Reset' }],
-      ]),
+        ['welcome', { subject: 'Hi', html: '<p>Hi</p>' }],
+        ['reset', { subject: 'Reset', html: '<p>Reset</p>' }],
+      ] satisfies Array<[string, EmailTemplate]>),
     });
 
     // size
     expect(ctx.cacheAdapters.size).toBe(2);
     // has
     expect(ctx.cacheAdapters.has('memory')).toBe(true);
-    expect(ctx.cacheAdapters.has('missing')).toBe(false);
+    expect(ctx.cacheAdapters.has('postgres')).toBe(false);
     // get
     expect(ctx.cacheAdapters.get('memory')).toBe(cacheAdapter1);
     // entries
@@ -790,6 +811,27 @@ describe('buildContext lifecycle', () => {
       infra: {
         frameworkConfig: {
           entityRegistry: createEntityRegistry(),
+          resolvedStores: {
+            sessions: 'memory',
+            oauthState: 'memory',
+            cache: 'memory',
+            authStore: 'memory',
+            sqlite: undefined,
+          },
+          logging: {
+            enabled: false,
+            verbose: false,
+            authTrace: false,
+            auditWarnings: false,
+          },
+          security: { cors: '*' },
+          signing: null,
+          dataEncryptionKeys: [],
+          redis: undefined,
+          mongo: undefined,
+          captcha: null,
+          registrar: createCoreRegistrar().registrar,
+          password: Bun.password,
           trustProxy: false,
           ws: {
             endpoints: {
@@ -825,6 +867,22 @@ describe('buildContext lifecycle', () => {
 
   test('ReadonlyMap forEach passes thisArg correctly (lines 178-181)', async () => {
     const { ctx } = await createDirectContext();
+    const cacheAdapter1: CacheAdapter = {
+      name: 'memory',
+      get: async () => null,
+      set: async () => {},
+      del: async () => {},
+      delPattern: async () => {},
+      isReady: () => true,
+    };
+    const cacheAdapter2: CacheAdapter = {
+      name: 'redis',
+      get: async () => null,
+      set: async () => {},
+      del: async () => {},
+      delPattern: async () => {},
+      isReady: () => true,
+    };
     finalizeContext(ctx, {
       identityResolver: null,
       routeAuth: null,
@@ -832,10 +890,10 @@ describe('buildContext lifecycle', () => {
       rateLimitAdapter: null,
       fingerprintBuilder: null,
       cacheAdapters: new Map([
-        ['a', 'adapter-a'],
-        ['b', 'adapter-b'],
-      ]),
-      emailTemplates: new Map([['t1', { subject: 'S1' }]]),
+        ['memory', cacheAdapter1],
+        ['redis', cacheAdapter2],
+      ] satisfies Array<['memory' | 'redis', CacheAdapter]>),
+      emailTemplates: new Map([['t1', { subject: 'S1', html: '<p>S1</p>' }]]),
     });
 
     // Exercise the forEach thisArg path on ReadonlyMap (line 178-181)
@@ -843,7 +901,7 @@ describe('buildContext lifecycle', () => {
     ctx.cacheAdapters.forEach(function (this: typeof collector, _v: unknown, k: unknown) {
       this.keys.push(k as string);
     }, collector);
-    expect(collector.keys).toEqual(['a', 'b']);
+    expect(collector.keys).toEqual(['memory', 'redis']);
 
     const emailCollector = { names: [] as string[] };
     ctx.emailTemplates.forEach(function (this: typeof emailCollector, _v: unknown, k: string) {

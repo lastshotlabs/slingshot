@@ -462,13 +462,13 @@ describe('getAuditLogModel', () => {
 
       // First call: creates model
       const model1 = getAuditLogModel(mockConn as any);
-      expect(model1).toBe(mockModel);
+      expect((model1 as { modelName: string }).modelName).toBe(mockModel.modelName);
       expect(mockConn.model).toHaveBeenCalledTimes(1);
       expect(mockSchema.index).toHaveBeenCalledTimes(3); // userId, requestTenantId, path indexes
 
       // Second call: returns cached model
       const model2 = getAuditLogModel(mockConn as any);
-      expect(model2).toBe(mockModel);
+      expect(model2).toBe(model1);
       // model() should NOT have been called again
       expect(mockConn.model).toHaveBeenCalledTimes(1);
     } finally {

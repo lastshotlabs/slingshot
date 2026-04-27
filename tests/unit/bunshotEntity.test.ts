@@ -517,8 +517,9 @@ describe('generated search with $and/$or filters', () => {
 
     // Should find only "hello world" — "hello again" is deleted, "hello other room" is r2
     expect(Array.isArray(results)).toBe(true);
-    expect(results.length).toBe(1);
-    expect(results[0].content).toBe('hello world');
+    const rows = results as Array<Record<string, unknown>>;
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.content).toBe('hello world');
   });
 
   it('handles $or filters at runtime', async () => {
@@ -551,8 +552,9 @@ describe('generated search with $and/$or filters', () => {
       cat2: 'food',
     });
 
-    expect(results.length).toBe(2);
-    const categories = results.map((r: Record<string, unknown>) => r.category).sort();
+    const rows = results as Array<Record<string, unknown>>;
+    expect(rows.length).toBe(2);
+    const categories = rows.map(r => r.category).sort();
     expect(categories).toEqual(['food', 'tech']);
   });
 });

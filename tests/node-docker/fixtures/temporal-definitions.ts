@@ -90,32 +90,35 @@ export const pauseTaskExport = defineTask({
   },
 });
 
+const onboardingWorkflowInput = z.object({
+  email: z.string().email(),
+  firstName: z.string(),
+  lastName: z.string(),
+});
+type OnboardingWorkflowInput = z.infer<typeof onboardingWorkflowInput>;
+
 export const onboardingWorkflowExport = defineWorkflow({
   name: 'onboard-user',
-  input: z.object({
-    email: z.string().email(),
-    firstName: z.string(),
-    lastName: z.string(),
-  }),
+  input: onboardingWorkflowInput,
   output: z.object({
     emailAttempt: z.number().int().positive(),
     fullName: z.string(),
     pauseLabel: z.string(),
   }),
   steps: [
-    step('retry-email-step', retryingEmailTaskExport, {
+    step<OnboardingWorkflowInput>('retry-email-step', retryingEmailTaskExport, {
       input: ctx => ({
         email: ctx.workflowInput.email,
       }),
     }),
-    sleep('workflow-pause', 100),
-    step('format-profile-step', formatProfileTaskExport, {
+    sleep<OnboardingWorkflowInput>('workflow-pause', 100),
+    step<OnboardingWorkflowInput>('format-profile-step', formatProfileTaskExport, {
       input: ctx => ({
         firstName: ctx.workflowInput.firstName,
         lastName: ctx.workflowInput.lastName,
       }),
     }),
-    step('pause-step', pauseTaskExport, {
+    step<OnboardingWorkflowInput>('pause-step', pauseTaskExport, {
       input: () => ({
         label: 'resumed',
       }),

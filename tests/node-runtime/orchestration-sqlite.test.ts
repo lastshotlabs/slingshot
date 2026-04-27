@@ -10,7 +10,7 @@ import {
   defineTask,
   defineWorkflow,
   step,
-} from '../../packages/slingshot-orchestration/src/index.ts';
+} from '../../packages/slingshot-orchestration/src/index';
 
 let tempDir = '';
 

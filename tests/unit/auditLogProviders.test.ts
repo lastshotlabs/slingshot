@@ -386,8 +386,14 @@ describe('createMongoAuditLogProvider', () => {
 
     const sortChain: Record<string, (...args: unknown[]) => unknown> = {
       sort: () => sortChain,
-      limit: (n: number) => ({
-        lean: async () => returnDocs.slice(0, n),
+      limit: (...args: unknown[]) => ({
+        lean: async () => {
+          const [limit] = args;
+          if (typeof limit !== 'number') {
+            throw new Error('Expected numeric Mongo limit');
+          }
+          return returnDocs.slice(0, limit);
+        },
       }),
     };
 

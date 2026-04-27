@@ -128,12 +128,14 @@ export async function createTestApp(
   authOverrides?: Partial<AuthPluginConfig>,
 ) {
   const mergedDb = { ...baseConfig.db, ...overrides?.db };
+  const authRedis =
+    typeof mergedDb.redis === 'boolean' ? mergedDb.redis : mergedDb.redis !== undefined;
   const explicitAuthAdapter = authOverrides?.auth?.adapter !== undefined;
   const inheritedAuthDb = explicitAuthAdapter
     ? {
         sqlite: mergedDb.sqlite,
         mongo: mergedDb.mongo,
-        redis: mergedDb.redis,
+        redis: authRedis,
         postgres: mergedDb.postgres,
         auth: 'memory' as const,
         sessions: 'memory' as const,
@@ -142,7 +144,7 @@ export async function createTestApp(
     : {
         sqlite: mergedDb.sqlite,
         mongo: mergedDb.mongo,
-        redis: mergedDb.redis,
+        redis: authRedis,
         postgres: mergedDb.postgres,
         sessions: mergedDb.sessions,
         auth: mergedDb.auth,

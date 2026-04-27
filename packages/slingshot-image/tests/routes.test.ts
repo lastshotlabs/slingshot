@@ -200,6 +200,39 @@ describe('createMemoryImageCache', () => {
   });
 });
 
+describe('GET /_snapshot/image — quality and format edge cases', () => {
+  it('clamps q=0 to minimum quality of 1 (no 400)', async () => {
+    const app = buildTestApp({ allowedOrigins: [] });
+    // Relative URL passes SSRF check; fetch will 502, but the q param must not cause 400
+    const res = await app.request('/_snapshot/image?url=%2Ftest.jpg&w=100&q=0');
+    expect(res.status).not.toBe(400);
+  });
+
+  it('clamps q=999 to maximum quality of 100 (no 400)', async () => {
+    const app = buildTestApp({ allowedOrigins: [] });
+    const res = await app.request('/_snapshot/image?url=%2Ftest.jpg&w=100&q=999');
+    expect(res.status).not.toBe(400);
+  });
+
+  it('falls back to q=75 when q is not a number', async () => {
+    const app = buildTestApp({ allowedOrigins: [] });
+    const res = await app.request('/_snapshot/image?url=%2Ftest.jpg&w=100&q=abc');
+    expect(res.status).not.toBe(400);
+  });
+
+  it('accepts a valid format (webp) without 400', async () => {
+    const app = buildTestApp({ allowedOrigins: [] });
+    const res = await app.request('/_snapshot/image?url=%2Ftest.jpg&w=100&f=webp');
+    expect(res.status).not.toBe(400);
+  });
+
+  it('falls back to original format for unrecognised f value (no 400)', async () => {
+    const app = buildTestApp({ allowedOrigins: [] });
+    const res = await app.request('/_snapshot/image?url=%2Ftest.jpg&w=100&f=bmp');
+    expect(res.status).not.toBe(400);
+  });
+});
+
 describe('buildCacheKey', () => {
   it('produces a consistent key', async () => {
     const { buildCacheKey } = await import('../src/cache');

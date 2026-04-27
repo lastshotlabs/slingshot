@@ -6,6 +6,7 @@
  * using the in-memory cache adapter via createTestApp().
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
+import type { Context } from 'hono';
 import { createTestApp } from '../setup';
 
 // ---------------------------------------------------------------------------
@@ -222,7 +223,7 @@ describe('cacheResponse — HTTP integration', () => {
     let callCount = 0;
     testApp.get(
       '/cache-dynamic/:id',
-      cacheResponse({ key: c => `item:${c.req.param('id')}`, store: 'memory', ttl: 60 }),
+      cacheResponse({ key: (c: Context) => `item:${c.req.param('id')}`, store: 'memory', ttl: 60 }),
       c => {
         callCount++;
         return c.json({ id: c.req.param('id') });

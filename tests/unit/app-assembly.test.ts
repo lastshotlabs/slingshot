@@ -155,11 +155,10 @@ describe('app assembly', () => {
           if (key === 'JWT_SECRET') return 'jwt-secret-from-provider-at-least-32-chars!!';
           return null;
         },
-        getMany: async (keys: readonly string[]) => {
-          const map = new Map<string, string | null>();
+        getMany: async (keys: string[]) => {
+          const map = new Map<string, string>();
           for (const k of keys) {
             if (k === 'JWT_SECRET') map.set(k, 'jwt-secret-from-provider-at-least-32-chars!!');
-            else map.set(k, null);
           }
           return map;
         },

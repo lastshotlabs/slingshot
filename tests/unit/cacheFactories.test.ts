@@ -150,9 +150,9 @@ describe('boundaryCacheFactories — dispatch map', () => {
     ).toThrow('[framework/boundaryAdapters] Redis cache adapter requested without a Redis client');
   });
 
-  test('redis factory returns adapter when redis is provided', () => {
+  test('redis factory returns adapter when redis is provided', async () => {
     const redisClient = createMockRedisClient();
-    const adapter = boundaryCacheFactories.redis({
+    const adapter = await boundaryCacheFactories.redis({
       redis: redisClient as any,
       mongo: null,
       sqliteDb: null,
@@ -384,6 +384,6 @@ describe('createMongoBoundaryCacheAdapter', () => {
     expect(cacheModel.deleteMany).toHaveBeenCalled();
     const call = cacheModel.deleteMany.mock.calls[0];
     // The filter should have a key field that is a regex
-    expect(call[0].key).toBeInstanceOf(RegExp);
+    expect((call?.[0] as { key: unknown } | undefined)?.key).toBeInstanceOf(RegExp);
   });
 });

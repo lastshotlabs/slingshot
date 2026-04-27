@@ -11,7 +11,14 @@
     "outDir": ".tmp/typecheck/root-tests",
     "noEmit": false
   },
-  "include": ["tests", "packages/slingshot-auth/tests/helpers/runtime.ts"],
+  "include": [
+    "tests",
+    "packages/slingshot-auth/tests/helpers/runtime.ts",
+    "scripts/build.ts",
+    "scripts/publish.ts",
+    "tsup.cli.config.ts",
+    "vitest.config.ts"
+  ],
   "exclude": ["node_modules", "dist"],
   "references": [
     {

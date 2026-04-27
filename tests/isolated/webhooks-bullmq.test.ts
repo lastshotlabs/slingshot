@@ -1,15 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { WebhookDeliveryError } from '../../packages/slingshot-webhooks/src/types/queue';
+import type { WebhookJob } from '../../packages/slingshot-webhooks/src/types/queue';
 
-type JobInput = {
-  deliveryId: string;
-  endpointId: string;
-  url: string;
-  secret: string;
-  event: string;
-  payload: string;
-  attempts: number;
-};
+type JobInput = Omit<WebhookJob, 'id' | 'createdAt'>;
 
 type BullJobShape = {
   id: string | undefined;
@@ -189,7 +182,10 @@ function makeJobInput(overrides: Partial<JobInput> = {}): JobInput {
     endpointId: 'endpoint-1',
     url: 'https://example.com/webhook',
     secret: 'super-secret-token',
-    event: 'auth:user.created',
+    event: 'auth:login',
+    eventId: 'event-1',
+    occurredAt: '2026-04-27T00:00:00.000Z',
+    subscriber: { ownerType: 'tenant', ownerId: 'tenant-a', tenantId: 'tenant-a' },
     payload: '{"userId":"user-1"}',
     attempts: 0,
     ...overrides,
@@ -241,7 +237,7 @@ describe('webhook BullMQ queue', () => {
     });
 
     state.queues[0]!.countValue = 7;
-    expect(await queue.depth()).toBe(7);
+    expect(await queue.depth!()).toBe(7);
 
     await queue.stop();
     expect(state.workers[0]?.closed).toBe(true);
@@ -460,7 +456,7 @@ describe('webhook BullMQ queue', () => {
     await queue.start(async () => {});
 
     await expect(queue.stop()).rejects.toThrow('worker close failed');
-    expect(await queue.depth()).toBe(0);
+    expect(await queue.depth!()).toBe(0);
     await expect(queue.start(async () => {})).resolves.toBeUndefined();
   });
 });

@@ -31,7 +31,7 @@ describe('build and publish scripts', () => {
     writeFileSync(join(cleanDir, 'keep', 'file.txt'), 'keep\n', 'utf8');
     writeFileSync(join(cleanDir, 'remove-me', 'file.txt'), 'remove\n', 'utf8');
 
-    const buildModule = await import('../../scripts/build.ts');
+    const buildModule = await import('../../scripts/build');
     buildModule.rewriteFrameworkDeclarationImports(frameworkDir);
     buildModule.cleanTarget({ path: cleanDir, preserveEntries: ['keep'] });
 
@@ -76,7 +76,7 @@ describe('build and publish scripts', () => {
       'utf8',
     );
 
-    const publishModule = await import('../../scripts/publish.ts');
+    const publishModule = await import('../../scripts/publish');
     expect(publishModule.parsePublishArgs(['--target=npm', '--dry-run'])).toEqual({
       target: 'npm',
       shouldPublish: false,

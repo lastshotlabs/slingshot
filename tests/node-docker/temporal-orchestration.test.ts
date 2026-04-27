@@ -123,7 +123,7 @@ describe('Temporal orchestration integration (docker)', () => {
       buildId,
       definitionsModulePath: FIXTURE_PATH,
       eventSink: {
-        async emit(name, payload) {
+        async emit(name: string, payload: unknown) {
           eventLog.push({ name, payload });
         },
       },
@@ -240,7 +240,7 @@ describe('Temporal orchestration integration (docker)', () => {
       expect(workflowProgress.some(progress => progress?.percent === 50)).toBe(true);
       expect(workflowProgress.some(progress => progress?.percent === 100)).toBe(true);
 
-      if (!completedWorkflowRun || completedWorkflowRun.type !== 'workflow') {
+      if (!completedWorkflowRun || !('steps' in completedWorkflowRun)) {
         throw new Error('Expected completed workflow run');
       }
 

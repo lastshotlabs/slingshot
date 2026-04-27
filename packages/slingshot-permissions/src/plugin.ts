@@ -142,10 +142,17 @@ export function createPermissionsPlugin(config?: PermissionsPluginConfig): Sling
       const permsState = pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
       if (!permsState?.adapter) return;
       bus.on('auth:user.deleted', async ({ userId }) => {
-        await permsState.adapter.deleteAllGrantsForSubject({
-          subjectId: userId,
-          subjectType: 'user',
-        });
+        try {
+          await permsState.adapter.deleteAllGrantsForSubject({
+            subjectId: userId,
+            subjectType: 'user',
+          });
+        } catch (err) {
+          console.error(
+            '[slingshot-permissions] Failed to delete grants for deleted user:',
+            err,
+          );
+        }
       });
     },
 

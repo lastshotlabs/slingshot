@@ -54,24 +54,46 @@ export function createOrchestrationRuntime(
     supports(capability) {
       return supportsCapability(options.adapter, capability);
     },
+    /**
+     * Send a signal to an in-flight workflow run.
+     *
+     * @not-implemented Signals are not yet supported by the memory or SQLite adapters.
+     * Use slingshot-orchestration-temporal for signal support.
+     * Check `runtime.supports('signals')` before calling.
+     */
     signal(runId, name, payload) {
       if (!supportsCapability(options.adapter, 'signals')) {
         return Promise.reject(throwUnsupported('signals'));
       }
       return (options.adapter as SignalCapability).signal(runId, name, payload);
     },
+    /**
+     * Schedule a task or workflow to run on a cron expression.
+     *
+     * @not-implemented Scheduling is not yet supported by the memory or SQLite adapters.
+     * Use slingshot-orchestration-temporal for scheduling support.
+     * Check `runtime.supports('scheduling')` before calling.
+     */
     schedule(target, cron, input) {
       if (!supportsCapability(options.adapter, 'scheduling')) {
         return Promise.reject(throwUnsupported('scheduling'));
       }
       return (options.adapter as ScheduleCapability).schedule(target, cron, input);
     },
+    /**
+     * @not-implemented Scheduling is not yet supported by the memory or SQLite adapters.
+     * Use slingshot-orchestration-temporal for scheduling support.
+     */
     unschedule(scheduleId) {
       if (!supportsCapability(options.adapter, 'scheduling')) {
         return Promise.reject(throwUnsupported('scheduling'));
       }
       return (options.adapter as ScheduleCapability).unschedule(scheduleId);
     },
+    /**
+     * @not-implemented Scheduling is not yet supported by the memory or SQLite adapters.
+     * Use slingshot-orchestration-temporal for scheduling support.
+     */
     listSchedules() {
       if (!supportsCapability(options.adapter, 'scheduling')) {
         return Promise.reject(throwUnsupported('scheduling'));

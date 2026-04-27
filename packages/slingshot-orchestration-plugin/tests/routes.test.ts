@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import {
@@ -9,6 +9,7 @@ import {
   defineWorkflow,
   sleep,
 } from '@lastshotlabs/slingshot-orchestration';
+import type { OrchestrationRuntime, Run } from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationRouter } from '../src/routes';
 
 describe('orchestration routes', () => {
@@ -338,7 +339,7 @@ describe('orchestration routes', () => {
     expect(body).toEqual([{ name: 'catalog-workflow', description: 'A test workflow' }]);
   });
 
-  test('POST /tasks/:name/runs with malformed JSON body defaults to empty options', async () => {
+  test('POST /tasks/:name/runs with malformed JSON body returns 400', async () => {
     const task = defineTask({
       name: 'json-fallback-task',
       input: z.any(),
@@ -365,7 +366,9 @@ describe('orchestration routes', () => {
       body: 'not json {{{',
     });
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toContain('Invalid JSON');
   });
 
   test('POST /tasks/:name/runs returns 404 when task is not registered', async () => {
@@ -512,5 +515,462 @@ describe('orchestration routes', () => {
     const body = await response.json();
     expect(body.total).toBeGreaterThanOrEqual(0);
     expect(body.runs).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Helper: build a minimal OrchestrationRuntime from parts so tests can control
+// listRuns without spinning up a real in-process task worker.
+// ---------------------------------------------------------------------------
+
+function makeFakeRun(id: string, tenantId?: string): Run {
+  return {
+    id,
+    type: 'task',
+    name: 'fake-task',
+    status: 'pending',
+    input: {},
+    tenantId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
+function makeMockRuntime(listRunsImpl: OrchestrationRuntime['listRuns']): OrchestrationRuntime {
+  return {
+    runTask: mock(async () => ({ id: 'run-mock', result: async () => ({}) })),
+    runWorkflow: mock(async () => ({ id: 'run-mock', result: async () => ({}) })),
+    getRun: mock(async () => null),
+    cancelRun: mock(async () => {}),
+    signal: mock(async () => {}),
+    schedule: mock(async () => ({ id: 'sched-mock' })),
+    listRuns: listRunsImpl,
+    onProgress: mock(() => () => {}),
+    supports: (cap) => cap === 'observability',
+  } as unknown as OrchestrationRuntime;
+}
+
+// ---------------------------------------------------------------------------
+// resolveRequestContext() exception handling
+// ---------------------------------------------------------------------------
+
+describe('resolveRequestContext — exception handling', () => {
+  test('synchronous throw in resolveRequestContext returns HTTP 500', async () => {
+    const task = defineTask({
+      name: 'ctx-sync-throw-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        resolveRequestContext() {
+          throw new Error('boom');
+        },
+      }),
+    );
+
+    const response = await app.request('/orchestration/tasks/ctx-sync-throw-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(500);
+  });
+
+  test('OrchestrationError VALIDATION_FAILED in resolveRequestContext returns HTTP 400', async () => {
+    const task = defineTask({
+      name: 'ctx-validation-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        resolveRequestContext() {
+          throw new OrchestrationError('VALIDATION_FAILED', 'bad actor header');
+        },
+      }),
+    );
+
+    const response = await app.request('/orchestration/tasks/ctx-validation-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.code).toBe('VALIDATION_FAILED');
+  });
+
+  test('OrchestrationError TASK_NOT_FOUND in resolveRequestContext returns HTTP 404', async () => {
+    const task = defineTask({
+      name: 'ctx-not-found-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        resolveRequestContext() {
+          throw new OrchestrationError('TASK_NOT_FOUND', 'no such task');
+        },
+      }),
+    );
+
+    const response = await app.request('/orchestration/tasks/ctx-not-found-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.code).toBe('TASK_NOT_FOUND');
+  });
+
+  test('unknown error code in resolveRequestContext maps to HTTP 500', async () => {
+    const task = defineTask({
+      name: 'ctx-unknown-error-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        resolveRequestContext() {
+          throw new OrchestrationError('ADAPTER_ERROR', 'something weird');
+        },
+      }),
+    );
+
+    const response = await app.request('/orchestration/tasks/ctx-unknown-error-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// authorizeRun() failure handling on GET /runs/:id
+// ---------------------------------------------------------------------------
+
+describe('authorizeRun — failure handling', () => {
+  test('authorizeRun throwing returns HTTP 500 on GET /runs/:id', async () => {
+    const task = defineTask({
+      name: 'auth-throw-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const handle = await runtime.runTask(task, {});
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        authorizeRun() {
+          throw new Error('auth system is down');
+        },
+      }),
+    );
+
+    const response = await app.request(`/orchestration/runs/${handle.id}`);
+    expect(response.status).toBe(500);
+  });
+
+  test('authorizeRun returning false returns HTTP 404 on GET /runs/:id', async () => {
+    const task = defineTask({
+      name: 'auth-false-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const handle = await runtime.runTask(task, {});
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        authorizeRun() {
+          return false;
+        },
+      }),
+    );
+
+    const response = await app.request(`/orchestration/runs/${handle.id}`);
+    expect(response.status).toBe(404);
+  });
+
+  test('async authorizeRun that rejects returns HTTP 500 on GET /runs/:id', async () => {
+    const task = defineTask({
+      name: 'auth-async-reject-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const handle = await runtime.runTask(task, {});
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        async authorizeRun() {
+          throw new Error('async rejection');
+        },
+      }),
+    );
+
+    const response = await app.request(`/orchestration/runs/${handle.id}`);
+    expect(response.status).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listAuthorizedRuns() — MAX_AUTH_SCAN cap
+// ---------------------------------------------------------------------------
+
+describe('listAuthorizedRuns — scan cap', () => {
+  test('returns results without scanning more than MAX_AUTH_SCAN records when all 3000 are authorized', async () => {
+    const totalRuns = 3_000;
+    // Build a fake listRuns that returns pages of 100 runs each from a pool of 3000.
+    const fakeRuns: Run[] = Array.from({ length: totalRuns }, (_, i) => makeFakeRun(`run-${i}`));
+
+    let totalScanned = 0;
+    const runtime = makeMockRuntime(async (filter) => {
+      const offset = filter?.offset ?? 0;
+      const limit = filter?.limit ?? 50;
+      const page = fakeRuns.slice(offset, offset + limit);
+      totalScanned += page.length;
+      return { runs: page, total: totalRuns };
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [],
+        workflows: [],
+        // authorizeRun always grants access — forces the loop to rely on scan cap
+        authorizeRun: () => true,
+      }),
+    );
+
+    const response = await app.request('/orchestration/runs?limit=10');
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    // Should have returned 10 runs
+    expect(body.runs).toHaveLength(10);
+    // Should have stopped scanning at MAX_AUTH_SCAN (2000), not gone to 3000
+    expect(totalScanned).toBeLessThanOrEqual(2_000);
+  });
+
+  test('returns empty list when all 3000 runs are rejected by authorizeRun', async () => {
+    const totalRuns = 3_000;
+    const fakeRuns: Run[] = Array.from({ length: totalRuns }, (_, i) => makeFakeRun(`run-${i}`));
+
+    const runtime = makeMockRuntime(async (filter) => {
+      const offset = filter?.offset ?? 0;
+      const limit = filter?.limit ?? 50;
+      const page = fakeRuns.slice(offset, offset + limit);
+      return { runs: page, total: totalRuns };
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [],
+        workflows: [],
+        // authorizeRun always denies — loop must cap and not hang
+        authorizeRun: () => false,
+      }),
+    );
+
+    const response = await app.request('/orchestration/runs?limit=10');
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.runs).toHaveLength(0);
+    expect(body.total).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Metadata size validation
+// ---------------------------------------------------------------------------
+
+describe('metadata size validation', () => {
+  test('POST /tasks/:name/runs returns 400 when metadata serializes to more than 64KB', async () => {
+    const task = defineTask({
+      name: 'metadata-large-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime, tasks: [task], workflows: [] }),
+    );
+
+    // 65 KB of metadata (each char is 1 byte in ASCII)
+    const oversized = { data: 'x'.repeat(65 * 1024) };
+
+    const response = await app.request('/orchestration/tasks/metadata-large-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metadata: oversized }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toContain('64KB');
+  });
+
+  test('POST /tasks/:name/runs succeeds when metadata is under 64KB', async () => {
+    const task = defineTask({
+      name: 'metadata-small-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime, tasks: [task], workflows: [] }),
+    );
+
+    // 63 KB of metadata — should pass validation
+    const smallEnough = { data: 'x'.repeat(63 * 1024) };
+
+    const response = await app.request('/orchestration/tasks/metadata-small-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metadata: smallEnough }),
+    });
+
+    expect(response.status).toBe(202);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Invalid JSON body
+// ---------------------------------------------------------------------------
+
+describe('invalid JSON body', () => {
+  test('POST /tasks/:name/runs with invalid JSON body returns 400 with descriptive error', async () => {
+    const task = defineTask({
+      name: 'bad-json-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) { return input; },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime, tasks: [task], workflows: [] }),
+    );
+
+    const response = await app.request('/orchestration/tasks/bad-json-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'not json at all',
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/invalid json/i);
   });
 });

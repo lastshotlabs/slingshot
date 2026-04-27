@@ -211,8 +211,15 @@ export function createTemporalOrchestrationAdapter(
           metadata: opts?.metadata,
         },
         searchAttributes: buildSearchAttributes(kind, name, opts) as never,
-        ...(kind === 'workflow' && definition.timeout
-          ? { workflowExecutionTimeout: definition.timeout }
+        ...(kind === 'workflow'
+          ? {
+              /**
+               * Default workflow execution timeout is 30 days.
+               * This prevents workflows from running forever if no explicit timeout
+               * is configured. Callers can override this per-workflow via `definition.timeout`.
+               */
+              workflowExecutionTimeout: definition.timeout ?? '30 days',
+            }
           : {}),
       },
     );
@@ -477,7 +484,19 @@ export function createTemporalOrchestrationAdapter(
             const serialized = JSON.stringify(state.progress);
             if (serialized !== lastSerialized) {
               lastSerialized = serialized;
-              callback(state.progress);
+              try {
+                callback(state.progress);
+              } catch (callbackError) {
+                // If the caller's callback throws, log it and stop polling
+                // to prevent the timer from accumulating unhandled errors.
+                console.error(
+                  '[slingshot-orchestration-temporal] onProgress callback threw; stopping poll',
+                  callbackError,
+                );
+                disposed = true;
+                clearInterval(timer);
+                return;
+              }
             }
           }
           const description = await handle.describe();

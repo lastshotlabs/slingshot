@@ -10,6 +10,12 @@ import { createAuthGroupResolver } from '../../src/lib/authGroupResolver';
 import { seedSuperAdmin } from '../../src/lib/bootstrap';
 import { createPermissionsPlugin } from '../../src/plugin';
 
+type MockBus = {
+  handlers: Map<string, Array<(data: unknown) => Promise<void>>>;
+  on(event: string, handler: (data: unknown) => Promise<void>): void;
+  emit(event: string, data: unknown): Promise<void>;
+};
+
 function asNever<T>(v: T): never {
   return v as never;
 }
@@ -223,6 +229,108 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
         resourceType: 'post',
       }),
     ).resolves.toBe(false);
+  });
+
+  test('setupPost: auth:user.deleted event triggers deleteAllGrantsForSubject', async () => {
+    const app = new Hono();
+    const ctx = { pluginState: new Map() };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin();
+    await plugin.setupMiddleware?.(
+      asNever({
+        app,
+        config: { resolvedStores: { authStore: 'memory' }, storeInfra: {} },
+        bus: {},
+      }),
+    );
+
+    const bus: MockBus = {
+      handlers: new Map(),
+      on(event, handler) {
+        const list = this.handlers.get(event) ?? [];
+        list.push(handler);
+        this.handlers.set(event, list);
+      },
+      async emit(event, data) {
+        for (const h of this.handlers.get(event) ?? []) await h(data);
+      },
+    };
+
+    plugin.setupPost?.(asNever({ app, bus }));
+
+    const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as any;
+    const deleteAllSpy = mock(async (_subject: unknown) => {});
+    state.adapter.deleteAllGrantsForSubject = deleteAllSpy;
+
+    await bus.emit('auth:user.deleted', { userId: 'user-to-delete' });
+
+    expect(deleteAllSpy).toHaveBeenCalledTimes(1);
+    expect(deleteAllSpy).toHaveBeenCalledWith({
+      subjectId: 'user-to-delete',
+      subjectType: 'user',
+    });
+  });
+
+  test('setupPost: deleteAllGrantsForSubject error is swallowed — handler does not propagate', async () => {
+    const app = new Hono();
+    const ctx = { pluginState: new Map() };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin();
+    await plugin.setupMiddleware?.(
+      asNever({
+        app,
+        config: { resolvedStores: { authStore: 'memory' }, storeInfra: {} },
+        bus: {},
+      }),
+    );
+
+    const bus: MockBus = {
+      handlers: new Map(),
+      on(event, handler) {
+        const list = this.handlers.get(event) ?? [];
+        list.push(handler);
+        this.handlers.set(event, list);
+      },
+      async emit(event, data) {
+        for (const h of this.handlers.get(event) ?? []) await h(data);
+      },
+    };
+
+    plugin.setupPost?.(asNever({ app, bus }));
+
+    const state = ctx.pluginState.get(PERMISSIONS_STATE_KEY) as any;
+    state.adapter.deleteAllGrantsForSubject = mock(async () => {
+      throw new Error('DB connection lost');
+    });
+
+    // Must resolve without throwing — error is swallowed by the try/catch in plugin.ts
+    await expect(bus.emit('auth:user.deleted', { userId: 'user-x' })).resolves.toBeUndefined();
+  });
+
+  test('setupPost: no-op when permissions state is absent', () => {
+    const app = new Hono();
+    const ctx = { pluginState: new Map() };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin();
+    // setupMiddleware was NOT called, so PERMISSIONS_STATE_KEY is absent
+    const bus: MockBus = {
+      handlers: new Map(),
+      on(event, handler) {
+        const list = this.handlers.get(event) ?? [];
+        list.push(handler);
+        this.handlers.set(event, list);
+      },
+      async emit(event, data) {
+        for (const h of this.handlers.get(event) ?? []) await h(data);
+      },
+    };
+    // Should not throw
+    expect(() => plugin.setupPost?.(asNever({ app, bus }))).not.toThrow();
+    // No handlers registered — bus is empty
+    expect(bus.handlers.size).toBe(0);
   });
 
   test('createPermissionsPlugin with groupResolver wires auth-backed group expansion', async () => {

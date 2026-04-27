@@ -2,6 +2,7 @@ import { createCachedRunHandle } from '../adapter';
 import { OrchestrationError } from '../errors';
 import type {
   AnyResolvedTask,
+  OrchestrationEventMap,
   OrchestrationEventSink,
   RunError,
   RunHandle,
@@ -71,6 +72,25 @@ function abortMessage(signal: AbortSignal): string | undefined {
   if (reason instanceof Error) return reason.message;
   if (typeof reason === 'string') return reason;
   return undefined;
+}
+
+function safeEmit<TName extends keyof OrchestrationEventMap>(
+  eventSink: OrchestrationEventSink | undefined,
+  name: TName,
+  payload: OrchestrationEventMap[TName],
+  label: string,
+): void {
+  if (!eventSink) return;
+  try {
+    const result = eventSink.emit(name, payload);
+    if (result && typeof (result as Promise<void>).catch === 'function') {
+      (result as Promise<void>).catch(err => {
+        console.error(`[orchestration] eventSink.emit error (${label}):`, err);
+      });
+    }
+  } catch (err) {
+    console.error(`[orchestration] eventSink.emit error (${label}):`, err);
+  }
 }
 
 function retryDelay(def: AnyResolvedTask, attempt: number): number {
@@ -187,12 +207,12 @@ export function createTaskRunner(options: {
       const execution = (async () => {
         const startedAt = Date.now();
         await options.callbacks.onStarted(next.options.runId);
-        void options.eventSink?.emit('orchestration.task.started', {
+        safeEmit(options.eventSink, 'orchestration.task.started', {
           runId: next.options.runId,
           task: next.def.name,
           input: next.input,
           tenantId: next.options.tenantId,
-        });
+        }, 'task.started');
 
         try {
           let attempt = 0;
@@ -226,11 +246,11 @@ export function createTaskRunner(options: {
                 tenantId: next.options.tenantId,
                 reportProgress: data => {
                   void options.callbacks.onProgress(next.options.runId, next.def.name, data);
-                  void options.eventSink?.emit('orchestration.task.progress', {
+                  safeEmit(options.eventSink, 'orchestration.task.progress', {
                     runId: next.options.runId,
                     task: next.def.name,
                     data,
-                  });
+                  }, 'task.progress');
                 },
               });
               const output = next.def.output.parse(result);
@@ -240,13 +260,13 @@ export function createTaskRunner(options: {
                 output,
                 Date.now() - startedAt,
               );
-              void options.eventSink?.emit('orchestration.task.completed', {
+              safeEmit(options.eventSink, 'orchestration.task.completed', {
                 runId: next.options.runId,
                 task: next.def.name,
                 output,
                 durationMs: Date.now() - startedAt,
                 tenantId: next.options.tenantId,
-              });
+              }, 'task.completed');
               next.resolve(output);
               return output;
             } catch (error) {
@@ -274,12 +294,12 @@ export function createTaskRunner(options: {
                 isCancelled ? 'cancelled' : 'failed',
               );
               if (!isCancelled) {
-                void options.eventSink?.emit('orchestration.task.failed', {
+                safeEmit(options.eventSink, 'orchestration.task.failed', {
                   runId: next.options.runId,
                   task: next.def.name,
                   error: runError,
                   tenantId: next.options.tenantId,
-                });
+                }, 'task.failed');
               }
               next.reject(
                 isCancelled ? new OrchestrationError('ADAPTER_ERROR', 'Run cancelled') : error,

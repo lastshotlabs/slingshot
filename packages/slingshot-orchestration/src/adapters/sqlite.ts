@@ -435,6 +435,12 @@ export function createSqliteAdapter(options: {
           });
         },
         onStepStarted(runId, stepName, taskName) {
+          // Preserve existing attempt count from persisted state so retries are
+          // counted correctly after crash recovery.
+          const existingRow = stepRowsByRun
+            .all(runId)
+            .find(s => s.name === stepName);
+          const previousAttempts = existingRow?.attempts ?? 0;
           upsertStep.run({
             runId,
             name: stepName,
@@ -442,8 +448,8 @@ export function createSqliteAdapter(options: {
             status: 'running',
             output: null,
             error: null,
-            attempts: 1,
-            startedAt: new Date().toISOString(),
+            attempts: previousAttempts + 1,
+            startedAt: existingRow?.started_at ?? new Date().toISOString(),
             completedAt: null,
           });
         },
@@ -859,7 +865,16 @@ export function createSqliteAdapter(options: {
       for (const controller of workflowControllers.values()) {
         controller.abort(new Error('Run cancelled'));
       }
-      await taskRunner.waitForIdle();
+      const SHUTDOWN_TIMEOUT_MS = 30_000;
+      const timeoutPromise = new Promise<void>(resolve => {
+        setTimeout(() => {
+          console.warn(
+            '[orchestration] shutdown timed out after 30s — some tasks may still be running',
+          );
+          resolve();
+        }, SHUTDOWN_TIMEOUT_MS);
+      });
+      await Promise.race([taskRunner.waitForIdle(), timeoutPromise]);
       db.close();
     },
     async listRuns(filter) {

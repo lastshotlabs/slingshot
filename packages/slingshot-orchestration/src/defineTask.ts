@@ -66,11 +66,12 @@ export function normalizeRetryPolicy(
     );
   }
 
+  const backoff = retry?.backoff ?? 'fixed';
   return Object.freeze({
     maxAttempts: retry?.maxAttempts ?? 1,
-    backoff: retry?.backoff ?? 'fixed',
+    backoff,
     delayMs: retry?.delayMs ?? 1_000,
-    maxDelayMs: retry?.maxDelayMs,
+    maxDelayMs: retry?.maxDelayMs ?? (backoff === 'exponential' ? 30_000 : undefined),
   });
 }
 

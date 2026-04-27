@@ -201,3 +201,77 @@ describe('bullmq task processor', () => {
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Job data corruption handling
+// ---------------------------------------------------------------------------
+
+describe('bullmq task processor – job data corruption', () => {
+  let consoleErrorSpy: ReturnType<typeof spyOn>;
+
+  beforeEach(() => {
+    consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
+
+  test('missing taskName field throws a clear error (not undefined access)', async () => {
+    const task = defineTask({
+      name: 'corruption-test-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const processor = createBullMQTaskProcessor({
+      taskRegistry: new Map([[task.name, task]]),
+    });
+
+    // Job with no taskName field — only job.name is set (but it's the wrong task)
+    const job = createFakeJob({ input: { value: 'ok' }, runId: 'run_corrupt_1' });
+
+    await expect(processor(job)).rejects.toThrow(
+      /BullMQ job .* has invalid data: missing 'taskName' field/,
+    );
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("missing 'taskName' field"),
+      expect.anything(),
+    );
+  });
+
+  test('null input field causes graceful failure without cryptic type error', async () => {
+    const task = defineTask({
+      name: 'null-input-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const processor = createBullMQTaskProcessor({
+      taskRegistry: new Map([[task.name, task]]),
+    });
+
+    // Provide a valid taskName but null input — Zod parse will fail gracefully
+    const job = createFakeJob({ taskName: task.name, input: null, runId: 'run_null_input' });
+
+    // The processor should throw (Zod validation error), but not an unhandled
+    // "Cannot read properties of null" TypeError.
+    await expect(processor(job)).rejects.toThrow();
+    // Crucially, it must NOT be an undefined-access TypeError
+    let caught: unknown;
+    try {
+      await processor(job);
+    } catch (err) {
+      caught = err;
+    }
+    // Should be a ZodError (or similar validation error), not a raw TypeError from undefined access
+    expect(caught instanceof TypeError && (caught as TypeError).message.includes('Cannot read')).toBe(false);
+  });
+});

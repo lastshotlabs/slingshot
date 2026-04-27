@@ -27,7 +27,19 @@ export function createBullMQTaskProcessor(options: {
       return { sleptMs: job.data['durationMs'] };
     }
 
-    const taskName = String(job.data['taskName'] ?? job.name);
+    if (typeof job.data['taskName'] !== 'string' || job.data['taskName'].length === 0) {
+      const msg = `BullMQ job ${job.id} has invalid data: missing 'taskName' field`;
+      console.error(`[slingshot-orchestration-bullmq] ${msg}`, { jobId: job.id, data: job.data });
+      throw new Error(msg);
+    }
+
+    if (!('input' in job.data)) {
+      const msg = `BullMQ job ${job.id} has invalid data: missing 'input' field`;
+      console.error(`[slingshot-orchestration-bullmq] ${msg}`, { jobId: job.id, data: job.data });
+      throw new Error(msg);
+    }
+
+    const taskName = job.data['taskName'];
     const runId = String(job.data['runId'] ?? job.id ?? '');
     const def = options.taskRegistry.get(taskName);
     if (!def) {

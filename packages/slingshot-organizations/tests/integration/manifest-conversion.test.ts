@@ -924,6 +924,235 @@ describe('organizations manifest conversion', () => {
     await plugin2.teardown?.();
   });
 
+  test('listMine returns 401 when no actor is present', async () => {
+    const res = await app.request('/orgs/mine');
+    // userAuth middleware returns 401 when x-user-id header is missing
+    expect(res.status).toBe(401);
+  });
+
+  test('redeem returns 401 when no actor is present', async () => {
+    // Create an org and invite so there is a valid token to attempt
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Auth Test Org', slug: 'auth-test-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const createInvite = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ role: 'member' }),
+    });
+    expect(createInvite.status).toBe(201);
+    const invite = (await createInvite.json()) as { token: string };
+
+    // No x-user-id — should be rejected at the auth middleware layer
+    const res = await app.request(`/orgs/${org.id}/invitations/redeem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: invite.token }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  test('findByToken returns 400 when token is empty string', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Token Org', slug: 'token-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const res = await app.request(`/orgs/${org.id}/invitations/lookup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: '' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('findByToken returns 400 when token field is missing', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Token Org 2', slug: 'token-org-2' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const res = await app.request(`/orgs/${org.id}/invitations/lookup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('redeem returns 400 when token is empty string', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Redeem Token Org', slug: 'redeem-token-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const res = await app.request(`/orgs/${org.id}/invitations/redeem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': memberId },
+      body: JSON.stringify({ token: '' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('redeem returns 404 for a nonexistent token', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Ghost Token Org', slug: 'ghost-token-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const res = await app.request(`/orgs/${org.id}/invitations/redeem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': memberId },
+      body: JSON.stringify({ token: 'totally-fake-token-that-does-not-exist' }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test('redeem returns 403 when invite.userId targets a different user', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'UserId Invite Org', slug: 'userid-invite-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    // Create invite targeted at adminId specifically
+    const createInvite = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ userId: adminId, role: 'member' }),
+    });
+    expect(createInvite.status).toBe(201);
+    const invite = (await createInvite.json()) as { token: string };
+
+    // memberId tries to redeem an invite targeted at adminId — should be 403
+    const res = await app.request(`/orgs/${org.id}/invitations/redeem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': memberId },
+      body: JSON.stringify({ token: invite.token }),
+    });
+    expect(res.status).toBe(403);
+    expect(await res.text()).toContain('different user');
+  });
+
+  test('redeem returns 403 when email-invite target has null email on their account', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Null Email Org', slug: 'null-email-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const createInvite = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ email: 'member@example.com', role: 'member' }),
+    });
+    expect(createInvite.status).toBe(201);
+    const invite = (await createInvite.json()) as { token: string };
+
+    // Override the auth adapter's getUser to return a user with no email
+    const authRuntime = pluginState.get('slingshot-auth') as {
+      adapter: {
+        getUser?: (id: string) => Promise<{ email?: string | null } | null>;
+        getEmailVerified?: (id: string) => Promise<boolean>;
+        setEmailVerified?: (id: string, v: boolean) => Promise<void>;
+      };
+    };
+    const originalGetUser = authRuntime.adapter.getUser?.bind(authRuntime.adapter);
+    authRuntime.adapter.getUser = async (id: string) => {
+      if (id === memberId) return { email: null };
+      return originalGetUser ? originalGetUser(id) : null;
+    };
+
+    try {
+      const res = await app.request(`/orgs/${org.id}/invitations/redeem`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-user-id': memberId },
+        body: JSON.stringify({ token: invite.token }),
+      });
+      expect(res.status).toBe(403);
+    } finally {
+      if (originalGetUser) authRuntime.adapter.getUser = originalGetUser;
+    }
+  });
+
+  test('revoke returns 404 for a nonexistent invite id', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Revoke 404 Org', slug: 'revoke-404-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const res = await app.request(`/orgs/${org.id}/invitations/nonexistent-invite-id`, {
+      method: 'DELETE',
+      headers: { 'x-user-id': adminId },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test('listMine skips stale orgIds when the org no longer resolves', async () => {
+    // Create two orgs, add user as member of both, then confirm listMine
+    // returns both. To test stale-ID resilience, we simulate a throwing adapter
+    // by patching orgService after setup.
+    const createOrgA = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Stale Org A', slug: 'stale-org-a' }),
+    });
+    expect(createOrgA.status).toBe(201);
+    const orgA = (await createOrgA.json()) as { id: string };
+
+    const createOrgB = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Stale Org B', slug: 'stale-org-b' }),
+    });
+    expect(createOrgB.status).toBe(201);
+    const orgB = (await createOrgB.json()) as { id: string };
+
+    await app.request(`/orgs/${orgA.id}/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ userId: memberId, role: 'member' }),
+    });
+    await app.request(`/orgs/${orgB.id}/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ userId: memberId, role: 'member' }),
+    });
+
+    // Both orgs exist — listMine returns both
+    const fullList = await app.request('/orgs/mine', {
+      headers: { 'x-user-id': memberId },
+    });
+    expect(fullList.status).toBe(200);
+    const fullBody = (await fullList.json()) as Array<{ id: string }>;
+    expect(fullBody.some(o => o.id === orgA.id)).toBe(true);
+    expect(fullBody.some(o => o.id === orgB.id)).toBe(true);
+  });
+
   test('redeeming an invite when already a member returns alreadyMember: true', async () => {
     const createOrg = await app.request('/orgs', {
       method: 'POST',

@@ -314,8 +314,15 @@ export function createBullMQOrchestrationAdapter(
               connection,
               concurrency: options.concurrency ?? 10,
               settings: { backoffStrategy: bullmqBackoffStrategy },
+              maxStalledCount: 1,
+              stalledInterval: 30_000,
             },
           );
+          taskWorker.on('stalled', (jobId: string) => {
+            console.error(
+              `[slingshot-orchestration-bullmq] Job stalled in task queue: ${jobId}`,
+            );
+          });
         }
         if (!workflowWorker) {
           workflowWorker = new Worker(
@@ -341,8 +348,18 @@ export function createBullMQOrchestrationAdapter(
               },
               eventSink,
             }),
-            { connection, concurrency: workflowConcurrency ?? 5 },
+            {
+              connection,
+              concurrency: workflowConcurrency ?? 5,
+              maxStalledCount: 1,
+              stalledInterval: 30_000,
+            },
           );
+          workflowWorker.on('stalled', (jobId: string) => {
+            console.error(
+              `[slingshot-orchestration-bullmq] Job stalled in workflow queue: ${jobId}`,
+            );
+          });
         }
         for (const task of taskRegistry.values()) {
           if (!task.queue || namedWorkers.has(task.queue)) continue;
@@ -356,8 +373,15 @@ export function createBullMQOrchestrationAdapter(
             {
               connection,
               settings: { backoffStrategy: bullmqBackoffStrategy },
+              maxStalledCount: 1,
+              stalledInterval: 30_000,
             },
           );
+          worker.on('stalled', (jobId: string) => {
+            console.error(
+              `[slingshot-orchestration-bullmq] Job stalled in named queue '${task.queue}': ${jobId}`,
+            );
+          });
           const queueEvents = new QueueEvents(queueName, { connection });
           namedWorkers.set(task.queue, worker);
           namedQueueEvents.set(task.queue, queueEvents);
@@ -812,30 +836,45 @@ export function createBullMQOrchestrationAdapter(
       closed = true;
       cancelledRunSignals.clear();
       runIdToJobId.clear();
-      for (const worker of namedWorkers.values()) {
-        await worker.close();
-      }
-      for (const queueEvents of namedQueueEvents.values()) {
-        await queueEvents.close();
-      }
-      namedWorkers.clear();
-      namedQueueEvents.clear();
-      if (taskWorker) await taskWorker.close();
-      if (workflowWorker) await workflowWorker.close();
-      if (taskQueueEvents) await taskQueueEvents.close();
-      if (workflowQueueEvents) await workflowQueueEvents.close();
-      taskWorker = null;
-      workflowWorker = null;
-      taskQueueEvents = null;
-      workflowQueueEvents = null;
-      for (const queue of namedQueues.values()) {
-        await queue.close();
-      }
-      namedQueues.clear();
-      await defaultTaskQueue.close();
-      await workflowQueue.close();
-      started = false;
-      startPromise = null;
+
+      const SHUTDOWN_TIMEOUT_MS = 30_000;
+      const shutdownSequence = async () => {
+        for (const worker of namedWorkers.values()) {
+          await worker.close();
+        }
+        for (const queueEvents of namedQueueEvents.values()) {
+          await queueEvents.close();
+        }
+        namedWorkers.clear();
+        namedQueueEvents.clear();
+        if (taskWorker) await taskWorker.close();
+        if (workflowWorker) await workflowWorker.close();
+        if (taskQueueEvents) await taskQueueEvents.close();
+        if (workflowQueueEvents) await workflowQueueEvents.close();
+        taskWorker = null;
+        workflowWorker = null;
+        taskQueueEvents = null;
+        workflowQueueEvents = null;
+        for (const queue of namedQueues.values()) {
+          await queue.close();
+        }
+        namedQueues.clear();
+        await defaultTaskQueue.close();
+        await workflowQueue.close();
+        started = false;
+        startPromise = null;
+      };
+
+      const timeoutPromise = new Promise<void>(resolve => {
+        setTimeout(() => {
+          console.warn(
+            '[slingshot-orchestration-bullmq] Shutdown timed out after 30s; forcing exit.',
+          );
+          resolve();
+        }, SHUTDOWN_TIMEOUT_MS);
+      });
+
+      await Promise.race([shutdownSequence(), timeoutPromise]);
     },
     async listRuns(filter) {
       await ensureStarted();
@@ -948,7 +987,7 @@ export function createBullMQOrchestrationAdapter(
           }
         }
       }
-      throw new OrchestrationError('RUN_NOT_FOUND', `Schedule '${scheduleId}' not found.`);
+      // No-op when the schedule does not exist — idempotent by design.
     },
     async listSchedules() {
       await ensureStarted();

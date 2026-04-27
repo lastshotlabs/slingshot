@@ -286,14 +286,17 @@ export function createOrganizationsManifestRuntime(args: {
         limit: 500,
       });
       const memberships = membershipsPage.items as OrganizationMemberRecord[];
-      const organizations = await Promise.all(
+      const orgResults = await Promise.allSettled(
         memberships.map(async membership => {
           return (await organizationAdapter.getById(membership.orgId)) as OrganizationRecord | null;
         }),
       );
-      return organizations.filter(
-        (organization): organization is OrganizationRecord => organization !== null,
-      );
+      return orgResults
+        .filter(
+          (r): r is PromiseFulfilledResult<OrganizationRecord> =>
+            r.status === 'fulfilled' && r.value !== null,
+        )
+        .map(r => r.value);
     },
   );
 

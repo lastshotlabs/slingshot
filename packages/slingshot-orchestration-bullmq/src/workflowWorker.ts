@@ -65,7 +65,13 @@ export function createBullMQWorkflowProcessor(options: {
   }
 
   return async function process(job: Job<Record<string, unknown>>) {
-    const workflowName = String(job.data['workflowName'] ?? job.name);
+    if (typeof job.data['workflowName'] !== 'string' || job.data['workflowName'].length === 0) {
+      const msg = `BullMQ job ${job.id} has invalid data: missing 'workflowName' field`;
+      console.error(`[slingshot-orchestration-bullmq] ${msg}`, { jobId: job.id, data: job.data });
+      throw new Error(msg);
+    }
+
+    const workflowName = job.data['workflowName'];
     const runId = String(job.data['runId'] ?? job.id ?? '');
     const def = options.workflowRegistry.get(workflowName);
     if (!def) {

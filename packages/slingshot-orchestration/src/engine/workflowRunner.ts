@@ -3,6 +3,7 @@ import { OrchestrationError } from '../errors';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
+  OrchestrationEventMap,
   OrchestrationEventSink,
   RunError,
   RunStatus,
@@ -51,6 +52,25 @@ function toRunError(error: unknown): RunError {
     return { message: error.message, stack: error.stack };
   }
   return { message: String(error) };
+}
+
+function safeEmit<TName extends keyof OrchestrationEventMap>(
+  eventSink: OrchestrationEventSink | undefined,
+  name: TName,
+  payload: OrchestrationEventMap[TName],
+  label: string,
+): void {
+  if (!eventSink) return;
+  try {
+    const result = eventSink.emit(name, payload);
+    if (result && typeof (result as Promise<void>).catch === 'function') {
+      (result as Promise<void>).catch(err => {
+        console.error(`[orchestration] eventSink.emit error (${label}):`, err);
+      });
+    }
+  } catch (err) {
+    console.error(`[orchestration] eventSink.emit error (${label}):`, err);
+  }
 }
 
 function reportWorkflowHookError(options: {
@@ -237,12 +257,12 @@ export async function executeWorkflow(options: {
   let failedStep: string | undefined;
 
   await options.callbacks.onStarted(options.runId);
-  void options.eventSink?.emit('orchestration.workflow.started', {
+  safeEmit(options.eventSink, 'orchestration.workflow.started', {
     runId: options.runId,
     workflow: options.def.name,
     input: workflowInput,
     tenantId: options.tenantId,
-  });
+  }, 'workflow.started');
 
   if (options.def.onStart) {
     try {
@@ -314,11 +334,11 @@ export async function executeWorkflow(options: {
           if (stepEntry.options.condition && !stepEntry.options.condition(stepContext)) {
             results[stepEntry.name] = undefined;
             await options.callbacks.onStepSkipped(options.runId, stepEntry.name, stepEntry.task);
-            void options.eventSink?.emit('orchestration.step.skipped', {
+            safeEmit(options.eventSink, 'orchestration.step.skipped', {
               runId: options.runId,
               workflow: options.def.name,
               step: stepEntry.name,
-            });
+            }, 'step.skipped');
           }
         }
 
@@ -374,12 +394,12 @@ export async function executeWorkflow(options: {
               item.value,
               1,
             );
-            void options.eventSink?.emit('orchestration.step.completed', {
+            safeEmit(options.eventSink, 'orchestration.step.completed', {
               runId: options.runId,
               workflow: options.def.name,
               step: item.step.name,
               output: item.value,
-            });
+            }, 'step.completed');
             continue;
           }
 
@@ -393,12 +413,12 @@ export async function executeWorkflow(options: {
             taskDef.retry.maxAttempts,
             item.step.options.continueOnFailure ? 'failed' : 'failed',
           );
-          void options.eventSink?.emit('orchestration.step.failed', {
+          safeEmit(options.eventSink, 'orchestration.step.failed', {
             runId: options.runId,
             workflow: options.def.name,
             step: item.step.name,
             error,
-          });
+          }, 'step.failed');
           if (!item.step.options.continueOnFailure && hardFailure === null) {
             hardFailure = item.reason;
             failedStep = item.step.name;
@@ -447,12 +467,12 @@ export async function executeWorkflow(options: {
         });
         results[entry.name] = output;
         await options.callbacks.onStepCompleted(options.runId, entry.name, taskDef.name, output, 1);
-        void options.eventSink?.emit('orchestration.step.completed', {
+        safeEmit(options.eventSink, 'orchestration.step.completed', {
           runId: options.runId,
           workflow: options.def.name,
           step: entry.name,
           output,
-        });
+        }, 'step.completed');
       } catch (error) {
         const runError = toRunError(error);
         await options.callbacks.onStepFailed(
@@ -463,12 +483,12 @@ export async function executeWorkflow(options: {
           taskDef.retry.maxAttempts,
           entry.options.continueOnFailure ? 'failed' : 'failed',
         );
-        void options.eventSink?.emit('orchestration.step.failed', {
+        safeEmit(options.eventSink, 'orchestration.step.failed', {
           runId: options.runId,
           workflow: options.def.name,
           step: entry.name,
           error: runError,
-        });
+        }, 'step.failed');
         if (entry.options.continueOnFailure) {
           results[entry.name] = undefined;
           continue;
@@ -483,13 +503,13 @@ export async function executeWorkflow(options: {
       options.def.output.parse(output);
     }
     await options.callbacks.onCompleted(options.runId, output, Date.now() - startedAt);
-    void options.eventSink?.emit('orchestration.workflow.completed', {
+    safeEmit(options.eventSink, 'orchestration.workflow.completed', {
       runId: options.runId,
       workflow: options.def.name,
       output,
       durationMs: Date.now() - startedAt,
       tenantId: options.tenantId,
-    });
+    }, 'workflow.completed');
 
     if (options.def.onComplete) {
       try {
@@ -530,13 +550,13 @@ export async function executeWorkflow(options: {
       status,
     );
     if (status !== 'cancelled') {
-      void options.eventSink?.emit('orchestration.workflow.failed', {
+      safeEmit(options.eventSink, 'orchestration.workflow.failed', {
         runId: options.runId,
         workflow: options.def.name,
         error: runError,
         failedStep,
         tenantId: options.tenantId,
-      });
+      }, 'workflow.failed');
     }
     if (options.def.onFail) {
       try {

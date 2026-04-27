@@ -165,6 +165,8 @@ class MockWorker {
     MockWorker.instances.push(this);
   }
 
+  on(_event: string, _listener: (...args: unknown[]) => void) {}
+
   async close() {}
 }
 

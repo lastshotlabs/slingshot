@@ -19,6 +19,11 @@ import type {
   OrchestrationRunAuthorizer,
 } from './types';
 
+// Maximum total records scanned in a single listAuthorizedRuns() call.
+// Prevents a malicious or misconfigured authorizeRun filter from scanning
+// millions of records per HTTP request when the filter rejects most results.
+const MAX_AUTH_SCAN = 2_000;
+
 const VALID_STATUSES = new Set<RunStatus>([
   'pending',
   'running',
@@ -66,6 +71,8 @@ function parseRunOptions(
   }
   if (typeof body['priority'] === 'number' && Number.isFinite(body['priority'])) {
     const priority = body['priority'] as number;
+    // Clamp priority to [-1_000_000, 1_000_000] — wide enough for any real ordering
+    // scheme while staying safely inside signed 32-bit integer range used by most queue backends.
     opts.priority = Math.max(-1_000_000, Math.min(1_000_000, Math.trunc(priority)));
   }
   if (body['tags'] && typeof body['tags'] === 'object' && !Array.isArray(body['tags'])) {
@@ -74,7 +81,9 @@ function parseRunOptions(
     let count = 0;
     for (const [key, value] of Object.entries(tags)) {
       if (typeof value !== 'string') continue;
+      // 50 entries: matches typical tag-indexing limits in BullMQ/Temporal adapters.
       if (count >= 50) break;
+      // 256-char keys and 1024-char values: aligns with common database index column widths.
       validated[key.slice(0, 256)] = value.slice(0, 1024);
       count += 1;
     }
@@ -198,6 +207,9 @@ async function listAuthorizedRuns(
 
   const requestedOffset = filter.offset ?? 0;
   const requestedLimit = filter.limit ?? 50;
+  // Cap batch fetch to 2× requested limit (min 50, max 200) to amortize auth filter cost
+  // while bounding over-fetch. Larger batches reduce round-trips when the authorizer is
+  // selective; smaller batches prevent excessive memory use when limits are large.
   const batchSize = Math.min(Math.max(requestedLimit * 2, 50), 200);
   const baseFilter: RunFilter = {
     ...filter,
@@ -211,6 +223,12 @@ async function listAuthorizedRuns(
   let scanOffset = 0;
 
   while (true) {
+    // Stop scanning when we have hit MAX_AUTH_SCAN records — this prevents a single HTTP
+    // request from scanning the entire run history when authorizeRun rejects aggressively.
+    if (scanOffset >= MAX_AUTH_SCAN) {
+      break;
+    }
+
     const page = await runtime.listRuns({
       ...baseFilter,
       offset: scanOffset,
@@ -296,10 +314,27 @@ export function createOrchestrationRouter(options: {
 
   router.post('/tasks/:name/runs', async c => {
     let body: Record<string, unknown>;
+    let parseError = false;
     try {
       body = (await c.req.json()) as Record<string, unknown>;
     } catch {
+      // Signal that JSON was malformed so the caller gets a clear 400 error rather
+      // than silently treating the body as empty and creating an unintended run.
+      parseError = true;
       body = {};
+    }
+    if (parseError) {
+      return c.json({ error: 'Invalid JSON in request body' }, 400);
+    }
+    // Reject payloads where metadata serializes above 64 KB — prevents memory spikes
+    // and runaway Redis/BullMQ job-data growth from unbounded client payloads.
+    if (
+      body['metadata'] &&
+      typeof body['metadata'] === 'object' &&
+      !Array.isArray(body['metadata']) &&
+      JSON.stringify(body['metadata']).length > 65_536
+    ) {
+      return c.json({ error: 'metadata exceeds 64KB limit' }, 400);
     }
     const input = body['input'];
     try {
@@ -337,10 +372,24 @@ export function createOrchestrationRouter(options: {
 
   router.post('/workflows/:name/runs', async c => {
     let body: Record<string, unknown>;
+    let parseError = false;
     try {
       body = (await c.req.json()) as Record<string, unknown>;
     } catch {
+      parseError = true;
       body = {};
+    }
+    if (parseError) {
+      return c.json({ error: 'Invalid JSON in request body' }, 400);
+    }
+    // Reject payloads where metadata serializes above 64 KB.
+    if (
+      body['metadata'] &&
+      typeof body['metadata'] === 'object' &&
+      !Array.isArray(body['metadata']) &&
+      JSON.stringify(body['metadata']).length > 65_536
+    ) {
+      return c.json({ error: 'metadata exceeds 64KB limit' }, 400);
     }
     const input = body['input'];
     try {
@@ -472,10 +521,15 @@ export function createOrchestrationRouter(options: {
         );
       }
       let body: Record<string, unknown>;
+      let parseError = false;
       try {
         body = (await c.req.json()) as Record<string, unknown>;
       } catch {
+        parseError = true;
         body = {};
+      }
+      if (parseError) {
+        return c.json({ error: 'Invalid JSON in request body' }, 400);
       }
       await options.runtime.signal(c.req.param('id'), c.req.param('signalName'), body['payload']);
       return c.json({ status: 'accepted' }, 202);

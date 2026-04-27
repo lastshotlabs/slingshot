@@ -284,6 +284,48 @@ describe('MemoryPermissionsAdapter', () => {
     expect(history[0].revokedReason).toBe('violated ToS');
   });
 
+  test('revokeGrant throws when revokedReason exceeds 1024 characters', async () => {
+    const id = await adapter.createGrant(baseGrant());
+    const longReason = 'x'.repeat(1025);
+    await expect(adapter.revokeGrant(id, 'admin-1', undefined, longReason)).rejects.toThrow(
+      'revokedReason exceeds maximum length of 1024',
+    );
+  });
+
+  test('revokeGrant accepts revokedReason exactly at the 1024-character limit', async () => {
+    const id = await adapter.createGrant(baseGrant());
+    const exactReason = 'x'.repeat(1024);
+    const result = await adapter.revokeGrant(id, 'admin-1', undefined, exactReason);
+    expect(result).toBe(true);
+    const history = await adapter.listGrantHistory('user-1', 'user');
+    expect(history[0].revokedReason).toBe(exactReason);
+  });
+
+  test('revokeGrant with tenantScope only revokes grant matching that tenant', async () => {
+    const idA = await adapter.createGrant(baseGrant({ tenantId: 'tenant-a' }));
+    await adapter.createGrant(baseGrant({ subjectId: 'user-1', tenantId: 'tenant-b' }));
+
+    // Revoke with tenantScope = 'tenant-a' — only tenant-a grant should be revoked
+    const resultA = await adapter.revokeGrant(idA, 'admin', 'tenant-a');
+    expect(resultA).toBe(true);
+
+    // tenant-b grant is still active
+    const tenantBGrants = await adapter.getGrantsForSubject('user-1', undefined, {
+      tenantId: 'tenant-b',
+    });
+    expect(tenantBGrants).toHaveLength(1);
+  });
+
+  test('revokeGrant with mismatched tenantScope returns false without revoking', async () => {
+    const id = await adapter.createGrant(baseGrant({ tenantId: 'tenant-a' }));
+    // tenantScope does not match grant's tenantId
+    const result = await adapter.revokeGrant(id, 'admin', 'tenant-b');
+    expect(result).toBe(false);
+    // Grant is still active
+    const grants = await adapter.getGrantsForSubject('user-1');
+    expect(grants).toHaveLength(1);
+  });
+
   test('createGrants creates all grants atomically and returns IDs in order', async () => {
     const inputs = [
       baseGrant({ subjectId: 'user-a', roles: ['admin'] }),

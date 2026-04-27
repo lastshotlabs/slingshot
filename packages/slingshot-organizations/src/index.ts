@@ -7,3 +7,4 @@ export {
   getOrganizationsOrgServiceOrNull,
 } from './orgService';
 export type { OrganizationsOrgService } from './orgService';
+export type { GroupsConfig, GroupsManagementConfig } from './types/groups';

@@ -123,6 +123,9 @@ export function createTemporalActivities(options: {
       try {
         await hook(args.payload as never);
       } catch (error) {
+        // Log and emit the error, then rethrow so Temporal can retry the activity.
+        // Swallowing hook errors would allow a workflow to appear successful even
+        // when its completion hook failed — better to be loud and retryable.
         console.error('[slingshot-orchestration-temporal] workflow hook failed', error);
         await options.eventSink?.emit('orchestration.workflow.hookError', {
           runId: args.runId,
@@ -130,6 +133,7 @@ export function createTemporalActivities(options: {
           hook: args.hook,
           error: toRunError(error),
         });
+        throw error;
       }
     },
 

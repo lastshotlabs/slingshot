@@ -63,6 +63,7 @@ export function createMemoryAdapter(
   const resultPromises = new Map<string, Promise<unknown>>();
   const progressListeners = new Map<string, Map<string, (data: RunProgress | undefined) => void>>();
   const idempotencyKeys = new Map<string, string>();
+  const inFlightIdempotencyKeys = new Set<string>();
   const workflowControllers = new Map<string, AbortController>();
   const workflowChildren = new Map<string, Set<string>>();
   const delayedWorkflowStarts = new Map<string, AbortController>();
@@ -166,12 +167,24 @@ export function createMemoryAdapter(
         if (existingRunId) {
           return createCachedRunHandle(existingRunId, () => loadRunResult(existingRunId));
         }
+        // Atomically claim the in-flight slot to prevent concurrent duplicate starts
+        if (inFlightIdempotencyKeys.has(scopedIdempotencyKey)) {
+          // Another concurrent call is in the process of starting — wait a tick and retry
+          // by re-checking the settled idempotency map.
+          await Promise.resolve();
+          const settledRunId = idempotencyKeys.get(scopedIdempotencyKey);
+          if (settledRunId) {
+            return createCachedRunHandle(settledRunId, () => loadRunResult(settledRunId));
+          }
+        }
+        inFlightIdempotencyKeys.add(scopedIdempotencyKey);
       }
 
       const runId = generateRunId();
       // Set idempotency key atomically before any async work to prevent races
       if (scopedIdempotencyKey) {
         idempotencyKeys.set(scopedIdempotencyKey, runId);
+        inFlightIdempotencyKeys.delete(scopedIdempotencyKey);
       }
       runs.set(runId, {
         id: runId,
@@ -211,12 +224,22 @@ export function createMemoryAdapter(
         if (existingRunId) {
           return createCachedRunHandle(existingRunId, () => loadRunResult(existingRunId));
         }
+        // Atomically claim the in-flight slot to prevent concurrent duplicate starts
+        if (inFlightIdempotencyKeys.has(scopedIdempotencyKey)) {
+          await Promise.resolve();
+          const settledRunId = idempotencyKeys.get(scopedIdempotencyKey);
+          if (settledRunId) {
+            return createCachedRunHandle(settledRunId, () => loadRunResult(settledRunId));
+          }
+        }
+        inFlightIdempotencyKeys.add(scopedIdempotencyKey);
       }
 
       const runId = generateRunId();
       // Set idempotency key atomically before any async work to prevent races
       if (scopedIdempotencyKey) {
         idempotencyKeys.set(scopedIdempotencyKey, runId);
+        inFlightIdempotencyKeys.delete(scopedIdempotencyKey);
       }
       const workflowRun: WorkflowRun = {
         id: runId,
@@ -397,7 +420,16 @@ export function createMemoryAdapter(
       for (const controller of workflowControllers.values()) {
         controller.abort(new Error('Run cancelled'));
       }
-      await taskRunner.waitForIdle();
+      const SHUTDOWN_TIMEOUT_MS = 30_000;
+      const timeoutPromise = new Promise<void>(resolve => {
+        setTimeout(() => {
+          console.warn(
+            '[orchestration] shutdown timed out after 30s — some tasks may still be running',
+          );
+          resolve();
+        }, SHUTDOWN_TIMEOUT_MS);
+      });
+      await Promise.race([taskRunner.waitForIdle(), timeoutPromise]);
     },
     async listRuns(filter) {
       const entries = [...runs.values()].filter(run => {

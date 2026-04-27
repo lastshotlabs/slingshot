@@ -93,6 +93,9 @@ const packageCoverageOverrides: Record<string, PackageCoverageOverride> = {
   'slingshot-ssr': {
     coverageTestFiles: ['tests/isolated/ssr-windows-path-resolution.test.ts'],
   },
+  'slingshot-orchestration-temporal': {
+    coverageTestFiles: ['tests/isolated/temporal-activities-hook-errors.test.ts'],
+  },
   'slingshot-webhooks': {
     coverageTestFiles: [
       'tests/isolated/webhooks-bullmq.test.ts',

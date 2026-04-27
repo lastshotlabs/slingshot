@@ -1,5 +1,15 @@
 const semaphores = new Map<string, { active: number; queue: Array<() => void> }>();
 
+/**
+ * Execute `fn` subject to a per-task concurrency cap.
+ *
+ * **Concurrency limits are enforced per worker process.**
+ * If multiple Temporal workers run the same task type, each worker enforces its
+ * own limit independently. There is no cross-process coordination — the total
+ * in-flight count across N workers can reach `limit * N`.
+ *
+ * Pass `limit = undefined` (or `0`) to run with no concurrency restriction.
+ */
 export async function withTaskConcurrency<T>(
   taskName: string,
   limit: number | undefined,

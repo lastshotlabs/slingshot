@@ -213,15 +213,23 @@ export async function slingshotWorkflowImpl(
   const hookActivity = createHookActivity();
   const parsedInput = workflow.input.parse(args.input);
   const steps: Record<string, StepRun> = {};
+  // Date.now() is deterministic inside Temporal workflows; the SDK sandbox patches it.
   const runStartedAtMs = Date.now();
   let progress: RunProgress | undefined;
   let failedStep: string | undefined;
+  // Signals are buffered for the lifetime of the workflow so that workflow logic
+  // (or external queries) can inspect them. To prevent unbounded memory growth,
+  // we cap the buffer at 100 entries and drop the oldest when the cap is reached.
+  const MAX_BUFFERED_SIGNALS = 100;
   const bufferedSignals: Array<{ name: string; payload?: unknown }> = [];
 
   setHandler(progressSignal, payload => {
     progress = payload.data;
   });
   setHandler(userSignal, payload => {
+    if (bufferedSignals.length >= MAX_BUFFERED_SIGNALS) {
+      bufferedSignals.shift(); // drop oldest to stay within cap
+    }
     bufferedSignals.push(payload);
   });
   setHandler(

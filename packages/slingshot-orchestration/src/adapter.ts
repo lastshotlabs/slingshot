@@ -74,10 +74,17 @@ export function supportsCapability(
 
 /**
  * Throw the standardized error for an unsupported optional capability.
+ *
+ * Signals and scheduling are not implemented in the memory or SQLite adapters.
+ * Use the slingshot-orchestration-temporal adapter for signal and scheduling support.
  */
 export function throwUnsupported(capability: OrchestrationCapability): never {
+  const hint =
+    capability === 'signals' || capability === 'scheduling'
+      ? ' Not implemented in memory/sqlite adapters — use Temporal adapter for signal support.'
+      : '';
   throw new OrchestrationError(
     'CAPABILITY_NOT_SUPPORTED',
-    `Adapter does not support '${capability}'. Check runtime.supports('${capability}') before calling.`,
+    `Adapter does not support '${capability}'. Check runtime.supports('${capability}') before calling.${hint}`,
   );
 }

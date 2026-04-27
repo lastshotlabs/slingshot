@@ -786,6 +786,165 @@ describe('PermissionEvaluator', () => {
     expect(warnMessages.some(m => m.includes('group-bad'))).toBe(true);
   });
 
+  test('scope { tenantId: undefined } behaves identically to no scope for non-global grants', async () => {
+    // Tenant-scoped grant — should NOT match when scope.tenantId is explicitly undefined
+    await adapter.createGrant({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: 'tenant-a',
+      resourceType: null,
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+
+    // No scope at all
+    const noScope = await evaluator.can(
+      { subjectId: 'user-1', subjectType: 'user' },
+      'read',
+    );
+    // Scope with tenantId explicitly undefined
+    const explicitUndefined = await evaluator.can(
+      { subjectId: 'user-1', subjectType: 'user' },
+      'read',
+      { tenantId: undefined, resourceType: 'post' },
+    );
+
+    expect(noScope).toBe(false);
+    expect(explicitUndefined).toBe(false);
+  });
+
+  test('global grant matches when scope is { tenantId: undefined }', async () => {
+    await adapter.createGrant({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+
+    const result = await evaluator.can(
+      { subjectId: 'user-1', subjectType: 'user' },
+      'read',
+      { tenantId: undefined, resourceType: 'post' },
+    );
+    expect(result).toBe(true);
+  });
+
+  test('scope with only resourceId (no tenantId / resourceType) does not match resource-scoped grants', async () => {
+    await adapter.createGrant({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: 'tenant-a',
+      resourceType: 'post',
+      resourceId: 'post-1',
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+
+    // Only passing resourceId with no tenantId — grant requires tenantId to match
+    const result = await evaluator.can(
+      { subjectId: 'user-1', subjectType: 'user' },
+      'read',
+      { resourceId: 'post-1' },
+    );
+    expect(result).toBe(false);
+  });
+
+  test('queryTimeoutMs fires for individual group grant fetches inside batch expansion', async () => {
+    // Each collectGrantsForSubject for a group is also wrapped with maybeWithTimeout.
+    // A hanging group grant fetch should reject (treated as allSettled failure) and
+    // be skipped — the evaluator should continue with remaining groups.
+    const hangingGroupAdapter: PermissionsAdapter = {
+      async createGrant() { return ''; },
+      async revokeGrant() { return false; },
+      async getGrantsForSubject() { return []; },
+      async getEffectiveGrantsForSubject(subjectId) {
+        if (subjectId === 'group-hang') {
+          return new Promise<PermissionGrant[]>(() => {}); // hangs forever
+        }
+        return []; // group-ok has no grants → user cannot access
+      },
+      async listGrantHistory() { return []; },
+      async listGrantsOnResource() { return []; },
+      async deleteAllGrantsForSubject() {},
+    };
+
+    const groupResolver = {
+      async getGroupsForUser() {
+        return ['group-hang', 'group-ok'];
+      },
+    };
+
+    const timedGroupEvaluator = createPermissionEvaluator({
+      registry,
+      adapter: hangingGroupAdapter,
+      groupResolver,
+      queryTimeoutMs: 50,
+    });
+
+    const warnMessages: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => { warnMessages.push(String(args[0])); };
+
+    let result: boolean;
+    try {
+      result = await timedGroupEvaluator.can(
+        { subjectId: 'user-1', subjectType: 'user' },
+        'read',
+        { resourceType: 'post' },
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    // group-hang timed out (treated as rejected by allSettled), group-ok had no grants
+    expect(result!).toBe(false);
+    // A warning about group-hang failure should have been emitted
+    expect(warnMessages.some(m => m.includes('group-hang'))).toBe(true);
+  });
+
+  test('non-user subject type skips group expansion entirely', async () => {
+    const groupAdapter = createMemoryPermissionsAdapter();
+    await groupAdapter.createGrant({
+      subjectId: 'service-group',
+      subjectType: 'group',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+
+    let getGroupsCalled = false;
+    const groupResolver = {
+      async getGroupsForUser() {
+        getGroupsCalled = true;
+        return ['service-group'];
+      },
+    };
+
+    const svcEvaluator = createPermissionEvaluator({
+      registry,
+      adapter: groupAdapter,
+      groupResolver,
+    });
+
+    // Service account — group expansion must NOT run
+    await svcEvaluator.can(
+      { subjectId: 'svc-1', subjectType: 'service-account' },
+      'read',
+      { resourceType: 'post' },
+    );
+    expect(getGroupsCalled).toBe(false);
+  });
+
   describe('queryTimeoutMs config validation', () => {
     test('throws when queryTimeoutMs is 0', () => {
       expect(() => createPermissionEvaluator({ registry, adapter, queryTimeoutMs: 0 })).toThrow(

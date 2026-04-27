@@ -132,6 +132,7 @@ class MockQueue {
 
   name: string;
   jobs: MockJob[] = [];
+  schedulers: Array<{ key: string; name: string; pattern?: string; memo?: unknown }> = [];
 
   constructor(name: string) {
     this.name = name;
@@ -139,14 +140,26 @@ class MockQueue {
   }
 
   async add(name: string, data: Record<string, unknown>, opts?: Record<string, unknown>) {
+    const jobId = (opts?.['jobId'] as string | undefined) ?? String(data['runId'] ?? `${this.name}-${this.jobs.length + 1}`);
     const job = new MockJob({
       queue: this,
-      id: String(data['runId'] ?? `${this.name}-${this.jobs.length + 1}`),
+      id: jobId,
       name,
       data,
       opts,
     });
-    this.jobs.push(job);
+    // Track repeatable jobs as schedulers
+    if (opts && typeof opts['jobId'] === 'string' && opts['repeat'] && typeof opts['repeat'] === 'object') {
+      const repeat = opts['repeat'] as Record<string, unknown>;
+      this.schedulers.push({
+        key: opts['jobId'] as string,
+        name,
+        pattern: typeof repeat['pattern'] === 'string' ? repeat['pattern'] : undefined,
+        memo: data,
+      });
+    } else {
+      this.jobs.push(job);
+    }
     return job;
   }
 
@@ -154,11 +167,13 @@ class MockQueue {
     return this.jobs;
   }
 
-  async getJobSchedulers() {
-    return [];
+  async getJobSchedulers(_start?: number, _end?: number) {
+    return this.schedulers;
   }
 
-  async removeJobScheduler() {}
+  async removeJobScheduler(key: string) {
+    this.schedulers = this.schedulers.filter(s => s.key !== key);
+  }
 
   get client() {
     return Promise.resolve(mockRedis);
@@ -195,6 +210,8 @@ class MockWorker {
   static instances: MockWorker[] = [];
   static failOnConstruction: Error | null = null;
 
+  eventListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+
   constructor(
     public name: string,
     public processor: (job: Record<string, unknown>) => Promise<unknown>,
@@ -206,6 +223,18 @@ class MockWorker {
       throw error;
     }
     MockWorker.instances.push(this);
+  }
+
+  on(event: string, listener: (...args: unknown[]) => void) {
+    const listeners = this.eventListeners.get(event) ?? new Set();
+    listeners.add(listener);
+    this.eventListeners.set(event, listeners);
+  }
+
+  emit(event: string, ...args: unknown[]) {
+    for (const listener of this.eventListeners.get(event) ?? []) {
+      listener(...args);
+    }
   }
 
   async close() {}
@@ -488,5 +517,180 @@ describe('bullmq orchestration adapter', () => {
 
     const listed = await adapter.listRuns({});
     expect(listed.runs.find(candidate => candidate.id === handle.id)?.status).toBe('running');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Schedule persistence (mock-based)
+// ---------------------------------------------------------------------------
+
+describe('bullmq orchestration adapter – schedule management', () => {
+  beforeEach(() => {
+    MockQueue.instances = [];
+    MockQueueEvents.instances = [];
+    MockWorker.instances = [];
+    MockWorker.failOnConstruction = null;
+    mockRedis.reset();
+  });
+
+  test('schedule() adds a repeatable job with correct cron pattern', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'sched-add',
+    });
+    const task = defineTask({
+      name: 'sched-task',
+      input: z.object({ run: z.boolean() }),
+      output: z.object({ run: z.boolean() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+
+    const handle = await adapter.schedule(
+      { type: 'task', name: task.name },
+      '0 * * * *',
+      { run: true },
+    );
+
+    expect(handle.id).toMatch(/^slingshot-schedule-task-sched-task-/);
+    expect(handle.cron).toBe('0 * * * *');
+    expect(handle.target).toEqual({ type: 'task', name: task.name });
+
+    const taskQueue = MockQueue.instances.find(q => q.name === 'sched-add:tasks');
+    expect(taskQueue).toBeDefined();
+    const scheduler = taskQueue!.schedulers[0];
+    expect(scheduler).toBeDefined();
+    expect(scheduler!.key).toBe(handle.id);
+    expect(scheduler!.pattern).toBe('0 * * * *');
+
+    await adapter.shutdown();
+  });
+
+  test('unschedule() removes the repeatable job', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'sched-remove',
+    });
+    const task = defineTask({
+      name: 'sched-remove-task',
+      input: z.object({ run: z.boolean() }),
+      output: z.object({ run: z.boolean() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+
+    const handle = await adapter.schedule(
+      { type: 'task', name: task.name },
+      '*/5 * * * *',
+      { run: true },
+    );
+
+    const taskQueue = MockQueue.instances.find(q => q.name === 'sched-remove:tasks');
+    expect(taskQueue!.schedulers).toHaveLength(1);
+
+    await adapter.unschedule(handle.id);
+
+    expect(taskQueue!.schedulers).toHaveLength(0);
+
+    await adapter.shutdown();
+  });
+
+  test('unschedule() on a non-existent ID does not throw', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'sched-noop',
+    });
+    // No tasks registered, no schedules created
+    await expect(adapter.unschedule('nonexistent-schedule-id')).resolves.toBeUndefined();
+    await adapter.shutdown();
+  });
+
+  test('listSchedules() returns entries with correct shape', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'sched-list',
+    });
+    const task = defineTask({
+      name: 'sched-list-task',
+      input: z.object({ run: z.boolean() }),
+      output: z.object({ run: z.boolean() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+
+    await adapter.schedule(
+      { type: 'task', name: task.name },
+      '0 9 * * 1',
+      { run: true },
+    );
+
+    const schedules = await adapter.listSchedules();
+    expect(schedules).toHaveLength(1);
+    const sched = schedules[0];
+    expect(sched).toBeDefined();
+    expect(typeof sched!.id).toBe('string');
+    expect(sched!.target.type).toBe('task');
+    expect(sched!.target.name).toBe(task.name);
+    expect(sched!.cron).toBe('0 9 * * 1');
+
+    await adapter.shutdown();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stalled job event logging
+// ---------------------------------------------------------------------------
+
+describe('bullmq orchestration adapter – stalled job logging', () => {
+  beforeEach(() => {
+    MockQueue.instances = [];
+    MockQueueEvents.instances = [];
+    MockWorker.instances = [];
+    MockWorker.failOnConstruction = null;
+    mockRedis.reset();
+  });
+
+  test('stalled event on the task worker triggers console.error with the job ID', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'stalled-log',
+    });
+    const task = defineTask({
+      name: 'stalled-task',
+      input: z.object({ x: z.number() }),
+      output: z.object({ x: z.number() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+
+    // Trigger lazy start
+    await adapter.start();
+
+    const taskWorker = MockWorker.instances.find(w => w.name === 'stalled-log:tasks');
+    expect(taskWorker).toBeDefined();
+
+    let consoleErrorSpy: ReturnType<typeof spyOn> | undefined;
+    try {
+      consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+      // Simulate BullMQ emitting a 'stalled' event
+      taskWorker!.emit('stalled', 'job-42');
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('job-42'),
+      );
+    } finally {
+      consoleErrorSpy?.mockRestore();
+    }
+
+    await adapter.shutdown();
   });
 });

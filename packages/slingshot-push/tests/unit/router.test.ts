@@ -531,6 +531,58 @@ describe('createPushRouter — retry behavior', () => {
 
     expect(repos._deliveries[0]!.attempts).toBe(2);
   });
+
+  test('catches provider.send() throws and treats them as transient failures', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const repos = createFakeRepos();
+    const provider = createMockProvider(async () => {
+      throw new Error('provider exploded');
+    });
+
+    repos._subscriptions.push(makeSubscription());
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 1, initialDelayMs: 0 },
+    });
+    await router.sendToUser('user-1', { title: 'Hello' });
+
+    expect(repos._deliveries[0]!.status).toBe('failed');
+    expect(repos._deliveries[0]!.failureReason).toBe('transient');
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Provider threw'),
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
+  });
+
+  test('respects retryAfterMs hint from provider instead of default backoff', async () => {
+    const repos = createFakeRepos();
+    let callCount = 0;
+    const callTimestamps: number[] = [];
+    const provider = createMockProvider(async () => {
+      callCount += 1;
+      callTimestamps.push(Date.now());
+      if (callCount === 1) {
+        return { ok: false as const, reason: 'transient' as const, retryAfterMs: 10, error: 'rate-limited' };
+      }
+      return { ok: true };
+    });
+
+    repos._subscriptions.push(makeSubscription());
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 2, initialDelayMs: 100_000 },
+    });
+    const start = Date.now();
+    const count = await router.sendToUser('user-1', { title: 'Hello' });
+
+    expect(count).toBe(1);
+    expect(callCount).toBe(2);
+    // retryAfterMs: 10 was used, not initialDelayMs: 100_000
+    expect(Date.now() - start).toBeLessThan(5_000);
+  });
 });
 
 describe('createPushRouter — sendToUsers', () => {

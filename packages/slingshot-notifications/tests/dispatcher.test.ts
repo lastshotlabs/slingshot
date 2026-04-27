@@ -150,6 +150,90 @@ describe('createIntervalDispatcher', () => {
     setIntervalSpy.mockRestore();
   });
 
+  test('start() is idempotent — double start creates only one interval', () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(
+      (() => 1) as typeof setInterval,
+    );
+
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      intervalMs: 1_000,
+      maxPerTick: 10,
+    });
+
+    dispatcher.start();
+    dispatcher.start();
+    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+
+    setIntervalSpy.mockRestore();
+  });
+
+  test('stop() is safe when the dispatcher was never started', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      intervalMs: 1_000,
+      maxPerTick: 10,
+    });
+
+    await expect(dispatcher.stop()).resolves.toBeUndefined();
+  });
+
+  test('safety cap drops rows above maxPerTick * 4 and logs a warning', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+
+    const oversizeRows = Array.from({ length: 5 }, (_, i) => ({
+      id: `n-${i}`,
+      userId: 'user-1',
+      actorId: null,
+      source: 'community',
+      type: 'community:mention',
+      targetType: 'community:thread',
+      targetId: 'thread-1',
+      tenantId: null,
+      data: null,
+      read: false,
+      dispatched: false,
+      dispatchedAt: null,
+      scheduledAt: new Date(),
+      createdAt: new Date(),
+    }));
+
+    const listPendingDispatch = mock(async () => oversizeRows);
+    (
+      adapters.notifications as { listPendingDispatch: typeof listPendingDispatch }
+    ).listPendingDispatch = listPendingDispatch;
+
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      intervalMs: 1_000,
+      maxPerTick: 1,
+    });
+
+    await dispatcher.tick();
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Dropped'));
+    warnSpy.mockRestore();
+  });
+
   test('does not re-enter while a dispatcher tick is already running', async () => {
     const adapters = createNotificationsTestAdapters();
     const bus = new InProcessAdapter();

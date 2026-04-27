@@ -80,21 +80,13 @@ describe('Organization entity', () => {
   });
 
   test('list and create routes require organizationsAdminGuard middleware', () => {
-    expect(Organization.routes?.list).toMatchObject({
-      middleware: expect.arrayContaining(['organizationsAdminGuard']),
-    });
-    expect(Organization.routes?.create).toMatchObject({
-      middleware: expect.arrayContaining(['organizationsAdminGuard']),
-    });
+    expect(Organization.routes?.list?.middleware).toContain('organizationsAdminGuard');
+    expect(Organization.routes?.create?.middleware).toContain('organizationsAdminGuard');
   });
 
   test('update and delete routes require organizationsAdminGuard middleware', () => {
-    expect(Organization.routes?.update).toMatchObject({
-      middleware: expect.arrayContaining(['organizationsAdminGuard']),
-    });
-    expect(Organization.routes?.delete).toMatchObject({
-      middleware: expect.arrayContaining(['organizationsAdminGuard']),
-    });
+    expect(Organization.routes?.update?.middleware).toContain('organizationsAdminGuard');
+    expect(Organization.routes?.delete?.middleware).toContain('organizationsAdminGuard');
   });
 
   test('getBySlug operation is defined on GET by-slug/:slug', () => {
@@ -287,18 +279,13 @@ describe('OrganizationInvite entity', () => {
   });
 
   test('create route requires inviteCreateDefaults and organizationsAdminGuard', () => {
-    expect(OrganizationInvite.routes?.create).toMatchObject({
-      middleware: expect.arrayContaining(['inviteCreateDefaults', 'organizationsAdminGuard']),
-    });
+    expect(OrganizationInvite.routes?.create?.middleware).toContain('inviteCreateDefaults');
+    expect(OrganizationInvite.routes?.create?.middleware).toContain('organizationsAdminGuard');
   });
 
   test('list and get routes require organizationsAdminGuard', () => {
-    expect(OrganizationInvite.routes?.list).toMatchObject({
-      middleware: expect.arrayContaining(['organizationsAdminGuard']),
-    });
-    expect(OrganizationInvite.routes?.get).toMatchObject({
-      middleware: expect.arrayContaining(['organizationsAdminGuard']),
-    });
+    expect(OrganizationInvite.routes?.list?.middleware).toContain('organizationsAdminGuard');
+    expect(OrganizationInvite.routes?.get?.middleware).toContain('organizationsAdminGuard');
   });
 
   test('findByToken operation uses POST with no auth', () => {

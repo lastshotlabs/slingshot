@@ -356,6 +356,8 @@ export function createMemoryAdapter(
         }
       })();
 
+      // Suppress unhandled-rejection until the caller attaches via handle.result()
+      promise.catch(() => {});
       resultPromises.set(runId, promise);
       return createCachedRunHandle(runId, () => promise);
     },

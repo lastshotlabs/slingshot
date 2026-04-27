@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
-import { createEventSchemaRegistry } from '@lastshotlabs/slingshot-core';
+import { createEventSchemaRegistry, createRawEventEnvelope } from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
   fakeKafkaState,
@@ -275,5 +275,248 @@ describe('kafkaAdapter', () => {
     bus.emit('auth:login', { userId: 'u-11', sessionId: 's-11' });
     await flushAsyncWork();
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  test('throws when heartbeatInterval >= sessionTimeout', () => {
+    expect(() =>
+      createKafkaAdapter({
+        brokers: ['localhost:19092'],
+        heartbeatInterval: 10_000,
+        sessionTimeout: 10_000,
+      }),
+    ).toThrow('heartbeatInterval must be less than sessionTimeout');
+  });
+
+  test('throws when registering a duplicate durable subscription', async () => {
+    const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
+    bus.on('auth:login', () => {}, { durable: true, name: 'dup-worker' });
+    await flushAsyncWork();
+    expect(() =>
+      bus.on('auth:login', () => {}, { durable: true, name: 'dup-worker' }),
+    ).toThrow('a durable subscription named "dup-worker" for event "auth:login" already exists.');
+  });
+
+  test('throws when calling off() on a durable subscription', async () => {
+    const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
+    const listener = mock(() => {});
+    bus.on('auth:login', listener, { durable: true, name: 'durable-off-worker' });
+    await flushAsyncWork();
+    expect(() => bus.off('auth:login', listener)).toThrow(
+      'cannot remove a durable subscription via off()',
+    );
+  });
+
+  test('skips messages with null value and logs a warning', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const listener = mock(() => {});
+    try {
+      const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
+      bus.on('auth:login', listener, { durable: true, name: 'null-value-worker' });
+      await flushAsyncWork();
+
+      const consumer = fakeKafkaState.consumers[0];
+      await consumer?.eachMessage?.({
+        topic: 'slingshot.events.auth.login',
+        partition: 0,
+        message: { offset: '0', key: null, headers: {}, value: null },
+        heartbeat: async () => {},
+      });
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('null message value'),
+      );
+    } finally {
+      warnSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
+  });
+
+  test('logs deserialization errors and skips the message without calling listener', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const listener = mock(() => {});
+    try {
+      const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
+      bus.on('auth:login', listener, { durable: true, name: 'deser-err-worker' });
+      await flushAsyncWork();
+
+      const consumer = fakeKafkaState.consumers[0];
+      await consumer?.eachMessage?.({
+        topic: 'slingshot.events.auth.login',
+        partition: 0,
+        message: {
+          offset: '1',
+          key: null,
+          headers: {},
+          value: Buffer.from('not-valid-json{{{'),
+        },
+        heartbeat: async () => {},
+      });
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('deserialization error'),
+        expect.any(Error),
+      );
+    } finally {
+      errorSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
+  });
+
+  test('sends exhausted messages to DLQ after maxRetries failures', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const listener = mock(async () => {
+      throw new Error('handler always fails');
+    });
+    try {
+      const bus = createKafkaAdapter({ brokers: ['localhost:19092'], maxRetries: 2 });
+      bus.on('auth:login', listener, { durable: true, name: 'dlq-worker' });
+      await flushAsyncWork();
+
+      const envelope = createRawEventEnvelope('auth:login', {
+        userId: 'u-dlq',
+        sessionId: 's-dlq',
+      });
+      const consumer = fakeKafkaState.consumers[0];
+      await consumer?.eachMessage?.({
+        topic: 'slingshot.events.auth.login',
+        partition: 0,
+        message: {
+          offset: '2',
+          key: Buffer.from('k'),
+          headers: { 'slingshot.event': 'auth:login' },
+          value: Buffer.from(JSON.stringify(envelope)),
+        },
+        heartbeat: async () => {},
+      });
+
+      expect(listener).toHaveBeenCalledTimes(2);
+      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic.endsWith('.dlq'));
+      expect(dlqSend?.topic).toBe('slingshot.events.auth.login.dlq');
+      expect(dlqSend?.messages[0]?.headers?.['slingshot.error']).toBe('handler always fails');
+    } finally {
+      errorSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
+  });
+
+  test('logs an error when DLQ send fails after retries are exhausted', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const listener = mock(async () => {
+      throw new Error('listener boom');
+    });
+    try {
+      const bus = createKafkaAdapter({ brokers: ['localhost:19092'], maxRetries: 1 });
+      bus.on('auth:login', listener, { durable: true, name: 'dlq-fail-worker' });
+      await flushAsyncWork();
+
+      fakeKafkaState.producerSendErrors.push(new Error('DLQ broker unavailable'));
+
+      const envelope = createRawEventEnvelope('auth:login', {
+        userId: 'u-dlqfail',
+        sessionId: 's-dlqfail',
+      });
+      const consumer = fakeKafkaState.consumers[0];
+      await consumer?.eachMessage?.({
+        topic: 'slingshot.events.auth.login',
+        partition: 0,
+        message: {
+          offset: '3',
+          key: null,
+          headers: {},
+          value: Buffer.from(JSON.stringify(envelope)),
+        },
+        heartbeat: async () => {},
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('failed to publish exhausted message to DLQ'),
+        expect.anything(),
+      );
+    } finally {
+      errorSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
+  });
+
+  test('emit() and on() after shutdown log a warning and do nothing', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const listener = mock(() => {});
+    try {
+      const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
+      await bus.shutdown();
+      const healthBefore = bus.health();
+      expect(healthBefore.isShutdown).toBe(true);
+
+      bus.emit('auth:login', { userId: 'u-post', sessionId: 's-post' });
+      bus.on('auth:login', listener);
+      await flushAsyncWork();
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(fakeKafkaState.producerSendCalls).toHaveLength(0);
+      const warnMessages = warnSpy.mock.calls.map(c => String(c[0]));
+      expect(warnMessages.some(m => m.includes('emit() called after shutdown'))).toBe(true);
+      expect(warnMessages.some(m => m.includes('on() called after shutdown'))).toBe(true);
+    } finally {
+      warnSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
+  });
+
+  test('health() reflects connected consumers', async () => {
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const bus = createKafkaAdapter({
+        brokers: ['localhost:19092'],
+        topicPrefix: 'health.test',
+        groupPrefix: 'health',
+      });
+
+      const beforeSubscribe = bus.health();
+      expect(beforeSubscribe.consumers).toHaveLength(0);
+
+      bus.on('auth:login', () => {}, { durable: true, name: 'health-worker' });
+      await flushAsyncWork();
+
+      const after = bus.health();
+      expect(after.consumers).toHaveLength(1);
+      expect(after.consumers[0]?.event).toBe('auth:login');
+      expect(after.consumers[0]?.connected).toBe(true);
+      expect(after.consumers[0]?.groupId).toContain('health-worker');
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  test('shutdown() logs a warning when discarding pending buffered messages', async () => {
+    const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+
+    try {
+      bus.on('auth:login', () => {}, { durable: true, name: 'shutdown-buffer-worker' });
+      await flushAsyncWork();
+
+      fakeKafkaState.producerSendErrors.push(new Error('broker down'));
+      bus.emit('auth:login', { userId: 'u-buf', sessionId: 's-buf' });
+      await flushAsyncWork();
+
+      expect(bus.health().pendingBufferSize).toBe(1);
+      await bus.shutdown();
+
+      expect(bus.health().pendingBufferSize).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('discarding 1 buffered message'),
+      );
+    } finally {
+      warnSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
   });
 });

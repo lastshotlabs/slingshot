@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import { createMemoryAdapter } from '../src/adapters/memory';
 import { defineTask } from '../src/defineTask';
-import { defineWorkflow, sleep } from '../src/defineWorkflow';
+import { defineWorkflow, sleep, step } from '../src/defineWorkflow';
 import { createOrchestrationRuntime } from '../src/runtime';
 import type { OrchestrationEventMap, OrchestrationEventSink } from '../src/types';
 
@@ -195,5 +195,122 @@ describe('memory orchestration runtime', () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  test('continueOnFailure: true allows workflow to complete when step fails', async () => {
+    const consoleError = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const failTask = defineTask({
+        name: 'fail-task-cof',
+        input: z.object({}),
+        output: z.object({ ok: z.boolean() }),
+        async handler() {
+          await new Promise(r => setTimeout(r, 0));
+          throw new Error('intentional failure');
+        },
+      });
+      const succeedTask = defineTask({
+        name: 'succeed-task-cof',
+        input: z.object({}),
+        output: z.object({ done: z.boolean() }),
+        async handler() {
+          return { done: true };
+        },
+      });
+      const workflow = defineWorkflow({
+        name: 'resilient-workflow-cof',
+        input: z.object({}),
+        steps: [
+          step('failing-step', failTask, { continueOnFailure: true }),
+          step('success-step', succeedTask),
+        ],
+      });
+
+      const runtime = createOrchestrationRuntime({
+        adapter: createMemoryAdapter({ concurrency: 1 }),
+        tasks: [failTask, succeedTask],
+        workflows: [workflow],
+      });
+
+      const handle = await runtime.runWorkflow(workflow, {});
+      const result = (await handle.result()) as Record<string, unknown>;
+
+      expect(result['failing-step']).toBeUndefined();
+      expect(result['success-step']).toMatchObject({ done: true });
+      const run = await runtime.getRun(handle.id);
+      expect(run?.status).toBe('completed');
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  test('continueOnFailure: false (default) fails the workflow when a step fails', async () => {
+    const consoleError = spyOn(console, 'error').mockImplementation(() => {});
+    const { eventSink, events } = createEventCollector();
+    try {
+      const failTask = defineTask({
+        name: 'hard-fail-task-cof',
+        input: z.object({}),
+        output: z.object({ ok: z.boolean() }),
+        async handler() {
+          await new Promise(r => setTimeout(r, 0));
+          throw new Error('step failed hard');
+        },
+      });
+      const workflow = defineWorkflow({
+        name: 'hard-fail-workflow-cof',
+        input: z.object({}),
+        steps: [step('hard-step', failTask)],
+      });
+
+      const runtime = createOrchestrationRuntime({
+        adapter: createMemoryAdapter({ concurrency: 1, eventSink }),
+        tasks: [failTask],
+        workflows: [workflow],
+      });
+
+      const handle = await runtime.runWorkflow(workflow, {});
+      // Attach the rejection handler BEFORE awaiting (same tick as runWorkflow return)
+      const resultPromise = handle.result();
+      let rejectedMessage: string | undefined;
+      try {
+        await resultPromise;
+      } catch (err) {
+        rejectedMessage = err instanceof Error ? err.message : String(err);
+      }
+      expect(rejectedMessage).toBe('step failed hard');
+      const run = await runtime.getRun(handle.id);
+      expect(run?.status).toBe('failed');
+      expect(events.map(e => e.name)).toContain('orchestration.workflow.failed');
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  test('cancelRun marks a workflow as cancelled and handle.result() rejects', async () => {
+    const workflow = defineWorkflow({
+      name: 'cancellable-workflow-cof',
+      input: z.object({}),
+      steps: [sleep('wait-step', 60_000)],
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [],
+      workflows: [workflow],
+    });
+
+    const handle = await runtime.runWorkflow(workflow, {});
+    await runtime.cancelRun(handle.id);
+
+    let error: Error | undefined;
+    try {
+      await handle.result();
+    } catch (err) {
+      error = err instanceof Error ? err : new Error(String(err));
+    }
+    expect(error?.message).toContain('cancelled');
+    const run = await runtime.getRun(handle.id);
+    expect(run?.status).toBe('cancelled');
   });
 });

@@ -198,9 +198,12 @@ async function awaitTaskResult(options: {
       };
 
       options.signal?.addEventListener('abort', onAbort, { once: true });
-      options.promise.finally(() => {
-        options.signal?.removeEventListener('abort', onAbort);
-      });
+      // Use then/then instead of finally so the derived promise fulfills on rejection
+      // (a rejected .finally() promise is unhandled in Bun's JSC-based rejection tracker).
+      options.promise.then(
+        () => options.signal?.removeEventListener('abort', onAbort),
+        () => options.signal?.removeEventListener('abort', onAbort),
+      );
     }),
   ]);
 }

@@ -241,6 +241,53 @@ describe('createBullMQAdapter — durable subscriptions', () => {
 });
 
 // ---------------------------------------------------------------------------
+// onEnvelope / offEnvelope
+// ---------------------------------------------------------------------------
+
+describe('createBullMQAdapter — onEnvelope / offEnvelope', () => {
+  test('onEnvelope delivers full envelope to durable listener', async () => {
+    const bus = createBullMQAdapter({ connection: {} });
+    const received: unknown[] = [];
+
+    bus.onEnvelope('auth:login' as any, async envelope => received.push(envelope), {
+      durable: true,
+      name: 'envelope-worker',
+    });
+
+    const queueName = fakeBullMQState.queues[0].name;
+    const envelope = {
+      key: 'auth:login',
+      payload: { userId: 'u-env' },
+      meta: {
+        eventId: 'evt-env',
+        occurredAt: new Date().toISOString(),
+        ownerPlugin: 'test',
+        exposure: ['internal' as const],
+        scope: null,
+        requestTenantId: null,
+      },
+    };
+    await fakeBullMQState.dispatchJob(queueName, 'auth:login', envelope);
+
+    expect(received).toHaveLength(1);
+    expect((received[0] as typeof envelope).key).toBe('auth:login');
+    expect((received[0] as typeof envelope).payload).toMatchObject({ userId: 'u-env' });
+  });
+
+  test('offEnvelope removes a non-durable envelope listener', () => {
+    const bus = createBullMQAdapter({ connection: {} });
+    const received: unknown[] = [];
+    const listener = async (envelope: unknown) => received.push(envelope);
+
+    bus.onEnvelope('auth:login' as any, listener as any);
+    bus.offEnvelope('auth:login' as any, listener as any);
+
+    bus.emit('auth:login' as any, { userId: 'u-removed' });
+    expect(received).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Shutdown
 // ---------------------------------------------------------------------------
 

@@ -315,6 +315,98 @@ export function createBullMQAdapter(
     if (pendingBuffer.length > 0) scheduleDrain();
   }
 
+  function registerEnvelopeListener<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
+    subscriptionOpts?: SubscriptionOpts,
+  ): void {
+    const key = event as string;
+    if (subscriptionOpts?.durable === true) {
+      if (!subscriptionOpts.name) {
+        throw new Error('[BullMQAdapter] durable subscriptions require a name. Pass opts.name.');
+      }
+
+      const mapKey = `${prefix}:${event}:${subscriptionOpts.name}`;
+      const bullmqQueueName = sanitizeQueueName(mapKey);
+
+      if (durableQueues.has(mapKey)) {
+        throw new Error(
+          `[BullMQAdapter] a durable subscription named "${subscriptionOpts.name}" for event "${event}" already exists. Names must be unique per event.`,
+        );
+      }
+
+      const queue = new Queue(bullmqQueueName, {
+        connection: opts.connection,
+        defaultJobOptions: { attempts },
+      });
+      queues.push(queue);
+      durableQueues.set(mapKey, queue);
+
+      const worker = new Worker(
+        bullmqQueueName,
+        async job => {
+          let decoded: unknown = job.data;
+          if (isSerializedBullMQEnvelope(job.data)) {
+            decoded = eventSerializer.deserialize(
+              event as string,
+              Buffer.from(job.data.__slingshot_serialized, 'base64'),
+            );
+          }
+          const envelope = isEventEnvelope(decoded, event)
+            ? decoded
+            : createRawEventEnvelope(
+                event as Extract<keyof SlingshotEventMap, string>,
+                validateEventPayload(
+                  event as string,
+                  decoded,
+                  schemaRegistry,
+                  validationMode,
+                ) as SlingshotEventMap[K],
+              );
+          await Promise.resolve(listener(envelope as EventEnvelope<K>));
+        },
+        { connection: opts.connection },
+      );
+
+      worker.on('error', err => {
+        console.error(`[BullMQAdapter] worker error on queue "${bullmqQueueName}":`, err);
+      });
+
+      worker.on('failed', (job, err) => {
+        const attemptsStr = job ? `(attempt ${job.attemptsMade}/${attempts})` : '(job unavailable)';
+        console.error(
+          `[BullMQAdapter] job failed on queue "${bullmqQueueName}" ${attemptsStr}:`,
+          err,
+        );
+      });
+
+      workers.push(worker);
+
+      if (!durableListeners.has(key)) durableListeners.set(key, new Set());
+      durableListeners.get(key)?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
+      return;
+    }
+
+    if (!envelopeListeners.has(key)) envelopeListeners.set(key, new Set());
+    envelopeListeners.get(key)?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
+  }
+
+  function unregisterEnvelopeListener<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void,
+  ): void {
+    const key = event as string;
+    const dl = durableListeners.get(key);
+    if (dl?.has(listener as (envelope: EventEnvelope) => void | Promise<void>)) {
+      throw new Error(
+        `[BullMQAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all workers.`,
+      );
+    }
+    envelopeListeners
+      .get(key)
+      ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
+  }
+
   return {
     emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
       const envelope = isEventEnvelope(payload, event)
@@ -395,7 +487,7 @@ export function createBullMQAdapter(
         payloadListenerWrappers.set(key, wrappers);
       }
       wrappers.set(listener as (payload: unknown) => void | Promise<void>, wrapper);
-      this.onEnvelope(
+      registerEnvelopeListener(
         event,
         wrapper as (envelope: EventEnvelope<K>) => void | Promise<void>,
         subscriptionOpts,
@@ -407,83 +499,7 @@ export function createBullMQAdapter(
       listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
       subscriptionOpts?: SubscriptionOpts,
     ): void {
-      const key = event as string;
-      if (subscriptionOpts?.durable === true) {
-        if (!subscriptionOpts.name) {
-          throw new Error('[BullMQAdapter] durable subscriptions require a name. Pass opts.name.');
-        }
-
-        // Internal map key (colons kept for human-readable lookup)
-        const mapKey = `${prefix}:${event}:${subscriptionOpts.name}`;
-        // Actual BullMQ queue name — colons replaced so BullMQ accepts it
-        const bullmqQueueName = sanitizeQueueName(mapKey);
-
-        if (durableQueues.has(mapKey)) {
-          throw new Error(
-            `[BullMQAdapter] a durable subscription named "${subscriptionOpts.name}" for event "${event}" already exists. Names must be unique per event.`,
-          );
-        }
-
-        const queue = new Queue(bullmqQueueName, {
-          connection: opts.connection,
-          defaultJobOptions: { attempts },
-        });
-        queues.push(queue);
-        durableQueues.set(mapKey, queue);
-
-        const worker = new Worker(
-          bullmqQueueName,
-          async job => {
-            let decoded: unknown = job.data;
-            if (isSerializedBullMQEnvelope(job.data)) {
-              decoded = eventSerializer.deserialize(
-                event as string,
-                Buffer.from(job.data.__slingshot_serialized, 'base64'),
-              );
-            }
-            const envelope = isEventEnvelope(decoded, event)
-              ? decoded
-              : createRawEventEnvelope(
-                  event as Extract<keyof SlingshotEventMap, string>,
-                  validateEventPayload(
-                    event as string,
-                    decoded,
-                    schemaRegistry,
-                    validationMode,
-                  ) as SlingshotEventMap[K],
-                );
-            await Promise.resolve(listener(envelope as EventEnvelope<K>));
-          },
-          { connection: opts.connection },
-        );
-
-        worker.on('error', err => {
-          console.error(`[BullMQAdapter] worker error on queue "${bullmqQueueName}":`, err);
-        });
-
-        worker.on('failed', (job, err) => {
-          const attemptsStr = job
-            ? `(attempt ${job.attemptsMade}/${attempts})`
-            : '(job unavailable)';
-          console.error(
-            `[BullMQAdapter] job failed on queue "${bullmqQueueName}" ${attemptsStr}:`,
-            err,
-          );
-        });
-
-        workers.push(worker);
-
-        // Track durable listener so off() can detect and reject it
-        if (!durableListeners.has(key)) durableListeners.set(key, new Set());
-        durableListeners
-          .get(key)
-          ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
-      } else {
-        if (!envelopeListeners.has(key)) envelopeListeners.set(key, new Set());
-        envelopeListeners
-          .get(key)
-          ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
-      }
+      registerEnvelopeListener(event, listener, subscriptionOpts);
     },
 
     /**
@@ -515,22 +531,14 @@ export function createBullMQAdapter(
       if (wrappers?.size === 0) {
         payloadListenerWrappers.delete(event as string);
       }
-      this.offEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void);
+      unregisterEnvelopeListener(event, wrapper as (envelope: EventEnvelope<K>) => void);
     },
 
     offEnvelope<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (envelope: EventEnvelope<K>) => void,
     ): void {
-      const dl = durableListeners.get(event as string);
-      if (dl?.has(listener as (envelope: EventEnvelope) => void | Promise<void>)) {
-        throw new Error(
-          `[BullMQAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all workers.`,
-        );
-      }
-      envelopeListeners
-        .get(event as string)
-        ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
+      unregisterEnvelopeListener(event, listener);
     },
 
     /**

@@ -36,6 +36,7 @@ export interface FakeKafkaState {
   adminConnectErrors: unknown[];
   adminConnectCalls: number;
   adminDisconnectCalls: number;
+  createTopicsErrors: unknown[];
   createTopicsCalls: FakeCreateTopicsPayload[];
   consumers: FakeConsumerRecord[];
   consumerConnectErrors: unknown[];
@@ -54,6 +55,7 @@ export const fakeKafkaState: FakeKafkaState = {
   adminConnectErrors: [],
   adminConnectCalls: 0,
   adminDisconnectCalls: 0,
+  createTopicsErrors: [],
   createTopicsCalls: [],
   consumers: [],
   consumerConnectErrors: [],
@@ -72,6 +74,7 @@ export function resetFakeKafkaState(): void {
   fakeKafkaState.adminConnectErrors.length = 0;
   fakeKafkaState.adminConnectCalls = 0;
   fakeKafkaState.adminDisconnectCalls = 0;
+  fakeKafkaState.createTopicsErrors.length = 0;
   fakeKafkaState.createTopicsCalls.length = 0;
   fakeKafkaState.consumers.length = 0;
   fakeKafkaState.consumerConnectErrors.length = 0;
@@ -126,6 +129,10 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
           state.adminDisconnectCalls += 1;
         },
         createTopics: async (payload: FakeCreateTopicsPayload) => {
+          const nextError = state.createTopicsErrors.shift();
+          if (nextError) {
+            throw nextError;
+          }
           state.createTopicsCalls.push(payload);
           return true;
         },

@@ -738,6 +738,29 @@ describe('organizations manifest conversion', () => {
     ).resolves.toBeDefined();
   });
 
+  test('getOrgBySlug returns null when tenantId does not match', async () => {
+    const orgService = getOrganizationsOrgServiceOrNull(pluginState);
+    if (!orgService) throw new Error('org service not available');
+
+    await orgService.createOrg({
+      name: 'Acme Corp',
+      slug: 'acme-corp',
+      tenantId: 'tenant-a',
+    });
+
+    // Requesting with the correct tenantId returns the org.
+    const found = await orgService.getOrgBySlug('acme-corp', 'tenant-a');
+    expect(found).not.toBeNull();
+
+    // Requesting with a different tenantId must return null — no cross-tenant leak.
+    const leaked = await orgService.getOrgBySlug('acme-corp', 'tenant-b');
+    expect(leaked).toBeNull();
+
+    // Requesting without a tenantId still finds the org (backward-compatible path).
+    const noFilter = await orgService.getOrgBySlug('acme-corp');
+    expect(noFilter).not.toBeNull();
+  });
+
   test('rejects mountPath values without a leading slash', () => {
     expect(() => createOrganizationsPlugin({ mountPath: 'orgs' })).toThrow(
       /mountPath must start with '\//i,

@@ -134,6 +134,27 @@ export function createMemoryManagedUserProvider(): MemoryManagedUserProvider {
   const sessions = new Map<string, SessionRecord>();
   const roles = new Map<string, string[]>();
 
+  function listUsers(input: ListUsersInput): Promise<ListUsersResult> {
+    let items = Array.from(users.values());
+    if (input.tenantId) items = items.filter(u => u.tenantId === input.tenantId);
+    if (input.status) items = items.filter(u => u.status === input.status);
+    if (input.role) {
+      const role = input.role;
+      items = items.filter(u => u.roles?.includes(role));
+    }
+    if (input.search) {
+      const q = input.search.toLowerCase();
+      items = items.filter(
+        u => u.email?.toLowerCase().includes(q) || u.displayName?.toLowerCase().includes(q),
+      );
+    }
+    const limit = input.limit ?? 20;
+    const startIdx = input.cursor ? items.findIndex(u => u.id === input.cursor) + 1 : 0;
+    const page = items.slice(startIdx, startIdx + limit);
+    const nextCursor = page.length === limit ? page[page.length - 1]?.id : undefined;
+    return Promise.resolve({ items: page, nextCursor });
+  }
+
   return {
     name: 'memory',
 
@@ -151,26 +172,7 @@ export function createMemoryManagedUserProvider(): MemoryManagedUserProvider {
       roles.clear();
     },
 
-    listUsers(input: ListUsersInput): Promise<ListUsersResult> {
-      let items = Array.from(users.values());
-      if (input.tenantId) items = items.filter(u => u.tenantId === input.tenantId);
-      if (input.status) items = items.filter(u => u.status === input.status);
-      if (input.role) {
-        const role = input.role;
-        items = items.filter(u => u.roles?.includes(role));
-      }
-      if (input.search) {
-        const q = input.search.toLowerCase();
-        items = items.filter(
-          u => u.email?.toLowerCase().includes(q) || u.displayName?.toLowerCase().includes(q),
-        );
-      }
-      const limit = input.limit ?? 20;
-      const startIdx = input.cursor ? items.findIndex(u => u.id === input.cursor) + 1 : 0;
-      const page = items.slice(startIdx, startIdx + limit);
-      const nextCursor = page.length === limit ? page[page.length - 1]?.id : undefined;
-      return Promise.resolve({ items: page, nextCursor });
-    },
+    listUsers,
 
     getUser(userId: string, scope?): Promise<ManagedUserRecord | null> {
       const user = users.get(userId) ?? null;
@@ -183,7 +185,7 @@ export function createMemoryManagedUserProvider(): MemoryManagedUserProvider {
       query: string,
       input: Omit<ListUsersInput, 'search'> = {},
     ): Promise<ListUsersResult> {
-      return this.listUsers({ ...input, search: query });
+      return listUsers({ ...input, search: query });
     },
 
     getCapabilities(): Promise<ManagedUserCapabilities> {

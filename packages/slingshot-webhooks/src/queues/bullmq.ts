@@ -267,7 +267,11 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
               attempts: bullJob.attemptsMade,
               createdAt: new Date(bullJob.timestamp),
             };
-            void config.onDeadLetter?.(webhookJob, err);
+            if (config.onDeadLetter) {
+              void Promise.resolve(config.onDeadLetter(webhookJob, err)).catch(callbackErr => {
+                console.error('[slingshot-webhooks] onDeadLetter handler failed', callbackErr);
+              });
+            }
           }
         });
 

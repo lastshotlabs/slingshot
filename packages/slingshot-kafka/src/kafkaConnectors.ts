@@ -510,7 +510,8 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
   ): Promise<void> {
     if (topics.length === 0) return;
     const ensuredAdmin = await ensureAdmin();
-    await ensuredAdmin.createTopics({ topics }).catch(() => {});
+    // KafkaJS resolves `false` when a topic already exists; other failures should surface.
+    await ensuredAdmin.createTopics({ topics });
   }
 
   function enforceDuplicatePublishPolicy(bus: SlingshotEventBus): void {
@@ -733,6 +734,44 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
     }
   }
 
+  async function stopConnector(): Promise<void> {
+    if (stopped) return;
+    stopped = true;
+    started = false;
+
+    if (drainTimer) {
+      clearInterval(drainTimer);
+      drainTimer = null;
+    }
+
+    await drainPendingBuffer();
+
+    if (boundBus) {
+      for (const runtime of outboundRuntimes) {
+        try {
+          boundBus.offEnvelope(runtime.config.event, runtime.listener);
+        } catch {
+          // Durable listeners are cleaned up by the underlying bus shutdown.
+        }
+        runtime.health.status = 'stopped';
+      }
+    }
+
+    for (const runtime of inboundRuntimes) {
+      runtime.health.status = 'stopped';
+      await runtime.consumer.disconnect().catch(() => {});
+    }
+
+    if (producer) {
+      await producer.disconnect().catch(() => {});
+      producer = null;
+    }
+    if (admin) {
+      await admin.disconnect().catch(() => {});
+      admin = null;
+    }
+  }
+
   return {
     name: 'slingshot-kafka-connectors',
 
@@ -919,48 +958,12 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
 
         started = true;
       } catch (err) {
-        await this.stop();
+        await stopConnector();
         throw err;
       }
     },
 
-    async stop(): Promise<void> {
-      if (stopped) return;
-      stopped = true;
-      started = false;
-
-      if (drainTimer) {
-        clearInterval(drainTimer);
-        drainTimer = null;
-      }
-
-      await drainPendingBuffer();
-
-      if (boundBus) {
-        for (const runtime of outboundRuntimes) {
-          try {
-            boundBus.offEnvelope(runtime.config.event, runtime.listener);
-          } catch {
-            // Durable listeners are cleaned up by the underlying bus shutdown.
-          }
-          runtime.health.status = 'stopped';
-        }
-      }
-
-      for (const runtime of inboundRuntimes) {
-        runtime.health.status = 'stopped';
-        await runtime.consumer.disconnect().catch(() => {});
-      }
-
-      if (producer) {
-        await producer.disconnect().catch(() => {});
-        producer = null;
-      }
-      if (admin) {
-        await admin.disconnect().catch(() => {});
-        admin = null;
-      }
-    },
+    stop: stopConnector,
 
     health(): KafkaConnectorHealth {
       return {

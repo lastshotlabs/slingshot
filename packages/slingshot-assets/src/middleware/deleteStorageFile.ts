@@ -35,6 +35,13 @@ export function createDeleteStorageFileMiddleware(
     if (!asset) return;
     if (c.res.status < 200 || c.res.status >= 300) return;
 
-    await storage.delete(asset.key);
+    try {
+      await storage.delete(asset.key);
+    } catch (err) {
+      console.error(
+        `[slingshot-assets] Failed to delete storage object for key "${asset.key}":`,
+        err,
+      );
+    }
   };
 }

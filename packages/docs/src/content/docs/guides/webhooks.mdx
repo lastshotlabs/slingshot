@@ -21,9 +21,10 @@ bun add @lastshotlabs/slingshot-webhooks
 ```
 
 ```ts
-import { createWebhookPlugin, createMemoryWebhookAdapter } from '@lastshotlabs/slingshot-webhooks';
+import { createMemoryWebhookAdapter, createWebhookPlugin } from '@lastshotlabs/slingshot-webhooks';
 
 const webhooks = createWebhookPlugin({
+  mountPath: '/webhooks',
   adapter: createMemoryWebhookAdapter(),
   events: ['*'],
   managementRole: 'admin',

@@ -620,9 +620,11 @@ function resolveParallelSlots(
     const slotName = entry.slice(1); // strip '@'
     const defaultFilePath = findConventionFileDirect(slotDir, 'default');
 
-    // Check for a direct page.ts in the slot directory (matches the parent URL)
+    // Check for a direct page.ts/load.ts in the slot directory (matches the parent URL)
     const directPage =
-      findConventionFileDirect(slotDir, 'page') ?? findConventionFileDirect(slotDir, 'index');
+      findConventionFileDirect(slotDir, 'page') ??
+      findConventionFileDirect(slotDir, 'load') ??
+      findConventionFileDirect(slotDir, 'index');
 
     if (directPage) {
       // Direct page match — this slot always renders for the parent's URL

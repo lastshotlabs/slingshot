@@ -215,4 +215,20 @@ describe('createMemoryQueue', () => {
     expect(drained).toBe(true);
     await queue.stop();
   });
+
+  it('drain() resolves after timeout when jobs hang, and warns', async () => {
+    const provider: MailProvider = {
+      name: 'mock',
+      send: mock(async () => new Promise<never>(() => {})),
+    };
+
+    const queue = createMemoryQueue({ drainTimeoutMs: 50 });
+    await queue.start(provider);
+    await queue.enqueue(makeMessage());
+
+    await expect(queue.drain!()).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('drain() timed out'));
+    await queue.stop();
+  });
 });

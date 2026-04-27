@@ -17,10 +17,13 @@ Pass the return value of `nodeRuntime()` to `createServer()` as the `runtime` op
 ## Minimum Setup
 
 ```ts
-import { createServer } from '@lastshotlabs/slingshot-core';
+import { createServer } from '@lastshotlabs/slingshot';
 import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
-const server = await createServer({ runtime: nodeRuntime(), ...config });
+const server = await createServer({
+  runtime: nodeRuntime(),
+  port: 3000,
+});
 ```
 
 ## Peer Dependencies

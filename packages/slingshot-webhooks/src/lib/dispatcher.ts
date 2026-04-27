@@ -33,6 +33,7 @@ export async function deliverWebhook(job: WebhookJob): Promise<void> {
       'X-Webhook-Delivery': job.deliveryId,
     },
     body: job.payload,
+    signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) {
     const retryable = res.status >= 500 || res.status === 429;

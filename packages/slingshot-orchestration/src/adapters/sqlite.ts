@@ -532,6 +532,34 @@ export function createSqliteAdapter(options: {
     resultPromises.set(row.id, promise);
   }
 
+  async function startAdapter(): Promise<void> {
+    if (started) return;
+    started = true;
+    const batchSize = 100;
+    let batch = recoverRows.all(batchSize);
+    while (batch.length > 0) {
+      for (const row of batch) {
+        await recoverRun(row);
+      }
+      const last = batch[batch.length - 1];
+      batch = recoverRowsAfter.all(
+        last.priority,
+        last.priority,
+        last.created_at,
+        last.priority,
+        last.created_at,
+        last.id,
+        batchSize,
+      );
+    }
+  }
+
+  async function ensureStarted(): Promise<void> {
+    if (!started) {
+      await startAdapter();
+    }
+  }
+
   return {
     registerTask(def) {
       taskRegistry.set(def.name, def);
@@ -540,9 +568,7 @@ export function createSqliteAdapter(options: {
       workflowRegistry.set(def.name, def);
     },
     async runTask(name, input, opts) {
-      if (!started) {
-        await this.start();
-      }
+      await ensureStarted();
       if (shuttingDown) {
         throw new OrchestrationError('ADAPTER_ERROR', 'Adapter is shutting down.');
       }
@@ -596,9 +622,7 @@ export function createSqliteAdapter(options: {
       return createHandle(runId, promise);
     },
     async runWorkflow(name, input, opts) {
-      if (!started) {
-        await this.start();
-      }
+      await ensureStarted();
       if (shuttingDown) {
         throw new OrchestrationError('ADAPTER_ERROR', 'Adapter is shutting down.');
       }
@@ -826,25 +850,7 @@ export function createSqliteAdapter(options: {
       });
     },
     async start() {
-      if (started) return;
-      started = true;
-      const batchSize = 100;
-      let batch = recoverRows.all(batchSize);
-      while (batch.length > 0) {
-        for (const row of batch) {
-          await recoverRun(row);
-        }
-        const last = batch[batch.length - 1];
-        batch = recoverRowsAfter.all(
-          last.priority,
-          last.priority,
-          last.created_at,
-          last.priority,
-          last.created_at,
-          last.id,
-          batchSize,
-        );
-      }
+      await startAdapter();
     },
     async shutdown() {
       shuttingDown = true;

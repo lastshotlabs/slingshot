@@ -231,4 +231,23 @@ describe('kafkaAdapter', () => {
       console.error = originalError;
     }
   });
+
+  test('supports detached on/off calls for non-durable listeners', async () => {
+    const bus = createKafkaAdapter({
+      brokers: ['localhost:19092'],
+    });
+
+    const listener = mock(() => {});
+    const { on, off } = bus;
+
+    on('auth:login', listener);
+    bus.emit('auth:login', { userId: 'u-10', sessionId: 's-10' });
+    await flushAsyncWork();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    off('auth:login', listener);
+    bus.emit('auth:login', { userId: 'u-11', sessionId: 's-11' });
+    await flushAsyncWork();
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
 });

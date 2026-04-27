@@ -308,7 +308,14 @@ export function buildActionRouter(config: ActionRouterConfig): Hono {
       return c.json({ error: `Invalid module name: ${moduleName}` }, 400);
     }
 
-    const fn = await resolveAction(modulePath, actionName);
+    let fn: ((...args: unknown[]) => unknown) | null;
+    try {
+      fn = await resolveAction(modulePath, actionName);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      const publicMessage = process.env.NODE_ENV === 'production' ? 'Action failed' : message;
+      return c.json({ error: publicMessage }, 500);
+    }
     if (fn === null) {
       return c.json({ error: `Action not found: ${moduleName}#${actionName}` }, 404);
     }

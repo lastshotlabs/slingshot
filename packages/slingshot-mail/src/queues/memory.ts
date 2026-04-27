@@ -29,6 +29,7 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
   console.warn('[slingshot-mail] Memory queue is not durable — for development/testing only');
   const maxAttempts = config?.maxAttempts ?? 3;
   const onDeadLetter = config?.onDeadLetter ?? null;
+  const drainTimeoutMs = config?.drainTimeoutMs ?? 30_000;
   const pending: Map<string, MailJob> = new Map();
   const activeJobs = new Set<Promise<void>>();
   let provider: MailProvider | null = null;
@@ -124,7 +125,20 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
       return resolveSync(() => pending.size);
     },
     async drain(): Promise<void> {
-      await Promise.all([...activeJobs]);
+      if (drainTimeoutMs === 0 || activeJobs.size === 0) {
+        await Promise.all([...activeJobs]);
+        return;
+      }
+      const drainAll = Promise.all([...activeJobs]);
+      const timeout = new Promise<'timeout'>(resolve =>
+        setTimeout(() => resolve('timeout'), drainTimeoutMs),
+      );
+      const result = await Promise.race([drainAll.then(() => 'done' as const), timeout]);
+      if (result === 'timeout') {
+        console.warn(
+          `[slingshot-mail] drain() timed out after ${drainTimeoutMs}ms — ${activeJobs.size} job(s) still in flight`,
+        );
+      }
     },
   };
 }

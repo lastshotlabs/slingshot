@@ -4,7 +4,7 @@
  * Tests createEventSyncManager() behavior using a mock provider that records
  * calls and a real InProcessAdapter event bus.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { createEventSyncManager } from '../src/eventSync';
@@ -279,6 +279,95 @@ describe('createEventSyncManager', () => {
       const result = await p.search('products', { q: 'Interval Flush Test' });
       expect(result.totalHits).toBeGreaterThanOrEqual(1);
     }
+  });
+
+  it('restores pending documents when indexDocuments fails so the next flush retries them', async () => {
+    const entity = makeEntityConfig('products');
+    const mgr = createEventSyncManager({
+      pluginConfig: PLUGIN_CONFIG,
+      searchManager,
+      transformRegistry: createSearchTransformRegistry(),
+      bus,
+      flushIntervalMs: 60000,
+      flushThreshold: 100,
+    });
+
+    mgr.subscribeConfigEntity(entity);
+
+    const dynamicBus = bus as unknown as { emit(event: string, payload: unknown): void };
+    dynamicBus.emit('entity:products.created', {
+      id: 'retry-doc-1',
+      document: { id: 'retry-doc-1', title: 'Retry Me' },
+    });
+
+    // Make the first indexDocuments call fail
+    const p = searchManager.getProvider('products');
+    if (!p) throw new Error('no provider');
+    const spy = spyOn(p, 'indexDocuments').mockRejectedValueOnce(
+      new Error('transient indexing failure'),
+    );
+
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    await mgr.flush();
+    errorSpy.mockRestore();
+
+    // Document was not indexed — provider threw
+    spy.mockRestore();
+    const afterFail = await p.search('products', { q: 'Retry Me' });
+    expect(afterFail.totalHits).toBe(0);
+
+    // Second flush should succeed because the document was restored to pending
+    await mgr.flush();
+    await mgr.teardown();
+
+    const afterRetry = await p.search('products', { q: 'Retry Me' });
+    expect(afterRetry.totalHits).toBeGreaterThanOrEqual(1);
+  });
+
+  it('schedules a follow-up flush when a delete arrives during an in-flight flush', async () => {
+    const entity = makeEntityConfig('products');
+    const mgr = createEventSyncManager({
+      pluginConfig: PLUGIN_CONFIG,
+      searchManager,
+      transformRegistry: createSearchTransformRegistry(),
+      bus,
+      flushIntervalMs: 60000,
+      flushThreshold: 100,
+    });
+
+    mgr.subscribeConfigEntity(entity);
+
+    const dynamicBus = bus as unknown as { emit(event: string, payload: unknown): void };
+    dynamicBus.emit('entity:products.created', {
+      id: 'overlap-doc-1',
+      document: { id: 'overlap-doc-1', title: 'Overlap Doc' },
+    });
+
+    const p = searchManager.getProvider('products');
+    if (!p) throw new Error('no provider');
+
+    const originalIndexDocuments = p.indexDocuments.bind(p);
+    let releaseIndex: (() => void) | undefined;
+    const gate = new Promise<void>(resolve => {
+      releaseIndex = resolve;
+    });
+    const indexSpy = spyOn(p, 'indexDocuments').mockImplementationOnce(async (...args) => {
+      await gate;
+      return originalIndexDocuments(...args);
+    });
+
+    const flushPromise = mgr.flush();
+    await new Promise(r => setTimeout(r, 10));
+
+    dynamicBus.emit('entity:products.deleted', { id: 'overlap-doc-1' });
+    releaseIndex?.();
+    await flushPromise;
+    await new Promise(r => setTimeout(r, 20));
+    indexSpy.mockRestore();
+    await mgr.teardown();
+
+    const after = await p.search('products', { q: 'Overlap Doc' });
+    expect(after.totalHits).toBe(0);
   });
 
   it('teardown flushes pending operations before stopping', async () => {

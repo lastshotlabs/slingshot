@@ -21,7 +21,25 @@ bun add @lastshotlabs/slingshot-mail
 ```
 
 ```ts
-import { createMailPlugin, createRawHtmlRenderer, createResendProvider } from '@lastshotlabs/slingshot-mail';
+import {
+  createMailPlugin,
+  createRawHtmlRenderer,
+  createResendProvider,
+} from '@lastshotlabs/slingshot-mail';
+
+function readWelcomePayload(payload: unknown): { email: string; identifier: string } {
+  if (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'email' in payload &&
+    'identifier' in payload &&
+    typeof payload.email === 'string' &&
+    typeof payload.identifier === 'string'
+  ) {
+    return { email: payload.email, identifier: payload.identifier };
+  }
+  throw new Error('auth:delivery.welcome payload is missing email or identifier');
+}
 
 const mail = createMailPlugin({
   provider: createResendProvider({ apiKey: process.env.RESEND_KEY! }),
@@ -36,10 +54,10 @@ const mail = createMailPlugin({
   from: 'noreply@example.com',
   subscriptions: [
     {
-      event: 'auth:user.created',
+      event: 'auth:delivery.welcome',
       template: 'welcome',
-      recipientMapper: payload => payload.email,
-      dataMapper: payload => ({ name: payload.name ?? payload.email }),
+      recipientMapper: payload => readWelcomePayload(payload).email,
+      dataMapper: payload => ({ name: readWelcomePayload(payload).identifier }),
     },
   ],
 });

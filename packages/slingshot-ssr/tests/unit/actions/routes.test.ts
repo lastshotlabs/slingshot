@@ -1,3 +1,4 @@
+import { rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { Hono } from 'hono';
@@ -18,8 +19,14 @@ function makeApp(trustedOrigins: readonly string[] = [], isrInvalidators?: Actio
   return app;
 }
 
-beforeEach(() => clearActionCache());
-afterEach(() => clearActionCache());
+beforeEach(() => {
+  clearActionCache();
+});
+
+afterEach(() => {
+  clearActionCache();
+  rmSync(path.join(SERVER_ACTIONS_DIR, 'broken.ts'), { force: true });
+});
 
 describe('POST /_snapshot/action - CSRF origin check', () => {
   test('rejects cross-origin requests with 403', async () => {
@@ -208,6 +215,23 @@ describe('POST /_snapshot/action - module resolution', () => {
       body: JSON.stringify({ module: 'nonexistent', action: 'missingFn', args: [] }),
     });
     expect(res.status).toBe(404);
+  });
+
+  test('returns 500 when the action module throws during import', async () => {
+    writeFileSync(
+      path.join(SERVER_ACTIONS_DIR, 'broken.ts'),
+      "throw new Error('broken action module'); export {};\n",
+      'utf8',
+    );
+    const app = makeApp([]);
+    const res = await app.request('/_snapshot/action', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ module: 'broken', action: 'noop', args: [] }),
+    });
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('broken action module');
   });
 });
 

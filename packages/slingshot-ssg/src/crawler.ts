@@ -266,9 +266,21 @@ async function callStaticPaths(filePath: string, routesDir: string): Promise<str
   }
 
   // Accept both legacy `staticPaths` and Next.js-aligned `generateStaticParams`.
-  const resolvedFn = mod['staticPaths'] ?? mod['generateStaticParams'];
-  const resolvedFnName = 'staticPaths' in mod ? 'staticPaths' : 'generateStaticParams';
-  if (typeof resolvedFn !== 'function') {
+  const staticPathsFn = mod['staticPaths'];
+  const generateStaticParamsFn = mod['generateStaticParams'];
+  const resolvedFn =
+    typeof staticPathsFn === 'function'
+      ? staticPathsFn
+      : typeof generateStaticParamsFn === 'function'
+        ? generateStaticParamsFn
+        : null;
+  const resolvedFnName =
+    typeof staticPathsFn === 'function'
+      ? 'staticPaths'
+      : typeof generateStaticParamsFn === 'function'
+        ? 'generateStaticParams'
+        : null;
+  if (resolvedFn === null || resolvedFnName === null) {
     console.warn(
       `[slingshot-ssg] ${filePath}: neither staticPaths nor generateStaticParams is a function`,
     );

@@ -134,6 +134,26 @@ describe('kafkaConnectors', () => {
     }
   });
 
+  test('surfaces topic creation failures instead of swallowing them', async () => {
+    const bus = createInProcessAdapter();
+    const connectors = createKafkaConnectors({
+      brokers: ['localhost:19092'],
+      outbound: [
+        {
+          event: 'auth:user.created',
+          topic: 'external.users.created',
+          autoCreateTopic: true,
+        },
+      ],
+    });
+
+    fakeKafkaState.createTopicsErrors.push(new Error('createTopics failed'));
+
+    await expect(connectors.start(bus)).rejects.toThrow('createTopics failed');
+    expect(fakeKafkaState.adminDisconnectCalls).toBe(1);
+    expect(connectors.health().started).toBe(false);
+  });
+
   test('outbound connectors subscribe to the bus and publish transformed payloads', async () => {
     const { bus, events } = createPublishedBus();
     const connectors = createKafkaConnectors({

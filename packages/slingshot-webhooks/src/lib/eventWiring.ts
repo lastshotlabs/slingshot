@@ -64,13 +64,24 @@ export function wireEventSubscriptions(
         try {
           await queue.enqueue(resolved.job);
         } catch (err) {
-          await adapter.updateDelivery(resolved.delivery.id, {
-            status: 'dead',
-            lastAttempt: {
-              attemptedAt: new Date().toISOString(),
-              error: 'enqueue failed: ' + String(err),
-            },
-          });
+          console.error(
+            `[slingshot-webhooks] failed to enqueue delivery for "${String(key)}"`,
+            err,
+          );
+          try {
+            await adapter.updateDelivery(resolved.delivery.id, {
+              status: 'dead',
+              lastAttempt: {
+                attemptedAt: new Date().toISOString(),
+                error: 'enqueue failed: ' + String(err),
+              },
+            });
+          } catch (updateErr) {
+            console.error(
+              `[slingshot-webhooks] failed to mark delivery ${resolved.delivery.id} as dead`,
+              updateErr,
+            );
+          }
         }
       }
     };

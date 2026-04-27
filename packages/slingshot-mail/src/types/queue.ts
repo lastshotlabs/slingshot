@@ -32,6 +32,12 @@ export interface MailQueueConfig {
   /** Base retry delay in milliseconds (doubles on each attempt). Default: 1000. Used by BullMQ. */
   retryBaseDelayMs?: number;
   /**
+   * Maximum milliseconds `drain()` will wait for in-flight jobs to settle.
+   * When the timeout expires, drain resolves with a console warning rather than hanging.
+   * Default: 30000. Set to 0 for no timeout (not recommended in production).
+   */
+  drainTimeoutMs?: number;
+  /**
    * Called when a job exceeds `maxAttempts` or encounters a permanent failure.
    * Use this for alerting, logging, or persisting failed deliveries.
    */

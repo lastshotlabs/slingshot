@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
 import { createAssetsTestApp, seedAsset } from '../../src/testing';
 
@@ -55,5 +55,35 @@ describe('asset delete cascade', () => {
     expect(response.status).toBe(404);
     expect(deletedKeys).toHaveLength(0);
     expect(await state.assets.getById(asset.id)).not.toBeNull();
+  });
+
+  it('returns 204 even when storage.delete() throws — error is logged, not propagated', async () => {
+    const storage: StorageAdapter = {
+      async put() {
+        return {};
+      },
+      async get() {
+        return null;
+      },
+      async delete() {
+        throw new Error('storage unavailable');
+      },
+    };
+    const { app, state } = await createAssetsTestApp({ storage });
+    const asset = await seedAsset(state, {
+      key: 'uploads/failing-delete.png',
+      ownerUserId: 'user-1',
+      mimeType: 'image/png',
+    });
+
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const response = await app.request(`/assets/assets/${asset.id}`, {
+      method: 'DELETE',
+      headers: { 'x-user-id': 'user-1' },
+    });
+    errorSpy.mockRestore();
+
+    expect(response.status).toBe(204);
+    expect(await state.assets.getById(asset.id)).toBeNull();
   });
 });

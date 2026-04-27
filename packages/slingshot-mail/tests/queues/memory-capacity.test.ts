@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 
-class TestTemplateNotFoundError extends Error {}
+class TestTemplateNotFoundError extends Error {
+  constructor(public readonly templateName: string) {
+    super(`Template not found: ${templateName}`);
+    this.name = 'TemplateNotFoundError';
+  }
+}
 
 mock.module('@lastshotlabs/slingshot-core', () => ({
   DEFAULT_MAX_ENTRIES: 2,

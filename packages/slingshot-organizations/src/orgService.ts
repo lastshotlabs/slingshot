@@ -2,7 +2,7 @@ import type { PluginStateCarrier, PluginStateMap } from '@lastshotlabs/slingshot
 import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 
 export type OrganizationsOrgService = {
-  getOrgBySlug(slug: string): Promise<{ id: string } | null>;
+  getOrgBySlug(slug: string, tenantId?: string): Promise<{ id: string } | null>;
   createOrg(data: {
     name: string;
     slug: string;

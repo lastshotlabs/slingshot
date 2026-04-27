@@ -178,7 +178,7 @@ export async function renderSsgPages(
   assetTagsHtml: string = '',
 ): Promise<SsgResult> {
   const start = Date.now();
-  const concurrency = config.concurrency ?? 4;
+  const concurrency = resolveConcurrency(config.concurrency);
   const pages: SsgPageResult[] = [];
 
   // Process in concurrency-limited batches
@@ -216,6 +216,12 @@ function resolveOutputPath(urlPath: string, outDir: string): string {
     return join(outDir, 'index.html');
   }
   return join(outDir, urlPath, 'index.html');
+}
+
+function resolveConcurrency(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) return 4;
+  const normalized = Math.floor(value);
+  return normalized >= 1 ? normalized : 1;
 }
 
 /** Coerce an unknown thrown value to an Error. */

@@ -206,6 +206,18 @@ async function checkPermission(
   });
 }
 
+async function tryLogAuditEntry(
+  auditLog: AuditLogProvider | undefined,
+  entry: Parameters<AuditLogProvider['logEntry']>[0],
+): Promise<void> {
+  if (!auditLog) return;
+  try {
+    await auditLog.logEntry(entry);
+  } catch (err) {
+    console.error('[slingshot-admin] Failed to write audit log entry', err);
+  }
+}
+
 export function createAdminRouter(config: AdminRouterConfig) {
   const { managedUserProvider, bus, evaluator } = config;
   const router = createTypedRouter();
@@ -389,25 +401,23 @@ export function createAdminRouter(config: AdminRouterConfig) {
           requestId: c.get('requestId'),
         },
       });
-      if (config.auditLog) {
-        await config.auditLog.logEntry({
-          id: randomUUID(),
-          userId: principal.subject,
-          sessionId: null,
-          requestTenantId: principal.tenantId ?? null,
-          method: c.req.method,
-          path: c.req.path,
-          status: 200,
-          ip: getClientIp(c),
-          userAgent: c.req.header('user-agent') ?? null,
-          action: 'admin.user.update',
-          resource: 'user',
-          resourceId: userId,
-          meta: { target: userId },
-          requestId: c.get('requestId'),
-          createdAt: new Date().toISOString(),
-        });
-      }
+      await tryLogAuditEntry(config.auditLog, {
+        id: randomUUID(),
+        userId: principal.subject,
+        sessionId: null,
+        requestTenantId: principal.tenantId ?? null,
+        method: c.req.method,
+        path: c.req.path,
+        status: 200,
+        ip: getClientIp(c),
+        userAgent: c.req.header('user-agent') ?? null,
+        action: 'admin.user.update',
+        resource: 'user',
+        resourceId: userId,
+        meta: { target: userId },
+        requestId: c.get('requestId'),
+        createdAt: new Date().toISOString(),
+      });
       return c.json({ message: 'Profile updated' }, 200);
     },
   );
@@ -490,25 +500,23 @@ export function createAdminRouter(config: AdminRouterConfig) {
           requestId: c.get('requestId'),
         },
       });
-      if (config.auditLog) {
-        await config.auditLog.logEntry({
-          id: randomUUID(),
-          userId: principal.subject,
-          sessionId: null,
-          requestTenantId: principal.tenantId ?? null,
-          method: c.req.method,
-          path: c.req.path,
-          status: 200,
-          ip: getClientIp(c),
-          userAgent: c.req.header('user-agent') ?? null,
-          action: 'admin.user.suspend',
-          resource: 'user',
-          resourceId: userId,
-          meta: { target: userId },
-          requestId: c.get('requestId'),
-          createdAt: new Date().toISOString(),
-        });
-      }
+      await tryLogAuditEntry(config.auditLog, {
+        id: randomUUID(),
+        userId: principal.subject,
+        sessionId: null,
+        requestTenantId: principal.tenantId ?? null,
+        method: c.req.method,
+        path: c.req.path,
+        status: 200,
+        ip: getClientIp(c),
+        userAgent: c.req.header('user-agent') ?? null,
+        action: 'admin.user.suspend',
+        resource: 'user',
+        resourceId: userId,
+        meta: { target: userId },
+        requestId: c.get('requestId'),
+        createdAt: new Date().toISOString(),
+      });
       return c.json({ message: 'User suspended' }, 200);
     },
   );
@@ -580,25 +588,23 @@ export function createAdminRouter(config: AdminRouterConfig) {
           requestId: c.get('requestId'),
         },
       });
-      if (config.auditLog) {
-        await config.auditLog.logEntry({
-          id: randomUUID(),
-          userId: principal.subject,
-          sessionId: null,
-          requestTenantId: principal.tenantId ?? null,
-          method: c.req.method,
-          path: c.req.path,
-          status: 200,
-          ip: getClientIp(c),
-          userAgent: c.req.header('user-agent') ?? null,
-          action: 'admin.user.unsuspend',
-          resource: 'user',
-          resourceId: userId,
-          meta: { target: userId },
-          requestId: c.get('requestId'),
-          createdAt: new Date().toISOString(),
-        });
-      }
+      await tryLogAuditEntry(config.auditLog, {
+        id: randomUUID(),
+        userId: principal.subject,
+        sessionId: null,
+        requestTenantId: principal.tenantId ?? null,
+        method: c.req.method,
+        path: c.req.path,
+        status: 200,
+        ip: getClientIp(c),
+        userAgent: c.req.header('user-agent') ?? null,
+        action: 'admin.user.unsuspend',
+        resource: 'user',
+        resourceId: userId,
+        meta: { target: userId },
+        requestId: c.get('requestId'),
+        createdAt: new Date().toISOString(),
+      });
       return c.json({ message: 'User unsuspended' }, 200);
     },
   );
@@ -717,25 +723,23 @@ export function createAdminRouter(config: AdminRouterConfig) {
           requestId: c.get('requestId'),
         },
       });
-      if (config.auditLog) {
-        await config.auditLog.logEntry({
-          id: randomUUID(),
-          userId: principal.subject,
-          sessionId: null,
-          requestTenantId: principal.tenantId ?? null,
-          method: c.req.method,
-          path: c.req.path,
-          status: 200,
-          ip: getClientIp(c),
-          userAgent: c.req.header('user-agent') ?? null,
-          action: 'admin.role.set',
-          resource: 'user',
-          resourceId: userId,
-          meta: { target: userId },
-          requestId: c.get('requestId'),
-          createdAt: new Date().toISOString(),
-        });
-      }
+      await tryLogAuditEntry(config.auditLog, {
+        id: randomUUID(),
+        userId: principal.subject,
+        sessionId: null,
+        requestTenantId: principal.tenantId ?? null,
+        method: c.req.method,
+        path: c.req.path,
+        status: 200,
+        ip: getClientIp(c),
+        userAgent: c.req.header('user-agent') ?? null,
+        action: 'admin.role.set',
+        resource: 'user',
+        resourceId: userId,
+        meta: { target: userId },
+        requestId: c.get('requestId'),
+        createdAt: new Date().toISOString(),
+      });
       return c.json({ roles }, 200);
     },
   );
@@ -802,25 +806,23 @@ export function createAdminRouter(config: AdminRouterConfig) {
           requestId: c.get('requestId'),
         },
       });
-      if (config.auditLog) {
-        await config.auditLog.logEntry({
-          id: randomUUID(),
-          userId: principal.subject,
-          sessionId: null,
-          requestTenantId: principal.tenantId ?? null,
-          method: c.req.method,
-          path: c.req.path,
-          status: 200,
-          ip: getClientIp(c),
-          userAgent: c.req.header('user-agent') ?? null,
-          action: 'admin.user.delete',
-          resource: 'user',
-          resourceId: userId,
-          meta: { target: userId },
-          requestId: c.get('requestId'),
-          createdAt: new Date().toISOString(),
-        });
-      }
+      await tryLogAuditEntry(config.auditLog, {
+        id: randomUUID(),
+        userId: principal.subject,
+        sessionId: null,
+        requestTenantId: principal.tenantId ?? null,
+        method: c.req.method,
+        path: c.req.path,
+        status: 200,
+        ip: getClientIp(c),
+        userAgent: c.req.header('user-agent') ?? null,
+        action: 'admin.user.delete',
+        resource: 'user',
+        resourceId: userId,
+        meta: { target: userId },
+        requestId: c.get('requestId'),
+        createdAt: new Date().toISOString(),
+      });
       return c.json({ message: 'User deleted' }, 200);
     },
   );
@@ -927,25 +929,23 @@ export function createAdminRouter(config: AdminRouterConfig) {
         return errorResponse(c, 'User not found', 404);
       }
       await managedUserProvider.revokeAllSessions(userId, getManagedUserScope(c));
-      if (config.auditLog) {
-        await config.auditLog.logEntry({
-          id: randomUUID(),
-          userId: principal.subject,
-          sessionId: null,
-          requestTenantId: principal.tenantId ?? null,
-          method: c.req.method,
-          path: c.req.path,
-          status: 200,
-          ip: getClientIp(c),
-          userAgent: c.req.header('user-agent') ?? null,
-          action: 'admin.session.revoke_all',
-          resource: 'user',
-          resourceId: userId,
-          meta: { target: userId },
-          requestId: c.get('requestId'),
-          createdAt: new Date().toISOString(),
-        });
-      }
+      await tryLogAuditEntry(config.auditLog, {
+        id: randomUUID(),
+        userId: principal.subject,
+        sessionId: null,
+        requestTenantId: principal.tenantId ?? null,
+        method: c.req.method,
+        path: c.req.path,
+        status: 200,
+        ip: getClientIp(c),
+        userAgent: c.req.header('user-agent') ?? null,
+        action: 'admin.session.revoke_all',
+        resource: 'user',
+        resourceId: userId,
+        meta: { target: userId },
+        requestId: c.get('requestId'),
+        createdAt: new Date().toISOString(),
+      });
       return c.json({ message: 'Sessions revoked' }, 200);
     },
   );
@@ -1013,25 +1013,23 @@ export function createAdminRouter(config: AdminRouterConfig) {
         }
       }
       await managedUserProvider.revokeSession(sessionId, getManagedUserScope(c));
-      if (config.auditLog) {
-        await config.auditLog.logEntry({
-          id: randomUUID(),
-          userId: principal.subject,
-          sessionId: null,
-          requestTenantId: principal.tenantId ?? null,
-          method: c.req.method,
-          path: c.req.path,
-          status: 200,
-          ip: getClientIp(c),
-          userAgent: c.req.header('user-agent') ?? null,
-          action: 'admin.session.revoke',
-          resource: 'session',
-          resourceId: sessionId,
-          meta: { target: userId },
-          requestId: c.get('requestId'),
-          createdAt: new Date().toISOString(),
-        });
-      }
+      await tryLogAuditEntry(config.auditLog, {
+        id: randomUUID(),
+        userId: principal.subject,
+        sessionId: null,
+        requestTenantId: principal.tenantId ?? null,
+        method: c.req.method,
+        path: c.req.path,
+        status: 200,
+        ip: getClientIp(c),
+        userAgent: c.req.header('user-agent') ?? null,
+        action: 'admin.session.revoke',
+        resource: 'session',
+        resourceId: sessionId,
+        meta: { target: userId },
+        requestId: c.get('requestId'),
+        createdAt: new Date().toISOString(),
+      });
       return c.json({ message: 'Session revoked' }, 200);
     },
   );

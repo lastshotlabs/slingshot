@@ -141,7 +141,9 @@ export function createNotificationsPlugin(
           })
         : {
             start() {},
-            stop() {},
+            stop() {
+              return Promise.resolve();
+            },
             tick() {
               return Promise.resolve(0);
             },
@@ -192,7 +194,7 @@ export function createNotificationsPlugin(
 
       teardown = async () => {
         (bus as unknown as DynamicBus).off('notifications:notification.created', createdListener);
-        dispatcher.stop();
+        await dispatcher.stop();
         deliveryAdapters.clear();
         await rateLimitBackend.close?.();
       };

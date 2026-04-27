@@ -48,7 +48,7 @@ export interface EventSyncManagerConfig {
   /** The application event bus to subscribe to entity CRUD events on. */
   readonly bus: SlingshotEventBus;
   /** Registry-backed event publisher used for package-owned search events. */
-  readonly events: SlingshotEvents;
+  readonly events?: SlingshotEvents;
 
   /**
    * Flush pending indexing operations after this interval in milliseconds.
@@ -210,6 +210,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
   const subscribedConfigEntities = new Set<string>();
   let flushTimer: ReturnType<typeof setInterval> | undefined;
   let flushing = false;
+  let flushRequested = false;
   let tornDown = false;
 
   // Entity CRUD events use dynamic string keys (e.g., 'entity:users.created').
@@ -239,9 +240,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
 
     // Deletions flush immediately
     if (action.type === 'delete') {
-      flushPending().catch((err: unknown) => {
-        console.error('[slingshot-search:event-sync] Immediate delete flush error:', err);
-      });
+      requestFlush('[slingshot-search:event-sync] Immediate delete flush error:');
       return;
     }
 
@@ -251,16 +250,25 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
       totalPending += indexMap.size;
     }
     if (totalPending >= flushThreshold) {
-      flushPending().catch((err: unknown) => {
-        console.error('[slingshot-search:event-sync] Threshold flush error:', err);
-      });
+      requestFlush('[slingshot-search:event-sync] Threshold flush error:');
     }
+  }
+
+  function requestFlush(errorPrefix: string): void {
+    if (flushing) {
+      flushRequested = true;
+      return;
+    }
+    flushPending().catch((err: unknown) => {
+      console.error(errorPrefix, err);
+    });
   }
 
   async function flushPending(): Promise<void> {
     // Guard against concurrent flushes
     if (flushing) return;
     flushing = true;
+    flushRequested = false;
 
     try {
       // Snapshot and clear pending queue atomically
@@ -301,6 +309,18 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
               `[slingshot-search:event-sync] Failed to delete ${toDelete.length} documents from '${indexName}':`,
               err,
             );
+            // Restore failed deletions to pending so the next flush retries them.
+            let indexPending = pending.get(indexName);
+            if (!indexPending) {
+              indexPending = new Map();
+              pending.set(indexName, indexPending);
+            }
+            for (const docId of toDelete) {
+              if (!indexPending.has(docId)) {
+                const failedAction = actions.get(docId);
+                if (failedAction) indexPending.set(docId, failedAction);
+              }
+            }
             emitSyncFailed(indexName, state.entityName, undefined, err);
           }
         }
@@ -314,12 +334,29 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
               `[slingshot-search:event-sync] Failed to index ${toIndex.length} documents to '${indexName}':`,
               err,
             );
+            // Restore failed index operations to pending so the next flush retries them.
+            let indexPending = pending.get(indexName);
+            if (!indexPending) {
+              indexPending = new Map();
+              pending.set(indexName, indexPending);
+            }
+            for (const [docId, action] of actions) {
+              if (action.type === 'index' && !indexPending.has(docId)) {
+                indexPending.set(docId, action);
+              }
+            }
             emitSyncFailed(indexName, state.entityName, undefined, err);
           }
         }
       }
     } finally {
       flushing = false;
+      if (flushRequested && pending.size > 0 && !tornDown) {
+        flushRequested = false;
+        void flushPending().catch((err: unknown) => {
+          console.error('[slingshot-search:event-sync] Follow-up flush error:', err);
+        });
+      }
     }
   }
 
@@ -333,6 +370,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     documentId: string | undefined,
     err: unknown,
   ): void {
+    if (!events) return;
     events.publish(
       'search:sync.failed',
       {
@@ -450,6 +488,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
 
     async teardown() {
       tornDown = true;
+      flushRequested = false;
 
       // Clear the flush timer
       if (flushTimer) {

@@ -92,6 +92,20 @@ describe('createBullMQAdapter — non-durable subscriptions', () => {
     expect(() => bus.off('auth:login' as any, () => {})).not.toThrow();
   });
 
+  test('on() and off() work when destructured from the adapter', () => {
+    const bus = createBullMQAdapter({ connection: {} });
+    const calls: unknown[] = [];
+    const listener = () => calls.push(true);
+    const { on, off, emit } = bus;
+
+    on('auth:login' as any, listener);
+    emit('auth:login' as any, {} as any);
+    off('auth:login' as any, listener);
+    emit('auth:login' as any, {} as any);
+
+    expect(calls).toHaveLength(1);
+  });
+
   test('emit() does not deliver to listeners of other events', () => {
     const bus = createBullMQAdapter({ connection: {} });
     const loginCalls: unknown[] = [];

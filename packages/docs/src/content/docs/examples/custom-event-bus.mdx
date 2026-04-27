@@ -224,7 +224,80 @@ await createServerFromManifest('./app.manifest.json', registry);
 
 ```typescript title="src/eventBus.ts"
 import { Redis } from 'ioredis';
-import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import type {
+  EventEnvelope,
+  SlingshotEventBus,
+  SlingshotEventMap,
+  SubscriptionOpts,
+} from '@lastshotlabs/slingshot-core';
+
+type RedisPayloadHandler = (payload: never) => void | Promise<void>;
+type RedisEnvelopeHandler = (envelope: never) => void | Promise<void>;
+
+class RedisEventBus implements SlingshotEventBus {
+  private readonly pub: Redis;
+  private readonly sub: Redis;
+  private readonly handlers = new Map<string, Set<RedisPayloadHandler>>();
+
+  constructor(
+    url: string,
+    private readonly channel: string,
+  ) {
+    this.pub = new Redis(url);
+    this.sub = new Redis(url);
+
+    this.sub.subscribe(channel);
+    this.sub.on('message', (_ch, msg) => {
+      const { key, payload } = JSON.parse(msg) as { key: string; payload: unknown };
+      this.handlers.get(key)?.forEach(handler => handler(payload as never));
+    });
+  }
+
+  emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void;
+  emit(event: string, payload: unknown): void;
+  emit(key: string, payload: unknown): void {
+    this.pub.publish(this.channel, JSON.stringify({ key, payload }));
+  }
+
+  on<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (payload: SlingshotEventMap[K]) => void | Promise<void>,
+    opts?: SubscriptionOpts,
+  ): void;
+  on(event: string, listener: RedisPayloadHandler, opts?: SubscriptionOpts): void;
+  on(key: string, handler: RedisPayloadHandler): void {
+    if (!this.handlers.has(key)) this.handlers.set(key, new Set());
+    this.handlers.get(key)?.add(handler);
+  }
+
+  onEnvelope<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
+    opts?: SubscriptionOpts,
+  ): void;
+  onEnvelope(event: string, listener: RedisEnvelopeHandler, opts?: SubscriptionOpts): void;
+  onEnvelope(): void {}
+
+  off<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (payload: SlingshotEventMap[K]) => void,
+  ): void;
+  off(event: string, listener: (payload: unknown) => void): void;
+  off(key: string, handler: RedisPayloadHandler): void {
+    this.handlers.get(key)?.delete(handler);
+  }
+
+  offEnvelope<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void,
+  ): void;
+  offEnvelope(event: string, listener: (envelope: EventEnvelope) => void): void;
+  offEnvelope(): void {}
+
+  async shutdown(): Promise<void> {
+    await Promise.all([this.pub.quit(), this.sub.quit()]);
+  }
+}
 
 export function createRedisEventBus({
   url,
@@ -233,33 +306,7 @@ export function createRedisEventBus({
   url: string;
   channel: string;
 }): SlingshotEventBus {
-  const pub = new Redis(url);
-  const sub = new Redis(url);
-  const handlers = new Map<string, Set<(payload: unknown) => void>>();
-
-  sub.subscribe(channel);
-  sub.on('message', (_ch, msg) => {
-    const { key, payload } = JSON.parse(msg) as { key: string; payload: unknown };
-    handlers.get(key)?.forEach(handler => handler(payload));
-  });
-
-  return {
-    emit(key: string, payload: unknown) {
-      pub.publish(channel, JSON.stringify({ key, payload }));
-    },
-    on(key: string, handler: (payload: unknown) => void | Promise<void>) {
-      if (!handlers.has(key)) handlers.set(key, new Set());
-      handlers.get(key)?.add(handler as (payload: unknown) => void);
-    },
-    onEnvelope() {},
-    off(key: string, handler: (payload: unknown) => void | Promise<void>) {
-      handlers.get(key)?.delete(handler as (payload: unknown) => void);
-    },
-    offEnvelope() {},
-    async shutdown() {
-      await Promise.all([pub.quit(), sub.quit()]);
-    },
-  };
+  return new RedisEventBus(url, channel);
 }
 ```
 

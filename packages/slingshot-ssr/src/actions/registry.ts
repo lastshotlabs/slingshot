@@ -21,6 +21,10 @@ const moduleCache = new Map<string, Record<string, unknown>>();
  * - The module cannot be imported (e.g. module not found)
  * - The module does not export a function named `action`
  *
+ * Throws when the module exists but fails during import evaluation. The action
+ * router treats that as a server error rather than a 404 so broken modules do
+ * not get masked as missing.
+ *
  * @param moduleId - Fully-resolved module specifier or absolute file path.
  * @param action   - Named export key to retrieve from the module.
  * @returns The exported function, or `null` if not found.
@@ -37,8 +41,11 @@ export async function resolveAction(
       // responsible for ensuring moduleId is a safe, trusted path.
       mod = (await import(moduleId)) as Record<string, unknown>;
       moduleCache.set(moduleId, mod);
-    } catch {
-      return null;
+    } catch (err) {
+      if (isModuleNotFoundError(err)) {
+        return null;
+      }
+      throw err;
     }
   }
 
@@ -56,4 +63,12 @@ export async function resolveAction(
  */
 export function clearActionCache(): void {
   moduleCache.clear();
+}
+
+function isModuleNotFoundError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const code = Reflect.get(err, 'code');
+  if (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') return true;
+  const message = Reflect.get(err, 'message');
+  return typeof message === 'string' && message.includes('Cannot find module');
 }

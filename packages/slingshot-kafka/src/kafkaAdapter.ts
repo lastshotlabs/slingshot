@@ -441,6 +441,133 @@ export function createKafkaAdapter(
     return false;
   }
 
+  function addEnvelopeListener<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
+  ): void {
+    const key = event as string;
+    if (!envelopeListeners.has(key)) envelopeListeners.set(key, new Set());
+    envelopeListeners
+      .get(key)
+      ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
+  }
+
+  function removeEnvelopeListener<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void,
+  ): void {
+    if (
+      durableListeners
+        .get(event as string)
+        ?.has(listener as (envelope: EventEnvelope) => void | Promise<void>)
+    ) {
+      throw new Error(
+        '[KafkaAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all consumers.',
+      );
+    }
+    envelopeListeners
+      .get(event as string)
+      ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
+  }
+
+  function registerEnvelopeListener<K extends keyof SlingshotEventMap>(
+    event: K,
+    listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
+    opts?: SubscriptionOpts,
+  ): void {
+    const key = event as string;
+    if (isShutdown) {
+      console.warn('[KafkaAdapter] onEnvelope() called after shutdown, ignoring.');
+      return;
+    }
+
+    if (opts?.durable) {
+      if (!opts.name) {
+        throw new Error('[KafkaAdapter] durable subscriptions require a name. Pass opts.name.');
+      }
+
+      const topic = toTopicName(config.topicPrefix, event as string);
+      const groupId = toGroupId(config.groupPrefix, topic, opts.name);
+      const entryKey = `${topic}:${opts.name}`;
+      if (durableConsumers.has(entryKey)) {
+        throw new Error(
+          `[KafkaAdapter] a durable subscription named "${opts.name}" for event "${event}" already exists.`,
+        );
+      }
+
+      const consumer = kafka.consumer({
+        groupId,
+        sessionTimeout: config.sessionTimeout,
+        heartbeatInterval: config.heartbeatInterval,
+        allowAutoTopicCreation: config.autoCreateTopics,
+      });
+
+      durableConsumers.set(entryKey, {
+        consumer,
+        groupId,
+        topic,
+        event: event as string,
+        name: opts.name,
+      });
+      if (!durableListeners.has(event as string)) {
+        durableListeners.set(event as string, new Set());
+      }
+      durableListeners
+        .get(event as string)
+        ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
+
+      void (async () => {
+        let connected = false;
+        try {
+          await ensureTopic(topic);
+          await consumer.connect();
+          connected = true;
+          connectedConsumers.add(entryKey);
+          await consumer.subscribe({
+            topic,
+            fromBeginning: config.startFromBeginning,
+          });
+          await consumer.run({
+            autoCommit: false,
+            eachMessage: async payload => {
+              const entry = durableConsumers.get(entryKey);
+              if (!entry) return;
+              await processDurableMessage(
+                entryKey,
+                entry,
+                listener as (envelope: EventEnvelope) => void | Promise<void>,
+                payload,
+              );
+            },
+          });
+        } catch (err) {
+          connectedConsumers.delete(entryKey);
+          durableConsumers.delete(entryKey);
+          durableListeners
+            .get(event as string)
+            ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
+          if (connected) {
+            try {
+              await consumer.disconnect();
+            } catch (disconnectErr) {
+              console.error(
+                `[KafkaAdapter] error disconnecting failed consumer "${groupId}":`,
+                disconnectErr,
+              );
+            }
+          }
+          console.error(
+            `[KafkaAdapter] durable consumer setup failed for event "${event}" group "${groupId}":`,
+            err,
+          );
+        }
+      })();
+      return;
+    }
+
+    addEnvelopeListener(event, listener);
+  }
+
   async function commitProcessedMessage(
     consumer: Consumer,
     topic: string,
@@ -657,7 +784,11 @@ export function createKafkaAdapter(
         payloadListenerWrappers.set(key, wrappers);
       }
       wrappers.set(listener as (payload: unknown) => void | Promise<void>, wrapper);
-      this.onEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void | Promise<void>, opts);
+      registerEnvelopeListener(
+        event,
+        wrapper as (envelope: EventEnvelope<K>) => void | Promise<void>,
+        opts,
+      );
     },
 
     onEnvelope<K extends keyof SlingshotEventMap>(
@@ -665,100 +796,7 @@ export function createKafkaAdapter(
       listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
       opts?: SubscriptionOpts,
     ): void {
-      const key = event as string;
-      if (isShutdown) {
-        console.warn('[KafkaAdapter] onEnvelope() called after shutdown, ignoring.');
-        return;
-      }
-
-      if (opts?.durable) {
-        if (!opts.name) {
-          throw new Error('[KafkaAdapter] durable subscriptions require a name. Pass opts.name.');
-        }
-
-        const topic = toTopicName(config.topicPrefix, event as string);
-        const groupId = toGroupId(config.groupPrefix, topic, opts.name);
-        const entryKey = `${topic}:${opts.name}`;
-        if (durableConsumers.has(entryKey)) {
-          throw new Error(
-            `[KafkaAdapter] a durable subscription named "${opts.name}" for event "${event}" already exists.`,
-          );
-        }
-
-        const consumer = kafka.consumer({
-          groupId,
-          sessionTimeout: config.sessionTimeout,
-          heartbeatInterval: config.heartbeatInterval,
-          allowAutoTopicCreation: config.autoCreateTopics,
-        });
-
-        durableConsumers.set(entryKey, {
-          consumer,
-          groupId,
-          topic,
-          event: event as string,
-          name: opts.name,
-        });
-        if (!durableListeners.has(event as string)) {
-          durableListeners.set(event as string, new Set());
-        }
-        durableListeners
-          .get(event as string)
-          ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
-
-        void (async () => {
-          let connected = false;
-          try {
-            await ensureTopic(topic);
-            await consumer.connect();
-            connected = true;
-            connectedConsumers.add(entryKey);
-            await consumer.subscribe({
-              topic,
-              fromBeginning: config.startFromBeginning,
-            });
-            await consumer.run({
-              autoCommit: false,
-              eachMessage: async payload => {
-                const entry = durableConsumers.get(entryKey);
-                if (!entry) return;
-                await processDurableMessage(
-                  entryKey,
-                  entry,
-                  listener as (envelope: EventEnvelope) => void | Promise<void>,
-                  payload,
-                );
-              },
-            });
-          } catch (err) {
-            connectedConsumers.delete(entryKey);
-            durableConsumers.delete(entryKey);
-            durableListeners
-              .get(event as string)
-              ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
-            if (connected) {
-              try {
-                await consumer.disconnect();
-              } catch (disconnectErr) {
-                console.error(
-                  `[KafkaAdapter] error disconnecting failed consumer "${groupId}":`,
-                  disconnectErr,
-                );
-              }
-            }
-            console.error(
-              `[KafkaAdapter] durable consumer setup failed for event "${event}" group "${groupId}":`,
-              err,
-            );
-          }
-        })();
-        return;
-      }
-
-      if (!envelopeListeners.has(key)) envelopeListeners.set(key, new Set());
-      envelopeListeners
-        .get(key)
-        ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
+      registerEnvelopeListener(event, listener, opts);
     },
 
     off<K extends keyof SlingshotEventMap>(
@@ -774,25 +812,14 @@ export function createKafkaAdapter(
       if (wrappers?.size === 0) {
         payloadListenerWrappers.delete(event as string);
       }
-      this.offEnvelope(event, wrapper as (envelope: EventEnvelope<K>) => void);
+      removeEnvelopeListener(event, wrapper as (envelope: EventEnvelope<K>) => void);
     },
 
     offEnvelope<K extends keyof SlingshotEventMap>(
       event: K,
       listener: (envelope: EventEnvelope<K>) => void,
     ): void {
-      if (
-        durableListeners
-          .get(event as string)
-          ?.has(listener as (envelope: EventEnvelope) => void | Promise<void>)
-      ) {
-        throw new Error(
-          '[KafkaAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all consumers.',
-        );
-      }
-      envelopeListeners
-        .get(event as string)
-        ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
+      removeEnvelopeListener(event, listener);
     },
 
     async shutdown(): Promise<void> {

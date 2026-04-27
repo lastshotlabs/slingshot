@@ -124,4 +124,37 @@ describe('memory queue', () => {
     expect(deadLetterJob?.attempts).toBe(3);
     await q.stop();
   });
+
+  it('awaits async dead-letter handlers before drain() resolves', async () => {
+    let resolveDeadLetter!: () => void;
+    const deadLetterDone = new Promise<void>(resolve => {
+      resolveDeadLetter = resolve;
+    });
+    const q = createWebhookMemoryQueue({
+      maxAttempts: 1,
+      onDeadLetter: async () => {
+        await deadLetterDone;
+      },
+    });
+
+    await q.start(async () => {
+      throw new WebhookDeliveryError('permanent failure', false, 400);
+    });
+
+    await q.enqueue(makeJob());
+
+    const drainPromise = q.drain();
+    let drained = false;
+    void drainPromise.then(() => {
+      drained = true;
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(drained).toBe(false);
+
+    resolveDeadLetter();
+    await drainPromise;
+    expect(drained).toBe(true);
+    await q.stop();
+  });
 });

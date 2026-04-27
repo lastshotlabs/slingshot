@@ -201,11 +201,10 @@ export function createOrganizationsPlugin(
       const memberAdapter = memberAdapterRef;
 
       const orgService: OrganizationsOrgService = {
-        async getOrgBySlug(slug) {
-          const page = await orgAdapter.list({
-            filter: { slug },
-            limit: 1,
-          });
+        async getOrgBySlug(slug, tenantId) {
+          const filter: Record<string, unknown> = { slug };
+          if (tenantId !== undefined) filter.tenantId = tenantId;
+          const page = await orgAdapter.list({ filter, limit: 1 });
           const org = page.items[0];
           return org && typeof org.id === 'string' ? { id: org.id } : null;
         },
@@ -252,7 +251,7 @@ export function createOrganizationsPlugin(
       if (!orgs?.length) return;
 
       for (const seedOrg of orgs) {
-        const existing = await orgService.getOrgBySlug(seedOrg.slug);
+        const existing = await orgService.getOrgBySlug(seedOrg.slug, seedOrg.tenantId);
         if (existing) {
           console.log(
             `[slingshot-organizations seed] Org '${seedOrg.slug}' already exists — skipping.`,

@@ -243,6 +243,22 @@ export async function load() { return { data: {}, revalidate: false } }
     expect(paths).toContain('/players/42');
     expect(paths).toContain('/players/99');
   });
+
+  it('prefers the callable generateStaticParams export when staticPaths is present but not callable', async () => {
+    writeRoute(
+      'authors/[id].ts',
+      `
+export const staticPaths = undefined;
+export async function generateStaticParams(ctx) {
+  void ctx.url;
+  return [{ id: 'alice' }];
+}
+export async function load() { return { data: {}, revalidate: false } }
+`,
+    );
+    const paths = await collectSsgRoutes(makeConfig());
+    expect(paths).toContain('/authors/alice');
+  });
 });
 
 describe('collectSsgRoutes — directory form routes', () => {

@@ -76,4 +76,33 @@ describe('sqlite orchestration adapter', () => {
 
     await adapter.shutdown();
   });
+
+  sqliteTest('runTask works when destructured from the sqlite adapter', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'slingshot-orchestration-'));
+    tempDirs.push(dir);
+
+    const dbPath = join(dir, 'orchestration.sqlite');
+    const { createSqliteAdapter } = sqliteModule!;
+    const task = defineTask({
+      name: 'sqlite-task-destructured',
+      input: z.object({ value: z.string() }),
+      output: z.object({ echoed: z.string() }),
+      async handler(input) {
+        return { echoed: input.value };
+      },
+    });
+
+    const adapter = createSqliteAdapter({ path: dbPath, concurrency: 1 });
+    const runtime = createOrchestrationRuntime({
+      adapter,
+      tasks: [task],
+    });
+
+    const { runTask } = adapter;
+    const handle = await runTask('sqlite-task-destructured', { value: 'sqlite' });
+    await expect(handle.result()).resolves.toEqual({ echoed: 'sqlite' });
+    expect((await runtime.getRun(handle.id))?.status).toBe('completed');
+
+    await adapter.shutdown();
+  });
 });

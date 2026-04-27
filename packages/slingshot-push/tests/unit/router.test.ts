@@ -4,7 +4,7 @@
  * Tests routing by platform, fan-out, invalid-token cleanup, retry backoff,
  * topic publish, and unknown-platform skip behavior.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type { PushProvider } from '../../src/providers/provider';
 import { createPushRouter } from '../../src/router';
 import type { PushRouterRepos } from '../../src/router';
@@ -561,6 +561,26 @@ describe('createPushRouter — sendToUsers', () => {
     expect(count).toBe(2);
   });
 
+  test('works when sendToUsers is destructured from the router', async () => {
+    const repos = createFakeRepos();
+    const provider = createMockProvider(async () => ({ ok: true }));
+    provider.send = async () => ({ ok: true });
+
+    repos._subscriptions.push(
+      makeSubscription({ userId: 'user-1', id: 'sub-1' }),
+      makeSubscription({ userId: 'user-2', id: 'sub-2', deviceId: 'd2' }),
+    );
+
+    const { sendToUsers } = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 1 },
+    });
+
+    const count = await sendToUsers(['user-1', 'user-2'], { title: 'Broadcast' });
+    expect(count).toBe(2);
+  });
+
   test('deduplicates user IDs', async () => {
     const repos = createFakeRepos();
     const calls: string[] = [];
@@ -647,5 +667,47 @@ describe('createPushRouter — publishTopic', () => {
     });
     const count = await router.publishTopic('nonexistent', { title: 'x' });
     expect(count).toBe(0);
+  });
+
+  test('caps delivery at 10,000 members and warns when exceeded', async () => {
+    const repos = createFakeRepos();
+    const sentIds: string[] = [];
+    const provider = createMockProvider(async sub => {
+      sentIds.push(sub.id);
+      return { ok: true };
+    });
+
+    const topic = { id: 'topic-big', tenantId: '', name: 'broadcast', createdAt: new Date() };
+    repos._topics.push(topic);
+
+    const CAP = 10_000;
+    for (let i = 0; i < CAP + 5; i++) {
+      const subId = `sub-${i}`;
+      repos._subscriptions.push(makeSubscription({ id: subId, userId: `user-${i}` }));
+      repos._memberships.push({
+        id: `m-${i}`,
+        topicId: 'topic-big',
+        subscriptionId: subId,
+        userId: `user-${i}`,
+        tenantId: '',
+        createdAt: new Date(),
+      });
+    }
+
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 1 },
+    });
+
+    const count = await router.publishTopic('broadcast', { title: 'Hello' });
+
+    expect(count).toBe(CAP);
+    expect(sentIds).toHaveLength(CAP);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('10000');
+
+    warnSpy.mockRestore();
   });
 });

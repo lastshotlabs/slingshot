@@ -308,22 +308,30 @@ export function createPushRouter(options: {
     return deliveredCount;
   }
 
+  async function sendToUser(
+    userId: string,
+    message: PushMessage,
+    opts: { tenantId?: string; notificationId?: string } = {},
+  ): Promise<number> {
+    const tenantId = opts.tenantId ?? '';
+    const subscriptions = asItems(
+      await options.repos.subscriptions.listByUserId({ userId, tenantId }),
+    );
+    return sendToSubscriptions(subscriptions, message, {
+      tenantId,
+      notificationId: opts.notificationId,
+    });
+  }
+
   return {
     async sendToUser(userId, message, opts = {}) {
-      const tenantId = opts.tenantId ?? '';
-      const subscriptions = asItems(
-        await options.repos.subscriptions.listByUserId({ userId, tenantId }),
-      );
-      return sendToSubscriptions(subscriptions, message, {
-        tenantId,
-        notificationId: opts.notificationId,
-      });
+      return sendToUser(userId, message, opts);
     },
     async sendToUsers(userIds, message, opts = {}) {
       const tenantId = opts.tenantId ?? '';
       let count = 0;
       for (const userId of [...new Set(userIds)]) {
-        count += await this.sendToUser(userId, message, {
+        count += await sendToUser(userId, message, {
           tenantId,
           notificationId: opts.notificationId,
         });
@@ -335,9 +343,16 @@ export function createPushRouter(options: {
       const topic = await options.repos.topics.findByName({ tenantId, name: topicName });
       if (!topic) return 0;
 
-      const memberships = asItems(
+      const MEMBERSHIP_CAP = 10_000;
+      const allMemberships = asItems(
         await options.repos.topicMemberships.listByTopic({ topicId: topic.id }),
       );
+      if (allMemberships.length > MEMBERSHIP_CAP) {
+        console.warn(
+          `[slingshot-push] Topic '${topicName}' has ${allMemberships.length} members; publishing to first ${MEMBERSHIP_CAP} only. Consider batched fan-out for large topics.`,
+        );
+      }
+      const memberships = allMemberships.slice(0, MEMBERSHIP_CAP);
       const subscriptions: RouterSubscriptionRecord[] = [];
       for (const membership of memberships) {
         const subscription = await options.repos.subscriptions.getById(membership.subscriptionId);

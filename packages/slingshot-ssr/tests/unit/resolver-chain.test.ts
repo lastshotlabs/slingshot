@@ -126,7 +126,7 @@ describe('resolveRouteChain — Phase 26: Parallel slots', () => {
   beforeAll(() => {
     routesDir = setup({
       'inbox/page.ts': 'export async function load() { return { data: {} }; }',
-      'inbox/@sidebar/page.ts': 'export async function load() { return { data: {} }; }',
+      'inbox/@sidebar/load.ts': 'export async function load() { return { data: {} }; }',
       'inbox/@thread/[id]/page.ts': 'export async function load() { return { data: {} }; }',
     });
   });
@@ -158,9 +158,9 @@ describe('resolveRouteChain — Phase 26: Parallel slots', () => {
 
     const sidebarSlot = (chain!.slots ?? []).find(s => s.name === 'sidebar');
     expect(sidebarSlot).toBeDefined();
-    // sidebar/page.ts should match /inbox
+    // sidebar/load.ts should match /inbox
     // (resolveRouteInDir uses full server routes dir for pattern building)
-    expect(sidebarSlot!.match !== undefined).toBe(true);
+    expect(sidebarSlot!.match).not.toBeNull();
   });
 
   it('slots is undefined when leaf directory has no @ subdirectories', () => {

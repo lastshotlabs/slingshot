@@ -97,4 +97,105 @@ describe('createIntervalDispatcher', () => {
     setIntervalSpy.mockRestore();
     errorSpy.mockRestore();
   });
+
+  test('stop() returns a promise that resolves after in-flight tick completes', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    let releaseTick!: () => void;
+    const tickBlocked = new Promise<void>(resolve => {
+      releaseTick = resolve;
+    });
+    const listPendingDispatch = mock(async () => {
+      await tickBlocked;
+      return [];
+    });
+    (
+      adapters.notifications as { listPendingDispatch: typeof listPendingDispatch }
+    ).listPendingDispatch = listPendingDispatch;
+
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      intervalMs: 1_000,
+      maxPerTick: 10,
+    });
+
+    const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(((
+      handler: TimerHandler,
+    ) => {
+      if (typeof handler === 'function') void handler();
+      return 1 as ReturnType<typeof setInterval>;
+    }) as typeof setInterval);
+
+    dispatcher.start();
+    await Promise.resolve();
+
+    const stopPromise = dispatcher.stop();
+    let stopped = false;
+    void stopPromise.then(() => {
+      stopped = true;
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(stopped).toBe(false);
+
+    releaseTick();
+    await stopPromise;
+    expect(stopped).toBe(true);
+
+    setIntervalSpy.mockRestore();
+  });
+
+  test('does not re-enter while a dispatcher tick is already running', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    let releaseTick!: () => void;
+    const tickBlocked = new Promise<void>(resolve => {
+      releaseTick = resolve;
+    });
+    const listPendingDispatch = mock(async () => {
+      await tickBlocked;
+      return [];
+    });
+    (
+      adapters.notifications as { listPendingDispatch: typeof listPendingDispatch }
+    ).listPendingDispatch = listPendingDispatch;
+
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      intervalMs: 1_000,
+      maxPerTick: 10,
+    });
+
+    const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(((
+      handler: TimerHandler,
+    ) => {
+      if (typeof handler === 'function') {
+        void handler();
+        void handler();
+      }
+      return 1 as ReturnType<typeof setInterval>;
+    }) as typeof setInterval);
+
+    dispatcher.start();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(listPendingDispatch).toHaveBeenCalledTimes(1);
+
+    releaseTick();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    dispatcher.stop();
+    setIntervalSpy.mockRestore();
+  });
 });

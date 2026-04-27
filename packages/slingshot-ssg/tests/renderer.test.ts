@@ -237,4 +237,13 @@ describe('renderSsgPages — batch rendering', () => {
     const result = await renderSsgPages(paths, makeOkRenderer(), config);
     expect(result.succeeded).toBe(5);
   });
+
+  it('treats zero concurrency as a safe minimum of 1', async () => {
+    const config = makeConfig({ concurrency: 0 });
+    const result = await renderSsgPages(['/a', '/b'], makeOkRenderer(), config);
+
+    expect(result.pages).toHaveLength(2);
+    expect(result.succeeded).toBe(2);
+    expect(result.failed).toBe(0);
+  });
 });

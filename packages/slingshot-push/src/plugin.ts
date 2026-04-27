@@ -30,10 +30,16 @@ import {
 
 function parseServiceAccount(value: FirebaseServiceAccount | string): FirebaseServiceAccount {
   if (typeof value !== 'string') return value;
-  if (value.startsWith('file://')) {
-    return JSON.parse(readFileSync(new URL(value), 'utf8')) as FirebaseServiceAccount;
+  try {
+    if (value.startsWith('file://')) {
+      return JSON.parse(readFileSync(new URL(value), 'utf8')) as FirebaseServiceAccount;
+    }
+    return JSON.parse(value) as FirebaseServiceAccount;
+  } catch (err) {
+    throw new Error(
+      `[slingshot-push] Failed to parse Firebase service account: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
-  return JSON.parse(value) as FirebaseServiceAccount;
 }
 
 /**

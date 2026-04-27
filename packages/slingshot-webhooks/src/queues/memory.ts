@@ -17,7 +17,7 @@ interface MemoryQueueConfig {
   /**
    * Callback invoked when a job is moved to the dead-letter state.
    * Receives the final `WebhookJob` snapshot and the last `Error`.
-   * May be async; errors thrown by the callback are not caught.
+   * May be async; callback failures are caught and logged.
    */
   onDeadLetter?: (job: WebhookJob, err: Error) => void | Promise<void>;
 }
@@ -42,6 +42,7 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
   const maxAttempts = config?.maxAttempts ?? 5;
   const onDeadLetter = config?.onDeadLetter ?? null;
   const jobs: WebhookJob[] = [];
+  const activeJobs = new Set<Promise<void>>();
   let processor: ((job: WebhookJob) => Promise<void>) | null = null;
   let running = false;
   let idCounter = 0;
@@ -97,14 +98,32 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
         if (!retryable || job.attempts + 1 >= maxAttempts) {
           const finalJob = { ...job, attempts: job.attempts + 1 };
           pending--;
-          void onDeadLetter?.(finalJob, lastErr);
+          if (onDeadLetter) {
+            try {
+              await onDeadLetter(finalJob, lastErr);
+            } catch (err) {
+              console.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+            }
+          }
           return;
         }
         job = { ...job, attempts: job.attempts + 1 };
       }
     }
     pending--;
-    void onDeadLetter?.(job, lastErr);
+    if (onDeadLetter) {
+      try {
+        await onDeadLetter(job, lastErr);
+      } catch (err) {
+        console.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+      }
+    }
+  }
+
+  function trackJob(job: WebhookJob): void {
+    const p = processJob(job);
+    activeJobs.add(p);
+    void p.finally(() => activeJobs.delete(p));
   }
 
   return {
@@ -118,7 +137,7 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
       };
       pending++;
       if (running && processor) {
-        void processJob(job);
+        trackJob(job);
       } else {
         evictOldestArray(jobs, DEFAULT_MAX_ENTRIES);
         jobs.push(job);
@@ -131,7 +150,7 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
       // Flush queued jobs exactly once; completed jobs must not replay on restart.
       const queuedJobs = jobs.splice(0, jobs.length);
       for (const job of queuedJobs) {
-        void processJob(job);
+        trackJob(job);
       }
       return Promise.resolve();
     },
@@ -142,6 +161,9 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
     },
     depth(): Promise<number> {
       return Promise.resolve(pending);
+    },
+    async drain(): Promise<void> {
+      await Promise.all([...activeJobs]);
     },
   };
 }

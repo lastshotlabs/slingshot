@@ -9,7 +9,7 @@ import type {
 
 export interface DispatcherAdapter {
   start(): void;
-  stop(): void;
+  stop(): Promise<void>;
   tick(): Promise<number>;
 }
 
@@ -36,20 +36,36 @@ export function createIntervalDispatcher(
   const maxPerTick = options.maxPerTick ?? 500;
   const defaultPreferences = options.defaultPreferences ?? DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS;
   let timer: ReturnType<typeof setInterval> | null = null;
+  let inflightTick: Promise<void> | null = null;
 
-  return {
+  async function runTick(): Promise<void> {
+    if (inflightTick) return;
+    let resolve!: () => void;
+    inflightTick = new Promise<void>(r => {
+      resolve = r;
+    });
+    try {
+      await dispatcher.tick();
+    } catch (err) {
+      console.error('[slingshot-notifications] Dispatcher tick failed', err);
+    } finally {
+      inflightTick = null;
+      resolve();
+    }
+  }
+
+  const dispatcher: DispatcherAdapter = {
     start() {
       if (timer) return;
       timer = setInterval(() => {
-        void this.tick().catch(err => {
-          console.error('[slingshot-notifications] Dispatcher tick failed', err);
-        });
+        void runTick();
       }, intervalMs);
     },
-    stop() {
+    async stop() {
       if (!timer) return;
       clearInterval(timer);
       timer = null;
+      await inflightTick;
     },
     async tick() {
       const dispatchedAt = new Date();
@@ -90,4 +106,6 @@ export function createIntervalDispatcher(
       return Math.min(safeRows.length, maxPerTick);
     },
   };
+
+  return dispatcher;
 }

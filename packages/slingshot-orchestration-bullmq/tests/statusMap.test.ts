@@ -13,4 +13,13 @@ describe('mapBullMQStatus', () => {
     expect(mapBullMQStatus('waiting-children')).toBe('pending');
     expect(mapBullMQStatus('paused')).toBe('pending');
   });
+
+  test('maps delayed and prioritized states to pending', () => {
+    expect(mapBullMQStatus('delayed')).toBe('pending');
+    expect(mapBullMQStatus('prioritized')).toBe('pending');
+  });
+
+  test('maps unknown state to pending via default case', () => {
+    expect(mapBullMQStatus('unknown')).toBe('pending');
+  });
 });

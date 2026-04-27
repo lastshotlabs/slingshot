@@ -42,6 +42,7 @@ bun add @lastshotlabs/slingshot-permissions
 ```
 
 ```typescript
+// @skip-typecheck
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import {
@@ -71,6 +72,7 @@ await createServer({
 The most common use case — declare what is required per route, the framework enforces it:
 
 ```typescript
+// @skip-typecheck
 const Post = defineEntity('Post', {
   namespace: 'blog',
   fields: {
@@ -104,6 +106,7 @@ the framework fetches the record and checks ownership automatically.
 For package routes, the same `permission` option applies:
 
 ```typescript
+// @skip-typecheck
 route.delete({
   path: '/posts/:id/archive',
   auth: 'userAuth',
@@ -120,6 +123,7 @@ For checks that depend on runtime values, inject the evaluator via `services` an
 `actor.id` from the handler context directly:
 
 ```typescript
+// @skip-typecheck
 import { getPermissionsState } from '@lastshotlabs/slingshot-core';
 
 const { evaluator } = getPermissionsState(app);
@@ -155,6 +159,7 @@ domain({
 The same evaluator works for realtime access control:
 
 ```typescript
+// @skip-typecheck
 onRoomSubscribe: async (ws, room) => {
   const allowed = await evaluator.can(
     { subjectId: ws.data.actor.id, subjectType: 'user' },

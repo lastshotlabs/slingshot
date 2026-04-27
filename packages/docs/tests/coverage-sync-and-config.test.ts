@@ -37,8 +37,8 @@ function makePackageFixture(): WorkspacePackage {
 
   return {
     kind: 'workspace',
-    slug: 'fixture-package',
-    name: '@lastshotlabs/fixture-package',
+    slug: 'slingshot-infra',
+    name: '@lastshotlabs/slingshot-infra',
     version: '1.2.3',
     description: 'Fixture package for docs sync testing.',
     packageJsonPath: join(packageDir, 'package.json'),
@@ -103,6 +103,9 @@ describe('sync-workspace-docs', () => {
 
     expect(packageIndex).toContain('Fixture package overview paragraph.');
     expect(packageIndex).toContain(`bun add ${fixturePackage.name}`);
+    expect(packageIndex).toContain('sidebar:');
+    expect(packageIndex).toContain('badge:');
+    expect(packageIndex).toContain('Status: Deferred');
     expect(guideOverview).toContain('title: "Overview"');
     expect(guideOverview).toContain('Fixture package overview paragraph.');
   });

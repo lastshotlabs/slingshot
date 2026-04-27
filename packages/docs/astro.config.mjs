@@ -87,17 +87,17 @@ export default defineConfig({
             {
               label: 'Auth',
               slug: 'core-features/auth',
-              badge: { text: 'Preview', variant: 'caution' },
+              badge: { text: 'Experimental', variant: 'caution' },
             },
             {
               label: 'Permissions',
               slug: 'core-features/permissions',
-              badge: { text: 'Preview', variant: 'caution' },
+              badge: { text: 'Prod path', variant: 'tip' },
             },
             {
               label: 'Jobs and Orchestration',
               slug: 'core-features/jobs-and-orchestration',
-              badge: { text: 'Preview', variant: 'caution' },
+              badge: { text: 'Prod path', variant: 'tip' },
             },
             {
               label: 'Maturity and Package Status',
@@ -211,7 +211,7 @@ export default defineConfig({
         },
         {
           label: 'Jobs and Orchestration Reference',
-          badge: { text: 'Preview', variant: 'caution' },
+          badge: { text: 'Prod path', variant: 'tip' },
           collapsed: true,
           items: [
             { label: 'Overview', slug: 'orchestration/overview' },

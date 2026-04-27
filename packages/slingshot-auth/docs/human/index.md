@@ -5,6 +5,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-auth
 
 > Human-owned documentation. This page records the package boundaries and the security assumptions we want to preserve.
 
+> Status: Experimental. Publish prereleases on the `next` channel until this API surface graduates.
+
 ## Purpose
 
 `@lastshotlabs/slingshot-auth` owns Slingshot's identity, session, and account-security layer. It is responsible for authenticating users, persisting auth state, and exposing safe integration points to the rest of the framework.

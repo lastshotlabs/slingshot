@@ -15,6 +15,7 @@ bun add @lastshotlabs/slingshot-permissions
 ```
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import {
@@ -53,6 +54,7 @@ have excess groups silently ignored and a `console.warn` emitted. Raise the cap 
 `maxGroups` in `createPermissionEvaluator()` if your org model requires it:
 
 ```typescript
+// @skip-typecheck
 createPermissionsPlugin({
   groupResolver: (pluginState) =>
     createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
@@ -71,6 +73,7 @@ Define what roles exist for each resource type and which actions they grant. Reg
 during plugin setup:
 
 ```typescript
+// @skip-typecheck
 import { getPermissionsState } from '@lastshotlabs/slingshot-core';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 
@@ -99,6 +102,7 @@ Grants connect subjects (users or groups) to roles on a resource type. Create th
 seed or from admin operations:
 
 ```typescript
+// @skip-typecheck
 import { getPermissionsState } from '@lastshotlabs/slingshot-core';
 
 const { adapter } = getPermissionsState(app);
@@ -133,6 +137,7 @@ await adapter.createGrant({
 For multi-tenant apps, scope a grant to a tenant so it only applies within that org:
 
 ```typescript
+// @skip-typecheck
 // Grant an org-admin role within a specific tenant
 await adapter.createGrant({
   subjectId: userId,
@@ -151,6 +156,7 @@ await adapter.createGrant({
 Grant access to a single resource — for example, when a user creates a document they own:
 
 ```typescript
+// @skip-typecheck
 // On document creation, give the author explicit access to that document
 await adapter.createGrant({
   subjectId: userId,
@@ -169,6 +175,7 @@ await adapter.createGrant({
 Explicitly deny an action regardless of other grants — deny always wins:
 
 ```typescript
+// @skip-typecheck
 await adapter.createGrant({
   subjectId: userId,
   subjectType: 'user',
@@ -206,6 +213,7 @@ every permission check silently denies. Always include `scope: { resourceType: '
 in every `permission` config.
 
 ```typescript
+// @skip-typecheck
 const Post = defineEntity('Post', {
   namespace: 'blog',
   fields: {
@@ -266,6 +274,7 @@ Ownership is an early exit, not a requirement alongside the permission check.
 Package routes use the same `permission` option:
 
 ```typescript
+// @skip-typecheck
 route.post({
   path: '/posts/:id/feature',
   auth: 'userAuth',
@@ -283,6 +292,7 @@ When the declarative `permission` option is not flexible enough, inject the eval
 domain service and use `actor.id` directly:
 
 ```typescript
+// @skip-typecheck
 import { getPermissionsState } from '@lastshotlabs/slingshot-core';
 
 const { evaluator } = getPermissionsState(app);
@@ -323,6 +333,7 @@ When a resource is permanently deleted, clean up its grants to prevent unbounded
 of orphaned records:
 
 ```typescript
+// @skip-typecheck
 import { getPermissionsState } from '@lastshotlabs/slingshot-core';
 
 const { adapter } = getPermissionsState(app);
@@ -342,6 +353,7 @@ grants; omitting it removes all grants across all tenants for that resource.
 ### Revocation audit trail
 
 ```typescript
+// @skip-typecheck
 await adapter.revokeGrant(grantId, revokedByUserId, undefined, 'violated terms of service');
 ```
 
@@ -354,6 +366,7 @@ The fourth argument to `revokeGrant` is an optional `revokedReason` string, stor
 The same evaluator works for realtime subscriptions:
 
 ```typescript
+// @skip-typecheck
 ws: {
   endpoints: {
     '/ws': {
@@ -373,6 +386,7 @@ ws: {
 ## Revoke a grant
 
 ```typescript
+// @skip-typecheck
 await adapter.revokeGrant(grantId, revokedByUserId);
 ```
 

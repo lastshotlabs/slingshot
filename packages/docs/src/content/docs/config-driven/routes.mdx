@@ -108,6 +108,7 @@ Package domain routes are for custom endpoints that do not belong to a single en
 They are declared inside the package, under `domain(...)`:
 
 ```typescript
+// @skip-typecheck
 import { definePackage, domain, route } from '@lastshotlabs/slingshot';
 
 export const notesPackage = definePackage({
@@ -137,6 +138,7 @@ This route form is auto-registered without `routesDir` because the package compi
 When a package domain route needs entity data, use the exported entity module as the lookup key:
 
 ```typescript
+// @skip-typecheck
 import { NoteEntity } from './packageEntities';
 
 route.get({

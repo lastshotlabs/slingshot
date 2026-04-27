@@ -37,6 +37,7 @@ An entity defines persistence structure first. Routes and adapters are derived f
 Operations define the behavior that sits on top of the entity.
 
 ```typescript title="note-operations.ts"
+// @skip-typecheck
 import { defineOperations, op } from '@lastshotlabs/slingshot';
 import { Note } from './note-entity';
 
@@ -59,6 +60,7 @@ See [Operations Reference](/slingshot/config-driven/operations/) for the full op
 ## Mount an entity in a package
 
 ```typescript
+// @skip-typecheck
 import { definePackage } from '@lastshotlabs/slingshot';
 import { entity } from '@lastshotlabs/slingshot';
 import { Note } from './note-entity';
@@ -186,6 +188,7 @@ Adapters read the resolved mapping from `config._storageFields` instead of hardc
 Customize how records are keyed, how IDs are generated, and how fields update:
 
 ```typescript
+// @skip-typecheck
 import { ulid } from 'ulid';
 
 const Task = defineEntity('Task', {

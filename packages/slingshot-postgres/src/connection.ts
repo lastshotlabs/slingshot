@@ -5,6 +5,7 @@ import {
   type PostgresHealthCheckResult,
   type PostgresMigrationMode,
   type PostgresPoolStatsSnapshot,
+  emitPackageStabilityWarning,
   attachPostgresPoolRuntime,
   createPostgresPoolRuntime,
 } from '@lastshotlabs/slingshot-core';
@@ -159,6 +160,12 @@ export async function connectPostgres(
   connectionString: string,
   options: PostgresConnectionOptions = {},
 ): Promise<DrizzlePostgresDb> {
+  emitPackageStabilityWarning(
+    '@lastshotlabs/slingshot-postgres',
+    'experimental',
+    'Use the next channel while the Postgres connection helper is still being hardened.',
+  );
+
   const pool = new Pool({
     connectionString,
     max: options.pool?.max,

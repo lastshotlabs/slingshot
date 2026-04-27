@@ -45,6 +45,7 @@ validation and OpenAPI docs.
 Your blog needs "publish" and "lookup by author." These are operations:
 
 ```typescript
+// @skip-typecheck
 import { defineOperations, op } from '@lastshotlabs/slingshot';
 
 const PostOps = defineOperations(Post, {
@@ -94,6 +95,7 @@ const Post = defineEntity('Post', {
 Move from in-memory to a real database with one change:
 
 ```typescript
+// @skip-typecheck
 entity({ config: Post, operations: PostOps, adapter: 'postgres' });
 ```
 

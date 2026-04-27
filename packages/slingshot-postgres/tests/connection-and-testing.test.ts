@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { resetPackageStabilityWarnings } from '@lastshotlabs/slingshot-core/testing';
 
 const queryMock = mock(async (_sql: string) => ({ rows: [{ ok: 1 }], rowCount: 1 }));
 const drizzleMock = mock((pool: unknown) => ({ kind: 'drizzle', pool }));
@@ -26,10 +27,19 @@ mock.module('drizzle-orm/node-postgres', () => ({
   drizzle: (pool: unknown) => drizzleMock(pool),
 }));
 
+let warningSpy: ReturnType<typeof spyOn> | null = null;
+
 beforeEach(() => {
   MockPool.instances.length = 0;
   queryMock.mockClear();
   drizzleMock.mockClear();
+  resetPackageStabilityWarnings();
+  warningSpy = spyOn(process, 'emitWarning').mockImplementation(() => undefined);
+});
+
+afterEach(() => {
+  warningSpy?.mockRestore();
+  warningSpy = null;
 });
 
 describe('slingshot-postgres connection helpers', () => {
@@ -48,6 +58,7 @@ describe('slingshot-postgres connection helpers', () => {
     expect(result.db).toEqual({ kind: 'drizzle', pool: MockPool.instances[0] });
     expect(typeof result.healthCheck).toBe('function');
     expect(typeof result.getStats).toBe('function');
+    expect(warningSpy).toHaveBeenCalledTimes(1);
     expect(result.getStats()).toMatchObject({
       migrationMode: 'apply',
       queryCount: 1,

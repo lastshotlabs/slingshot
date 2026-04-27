@@ -1,7 +1,7 @@
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { AuthRateLimitConfig } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+import { emitPackageStabilityWarning, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 import { createOAuthRouter } from './routes/oauth';
 
 /**
@@ -78,6 +78,12 @@ export type OAuthPluginOptions = {
  * ```
  */
 export function createOAuthPlugin(options?: OAuthPluginOptions): SlingshotPlugin {
+  emitPackageStabilityWarning(
+    '@lastshotlabs/slingshot-oauth',
+    'experimental',
+    'Use the next channel until the social login surface is promoted to stable.',
+  );
+
   return {
     name: 'slingshot-oauth',
     dependencies: ['slingshot-auth'],

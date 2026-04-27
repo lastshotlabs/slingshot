@@ -30,6 +30,7 @@ entry) but replace the handler logic.
 **Scenario:** The default `GET /posts/:id` returns the raw record. You want to add a view count:
 
 ```typescript title="src/packages/blog.ts"
+// @skip-typecheck
 import { definePackage, entity } from '@lastshotlabs/slingshot';
 import { defineEntityExecutor } from '@lastshotlabs/slingshot-entity';
 import { Post } from '../entities/post';
@@ -94,6 +95,7 @@ The handler function receives the route execution context:
 You can also override the OpenAPI schema for the route:
 
 ```typescript
+// @skip-typecheck
 overrides: {
   get: defineEntityExecutor({
     summary: 'Get a post with related data',
@@ -137,6 +139,7 @@ but is not one of the defaults.
 **Scenario:** Add a `POST /posts/:id/preview` endpoint that returns a rendered preview:
 
 ```typescript title="src/packages/blog.ts"
+// @skip-typecheck
 import { defineEntityRoute, entity } from '@lastshotlabs/slingshot-entity';
 
 entity({

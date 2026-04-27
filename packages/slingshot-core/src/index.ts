@@ -211,6 +211,8 @@ export type {
 export { deepFreeze } from './deepFreeze';
 export { bestEffort } from './bestEffort';
 export { encodeCursor, decodeCursor } from './cursor';
+export { emitPackageStabilityWarning } from './stability';
+export type { PackageStability } from './stability';
 export {
   evaluateFilter,
   extractFilterParams,

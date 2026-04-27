@@ -10,7 +10,7 @@ description: Auto-generated workspace facts for @lastshotlabs/slingshot-infra
 - Package: `@lastshotlabs/slingshot-infra`
 - Version: `0.0.2`
 - Kind: Workspace package
-- Role: feature package
+- Role: platform tooling package
 - Description: Infrastructure configuration, deploy planning, and platform tooling for Slingshot apps
 - Workspace path: `packages/slingshot-infra`
 - Entry point: `packages/slingshot-infra/src/index.ts`

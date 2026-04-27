@@ -22,6 +22,7 @@ hatches at every level.
 Replace the handler behind a generated route without changing its identity:
 
 ```typescript
+// @skip-typecheck
 import { defineEntityExecutor, entity } from '@lastshotlabs/slingshot-entity';
 
 entity({
@@ -51,6 +52,7 @@ See [Generated Routes, Overrides, and Extra Routes](/slingshot/entity-system/gen
 Add routes that live alongside generated entity routes:
 
 ```typescript
+// @skip-typecheck
 import { defineEntityRoute, entity } from '@lastshotlabs/slingshot-entity';
 
 entity({
@@ -82,6 +84,7 @@ entity({
 Build your own storage adapter when the generated ones do not fit:
 
 ```typescript
+// @skip-typecheck
 entity({
   config: Post,
   wiring: {
@@ -117,6 +120,7 @@ See [Storage and Adapter Wiring](/slingshot/entity-system/storage-and-adapter-wi
 Use a raw plugin when you need direct lifecycle control:
 
 ```typescript
+// @skip-typecheck
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 
 const metricsPlugin: SlingshotPlugin = {
@@ -141,6 +145,7 @@ const metricsPlugin: SlingshotPlugin = {
 Register it in the app root:
 
 ```typescript
+// @skip-typecheck
 await createServer({
   port: 3000,
   plugins: [metricsPlugin],

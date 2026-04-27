@@ -1,6 +1,6 @@
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
-import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
+import { emitPackageStabilityWarning, getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 import { isJwksLoaded } from './lib/jwks';
 import { createOidcRouter } from './routes/oidc';
 
@@ -35,6 +35,12 @@ import { createOidcRouter } from './routes/oidc';
  * ```
  */
 export function createOidcPlugin(): SlingshotPlugin {
+  emitPackageStabilityWarning(
+    '@lastshotlabs/slingshot-oidc',
+    'experimental',
+    'Use the next channel until the OIDC discovery and JWKS surface is fully stabilized.',
+  );
+
   return {
     name: 'slingshot-oidc',
     dependencies: ['slingshot-auth'],

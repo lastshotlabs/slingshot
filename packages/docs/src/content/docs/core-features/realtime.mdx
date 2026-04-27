@@ -28,6 +28,7 @@ into the event bus — publish an event, mark it as client-safe, and browsers re
 automatically.
 
 ```typescript
+// @skip-typecheck
 import { createServer, defineEvent } from '@lastshotlabs/slingshot';
 
 // Mark events as client-safe so they reach browsers

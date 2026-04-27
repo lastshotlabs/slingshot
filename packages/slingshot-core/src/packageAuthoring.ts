@@ -646,11 +646,10 @@ function createServiceAwareRouteBuilder<
 
 type DomainRouteServiceRequirements<TRoute extends AnyDomainRouteDefinition> = Simplify<
   UnionToIntersection<
-    TRoute extends DomainRouteDefinition<
-      PackageDomainRouteContext<TypedRouteRequestSpec, infer TServices>,
-      TypedRouteRequestSpec
-    >
-      ? TServices
+    TRoute extends DomainRouteDefinition<infer TCtx, TypedRouteRequestSpec>
+      ? TCtx extends PackageDomainRouteContext<TypedRouteRequestSpec, infer TServices>
+        ? TServices
+        : EmptyServices
       : EmptyServices
   >
 >;

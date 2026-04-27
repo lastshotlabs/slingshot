@@ -18,7 +18,7 @@ import { createServer } from '@lastshotlabs/slingshot';
 await createServer({
   middleware: [
     async (c, next) => {
-      c.set('requestStartedAt', Date.now());
+      console.log('Request received at:', Date.now());
       await next();
     },
   ],

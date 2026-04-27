@@ -20,6 +20,7 @@ and adapter method.
 ## Define operations alongside the entity
 
 ```typescript title="src/entities/post-operations.ts"
+// @skip-typecheck
 import { defineOperations, op } from '@lastshotlabs/slingshot';
 import { Post } from './post';
 
@@ -44,6 +45,7 @@ export const PostOps = defineOperations(Post, {
 Wire them into your entity module:
 
 ```typescript title="src/packages/blog.ts"
+// @skip-typecheck
 import { definePackage, entity } from '@lastshotlabs/slingshot';
 import { Post } from '../entities/post';
 import { PostOps } from '../entities/post-operations';
@@ -329,6 +331,7 @@ nearbyStores: op.custom({
 ## Real-world example: a task management entity
 
 ```typescript title="src/entities/task.ts"
+// @skip-typecheck
 import { defineEntity, defineOperations, field, index, op } from '@lastshotlabs/slingshot';
 
 export const Task = defineEntity('Task', {

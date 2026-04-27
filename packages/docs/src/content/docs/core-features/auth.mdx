@@ -5,9 +5,9 @@ description: Add registration, login, sessions, OAuth, MFA, and passkeys to your
 
 import { Aside } from '@astrojs/starlight/components';
 
-<Aside type="caution" title="Preview">
-  `@lastshotlabs/slingshot-auth` is pre-1.0 (`0.0.2`). The API surface is evolving — verify fit
-  before building critical product dependencies on it.
+<Aside type="caution" title="Experimental">
+  `@lastshotlabs/slingshot-auth` is experimental in this worktree. It is published on the `next`
+  channel and emits a runtime warning when used. The API surface can still change.
 </Aside>
 
 You want users to create accounts, log in, and access protected resources. Slingshot's auth
@@ -103,6 +103,8 @@ The auth middleware sets the actor on every request. Read it with `getActor(c)`:
 ```typescript
 import { getActor, getActorId } from '@lastshotlabs/slingshot-core';
 
+declare const c: Parameters<typeof getActor>[0];
+
 // Full actor object — id, roles, tenantId, sessionId, claims
 const actor = getActor(c);
 
@@ -136,6 +138,7 @@ createAuthPlugin({
 Require a specific role with `requireRole`:
 
 ```typescript
+// @skip-typecheck
 import { requireRole } from '@lastshotlabs/slingshot-auth';
 
 router.use('/admin/*', requireRole('admin'));
@@ -167,6 +170,7 @@ your own JWT verification) or want to use a different auth library, write a plug
 2. Registers a `RouteAuthRegistry` so entity routes and framework features can enforce `auth: 'userAuth'`
 
 ```typescript
+// @skip-typecheck
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import type { Actor } from '@lastshotlabs/slingshot-core';
 

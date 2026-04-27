@@ -70,11 +70,13 @@ The core framework is the stable foundation:
 - `defineEntity(...)`, `defineOperations(...)` — entity system
 - Events, WebSockets, SSE — built-in realtime
 
-Feature packages like auth, permissions, and orchestration are pre-1.0 and labeled **Preview**
-in the sidebar. They work and are actively used, but their API surfaces may change.
+Feature packages now sit in the non-stable buckets: **Experimental**, **Prod path**,
+and **Deferred**. Auth stays in the experimental bucket, while permissions and orchestration are on
+the production-hardening path. They all still sit below the stable core, so check the maturity
+guide before committing a product surface to one of them.
 
 Read [Maturity and Package Status](/slingshot/core-features/maturity-and-package-status/)
-before betting a product surface on a preview package.
+before betting a product surface on one of the non-stable package buckets.
 
 ## When you want to understand the framework
 

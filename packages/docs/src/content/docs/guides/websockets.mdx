@@ -54,7 +54,7 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
     }
 
     export async function wsOpen(ws: ServerWebSocket<{ actorId: string }>) {
-      console.log('Connected:', ws.data.actor.id);
+      console.log('Connected:', ws.data.actorId);
     }
 
     export async function wsMessage(ws: ServerWebSocket<{ actorId: string }>, message: string | Buffer) {
@@ -63,7 +63,7 @@ Slingshot supports WebSocket endpoints alongside your HTTP routes. WebSockets ar
     }
 
     export async function wsClose(ws: ServerWebSocket<{ actorId: string }>) {
-      console.log('Disconnected:', ws.data.actor.id);
+      console.log('Disconnected:', ws.data.actorId);
     }
     ```
 

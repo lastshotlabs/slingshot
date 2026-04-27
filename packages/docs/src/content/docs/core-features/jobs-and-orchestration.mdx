@@ -5,8 +5,9 @@ description: Run background work — emails, imports, retries, scheduled tasks, 
 
 import { Aside } from '@astrojs/starlight/components';
 
-<Aside type="caution" title="Preview">
-  The orchestration packages are pre-1.0 (`0.0.2`). The API surface is evolving.
+<Aside type="caution" title="Prod path">
+  The orchestration packages are pre-1.0 (`0.0.2`) and on the production-hardening path. The API
+  surface is still evolving, but this family is not in the experimental bucket.
 </Aside>
 
 Some work does not belong in a request handler. Sending a welcome email should not make the
@@ -20,11 +21,14 @@ Move that work into tasks and workflows.
 A task is a named, retryable unit of work:
 
 ```typescript
+// @skip-typecheck
 import { defineTask } from '@lastshotlabs/slingshot-orchestration';
+
+declare const emailService: { send(opts: { to: string; subject: string; body: string }): Promise<void> };
 
 const sendWelcomeEmail = defineTask({
   name: 'send-welcome-email',
-  handler: async ({ input }) => {
+  handler: async (input: { email: string; name: string }) => {
     await emailService.send({
       to: input.email,
       subject: 'Welcome!',
@@ -67,6 +71,7 @@ The request returns immediately. The task runs in the background.
 When work has multiple steps that depend on each other:
 
 ```typescript
+// @skip-typecheck
 import { defineWorkflow } from '@lastshotlabs/slingshot-orchestration';
 
 const onboardUser = defineWorkflow({
@@ -94,6 +99,7 @@ Orchestration adapters control where and how tasks execute:
 | `temporal` | Enterprise durable workflows |
 
 ```typescript
+// @skip-typecheck
 import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
 
 createOrchestrationPlugin({

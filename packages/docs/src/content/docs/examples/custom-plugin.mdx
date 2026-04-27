@@ -179,7 +179,7 @@ export function createCatalogRouter(store: ProductStore, events: SlingshotEvents
       events.publish(
         'entity:products.created',
         { product, userId },
-        { userId, actorId: userId, source: 'http' },
+        { userId, actorId: userId, source: 'http', requestTenantId: null },
       );
 
       return c.json(product, 201) as never;

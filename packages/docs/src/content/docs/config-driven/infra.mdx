@@ -7,6 +7,9 @@ import { Aside, TabItem, Tabs } from '@astrojs/starlight/components';
 
 Infrastructure in Slingshot follows the same config-driven philosophy as the application layer. You declare what you need in TypeScript; the CLI generates and applies everything else.
 
+> Status: Deferred. This package documents and drives infra generation, but it is not currently on
+> the production-hardening track.
+
 Two config files drive the entire deploy pipeline:
 
 - **`slingshot.platform.ts`** — org-level infrastructure: cloud provider, shared resources (databases, caches), secrets backend, deployment stacks, stages, DNS

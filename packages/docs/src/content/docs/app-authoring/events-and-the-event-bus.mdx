@@ -21,8 +21,8 @@ event for blog posts.
 ## Define an event once
 
 ```typescript title="src/blog/events.ts"
-import type { SlingshotPlugin } from '@lastshotlabs/slingshot';
-import { defineEvent } from '@lastshotlabs/slingshot';
+import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import { defineEvent } from '@lastshotlabs/slingshot-core';
 
 declare module '@lastshotlabs/slingshot-core' {
   interface SlingshotEventMap {
@@ -42,7 +42,7 @@ export const blogEventsPlugin: SlingshotPlugin = {
       defineEvent('blog:post.published', {
         ownerPlugin: 'blog',
         exposure: ['client-safe', 'user-webhook'],
-        resolveScope(payload) {
+        resolveScope(payload, _ctx) {
           return {
             userId: payload.authorId,
             actorId: payload.authorId,
@@ -62,6 +62,7 @@ downstream transport that depends on the event model.
 ## Publish through `ctx.events`
 
 ```typescript title="src/publish-post.ts"
+// @skip-typecheck
 import { createApp, getContext } from '@lastshotlabs/slingshot';
 import { blogEventsPlugin } from './blog/events';
 import { blogPackage } from './blog/package';

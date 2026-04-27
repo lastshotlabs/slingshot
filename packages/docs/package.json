@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "node ./scripts/astro-safe.mjs dev",
-    "build": "node ./scripts/ensure-pagefind-link.mjs && node ./scripts/astro-safe.mjs build && powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/ensure-pagefind-index.ps1",
+    "build": "node ./scripts/ensure-pagefind-link.mjs && node ./scripts/astro-safe.mjs build && node ./scripts/ensure-pagefind-index.mjs",
     "lint": "node ./scripts/astro-safe.mjs check",
     "preview": "node ./scripts/astro-safe.mjs preview",
     "generate-api": "bun generate-api.ts"

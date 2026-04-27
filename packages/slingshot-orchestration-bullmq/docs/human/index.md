@@ -40,14 +40,14 @@ Typical composition:
 ## Minimal setup
 
 ```ts
-import IORedis from 'ioredis';
 import { createOrchestrationRuntime } from '@lastshotlabs/slingshot-orchestration';
 import { createBullMQOrchestrationAdapter } from '@lastshotlabs/slingshot-orchestration-bullmq';
 
-const redis = new IORedis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
+declare const tasks: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask[];
+declare const workflows: import('@lastshotlabs/slingshot-orchestration').AnyResolvedWorkflow[];
 
 const adapter = createBullMQOrchestrationAdapter({
-  connection: redis,
+  connection: { host: '127.0.0.1', port: 6379 },
   prefix: 'orchestration',
   concurrency: 20,
 });

@@ -15,6 +15,7 @@ import {
   getClientIpFromRequest,
   getContextOrNull,
   isPublicPath,
+  emitPackageStabilityWarning,
   sha256,
   timingSafeEqual,
   validatePluginConfig,
@@ -95,6 +96,12 @@ type FrameworkMongoConn = { auth: Connection | null; app: Connection | null };
  * - OAuth routes are provided by `@lastshotlabs/slingshot-oauth` and mounted by that plugin.
  */
 export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin {
+  emitPackageStabilityWarning(
+    '@lastshotlabs/slingshot-auth',
+    'experimental',
+    'Use this package on the next channel while the auth surface is still being hardened.',
+  );
+
   const config: AuthPluginConfig = validatePluginConfig(
     'slingshot-auth',
     rawConfig,

@@ -12,6 +12,59 @@ const outputRoot = resolve(docsPackageRoot, 'src/content/docs/packages');
 const levels = ['generated', 'ai', 'human', 'notes'] as const;
 
 type DocLevel = (typeof levels)[number];
+type PackageStatus = 'Core path' | 'Prod path' | 'Experimental' | 'Deferred';
+
+interface PackageStatusMeta {
+  label: PackageStatus;
+  variant: 'default' | 'note' | 'tip' | 'caution' | 'danger' | 'success';
+  note: string;
+}
+
+const corePathPackages = new Set(['slingshot', 'slingshot-core', 'slingshot-entity']);
+const productionPathPackages = new Set([
+  'slingshot-permissions',
+  'slingshot-organizations',
+  'slingshot-orchestration',
+  'slingshot-orchestration-bullmq',
+  'slingshot-orchestration-temporal',
+  'slingshot-orchestration-plugin',
+  'slingshot-bullmq',
+  'slingshot-assets',
+  'slingshot-search',
+  'slingshot-webhooks',
+  'slingshot-kafka',
+  'slingshot-admin',
+  'slingshot-mail',
+  'slingshot-notifications',
+  'slingshot-push',
+  'slingshot-runtime-bun',
+  'slingshot-runtime-node',
+  'slingshot-runtime-edge',
+  'slingshot-runtime-lambda',
+  'slingshot-ssr',
+  'slingshot-ssg',
+]);
+const experimentalPackages = new Set([
+  'slingshot-auth',
+  'slingshot-oauth',
+  'slingshot-oidc',
+  'slingshot-m2m',
+  'slingshot-scim',
+  'slingshot-postgres',
+]);
+const deferredPackages = new Set([
+  'slingshot-community',
+  'slingshot-chat',
+  'slingshot-game-engine',
+  'slingshot-deep-links',
+  'slingshot-embeds',
+  'slingshot-emoji',
+  'slingshot-gifs',
+  'slingshot-image',
+  'slingshot-interactions',
+  'slingshot-polls',
+  'slingshot-infra',
+]);
 
 function ensureDir(path: string): void {
   mkdirSync(path, { recursive: true });
@@ -50,7 +103,44 @@ function packageRole(pkg: WorkspacePackage): string {
   if (pkg.slug === 'slingshot-entity') return 'config-driven tooling package';
   if (pkg.slug === 'slingshot-permissions') return 'library package';
   if (pkg.slug === 'slingshot-postgres') return 'adapter package';
+  if (pkg.slug === 'slingshot-infra') return 'platform tooling package';
   return 'feature package';
+}
+
+function packageStatus(pkg: WorkspacePackage): PackageStatusMeta | null {
+  if (corePathPackages.has(pkg.slug)) {
+    return {
+      label: 'Core path',
+      variant: 'success',
+      note: 'This is part of the canonical framework foundation.',
+    };
+  }
+
+  if (productionPathPackages.has(pkg.slug)) {
+    return {
+      label: 'Prod path',
+      variant: 'tip',
+      note: 'This package is on the hardening track, but still pre-1.0.',
+    };
+  }
+
+  if (experimentalPackages.has(pkg.slug)) {
+    return {
+      label: 'Experimental',
+      variant: 'caution',
+      note: 'This package is published on the `next` channel and emits runtime warnings when used.',
+    };
+  }
+
+  if (deferredPackages.has(pkg.slug)) {
+    return {
+      label: 'Deferred',
+      variant: 'note',
+      note: 'This package is documented and usable, but it is not currently on the production-hardening track.',
+    };
+  }
+
+  return null;
 }
 
 function dependencyLines(deps: Record<string, string>): string[] {
@@ -512,14 +602,34 @@ function copyDocsRecursive(
 function packageOverview(pkg: WorkspacePackage): string {
   const description = normalizeText(pkg.description);
   const summary = packageOverviewSummary(pkg) ?? description;
-  return [
+  const status = packageStatus(pkg);
+  const statusLines = status
+    ? [
+        '',
+        `> Status: ${status.label}. ${status.note}`,
+        '',
+      ]
+    : [''];
+
+  const frontmatterLines = [
     '---',
     `title: "${pkg.name}"`,
     `description: "${summary.replace(/"/g, '\\"')}"`,
+  ];
+
+  if (status) {
+    frontmatterLines.push('sidebar:');
+    frontmatterLines.push(`  badge:`);
+    frontmatterLines.push(`    text: "${status.label}"`);
+    frontmatterLines.push(`    variant: "${status.variant}"`);
+  }
+
+  return [
+    ...frontmatterLines,
     '---',
     '',
     `${summary}`,
-    '',
+    ...statusLines,
     '## Start Here',
     '',
     '- [Overview](./overview/): how to use the package, what it is for, and setup guidance.',
@@ -531,6 +641,7 @@ function packageOverview(pkg: WorkspacePackage): string {
     `- Install: \`bun add ${pkg.name}\``,
     `- Version: \`${pkg.version}\``,
     `- Role: ${packageRole(pkg)}`,
+    ...(status ? [`- Status: ${status.label}`] : []),
     `- Workspace path: \`${pkg.relativeDir.replace(/\\/g, '/')}\``,
     `- API reference: [${pkg.name}](${apiReferenceLink(pkg)})`,
     '',
@@ -542,6 +653,21 @@ function packageOverview(pkg: WorkspacePackage): string {
 }
 
 function packagesIndex(packages: WorkspacePackage[]): string {
+  const byName = (a: WorkspacePackage, b: WorkspacePackage) => a.name.localeCompare(b.name);
+  const rootPackages = packages.filter(pkg => pkg.kind === 'root').sort(byName);
+  const corePackages = packages
+    .filter(pkg => pkg.kind !== 'root' && packageStatus(pkg)?.label === 'Core path')
+    .sort(byName);
+  const productionPackages = packages
+    .filter(pkg => pkg.kind !== 'root' && packageStatus(pkg)?.label === 'Prod path')
+    .sort(byName);
+  const experimentalPackagesList = packages
+    .filter(pkg => pkg.kind !== 'root' && packageStatus(pkg)?.label === 'Experimental')
+    .sort(byName);
+  const deferredPackagesList = packages
+    .filter(pkg => pkg.kind !== 'root' && packageStatus(pkg)?.label === 'Deferred')
+    .sort(byName);
+
   const lines = [
     '---',
     'title: Workspace Packages',
@@ -557,13 +683,26 @@ function packagesIndex(packages: WorkspacePackage[]): string {
     '',
     'The published docs flatten those lanes into reader-friendly pages such as Overview, Reference, and Maintainer Notes.',
     '',
+    'The chart below mirrors the maturity policy. `@lastshotlabs/slingshot-docs` is listed separately because it is private docs tooling, not a product package.',
+    '',
     '## Packages',
     '',
   ];
 
-  for (const pkg of packages) {
-    lines.push(`- [${pkg.name}](/packages/${pkg.slug}/)`);
-  }
+  const addSection = (heading: string, items: WorkspacePackage[]): void => {
+    if (!items.length) return;
+    lines.push(`### ${heading}`, '');
+    for (const pkg of items) {
+      lines.push(`- [${pkg.name}](/packages/${pkg.slug}/)`);
+    }
+    lines.push('');
+  };
+
+  addSection('Assembly layer', rootPackages);
+  addSection('Core path', corePackages);
+  addSection('Prod path', productionPackages);
+  addSection('Experimental', experimentalPackagesList);
+  addSection('Deferred', deferredPackagesList);
 
   lines.push('');
   return lines.join('\n');

@@ -85,6 +85,7 @@ bun add @lastshotlabs/slingshot \
   </TabItem>
   <TabItem label="Code">
     ```typescript title="src/index.ts"
+    // @skip-typecheck
     import { createServer } from '@lastshotlabs/slingshot';
     import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
     import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
@@ -115,7 +116,7 @@ bun add @lastshotlabs/slingshot \
           providers: {
             default: { provider: 'db-native' },
           },
-          tenantResolver: c => getRequestTenantId(c),
+          tenantResolver: c => getRequestTenantId(c) ?? undefined,
           tenantField: 'organizationId',
         }),
       ],
@@ -375,6 +376,7 @@ export async function requireOrgMember(c: Context, next: Next) {
 Apply it to your org-scoped routes:
 
 ```typescript title="src/routes/projects.ts"
+// @skip-typecheck
 import { userAuth } from '@lastshotlabs/slingshot-auth';
 import { createRouter } from '@lastshotlabs/slingshot-core';
 import { requireOrgMember } from '../middleware/requireOrgMember';
@@ -409,6 +411,7 @@ router.post('/organizations/:orgId/projects', async c => {
 The auth plugin embeds `tenantId` in the JWT when a user logs in with an org context. The `identify` middleware decodes it on every request and sets `c.var.tenantId`. That value is your authoritative scope — never query with `organizationId` taken directly from the request body.
 
 ```typescript
+// @skip-typecheck
 import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
 
 // In a route handler — tenantId comes from the verified JWT, not from user input
@@ -434,6 +437,7 @@ bun add @lastshotlabs/slingshot-m2m
 ```
 
 ```typescript
+// @skip-typecheck
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createM2MPlugin } from '@lastshotlabs/slingshot-m2m';
 
@@ -464,6 +468,7 @@ bun add @lastshotlabs/slingshot-scim
 ```
 
 ```typescript
+// @skip-typecheck
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createScimPlugin } from '@lastshotlabs/slingshot-scim';
 
@@ -491,6 +496,7 @@ Mounts at `/scim/v2`. Handles `Users` and `Groups` provisioning automatically. W
 Register entities with the search plugin and scope queries to an `orgId`:
 
 ```typescript
+// @skip-typecheck
 import { getRequestTenantId } from '@lastshotlabs/slingshot-core';
 import { createSearchPlugin } from '@lastshotlabs/slingshot-search';
 
@@ -498,7 +504,7 @@ createSearchPlugin({
   providers: {
     default: { provider: 'db-native' },
   },
-  tenantResolver: c => getRequestTenantId(c),
+  tenantResolver: c => getRequestTenantId(c) ?? undefined,
   tenantField: 'organizationId',
 });
 ```

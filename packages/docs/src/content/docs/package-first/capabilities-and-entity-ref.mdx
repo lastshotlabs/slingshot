@@ -12,6 +12,7 @@ Your notification package needs to send email. Your blog package defines the Pos
 cross-package contracts, you end up with tight coupling:
 
 ```typescript
+// @skip-typecheck
 // BAD — notification package directly imports from mail package internals
 // BAD — search package directly imports blog package adapter
 import { postAdapter } from '../blog/runtime';
@@ -53,6 +54,7 @@ export const mailPackage = definePackage({
 ### Step 2: Require and use the capability
 
 ```typescript title="src/packages/notifications.ts"
+// @skip-typecheck
 import { definePackage, domain, route } from '@lastshotlabs/slingshot';
 import { Mailer } from './mail';
 
@@ -109,6 +111,7 @@ When one package needs to read or write another package's entity data, use `enti
 ### Scenario: search package reads blog posts
 
 ```typescript title="src/packages/search.ts"
+// @skip-typecheck
 import { definePackage, domain, entityRef, route } from '@lastshotlabs/slingshot';
 import type { PackageEntityAdapterFor } from '@lastshotlabs/slingshot-entity';
 import { Post } from '../entities/post';
@@ -184,6 +187,7 @@ The adapter will work at runtime but will not have TypeScript autocompletion for
 ## Real-world example: a SaaS app
 
 ```typescript title="src/packages/billing.ts"
+// @skip-typecheck
 import {
   defineCapability,
   definePackage,
@@ -250,6 +254,7 @@ export const billingPackage = definePackage({
 Other packages can now consume the payment service:
 
 ```typescript title="src/packages/orders.ts"
+// @skip-typecheck
 import { PaymentService } from './billing';
 
 const orderPackage = definePackage({

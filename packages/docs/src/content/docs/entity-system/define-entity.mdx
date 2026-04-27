@@ -338,6 +338,7 @@ const LegacyUser = defineEntity('LegacyUser', {
 Here is a blog post entity with everything wired up:
 
 ```typescript title="src/entities/post.ts"
+// @skip-typecheck
 import { defineEntity, field, index } from '@lastshotlabs/slingshot';
 
 export const Post = defineEntity('Post', {

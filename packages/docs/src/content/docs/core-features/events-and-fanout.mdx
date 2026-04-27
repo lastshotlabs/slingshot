@@ -27,12 +27,13 @@ declare module '@lastshotlabs/slingshot-core' {
 Publish through the app context — accessible via `getContext(app)` after `createServer`:
 
 ```typescript
-import { getContext } from '@lastshotlabs/slingshot';
+// @skip-typecheck
+import { createServer, getContext } from '@lastshotlabs/slingshot';
 
 const { app } = await createServer({ /* ... */ });
 const ctx = getContext(app);
 
-ctx.events.publish('user.created', { userId: 'usr_123', email: 'alice@example.com' });
+ctx.events.publish('user.created', { userId: 'usr_123', email: 'alice@example.com' }, { requestTenantId: null });
 ```
 
 See [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) for the full
@@ -44,6 +45,7 @@ Subscribe in the `setupPost` lifecycle hook — this guarantees all publishers a
 before any subscriber starts listening:
 
 ```typescript
+// @skip-typecheck
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 
 const mailPlugin: SlingshotPlugin = {
@@ -86,6 +88,12 @@ Register event definitions in a plugin's `setupMiddleware` hook:
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { defineEvent } from '@lastshotlabs/slingshot-core';
 
+declare module '@lastshotlabs/slingshot-core' {
+  interface SlingshotEventMap {
+    'task.completed': { userId: string; taskId: string };
+  }
+}
+
 const appEventsPlugin: SlingshotPlugin = {
   name: 'app-events',
   setupMiddleware({ events }) {
@@ -93,7 +101,7 @@ const appEventsPlugin: SlingshotPlugin = {
       defineEvent('task.completed', {
         ownerPlugin: 'app',
         exposure: ['client-safe'],
-        resolveScope(payload) {
+        resolveScope(payload, _ctx) {
           return { userId: payload.userId };
         },
       }),

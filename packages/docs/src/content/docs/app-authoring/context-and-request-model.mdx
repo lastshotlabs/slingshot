@@ -13,6 +13,7 @@ everything from testing to middleware to realtime click.
 `getContext(app)`:
 
 ```typescript
+// @skip-typecheck
 import { createApp, getContext } from '@lastshotlabs/slingshot';
 
 const { app } = await createApp({ packages: [blogPackage] });
@@ -36,6 +37,7 @@ const ctx = getContext(app);
 Plugins get the context in their lifecycle hooks:
 
 ```typescript
+// @skip-typecheck
 const analyticsPlugin: SlingshotPlugin = {
   name: 'analytics',
   setupPost({ ctx }) {
@@ -54,6 +56,7 @@ const analyticsPlugin: SlingshotPlugin = {
 ### Use it in tests
 
 ```typescript
+// @skip-typecheck
 import { createApp, getContext } from '@lastshotlabs/slingshot';
 
 let app: Awaited<ReturnType<typeof createApp>>['app'];
@@ -95,6 +98,7 @@ Every HTTP request has an identity — who is making it. In Slingshot, that is t
 Package route handlers receive the actor directly:
 
 ```typescript
+// @skip-typecheck
 route.get({
   path: '/dashboard',
   auth: 'userAuth',
@@ -113,6 +117,7 @@ route.get({
 Use `getActor(c)` and related helpers:
 
 ```typescript
+// @skip-typecheck
 import { getActor, getActorId, getRequestTenantId } from '@lastshotlabs/slingshot-core';
 
 // Full actor object

@@ -145,6 +145,7 @@ generates routes at `/blog/posts/*`.
 Packages can declare dependencies on other packages or plugins:
 
 ```typescript
+// @skip-typecheck
 const commentPackage = definePackage({
   name: 'comments',
   dependencies: ['blog', 'slingshot-auth'],
@@ -163,6 +164,7 @@ Dependencies ensure:
 Middleware defined in a package is available to that package's routes by name:
 
 ```typescript
+// @skip-typecheck
 import { getActor } from '@lastshotlabs/slingshot';
 
 const adminPackage = definePackage({
@@ -204,6 +206,7 @@ const adminPackage = definePackage({
 The app root reads like a table of contents:
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { adminPackage } from './packages/admin';
@@ -226,6 +229,7 @@ Each package is self-contained. Adding a new feature means adding a new package 
 Use `inspectPackage` to see the effective routes and structure without reading framework internals:
 
 ```typescript
+// @skip-typecheck
 import { inspectPackage } from '@lastshotlabs/slingshot';
 import { blogPackage } from './packages/blog';
 

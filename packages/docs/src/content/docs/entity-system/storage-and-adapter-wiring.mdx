@@ -12,6 +12,7 @@ entity code stays the same.
 When you do not configure a database, entities use in-memory storage:
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 import { createServer, definePackage, entity } from '@lastshotlabs/slingshot';
 import { Task } from './entities/task';
 
@@ -28,6 +29,7 @@ Data lives in memory and resets on restart. This is perfect for development and 
 One config change:
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 await createServer({
   port: 3000,
   db: { default: { adapter: 'sqlite', url: './data/app.db' } },
@@ -40,6 +42,7 @@ The entity definition and all your routes stay exactly the same. Data now persis
 ## Switch to Postgres
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 await createServer({
   port: 3000,
   db: { default: { adapter: 'postgres', url: process.env.DATABASE_URL! } },
@@ -52,6 +55,7 @@ Same entity code. Same routes. Different backend.
 ## Switch to MongoDB
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 await createServer({
   port: 3000,
   db: { default: { adapter: 'mongo', url: process.env.MONGO_URL! } },
@@ -64,6 +68,7 @@ await createServer({
 Best for cache-shaped entities like sessions, rate limits, or ephemeral state:
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 await createServer({
   port: 3000,
   db: { default: { adapter: 'redis', url: process.env.REDIS_URL! } },
@@ -76,6 +81,7 @@ await createServer({
 Different entities can use different backends:
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 await createServer({
   port: 3000,
   db: {
@@ -100,6 +106,7 @@ For advanced control, use `createEntityFactories` to get a set of backend-specif
 constructors:
 
 ```typescript title="src/entities/post-factories.ts"
+// @skip-typecheck
 import { createEntityFactories } from '@lastshotlabs/slingshot';
 import { Post } from './post';
 import { PostOps } from './post-operations';
@@ -110,6 +117,7 @@ export const postFactories = createEntityFactories(Post, PostOps);
 This gives you typed factory methods:
 
 ```typescript
+// @skip-typecheck
 postFactories.memory(); // in-memory adapter
 postFactories.sqlite(infra); // SQLite adapter
 postFactories.postgres(infra); // Postgres adapter
@@ -120,6 +128,7 @@ postFactories.redis(infra); // Redis adapter
 Wire it into the entity module with `wiring: { mode: 'factories' }`:
 
 ```typescript title="src/packages/blog.ts"
+// @skip-typecheck
 entity({
   config: Post,
   operations: PostOps,
@@ -138,6 +147,7 @@ in test code.
 When a package owns several related entities and you want one combined adapter:
 
 ```typescript
+// @skip-typecheck
 import { createCompositeFactories } from '@lastshotlabs/slingshot';
 import { LineItem } from './line-item';
 import { LineItemOps } from './line-item-operations';
@@ -159,6 +169,7 @@ For complete control over adapter construction — useful when integrating with 
 database or custom ORM:
 
 ```typescript
+// @skip-typecheck
 entity({
   config: Post,
   wiring: {

@@ -136,6 +136,16 @@ Pass explicit hooks when you want tenant scoping, actor metadata, or run-level a
 
 ```ts
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
+import type {
+  OrchestrationRunAuthorizationInput,
+} from '@lastshotlabs/slingshot-orchestration-plugin';
+import type { Context } from 'hono';
+
+declare const adapter: import('@lastshotlabs/slingshot-orchestration').OrchestrationAdapter;
+declare const tasks: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask[];
+declare const workflows: import('@lastshotlabs/slingshot-orchestration').AnyResolvedWorkflow[];
+declare const requireAdmin: import('hono').MiddlewareHandler;
 
 const orchestrationPlugin = createOrchestrationPlugin({
   adapter,
@@ -143,7 +153,7 @@ const orchestrationPlugin = createOrchestrationPlugin({
   workflows,
   routes: true,
   routeMiddleware: [requireAdmin],
-  resolveRequestContext(c) {
+  resolveRequestContext(c: Context) {
     const tenantId = c.req.header('x-tenant-id');
     if (!tenantId) {
       throw new OrchestrationError('VALIDATION_FAILED', 'missing x-tenant-id');
@@ -154,7 +164,7 @@ const orchestrationPlugin = createOrchestrationPlugin({
       metadata: { source: 'ops-api' },
     };
   },
-  authorizeRun({ context, run }) {
+  authorizeRun({ context, run }: OrchestrationRunAuthorizationInput) {
     return run.tenantId === undefined || run.tenantId === context.tenantId;
   },
 });

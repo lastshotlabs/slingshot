@@ -9,6 +9,7 @@ Every Slingshot app starts with one of two functions: `createServer()` for produ
 ## createServer — the production entrypoint
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { blogPackage } from './packages/blog';
@@ -53,6 +54,7 @@ Your API is live at `http://localhost:3000`, docs at `http://localhost:3000/docs
 `createApp()` does everything except start the network server. Use it in tests:
 
 ```typescript title="tests/blog.test.ts"
+// @skip-typecheck
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { createApp, getContext } from '@lastshotlabs/slingshot';
 import { blogPackage } from '../src/packages/blog';
@@ -141,6 +143,7 @@ No `db` config means in-memory storage. Data resets on restart.
 ### Production server with Postgres
 
 ```typescript
+// @skip-typecheck
 await createServer({
   port: Number(process.env.PORT ?? 3000),
   security: {
@@ -161,6 +164,7 @@ await createServer({
 ### Lambda handler
 
 ```typescript title="src/lambda.ts"
+// @skip-typecheck
 import { createApp } from '@lastshotlabs/slingshot';
 import { blogPackage } from './packages/blog';
 

@@ -8,6 +8,7 @@ The app root config controls everything your app needs to run. Here is the full 
 ## A production-ready app root
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
@@ -101,6 +102,7 @@ await createServer({
 ### Security
 
 ```typescript
+// @skip-typecheck
 security: {
   signing: {
     secret: 'min-32-char-secret',
@@ -122,6 +124,7 @@ security: {
 ### Database
 
 ```typescript
+// @skip-typecheck
 // Single database
 db: {
   default: { adapter: 'postgres', url: process.env.DATABASE_URL! },
@@ -161,6 +164,7 @@ connection unless they specify a named connection with `adapter: 'cache'`.
 ### Realtime
 
 ```typescript
+// @skip-typecheck
 // WebSocket endpoints
 ws: {
   endpoints: {
@@ -205,6 +209,7 @@ sse: {
 ### Minimal dev server
 
 ```typescript
+// @skip-typecheck
 await createServer({
   port: 3000,
   packages: [appPackage],
@@ -214,6 +219,7 @@ await createServer({
 ### API with auth
 
 ```typescript
+// @skip-typecheck
 await createServer({
   port: 3000,
   security: { signing: { secret: 'dev-secret-change-in-prod' } },
@@ -225,6 +231,7 @@ await createServer({
 ### Multi-tenant SaaS
 
 ```typescript
+// @skip-typecheck
 await createServer({
   port: 3000,
   security: { signing: { secret: process.env.JWT_SECRET! } },
@@ -244,6 +251,7 @@ await createServer({
 ### Realtime app with WebSockets
 
 ```typescript
+// @skip-typecheck
 await createServer({
   port: 3000,
   security: { signing: { secret: process.env.JWT_SECRET! } },

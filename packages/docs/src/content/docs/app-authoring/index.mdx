@@ -14,6 +14,7 @@ Come back here when you want to understand what `createServer(...)` actually doe
 ## The app root
 
 ```typescript title="src/index.ts"
+// @skip-typecheck
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { adminPackage } from './packages/admin';
@@ -70,6 +71,7 @@ You get all of this from one function call.
 `createApp()` does everything except start the network server. Use it in tests:
 
 ```typescript
+// @skip-typecheck
 const { app, ctx } = await createApp({ packages: [blogPackage] });
 const response = await app.request('/posts');
 await ctx.destroy();

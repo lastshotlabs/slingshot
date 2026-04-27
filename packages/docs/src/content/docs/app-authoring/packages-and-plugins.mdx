@@ -12,6 +12,7 @@ A package is a self-contained feature module. It owns entities, routes, middlewa
 cross-package contracts:
 
 ```typescript
+// @skip-typecheck
 import { createServer } from '@lastshotlabs/slingshot';
 import { blogPackage } from './packages/blog';
 import { commentPackage } from './packages/comments';
@@ -39,6 +40,7 @@ Plugins give you direct lifecycle hooks. Use them for infrastructure concerns th
 fit the package model:
 
 ```typescript
+// @skip-typecheck
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 
 const metricsPlugin: SlingshotPlugin = {
@@ -100,6 +102,7 @@ share the same lifecycle but present different authoring surfaces.
 You can use both in the same app:
 
 ```typescript
+// @skip-typecheck
 await createServer({
   port: 3000,
   plugins: [

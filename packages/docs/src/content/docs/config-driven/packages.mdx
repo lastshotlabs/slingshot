@@ -22,6 +22,7 @@ The canonical package lookup model is:
 ## The package shape
 
 ```typescript title="notes-package.ts"
+// @skip-typecheck
 import {
   defineCapability,
   defineEntity,
@@ -107,6 +108,7 @@ export const notesPackage = definePackage({
 Inside a package-owned `domain(...)` route, the default path is typed entity modules:
 
 ```typescript
+// @skip-typecheck
 import { domain, route } from '@lastshotlabs/slingshot';
 import { NoteEntity } from './note-package';
 
@@ -137,6 +139,7 @@ That is the intended DX:
 When one package needs another package's entity adapter, make that dependency explicit:
 
 ```typescript
+// @skip-typecheck
 import { entityRef, route } from '@lastshotlabs/slingshot';
 import { NoteEntity } from '../notes/package';
 
@@ -255,6 +258,7 @@ Use `services` for domain-local helpers. Use capabilities for cross-package cont
 Mount packages at the app root:
 
 ```typescript
+// @skip-typecheck
 import { createApp } from '@lastshotlabs/slingshot';
 import { notesPackage } from './notes-package';
 
@@ -270,6 +274,7 @@ Packages compile into framework plugins internally, but the public authoring sur
 Use `inspectPackage(...)` to inspect the effective package graph without booting the full app:
 
 ```typescript
+// @skip-typecheck
 import { inspectPackage } from '@lastshotlabs/slingshot';
 import { notesPackage } from './notes-package';
 

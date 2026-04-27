@@ -100,9 +100,7 @@ const MIGRATIONS: Migration[] = [
   },
   // v2: revocation audit field + composite lookup index
   async pool => {
-    await pool.query(
-      `ALTER TABLE permission_grants ADD COLUMN IF NOT EXISTS revoked_reason TEXT`,
-    );
+    await pool.query(`ALTER TABLE permission_grants ADD COLUMN IF NOT EXISTS revoked_reason TEXT`);
     await pool.query(
       `CREATE INDEX IF NOT EXISTS idx_permission_grants_subject_tenant ON permission_grants (subject_id, subject_type, tenant_id)`,
     );

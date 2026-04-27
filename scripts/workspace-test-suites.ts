@@ -85,9 +85,7 @@ const packageCoverageOverrides: Record<string, PackageCoverageOverride> = {
     ],
   },
   'slingshot-bullmq': {
-    coverageTestFiles: [
-      'tests/isolated/bullmq-adapter-durable.test.ts',
-    ],
+    coverageTestFiles: ['tests/isolated/bullmq-adapter-durable.test.ts'],
   },
   'slingshot-webhooks': {
     coverageTestFiles: [

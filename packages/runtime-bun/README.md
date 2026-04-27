@@ -3,29 +3,47 @@ title: Human Guide
 description: Human-maintained guidance for @lastshotlabs/slingshot-runtime-bun
 ---
 
-> Human-owned documentation. This is the authoritative lane for package boundaries, constraints, and operational guidance.
+`@lastshotlabs/slingshot-runtime-bun` is the Bun-native runtime implementation for Slingshot.
+Pass the return value of `bunRuntime()` to `createServer()` as the `runtime` option.
 
-## Purpose
+## What It Provides
 
-@lastshotlabs/slingshot-runtime-bun is the runtime package in the Slingshot workspace.
+- **password** — `Bun.password.hash()` / `Bun.password.verify()` (argon2id by default)
+- **sqlite** — `bun:sqlite` Database opened in WAL mode with `create: true`
+- **server** — `Bun.serve` HTTP server with WebSocket upgrade support
+- **fs** — `Bun.write` and `Bun.file` for async binary and text file I/O
+- **glob** — `Bun.Glob` for file pattern scanning
 
-Package documentation for this Slingshot workspace module.
+## Minimum Setup
 
-## Package Boundaries
+```ts
+import { createServer } from '@lastshotlabs/slingshot-core';
+import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
 
-- Document which responsibilities this package owns.
-- Call out which contracts come from `slingshot-core` or neighboring packages.
-- Keep package-specific examples here instead of hiding them in the root docs.
+const server = await createServer({ runtime: bunRuntime(), ...config });
+```
 
 ## Operational Notes
 
-- Add startup requirements, debugging tips, and failure modes.
-- Record migrations when config shapes or lifecycle timing changes.
+- `readFile()` uses `Bun.file(path).exists()` before reading. Missing files return `null`;
+  errors on files that do exist (e.g. permission denied) propagate as exceptions.
+- `fs.readFile()` uses the same `exists()` check and returns `null` for missing binary files.
+- `password.hash()` defaults to argon2id. The hash output is self-describing and includes the
+  algorithm identifier, so it is forward-compatible if the algorithm default changes.
+- SQLite databases are opened in WAL mode. Set up your application's migration step before any
+  reads or writes. The runtime does not run migrations itself.
+- WebSocket upgrade is delegated to `Bun.serve`. Call `server.upgrade(req, { data })` from
+  inside a `fetch` handler — Bun returns `undefined` from `fetch` when the upgrade succeeds.
 
 ## Gotchas
 
-- Record edge cases that surprised us.
+- `connection.port` must be a number, not a string. Env-var values need explicit coercion:
+  `port: Number(process.env.PORT)`.
+- `glob.scan()` returns paths relative to `cwd`, not absolute. Join with `cwd` when you need
+  absolute paths for subsequent file operations.
+- `server.stop(true)` closes open connections immediately. Pass `false` (or no argument) if
+  you want graceful drain.
 
 ## Key Files
 
-- `packages/runtime-bun/src/index.ts`
+- `src/index.ts`

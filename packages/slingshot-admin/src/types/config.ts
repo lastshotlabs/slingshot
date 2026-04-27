@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import type {
+  AuditLogProvider,
+  MailRenderer,
+  PermissionEvaluator,
+  PermissionRegistry,
+  PermissionsAdapter,
+} from '@lastshotlabs/slingshot-core';
+import type { AdminAccessProvider, ManagedUserProvider } from '@lastshotlabs/slingshot-core';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
@@ -13,15 +21,6 @@ function normalizeMountPath(value: string): string {
 
   return normalized;
 }
-
-import type {
-  AuditLogProvider,
-  MailRenderer,
-  PermissionEvaluator,
-  PermissionRegistry,
-  PermissionsAdapter,
-} from '@lastshotlabs/slingshot-core';
-import type { AdminAccessProvider, ManagedUserProvider } from '@lastshotlabs/slingshot-core';
 
 /**
  * Zod schema for `AdminPluginConfig`. Used by `createAdminPlugin` to validate

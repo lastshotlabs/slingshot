@@ -1,0 +1,42 @@
+---
+title: Webhooks
+description: Manage outbound webhook endpoints and inbound webhook intake
+---
+
+`@lastshotlabs/slingshot-webhooks` owns endpoint management, scoped delivery, and inbound provider
+intake. Event owners define what can be delivered; this package projects those events to subscribers.
+
+## When to use it
+
+Use the webhook package when you need:
+
+- signed outbound delivery to customer-owned endpoints
+- endpoint management with retries and dead-letter handling
+- inbound provider intake mounted under the same package surface
+
+## Quick start
+
+```bash
+bun add @lastshotlabs/slingshot-webhooks
+```
+
+```ts
+import { createWebhookPlugin, createMemoryWebhookAdapter } from '@lastshotlabs/slingshot-webhooks';
+
+const webhooks = createWebhookPlugin({
+  adapter: createMemoryWebhookAdapter(),
+  events: ['*'],
+  managementRole: 'admin',
+});
+```
+
+## Production notes
+
+- Keep management routes fail-closed with an explicit admin guard.
+- Use `subscriptions` rather than legacy event allowlists when configuring endpoints.
+- Treat endpoint URLs and delivery secrets as untrusted input at the boundary.
+
+## Go deeper
+
+- [Package docs](/slingshot/packages/slingshot-webhooks/)
+- [Webhook Governance](/slingshot/guides/webhook-governance/)

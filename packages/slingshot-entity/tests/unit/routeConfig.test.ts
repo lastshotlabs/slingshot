@@ -295,7 +295,16 @@ describe('resolveDataScope helpers', () => {
 
   it('resolves ctx and param sources', () => {
     const c = createContext(
-      { actor: { id: 'user-1', kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} } },
+      {
+        actor: {
+          id: 'user-1',
+          kind: 'user',
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        },
+      },
       { orgId: 'org-2' },
     );
     expect(resolveDataScopeValue('ctx:actor.id', c)).toBe('user-1');
@@ -309,11 +318,7 @@ describe('resolveDataScope helpers', () => {
 
   it('returns missing when a scope source is absent', () => {
     const c = createContext({}, {});
-    const result = resolveDataScopes(
-      [{ field: 'authorId', from: 'ctx:actor.id' }],
-      'get',
-      c,
-    );
+    const result = resolveDataScopes([{ field: 'authorId', from: 'ctx:actor.id' }], 'get', c);
     expect(result.status).toBe('missing');
     if (result.status === 'missing') {
       expect(result.source).toBe('ctx:actor.id');
@@ -322,7 +327,16 @@ describe('resolveDataScope helpers', () => {
 
   it('builds bindings and respects applyTo', () => {
     const c = createContext(
-      { actor: { id: 'user-1', kind: 'user', tenantId: null, sessionId: null, roles: null, claims: {} } },
+      {
+        actor: {
+          id: 'user-1',
+          kind: 'user',
+          tenantId: null,
+          sessionId: null,
+          roles: null,
+          claims: {},
+        },
+      },
       { orgId: 'org-2' },
     );
     const scopes: readonly EntityRouteDataScopeConfig[] = [

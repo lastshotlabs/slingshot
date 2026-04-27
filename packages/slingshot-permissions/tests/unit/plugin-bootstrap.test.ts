@@ -1,6 +1,10 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { Hono } from 'hono';
-import { PERMISSIONS_STATE_KEY, attachContext, getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
+import {
+  PERMISSIONS_STATE_KEY,
+  attachContext,
+  getAuthRuntimePeerOrNull,
+} from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from '../../src/factories';
 import { createAuthGroupResolver } from '../../src/lib/authGroupResolver';
 import { seedSuperAdmin } from '../../src/lib/bootstrap';

@@ -3,8 +3,7 @@ import { createFakeBullMQModule, fakeBullMQState } from './helpers/fakeBullMQ';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 
-const { createBullMQAdapter, bullmqAdapterOptionsSchema } =
-  await import('../src/bullmqAdapter');
+const { createBullMQAdapter, bullmqAdapterOptionsSchema } = await import('../src/bullmqAdapter');
 
 afterEach(() => {
   fakeBullMQState.reset();
@@ -163,9 +162,9 @@ describe('createBullMQAdapter — durable subscriptions', () => {
 
   test('durable on() requires a name', () => {
     const bus = createBullMQAdapter({ connection: {} });
-    expect(() =>
-      bus.on('auth:login' as any, async () => {}, { durable: true } as any),
-    ).toThrow('durable subscriptions require a name');
+    expect(() => bus.on('auth:login' as any, async () => {}, { durable: true } as any)).toThrow(
+      'durable subscriptions require a name',
+    );
   });
 
   test('duplicate durable subscription name for same event throws', () => {
@@ -242,9 +241,7 @@ describe('createBullMQAdapter — shutdown', () => {
 
     await bus.shutdown();
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('discarding'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('discarding'));
 
     warnSpy.mockRestore();
     errorSpy.mockRestore();

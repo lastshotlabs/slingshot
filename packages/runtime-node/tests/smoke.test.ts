@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as fsPromises from 'node:fs/promises';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { nodeRuntime } from '../src/index';
 

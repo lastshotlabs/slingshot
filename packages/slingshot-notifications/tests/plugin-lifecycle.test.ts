@@ -247,8 +247,8 @@ describe('createNotificationsPlugin lifecycle', () => {
   });
 
   test('rejects mountPath values without a leading slash', () => {
-    expect(() =>
-      createNotificationsPlugin({ mountPath: 'notifications' } as never),
-    ).toThrow(/mountPath must start with '\//i);
+    expect(() => createNotificationsPlugin({ mountPath: 'notifications' } as never)).toThrow(
+      /mountPath must start with '\//i,
+    );
   });
 });

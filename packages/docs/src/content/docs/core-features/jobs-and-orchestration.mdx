@@ -24,7 +24,9 @@ A task is a named, retryable unit of work:
 // @skip-typecheck
 import { defineTask } from '@lastshotlabs/slingshot-orchestration';
 
-declare const emailService: { send(opts: { to: string; subject: string; body: string }): Promise<void> };
+declare const emailService: {
+  send(opts: { to: string; subject: string; body: string }): Promise<void>;
+};
 
 const sendWelcomeEmail = defineTask({
   name: 'send-welcome-email',

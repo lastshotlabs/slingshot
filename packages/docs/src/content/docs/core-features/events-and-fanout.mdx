@@ -30,10 +30,16 @@ Publish through the app context — accessible via `getContext(app)` after `crea
 // @skip-typecheck
 import { createServer, getContext } from '@lastshotlabs/slingshot';
 
-const { app } = await createServer({ /* ... */ });
+const { app } = await createServer({
+  /* ... */
+});
 const ctx = getContext(app);
 
-ctx.events.publish('user.created', { userId: 'usr_123', email: 'alice@example.com' }, { requestTenantId: null });
+ctx.events.publish(
+  'user.created',
+  { userId: 'usr_123', email: 'alice@example.com' },
+  { requestTenantId: null },
+);
 ```
 
 See [Events and the Event Bus](/slingshot/app-authoring/events-and-the-event-bus/) for the full

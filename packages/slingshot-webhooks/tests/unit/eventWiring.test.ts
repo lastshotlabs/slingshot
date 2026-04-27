@@ -146,10 +146,14 @@ describe('eventWiring', () => {
     const config: WebhookPluginConfig = { events: ['test:webhook.tenant.*'] };
     const unsubs = wireEventSubscriptions(bus, events, config, queue, adapter);
 
-    events.publish('test:webhook.tenant.created', {
-      tenantId: 'tenant-a',
-      documentId: 'doc-1',
-    }, { requestTenantId: null });
+    events.publish(
+      'test:webhook.tenant.created',
+      {
+        tenantId: 'tenant-a',
+        documentId: 'doc-1',
+      },
+      { requestTenantId: null },
+    );
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
@@ -173,10 +177,14 @@ describe('eventWiring', () => {
     const config: WebhookPluginConfig = { events: ['security.*'] };
     const unsubs = wireEventSubscriptions(bus, events, config, queue, adapter);
 
-    events.publish('test:webhook.tenant.created', {
-      tenantId: 'tenant-a',
-      documentId: 'doc-1',
-    }, { requestTenantId: null });
+    events.publish(
+      'test:webhook.tenant.created',
+      {
+        tenantId: 'tenant-a',
+        documentId: 'doc-1',
+      },
+      { requestTenantId: null },
+    );
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
@@ -196,10 +204,14 @@ describe('eventWiring', () => {
     const config: WebhookPluginConfig = {};
     const unsubs = wireEventSubscriptions(bus, events, config, queue, adapter);
 
-    events.publish('test:webhook.tenant.created', {
-      tenantId: 'tenant-a',
-      documentId: 'doc-1',
-    }, { requestTenantId: null });
+    events.publish(
+      'test:webhook.tenant.created',
+      {
+        tenantId: 'tenant-a',
+        documentId: 'doc-1',
+      },
+      { requestTenantId: null },
+    );
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();
@@ -225,10 +237,14 @@ describe('eventWiring', () => {
     const config: WebhookPluginConfig = { events: ['test:webhook.*'] };
     const unsubs = wireEventSubscriptions(bus, events, config, queue, failingAdapter);
 
-    events.publish('test:webhook.tenant.created', {
-      tenantId: 'tenant-a',
-      documentId: 'doc-1',
-    }, { requestTenantId: null });
+    events.publish(
+      'test:webhook.tenant.created',
+      {
+        tenantId: 'tenant-a',
+        documentId: 'doc-1',
+      },
+      { requestTenantId: null },
+    );
     await new Promise(resolve => setTimeout(resolve, 30));
 
     for (const unsub of unsubs) unsub();
@@ -253,10 +269,14 @@ describe('eventWiring', () => {
     const config: WebhookPluginConfig = { events: ['test:webhook.*'] };
     const unsubs = wireEventSubscriptions(bus, events, config, failingQueue, adapter);
 
-    events.publish('test:webhook.tenant.created', {
-      tenantId: 'tenant-a',
-      documentId: 'doc-1',
-    }, { requestTenantId: null });
+    events.publish(
+      'test:webhook.tenant.created',
+      {
+        tenantId: 'tenant-a',
+        documentId: 'doc-1',
+      },
+      { requestTenantId: null },
+    );
     await new Promise(resolve => setTimeout(resolve, 30));
 
     const deliveries = await adapter.listDeliveries();

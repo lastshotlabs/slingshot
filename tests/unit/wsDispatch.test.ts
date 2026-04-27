@@ -198,9 +198,7 @@ describe('wsDispatch — handleIncomingEvent', () => {
   });
 
   it('auth: none (default), anonymous actor — handler called, context.actor.id is null', async () => {
-    const handler = mock(
-      (_ws: unknown, _p: unknown, ctx: { actor: Actor }) => ctx.actor.id,
-    );
+    const handler = mock((_ws: unknown, _p: unknown, ctx: { actor: Actor }) => ctx.actor.id);
     const ws = createMockWs('s1');
     const msg = JSON.stringify({ action: 'event', event: 'open', ackId: 'a6' });
 

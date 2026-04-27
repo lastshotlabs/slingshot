@@ -158,8 +158,13 @@ describe('createLambdaRuntime', () => {
     await expect(runtime.getContext()).rejects.toThrow('init failed');
     expect(runtimeState.teardown).toHaveBeenCalledTimes(1);
 
+    const expectedCtx = runtimeState.ctx;
+    if (expectedCtx == null) {
+      throw new Error('test bootstrap did not install a context fixture');
+    }
+
     const ctx = await runtime.getContext();
-    expect(ctx).toBe(runtimeState.ctx);
+    expect(ctx).toBe(expectedCtx);
     expect(runtimeState.bootstrapCalls).toBe(2);
     expect(onInit).toHaveBeenCalledTimes(2);
   });

@@ -5,7 +5,11 @@ import type {
   SlingshotHandler,
   TriggerAdapter,
 } from '@lastshotlabs/slingshot-core';
-import { createDefaultIdentityResolver, HandlerError, ValidationError } from '@lastshotlabs/slingshot-core';
+import {
+  HandlerError,
+  ValidationError,
+  createDefaultIdentityResolver,
+} from '@lastshotlabs/slingshot-core';
 import { invokeWithAdapter } from '../src/invocationLoop';
 import { apigwTrigger } from '../src/triggers/apigw';
 import { kinesisTrigger } from '../src/triggers/kinesis';

@@ -10,14 +10,16 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-organizations
 @lastshotlabs/slingshot-organizations is the feature package in the Slingshot workspace.
 
 Organizations and groups management plugin for Slingshot
-Organization and group entities follow the shared package-first/entity model; `createOrganizationsPlugin()`
-is the runtime shell that composes auth, invites, and membership flows.
+The organization and group entities themselves follow the shared package-first/entity authoring model;
+`createOrganizationsPlugin()` is the runtime shell that composes auth, invites, and membership flows.
 
 ## Package Boundaries
 
-- Document which responsibilities this package owns.
-- Call out which contracts come from `slingshot-core` or neighboring packages.
-- Keep package-specific examples here instead of hiding them in the root docs.
+- Owns organization and group entity definitions, membership records, and invitation flows.
+- Owns the org service published to plugin state, accessible via `getOrganizationsOrgServiceOrNull`.
+- Depends on `slingshot-auth` for user auth middleware, route auth, and actor identity resolution.
+- Depends on `slingshot-entity` for entity-backed CRUD routes and manifest-driven runtime.
+- Does not own auth session management, user identity, or the permissions grant system.
 
 ## Operational Notes
 
@@ -28,6 +30,7 @@ is the runtime shell that composes auth, invites, and membership flows.
 
 ## Gotchas
 
+- `mountPath` must start with `/`; trailing slashes are trimmed before routes are mounted.
 - Invitation acceptance is a continuation flow. Validate both the invitation target email and the current auth-account state before consuming the one-time token.
 - Email-targeted invites require a verified matching email address, not only a matching email
   string on the current account.

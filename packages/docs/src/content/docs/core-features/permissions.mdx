@@ -45,11 +45,11 @@ bun add @lastshotlabs/slingshot-permissions
 // @skip-typecheck
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import {
-  createPermissionsPlugin,
-  createAuthGroupResolver,
-} from '@lastshotlabs/slingshot-permissions';
 import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
+import {
+  createAuthGroupResolver,
+  createPermissionsPlugin,
+} from '@lastshotlabs/slingshot-permissions';
 
 await createServer({
   port: 3000,
@@ -57,7 +57,7 @@ await createServer({
   plugins: [
     createAuthPlugin({ auth: { roles: ['user'] } }),
     createPermissionsPlugin({
-      groupResolver: (pluginState) =>
+      groupResolver: pluginState =>
         createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
     }),
   ],
@@ -89,10 +89,19 @@ const Post = defineEntity('Post', {
       permission: { requires: 'post:create', scope: { resourceType: 'post' } },
     },
     update: {
-      permission: { requires: 'post:update', ownerField: 'authorId', scope: { resourceType: 'post' } },
+      permission: {
+        requires: 'post:update',
+        ownerField: 'authorId',
+        scope: { resourceType: 'post' },
+      },
     },
     delete: {
-      permission: { requires: 'post:delete', ownerField: 'authorId', or: 'post:moderate', scope: { resourceType: 'post' } },
+      permission: {
+        requires: 'post:delete',
+        ownerField: 'authorId',
+        or: 'post:moderate',
+        scope: { resourceType: 'post' },
+      },
     },
   },
 });

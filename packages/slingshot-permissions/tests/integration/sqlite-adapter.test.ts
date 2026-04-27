@@ -667,9 +667,9 @@ describe('Permissions SQLite adapter', () => {
 
     test('throws when revokedReason exceeds 1024 characters', async () => {
       const id = await adapter.createGrant(makeGrant());
-      await expect(
-        adapter.revokeGrant(id, 'admin-1', undefined, 'x'.repeat(1025)),
-      ).rejects.toThrow('revokedReason exceeds maximum length of 1024');
+      await expect(adapter.revokeGrant(id, 'admin-1', undefined, 'x'.repeat(1025))).rejects.toThrow(
+        'revokedReason exceeds maximum length of 1024',
+      );
     });
   });
 

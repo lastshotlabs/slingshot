@@ -1,0 +1,55 @@
+---
+title: Admin Surface
+description: Wire the admin routes, access provider, and managed-user provider
+---
+
+`@lastshotlabs/slingshot-admin` is the admin HTTP surface for Slingshot. It is intentionally thin:
+auth and managed-user logic come from providers, not from the plugin itself.
+
+## When to use it
+
+Use the admin package when you need:
+
+- admin route mounting with centralized guards
+- managed user CRUD against your auth backend
+- permissions-aware admin actions and audit logging
+
+## Quick start
+
+```bash
+bun add @lastshotlabs/slingshot-admin @lastshotlabs/slingshot-permissions
+```
+
+```ts
+import { createAdminPlugin } from '@lastshotlabs/slingshot-admin';
+import {
+  createMemoryAccessProvider,
+  createMemoryManagedUserProvider,
+} from '@lastshotlabs/slingshot-admin/testing';
+import {
+  createMemoryPermissionsAdapter,
+  createPermissionEvaluator,
+  createPermissionRegistry,
+} from '@lastshotlabs/slingshot-permissions';
+
+const registry = createPermissionRegistry();
+const adapter = createMemoryPermissionsAdapter();
+const evaluator = createPermissionEvaluator({ registry, adapter });
+
+const admin = createAdminPlugin({
+  accessProvider: createMemoryAccessProvider(),
+  managedUserProvider: createMemoryManagedUserProvider(),
+  permissions: { registry, adapter, evaluator },
+});
+```
+
+## Production notes
+
+- Keep the access provider and managed-user provider outside the plugin.
+- Use `createAuth0AccessProvider()` or a comparable provider for real deployments.
+- Enable `mailRenderer` only when you actually need admin mail previews or sends.
+
+## Go deeper
+
+- [Package docs](/slingshot/packages/slingshot-admin/)
+- [Permissions guide](/slingshot/guides/permissions/)

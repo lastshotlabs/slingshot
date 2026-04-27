@@ -12,8 +12,8 @@ The app root config controls everything your app needs to run. Here is the full 
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
 import { createPermissionsPlugin } from '@lastshotlabs/slingshot-permissions';
-import { blogPackage } from './packages/blog';
 import { adminPackage } from './packages/admin';
+import { blogPackage } from './packages/blog';
 
 await createServer({
   // --- Server ---
@@ -55,9 +55,15 @@ await createServer({
   ws: {
     endpoints: {
       '/ws': {
-        onConnect: async (ws) => { console.log('Connected:', ws.data.actor.id); },
-        onMessage: async (ws, message) => { /* handle message */ },
-        onClose: async (ws) => { console.log('Disconnected'); },
+        onConnect: async ws => {
+          console.log('Connected:', ws.data.actor.id);
+        },
+        onMessage: async (ws, message) => {
+          /* handle message */
+        },
+        onClose: async ws => {
+          console.log('Disconnected');
+        },
       },
     },
   },
@@ -86,18 +92,18 @@ await createServer({
 
 ### Server
 
-| Key    | Type     | Default | What it does      |
-| ------ | -------- | ------- | ----------------- |
-| `port` | `number` | `3000`  | HTTP server port  |
+| Key    | Type     | Default | What it does     |
+| ------ | -------- | ------- | ---------------- |
+| `port` | `number` | `3000`  | HTTP server port |
 
 ### App metadata
 
-| Key             | What it does                                         |
-| --------------- | ---------------------------------------------------- |
-| `meta`          | App name and version for OpenAPI docs                |
-| `routesDir`     | Directory for auto-discovered route files            |
-| `modelSchemas`  | Directory for shared Zod schemas preloaded at boot   |
-| `versioning`    | API versioning config for versioned route trees      |
+| Key            | What it does                                       |
+| -------------- | -------------------------------------------------- |
+| `meta`         | App name and version for OpenAPI docs              |
+| `routesDir`    | Directory for auto-discovered route files          |
+| `modelSchemas` | Directory for shared Zod schemas preloaded at boot |
+| `versioning`   | API versioning config for versioned route trees    |
 
 ### Security
 
@@ -148,18 +154,18 @@ connection unless they specify a named connection with `adapter: 'cache'`.
 
 ### Composition
 
-| Key           | What it does                                          |
-| ------------- | ----------------------------------------------------- |
+| Key           | What it does                                            |
+| ------------- | ------------------------------------------------------- |
 | `packages`    | Feature packages to load (the main composition surface) |
-| `plugins`     | Raw plugins for auth, permissions, and infrastructure |
-| `permissions` | Shared permissions bootstrap config                   |
+| `plugins`     | Raw plugins for auth, permissions, and infrastructure   |
+| `permissions` | Shared permissions bootstrap config                     |
 
 ### Events
 
-| Key               | What it does                                        |
-| ----------------- | --------------------------------------------------- |
+| Key               | What it does                                                 |
+| ----------------- | ------------------------------------------------------------ |
 | `eventBus`        | Event transport: `'memory'` (default), `'bullmq'`, `'redis'` |
-| `kafkaConnectors` | Kafka bridge config for external event streaming    |
+| `kafkaConnectors` | Kafka bridge config for external event streaming             |
 
 ### Realtime
 
@@ -186,23 +192,23 @@ sse: {
 
 ### Infrastructure
 
-| Key             | What it does                                       |
-| --------------- | -------------------------------------------------- |
-| `upload`        | File upload config (provider, directory, limits)   |
-| `jobs`          | Background job orchestration config                |
-| `runtime`       | Runtime abstraction (Bun, Node, edge, Lambda)      |
-| `secrets`       | Secret provider: `'env'`, `'ssm'`, `'file'`       |
+| Key       | What it does                                     |
+| --------- | ------------------------------------------------ |
+| `upload`  | File upload config (provider, directory, limits) |
+| `jobs`    | Background job orchestration config              |
+| `runtime` | Runtime abstraction (Bun, Node, edge, Lambda)    |
+| `secrets` | Secret provider: `'env'`, `'ssm'`, `'file'`      |
 
 ### Operations
 
-| Key             | What it does                                       |
-| --------------- | -------------------------------------------------- |
-| `logging`       | Structured logging config                          |
-| `metrics`       | Metrics endpoint (`/metrics`)                      |
-| `observability` | OpenTelemetry tracing config                       |
-| `tenancy`       | Tenant resolver for multi-tenant apps              |
-| `middleware`     | Global middleware array                            |
-| `validation`    | Request/response validation behavior               |
+| Key             | What it does                          |
+| --------------- | ------------------------------------- |
+| `logging`       | Structured logging config             |
+| `metrics`       | Metrics endpoint (`/metrics`)         |
+| `observability` | OpenTelemetry tracing config          |
+| `tenancy`       | Tenant resolver for multi-tenant apps |
+| `middleware`    | Global middleware array               |
+| `validation`    | Request/response validation behavior  |
 
 ## Config by use case
 
@@ -259,7 +265,7 @@ await createServer({
   ws: {
     endpoints: {
       '/ws': {
-        onConnect: async (ws) => {
+        onConnect: async ws => {
           console.log('User connected:', ws.data.actor.id);
         },
         onMessage: async (ws, message) => {

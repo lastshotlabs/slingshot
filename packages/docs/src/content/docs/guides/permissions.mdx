@@ -18,11 +18,11 @@ bun add @lastshotlabs/slingshot-permissions
 // @skip-typecheck
 import { createServer } from '@lastshotlabs/slingshot';
 import { createAuthPlugin } from '@lastshotlabs/slingshot-auth';
-import {
-  createPermissionsPlugin,
-  createAuthGroupResolver,
-} from '@lastshotlabs/slingshot-permissions';
 import { getAuthRuntimePeerOrNull } from '@lastshotlabs/slingshot-core';
+import {
+  createAuthGroupResolver,
+  createPermissionsPlugin,
+} from '@lastshotlabs/slingshot-permissions';
 
 await createServer({
   port: 3000,
@@ -32,7 +32,7 @@ await createServer({
       auth: { roles: ['user', 'editor', 'admin'], defaultRole: 'user' },
     }),
     createPermissionsPlugin({
-      groupResolver: (pluginState) =>
+      groupResolver: pluginState =>
         createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
     }),
   ],
@@ -56,7 +56,7 @@ have excess groups silently ignored and a `console.warn` emitted. Raise the cap 
 ```typescript
 // @skip-typecheck
 createPermissionsPlugin({
-  groupResolver: (pluginState) =>
+  groupResolver: pluginState =>
     createAuthGroupResolver(() => getAuthRuntimePeerOrNull(pluginState)),
   maxGroups: 200,
 });
@@ -109,11 +109,11 @@ const { adapter } = getPermissionsState(app);
 
 // Grant the 'editor' auth group the 'author' role on all posts
 await adapter.createGrant({
-  subjectId: 'editor',    // auth group ID
+  subjectId: 'editor', // auth group ID
   subjectType: 'group',
-  tenantId: null,         // applies across all tenants
+  tenantId: null, // applies across all tenants
   resourceType: 'post',
-  resourceId: null,       // applies to all posts
+  resourceId: null, // applies to all posts
   roles: ['author'],
   effect: 'allow',
   grantedBy: 'system',
@@ -142,7 +142,7 @@ For multi-tenant apps, scope a grant to a tenant so it only applies within that 
 await adapter.createGrant({
   subjectId: userId,
   subjectType: 'user',
-  tenantId: orgId,         // scoped to this tenant
+  tenantId: orgId, // scoped to this tenant
   resourceType: 'project',
   resourceId: null,
   roles: ['admin'],
@@ -163,7 +163,7 @@ await adapter.createGrant({
   subjectType: 'user',
   tenantId: orgId,
   resourceType: 'document',
-  resourceId: documentId,   // scoped to this exact document
+  resourceId: documentId, // scoped to this exact document
   roles: ['author'],
   effect: 'allow',
   grantedBy: 'system',
@@ -183,7 +183,7 @@ await adapter.createGrant({
   resourceType: 'post',
   resourceId: null,
   roles: ['author'],
-  effect: 'deny',           // overrides any allow grant
+  effect: 'deny', // overrides any allow grant
   grantedBy: adminUserId,
 });
 ```

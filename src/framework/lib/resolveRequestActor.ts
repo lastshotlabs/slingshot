@@ -1,4 +1,8 @@
-import { ANONYMOUS_ACTOR, type Actor, type RequestActorResolver } from '@lastshotlabs/slingshot-core';
+import {
+  ANONYMOUS_ACTOR,
+  type Actor,
+  type RequestActorResolver,
+} from '@lastshotlabs/slingshot-core';
 
 export async function resolveRequestActor(
   req: Request,

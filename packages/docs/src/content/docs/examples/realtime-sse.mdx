@@ -151,7 +151,17 @@ export async function sseUpgrade(req: Request) {
   if (!token) return new Response('Unauthorized', { status: 401 });
   const userId = verifyToken(token);
   if (!userId) return new Response('Unauthorized', { status: 401 });
-  return { actor: { id: userId, kind: 'user' as const, tenantId: null, sessionId: null, roles: null, claims: {} }, requestTenantId: null };
+  return {
+    actor: {
+      id: userId,
+      kind: 'user' as const,
+      tenantId: null,
+      sessionId: null,
+      roles: null,
+      claims: {},
+    },
+    requestTenantId: null,
+  };
 }
 ```
 

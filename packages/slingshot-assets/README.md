@@ -6,8 +6,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-assets
 `@lastshotlabs/slingshot-assets` is Slingshot's asset storage package. It owns asset metadata, storage
 adapter resolution, presigned-upload support, image-aware asset behavior, and the runtime wiring
 that keeps stored bytes and persisted asset records aligned.
-Asset entities follow the shared package-first/entity model; `createAssetsPlugin()` is the runtime
-shell that composes those entities into the live plugin.
+The asset entities themselves follow the shared package-first/entity authoring model;
+`createAssetsPlugin()` is the runtime shell that composes them into the live plugin.
 
 ## When To Use It
 
@@ -41,7 +41,7 @@ At minimum, provide:
 
 Then layer on the optional controls as needed:
 
-- `mountPath` for route placement
+- `mountPath` for route placement. It must start with `/`; trailing slashes are trimmed.
 - `maxFileSize` and `maxFiles` for upload limits
 - `allowedMimeTypes` for MIME policy
 - `keyPrefix` and `tenantScopedKeys` for storage-key shape

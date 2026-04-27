@@ -1,0 +1,57 @@
+---
+title: Transactional Mail
+description: Use the mail package for provider-backed templated email delivery
+---
+
+`@lastshotlabs/slingshot-mail` owns outbound transactional email. It keeps three concerns separate:
+provider transport, template rendering, and queueing.
+
+## When to use it
+
+Use the mail package when you need:
+
+- templated emails driven by app events
+- a provider swap between Resend, SES, Postmark, or SendGrid
+- a memory queue for local development or a durable queue for production
+
+## Quick start
+
+```bash
+bun add @lastshotlabs/slingshot-mail
+```
+
+```ts
+import { createMailPlugin, createRawHtmlRenderer, createResendProvider } from '@lastshotlabs/slingshot-mail';
+
+const mail = createMailPlugin({
+  provider: createResendProvider({ apiKey: process.env.RESEND_KEY! }),
+  renderer: createRawHtmlRenderer({
+    templates: {
+      welcome: {
+        subject: 'Welcome to Slingshot',
+        html: '<p>Hello {{name}}</p>',
+      },
+    },
+  }),
+  from: 'noreply@example.com',
+  subscriptions: [
+    {
+      event: 'auth:user.created',
+      template: 'welcome',
+      recipientMapper: payload => payload.email,
+      dataMapper: payload => ({ name: payload.name ?? payload.email }),
+    },
+  ],
+});
+```
+
+## Production notes
+
+- Use a durable queue for production delivery if you cannot tolerate job loss on restart.
+- Keep `from` explicit even when the provider has a default sender.
+- Prefer template validation on startup so missing templates fail early.
+
+## Go deeper
+
+- [Package docs](/slingshot/packages/slingshot-mail/)
+- [Content Platform example](/slingshot/examples/content-platform/)

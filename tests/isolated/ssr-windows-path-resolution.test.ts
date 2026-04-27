@@ -17,9 +17,8 @@ mock.module('../../packages/slingshot-ssr/src/actions/registry', () => ({
   clearActionCache: () => {},
 }));
 
-const { buildActionRouter } = await import(
-  '../../packages/slingshot-ssr/src/actions/routes?windows-style-actions-dir'
-);
+const { buildActionRouter } =
+  await import('../../packages/slingshot-ssr/src/actions/routes?windows-style-actions-dir');
 
 describe('buildActionRouter() — Windows-style serverActionsDir resolution', () => {
   test('uses win32 path semantics for Windows-style action directories', async () => {
@@ -46,8 +45,6 @@ describe('buildActionRouter() — Windows-style serverActionsDir resolution', ()
 
     expect(res.status).toBe(200);
     expect(resolveAction).toHaveBeenCalledTimes(1);
-    expect(resolveAction.mock.calls[0]?.[0]).toBe(
-      path.win32.resolve('C:\\temp\\actions', 'posts'),
-    );
+    expect(resolveAction.mock.calls[0]?.[0]).toBe(path.win32.resolve('C:\\temp\\actions', 'posts'));
   });
 });

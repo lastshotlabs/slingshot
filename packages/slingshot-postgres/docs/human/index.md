@@ -45,18 +45,18 @@ const { pool } = await connectPostgres(process.env.DATABASE_URL!, {
 
 All `PostgresPoolConfig` fields are optional and map to `pg.Pool` constructor options:
 
-| Field                          | `pg.Pool` field               |
-| ------------------------------ | ----------------------------- |
-| `max`                          | `max`                         |
-| `min`                          | `min`                         |
-| `idleTimeoutMs`                | `idleTimeoutMillis`           |
-| `connectionTimeoutMs`          | `connectionTimeoutMillis`     |
-| `queryTimeoutMs`               | `query_timeout`               |
-| `statementTimeoutMs`           | `statement_timeout`           |
-| `maxUses`                      | `maxUses`                     |
-| `allowExitOnIdle`              | `allowExitOnIdle`             |
-| `keepAlive`                    | `keepAlive`                   |
-| `keepAliveInitialDelayMillis`  | `keepAliveInitialDelayMillis` |
+| Field                         | `pg.Pool` field               |
+| ----------------------------- | ----------------------------- |
+| `max`                         | `max`                         |
+| `min`                         | `min`                         |
+| `idleTimeoutMs`               | `idleTimeoutMillis`           |
+| `connectionTimeoutMs`         | `connectionTimeoutMillis`     |
+| `queryTimeoutMs`              | `query_timeout`               |
+| `statementTimeoutMs`          | `statement_timeout`           |
+| `maxUses`                     | `maxUses`                     |
+| `allowExitOnIdle`             | `allowExitOnIdle`             |
+| `keepAlive`                   | `keepAlive`                   |
+| `keepAliveInitialDelayMillis` | `keepAliveInitialDelayMillis` |
 
 ## Migration Schema
 
@@ -66,6 +66,7 @@ inside the same transaction as the version bump, so a mid-migration crash leaves
 unchanged and the migration is retried on next startup.
 
 Current migration history:
+
 - **v1** — `slingshot_users`, `slingshot_oauth_accounts`, `slingshot_user_roles`, `slingshot_tenant_roles`
 - **v2** — MFA columns on users, `slingshot_recovery_codes`, `slingshot_webauthn_credentials`, `slingshot_groups`, `slingshot_group_memberships`
 
@@ -95,7 +96,7 @@ Never edit or reorder existing migrations. Append new ones to the `MIGRATIONS` a
 - The `DrizzlePostgresDb.db` is a plain Drizzle client with no schema inference. Use it for
   simple queries; type-safe schema queries require importing and passing the schema explicitly.
 - Do not call `createPostgresAdapter` multiple times with the same pool if `migrations:
-  'assume-ready'` is not set — the migration runner serialises concurrent callers via the
+'assume-ready'` is not set — the migration runner serialises concurrent callers via the
   advisory lock, but repeated calls from the same process are wasteful.
 
 ## Key Files

@@ -135,12 +135,10 @@ The orchestration router does not read actor or tenant identity from framework-l
 Pass explicit hooks when you want tenant scoping, actor metadata, or run-level authorization:
 
 ```ts
+import type { Context } from 'hono';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationPlugin } from '@lastshotlabs/slingshot-orchestration-plugin';
-import type {
-  OrchestrationRunAuthorizationInput,
-} from '@lastshotlabs/slingshot-orchestration-plugin';
-import type { Context } from 'hono';
+import type { OrchestrationRunAuthorizationInput } from '@lastshotlabs/slingshot-orchestration-plugin';
 
 declare const adapter: import('@lastshotlabs/slingshot-orchestration').OrchestrationAdapter;
 declare const tasks: import('@lastshotlabs/slingshot-orchestration').AnyResolvedTask[];

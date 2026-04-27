@@ -1,10 +1,7 @@
 import { and, asc, eq, gt, ilike, isNull, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool, PoolClient } from 'pg';
-import {
-  HttpError,
-  getPostgresPoolRuntime,
-} from '@lastshotlabs/slingshot-core';
+import { HttpError, getPostgresPoolRuntime } from '@lastshotlabs/slingshot-core';
 import type { AuthAdapter } from '@lastshotlabs/slingshot-core';
 import {
   groupMemberships,

@@ -30,7 +30,8 @@ await createServer({
         events: ['blog:post.published'],
         heartbeat: 15_000,
         filter: (client, _event, payload) =>
-          client.actor.id !== null && (payload as { authorId: string }).authorId === client.actor.id,
+          client.actor.id !== null &&
+          (payload as { authorId: string }).authorId === client.actor.id,
       },
     },
   },

@@ -800,7 +800,12 @@ export function createGameEnginePlugin(
         endpoint.on ??= {};
         endpoint.on.close = async ws => {
           const wsData = ws as {
-            data: { actor: { id: string | null }; id: string; rooms: Set<string>; endpoint: string };
+            data: {
+              actor: { id: string | null };
+              id: string;
+              rooms: Set<string>;
+              endpoint: string;
+            };
           };
           const userId = wsData.data.actor.id;
           if (!userId) return;

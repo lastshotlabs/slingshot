@@ -78,14 +78,14 @@ describe('createIntervalDispatcher', () => {
       maxPerTick: 10,
     });
     (dispatcher as { tick: typeof tick }).tick = tick;
-    const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(
-      ((handler: TimerHandler) => {
-        if (typeof handler === 'function') {
-          void handler();
-        }
-        return 1 as ReturnType<typeof setInterval>;
-      }) as typeof setInterval,
-    );
+    const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(((
+      handler: TimerHandler,
+    ) => {
+      if (typeof handler === 'function') {
+        void handler();
+      }
+      return 1 as ReturnType<typeof setInterval>;
+    }) as typeof setInterval);
 
     dispatcher.start();
     await Promise.resolve();

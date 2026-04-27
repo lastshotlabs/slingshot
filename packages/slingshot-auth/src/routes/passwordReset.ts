@@ -7,7 +7,12 @@ import { SuccessResponse } from '@auth/schemas/success';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { createRoute, errorResponse } from '@lastshotlabs/slingshot-core';
-import { HttpError, createRouter, getClientIp, getRequestTenantId } from '@lastshotlabs/slingshot-core';
+import {
+  HttpError,
+  createRouter,
+  getClientIp,
+  getRequestTenantId,
+} from '@lastshotlabs/slingshot-core';
 import type { AuthRateLimitConfig, HookContext } from '../config/authConfig';
 import { publishAuthEvent } from '../eventGovernance';
 import type { AuthRuntimeContext } from '../runtime';

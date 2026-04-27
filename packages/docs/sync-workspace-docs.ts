@@ -603,13 +603,7 @@ function packageOverview(pkg: WorkspacePackage): string {
   const description = normalizeText(pkg.description);
   const summary = packageOverviewSummary(pkg) ?? description;
   const status = packageStatus(pkg);
-  const statusLines = status
-    ? [
-        '',
-        `> Status: ${status.label}. ${status.note}`,
-        '',
-      ]
-    : [''];
+  const statusLines = status ? ['', `> Status: ${status.label}. ${status.note}`, ''] : [''];
 
   const frontmatterLines = [
     '---',

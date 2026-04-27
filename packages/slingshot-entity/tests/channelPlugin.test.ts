@@ -22,12 +22,12 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { ANONYMOUS_ACTOR } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
-
-const userActor = (id: string): Actor => ({ ...ANONYMOUS_ACTOR, id, kind: 'user' });
 import type { WsPublishFn } from '../src/channels/applyChannelConfig';
 import { createEntityPlugin } from '../src/createEntityPlugin';
 import type { EntityPluginEntry } from '../src/createEntityPlugin';
 import type { BareEntityAdapter } from '../src/routing/buildBareEntityRoutes';
+
+const userActor = (id: string): Actor => ({ ...ANONYMOUS_ACTOR, id, kind: 'user' });
 
 const threadConfig: ResolvedEntityConfig = {
   name: 'Thread',

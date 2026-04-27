@@ -11,7 +11,12 @@ import { SuccessResponse } from '@auth/schemas/success';
 import * as AuthService from '@auth/services/auth';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { createRoute, errorResponse, getRequestTenantId, withSecurity } from '@lastshotlabs/slingshot-core';
+import {
+  createRoute,
+  errorResponse,
+  getRequestTenantId,
+  withSecurity,
+} from '@lastshotlabs/slingshot-core';
 import {
   COOKIE_REFRESH_TOKEN,
   COOKIE_TOKEN,

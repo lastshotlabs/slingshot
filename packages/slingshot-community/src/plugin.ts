@@ -598,7 +598,9 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
           const ep = (endpointMap[config.ws.wsEndpoint] ??= {});
           ep.onRoomSubscribe = innerPlugin.buildSubscribeGuard({
             getActor: (ws: unknown) => {
-              const data = (ws as { data?: { actor?: import('@lastshotlabs/slingshot-core').Actor } }).data;
+              const data = (
+                ws as { data?: { actor?: import('@lastshotlabs/slingshot-core').Actor } }
+              ).data;
               return data?.actor ?? null;
             },
             checkPermission: (actor, requires, scope) => {
@@ -606,8 +608,7 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
               return permissionsRef.evaluator.can(
                 {
                   subjectId: actor.id,
-                  subjectType:
-                    actor.kind === 'service-account' ? 'service-account' : 'user',
+                  subjectType: actor.kind === 'service-account' ? 'service-account' : 'user',
                 },
                 requires,
                 scope,

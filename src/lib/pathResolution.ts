@@ -14,6 +14,7 @@ function usesWindowsPathSyntax(value: string): boolean {
  */
 export function resolveManifestPath(value: string, baseDir: string): string {
   const substituted = value.replace('${importMetaDir}', baseDir);
-  const pathApi = usesWindowsPathSyntax(baseDir) || usesWindowsPathSyntax(substituted) ? win32 : posix;
+  const pathApi =
+    usesWindowsPathSyntax(baseDir) || usesWindowsPathSyntax(substituted) ? win32 : posix;
   return pathApi.resolve(baseDir, substituted);
 }

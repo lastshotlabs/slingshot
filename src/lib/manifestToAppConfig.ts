@@ -41,7 +41,6 @@ import type { CreateServerConfig } from '../server';
 import type { AppManifest, AppManifestHandlerRef } from './manifest';
 import type { ManifestHandlerRegistry } from './manifestHandlerRegistry';
 import { getManifestPluginRefs } from './manifestPluginRefs';
-import { resolveManifestPath } from './pathResolution';
 import {
   resolveLoggingStrategy,
   resolveNormalizePathStrategy,
@@ -50,6 +49,7 @@ import {
   resolveUploadAuthStrategy,
   resolveValidationFormatStrategy,
 } from './manifestStrategies';
+import { resolveManifestPath } from './pathResolution';
 
 export interface ManifestToConfigOptions {
   /**

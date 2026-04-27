@@ -151,7 +151,9 @@ describe('createDefaultIdentityResolver', () => {
     });
 
     test('session is always null for service-account', () => {
-      const actor = resolver.resolve(input({ serviceAccountId: 'svc-1', sessionId: 'sess-ignored' }));
+      const actor = resolver.resolve(
+        input({ serviceAccountId: 'svc-1', sessionId: 'sess-ignored' }),
+      );
       expect(actor.sessionId).toBeNull();
     });
 

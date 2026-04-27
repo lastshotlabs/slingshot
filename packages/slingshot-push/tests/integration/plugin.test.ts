@@ -29,9 +29,9 @@ import type {
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { createPushPlugin } from '../../src/plugin';
-import type { PushPluginConfig } from '../../src/types/config';
 import { PUSH_PLUGIN_STATE_KEY, type PushPluginState } from '../../src/state';
 import { TEST_VAPID } from '../../src/testing';
+import type { PushPluginConfig } from '../../src/types/config';
 
 // ---------------------------------------------------------------------------
 // Mock web-push before any provider creates
@@ -646,21 +646,22 @@ describe('createPushPlugin — provider fan-out resilience', () => {
     });
     const providers = harness.pluginState.providers as unknown as {
       web: {
-        send: (subscription: { platformData: { endpoint: string } }, message: unknown) => Promise<{
+        send: (
+          subscription: { platformData: { endpoint: string } },
+          message: unknown,
+        ) => Promise<{
           ok: boolean;
           reason?: string;
           error?: string;
         }>;
       };
     };
-    const send = mock(
-      async (subscription: { platformData: { endpoint: string } }) => {
-        if (subscription.platformData.endpoint.includes('fail')) {
-          throw new Error('web provider failed');
-        }
-        return { ok: true };
-      },
-    );
+    const send = mock(async (subscription: { platformData: { endpoint: string } }) => {
+      if (subscription.platformData.endpoint.includes('fail')) {
+        throw new Error('web provider failed');
+      }
+      return { ok: true };
+    });
     providers.web = {
       platform: 'web',
       send,

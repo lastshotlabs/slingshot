@@ -135,19 +135,20 @@ export const ssrPluginConfigSchema = z.object({
    */
   trustedOrigins: z
     .array(
-      z
-        .string()
-        .refine(
-          val => {
-            try {
-              const u = new URL(val);
-              return (u.protocol === 'http:' || u.protocol === 'https:') && u.pathname === '/';
-            } catch {
-              return false;
-            }
-          },
-          { message: "Each trustedOrigin must be a full HTTP/HTTPS origin, e.g. 'https://app.example.com'" },
-        ),
+      z.string().refine(
+        val => {
+          try {
+            const u = new URL(val);
+            return (u.protocol === 'http:' || u.protocol === 'https:') && u.pathname === '/';
+          } catch {
+            return false;
+          }
+        },
+        {
+          message:
+            "Each trustedOrigin must be a full HTTP/HTTPS origin, e.g. 'https://app.example.com'",
+        },
+      ),
     )
     .optional()
     .describe(

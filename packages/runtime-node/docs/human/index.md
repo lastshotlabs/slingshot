@@ -17,8 +17,8 @@ Pass the return value of `nodeRuntime()` to `createServer()` as the `runtime` op
 ## Minimum Setup
 
 ```ts
-import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 import { createServer } from '@lastshotlabs/slingshot-core';
+import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
 
 const server = await createServer({ runtime: nodeRuntime(), ...config });
 ```
@@ -28,13 +28,13 @@ const server = await createServer({ runtime: nodeRuntime(), ...config });
 All peer deps are loaded lazily via dynamic `import()` at first use, not at module import time.
 Missing deps surface at the first call to the affected capability.
 
-| Capability | Peer dep           |
-| ---------- | ------------------ |
-| password   | `argon2`           |
-| sqlite     | `better-sqlite3`   |
+| Capability | Peer dep            |
+| ---------- | ------------------- |
+| password   | `argon2`            |
+| sqlite     | `better-sqlite3`    |
 | server     | `@hono/node-server` |
-| websocket  | `ws`               |
-| glob       | `fast-glob`        |
+| websocket  | `ws`                |
+| glob       | `fast-glob`         |
 
 ## Operational Notes
 

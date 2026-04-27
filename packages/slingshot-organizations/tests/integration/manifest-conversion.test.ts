@@ -739,8 +739,8 @@ describe('organizations manifest conversion', () => {
   });
 
   test('rejects mountPath values without a leading slash', () => {
-    expect(() =>
-      createOrganizationsPlugin({ mountPath: 'orgs' }),
-    ).toThrow(/mountPath must start with '\//i);
+    expect(() => createOrganizationsPlugin({ mountPath: 'orgs' })).toThrow(
+      /mountPath must start with '\//i,
+    );
   });
 });

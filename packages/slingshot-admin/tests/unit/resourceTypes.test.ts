@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { PermissionRegistry } from '@lastshotlabs/slingshot-core';
-import { adminPluginConfigSchema } from '../../src/types/config';
 import { registerAdminResourceTypes } from '../../src/lib/resourceTypes';
+import { adminPluginConfigSchema } from '../../src/types/config';
 
 // ---------------------------------------------------------------------------
 // Minimal in-memory registry for testing

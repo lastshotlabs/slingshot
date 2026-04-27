@@ -5,9 +5,9 @@ import { getCacheAdapter, getCacheAdapterOrNull } from '../src/cache';
 import { resolveContext } from '../src/context/contextAccess';
 import { attachContext, getContext, getContextOrNull } from '../src/context/contextStore';
 import { createCoreRegistrar } from '../src/coreRegistrar';
-import { ANONYMOUS_ACTOR } from '../src/identity';
 import { getEmailTemplate, getEmailTemplates } from '../src/emailTemplates';
 import { getEmbedsPeer, getEmbedsPeerOrNull } from '../src/embedsPeer';
+import { ANONYMOUS_ACTOR } from '../src/identity';
 import { getNotificationsState, getNotificationsStateOrNull } from '../src/notificationsPeer';
 import { getPermissionsState, getPermissionsStateOrNull } from '../src/permissions';
 import {

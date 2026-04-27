@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import * as realDbNative from '../src/providers/dbNative';
 import { createSearchTransformRegistry } from '../src/transformRegistry';
 import type { SearchProvider } from '../src/types/provider';
-import * as realDbNative from '../src/providers/dbNative';
 
 const providerState = {
   factoryCalls: 0,

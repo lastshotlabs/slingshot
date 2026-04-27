@@ -71,9 +71,7 @@ describe('evaluateRouteAuth — parentAuth tenant checks', () => {
   });
 
   test('system actor (tenantId=null, kind=system) is treated as global principal and bypasses check', async () => {
-    const result = await runParentAuthCheck(
-      actor({ id: 'sys', kind: 'system', tenantId: null }),
-    );
+    const result = await runParentAuthCheck(actor({ id: 'sys', kind: 'system', tenantId: null }));
     expect(result.authorized).toBe(true);
   });
 });

@@ -292,7 +292,10 @@ class MockPool implements PoolLike {
     // --- DELETE FROM permission_grants WHERE ... ---
     if (s.startsWith('DELETE FROM permission_grants WHERE')) {
       const allRows = Array.from(this.grants.values());
-      const fakeSql = s.replace(/^DELETE FROM permission_grants/, 'SELECT * FROM permission_grants');
+      const fakeSql = s.replace(
+        /^DELETE FROM permission_grants/,
+        'SELECT * FROM permission_grants',
+      );
       const toDelete = applyFilter(allRows, fakeSql, params ?? []);
       for (const row of toDelete) this.grants.delete(row.id as string);
       return { rows: [], rowCount: toDelete.length };
@@ -1109,8 +1112,8 @@ describe('Postgres permissions adapter — revokeGrant revokedReason', () => {
 
   test('throws when revokedReason exceeds 1024 characters', async () => {
     const id = await adapter.createGrant(baseGrant());
-    await expect(
-      adapter.revokeGrant(id, 'admin-1', undefined, 'x'.repeat(1025)),
-    ).rejects.toThrow('revokedReason exceeds maximum length of 1024');
+    await expect(adapter.revokeGrant(id, 'admin-1', undefined, 'x'.repeat(1025))).rejects.toThrow(
+      'revokedReason exceeds maximum length of 1024',
+    );
   });
 });

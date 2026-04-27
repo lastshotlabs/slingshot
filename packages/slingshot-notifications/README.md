@@ -7,8 +7,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-notifications
 notification records, user notification preferences, dispatcher scheduling, rate limiting,
 preference resolution, and the builder/runtime surface that other packages use to enqueue or
 deliver notifications.
-Notification entities follow the shared package-first/entity model; `createNotificationsPlugin()` is
-the runtime shell that wires storage, dispatch, and delivery.
+The notification entities themselves follow the shared package-first/entity authoring model;
+`createNotificationsPlugin()` is the runtime shell that wires storage, dispatch, and delivery.
 
 ## When To Use It
 
@@ -91,6 +91,7 @@ The highest-value changes are usually:
 
 ## Gotchas
 
+- `mountPath` must start with `/`; trailing slashes are trimmed before routes are mounted.
 - Disabling the dispatcher does not remove notification persistence. It only stops the automatic
   polling loop that drains queued notifications.
 - Delivery adapters are opt-in. Persisted notifications exist without them, but external delivery

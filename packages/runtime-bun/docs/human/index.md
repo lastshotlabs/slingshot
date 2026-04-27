@@ -17,8 +17,8 @@ Pass the return value of `bunRuntime()` to `createServer()` as the `runtime` opt
 ## Minimum Setup
 
 ```ts
-import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
 import { createServer } from '@lastshotlabs/slingshot-core';
+import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
 
 const server = await createServer({ runtime: bunRuntime(), ...config });
 ```

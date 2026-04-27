@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { Hono } from 'hono';
+import { z } from 'zod';
 import {
   attachContext,
   createEventDefinitionRegistry,
@@ -12,9 +13,8 @@ import {
   createOrchestrationRuntime,
   defineTask,
 } from '@lastshotlabs/slingshot-orchestration';
-import { z } from 'zod';
-import { createOrchestrationPlugin } from '../src/plugin';
 import { ORCHESTRATION_PLUGIN_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
+import { createOrchestrationPlugin } from '../src/plugin';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -263,7 +263,6 @@ describe('createOrchestrationPlugin — setupPost / teardown with runtime', () =
 });
 
 describe('getOrchestration / getOrchestrationOrNull', () => {
-
   test('getOrchestrationOrNull returns null when plugin not registered', () => {
     const ctx = { pluginState: new Map() } as never;
     expect(getOrchestrationOrNull(ctx)).toBeNull();

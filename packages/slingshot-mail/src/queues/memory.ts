@@ -26,7 +26,7 @@ import type { MailJob, MailQueue, MailQueueConfig } from '../types/queue';
  * ```
  */
 export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
-  console.warn('[slingshot-mail] Memory queue is not durable â€” for development/testing only');
+  console.warn('[slingshot-mail] Memory queue is not durable — for development/testing only');
   const maxAttempts = config?.maxAttempts ?? 3;
   const onDeadLetter = config?.onDeadLetter ?? null;
   const pending: Map<string, MailJob> = new Map();
@@ -83,19 +83,22 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
           attempts: 0,
           createdAt: new Date(),
         };
+        pending.set(id, job);
         if (pending.size > DEFAULT_MAX_ENTRIES) {
-          const excess = pending.size - DEFAULT_MAX_ENTRIES;
-          let i = 0;
-          for (const evicted of pending.values()) {
-            if (i++ >= excess) break;
+          const overflow = pending.size - DEFAULT_MAX_ENTRIES;
+          for (let i = 0; i < overflow; i++) {
+            const oldest = pending.entries().next().value as [string, MailJob] | undefined;
+            if (!oldest) break;
+            const [oldestId, oldestJob] = oldest;
+            pending.delete(oldestId);
             onDeadLetter?.(
-              evicted,
-              new Error('[slingshot-mail] Memory queue at capacity â€” job evicted'),
+              oldestJob,
+              new Error('[slingshot-mail] Memory queue at capacity — job evicted'),
             );
           }
+        } else {
+          evictOldest(pending, DEFAULT_MAX_ENTRIES);
         }
-        evictOldest(pending, DEFAULT_MAX_ENTRIES);
-        pending.set(id, job);
         if (running && provider) {
           trackJob(job);
         }

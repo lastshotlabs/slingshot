@@ -211,7 +211,9 @@ describe('createMailPlugin lifecycle', () => {
     expect(start).toHaveBeenCalledTimes(1);
     expect(stop).toHaveBeenCalledTimes(1);
 
-    await expect(plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus })).resolves.toBeUndefined();
+    await expect(
+      plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus }),
+    ).resolves.toBeUndefined();
     expect(start).toHaveBeenCalledTimes(2);
 
     await plugin.teardown!();

@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, mock, test } from 'bun:test';
 
 const createdWorkers: Array<{
@@ -76,10 +76,7 @@ describe('Temporal worker bootstrap', () => {
   test('shuts down already-created workers when a later worker creation fails', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'slingshot-temporal-'));
     const definitionsModulePath = join(tempDir, 'definitions.ts');
-    writeFileSync(
-      definitionsModulePath,
-      'export const tasks = []; export const workflows = [];\n',
-    );
+    writeFileSync(definitionsModulePath, 'export const tasks = []; export const workflows = [];\n');
 
     const connection = {
       close: mock(async () => {}),

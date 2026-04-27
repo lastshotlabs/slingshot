@@ -11,9 +11,7 @@ function normalizePackageName(packageName: string): string {
     .toUpperCase();
 }
 
-function getEmitWarning():
-  | ((warning: string, type?: string, code?: string) => void)
-  | null {
+function getEmitWarning(): ((warning: string, type?: string, code?: string) => void) | null {
   if (typeof process === 'undefined' || typeof process.emitWarning !== 'function') {
     return null;
   }
@@ -50,10 +48,7 @@ export function emitPackageStabilityWarning(
   );
 }
 
-export function markPackageExperimental(
-  packageName: string,
-  detail?: string,
-): void {
+export function markPackageExperimental(packageName: string, detail?: string): void {
   emitPackageStabilityWarning(packageName, 'experimental', detail);
 }
 

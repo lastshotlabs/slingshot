@@ -5,6 +5,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-oidc
 
 > Human-owned documentation. This is the authoritative lane for package boundaries, constraints, and operational guidance.
 
+> Status: Experimental. Publish prereleases on the `next` channel until this package graduates.
+
 ## Purpose
 
 @lastshotlabs/slingshot-oidc is the feature package in the Slingshot workspace.

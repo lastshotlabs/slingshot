@@ -142,7 +142,10 @@ export function createPermissionsPlugin(config?: PermissionsPluginConfig): Sling
       const permsState = pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
       if (!permsState?.adapter) return;
       bus.on('auth:user.deleted', async ({ userId }) => {
-        await permsState.adapter.deleteAllGrantsForSubject({ subjectId: userId, subjectType: 'user' });
+        await permsState.adapter.deleteAllGrantsForSubject({
+          subjectId: userId,
+          subjectType: 'user',
+        });
       });
     },
 
@@ -170,9 +173,7 @@ export function createPermissionsPlugin(config?: PermissionsPluginConfig): Sling
           g => g.roles.includes(SUPER_ADMIN_ROLE) && g.effect === 'allow' && !g.revokedAt,
         );
         if (alreadyAdmin) {
-          console.log(
-            `[slingshot-permissions seed] '${email}' already has super-admin — skipped.`,
-          );
+          console.log(`[slingshot-permissions seed] '${email}' already has super-admin — skipped.`);
           continue;
         }
         await permsState.adapter.createGrant({

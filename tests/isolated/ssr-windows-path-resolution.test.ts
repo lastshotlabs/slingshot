@@ -11,14 +11,13 @@ import path from 'node:path';
 import { describe, expect, mock, test } from 'bun:test';
 import { Hono } from 'hono';
 
-const resolveAction = mock(async () => async () => ({ ok: true }));
+const resolveAction = mock(async (_actionPath: string) => async () => ({ ok: true }));
 mock.module('../../packages/slingshot-ssr/src/actions/registry', () => ({
   resolveAction,
   clearActionCache: () => {},
 }));
 
-const { buildActionRouter } =
-  await import('../../packages/slingshot-ssr/src/actions/routes?windows-style-actions-dir');
+const { buildActionRouter } = await import('../../packages/slingshot-ssr/src/actions/routes');
 
 describe('buildActionRouter() — Windows-style serverActionsDir resolution', () => {
   test('uses win32 path semantics for Windows-style action directories', async () => {

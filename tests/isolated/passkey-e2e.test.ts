@@ -15,8 +15,6 @@ import { mock } from 'bun:test';
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test';
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import { getContext } from '@lastshotlabs/slingshot-core';
-import { ApiClient } from '../../../snapshot/src/api/client';
-import { defaultContract } from '../../../snapshot/src/auth/contract';
 import type { HookContext } from '../../packages/slingshot-auth/src/config/authConfig';
 import { createTestApp } from '../setup';
 
@@ -66,7 +64,7 @@ mock.module('@simplewebauthn/server', () => ({
 }));
 
 let server: Server<undefined>;
-let api: ApiClient;
+let api: TestApiClient;
 let app: Awaited<ReturnType<typeof createTestApp>>;
 let preLoginCalls: Array<{ identifier: string } & HookContext>;
 let loginSuccessEvents: Array<{ userId: string }>;
@@ -88,6 +86,48 @@ const storage = {
     tokenStore.refresh = null;
   },
 };
+
+type TokenStorage = typeof storage;
+
+class TestApiClient {
+  private storage: TokenStorage | null = null;
+
+  constructor(private readonly apiUrl: string) {}
+
+  setStorage(storageAdapter: TokenStorage): void {
+    this.storage = storageAdapter;
+  }
+
+  async post<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>('POST', path, body);
+  }
+
+  async get<T>(path: string): Promise<T> {
+    return this.request<T>('GET', path);
+  }
+
+  private async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
+    const headers = new Headers();
+    headers.set('accept', 'application/json');
+    if (body !== undefined) {
+      headers.set('content-type', 'application/json');
+    }
+    const token = this.storage?.get();
+    if (token) {
+      headers.set('authorization', `Bearer ${token}`);
+    }
+
+    const response = await fetch(`${this.apiUrl}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`Request ${method} ${path} failed with HTTP ${response.status}`);
+    }
+    return (await response.json()) as T;
+  }
+}
 
 afterAll(() => server?.stop(true));
 
@@ -133,7 +173,7 @@ async function bootPasskeyApp(authOverrides: Record<string, unknown> = {}) {
 
   server = Bun.serve({ port: 0, fetch: app.fetch });
   const apiUrl = `http://localhost:${server.port}`;
-  api = new ApiClient({ apiUrl, auth: 'token', contract: defaultContract(apiUrl) } as any);
+  api = new TestApiClient(apiUrl);
   api.setStorage(storage);
 }
 

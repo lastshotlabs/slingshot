@@ -366,7 +366,7 @@ export const initiateEmailOtp = async (
   userId: string,
   runtime: AuthRuntimeContext,
 ): Promise<string> => {
-  const { adapter, eventBus, config } = runtime;
+  const { adapter, config } = runtime;
   const emailOtpConfig = config.mfa?.emailOtp ?? null;
   if (!emailOtpConfig) throw new HttpError(501, 'Email OTP is not configured');
 

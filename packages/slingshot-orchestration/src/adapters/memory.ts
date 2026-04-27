@@ -10,20 +10,10 @@ import type {
   OrchestrationAdapter,
   OrchestrationEventSink,
   Run,
-  RunFilter,
   RunProgress,
-  RunStatus,
-  StepRun,
   WorkflowRun,
 } from '../types';
 import { memoryAdapterOptionsSchema } from '../validation';
-
-function toError(error: unknown) {
-  if (error instanceof Error) {
-    return { message: error.message, stack: error.stack };
-  }
-  return { message: String(error) };
-}
 
 function matchesTags(
   runTags: Record<string, string> | undefined,
@@ -71,7 +61,7 @@ export function createMemoryAdapter(
   const workflowRegistry = new Map<string, AnyResolvedWorkflow>();
   const runs = new Map<string, Run | WorkflowRun>();
   const resultPromises = new Map<string, Promise<unknown>>();
-  const progressListeners = new Map<string, Set<(data: RunProgress | undefined) => void>>();
+  const progressListeners = new Map<string, Map<string, (data: RunProgress | undefined) => void>>();
   const idempotencyKeys = new Map<string, string>();
   const workflowControllers = new Map<string, AbortController>();
   const workflowChildren = new Map<string, Set<string>>();
@@ -86,7 +76,7 @@ export function createMemoryAdapter(
   }
 
   function notifyProgress(runId: string, progress: RunProgress | undefined): void {
-    for (const listener of progressListeners.get(runId) ?? []) {
+    for (const listener of progressListeners.get(runId)?.values() ?? []) {
       listener(progress);
     }
   }
@@ -430,11 +420,13 @@ export function createMemoryAdapter(
       };
     },
     onProgress(runId, callback) {
-      const listeners = progressListeners.get(runId) ?? new Set();
-      listeners.add(callback);
+      const subscriptionId = crypto.randomUUID();
+      const listeners =
+        progressListeners.get(runId) ?? new Map<string, (data: RunProgress | undefined) => void>();
+      listeners.set(subscriptionId, callback);
       progressListeners.set(runId, listeners);
       return () => {
-        listeners.delete(callback);
+        listeners.delete(subscriptionId);
         if (listeners.size === 0) {
           progressListeners.delete(runId);
         }

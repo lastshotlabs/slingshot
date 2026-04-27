@@ -85,23 +85,27 @@ export function createNotificationBuilder(
           data: freezeNotificationData({ ...(existing.data ?? {}), count: nextCount }),
         });
         if (updated) {
-          options.events.publish(
-            'notifications:notification.updated',
-            {
-              id: existing.id,
-              userId: input.userId,
-              tenantId: input.tenantId ?? null,
-              changes: { count: nextCount },
-            },
-            {
-              userId: input.userId,
-              actorId: input.actorId ?? input.userId,
-              source: 'system',
-              // System-source emit (called from notify() helper, not an HTTP route).
-              // Notification's own tenantId is on the payload + scope, not here.
-              requestTenantId: null,
-            },
-          );
+          try {
+            options.events.publish(
+              'notifications:notification.updated',
+              {
+                id: existing.id,
+                userId: input.userId,
+                tenantId: input.tenantId ?? null,
+                changes: { count: nextCount },
+              },
+              {
+                userId: input.userId,
+                actorId: input.actorId ?? input.userId,
+                source: 'system',
+                // System-source emit (called from notify() helper, not an HTTP route).
+                // Notification's own tenantId is on the payload + scope, not here.
+                requestTenantId: null,
+              },
+            );
+          } catch (err: unknown) {
+            console.error('[notifications] event publish error:', err);
+          }
         }
         return updated;
       }
@@ -135,14 +139,18 @@ export function createNotificationBuilder(
         notification,
         preferences,
       };
-      options.events.publish('notifications:notification.created', payload, {
-        userId: notification.userId,
-        actorId: notification.actorId ?? notification.userId,
-        source: 'system',
-        // System-source emit (called from notify() helper, not an HTTP route).
-        // Notification's own tenantId is on the payload + scope, not here.
-        requestTenantId: null,
-      });
+      try {
+        options.events.publish('notifications:notification.created', payload, {
+          userId: notification.userId,
+          actorId: notification.actorId ?? notification.userId,
+          source: 'system',
+          // System-source emit (called from notify() helper, not an HTTP route).
+          // Notification's own tenantId is on the payload + scope, not here.
+          requestTenantId: null,
+        });
+      } catch (err: unknown) {
+        console.error('[notifications] event publish error:', err);
+      }
     }
 
     return notification;

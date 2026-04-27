@@ -168,7 +168,11 @@ export function defineWorkflow<TInput, TOutput>(
 export function stepResult<TResult = unknown>(
   results: Record<string, unknown>,
   name: string,
-  _task?: AnyResolvedTask,
+  task?: AnyResolvedTask,
+): TResult | undefined;
+export function stepResult<TResult = unknown>(
+  results: Record<string, unknown>,
+  name: string,
 ): TResult | undefined {
   return results[name] as TResult | undefined;
 }

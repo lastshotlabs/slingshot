@@ -12,7 +12,7 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
-import type { EntityPlugin, EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
+import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
 import { createNotificationBuilder } from './builder';
 import { createIntervalDispatcher } from './dispatcher';

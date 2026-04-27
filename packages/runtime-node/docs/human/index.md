@@ -52,7 +52,8 @@ Missing deps surface at the first call to the affected capability.
 - `password.hash()` defaults to argon2id. The hash output includes the algorithm identifier so
   it is forward-compatible if the algorithm default changes.
 - WebSocket upgrade uses a pending-upgrade map keyed by `sec-websocket-key`. Upgrades that are
-  not completed within 30 s have their socket destroyed automatically.
+  not completed within the timeout period have their socket destroyed automatically. The timeout
+  defaults to 30 s and is configurable via `upgradeTimeoutMs` in the server options.
 - `server.publish(channel, message)` broadcasts only to open (`readyState === 1`) sockets; closed
   sockets in a channel are silently skipped.
 - TLS is supported via `opts.tls.key` and `opts.tls.cert`. Pass PEM strings or `Buffer` values.

@@ -710,7 +710,9 @@ export interface AuthHooksConfig {
    * checks on top of the built-in suspension and required-email-verification
    * rules without teaching slingshot-core about custom user fields.
    */
-  checkUserAccess?: (data: UserAccessHookInput) => Promise<AuthUserAccessDecision | boolean | void>;
+  checkUserAccess?: (
+    data: UserAccessHookInput,
+  ) => Promise<AuthUserAccessDecision | boolean | undefined>;
 }
 
 // ---------------------------------------------------------------------------

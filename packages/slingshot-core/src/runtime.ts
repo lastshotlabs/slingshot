@@ -174,6 +174,17 @@ export interface RuntimeServerOptions {
    * is attempted without a handler configured, the runtime will throw at upgrade time.
    */
   websocket?: RuntimeWebSocketHandler;
+  /**
+   * Maximum time in milliseconds to wait for the fetch handler to call `upgrade()`
+   * after a WebSocket upgrade request arrives.
+   *
+   * If the fetch handler does not call `upgrade()` within this window the pending
+   * connection is destroyed and a warning is logged. Defaults to `30_000` (30 s).
+   *
+   * Only honoured by the Node.js runtime (`@lastshotlabs/slingshot-runtime-node`).
+   * Bun's built-in WebSocket handling manages this timeout internally.
+   */
+  upgradeTimeoutMs?: number;
 }
 
 /**

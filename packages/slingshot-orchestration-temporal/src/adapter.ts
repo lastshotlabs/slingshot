@@ -4,7 +4,6 @@ import {
   type Connection,
   ScheduleNotFoundError,
   WorkflowFailedError,
-  isGrpcServiceError,
 } from '@temporalio/client';
 import type {
   AnyResolvedTask,
@@ -18,7 +17,6 @@ import type {
   WorkflowRun,
 } from '@lastshotlabs/slingshot-orchestration';
 import { OrchestrationError, createCachedRunHandle } from '@lastshotlabs/slingshot-orchestration';
-import { createOrchestrationProviderRegistry } from '@lastshotlabs/slingshot-orchestration/provider';
 import { toRunError, wrapTemporalError } from './errors';
 import { deriveTemporalRunId } from './ids';
 import {
@@ -66,13 +64,37 @@ interface TemporalFailureDetails {
   progress?: Run['progress'];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function hasErrorName(value: unknown, name: string): boolean {
+  return isRecord(value) && value.name === name;
+}
+
 function extractFailureDetails(error: unknown): TemporalFailureDetails | undefined {
-  if (!(error instanceof WorkflowFailedError)) return undefined;
-  const cause = error.cause;
-  if (!(cause instanceof ApplicationFailure)) return undefined;
-  const [details] = cause.details ?? [];
-  if (typeof details !== 'object' || details === null) return undefined;
-  return details as TemporalFailureDetails;
+  if (!(error instanceof WorkflowFailedError) && !hasErrorName(error, 'WorkflowFailedError')) {
+    return undefined;
+  }
+
+  const cause = isRecord(error) ? error.cause : undefined;
+  if (!(cause instanceof ApplicationFailure) && !hasErrorName(cause, 'ApplicationFailure')) {
+    return undefined;
+  }
+
+  const details = isRecord(cause) && Array.isArray(cause.details) ? cause.details[0] : undefined;
+  if (!isRecord(details) || !isRecord(details.error)) return undefined;
+  if (typeof details.error.message !== 'string') return undefined;
+
+  return {
+    error: {
+      message: details.error.message,
+      stack: typeof details.error.stack === 'string' ? details.error.stack : undefined,
+    },
+    failedStep: typeof details.failedStep === 'string' ? details.failedStep : undefined,
+    steps: details.steps as TemporalFailureDetails['steps'],
+    progress: details.progress as TemporalFailureDetails['progress'],
+  };
 }
 
 function getMemo(description: { memo?: Record<string, unknown> }): TemporalMemo {
@@ -120,13 +142,9 @@ export function createTemporalOrchestrationAdapter(
   const tasks = new Map<string, AnyResolvedTask>();
   const workflows = new Map<string, AnyResolvedWorkflow>();
   let started = false;
-  let registry = createOrchestrationProviderRegistry({ tasks: [], workflows: [] });
 
   function rebuildRegistry(): void {
-    registry = createOrchestrationProviderRegistry({
-      tasks: [...tasks.values()],
-      workflows: [...workflows.values()],
-    });
+    // Reserved for future provider-manifest materialization.
   }
 
   function ensureMutable(): void {

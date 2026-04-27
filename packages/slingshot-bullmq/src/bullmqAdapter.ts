@@ -58,6 +58,12 @@ export const bullmqAdapterOptionsSchema = z.object({
   attempts: z.number().int().min(1).optional(),
   /** Event payload validation mode. Default: "off". */
   validation: z.enum(['strict', 'warn', 'off']).optional(),
+  /**
+   * Maximum milliseconds to wait for `queue.add()` before rejecting with a
+   * timeout error. Guards against indefinite hangs when Redis is unresponsive.
+   * Default: 10_000 (10 seconds).
+   */
+  enqueueTimeoutMs: z.number().int().positive().optional(),
 });
 
 /**
@@ -86,6 +92,67 @@ export type BullMQAdapterOptions = z.infer<typeof bullmqAdapterOptionsSchema>;
  */
 function sanitizeQueueName(raw: string): string {
   return raw.replace(/:/g, '_');
+}
+
+/**
+ * Error codes that indicate a transient infrastructure condition.
+ *
+ * These errors are safe to retry — the underlying resource (Redis) is
+ * temporarily unavailable but should recover.
+ */
+const RETRYABLE_CODES = new Set(['ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND']);
+
+/**
+ * Error codes that indicate a permanent, non-retryable failure.
+ *
+ * Retrying these will not succeed — the request itself is malformed or the
+ * target resource does not exist.
+ */
+const NON_RETRYABLE_CODES = new Set(['EINVAL', 'ENOENT', 'EACCES', 'EBADF']);
+
+/**
+ * Classify whether an error is worth retrying.
+ *
+ * Returns `true` for transient network/connection errors (`ECONNREFUSED`,
+ * `EPIPE`, `ETIMEDOUT`, `ECONNRESET`, `ENOTFOUND`). Returns `false` for
+ * permanent errors (`EINVAL`, `ENOENT`, etc.) and for anything else —
+ * unknown errors default to non-retryable to prevent retry storms.
+ *
+ * @param err - The error to classify.
+ * @returns `true` if the error is likely transient and worth retrying.
+ */
+function isRetryableError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const code = (err as { code?: string }).code;
+  if (!code) return false;
+  if (NON_RETRYABLE_CODES.has(code)) return false;
+  return RETRYABLE_CODES.has(code);
+}
+
+/**
+ * Wrap `queue.add()` with a per-call timeout so that a hung Redis connection
+ * does not block the event loop indefinitely.
+ *
+ * @param queue - The BullMQ `Queue` to enqueue on.
+ * @param name - The job name.
+ * @param data - The job data object.
+ * @param timeoutMs - Maximum milliseconds to wait before rejecting.
+ */
+async function addWithTimeout(
+  queue: Queue,
+  name: string,
+  data: object,
+  timeoutMs: number,
+): Promise<void> {
+  await Promise.race([
+    queue.add(name, data),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`[BullMQAdapter] queue.add() timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      ),
+    ),
+  ]);
 }
 
 /**
@@ -200,6 +267,7 @@ export function createBullMQAdapter(
   const opts = validatePluginConfig('slingshot-bullmq', adapterOpts, bullmqAdapterOptionsSchema);
   const prefix = opts.prefix ?? 'slingshot:events';
   const attempts = opts.attempts ?? 3;
+  const enqueueTimeoutMs = opts.enqueueTimeoutMs ?? 10_000;
   const eventSerializer = serializer ?? JSON_SERIALIZER;
   const validationMode = opts.validation ?? 'off';
   const envelopeListeners = new Map<
@@ -296,8 +364,15 @@ export function createBullMQAdapter(
     const retry: PendingEnqueue[] = [];
     for (const item of pendingBuffer) {
       try {
-        await item.queue.add(item.event, item.payload);
+        await addWithTimeout(item.queue, item.event, item.payload, enqueueTimeoutMs);
       } catch (err: unknown) {
+        if (!isRetryableError(err)) {
+          console.error(
+            `[BullMQAdapter] dropping durable event "${item.event}" to queue "${item.name}" — non-retryable error:`,
+            err,
+          );
+          continue;
+        }
         const next = { ...item, attempts: item.attempts + 1 };
         if (next.attempts >= MAX_ENQUEUE_ATTEMPTS) {
           console.error(
@@ -452,23 +527,25 @@ export function createBullMQAdapter(
                   ).toString('base64'),
                   __slingshot_content_type: eventSerializer.contentType,
                 } satisfies SerializedBullMQEnvelope);
-          queue.add(event, durablePayload).catch((err: unknown) => {
-            if (pendingBuffer.length >= MAX_PENDING_BUFFER) {
-              console.error(
-                `[BullMQAdapter] pending buffer full; dropping durable event "${event}" to queue "${name}":`,
-                err,
-              );
-              return;
-            }
-            pendingBuffer.push({
-              name,
-              queue,
-              event,
-              payload: durablePayload,
-              attempts: 1,
-            });
-            scheduleDrain();
-          });
+          addWithTimeout(queue, event as string, durablePayload, enqueueTimeoutMs).catch(
+            (err: unknown) => {
+              if (pendingBuffer.length >= MAX_PENDING_BUFFER) {
+                console.error(
+                  `[BullMQAdapter] pending buffer full; dropping durable event "${event}" to queue "${name}":`,
+                  err,
+                );
+                return;
+              }
+              pendingBuffer.push({
+                name,
+                queue,
+                event,
+                payload: durablePayload,
+                attempts: 1,
+              });
+              scheduleDrain();
+            },
+          );
         }
       }
     },

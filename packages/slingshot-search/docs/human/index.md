@@ -58,6 +58,11 @@ sees the string values.
 - `mountPath` must start with `/`; trailing slashes are trimmed before route mounting.
 - The package can target external providers or the DB-native provider. Docs should be careful not
   to imply one deployment shape when the plugin is designed to support several.
+- When `syncMode: "event-bus"` is used, failed flush operations (both index and delete) restore
+  the affected documents to the pending queue so the next flush retries them. This means a
+  transient provider outage does not cause silent data loss — documents accumulate in the pending
+  queue and are retried on the next flush cycle. Documents indexed or deleted after the failure
+  take precedence over the retry (non-overwriting restore).
 
 ## Key Files
 

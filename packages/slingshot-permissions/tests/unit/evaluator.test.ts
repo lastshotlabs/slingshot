@@ -628,4 +628,105 @@ describe('PermissionEvaluator', () => {
     expect(warnMessage).toMatch(/truncated/);
     expect(warnMessage).toMatch(/4.*3|maxGroups/);
   });
+
+  test('queryTimeoutMs rejects can() when adapter hangs past the deadline', async () => {
+    const hangingAdapter: PermissionsAdapter = {
+      async createGrant() {
+        return '';
+      },
+      async revokeGrant() {
+        return false;
+      },
+      async getGrantsForSubject() {
+        return [];
+      },
+      async getEffectiveGrantsForSubject() {
+        return new Promise(() => {}) as Promise<PermissionGrant[]>; // hangs forever
+      },
+      async listGrantHistory() {
+        return [];
+      },
+      async listGrantsOnResource() {
+        return [];
+      },
+      async deleteAllGrantsForSubject() {},
+    };
+
+    const timedEvaluator = createPermissionEvaluator({
+      registry,
+      adapter: hangingAdapter,
+      queryTimeoutMs: 50,
+    });
+
+    await expect(
+      timedEvaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      }),
+    ).rejects.toThrow('Permission query timed out');
+  });
+
+  test('can() continues with other group grants when one group grant fetch fails', async () => {
+    // group-good has the required grant; group-bad fails its fetch
+    const groupAdapter = createMemoryPermissionsAdapter();
+    await groupAdapter.createGrant({
+      subjectId: 'group-good',
+      subjectType: 'group',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+
+    const failingAdapter: PermissionsAdapter = {
+      async createGrant() {
+        return '';
+      },
+      async revokeGrant() {
+        return false;
+      },
+      async getGrantsForSubject() {
+        return [];
+      },
+      async getEffectiveGrantsForSubject(subjectId) {
+        if (subjectId === 'group-bad') throw new Error('db connection lost');
+        return groupAdapter.getEffectiveGrantsForSubject(subjectId, 'group');
+      },
+      async listGrantHistory() {
+        return [];
+      },
+      async listGrantsOnResource() {
+        return [];
+      },
+      async deleteAllGrantsForSubject() {},
+    };
+
+    const groupResolver = {
+      async getGroupsForUser(userId: string) {
+        if (userId === 'user-1') return ['group-bad', 'group-good'];
+        return [];
+      },
+    };
+
+    const warnMessages: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnMessages.push(String(args[0]));
+    };
+    let result: boolean;
+    try {
+      result = await createPermissionEvaluator({
+        registry,
+        adapter: failingAdapter,
+        groupResolver,
+      }).can({ subjectId: 'user-1', subjectType: 'user' }, 'read', { resourceType: 'post' });
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    // group-good's grant should still be applied even though group-bad failed
+    expect(result!).toBe(true);
+    expect(warnMessages.some(m => m.includes('group-bad'))).toBe(true);
+  });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
 import { createNotificationBuilder } from '../src/builder';
 import { createNoopRateLimitBackend } from '../src/rateLimit';
@@ -144,5 +144,52 @@ describe('createNotificationBuilder', () => {
     });
 
     expect(notification).toBeNull();
+  });
+
+  test('event publish failure does not propagate — notification is still returned', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+
+    // Make events.publish throw for the created event
+    const events = createNotificationsTestEvents(bus);
+    const originalPublish = events.publish.bind(events);
+    events.publish = (key: unknown, ...args: unknown[]) => {
+      if (String(key) === 'notifications:notification.created') {
+        throw new Error('event bus unavailable');
+      }
+      return (originalPublish as (...a: unknown[]) => unknown)(key, ...args);
+    };
+
+    const errorSpy = mock(() => {});
+    const originalConsoleError = console.error;
+    console.error = errorSpy;
+
+    let notification: unknown;
+    try {
+      const builder = createNotificationBuilder({
+        source: 'community',
+        notifications: adapters.notifications,
+        preferences: adapters.preferences,
+        bus,
+        events,
+        rateLimitBackend: createNoopRateLimitBackend(),
+        defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+        rateLimit: { limit: 100, windowMs: 60_000 },
+      });
+
+      notification = await builder.notify({
+        userId: 'user-1',
+        type: 'community:mention',
+        targetType: 'community:post',
+        targetId: 'post-1',
+      });
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    // Notification was created despite the event publish failure
+    expect(notification).not.toBeNull();
+    expect(errorSpy).toHaveBeenCalled();
+    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('[notifications]');
   });
 });

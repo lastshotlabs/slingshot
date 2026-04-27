@@ -45,6 +45,8 @@ Pass it to `createServer()` or `createApp()` as the `bus` option.
 
 - The adapter does not manage Redis connection lifecycle. You are responsible for Redis
   availability. If Redis is unavailable at subscribe time, events will buffer in memory.
+- `queue.add()` is bounded by `enqueueTimeoutMs` (default 10 000 ms). If Redis does not
+  accept the job within that window the call rejects, preventing hung queue workers.
 - Workers are not stopped until the process exits or `offEnvelope` is called. Unsubscribing
   all handlers for an event key closes the worker for that queue.
 - `prefix` defaults to `"slingshot:events"`. If you run multiple Slingshot apps against the

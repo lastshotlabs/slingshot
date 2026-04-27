@@ -65,7 +65,11 @@ export function createIntervalDispatcher(
       if (!timer) return;
       clearInterval(timer);
       timer = null;
-      await inflightTick;
+      try {
+        await inflightTick;
+      } catch (err) {
+        console.error('[slingshot-notifications] Dispatcher stop(): inflight tick rejected', err);
+      }
     },
     async tick() {
       const dispatchedAt = new Date();

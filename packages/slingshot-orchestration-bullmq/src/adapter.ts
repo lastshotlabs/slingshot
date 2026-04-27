@@ -259,7 +259,18 @@ export function createBullMQOrchestrationAdapter(
   const namedQueues = new Map<string, Queue>();
   const namedWorkers = new Map<string, Worker>();
   const namedQueueEvents = new Map<string, QueueEvents>();
+  // Capped FIFO cache: maps runId → BullMQ jobId to avoid full-queue scans.
+  // Unbounded growth would cause OOM in long-running processes; 10k entries covers
+  // the typical lookback window and is evicted FIFO (Map iteration order = insertion order).
+  const RUN_ID_CACHE_LIMIT = 10_000;
   const runIdToJobId = new Map<string, string>();
+  function cacheRunId(runId: string, jobId: string): void {
+    if (runIdToJobId.size >= RUN_ID_CACHE_LIMIT) {
+      const oldest = runIdToJobId.keys().next().value;
+      if (oldest !== undefined) runIdToJobId.delete(oldest);
+    }
+    runIdToJobId.set(runId, jobId);
+  }
   const cancelledRunSignals = new Map<string, string>();
   const cancelledRunsIndexKey = `${prefix}:cancelled:runs`;
   let taskQueueEvents: QueueEvents | null = null;
@@ -648,7 +659,10 @@ export function createBullMQOrchestrationAdapter(
     const direct = await Job.fromId(queue, runId);
     if (direct) return direct;
 
-    const jobs = await queue.getJobs(lookupStates);
+    // Full-scan fallback: cap at 500 most-recent jobs to avoid OOM on large queues.
+    // The runIdToJobId cache handles the common case; this path is only hit for
+    // jobs started before the cache was populated (e.g. after a process restart).
+    const jobs = await queue.getJobs(lookupStates, 0, 499);
     return (
       jobs.find(job => {
         const jobRunId =
@@ -679,7 +693,7 @@ export function createBullMQOrchestrationAdapter(
           typeof existingJob.data['runId'] === 'string'
             ? (existingJob.data['runId'] as string)
             : String(existingJob.id);
-        runIdToJobId.set(existingRunId, String(existingJob.id));
+        cacheRunId(existingRunId, String(existingJob.id));
         return createResultHandle(existingRunId, () =>
           waitForRunResult(existingRunId, existingJob, getQueueEventsForTaskName(name)),
         );
@@ -705,7 +719,7 @@ export function createBullMQOrchestrationAdapter(
           ...(opts?.adapterHints ?? {}),
         },
       );
-      runIdToJobId.set(runId, String(job.id));
+      cacheRunId(runId, String(job.id));
       return createResultHandle(runId, () =>
         waitForRunResult(runId, job, getQueueEventsForTaskName(name)),
       );
@@ -725,7 +739,7 @@ export function createBullMQOrchestrationAdapter(
           typeof existingJob.data['runId'] === 'string'
             ? (existingJob.data['runId'] as string)
             : String(existingJob.id);
-        runIdToJobId.set(existingRunId, String(existingJob.id));
+        cacheRunId(existingRunId, String(existingJob.id));
         return createResultHandle(existingRunId, () => {
           if (!workflowQueueEvents) {
             throw new OrchestrationError('ADAPTER_ERROR', 'Workflow queue events are not started.');
@@ -752,7 +766,7 @@ export function createBullMQOrchestrationAdapter(
           ...(opts?.adapterHints ?? {}),
         },
       );
-      runIdToJobId.set(runId, String(job.id));
+      cacheRunId(runId, String(job.id));
       return createResultHandle(runId, () => {
         if (!workflowQueueEvents) {
           throw new OrchestrationError('ADAPTER_ERROR', 'Workflow queue events are not started.');
@@ -796,6 +810,7 @@ export function createBullMQOrchestrationAdapter(
     async shutdown() {
       closed = true;
       cancelledRunSignals.clear();
+      runIdToJobId.clear();
       for (const worker of namedWorkers.values()) {
         await worker.close();
       }
@@ -924,7 +939,7 @@ export function createBullMQOrchestrationAdapter(
     async unschedule(scheduleId) {
       await ensureStarted();
       for (const queue of [defaultTaskQueue, workflowQueue, ...namedQueues.values()]) {
-        const jobSchedulers = await queue.getJobSchedulers();
+        const jobSchedulers = await queue.getJobSchedulers(0, 999);
         for (const scheduler of jobSchedulers) {
           if (scheduler.key === scheduleId) {
             await queue.removeJobScheduler(scheduler.key);
@@ -938,7 +953,7 @@ export function createBullMQOrchestrationAdapter(
       await ensureStarted();
       const schedules: ScheduleHandle[] = [];
       for (const queue of [defaultTaskQueue, workflowQueue, ...namedQueues.values()]) {
-        const jobSchedulers = await queue.getJobSchedulers();
+        const jobSchedulers = await queue.getJobSchedulers(0, 999);
         for (const scheduler of jobSchedulers) {
           schedules.push({
             id: scheduler.key,

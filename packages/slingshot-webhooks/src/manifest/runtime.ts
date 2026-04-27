@@ -20,6 +20,7 @@ import {
 } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import { matchGlob } from '../lib/globMatch';
+import { validateWebhookUrl } from '../lib/validateWebhookUrl';
 import type { WebhookAdapter } from '../types/adapter';
 import type {
   WebhookAttempt,
@@ -283,6 +284,13 @@ function assertEndpointUrl(input: Record<string, unknown>, partial: boolean): vo
         message: 'Webhook target URL must use http or https',
       });
     }
+    try {
+      validateWebhookUrl(url);
+    } catch (err) {
+      throw new HTTPException(400, {
+        message: err instanceof Error ? err.message : 'Invalid webhook URL',
+      });
+    }
   }
 }
 
@@ -484,10 +492,14 @@ function normalizeEndpointCreateInput(
   assertEndpointSecret(input, false);
   assertValidEnabled(input.enabled);
   const owner = inferCreateOwner(input);
+  const requestedSubscriptions = normalizeSubscriptionRequests(input.subscriptions, false);
+  if (!requestedSubscriptions) {
+    throw new HTTPException(400, { message: 'subscriptions must not be empty' });
+  }
   const subscriptions = normalizeWebhookSubscriptions(
     definitions,
     owner.ownerType,
-    normalizeSubscriptionRequests(input.subscriptions, false)!,
+    requestedSubscriptions,
   );
 
   return {

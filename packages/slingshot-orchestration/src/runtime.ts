@@ -1,5 +1,4 @@
 import { supportsCapability, throwUnsupported } from './adapter';
-import { OrchestrationError } from './errors';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,

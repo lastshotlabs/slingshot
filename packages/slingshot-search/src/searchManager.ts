@@ -606,7 +606,17 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
         async indexDocument(entity: Record<string, unknown>, opts?: TenantContext): Promise<void> {
           const targetIndex = resolveTargetIndex(opts);
           await ensureTenantIndex(targetIndex);
-          const doc = prepareDoc(entity);
+          let doc: Record<string, unknown>;
+          try {
+            doc = prepareDoc(entity);
+          } catch (err) {
+            const docId = entity[pkField];
+            console.error(
+              `[slingshot-search] Transform error for document id="${String(docId)}" in index '${targetIndex}' — skipping document:`,
+              err,
+            );
+            return;
+          }
           const id = String(entity[pkField]);
           await provider.indexDocument(targetIndex, doc, id);
         },
@@ -617,8 +627,21 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
         ): Promise<void> {
           const targetIndex = resolveTargetIndex(opts);
           await ensureTenantIndex(targetIndex);
-          const docs = entities.map(e => prepareDoc(e));
-          await provider.indexDocuments(targetIndex, docs, pkField);
+          const docs: Array<Record<string, unknown>> = [];
+          for (const e of entities) {
+            try {
+              docs.push(prepareDoc(e));
+            } catch (err) {
+              const docId = e[pkField];
+              console.error(
+                `[slingshot-search] Transform error for document id="${String(docId)}" in index '${targetIndex}' — skipping document:`,
+                err,
+              );
+            }
+          }
+          if (docs.length > 0) {
+            await provider.indexDocuments(targetIndex, docs, pkField);
+          }
         },
 
         async removeDocument(id: string | number, opts?: TenantContext): Promise<void> {
@@ -808,7 +831,17 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
       }
 
       for await (const raw of source) {
-        const doc = prepareDoc(raw);
+        let doc: Record<string, unknown>;
+        try {
+          doc = prepareDoc(raw);
+        } catch (err) {
+          const docId = raw[pkField];
+          console.error(
+            `[slingshot-search] Transform error for document id="${String(docId)}" in entity '${entityStorageName}' — skipping document:`,
+            err,
+          );
+          continue;
+        }
         batch.push(doc);
 
         if (batch.length >= batchSize) {

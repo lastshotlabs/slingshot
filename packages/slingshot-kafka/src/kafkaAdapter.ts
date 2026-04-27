@@ -447,9 +447,7 @@ export function createKafkaAdapter(
   ): void {
     const key = event as string;
     if (!envelopeListeners.has(key)) envelopeListeners.set(key, new Set());
-    envelopeListeners
-      .get(key)
-      ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
+    envelopeListeners.get(key)?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
   }
 
   function removeEnvelopeListener<K extends keyof SlingshotEventMap>(

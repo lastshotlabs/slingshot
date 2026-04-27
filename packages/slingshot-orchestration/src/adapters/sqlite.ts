@@ -11,7 +11,6 @@ import type {
   OrchestrationAdapter,
   OrchestrationEventSink,
   Run,
-  RunFilter,
   RunHandle,
   RunProgress,
   RunStatus,
@@ -191,7 +190,7 @@ export function createSqliteAdapter(options: {
   const taskRegistry = new Map<string, AnyResolvedTask>();
   const workflowRegistry = new Map<string, AnyResolvedWorkflow>();
   const resultPromises = new Map<string, Promise<unknown>>();
-  const progressListeners = new Map<string, Set<(data: RunProgress | undefined) => void>>();
+  const progressListeners = new Map<string, Map<string, (data: RunProgress | undefined) => void>>();
   const workflowControllers = new Map<string, AbortController>();
   const workflowChildren = new Map<string, Set<string>>();
   const delayedWorkflowStarts = new Map<string, AbortController>();
@@ -268,7 +267,7 @@ export function createSqliteAdapter(options: {
   ) as Database.Statement<[number, number, string, number, string, string, number], SqliteRunRow>;
 
   function notifyProgress(runId: string, progress: RunProgress | undefined): void {
-    for (const listener of progressListeners.get(runId) ?? []) {
+    for (const listener of progressListeners.get(runId)?.values() ?? []) {
       listener(progress);
     }
   }
@@ -890,11 +889,13 @@ export function createSqliteAdapter(options: {
       };
     },
     onProgress(runId, callback) {
-      const listeners = progressListeners.get(runId) ?? new Set();
-      listeners.add(callback);
+      const subscriptionId = crypto.randomUUID();
+      const listeners =
+        progressListeners.get(runId) ?? new Map<string, (data: RunProgress | undefined) => void>();
+      listeners.set(subscriptionId, callback);
       progressListeners.set(runId, listeners);
       return () => {
-        listeners.delete(callback);
+        listeners.delete(subscriptionId);
         if (listeners.size === 0) {
           progressListeners.delete(runId);
         }

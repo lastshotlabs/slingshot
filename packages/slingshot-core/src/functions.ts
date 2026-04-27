@@ -1,6 +1,5 @@
 import type { SlingshotContext } from './context/slingshotContext';
 import type { HandlerMeta, SlingshotHandler } from './handler';
-import type { Actor } from './identity';
 import type { SlingshotRuntime } from './runtime';
 
 /**
@@ -126,6 +125,16 @@ export interface FunctionsRuntimeConfig {
   runtime?: SlingshotRuntime;
   hooks?: FunctionsHooks;
   handlersPath?: string | { dir: string } | false;
+  /**
+   * Maximum time in milliseconds the runtime waits for `onShutdown` to complete
+   * when a SIGTERM signal is received.
+   *
+   * If `onShutdown` does not resolve within this window the shutdown proceeds
+   * regardless. Defaults to `1500` ms.
+   *
+   * Only honoured by the Lambda runtime (`@lastshotlabs/slingshot-runtime-lambda`).
+   */
+  shutdownTimeoutMs?: number;
 }
 
 export interface IdempotencyOpts {

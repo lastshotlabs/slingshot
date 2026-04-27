@@ -61,7 +61,7 @@ export interface AuthRuntimePeer {
    */
   readonly evaluateUserAccess?: (
     input: AuthUserAccessInput,
-  ) => Promise<AuthUserAccessDecision | boolean | void>;
+  ) => Promise<AuthUserAccessDecision | boolean | undefined>;
 }
 
 /**
@@ -111,7 +111,7 @@ function deny(
 }
 
 function normalizeDecision(
-  decision: AuthUserAccessDecision | boolean | void,
+  decision: AuthUserAccessDecision | boolean | undefined,
 ): AuthUserAccessDecision {
   if (decision === undefined || decision === true) {
     return { allow: true };

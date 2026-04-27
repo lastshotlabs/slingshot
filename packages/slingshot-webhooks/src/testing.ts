@@ -1,6 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import type { MiddlewareHandler } from 'hono';
-import { registerAuthEventDefinitions } from '@lastshotlabs/slingshot-auth';
 import type {
   AppEnv,
   CoreRegistrar,
@@ -19,6 +18,7 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  defineEvent,
   getActor,
   getActorId,
 } from '@lastshotlabs/slingshot-core';
@@ -39,6 +39,24 @@ const memoryInfra: StoreInfra = {
   getSqliteDb: () => unsupportedInfra('sqlite'),
   getPostgres: () => unsupportedInfra('postgres'),
 };
+
+function registerWebhooksTestAuthDefinitions(events: SlingshotEvents): void {
+  if (events.get('auth:login')) return;
+
+  events.register(
+    defineEvent('auth:login', {
+      ownerPlugin: 'slingshot-auth',
+      exposure: ['user-webhook'],
+      resolveScope(payload, ctx) {
+        return {
+          tenantId: payload.tenantId ?? ctx.requestTenantId ?? null,
+          userId: payload.userId,
+          actorId: ctx.actorId ?? payload.userId,
+        };
+      },
+    }),
+  );
+}
 
 interface WebhooksTestFrameworkOptions {
   storeInfra?: StoreInfra;
@@ -130,7 +148,7 @@ export async function createWebhooksTestApp(
     definitions: createEventDefinitionRegistry(),
     bus,
   });
-  registerAuthEventDefinitions(events);
+  registerWebhooksTestAuthDefinitions(events);
   frameworkOptions.registerDefinitions?.(events);
   const frameworkConfig = createTestFrameworkConfig(frameworkOptions);
   const pluginState = new Map<string, unknown>();

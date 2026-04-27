@@ -155,6 +155,16 @@ export const assetsPluginConfigSchema = z.object({
     .describe(
       'Fixed tenant ID applied to asset operations. Omit to resolve tenancy from the surrounding app context.',
     ),
+  storageRetryAttempts: z
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .optional()
+    .describe(
+      'Number of attempts for storage put/delete operations before giving up. Default: 3. ' +
+        'Each retry uses an increasing delay (attempt × 500 ms).',
+    ),
 });
 
 /**

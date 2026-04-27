@@ -82,7 +82,7 @@ export interface PostAuthGuardFailure {
  * a non-null `PostAuthGuardFailure` short-circuits the request with that
  * error. If all guards return `null`, the request continues to the handler.
  */
-export type PostAuthGuard = (c: Context<any, any>) => Promise<PostAuthGuardFailure | null>;
+export type PostAuthGuard = (c: Context) => Promise<PostAuthGuardFailure | null>;
 
 /**
  * Resolves the authenticated `Actor` from a raw HTTP request.

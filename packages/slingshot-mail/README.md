@@ -30,6 +30,9 @@ instead of embedding provider SDK calls throughout the codebase.
   needs attention.
 - `setupPost()` should only run once for a given plugin instance. The package defends against
   double activation because queue startup and event subscriptions are stateful.
+- The in-memory queue's `drain()` call has a default 30-second timeout. Configure it via
+  `drainTimeoutMs` in the queue options (`0` to disable). A timeout warning is logged if jobs
+  are still in flight when the deadline is reached — the timeout is soft; jobs are not cancelled.
 
 ## Gotchas
 

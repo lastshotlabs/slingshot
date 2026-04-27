@@ -134,7 +134,9 @@ function evaluateCondition(
  *
  * Handles all composite operators (`$and`, `$or`, `$not`), geo filters
  * (`$geoRadius`, `$geoBoundingBox`), and delegates leaf conditions to
- * `evaluateCondition`. Unknown node shapes return `true` (permissive fallback).
+ * `evaluateCondition`. Unknown node shapes return `false` (conservative fallback)
+ * and log a warning — over-inclusion is more dangerous than under-inclusion for
+ * security-relevant filter evaluation.
  *
  * @param doc - The in-memory document to test.
  * @param filter - The filter AST node to evaluate. May be arbitrarily nested.
@@ -190,7 +192,14 @@ export function evaluateFilter(doc: Record<string, unknown>, filter: SearchFilte
   if ('field' in filter && 'op' in filter) {
     return evaluateCondition(doc, filter);
   }
-  return true;
+  // Unknown node type — return false (matches nothing) rather than true.
+  // Over-inclusion is more dangerous than under-inclusion for security-relevant
+  // filter evaluation. Log a warning so misconfigured filters are discoverable.
+  console.warn(
+    '[slingshot-search] evaluateFilter: unknown filter node type encountered — returning false (no match). Node keys:',
+    Object.keys(filter),
+  );
+  return false;
 }
 
 // ============================================================================

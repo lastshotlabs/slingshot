@@ -705,8 +705,9 @@ describe('createPushRouter — publishTopic', () => {
 
     expect(count).toBe(CAP);
     expect(sentIds).toHaveLength(CAP);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0]?.[0]).toContain('10000');
+    const capWarning = warnSpy.mock.calls.find(c => String(c[0]).includes('10000'));
+    expect(capWarning).toBeDefined();
+    expect(String(capWarning?.[0])).toContain('slingshot-push');
 
     warnSpy.mockRestore();
   });

@@ -43,6 +43,11 @@ export interface S3StorageConfig {
    * When `true`, `ReadableStream` uploads use `@aws-sdk/lib-storage` multipart upload.
    */
   readonly streaming?: boolean;
+  /**
+   * Number of attempts for `put()` and `delete()` operations before propagating
+   * the error. Each retry waits `attempt × 500 ms` before retrying. Default: 3.
+   */
+  readonly retryAttempts?: number;
 }
 
 interface S3ClientShape {
@@ -95,6 +100,30 @@ function requireLibStorage(): LibStorageModule {
 }
 
 /**
+ * Retry a potentially-failing async operation with linear back-off.
+ *
+ * Attempts `fn` up to `attempts` times. On each failure (except the last),
+ * waits `attempt × delayMs` milliseconds before the next try. The final
+ * failure is rethrown to the caller.
+ *
+ * @param fn - The async operation to run.
+ * @param attempts - Maximum number of tries. Default: 3.
+ * @param delayMs - Base delay in milliseconds. Actual wait = `attempt × delayMs`.
+ */
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 500): Promise<T> {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i === attempts - 1) throw err;
+      await new Promise<void>(r => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  // unreachable — loop always throws or returns before here
+  throw new Error('[s3Storage] withRetry: unreachable');
+}
+
+/**
  * Create a `StorageAdapter` backed by an S3-compatible object store.
  *
  * AWS SDK modules are loaded lazily so apps that do not use S3 avoid the import cost.
@@ -104,6 +133,7 @@ function requireLibStorage(): LibStorageModule {
  */
 export function s3Storage(config: S3StorageConfig): StorageAdapter {
   let clientRef: S3ClientShape | null = null;
+  const retryAttempts = config.retryAttempts ?? 3;
 
   function getClient(): S3ClientShape {
     if (clientRef) return clientRef;
@@ -123,41 +153,43 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
       const bucket = meta.bucket ?? config.bucket;
       const client = getClient();
 
-      if (config.streaming && data instanceof ReadableStream) {
-        const { Upload } = requireLibStorage();
-        const upload = new Upload({
-          client,
-          params: {
-            Bucket: bucket,
-            Key: key,
-            Body: data,
-            ContentType: meta.mimeType,
-          },
-        });
-        await upload.done();
-      } else {
-        const { PutObjectCommand } = requireS3Client();
-        let body: Blob | Buffer | Uint8Array;
-
-        if (data instanceof ReadableStream) {
-          const response = new Response(data);
-          body = Buffer.from(await response.arrayBuffer());
-        } else if (data instanceof Blob) {
-          body = Buffer.from(await data.arrayBuffer());
+      await withRetry(async () => {
+        if (config.streaming && data instanceof ReadableStream) {
+          const { Upload } = requireLibStorage();
+          const upload = new Upload({
+            client,
+            params: {
+              Bucket: bucket,
+              Key: key,
+              Body: data,
+              ContentType: meta.mimeType,
+            },
+          });
+          await upload.done();
         } else {
-          body = data;
-        }
+          const { PutObjectCommand } = requireS3Client();
+          let body: Blob | Buffer | Uint8Array;
 
-        await client.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: body,
-            ContentType: meta.mimeType,
-            ContentLength: meta.size,
-          }),
-        );
-      }
+          if (data instanceof ReadableStream) {
+            const response = new Response(data);
+            body = Buffer.from(await response.arrayBuffer());
+          } else if (data instanceof Blob) {
+            body = Buffer.from(await data.arrayBuffer());
+          } else {
+            body = data;
+          }
+
+          await client.send(
+            new PutObjectCommand({
+              Bucket: bucket,
+              Key: key,
+              Body: body,
+              ContentType: meta.mimeType,
+              ContentLength: meta.size,
+            }),
+          );
+        }
+      }, retryAttempts);
 
       const url = config.publicUrl ? `${config.publicUrl.replace(/\/$/, '')}/${key}` : undefined;
       return url === undefined ? {} : { url };
@@ -186,7 +218,10 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
 
     async delete(key) {
       const { DeleteObjectCommand } = requireS3Client();
-      await getClient().send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
+      await withRetry(
+        () => getClient().send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key })),
+        retryAttempts,
+      );
     },
 
     async presignPut(key, opts) {

@@ -57,7 +57,7 @@ export interface AuthRuntimeContext {
   /** Optional app-owned continuation check layered on top of auth built-ins. */
   readonly evaluateUserAccess: (
     input: AuthUserAccessInput,
-  ) => Promise<AuthUserAccessDecision | boolean | void>;
+  ) => Promise<AuthUserAccessDecision | boolean | undefined>;
   readonly eventBus: SlingshotEventBus;
   readonly events: SlingshotEvents;
   readonly config: AuthResolvedConfig;

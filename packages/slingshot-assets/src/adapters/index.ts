@@ -72,14 +72,24 @@ function parseS3StorageConfig(
   };
 }
 
+/** Optional override options for built-in adapter resolution. */
+export interface ResolveStorageAdapterOptions {
+  /** Override the retry attempt count for `put()` and `delete()` on the S3 adapter. */
+  readonly storageRetryAttempts?: number;
+}
+
 /**
  * Resolve a storage adapter from a manifest-compatible reference or pass through an existing
  * runtime adapter instance.
  *
  * @param ref - Runtime adapter instance or manifest-compatible adapter ref.
+ * @param options - Optional overrides for built-in adapter configuration.
  * @returns The resolved storage adapter.
  */
-export function resolveStorageAdapter(ref: StorageAdapter | StorageAdapterRef): StorageAdapter {
+export function resolveStorageAdapter(
+  ref: StorageAdapter | StorageAdapterRef,
+  options?: ResolveStorageAdapterOptions,
+): StorageAdapter {
   if (isStorageAdapter(ref)) return ref;
 
   switch (ref.adapter) {
@@ -87,7 +97,14 @@ export function resolveStorageAdapter(ref: StorageAdapter | StorageAdapterRef): 
       return memoryStorage();
     case 'local':
       return localStorage(parseLocalStorageConfig(ref.config));
-    case 's3':
-      return s3Storage(parseS3StorageConfig(ref.config));
+    case 's3': {
+      const s3Config = parseS3StorageConfig(ref.config);
+      return s3Storage({
+        ...s3Config,
+        ...(options?.storageRetryAttempts !== undefined
+          ? { retryAttempts: options.storageRetryAttempts }
+          : {}),
+      });
+    }
   }
 }

@@ -20,6 +20,9 @@ import type { PermissionRegistry } from '@lastshotlabs/slingshot-core';
  * registry handles `super-admin` specially: `getActionsForRole(*, 'super-admin')`
  * always returns `['*']`.
  *
+ * Only resource types with implemented route handlers are registered here.
+ * Do not add resource types until the corresponding routes exist.
+ *
  * @param registry - The application's `PermissionRegistry` instance.
  *
  * @example
@@ -64,6 +67,6 @@ export function registerAdminResourceTypes(registry: PermissionRegistry): void {
   registry.register({
     resourceType: 'admin:mail',
     actions: ['read'],
-    roles: { 'tenant-admin': ['read'] },
+    roles: { 'tenant-admin': ['read'], support: ['read'] },
   });
 }

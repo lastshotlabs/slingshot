@@ -62,7 +62,7 @@ export const createEmailVerificationRouter = (
   { primaryField, rateLimit }: EmailVerificationRouterOptions,
   runtime: AuthRuntimeContext,
 ) => {
-  const { adapter, eventBus } = runtime;
+  const { adapter } = runtime;
   const getConfig = () => runtime.config;
   const router = createRouter();
   const LoginSchema = createLoginSchema(primaryField);

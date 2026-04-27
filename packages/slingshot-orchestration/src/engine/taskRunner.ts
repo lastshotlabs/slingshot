@@ -322,7 +322,9 @@ export function createTaskRunner(options: {
         enqueueCounter += 1;
         schedule();
       });
-      void promise.catch(() => undefined);
+      promise.catch(err => {
+        console.error('[orchestration] task post-return error:', err);
+      });
       executionPromises.set(submissionOptions.runId, promise);
       return createCachedRunHandle(submissionOptions.runId, () => promise);
     },

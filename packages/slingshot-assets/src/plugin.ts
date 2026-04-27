@@ -47,7 +47,9 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
     validatePluginConfig(ASSETS_PLUGIN_STATE_KEY, rawConfig, assetsPluginConfigSchema),
   );
   const mountPath = config.mountPath ?? '/assets';
-  const storage = resolveStorageAdapter(config.storage);
+  const storage = resolveStorageAdapter(config.storage, {
+    storageRetryAttempts: config.storageRetryAttempts,
+  });
   const imageConfig = resolveImageConfig(config.image);
   const imageCache =
     imageConfig != null
@@ -57,7 +59,12 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
       : null;
 
   type LazyMiddleware = { handler: import('hono').MiddlewareHandler };
-  const noop: import('hono').MiddlewareHandler = async (_c, next) => next();
+  const noop: import('hono').MiddlewareHandler = async (_c, next) => {
+    console.warn(
+      '[assets] delete cascade fired but no handler configured — storage file not deleted',
+    );
+    return next();
+  };
   const deleteStorageFileRef: LazyMiddleware = { handler: noop };
 
   let assetAdapterRef: AssetAdapter | undefined;

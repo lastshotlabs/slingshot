@@ -52,9 +52,9 @@ bun add @lastshotlabs/slingshot
 - `format:check`: `prettier --check .`
 - `hardening:core`: `bun run lint && bun run format:check && bun run typecheck && bun run typecheck:root && bun run build && bun run test`
 - `hardening:full`: `bun run hardening:core && bun run lint:deps && bun run test:docker && bun run test:e2e && bun run test:coverage:check && bun run docs:ci`
-- `lint`: `eslint src/ --cache && bun run --filter '*' lint`
+- `lint`: `eslint src/ --cache && bun run --filter '@lastshotlabs/slingshot-*' lint`
 - `lint:deps`: `depcruise packages/ src/ --config .dependency-cruiser.cjs`
-- `lint:fix`: `eslint src/ --cache --fix && bun run --filter '*' lint -- --fix`
+- `lint:fix`: `eslint src/ --cache --fix && bun run --filter '@lastshotlabs/slingshot-*' lint -- --fix`
 - `prepublishOnly`: `bun run build`
 - `release`: `bun run build && bun publish --access public && bun run --filter '*' publish`
 - `release:major`: `bun run --filter '*' version major && npm version major && bun run release`

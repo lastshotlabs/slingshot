@@ -339,6 +339,8 @@ function createNodeServer(): RuntimeServerFactory {
         const { WebSocketServer } = await import('ws');
         wss = new WebSocketServer({ noServer: true });
 
+        const upgradeTimeoutMs = opts.upgradeTimeoutMs ?? 30_000;
+
         httpServer.on('upgrade', (req, socket, head) => {
           const key = req.headers['sec-websocket-key'];
           if (!key) {
@@ -349,7 +351,10 @@ function createNodeServer(): RuntimeServerFactory {
           const timer = setTimeout(() => {
             pendingUpgrades.delete(key);
             socket.destroy();
-          }, 30_000);
+            console.warn(
+              `[runtime-node] WebSocket upgrade timed out after ${upgradeTimeoutMs}ms for key ${key} — connection destroyed`,
+            );
+          }, upgradeTimeoutMs);
 
           pendingUpgrades.set(key, { req, socket, head, timer });
 
@@ -440,12 +445,16 @@ function createNodeServer(): RuntimeServerFactory {
           return port;
         },
         stop(closeActiveConnections?: boolean): Promise<void> {
-          for (const [key, pending] of pendingUpgrades) {
-            clearTimeout(pending.timer);
-            pending.socket.destroy();
-            pendingUpgrades.delete(key);
-          }
           return new Promise(resolve => {
+            // Drain pending upgrades before closing the server.
+            // clearTimeout + socket.destroy() are synchronous but must complete
+            // before httpServer.close() so destroyed sockets are not counted as
+            // active connections during the close handshake.
+            for (const [key, pending] of pendingUpgrades) {
+              clearTimeout(pending.timer);
+              pending.socket.destroy();
+              pendingUpgrades.delete(key);
+            }
             if (closeActiveConnections) {
               // Node 18.2+ API — force-close all active connections
               (httpServer as { closeAllConnections?: () => void }).closeAllConnections?.();

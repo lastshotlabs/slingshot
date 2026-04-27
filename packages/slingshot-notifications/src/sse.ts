@@ -28,19 +28,34 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
+    let cleanupCalled = false;
+    let createdHandler: ((payload: unknown) => void) | undefined;
+    let updatedHandler: ((payload: unknown) => void) | undefined;
+
+    const cleanup = () => {
+      if (cleanupCalled) return;
+      cleanupCalled = true;
+      if (createdHandler) {
+        dynamicBus.off('notifications:notification.created', createdHandler);
+      }
+      if (updatedHandler) {
+        dynamicBus.off('notifications:notification.updated', updatedHandler);
+      }
+    };
+
     const stream = new ReadableStream<string>({
       start(controller) {
         writeSseChunk(controller, 'retry: 5000');
         writeSseChunk(controller, ': connected');
 
-        const createdHandler = (payload: unknown) => {
+        createdHandler = (payload: unknown) => {
           const event = payload as NotificationCreatedEventPayload;
           if (event.notification.userId !== userId) return;
           writeSseChunk(controller, 'event: notification.created');
           writeSseChunk(controller, `data: ${JSON.stringify(event)}`);
         };
 
-        const updatedHandler = (payload: unknown) => {
+        updatedHandler = (payload: unknown) => {
           const event = payload as { userId?: string };
           if (event.userId !== userId) return;
           writeSseChunk(controller, 'event: notification.updated');
@@ -50,13 +65,27 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
         dynamicBus.on('notifications:notification.created', createdHandler);
         dynamicBus.on('notifications:notification.updated', updatedHandler);
 
-        const cleanup = () => {
-          dynamicBus.off('notifications:notification.created', createdHandler);
-          dynamicBus.off('notifications:notification.updated', updatedHandler);
-          controller.close();
+        const closeAndCleanup = () => {
+          cleanup();
+          try {
+            controller.close();
+          } catch {
+            // ignore: controller may already be closed if the stream errored
+          }
         };
 
-        c.req.raw.signal.addEventListener('abort', cleanup, { once: true });
+        c.req.raw.signal.addEventListener('abort', closeAndCleanup, { once: true });
+
+        // Also clean up if the underlying Node.js stream errors (e.g. client
+        // disconnects before the abort signal fires).
+        (controller as unknown as { on?: (event: string, fn: () => void) => void }).on?.(
+          'error',
+          closeAndCleanup,
+        );
+      },
+      cancel() {
+        // Ensure bus listeners are removed when the consumer cancels the stream.
+        cleanup();
       },
     });
 

@@ -110,13 +110,18 @@ export async function invokeWithAdapter(
     let capturedError: Error | undefined;
 
     try {
-      const aborted = await hooks?.beforeInvoke?.({
-        input: record.body,
-        meta,
-        trigger: adapter.kind,
-        isColdStart,
-        ctx,
-      });
+      let aborted: Awaited<ReturnType<NonNullable<FunctionsHooks['beforeInvoke']>>> | undefined;
+      try {
+        aborted = await hooks?.beforeInvoke?.({
+          input: record.body,
+          meta,
+          trigger: adapter.kind,
+          isColdStart,
+          ctx,
+        });
+      } catch (err) {
+        console.error('[lambda] beforeInvoke hook threw:', err);
+      }
       if (aborted && typeof aborted === 'object' && 'abort' in aborted && aborted.abort) {
         output = aborted.response;
       } else {
@@ -144,16 +149,21 @@ export async function invokeWithAdapter(
       });
     } catch (rawError) {
       capturedError = rawError instanceof Error ? rawError : new Error(String(rawError));
-      const disposition = await hooks?.onError?.({
-        error: capturedError,
-        kind: classifyError(capturedError),
-        input: record.body,
-        meta: record.meta,
-        trigger: adapter.kind,
-        correlationId: meta.correlationId,
-        isColdStart,
-        ctx,
-      });
+      let disposition: Awaited<ReturnType<NonNullable<FunctionsHooks['onError']>>> | undefined;
+      try {
+        disposition = await hooks?.onError?.({
+          error: capturedError,
+          kind: classifyError(capturedError),
+          input: record.body,
+          meta: record.meta,
+          trigger: adapter.kind,
+          correlationId: meta.correlationId,
+          isColdStart,
+          ctx,
+        });
+      } catch (err) {
+        console.error('[lambda] onError hook threw:', err);
+      }
 
       if (disposition?.replaceWith) {
         capturedError = disposition.replaceWith;
@@ -221,16 +231,20 @@ export async function invokeWithAdapter(
         });
       }
     } finally {
-      await hooks?.afterInvoke?.({
-        input: record.body,
-        meta,
-        trigger: adapter.kind,
-        isColdStart,
-        ctx,
-        output,
-        error: capturedError,
-        latencyMs: Date.now() - startedAt,
-      });
+      try {
+        await hooks?.afterInvoke?.({
+          input: record.body,
+          meta,
+          trigger: adapter.kind,
+          isColdStart,
+          ctx,
+          output,
+          error: capturedError,
+          latencyMs: Date.now() - startedAt,
+        });
+      } catch (err) {
+        console.error('[lambda] afterInvoke hook threw:', err);
+      }
     }
   }
 

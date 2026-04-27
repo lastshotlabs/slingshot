@@ -356,4 +356,74 @@ describe('invokeWithAdapter', () => {
       trigger: 'schedule',
     });
   });
+
+  test('beforeInvoke hook throwing does not crash the invocation — handler still runs', async () => {
+    const errorSpy = mock(() => {});
+    const originalConsoleError = console.error;
+    console.error = errorSpy;
+
+    const ctx = createContextFixture();
+    const handler = createHandler(async () => ({ ok: true }));
+
+    let result: unknown;
+    try {
+      result = await invokeWithAdapter(
+        handler,
+        sqsTrigger as TriggerAdapter,
+        { Records: [{ messageId: 'msg-1', body: '{}' }] },
+        ctx,
+        {
+          async beforeInvoke() {
+            throw new Error('beforeInvoke hook crashed');
+          },
+        },
+        undefined,
+        false,
+      );
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    // Handler still ran — no batch failures since the handler itself succeeded
+    const batchResult = result as { batchItemFailures: unknown[] };
+    expect(batchResult.batchItemFailures).toHaveLength(0);
+    expect(errorSpy).toHaveBeenCalled();
+    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('beforeInvoke hook threw');
+  });
+
+  test('onError hook throwing does not prevent error handling — invocation returns failure', async () => {
+    const errorSpy = mock(() => {});
+    const originalConsoleError = console.error;
+    console.error = errorSpy;
+
+    const ctx = createContextFixture();
+    const handler = createHandler(async () => {
+      throw new Error('handler error');
+    });
+
+    let result: unknown;
+    try {
+      result = await invokeWithAdapter(
+        handler,
+        sqsTrigger as TriggerAdapter,
+        { Records: [{ messageId: 'msg-2', body: '{}' }] },
+        ctx,
+        {
+          async onError() {
+            throw new Error('onError hook crashed');
+          },
+        },
+        undefined,
+        false,
+      );
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    // Record failed (handler threw) — appears in batchItemFailures
+    const batchResult = result as { batchItemFailures: Array<{ itemIdentifier: string }> };
+    expect(batchResult.batchItemFailures).toHaveLength(1);
+    expect(batchResult.batchItemFailures[0].itemIdentifier).toBe('msg-2');
+    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('onError hook threw');
+  });
 });

@@ -38,6 +38,7 @@ function parseServiceAccount(value: FirebaseServiceAccount | string): FirebaseSe
   } catch (err) {
     throw new Error(
       `[slingshot-push] Failed to parse Firebase service account: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
     );
   }
 }

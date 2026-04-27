@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { basename, dirname, relative, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 import type {
   OrchestrationProviderRegistry,

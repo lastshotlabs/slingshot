@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock, spyOn } from 'bun:test';
 import type {
   SlingshotEventBus,
   SlingshotEvents,
@@ -284,6 +284,47 @@ describe('eventWiring', () => {
     expect(deliveries.items[0].status).toBe('dead');
     expect(deliveries.items[0].lastAttempt?.error).toContain('enqueue failed');
 
+    for (const unsub of unsubs) unsub();
+  });
+
+  it('logs both errors and does not crash when enqueue fails and updateDelivery also throws', async () => {
+    const bus = createInProcessAdapter();
+    const events = createEvents(bus);
+    const adapter = createAdapter([createEndpoint()]);
+
+    // Make updateDelivery throw too
+    const updateSpy = spyOn(adapter, 'updateDelivery').mockRejectedValueOnce(
+      new Error('adapter unavailable'),
+    );
+
+    const failingQueue = {
+      name: 'failing',
+      enqueue: mock(async () => {
+        throw new Error('queue unavailable');
+      }),
+      start: mock(async () => {}),
+      stop: mock(async () => {}),
+      depth: mock(async () => 0),
+    };
+
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const config: WebhookPluginConfig = { events: ['test:webhook.*'] };
+    const unsubs = wireEventSubscriptions(bus, events, config, failingQueue, adapter);
+
+    events.publish(
+      'test:webhook.tenant.created',
+      { tenantId: 'tenant-a', documentId: 'doc-1' },
+      { requestTenantId: null },
+    );
+    await new Promise(resolve => setTimeout(resolve, 30));
+
+    // Both enqueue failure and updateDelivery failure should be logged
+    const calls = errorSpy.mock.calls.map(c => String(c[0]));
+    expect(calls.some(m => m.includes('failed to enqueue delivery'))).toBe(true);
+    expect(calls.some(m => m.includes('failed to mark delivery'))).toBe(true);
+
+    errorSpy.mockRestore();
+    updateSpy.mockRestore();
     for (const unsub of unsubs) unsub();
   });
 

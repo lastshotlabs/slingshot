@@ -57,7 +57,10 @@ function packageSuites(): TestCommandSuite[] {
     .filter(name => existsSync(join(packagesDir, name, 'tests')))
     .map(name => {
       const testsPath = normalizePath(join('packages', name, 'tests'));
-      const testFiles = collectPackageTestFiles(join(packagesDir, name, 'tests'));
+      let testFiles = collectPackageTestFiles(join(packagesDir, name, 'tests'));
+      if (name === 'runtime-node') {
+        testFiles = testFiles.filter(file => !file.includes('/tests/node-runtime/'));
+      }
       const configPath = normalizePath(join('packages', name, 'bunfig.toml'));
       return {
         name,

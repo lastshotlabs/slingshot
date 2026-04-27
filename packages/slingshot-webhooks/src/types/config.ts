@@ -104,8 +104,8 @@ export const webhookPluginConfigSchema = z.object({
   /** Mount path for webhook routes. Default: `'/webhooks'`. */
   mountPath: z
     .string()
+    .transform(normalizeMountPath)
     .optional()
-    .transform(value => (value === undefined ? value : normalizeMountPath(value)))
     .describe("URL path prefix for webhook routes. Omit to use '/webhooks'."),
   /** Role required for webhook management routes. Default: `'admin'`. */
   managementRole: z

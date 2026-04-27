@@ -65,6 +65,13 @@ export interface AssetsPluginConfig {
   readonly image?: ImageConfig;
   /** Tenant identifier used when generating grants or scoped lookups. */
   readonly tenantId?: string;
+  /**
+   * Number of retry attempts for storage `put()` and `delete()` operations.
+   * Each retry waits `attempt × 500 ms` before retrying. Default: 3.
+   * Only applies to built-in adapters (e.g. S3); runtime adapter instances
+   * are used as-is.
+   */
+  readonly storageRetryAttempts?: number;
 }
 
 /**

@@ -1,12 +1,17 @@
 import { WebhookDeliveryError } from '../types/queue';
 import type { WebhookJob } from '../types/queue';
 import { signPayload } from './signing';
+import { validateWebhookUrl } from './validateWebhookUrl';
 
 /**
  * Executes a single webhook HTTP delivery attempt for the given job.
  *
  * Signs the payload with HMAC-SHA256 and posts it to `job.url` with the
  * `X-Webhook-Signature`, `X-Webhook-Event`, and `X-Webhook-Delivery` headers.
+ *
+ * Performs a defense-in-depth SSRF check via {@link validateWebhookUrl} before
+ * making the outbound request, guarding against private/loopback targets that
+ * may have bypassed registration-time validation.
  *
  * @param job - The webhook job containing URL, secret, event, and payload.
  * @throws {WebhookDeliveryError} On any non-2xx response. `retryable` is `true`
@@ -20,6 +25,10 @@ import { signPayload } from './signing';
  * - `X-Webhook-Delivery` — a unique delivery ID for idempotency and tracing (`job.deliveryId`).
  */
 export async function deliverWebhook(job: WebhookJob): Promise<void> {
+  // Defense-in-depth: reject private/loopback targets even if validation was
+  // bypassed at registration time (e.g. direct adapter writes, migrated rows).
+  validateWebhookUrl(job.url);
+
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = await signPayload(job.secret, job.payload, timestamp);
   const res = await fetch(job.url, {

@@ -4,7 +4,6 @@ import type { ConnectionLike } from '@temporalio/client';
 import type {
   OrchestrationEventMap,
   OrchestrationEventSink,
-  Run,
   TaskContext,
 } from '@lastshotlabs/slingshot-orchestration';
 import { withTaskConcurrency } from './concurrency';

@@ -51,6 +51,22 @@ describe('bullmqAdapterOptionsSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  test('accepts enqueueTimeoutMs as a positive integer', () => {
+    const result = bullmqAdapterOptionsSchema.safeParse({
+      connection: { host: 'localhost' },
+      enqueueTimeoutMs: 5000,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test('rejects enqueueTimeoutMs of zero', () => {
+    const result = bullmqAdapterOptionsSchema.safeParse({
+      connection: {},
+      enqueueTimeoutMs: 0,
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -308,6 +324,31 @@ describe('createBullMQAdapter — _drainPendingBuffer', () => {
     // Should not throw or create calls
     await bus._drainPendingBuffer();
     expect(fakeBullMQState.queues[0].addCalls).toHaveLength(0);
+  });
+
+  test('non-retryable error drops buffered event without re-queuing', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const bus = createBullMQAdapter({ connection: {} });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'audit' });
+
+    // Buffer the event by failing the first add with a retryable error
+    fakeBullMQState.nextAddError(new Error('Redis down'));
+    bus.emit('auth:login' as any, { userId: 'drop-me' } as any);
+    await new Promise(r => setTimeout(r, 10));
+    expect(fakeBullMQState.queues[0].addCalls).toHaveLength(0);
+
+    // Now drain with a non-retryable error (EINVAL code) — event should be dropped
+    const nonRetryable = Object.assign(new Error('invalid argument'), { code: 'EINVAL' });
+    fakeBullMQState.nextAddError(nonRetryable);
+    await bus._drainPendingBuffer();
+
+    // Event was permanently dropped — no successful add, no retry
+    expect(fakeBullMQState.queues[0].addCalls).toHaveLength(0);
+    const errCalls = errorSpy.mock.calls.map(c => String(c[0]));
+    expect(errCalls.some(m => m.includes('non-retryable'))).toBe(true);
+
+    errorSpy.mockRestore();
   });
 });
 

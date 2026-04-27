@@ -15,7 +15,6 @@ import type { SlingshotEvents } from '../eventPublisher';
 import type { IdempotencyAdapter } from '../idempotency';
 import type { IdentityResolver } from '../identity';
 import type { KafkaConnectorHandle } from '../kafkaConnectors';
-import type { SlingshotPlugin } from '../plugin';
 import type { RuntimeSqliteDatabase } from '../runtime';
 import type { SecretRepository } from '../secrets';
 import type { SigningConfig } from '../signing';

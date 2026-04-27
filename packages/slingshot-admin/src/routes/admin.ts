@@ -53,10 +53,10 @@ const AdminUserListResponse = z
 const AdminUserResponse = AdminUserRecord.openapi('AdminUserResponse');
 
 const AdminUpdateUserBody = z.object({
-  displayName: z.string().optional(),
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  externalId: z.string().optional(),
+  displayName: z.string().max(255).trim().optional(),
+  firstName: z.string().max(255).trim().optional(),
+  lastName: z.string().max(255).trim().optional(),
+  externalId: z.string().max(255).optional(),
 });
 
 const AdminSuspendBody = z.object({
@@ -64,7 +64,7 @@ const AdminSuspendBody = z.object({
 });
 
 const AdminSetRolesBody = z.object({
-  roles: z.array(z.string()),
+  roles: z.array(z.string().max(64)).max(100),
 });
 
 const AdminRolesResponse = z
@@ -135,6 +135,32 @@ const AuditLogListResponse = z
   .openapi('AuditLogListResponse');
 
 const tags = ['Admin'];
+
+// ---------------------------------------------------------------------------
+// Reusable validated param shapes
+// ---------------------------------------------------------------------------
+
+/** Validated user ID param — alphanumeric, hyphens, and underscores only. */
+const UserIdParam = z.object({
+  userId: z
+    .string()
+    .max(128)
+    .regex(
+      /^[a-zA-Z0-9_-]+$/,
+      'userId must contain only alphanumeric characters, hyphens, or underscores',
+    ),
+});
+
+/** Validated session ID param — same constraints as userId. */
+const SessionIdParam = z.object({
+  sessionId: z
+    .string()
+    .max(128)
+    .regex(
+      /^[a-zA-Z0-9_-]+$/,
+      'sessionId must contain only alphanumeric characters, hyphens, or underscores',
+    ),
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -302,7 +328,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Returns a single user record by ID.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
       },
       responses: {
         200: {
@@ -345,7 +371,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Updates display name, first/last name, or external ID for a user.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
         body: { content: { 'application/json': { schema: AdminUpdateUserBody } } },
       },
       responses: {
@@ -434,7 +460,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Suspends a user account. Suspended users cannot log in.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
         body: { content: { 'application/json': { schema: AdminSuspendBody } }, required: false },
       },
       responses: {
@@ -533,7 +559,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Restores a suspended user account.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
       },
       responses: {
         200: {
@@ -621,7 +647,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Returns the app-wide roles assigned to a user.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
       },
       responses: {
         200: {
@@ -669,7 +695,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Replaces all app-wide roles for a user.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
         body: { content: { 'application/json': { schema: AdminSetRolesBody } } },
       },
       responses: {
@@ -756,7 +782,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Permanently deletes a user account and revokes all sessions.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
       },
       responses: {
         200: {
@@ -839,7 +865,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Returns all active sessions for a user.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
       },
       responses: {
         200: {
@@ -887,7 +913,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Revokes all active sessions for a user, forcing them to re-authenticate.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
       },
       responses: {
         200: {
@@ -962,7 +988,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Revokes a single session for a user by session ID.',
       tags,
       request: {
-        params: z.object({ userId: z.string(), sessionId: z.string() }),
+        params: UserIdParam.merge(SessionIdParam),
       },
       responses: {
         200: {
@@ -1141,7 +1167,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
       description: 'Returns paginated audit log entries for a specific user.',
       tags,
       request: {
-        params: z.object({ userId: z.string() }),
+        params: UserIdParam,
         query: z.object({
           ...cursorParams({ limit: 50, maxLimit: 200 }).shape,
           after: z.string().optional().describe('Filter entries after this ISO 8601 date'),

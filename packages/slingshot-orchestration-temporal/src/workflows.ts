@@ -12,7 +12,6 @@ import type {
   RunProgress,
   RunStatus,
   StepRun,
-  WorkflowRun,
 } from '@lastshotlabs/slingshot-orchestration';
 import type { ProviderTaskManifest } from '@lastshotlabs/slingshot-orchestration/provider';
 import type {
@@ -161,7 +160,6 @@ export async function slingshotTaskWorkflowImpl(
   }
 
   let progress: RunProgress | undefined;
-  const runStartedAtMs = Date.now();
 
   setHandler(progressSignal, payload => {
     progress = payload.data;

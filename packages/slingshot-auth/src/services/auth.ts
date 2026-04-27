@@ -785,7 +785,7 @@ export const passkeyLogin = async (
   metadata?: SessionMetadata,
   hookContext?: HookContext,
 ): Promise<AuthResult> => {
-  const { adapter, config, eventBus } = runtime;
+  const { adapter, config } = runtime;
   if (!adapter.findUserByWebAuthnCredentialId || !adapter.getWebAuthnCredentials) {
     throw new HttpError(501, 'Auth adapter does not support passkey login');
   }

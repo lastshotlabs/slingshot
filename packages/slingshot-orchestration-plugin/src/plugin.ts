@@ -32,12 +32,20 @@ export function createOrchestrationPlugin(
     name: ORCHESTRATION_PLUGIN_KEY,
     dependencies: [],
     setupRoutes({ app, bus }: PluginSetupContext) {
-      runtime ??= createOrchestrationRuntime({
-        adapter: providedAdapter!,
-        tasks: options.tasks,
-        workflows,
-        eventSink: createSlingshotEventSink(bus),
-      });
+      if (!runtime) {
+        if (!providedAdapter) {
+          throw new OrchestrationError(
+            'INVALID_CONFIG',
+            'Orchestration plugin requires either a runtime or an adapter.',
+          );
+        }
+        runtime = createOrchestrationRuntime({
+          adapter: providedAdapter,
+          tasks: options.tasks,
+          workflows,
+          eventSink: createSlingshotEventSink(bus),
+        });
+      }
 
       getContext(app).pluginState.set(ORCHESTRATION_PLUGIN_KEY, runtime);
 

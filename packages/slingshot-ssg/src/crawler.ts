@@ -1,5 +1,6 @@
 // packages/slingshot-ssg/src/crawler.ts
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { readdir, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import type {
   GenerateStaticParams,
@@ -37,7 +38,7 @@ import type { SsgConfig, SsgStaticPathsFn } from './types';
  * ```
  */
 export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
-  const routeFiles = collectRouteFiles(config.serverRoutesDir);
+  const routeFiles = await collectRouteFiles(config.serverRoutesDir);
   const paths: string[] = [];
 
   for (const filePath of routeFiles) {
@@ -105,24 +106,27 @@ const CONVENTION_BASENAMES = new Set([
  * directory. Excludes convention side-car files (meta, layout, loading, error,
  * not-found, middleware).
  */
-function collectRouteFiles(dir: string): string[] {
+async function collectRouteFiles(dir: string): Promise<string[]> {
   const results: string[] = [];
   if (!existsSync(dir)) return results;
 
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    const stat = statSync(full);
+  const entries = await readdir(dir);
+  await Promise.all(
+    entries.map(async entry => {
+      const full = join(dir, entry);
+      const fileStat = await stat(full);
 
-    if (stat.isDirectory()) {
-      results.push(...collectRouteFiles(full));
-    } else if (/\.(ts|tsx|js)$/.test(entry)) {
-      const basename = entry.replace(/\.(ts|tsx|js)$/, '');
-      if (!CONVENTION_BASENAMES.has(basename)) {
-        results.push(full);
+      if (fileStat.isDirectory()) {
+        results.push(...(await collectRouteFiles(full)));
+      } else if (/\.(ts|tsx|js)$/.test(entry)) {
+        const basename = entry.replace(/\.(ts|tsx|js)$/, '');
+        if (!CONVENTION_BASENAMES.has(basename)) {
+          results.push(full);
+        }
       }
-    }
-  }
-  return results;
+    }),
+  );
+  return results.sort();
 }
 
 /**
@@ -289,10 +293,22 @@ async function callStaticPaths(filePath: string, routesDir: string): Promise<str
 
   let paramSets: StaticParamSet[];
   try {
-    paramSets =
+    const STATIC_PATHS_TIMEOUT_MS = 60_000;
+    const timeoutSignal = AbortSignal.timeout(STATIC_PATHS_TIMEOUT_MS);
+    const callPromise =
       resolvedFnName === 'generateStaticParams'
-        ? await (resolvedFn as GenerateStaticParams)(createBuildTimeContext())
-        : await (resolvedFn as SsgStaticPathsFn)();
+        ? (resolvedFn as GenerateStaticParams)(createBuildTimeContext())
+        : (resolvedFn as SsgStaticPathsFn)();
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutSignal.addEventListener('abort', () => {
+        reject(
+          new Error(
+            `staticPaths() timed out after 60s — check for infinite generators or unresolved promises`,
+          ),
+        );
+      });
+    });
+    paramSets = await Promise.race([callPromise, timeoutPromise]);
   } catch (err) {
     console.warn(`[slingshot-ssg] ${filePath}: ${resolvedFnName}() threw:`, err);
     return [];

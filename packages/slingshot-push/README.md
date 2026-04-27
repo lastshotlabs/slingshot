@@ -47,6 +47,10 @@ The `serviceAccount` value can also be a JSON string or a `file://` path read at
 - The Android `serviceAccount` field can be an inline object, a JSON string, or a `file://` URI
   resolved at startup. Prefer environment variables for key material rather than inlining in config.
 - Retry policy applies to delivery attempts, not to subscription management operations.
+- When a provider send succeeds, the delivery record transitions through `sent` → `delivered`
+  automatically. The `/ack/:deliveryId` endpoint is for client-side acknowledgement (e.g., a
+  service worker confirming the notification was shown); it moves the record to `delivered` from
+  the client side. Both paths are now wired.
 
 ## Gotchas
 
@@ -60,6 +64,9 @@ The `serviceAccount` value can also be a JSON string or a `file://` path read at
 - `slingshot-push` does not send push notifications directly on topic subscribe/unsubscribe. Those
   routes only manage membership records. Actual delivery is triggered through the notifications
   dispatcher or direct router calls.
+- Topic fan-out is capped at 10,000 members per publish call. Topics exceeding this threshold
+  will log a warning and deliver only to the first 10,000. Use a cursor-paginated delivery loop
+  outside the plugin for topics that require full-membership delivery.
 
 ## Key Files
 

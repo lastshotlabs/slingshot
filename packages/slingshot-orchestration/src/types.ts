@@ -32,6 +32,44 @@ export interface TaskContext {
   reportProgress(data: { percent?: number; message?: string; [key: string]: unknown }): void;
 }
 
+type TaskHandler<TInput, TOutput> = {
+  bivarianceHack(input: TInput, ctx: TaskContext): Promise<TOutput>;
+}['bivarianceHack'];
+
+type StepInputMapper<TWorkflowInput> = {
+  bivarianceHack(ctx: StepInputContext<TWorkflowInput>): unknown;
+}['bivarianceHack'];
+
+type StepCondition<TWorkflowInput> = {
+  bivarianceHack(ctx: StepInputContext<TWorkflowInput>): boolean;
+}['bivarianceHack'];
+
+type StepDurationMapper<TWorkflowInput> = {
+  bivarianceHack(ctx: StepInputContext<TWorkflowInput>): number;
+}['bivarianceHack'];
+
+type WorkflowStartHook<TInput> = {
+  bivarianceHack(ctx: { runId: string; input: TInput; tenantId?: string }): Promise<void> | void;
+}['bivarianceHack'];
+
+type WorkflowCompleteHook<TOutput> = {
+  bivarianceHack(ctx: {
+    runId: string;
+    output: TOutput;
+    durationMs: number;
+    tenantId?: string;
+  }): Promise<void> | void;
+}['bivarianceHack'];
+
+type WorkflowFailHook = {
+  bivarianceHack(ctx: {
+    runId: string;
+    error: Error;
+    failedStep?: string;
+    tenantId?: string;
+  }): Promise<void> | void;
+}['bivarianceHack'];
+
 /**
  * User-authored task definition before normalization.
  */
@@ -40,7 +78,7 @@ export interface TaskDefinition<TInput = unknown, TOutput = unknown> {
   description?: string;
   input: ZodType<TInput>;
   output: ZodType<TOutput>;
-  handler: (input: TInput, ctx: TaskContext) => Promise<TOutput>;
+  handler: TaskHandler<TInput, TOutput>;
   retry?: RetryPolicy;
   timeout?: number;
   queue?: string;
@@ -56,7 +94,7 @@ export interface ResolvedTask<TInput = unknown, TOutput = unknown> {
   readonly description: string | undefined;
   readonly input: ZodType<TInput>;
   readonly output: ZodType<TOutput>;
-  readonly handler: (input: TInput, ctx: TaskContext) => Promise<TOutput>;
+  readonly handler: TaskHandler<TInput, TOutput>;
   readonly retry: RetryPolicy;
   readonly timeout: number | undefined;
   readonly queue: string | undefined;
@@ -67,7 +105,7 @@ export interface ResolvedTask<TInput = unknown, TOutput = unknown> {
  * Convenience alias for APIs that accept any resolved task regardless of its
  * input/output generics.
  */
-export type AnyResolvedTask = ResolvedTask<any, any>;
+export type AnyResolvedTask = ResolvedTask<unknown, unknown>;
 
 /**
  * Pure data available to step mappers and conditions.
@@ -81,8 +119,8 @@ export interface StepInputContext<TWorkflowInput = unknown> {
  * Optional per-step behavior overrides applied inside a workflow.
  */
 export interface StepOptions<TWorkflowInput = unknown> {
-  input?: (ctx: StepInputContext<TWorkflowInput>) => unknown;
-  condition?: (ctx: StepInputContext<TWorkflowInput>) => boolean;
+  input?: StepInputMapper<TWorkflowInput>;
+  condition?: StepCondition<TWorkflowInput>;
   retry?: RetryPolicy;
   timeout?: number;
   continueOnFailure?: boolean;
@@ -113,7 +151,7 @@ export interface ParallelEntry<TWorkflowInput = unknown> {
 export interface SleepEntry<TWorkflowInput = unknown> {
   readonly _tag: 'Sleep';
   readonly name: string;
-  readonly duration: number | ((ctx: StepInputContext<TWorkflowInput>) => number);
+  readonly duration: number | StepDurationMapper<TWorkflowInput>;
 }
 
 /**
@@ -135,19 +173,9 @@ export interface WorkflowDefinition<TInput = unknown, TOutput = unknown> {
   outputMapper?: (results: Record<string, unknown>) => TOutput;
   steps: WorkflowEntry<TInput>[];
   timeout?: number;
-  onStart?: (ctx: { runId: string; input: TInput; tenantId?: string }) => Promise<void> | void;
-  onComplete?: (ctx: {
-    runId: string;
-    output: TOutput;
-    durationMs: number;
-    tenantId?: string;
-  }) => Promise<void> | void;
-  onFail?: (ctx: {
-    runId: string;
-    error: Error;
-    failedStep?: string;
-    tenantId?: string;
-  }) => Promise<void> | void;
+  onStart?: WorkflowStartHook<TInput>;
+  onComplete?: WorkflowCompleteHook<TOutput>;
+  onFail?: WorkflowFailHook;
 }
 
 /**
@@ -171,7 +199,7 @@ export interface ResolvedWorkflow<TInput = unknown, TOutput = unknown> {
  * Convenience alias for APIs that accept any resolved workflow regardless of
  * its input/output generics.
  */
-export type AnyResolvedWorkflow = ResolvedWorkflow<any, any>;
+export type AnyResolvedWorkflow = ResolvedWorkflow<unknown, unknown>;
 
 /**
  * Portable run lifecycle states used across adapters and HTTP responses.
@@ -450,16 +478,16 @@ export type OrchestrationCapability = 'signals' | 'scheduling' | 'observability'
 export interface OrchestrationRuntime {
   runTask<T extends AnyResolvedTask>(
     task: T,
-    input: T extends ResolvedTask<infer TInput, any> ? TInput : never,
+    input: T extends ResolvedTask<infer TInput, unknown> ? TInput : never,
     opts?: RunOptions,
-  ): Promise<RunHandle<T extends ResolvedTask<any, infer TOutput> ? TOutput : unknown>>;
+  ): Promise<RunHandle<T extends ResolvedTask<unknown, infer TOutput> ? TOutput : unknown>>;
   runTask(name: string, input: unknown, opts?: RunOptions): Promise<RunHandle>;
 
   runWorkflow<T extends AnyResolvedWorkflow>(
     workflow: T,
-    input: T extends ResolvedWorkflow<infer TInput, any> ? TInput : never,
+    input: T extends ResolvedWorkflow<infer TInput, unknown> ? TInput : never,
     opts?: RunOptions,
-  ): Promise<RunHandle<T extends ResolvedWorkflow<any, infer TOutput> ? TOutput : unknown>>;
+  ): Promise<RunHandle<T extends ResolvedWorkflow<unknown, infer TOutput> ? TOutput : unknown>>;
   runWorkflow(name: string, input: unknown, opts?: RunOptions): Promise<RunHandle>;
 
   getRun(runId: string): Promise<Run | WorkflowRun | null>;

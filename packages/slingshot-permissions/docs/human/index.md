@@ -35,6 +35,8 @@ resource-type definitions instead of each package inventing its own policy engin
 - Use the memory adapter for tests, not as an accidental production default.
 - Redis is not a supported permissions store. Fail closed at startup instead of silently
   downgrading permissions state to process memory.
+- Set `queryTimeoutMs` in `EvaluatorConfig` to bound adapter queries. Without a timeout a
+  hung DB call blocks every permission check on that request indefinitely.
 
 ## Gotchas
 

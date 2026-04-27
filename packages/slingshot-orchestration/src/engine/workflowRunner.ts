@@ -5,12 +5,9 @@ import type {
   AnyResolvedWorkflow,
   OrchestrationEventSink,
   RunError,
-  RunOptions,
   RunStatus,
   StepEntry,
   StepRun,
-  TaskContext,
-  WorkflowRun,
 } from '../types';
 import type { TaskRunner } from './taskRunner';
 

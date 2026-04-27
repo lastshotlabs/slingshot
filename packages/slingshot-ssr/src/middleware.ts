@@ -182,15 +182,20 @@ export function buildSsrMiddleware(
           // Serve the stale cached response immediately, then regenerate in background.
           // The background regeneration is a fire-and-forget microtask — it never
           // blocks or delays the current response (spec: SWR behavior).
+          // A 30-second timeout guards against hung renderers blocking worker resources.
           try {
             const staleBsCtx = getContext(app);
-            Promise.resolve()
-              .then(() =>
-                regeneratePage(cacheKey, url, query, config, assetTags, staleBsCtx, isrAdapter),
-              )
-              .catch((err: unknown) => {
-                console.error('[slingshot-ssr] ISR background regen failed for', cacheKey, err);
-              });
+            const isrTimeout = AbortSignal.timeout(30_000);
+            Promise.race([
+              regeneratePage(cacheKey, url, query, config, assetTags, staleBsCtx, isrAdapter),
+              new Promise<never>((_, reject) => {
+                isrTimeout.addEventListener('abort', () => {
+                  reject(new Error('[slingshot-ssr] ISR background regen timed out after 30s'));
+                });
+              }),
+            ]).catch((err: unknown) => {
+              console.error('[slingshot-ssr] ISR background regen failed for', cacheKey, err);
+            });
           } catch {
             // No Slingshot context attached — serve stale content but skip background regeneration.
           }
@@ -550,8 +555,7 @@ export function buildSsrMiddleware(
         },
       });
       response.body.pipeTo(writable).catch((err: unknown) => {
-        // Stream errors surface via the readable side; don't double-report here.
-        void err;
+        console.error('[ssr] response stream error:', err);
       });
       response = new Response(readable, {
         status: response.status,

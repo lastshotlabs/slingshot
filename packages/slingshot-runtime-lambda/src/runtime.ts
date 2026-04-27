@@ -46,11 +46,14 @@ export function createLambdaRuntime(config: FunctionsRuntimeConfig): LambdaRunti
     }
     if (!shutdownRegistered && config.hooks?.onShutdown) {
       shutdownRegistered = true;
+      const shutdownTimeoutMs = config.shutdownTimeoutMs ?? 1500;
       process.once('SIGTERM', () => {
         void Promise.race([
           config.hooks?.onShutdown?.(cached?.ctx as SlingshotContext),
-          new Promise(resolve => setTimeout(resolve, 1500)),
-        ]).catch(() => {});
+          new Promise(resolve => setTimeout(resolve, shutdownTimeoutMs)),
+        ]).catch(err => {
+          console.error('[lambda] onShutdown hook threw during SIGTERM:', err);
+        });
       });
     }
     return cached;

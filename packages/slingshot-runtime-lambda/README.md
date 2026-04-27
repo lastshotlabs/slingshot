@@ -67,7 +67,8 @@ Each adapter is responsible for:
 
 - Cold start uses `resolveManifestConfig()` and `createApp()` without binding a port.
 - Warm invocations reuse the cached app context until `shutdown()` or process termination.
-- `onShutdown` is best-effort only. On Lambda it races a short timeout after `SIGTERM`.
+- `onShutdown` is best-effort only. On Lambda it races a configurable timeout after `SIGTERM`
+  (default 1500 ms). Set `shutdownTimeoutMs` in `FunctionsRuntimeConfig` to adjust.
 - SQS supports partial batch failure responses. Whole-batch retry sources rethrow unless hooks suppress or drop the failure.
 
 ## Review Heuristics

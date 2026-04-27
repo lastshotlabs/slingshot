@@ -34,6 +34,8 @@ The webhook entities themselves follow the shared package-first/entity authoring
 
 - Plugin config still has an `events` field, but that is only the webhook plugin's own intake filter on the app bus. It is not the endpoint-management payload shape.
 - Future plugin event registrations do not silently expand existing endpoint subscriptions. Concrete event subscriptions stay frozen until an endpoint is updated explicitly.
+- Each delivery attempt has a hard 30-second HTTP timeout. Endpoints that take longer than 30 seconds will receive a delivery failure (retryable). There is no way to configure this timeout per endpoint.
+- If enqueueing a delivery fails, the delivery record is immediately marked `dead`. If that status update itself fails, the error is logged but does not propagate — the event handler always returns cleanly.
 
 ## Key Files
 

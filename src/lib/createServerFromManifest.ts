@@ -20,6 +20,7 @@ import type { ManifestHandlerRegistry } from './manifestHandlerRegistry';
 import { getManifestPluginRefs } from './manifestPluginRefs';
 import { manifestToAppConfig } from './manifestToAppConfig';
 import type { ManifestToConfigOptions } from './manifestToAppConfig';
+import { resolveManifestPath } from './pathResolution';
 
 export interface CreateServerFromManifestOptions extends ManifestToConfigOptions {
   /**
@@ -92,20 +93,20 @@ export function resolveHandlersFileEntries(
   }
 
   if (typeof handlersConfig === 'object' && 'dir' in handlersConfig) {
-    const dirPath = resolve(baseDir, handlersConfig.dir);
+    const dirPath = resolveManifestPath(handlersConfig.dir, baseDir);
     if (!existsSync(dirPath)) {
       return { mode: 'dir', dirPath, files: [] };
     }
     const files = readdirSync(dirPath)
       .filter(f => /\.(ts|js)$/.test(f) && !f.endsWith('.d.ts'))
       .sort()
-      .map(file => resolve(dirPath, file));
+      .map(file => resolveManifestPath(file, dirPath));
     return { mode: 'dir', dirPath, files };
   }
 
-  const filePath = resolve(
-    baseDir,
+  const filePath = resolveManifestPath(
     typeof handlersConfig === 'string' ? handlersConfig : 'slingshot.handlers.ts',
+    baseDir,
   );
   return { mode: 'file', filePath };
 }

@@ -1,11 +1,11 @@
 import { createRequire } from 'node:module';
 import type { Context, MiddlewareHandler } from 'hono';
-import { resolve } from 'path';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { getActor, getActorId } from '@lastshotlabs/slingshot-core';
 import type { AppManifestHandlerRef } from './manifest';
 import { createDeferredAdminProviders } from './manifestAdminProviders';
 import type { ManifestHandlerRegistry } from './manifestHandlerRegistry';
+import { resolveManifestPath } from './pathResolution';
 
 const require = createRequire(import.meta.url);
 
@@ -39,7 +39,7 @@ export function resolveHandlerRef(
 }
 
 export function resolveBuiltinPath(value: string, baseDir: string): string {
-  return resolve(baseDir, value.replace('${importMetaDir}', baseDir));
+  return resolveManifestPath(value, baseDir);
 }
 
 function resolveSsrRuntimeStrategy(strategy: string): unknown {

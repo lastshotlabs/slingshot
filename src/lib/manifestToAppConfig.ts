@@ -35,13 +35,13 @@ import {
 import { createRedisTransport } from '@framework/ws/redisTransport';
 import type { RedisTransportOptions } from '@framework/ws/redisTransport';
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
 import type { KafkaConnectorHandle, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import type { CreateServerConfig } from '../server';
 import type { AppManifest, AppManifestHandlerRef } from './manifest';
 import type { ManifestHandlerRegistry } from './manifestHandlerRegistry';
 import { getManifestPluginRefs } from './manifestPluginRefs';
+import { resolveManifestPath } from './pathResolution';
 import {
   resolveLoggingStrategy,
   resolveNormalizePathStrategy,
@@ -68,7 +68,7 @@ export interface ManifestToConfigOptions {
 // ---------------------------------------------------------------------------
 
 function resolvePath(value: string, baseDir: string): string {
-  return resolve(value.replace('${importMetaDir}', baseDir));
+  return resolveManifestPath(value, baseDir);
 }
 
 function resolveRef(

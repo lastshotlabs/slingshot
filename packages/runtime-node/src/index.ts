@@ -84,6 +84,15 @@ function deleteChannelIfEmpty(
   if (subs?.size === 0) channels.delete(channel);
 }
 
+function isEnoentError(err: unknown): err is NodeJS.ErrnoException {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as NodeJS.ErrnoException).code === 'ENOENT'
+  );
+}
+
 export const runtimeNodeInternals = {
   toBufferChunk,
   stringifyWsPayload,
@@ -518,12 +527,7 @@ function createNodeFs(): RuntimeFs {
       try {
         return new Uint8Array(await readFile(path));
       } catch (err: unknown) {
-        if (
-          typeof err === 'object' &&
-          err !== null &&
-          'code' in err &&
-          (err as NodeJS.ErrnoException).code === 'ENOENT'
-        ) {
+        if (isEnoentError(err)) {
           return null;
         }
         throw err;
@@ -632,8 +636,11 @@ export function nodeRuntime(): SlingshotRuntime {
       const { readFile } = await import('node:fs/promises');
       try {
         return await readFile(path, 'utf8');
-      } catch {
-        return null;
+      } catch (err: unknown) {
+        if (isEnoentError(err)) {
+          return null;
+        }
+        throw err;
       }
     },
     supportsAsyncLocalStorage: true,

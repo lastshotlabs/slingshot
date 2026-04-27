@@ -1,4 +1,19 @@
 import { z } from 'zod';
+
+function normalizeMountPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/')) {
+    throw new Error("mountPath must start with '/'");
+  }
+
+  const normalized = trimmed.replace(/\/+$/, '');
+  if (normalized.length === 0) {
+    throw new Error("mountPath must not be '/'");
+  }
+
+  return normalized;
+}
+
 import type {
   AuditLogProvider,
   MailRenderer,
@@ -43,8 +58,11 @@ export const adminPluginConfigSchema = z.object({
   /** Mount path for admin routes. Default: '/admin' */
   mountPath: z
     .string()
+    .transform(value => normalizeMountPath(value))
     .optional()
-    .describe("URL path prefix for admin routes. Omit to use '/admin'."),
+    .describe(
+      "URL path prefix for admin routes. Must start with '/'. Trailing slashes are trimmed. Omit to use '/admin'.",
+    ),
   /** Provider for admin access verification */
   accessProvider: z
     .custom<AdminAccessProvider>(v => v != null && typeof v === 'object', {

@@ -1,6 +1,20 @@
 import { z } from 'zod';
 import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
 
+function normalizeMountPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/')) {
+    throw new Error("mountPath must start with '/'");
+  }
+
+  const normalized = trimmed.replace(/\/+$/, '');
+  if (normalized.length === 0) {
+    throw new Error("mountPath must not be '/'");
+  }
+
+  return normalized;
+}
+
 const storageAdapterRefSchema = z.object({
   adapter: z
     .enum(['s3', 'local', 'memory'])
@@ -69,8 +83,11 @@ export const assetsPluginConfigSchema = z.object({
   mountPath: z
     .string()
     .min(1)
+    .transform(value => normalizeMountPath(value))
     .optional()
-    .describe('URL path prefix for asset routes. Omit to use the plugin default mount path.'),
+    .describe(
+      "URL path prefix for asset routes. Must start with '/'. Trailing slashes are trimmed. Omit to use the plugin default mount path.",
+    ),
   storage: z
     .union([
       storageAdapterRefSchema,

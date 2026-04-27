@@ -64,8 +64,16 @@ async function readFileViaRuntime(
   const { readFile } = await import('node:fs/promises');
   try {
     return await readFile(filePath, 'utf8');
-  } catch {
-    return null;
+  } catch (err: unknown) {
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as NodeJS.ErrnoException).code === 'ENOENT'
+    ) {
+      return null;
+    }
+    throw err;
   }
 }
 

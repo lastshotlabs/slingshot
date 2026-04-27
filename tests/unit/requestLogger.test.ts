@@ -145,6 +145,7 @@ describe('requestLogger middleware', () => {
   test('userId and tenantId captured from context', async () => {
     const { app, logs } = createLoggerApp();
     app.use(async (c, next) => {
+      c.set('tenantId', 'tenant-456');
       c.set('actor', {
         id: 'actor-123',
         kind: 'user',
@@ -153,7 +154,6 @@ describe('requestLogger middleware', () => {
         roles: null,
         claims: {},
       } satisfies Actor);
-      // actor already set above — no legacy variable needed
       await next();
     });
     app.get('/api/data', c => c.json({ ok: true }));
@@ -161,7 +161,7 @@ describe('requestLogger middleware', () => {
     await app.request('/api/data');
 
     expect(logs[0].userId).toBe('actor-123');
-    expect(logs[0].tenantId).toBe('tenant-456');
+    expect(logs[0].requestTenantId).toBe('tenant-456');
   });
 
   test('downstream throw still produces a log entry with status 500', async () => {

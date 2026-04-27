@@ -2,6 +2,8 @@
 
 Multi-provider push delivery plugin with manifest wiring, formatter compilation, entity-backed
 subscriptions, and provider dispatch.
+Push entities follow the shared package-first/entity model; `createPushPlugin()` is the runtime shell
+that composes routing, providers, and manifest wiring.
 
 ## Key Files
 

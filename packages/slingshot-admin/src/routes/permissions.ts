@@ -164,6 +164,9 @@ export function createPermissionsRouter(config: PermissionsRouterConfig) {
 
       // Parse expiresAt string to Date BEFORE calling validateGrant
       const expiresAt = body.expiresAt ? new Date(body.expiresAt) : undefined;
+      if (expiresAt !== undefined && Number.isNaN(expiresAt.getTime())) {
+        return errorResponse(c, 'expiresAt must be a valid ISO date', 400);
+      }
 
       try {
         const grantInput = {

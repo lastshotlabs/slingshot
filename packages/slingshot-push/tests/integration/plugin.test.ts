@@ -29,6 +29,7 @@ import type {
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { createPushPlugin } from '../../src/plugin';
+import type { PushPluginConfig } from '../../src/types/config';
 import { PUSH_PLUGIN_STATE_KEY, type PushPluginState } from '../../src/state';
 import { TEST_VAPID } from '../../src/testing';
 
@@ -143,6 +144,7 @@ async function createPushHarness(opts?: {
   userId?: string;
   withNotificationsPlugin?: boolean;
   authRuntime?: TestAuthRuntime;
+  pluginConfig?: Partial<PushPluginConfig>;
 }): Promise<PushHarness> {
   const userId = opts?.userId ?? 'user-1';
   const runtime = createRuntime();
@@ -188,6 +190,7 @@ async function createPushHarness(opts?: {
     enabledPlatforms: ['web'],
     web: { vapid: TEST_VAPID },
     mountPath: '/push',
+    ...(opts?.pluginConfig ?? {}),
   });
 
   const app = new Hono();
@@ -636,6 +639,67 @@ describe('createPushPlugin — delivery ack', () => {
   });
 });
 
+describe('createPushPlugin — provider fan-out resilience', () => {
+  test('continues sending later subscriptions when one provider call throws', async () => {
+    const harness = await createPushHarness({
+      pluginConfig: { retries: { maxAttempts: 1, initialDelayMs: 0 } },
+    });
+    const providers = harness.pluginState.providers as unknown as {
+      web: {
+        send: (subscription: { platformData: { endpoint: string } }, message: unknown) => Promise<{
+          ok: boolean;
+          reason?: string;
+          error?: string;
+        }>;
+      };
+    };
+    const send = mock(
+      async (subscription: { platformData: { endpoint: string } }) => {
+        if (subscription.platformData.endpoint.includes('fail')) {
+          throw new Error('web provider failed');
+        }
+        return { ok: true };
+      },
+    );
+    providers.web = {
+      platform: 'web',
+      send,
+    };
+
+    await json(harness.app, 'POST', '/push/subscriptions', {
+      body: {
+        userId: 'user-1',
+        deviceId: 'device-fail',
+        platform: 'web',
+        platformData: {
+          platform: 'web',
+          endpoint: 'https://push.example.com/fail',
+          keys: { p256dh: 'k1', auth: 'a1' },
+        },
+      },
+    });
+    await json(harness.app, 'POST', '/push/subscriptions', {
+      body: {
+        userId: 'user-1',
+        deviceId: 'device-ok',
+        platform: 'web',
+        platformData: {
+          platform: 'web',
+          endpoint: 'https://push.example.com/ok',
+          keys: { p256dh: 'k2', auth: 'a2' },
+        },
+      },
+    });
+
+    const delivered = await harness.pluginState.router.sendToUser('user-1', {
+      title: 'Fan-out',
+    });
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(delivered).toBe(1);
+  });
+});
+
 describe('createPushPlugin — notifications delivery adapter wiring', () => {
   test('registers delivery adapter with slingshot-notifications when present', async () => {
     let registeredAdapter: unknown = null;
@@ -760,5 +824,15 @@ describe('createPushPlugin — manifest-first boot', () => {
     // The config was serializable — no functions, no class instances
     expect(harness.pluginState).toBeDefined();
     expect(harness.pluginState.config.mountPath).toBe('/push');
+  });
+
+  test('rejects mountPath values without a leading slash', () => {
+    expect(() =>
+      createPushPlugin({
+        enabledPlatforms: ['web'],
+        web: { vapid: TEST_VAPID },
+        mountPath: 'push',
+      }),
+    ).toThrow(/mountPath must start with '\//i);
   });
 });

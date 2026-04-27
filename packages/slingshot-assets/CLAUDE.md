@@ -2,6 +2,8 @@
 
 Entity-backed asset storage plugin with storage adapter resolution, upload metadata, and
 manifest-aware runtime wiring for asset routes.
+Asset entities follow the shared package-first/entity model; `createAssetsPlugin()` is the runtime
+shell that composes those entities into the live plugin.
 
 ## Key Files
 

@@ -10,6 +10,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-push
 @lastshotlabs/slingshot-push is the feature package in the Slingshot workspace.
 
 Web Push (VAPID) delivery plugin for Slingshot
+Push entities follow the shared package-first/entity model; `createPushPlugin()` is the runtime shell
+that composes routing, providers, and manifest wiring.
 
 ## Package Boundaries
 

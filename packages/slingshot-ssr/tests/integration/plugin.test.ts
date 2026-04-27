@@ -134,6 +134,48 @@ describe('ssrPluginConfigSchema', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('rejects relative serverRoutesDir', () => {
+    const result = ssrPluginConfigSchema.safeParse({
+      renderer: { resolve: () => {}, render: () => {}, renderChain: () => {} },
+      serverRoutesDir: 'server/routes',
+      assetsManifest: '/manifest.json',
+    });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toMatch(/absolute/i);
+  });
+
+  it('rejects relative serverActionsDir', () => {
+    const result = ssrPluginConfigSchema.safeParse({
+      renderer: { resolve: () => {}, render: () => {}, renderChain: () => {} },
+      serverRoutesDir: '/routes',
+      assetsManifest: '/manifest.json',
+      serverActionsDir: 'server/actions',
+    });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toMatch(/absolute/i);
+  });
+
+  it('rejects bare-hostname trustedOrigins', () => {
+    const result = ssrPluginConfigSchema.safeParse({
+      renderer: { resolve: () => {}, render: () => {}, renderChain: () => {} },
+      serverRoutesDir: '/routes',
+      assetsManifest: '/manifest.json',
+      trustedOrigins: ['example.com'],
+    });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues)).toMatch(/origin/i);
+  });
+
+  it('accepts full HTTP/HTTPS origins in trustedOrigins', () => {
+    const result = ssrPluginConfigSchema.safeParse({
+      renderer: { resolve: () => {}, render: () => {}, renderChain: () => {} },
+      serverRoutesDir: '/routes',
+      assetsManifest: '/manifest.json',
+      trustedOrigins: ['https://app.example.com', 'http://localhost:3001'],
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('createSsrPlugin — production mode manifest check', () => {

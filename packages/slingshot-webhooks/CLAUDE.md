@@ -2,6 +2,8 @@
 
 Inbound and outbound webhook plugin with entity-backed endpoints, signature helpers, and
 queue-backed delivery for retries and fan-out.
+Webhook entities follow the shared package-first/entity model; `createWebhookPlugin()` is the runtime
+shell that composes delivery and intake wiring.
 
 ## Key Files
 

@@ -35,8 +35,14 @@ export function createLambdaRuntime(config: FunctionsRuntimeConfig): LambdaRunti
 
   async function ensureBootstrap(): Promise<BootstrapResult> {
     if (!cached) {
-      cached = await bootstrap(config);
-      await config.hooks?.onInit?.(cached.ctx);
+      const bootstrapped = await bootstrap(config);
+      try {
+        await config.hooks?.onInit?.(bootstrapped.ctx);
+      } catch (err) {
+        await bootstrapped.teardown().catch(() => {});
+        throw err;
+      }
+      cached = bootstrapped;
     }
     if (!shutdownRegistered && config.hooks?.onShutdown) {
       shutdownRegistered = true;

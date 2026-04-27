@@ -46,7 +46,7 @@ describe('webhooks manifest conversion', () => {
       enabled: boolean;
     };
     expect(createdEndpoint.enabled).toBe(true);
-    expect(createdEndpoint.secret).toBe('oken');
+    expect(createdEndpoint.secret).toBe('****');
 
     events.publish(
       'auth:login',

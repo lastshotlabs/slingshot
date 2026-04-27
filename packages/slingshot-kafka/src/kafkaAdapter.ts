@@ -707,9 +707,11 @@ export function createKafkaAdapter(
           ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
 
         void (async () => {
+          let connected = false;
           try {
             await ensureTopic(topic);
             await consumer.connect();
+            connected = true;
             connectedConsumers.add(entryKey);
             await consumer.subscribe({
               topic,
@@ -734,6 +736,16 @@ export function createKafkaAdapter(
             durableListeners
               .get(event as string)
               ?.delete(listener as (envelope: EventEnvelope) => void | Promise<void>);
+            if (connected) {
+              try {
+                await consumer.disconnect();
+              } catch (disconnectErr) {
+                console.error(
+                  `[KafkaAdapter] error disconnecting failed consumer "${groupId}":`,
+                  disconnectErr,
+                );
+              }
+            }
             console.error(
               `[KafkaAdapter] durable consumer setup failed for event "${event}" group "${groupId}":`,
               err,

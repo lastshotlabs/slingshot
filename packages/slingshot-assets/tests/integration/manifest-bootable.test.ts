@@ -38,4 +38,13 @@ describe('slingshot-assets manifest bootability', () => {
     expect(plugin.dependencies).toContain('slingshot-auth');
     expect(plugin.dependencies).toContain('slingshot-permissions');
   });
+
+  test('rejects mountPath values without a leading slash', () => {
+    expect(() =>
+      createAssetsPlugin({
+        storage: { adapter: 'memory' },
+        mountPath: 'assets',
+      } as AssetsPluginConfig),
+    ).toThrow(/mountPath must start with '\//i);
+  });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { PermissionRegistry } from '@lastshotlabs/slingshot-core';
+import { adminPluginConfigSchema } from '../../src/types/config';
 import { registerAdminResourceTypes } from '../../src/lib/resourceTypes';
 
 // ---------------------------------------------------------------------------
@@ -105,5 +106,13 @@ describe('registerAdminResourceTypes', () => {
       registerAdminResourceTypes(registry);
       registerAdminResourceTypes(registry);
     }).not.toThrow();
+  });
+});
+
+describe('adminPluginConfigSchema mountPath', () => {
+  test('rejects mountPath values without a leading slash', () => {
+    expect(() => adminPluginConfigSchema.parse({ mountPath: 'admin' })).toThrow(
+      /mountPath must start with '\//i,
+    );
   });
 });

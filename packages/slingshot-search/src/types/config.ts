@@ -9,6 +9,20 @@ import { z } from 'zod';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import type { AnySearchProviderConfig } from './provider';
 
+function normalizeMountPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/')) {
+    throw new Error("mountPath must start with '/'");
+  }
+
+  const normalized = trimmed.replace(/\/+$/, '');
+  if (normalized.length === 0) {
+    throw new Error("mountPath must not be '/'");
+  }
+
+  return normalized;
+}
+
 /**
  * Admin gate for search index management routes.
  *
@@ -261,8 +275,11 @@ export const searchPluginConfigSchema = z.object({
     ),
   mountPath: z
     .string()
+    .transform(value => normalizeMountPath(value))
     .optional()
-    .describe("URL path prefix for search routes. Omit to use '/search'."),
+    .describe(
+      "URL path prefix for search routes. Must start with '/'. Trailing slashes are trimmed. Omit to use '/search'.",
+    ),
   disableRoutes: z
     .array(z.string())
     .optional()

@@ -5,7 +5,6 @@ import {
   type PostgresHealthCheckResult,
   type PostgresMigrationMode,
   type PostgresPoolStatsSnapshot,
-  emitPackageStabilityWarning,
   attachPostgresPoolRuntime,
   createPostgresPoolRuntime,
 } from '@lastshotlabs/slingshot-core';
@@ -160,12 +159,6 @@ export async function connectPostgres(
   connectionString: string,
   options: PostgresConnectionOptions = {},
 ): Promise<DrizzlePostgresDb> {
-  emitPackageStabilityWarning(
-    '@lastshotlabs/slingshot-postgres',
-    'experimental',
-    'Use the next channel while the Postgres connection helper is still being hardened.',
-  );
-
   const pool = new Pool({
     connectionString,
     max: options.pool?.max,
@@ -179,18 +172,23 @@ export async function connectPostgres(
     keepAlive: options.pool?.keepAlive,
     keepAliveInitialDelayMillis: options.pool?.keepAliveInitialDelayMillis,
   });
-  const runtime = createPostgresPoolRuntime({
-    migrationMode: options.migrations,
-    healthcheckTimeoutMs: options.healthcheckTimeoutMs ?? options.pool?.queryTimeoutMs,
-  });
-  attachPostgresPoolRuntime(pool, runtime);
-  instrumentPool(pool, (durationMs, failed) => runtime.recordQuery(durationMs, failed));
-  await pool.query('SELECT 1'); // verify connectivity eagerly
-  const db = drizzle(pool);
-  return {
-    pool,
-    db,
-    healthCheck: timeoutMs => checkPostgresHealth(pool, runtime.healthcheckTimeoutMs, timeoutMs),
-    getStats: () => runtime.snapshot(pool),
-  };
+  try {
+    const runtime = createPostgresPoolRuntime({
+      migrationMode: options.migrations,
+      healthcheckTimeoutMs: options.healthcheckTimeoutMs ?? options.pool?.queryTimeoutMs,
+    });
+    attachPostgresPoolRuntime(pool, runtime);
+    instrumentPool(pool, (durationMs, failed) => runtime.recordQuery(durationMs, failed));
+    await pool.query('SELECT 1'); // verify connectivity eagerly
+    const db = drizzle(pool);
+    return {
+      pool,
+      db,
+      healthCheck: timeoutMs => checkPostgresHealth(pool, runtime.healthcheckTimeoutMs, timeoutMs),
+      getStats: () => runtime.snapshot(pool),
+    };
+  } catch (error) {
+    await pool.end().catch(() => undefined);
+    throw error;
+  }
 }

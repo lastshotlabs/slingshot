@@ -291,7 +291,7 @@ describe('createSseUpgradeHandler', () => {
     const req = new Request('http://localhost/events');
     const clientData = await upgrade(req);
     expect(clientData.actor.id).toBe('user-abc');
-    expect(clientData.requestTenantId).toBe('tenant-z');
+    expect(clientData.requestTenantId).toBeNull();
     expect(clientData.endpoint).toBe('/events');
   });
 

@@ -47,6 +47,7 @@ describe('coverage tooling', () => {
     ]);
     expect(filtered.packageTestSuites.map((suite: { name: string }) => suite.name)).toEqual([
       'runtime-bun',
+      'slingshot-bullmq',
     ]);
   });
 

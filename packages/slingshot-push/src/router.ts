@@ -200,7 +200,17 @@ export function createPushRouter(options: {
         attempts += 1;
         await options.repos.deliveries.incrementAttempts(delivery.id, 1);
 
-        const result = await provider.send(toProviderSubscription(subscription, platform), payload);
+        let result;
+        try {
+          result = await provider.send(toProviderSubscription(subscription, platform), payload);
+        } catch (err) {
+          console.error('[slingshot-push] Provider threw while sending push delivery', err);
+          result = {
+            ok: false,
+            reason: 'transient' as const,
+            error: err instanceof Error ? err.message : 'push provider threw',
+          };
+        }
         if (result.ok) {
           await options.repos.deliveries.markSent({
             id: delivery.id,

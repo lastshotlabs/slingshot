@@ -357,7 +357,7 @@ describe('webhooks manifest runtime', () => {
         sourcePattern: 'test:webhook.*',
       },
     ]);
-    expect(created.secret).toBe('cret');
+    expect(created.secret).toBe('****');
     expect(records[0]?.subscriptions).toEqual(created.subscriptions);
 
     await expect(

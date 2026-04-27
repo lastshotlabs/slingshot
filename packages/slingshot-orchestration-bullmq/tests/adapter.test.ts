@@ -193,12 +193,18 @@ class MockQueueEvents {
 
 class MockWorker {
   static instances: MockWorker[] = [];
+  static failOnConstruction: Error | null = null;
 
   constructor(
     public name: string,
     public processor: (job: Record<string, unknown>) => Promise<unknown>,
     public opts: Record<string, unknown>,
   ) {
+    if (MockWorker.failOnConstruction) {
+      const error = MockWorker.failOnConstruction;
+      MockWorker.failOnConstruction = null;
+      throw error;
+    }
     MockWorker.instances.push(this);
   }
 
@@ -227,6 +233,7 @@ describe('bullmq orchestration adapter', () => {
     MockQueue.instances = [];
     MockQueueEvents.instances = [];
     MockWorker.instances = [];
+    MockWorker.failOnConstruction = null;
     mockRedis.reset();
   });
 
@@ -253,6 +260,28 @@ describe('bullmq orchestration adapter', () => {
 
     expect(MockQueueEvents.instances.length).toBeGreaterThan(queueEventsBefore);
     expect(MockWorker.instances.length).toBeGreaterThan(workersBefore);
+  });
+
+  test('retries startup after a worker constructor failure', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'retry-startup',
+    });
+    const task = defineTask({
+      name: 'retry-startup-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+
+    MockWorker.failOnConstruction = new Error('worker failed');
+    await expect(adapter.runTask(task.name, { value: 'ok' })).rejects.toThrow('worker failed');
+
+    const handle = await adapter.runTask(task.name, { value: 'ok' });
+    await expect(handle.result()).resolves.toEqual({ value: 'ok' });
   });
 
   test('listRuns maps BullMQ job states to portable run statuses', async () => {

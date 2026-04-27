@@ -38,6 +38,9 @@ export interface FakeKafkaState {
   adminDisconnectCalls: number;
   createTopicsCalls: FakeCreateTopicsPayload[];
   consumers: FakeConsumerRecord[];
+  consumerConnectErrors: unknown[];
+  consumerSubscribeErrors: unknown[];
+  consumerRunErrors: unknown[];
 }
 
 export const fakeKafkaState: FakeKafkaState = {
@@ -53,6 +56,9 @@ export const fakeKafkaState: FakeKafkaState = {
   adminDisconnectCalls: 0,
   createTopicsCalls: [],
   consumers: [],
+  consumerConnectErrors: [],
+  consumerSubscribeErrors: [],
+  consumerRunErrors: [],
 };
 
 export function resetFakeKafkaState(): void {
@@ -68,6 +74,9 @@ export function resetFakeKafkaState(): void {
   fakeKafkaState.adminDisconnectCalls = 0;
   fakeKafkaState.createTopicsCalls.length = 0;
   fakeKafkaState.consumers.length = 0;
+  fakeKafkaState.consumerConnectErrors.length = 0;
+  fakeKafkaState.consumerSubscribeErrors.length = 0;
+  fakeKafkaState.consumerRunErrors.length = 0;
 }
 
 export function flushAsyncWork(ms = 0): Promise<void> {
@@ -135,12 +144,20 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
 
       return {
         connect: async () => {
+          const nextError = state.consumerConnectErrors.shift();
+          if (nextError) {
+            throw nextError;
+          }
           record.connectCalls += 1;
         },
         disconnect: async () => {
           record.disconnectCalls += 1;
         },
         subscribe: async (payload: { topic: string | RegExp; fromBeginning: boolean }) => {
+          const nextError = state.consumerSubscribeErrors.shift();
+          if (nextError) {
+            throw nextError;
+          }
           record.subscribeCalls.push(payload);
         },
         run: async ({
@@ -152,6 +169,10 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
           partitionsConsumedConcurrently?: number;
           eachMessage: (payload: any) => Promise<void>;
         }) => {
+          const nextError = state.consumerRunErrors.shift();
+          if (nextError) {
+            throw nextError;
+          }
           record.runCalls.push({ autoCommit, partitionsConsumedConcurrently });
           record.eachMessage = eachMessage;
         },

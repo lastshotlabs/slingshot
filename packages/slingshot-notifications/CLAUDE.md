@@ -2,6 +2,8 @@
 
 Shared notification storage, preference resolution, scheduling, and dispatcher plumbing. Other
 feature packages depend on this package for notification persistence and delivery.
+Notification entities follow the shared package-first/entity model; `createNotificationsPlugin()` is
+the runtime shell that wires storage, dispatch, and delivery.
 
 ## Key Files
 

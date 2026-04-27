@@ -43,6 +43,7 @@ const productionPathPackages = new Set([
   'slingshot-runtime-lambda',
   'slingshot-ssr',
   'slingshot-ssg',
+  'slingshot-postgres',
 ]);
 const experimentalPackages = new Set([
   'slingshot-auth',
@@ -50,7 +51,6 @@ const experimentalPackages = new Set([
   'slingshot-oidc',
   'slingshot-m2m',
   'slingshot-scim',
-  'slingshot-postgres',
 ]);
 const deferredPackages = new Set([
   'slingshot-community',

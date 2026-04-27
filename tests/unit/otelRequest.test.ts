@@ -88,6 +88,7 @@ function buildApp(tracer: Tracer, handler?: (c: any) => any) {
   // Provide default context variables the middleware reads after next()
   app.use('/*', async (c, next) => {
     c.set('requestId', 'req-123');
+    c.set('tenantId', 'tenant-789');
     c.set('actor', {
       id: 'user-456',
       kind: 'user',
@@ -166,7 +167,7 @@ describe('otelRequestMiddleware', () => {
     expect(attrs['http.status_code']).toBe(200);
     expect(attrs['slingshot.request_id']).toBe('req-123');
     expect(attrs['slingshot.user_id']).toBe('user-456');
-    expect(attrs['slingshot.tenant_id']).toBe('tenant-789');
+    expect(attrs['slingshot.request_tenant_id']).toBe('tenant-789');
 
     // Status OK
     expect(getStatus()?.code).toBe(SpanStatusCode.OK);
@@ -196,7 +197,7 @@ describe('otelRequestMiddleware', () => {
     expect(res.status).toBe(200);
     expect(attrs['slingshot.request_id']).toBeUndefined();
     expect(attrs['slingshot.user_id']).toBeUndefined();
-    expect(attrs['slingshot.tenant_id']).toBeUndefined();
+    expect(attrs['slingshot.request_tenant_id']).toBeUndefined();
   });
 
   test('TextMapGetter.get returns header value and keys returns header keys', async () => {

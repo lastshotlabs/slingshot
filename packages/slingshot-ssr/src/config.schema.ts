@@ -1,4 +1,5 @@
 // packages/slingshot-ssr/src/config.schema.ts
+import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import type { IsrCacheAdapter } from './isr/types';
 import type { NavigationConfig, PageDeclaration } from './pageDeclarations';
@@ -90,6 +91,7 @@ export const ssrPluginConfigSchema = z.object({
   serverRoutesDir: z
     .string()
     .min(1, 'serverRoutesDir must be a non-empty path')
+    .refine(isAbsolute, { message: 'serverRoutesDir must be an absolute path' })
     .describe('Absolute path to the directory containing SSR server route modules.'),
   assetsManifest: z
     .string()
@@ -132,10 +134,24 @@ export const ssrPluginConfigSchema = z.object({
    * @default []
    */
   trustedOrigins: z
-    .array(z.string())
+    .array(
+      z
+        .string()
+        .refine(
+          val => {
+            try {
+              const u = new URL(val);
+              return (u.protocol === 'http:' || u.protocol === 'https:') && u.pathname === '/';
+            } catch {
+              return false;
+            }
+          },
+          { message: "Each trustedOrigin must be a full HTTP/HTTPS origin, e.g. 'https://app.example.com'" },
+        ),
+    )
     .optional()
     .describe(
-      'Additional trusted origins for server action CSRF checks. Omit to trust only the server origin.',
+      "Additional trusted origins for server action CSRF checks. Must be full HTTP/HTTPS origins (e.g. 'https://app.example.com'). Omit to trust only the server origin.",
     ),
   /**
    * Absolute path to the directory containing server action modules.
@@ -143,6 +159,7 @@ export const ssrPluginConfigSchema = z.object({
    */
   serverActionsDir: z
     .string()
+    .refine(isAbsolute, { message: 'serverActionsDir must be an absolute path' })
     .optional()
     .describe(
       "Absolute path to the directory containing server action modules. Omit to use process.cwd() + '/server/actions'.",

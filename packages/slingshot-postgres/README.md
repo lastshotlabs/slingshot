@@ -5,6 +5,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-postgres
 
 > Human-owned documentation. This is the authoritative lane for package boundaries, constraints, and operational guidance.
 
+> Status: Prod path. This package is on the hardening track, but still pre-1.0.
+
 ## Purpose
 
 @lastshotlabs/slingshot-postgres is the adapter package in the Slingshot workspace.

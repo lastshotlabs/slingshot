@@ -2,6 +2,8 @@
 
 Organizations and groups plugin with entity-backed orgs, memberships, invites, and group
 relationships layered on auth and entity primitives.
+Organization and group entities follow the shared package-first/entity model; `createOrganizationsPlugin()`
+is the runtime shell that composes auth, invites, and membership flows.
 
 ## Key Files
 

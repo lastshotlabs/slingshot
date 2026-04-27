@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { resetPackageStabilityWarnings } from '@lastshotlabs/slingshot-core/testing';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
 const queryMock = mock(async (_sql: string) => ({ rows: [{ ok: 1 }], rowCount: 1 }));
+const endMock = mock(async () => {});
 const drizzleMock = mock((pool: unknown) => ({ kind: 'drizzle', pool }));
 const drizzleNameSymbol = Symbol.for('drizzle:Name');
 
@@ -17,6 +17,10 @@ class MockPool {
   query(sql: string) {
     return queryMock(sql);
   }
+
+  end() {
+    return endMock();
+  }
 }
 
 mock.module('pg', () => ({
@@ -27,19 +31,11 @@ mock.module('drizzle-orm/node-postgres', () => ({
   drizzle: (pool: unknown) => drizzleMock(pool),
 }));
 
-let warningSpy: ReturnType<typeof spyOn> | null = null;
-
 beforeEach(() => {
   MockPool.instances.length = 0;
   queryMock.mockClear();
+  endMock.mockClear();
   drizzleMock.mockClear();
-  resetPackageStabilityWarnings();
-  warningSpy = spyOn(process, 'emitWarning').mockImplementation(() => undefined);
-});
-
-afterEach(() => {
-  warningSpy?.mockRestore();
-  warningSpy = null;
 });
 
 describe('slingshot-postgres connection helpers', () => {
@@ -58,7 +54,6 @@ describe('slingshot-postgres connection helpers', () => {
     expect(result.db).toEqual({ kind: 'drizzle', pool: MockPool.instances[0] });
     expect(typeof result.healthCheck).toBe('function');
     expect(typeof result.getStats).toBe('function');
-    expect(warningSpy).toHaveBeenCalledTimes(1);
     expect(result.getStats()).toMatchObject({
       migrationMode: 'apply',
       queryCount: 1,
@@ -67,6 +62,14 @@ describe('slingshot-postgres connection helpers', () => {
       idleCount: 0,
       waitingCount: 0,
     });
+  });
+
+  test('connectPostgres closes the pool when startup verification fails', async () => {
+    const { connectPostgres } = await import(`../src/connection.ts?failure=${Date.now()}`);
+    queryMock.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(connectPostgres('postgresql://db.example/app')).rejects.toThrow('boom');
+    expect(endMock).toHaveBeenCalledTimes(1);
   });
 
   test('connectPostgres passes pool sizing and migration options to the runtime', async () => {

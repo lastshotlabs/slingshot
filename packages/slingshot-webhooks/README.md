@@ -10,6 +10,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-webhooks
 `@lastshotlabs/slingshot-webhooks` owns outbound webhook endpoint management, scoped delivery, and
 inbound provider intake. It does not own the event universe. Event owners define what is externally
 deliverable through the registry, and this package projects those definitions onto subscribers.
+Webhook entities follow the shared package-first/entity model; `createWebhookPlugin()` is the runtime
+shell that composes delivery and intake wiring.
 
 ## Package Boundaries
 

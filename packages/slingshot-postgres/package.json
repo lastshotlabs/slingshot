@@ -23,8 +23,7 @@
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com",
-    "access": "public",
-    "tag": "next"
+    "access": "public"
   },
   "files": [
     "dist",

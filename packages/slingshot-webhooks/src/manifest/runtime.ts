@@ -124,7 +124,8 @@ function hasMethods(value: unknown, methods: readonly string[]): value is BareEn
 }
 
 function maskSecret(secret: string): string {
-  return secret.length > 4 ? secret.slice(-4) : '****';
+  void secret;
+  return '****';
 }
 
 function sanitizeEndpoint(record: EndpointRecord): WebhookEndpoint {

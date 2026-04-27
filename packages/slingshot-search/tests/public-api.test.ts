@@ -34,4 +34,15 @@ describe('slingshot-search public api', () => {
       }),
     ).toThrow(/verifyRequest/);
   });
+
+  test('createSearchPlugin rejects mountPath values without a leading slash', () => {
+    expect(() =>
+      createSearchPlugin({
+        providers: {
+          default: { provider: 'db-native' },
+        },
+        mountPath: 'search',
+      }),
+    ).toThrow(/mountPath must start with '\//i);
+  });
 });

@@ -141,6 +141,29 @@ describe('createLambdaRuntime', () => {
     expect(handlerMeta).toContain('sched-2');
   });
 
+  test('tears down a failed bootstrap and retries on the next access', async () => {
+    const { createLambdaRuntime } = await import('../src/runtime');
+    let failOnInit = true;
+    const onInit = mock(async () => {
+      if (failOnInit) {
+        failOnInit = false;
+        throw new Error('init failed');
+      }
+    });
+    const runtime = createLambdaRuntime({
+      manifest: { manifestVersion: 1 },
+      hooks: { onInit },
+    });
+
+    await expect(runtime.getContext()).rejects.toThrow('init failed');
+    expect(runtimeState.teardown).toHaveBeenCalledTimes(1);
+
+    const ctx = await runtime.getContext();
+    expect(ctx).toBe(runtimeState.ctx);
+    expect(runtimeState.bootstrapCalls).toBe(2);
+    expect(onInit).toHaveBeenCalledTimes(2);
+  });
+
   test('shutdown calls onShutdown and tears down the cached app context', async () => {
     const { createLambdaRuntime } = await import('../src/runtime');
     const onShutdown = mock(async () => {});

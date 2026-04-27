@@ -407,6 +407,17 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
     providersConnected = true;
   }
 
+  async function cleanupAfterInitializationFailure(): Promise<void> {
+    await Promise.allSettled([...providers.values()].map(provider => provider.teardown()));
+    providers.clear();
+    entityStates.clear();
+    entityNameToStorageName.clear();
+    pendingEntityInitializations.clear();
+    createdTenantIndexes.clear();
+    providersConnected = false;
+    initialized = false;
+  }
+
   async function registerConfigEntity(
     entity: ResolvedEntityConfig,
     autoCreate: boolean,
@@ -489,15 +500,20 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
     async initialize(entities) {
       if (initialized) return;
 
-      await ensureProvidersConnected();
-
       const autoCreate = pluginConfig.autoCreateIndexes !== false;
 
-      for (const entity of entities) {
-        await registerConfigEntity(entity, autoCreate);
-      }
+      try {
+        await ensureProvidersConnected();
 
-      initialized = true;
+        for (const entity of entities) {
+          await registerConfigEntity(entity, autoCreate);
+        }
+
+        initialized = true;
+      } catch (error) {
+        await cleanupAfterInitializationFailure();
+        throw error;
+      }
     },
 
     async ensureConfigEntity(entity) {

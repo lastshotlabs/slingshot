@@ -207,6 +207,26 @@ describe('POST /grants — create permission grant', () => {
     });
     expect(res.status).toBe(201);
   });
+
+  test('rejects invalid expiresAt values', async () => {
+    const { app } = createApp({ globalAdmin: true });
+
+    const res = await app.request('/grants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subjectId: 'user-x',
+        subjectType: 'user',
+        tenantId: null,
+        roles: ['tenant-admin'],
+        expiresAt: 'not-a-date',
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain('expiresAt must be a valid ISO date');
+  });
 });
 
 describe('DELETE /grants/:grantId — revoke grant', () => {

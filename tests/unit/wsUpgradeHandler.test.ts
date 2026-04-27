@@ -75,7 +75,7 @@ describe('createWsUpgradeHandler', () => {
 
     expect(capturedData).toBeDefined();
     expect(capturedData.actor).toBe(userActor);
-    expect(capturedData.requestTenantId).toBe('tenant-9');
+    expect(capturedData.requestTenantId).toBeNull();
     expect(capturedData.endpoint).toBe('/chat');
     expect(capturedData.rooms).toBeInstanceOf(Set);
     expect(typeof capturedData.id).toBe('string');

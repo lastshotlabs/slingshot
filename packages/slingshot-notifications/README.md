@@ -7,6 +7,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-notifications
 notification records, user notification preferences, dispatcher scheduling, rate limiting,
 preference resolution, and the builder/runtime surface that other packages use to enqueue or
 deliver notifications.
+Notification entities follow the shared package-first/entity model; `createNotificationsPlugin()` is
+the runtime shell that wires storage, dispatch, and delivery.
 
 ## When To Use It
 

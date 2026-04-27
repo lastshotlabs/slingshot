@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import * as fsPromises from 'node:fs/promises';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { nodeRuntime } from '../src/index';
 
 // SQLite (better-sqlite3) and WebSocket (upgrade() flow) tests live in
@@ -64,6 +65,23 @@ describe('runtime-node smoke', () => {
     expect(new TextDecoder().decode(bytes!)).toBe('hello world');
     expect(await runtime.readFile(filePath)).toBe('hello world');
     expect(await runtime.readFile(join(tempDir, 'missing.txt'))).toBeNull();
+  });
+
+  test('runtime.readFile rethrows non-ENOENT errors', async () => {
+    const runtime = nodeRuntime();
+    const readSpy = spyOn(fsPromises, 'readFile').mockImplementation(async () => {
+      const err = new Error('permission denied') as NodeJS.ErrnoException;
+      err.code = 'EACCES';
+      throw err;
+    });
+
+    try {
+      await expect(runtime.readFile(join(tempDir, 'forbidden.txt'))).rejects.toMatchObject({
+        code: 'EACCES',
+      });
+    } finally {
+      readSpy.mockRestore();
+    }
   });
 
   test('fs.readFile returns null for ENOENT', async () => {

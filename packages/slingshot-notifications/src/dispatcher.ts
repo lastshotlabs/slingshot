@@ -41,7 +41,9 @@ export function createIntervalDispatcher(
     start() {
       if (timer) return;
       timer = setInterval(() => {
-        void this.tick();
+        void this.tick().catch(err => {
+          console.error('[slingshot-notifications] Dispatcher tick failed', err);
+        });
       }, intervalMs);
     },
     stop() {

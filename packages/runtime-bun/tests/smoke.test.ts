@@ -81,6 +81,18 @@ describe('runtime-bun smoke', () => {
     expect(await runtime.readFile(join(tempDir, 'missing.txt'))).toBeNull();
   });
 
+  test('runtime.readFile rethrows read errors on existing files', async () => {
+    const runtime = bunRuntime();
+    const filePath = join(tempDir, 'no-perms.txt');
+    await writeFile(filePath, 'secret');
+    await import('node:fs/promises').then(fs => fs.chmod(filePath, 0o000));
+    try {
+      await expect(runtime.readFile(filePath)).rejects.toThrow();
+    } finally {
+      await import('node:fs/promises').then(fs => fs.chmod(filePath, 0o644));
+    }
+  });
+
   test('scans files with glob support', async () => {
     const runtime = bunRuntime();
     await writeFile(join(tempDir, 'a.ts'), '');

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { InProcessAdapter } from '@lastshotlabs/slingshot-core';
 import { createIntervalDispatcher } from '../src/dispatcher';
 import { createNotificationsTestAdapters, createNotificationsTestEvents } from '../src/testing';
@@ -61,5 +61,40 @@ describe('createIntervalDispatcher', () => {
     const persisted = await adapters.notifications.getById(notification.id);
     expect(persisted?.dispatched).toBe(true);
     expect(persisted?.dispatchedAt).toBeTruthy();
+  });
+
+  test('logs dispatcher tick failures instead of surfacing unhandled rejections', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const tick = mock(async () => {
+      throw new Error('dispatcher boom');
+    });
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus: new InProcessAdapter(),
+      events: createNotificationsTestEvents(new InProcessAdapter()),
+      intervalMs: 1_000,
+      maxPerTick: 10,
+    });
+    (dispatcher as { tick: typeof tick }).tick = tick;
+    const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(
+      ((handler: TimerHandler) => {
+        if (typeof handler === 'function') {
+          void handler();
+        }
+        return 1 as ReturnType<typeof setInterval>;
+      }) as typeof setInterval,
+    );
+
+    dispatcher.start();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(tick).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+
+    setIntervalSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 });

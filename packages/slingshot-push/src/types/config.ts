@@ -2,6 +2,20 @@ import { z } from 'zod';
 import type { NotificationRecord } from '@lastshotlabs/slingshot-core';
 import type { PushMessage, PushPlatform } from './models';
 
+function normalizeMountPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/')) {
+    throw new Error("mountPath must start with '/'");
+  }
+
+  const normalized = trimmed.replace(/\/+$/, '');
+  if (normalized.length === 0) {
+    throw new Error("mountPath must not be '/'");
+  }
+
+  return normalized;
+}
+
 /** Imperative formatter escape hatch used after config compilation. */
 export type PushFormatterFn = (
   notification: NotificationRecord,
@@ -213,7 +227,10 @@ export const pushPluginConfigSchema = z
     mountPath: z
       .string()
       .default('/push')
-      .describe('URL path prefix for push routes. Default: /push.'),
+      .transform(value => normalizeMountPath(value))
+      .describe(
+        "URL path prefix for push routes. Must start with '/'. Trailing slashes are trimmed. Default: /push.",
+      ),
   })
   .superRefine((config, ctx) => {
     for (const platform of config.enabledPlatforms) {

@@ -5,7 +5,7 @@
  * denial of unknown channels.
  */
 import { describe, expect, it, mock } from 'bun:test';
-import type { EntityChannelConfig } from '@lastshotlabs/slingshot-core';
+import type { Actor, EntityChannelConfig } from '@lastshotlabs/slingshot-core';
 import { buildSubscribeGuard } from '../../packages/slingshot-entity/src/channels/applyChannelConfig';
 import type { ChannelConfigDeps } from '../../packages/slingshot-entity/src/channels/applyChannelConfig';
 
@@ -13,9 +13,18 @@ import type { ChannelConfigDeps } from '../../packages/slingshot-entity/src/chan
 // Helpers
 // ---------------------------------------------------------------------------
 
+const MOCK_ACTOR: Actor = {
+  id: 'user-1',
+  kind: 'user',
+  tenantId: null,
+  sessionId: null,
+  roles: null,
+  claims: {},
+};
+
 function makeDeps(overrides: Partial<ChannelConfigDeps> = {}): ChannelConfigDeps {
   return {
-    getIdentity: mock(() => ({ userId: 'user-1' })),
+    getActor: mock(() => MOCK_ACTOR),
     checkPermission: mock(async () => true),
     middleware: {},
     ...overrides,
@@ -49,8 +58,12 @@ describe('buildSubscribeGuard', () => {
     const result = await guard({}, 'threads:abc123:updates');
 
     expect(result).toBe(true);
-    expect(deps.getIdentity).toHaveBeenCalled();
-    expect(deps.checkPermission).toHaveBeenCalledWith('user-1', 'thread:read', undefined);
+    expect(deps.getActor).toHaveBeenCalled();
+    expect(deps.checkPermission).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', kind: 'user' }),
+      'thread:read',
+      undefined,
+    );
   });
 
   it('denies subscribe to undeclared channel name', async () => {
@@ -87,7 +100,7 @@ describe('buildSubscribeGuard', () => {
         updates: { auth: 'userAuth' },
       },
     });
-    const deps = makeDeps({ getIdentity: mock(() => null) });
+    const deps = makeDeps({ getActor: mock(() => null) });
     const guard = buildSubscribeGuard(configs, deps);
 
     const result = await guard({}, 'threads:abc123:updates');
@@ -101,7 +114,7 @@ describe('buildSubscribeGuard', () => {
         updates: { auth: 'bearer' },
       },
     });
-    const deps = makeDeps({ getIdentity: mock(() => null) });
+    const deps = makeDeps({ getActor: mock(() => null) });
     const guard = buildSubscribeGuard(configs, deps);
 
     const result = await guard({}, 'threads:abc123:updates');
@@ -115,7 +128,7 @@ describe('buildSubscribeGuard', () => {
         updates: { auth: 'none' },
       },
     });
-    const deps = makeDeps({ getIdentity: mock(() => null) });
+    const deps = makeDeps({ getActor: mock(() => null) });
     const guard = buildSubscribeGuard(configs, deps);
 
     const result = await guard({}, 'threads:abc123:updates');
@@ -287,9 +300,11 @@ describe('buildSubscribeGuard', () => {
 
     await guard({}, 'threads:abc123:updates');
 
-    expect(deps.checkPermission).toHaveBeenCalledWith('user-1', 'thread:read', {
-      tenantId: 'tenant-1',
-    });
+    expect(deps.checkPermission).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1', kind: 'user' }),
+      'thread:read',
+      { tenantId: 'tenant-1' },
+    );
   });
 
   it('ownerField match allows subscribe', async () => {
@@ -379,6 +394,6 @@ describe('buildSubscribeGuard', () => {
     const result = await guard({}, 'threads:abc123:updates');
 
     expect(result).toBe(true);
-    expect(deps.getIdentity).toHaveBeenCalled();
+    expect(deps.getActor).toHaveBeenCalled();
   });
 });

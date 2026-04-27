@@ -208,4 +208,27 @@ describe('kafkaAdapter', () => {
       console.warn = originalWarn;
     }
   });
+
+  test('disconnects a durable consumer when setup fails after connect', async () => {
+    const bus = createKafkaAdapter({
+      brokers: ['localhost:19092'],
+    });
+
+    fakeKafkaState.consumerSubscribeErrors.push(new Error('subscribe failed'));
+    const originalError = console.error;
+    const errorSpy = mock(() => {});
+    console.error = errorSpy;
+
+    try {
+      bus.on('auth:login', () => {}, { durable: true, name: 'broken-worker' });
+      await flushAsyncWork();
+
+      expect(fakeKafkaState.consumers).toHaveLength(1);
+      expect(fakeKafkaState.consumers[0]?.connectCalls).toBe(1);
+      expect(fakeKafkaState.consumers[0]?.disconnectCalls).toBe(1);
+      expect(bus.health().consumers).toHaveLength(0);
+    } finally {
+      console.error = originalError;
+    }
+  });
 });

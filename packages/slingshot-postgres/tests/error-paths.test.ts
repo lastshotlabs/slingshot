@@ -10,13 +10,12 @@
  * The fake db object lets us simulate query failures and transaction
  * rollback scenarios at the drizzle level.
  */
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import {
   HttpError,
   attachPostgresPoolRuntime,
   createPostgresPoolRuntime,
 } from '@lastshotlabs/slingshot-core';
-import { resetPackageStabilityWarnings } from '@lastshotlabs/slingshot-core/testing';
 // ── Import adapter AFTER mocks ────────────────────────────────────────────────
 import { createPostgresAdapter } from '../src/adapter.js';
 
@@ -150,25 +149,9 @@ function uniqueConstraintError(): Error {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('slingshot-postgres adapter — error paths', () => {
-  let warningSpy: ReturnType<typeof spyOn> | null = null;
-
   beforeEach(() => {
     mockDbImpl = null;
     mockMigrationVersion = 2;
-    resetPackageStabilityWarnings();
-    warningSpy = spyOn(process, 'emitWarning').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    warningSpy?.mockRestore();
-    warningSpy = null;
-  });
-
-  test('emits an ExperimentalWarning once when creating the adapter', async () => {
-    const pool = new (await import('pg')).Pool();
-
-    await createPostgresAdapter({ pool });
-    expect(warningSpy).toHaveBeenCalledTimes(1);
   });
 
   test('fails closed when the database schema version is newer than this binary supports', async () => {

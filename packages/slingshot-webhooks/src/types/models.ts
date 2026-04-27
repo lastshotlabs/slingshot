@@ -32,7 +32,7 @@ export interface WebhookEndpoint {
   ownerId: string;
   tenantId?: string | null;
   url: string;
-  /** Masked in HTTP responses; the runtime adapter reveals the full value internally. */
+  /** Fully redacted in HTTP responses; the runtime adapter reveals the full value internally. */
   secret: string;
   subscriptions: WebhookEndpointSubscription[];
   enabled: boolean;

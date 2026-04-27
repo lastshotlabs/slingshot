@@ -55,6 +55,7 @@ sees the string values.
 - `setupPost()` initializes indexes and wires event-sync subscriptions after entity discovery. If
   this phase is skipped in a custom integration, the routes may mount but the search runtime will
   not be complete.
+- `mountPath` must start with `/`; trailing slashes are trimmed before route mounting.
 - The package can target external providers or the DB-native provider. Docs should be careful not
   to imply one deployment shape when the plugin is designed to support several.
 

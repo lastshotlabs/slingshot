@@ -737,4 +737,10 @@ describe('organizations manifest conversion', () => {
       orgService.addOrgMember(created.id, memberId, ['admin'], adminId),
     ).resolves.toBeDefined();
   });
+
+  test('rejects mountPath values without a leading slash', () => {
+    expect(() =>
+      createOrganizationsPlugin({ mountPath: 'orgs' }),
+    ).toThrow(/mountPath must start with '\//i);
+  });
 });

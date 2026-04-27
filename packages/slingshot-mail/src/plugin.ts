@@ -67,41 +67,58 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
     activated = true;
 
     // 1. Resolve queue
+    const providedQueue = config.queue ?? null;
     queue =
-      config.queue ??
+      providedQueue ??
       createMemoryQueue({
         maxAttempts: config.queueConfig?.maxAttempts,
         onDeadLetter: config.onDeadLetter,
       });
 
-    // 2. Start queue (throws immediately if backend is unavailable)
-    await queue.start(config.provider);
+    try {
+      // 2. Start queue (throws immediately if backend is unavailable)
+      await queue.start(config.provider);
 
-    // 3. Validate templates on startup if enabled (default: true when renderer supports it)
-    if (config.validateTemplatesOnStartup !== false && config.renderer.listTemplates) {
-      const availableTemplates = await config.renderer.listTemplates();
-      for (const sub of config.subscriptions ?? []) {
-        if (!availableTemplates.includes(sub.template)) {
+      // 3. Validate templates on startup if enabled (default: true when renderer supports it)
+      if (config.validateTemplatesOnStartup !== false && config.renderer.listTemplates) {
+        const availableTemplates = await config.renderer.listTemplates();
+        for (const sub of config.subscriptions ?? []) {
+          if (!availableTemplates.includes(sub.template)) {
+            console.warn(
+              `[slingshot-mail] Template "${sub.template}" not found for subscription on event "${sub.event}"`,
+            );
+          }
+        }
+      }
+
+      // 4. Optional provider health check
+      if (config.provider.healthCheck) {
+        try {
+          await config.provider.healthCheck();
+        } catch (err) {
           console.warn(
-            `[slingshot-mail] Template "${sub.template}" not found for subscription on event "${sub.event}"`,
+            `[slingshot-mail] Provider health check failed: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
       }
-    }
 
-    // 4. Optional provider health check
-    if (config.provider.healthCheck) {
-      try {
-        await config.provider.healthCheck();
-      } catch (err) {
-        console.warn(
-          `[slingshot-mail] Provider health check failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
+      // 5. Wire subscriptions
+      unsubscribers = wireSubscriptions(bus, config, queue);
+    } catch (err) {
+      unsubscribers = [];
+      activated = false;
+      if (queue) {
+        try {
+          await queue.stop();
+        } catch {
+          // Best-effort cleanup for partially initialized queues.
+        }
       }
+      if (!providedQueue) {
+        queue = null;
+      }
+      throw err;
     }
-
-    // 5. Wire subscriptions
-    unsubscribers = wireSubscriptions(bus, config, queue);
   }
 
   return {

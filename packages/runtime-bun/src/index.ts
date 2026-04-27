@@ -94,11 +94,9 @@ export function bunRuntime(): SlingshotRuntime {
       },
     },
     async readFile(path: string): Promise<string | null> {
-      try {
-        return await Bun.file(path).text();
-      } catch {
-        return null;
-      }
+      const f = Bun.file(path);
+      if (!(await f.exists())) return null;
+      return await f.text();
     },
     supportsAsyncLocalStorage: true,
   };

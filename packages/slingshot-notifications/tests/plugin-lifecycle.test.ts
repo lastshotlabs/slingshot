@@ -188,4 +188,67 @@ describe('createNotificationsPlugin lifecycle', () => {
 
     expect(deliver).toHaveBeenCalledTimes(1);
   });
+
+  test('continues delivering to later adapters when one adapter throws', async () => {
+    const app = new Hono();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus, { registerDefinitions: false });
+    attachMinimalContext(app, bus);
+
+    const plugin = createNotificationsPlugin({
+      dispatcher: { enabled: false, intervalMs: 1000, maxPerTick: 10 },
+    });
+
+    await plugin.setupMiddleware?.({
+      app: app as never,
+      config: createFrameworkConfig(),
+      bus,
+      events,
+    });
+    await plugin.setupRoutes?.({
+      app: app as never,
+      config: createFrameworkConfig(),
+      bus,
+      events,
+    });
+    await plugin.setupPost?.({
+      app: app as never,
+      config: createFrameworkConfig(),
+      bus,
+      events,
+    });
+
+    const state = getContext(app).pluginState.get(NOTIFICATIONS_PLUGIN_STATE_KEY) as
+      | NotificationsPluginState
+      | undefined;
+    expect(state).toBeDefined();
+
+    const firstDeliver = mock(async () => {
+      throw new Error('adapter failed');
+    });
+    const secondDeliver = mock(async () => {});
+    state?.registerDeliveryAdapter({ deliver: firstDeliver } as never);
+    state?.registerDeliveryAdapter({ deliver: secondDeliver } as never);
+
+    bus.emit('notifications:notification.created', {
+      notification: {
+        id: 'n-throw',
+        userId: 'user-1',
+        tenantId: null,
+        source: 'community',
+        type: 'community:mention',
+      },
+      preferences: { pushEnabled: true },
+    } as never);
+    await bus.drain();
+
+    expect(firstDeliver).toHaveBeenCalledTimes(1);
+    expect(secondDeliver).toHaveBeenCalledTimes(1);
+  });
+
+  test('rejects mountPath values without a leading slash', () => {
+    expect(() =>
+      createNotificationsPlugin({ mountPath: 'notifications' } as never),
+    ).toThrow(/mountPath must start with '\//i);
+  });
 });

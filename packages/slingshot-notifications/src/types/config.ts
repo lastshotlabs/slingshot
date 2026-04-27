@@ -1,20 +1,38 @@
 import { z } from 'zod';
 
+function normalizeMountPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/')) {
+    throw new Error("mountPath must start with '/'");
+  }
+
+  const normalized = trimmed.replace(/\/+$/, '');
+  if (normalized.length === 0) {
+    throw new Error("mountPath must not be '/'");
+  }
+
+  return normalized;
+}
+
 export const notificationsPluginConfigSchema = z.object({
   mountPath: z
     .string()
-    .startsWith('/')
     .default('/notifications')
-    .describe('URL path prefix for notification routes. Default: /notifications.'),
+    .transform(value => normalizeMountPath(value))
+    .describe(
+      "URL path prefix for notification routes. Must start with '/'. Trailing slashes are trimmed. Default: /notifications.",
+    ),
   sseEnabled: z
     .boolean()
     .default(true)
     .describe('Whether the notification SSE stream is mounted. Default: true.'),
   ssePath: z
     .string()
-    .startsWith('/')
     .default('/notifications/sse')
-    .describe('URL path for the notification SSE endpoint. Default: /notifications/sse.'),
+    .transform(value => normalizeMountPath(value))
+    .describe(
+      "URL path for the notification SSE endpoint. Must start with '/'. Trailing slashes are trimmed. Default: /notifications/sse.",
+    ),
   dispatcher: z
     .object({
       enabled: z

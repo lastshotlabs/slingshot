@@ -150,7 +150,14 @@ export function createNotificationsPlugin(
       const createdListener = async (payload: unknown) => {
         const event = payload as NotificationCreatedEventPayload;
         for (const adapter of deliveryAdapters) {
-          await adapter.deliver(event);
+          try {
+            await adapter.deliver(event);
+          } catch (err) {
+            console.error(
+              '[slingshot-notifications] Delivery adapter failed for notifications:notification.created',
+              err,
+            );
+          }
         }
       };
 
@@ -186,6 +193,7 @@ export function createNotificationsPlugin(
       teardown = async () => {
         (bus as unknown as DynamicBus).off('notifications:notification.created', createdListener);
         dispatcher.stop();
+        deliveryAdapters.clear();
         await rateLimitBackend.close?.();
       };
     },

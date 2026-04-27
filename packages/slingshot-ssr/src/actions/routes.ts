@@ -185,19 +185,26 @@ function toSafeRedirectPath(target: string | undefined, requestUrl: string): str
  */
 function resolveModulePath(serverActionsDir: string, moduleName: string): string | null {
   // Reject names that are clearly path traversal attempts or absolute paths.
-  if (moduleName.includes('..') || path.isAbsolute(moduleName) || moduleName.includes('\0')) {
+  const useWin32Path = hasWindowsPathSyntax(serverActionsDir) || hasWindowsPathSyntax(moduleName);
+  const pathApi = useWin32Path ? path.win32 : path.posix;
+
+  if (moduleName.includes('..') || pathApi.isAbsolute(moduleName) || moduleName.includes('\0')) {
     return null;
   }
 
-  const resolved = path.resolve(serverActionsDir, moduleName);
+  const resolved = pathApi.resolve(serverActionsDir, moduleName);
 
   // Ensure the resolved path is still inside serverActionsDir.
-  const relative = path.relative(serverActionsDir, resolved);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+  const relative = pathApi.relative(serverActionsDir, resolved);
+  if (relative.startsWith('..') || pathApi.isAbsolute(relative)) {
     return null;
   }
 
   return resolved;
+}
+
+function hasWindowsPathSyntax(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\');
 }
 
 // ─── Router factory ───────────────────────────────────────────────────────────

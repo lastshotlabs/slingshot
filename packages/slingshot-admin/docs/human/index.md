@@ -85,6 +85,7 @@ fully-constructed provider objects — it never sees the string values.
   in-memory access and managed-user providers.
 - This package can look "too small" on first read. That is intentional. If business logic starts
   piling up here, it probably belongs in the backing providers or in a different package.
+- `mountPath` must start with `/`; trailing slashes are trimmed before routes are mounted.
 - Mount path defaults to `/admin`, but the mounted permissions sub-router lives under
   `${mountPath}/permissions`, so proxy and routing assumptions should be documented carefully in
   consumer apps.

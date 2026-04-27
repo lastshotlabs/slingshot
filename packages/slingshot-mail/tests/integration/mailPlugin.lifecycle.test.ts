@@ -178,6 +178,46 @@ describe('createMailPlugin lifecycle', () => {
     await bus.shutdown?.();
   });
 
+  it('queue startup failure tears down cleanly and allows retry', async () => {
+    const bus: SlingshotEventBus = createInProcessAdapter();
+    const renderer = createRawHtmlRenderer({ templates: {} });
+    const start = mock(async () => {
+      if (start.mock.calls.length === 1) {
+        throw new Error('queue offline');
+      }
+    });
+    const stop = mock(async () => {});
+    const queue = {
+      name: 'test-queue',
+      enqueue: mock(async () => 'job-1'),
+      start,
+      stop,
+      depth: mock(async () => 0),
+      drain: mock(async () => {}),
+    };
+    const provider = makeMockProvider();
+
+    const plugin = createMailPlugin({
+      provider,
+      renderer,
+      from: 'noreply@example.com',
+      queue,
+      subscriptions: [],
+    });
+
+    await expect(plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus })).rejects.toThrow(
+      'queue offline',
+    );
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(stop).toHaveBeenCalledTimes(1);
+
+    await expect(plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus })).resolves.toBeUndefined();
+    expect(start).toHaveBeenCalledTimes(2);
+
+    await plugin.teardown!();
+    await bus.shutdown?.();
+  });
+
   it('teardown() called before setup() → no crash (queue is undefined)', async () => {
     const renderer = createRawHtmlRenderer({ templates: {} });
     const provider = makeMockProvider();

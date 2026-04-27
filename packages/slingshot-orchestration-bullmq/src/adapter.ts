@@ -354,7 +354,10 @@ export function createBullMQOrchestrationAdapter(
           }
         }
         started = true;
-      })();
+      })().catch(error => {
+        startPromise = null;
+        throw error;
+      });
     }
     await startPromise;
   }

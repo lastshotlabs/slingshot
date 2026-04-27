@@ -20,8 +20,28 @@ import { ORGANIZATIONS_ORG_SERVICE_STATE_KEY, type OrganizationsOrgService } fro
 
 const memberRoleSchema = z.enum(['owner', 'admin', 'member']);
 
+function normalizeMountPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('/')) {
+    throw new Error("mountPath must start with '/'");
+  }
+
+  const normalized = trimmed.replace(/\/+$/, '');
+  if (normalized.length === 0) {
+    throw new Error("mountPath must not be '/'");
+  }
+
+  return normalized;
+}
+
 const organizationsPluginConfigSchema = z.object({
-  mountPath: z.string().optional(),
+  mountPath: z
+    .string()
+    .transform(value => normalizeMountPath(value))
+    .optional()
+    .describe(
+      "URL path prefix for organization routes. Must start with '/'. Trailing slashes are trimmed. Omit to mount routes at the app root.",
+    ),
   organizations: z
     .object({
       enabled: z.boolean().default(true),
@@ -60,12 +80,11 @@ function composeAuthenticatedGuard(
   guard: MiddlewareHandler,
 ): MiddlewareHandler {
   return async (c, next) => {
-    let guardResponse: Response | undefined;
-    await userAuthMiddleware(c, async () => {
-      const result = await guard(c, next);
-      guardResponse = result === undefined ? undefined : result;
-    });
-    return guardResponse;
+    const authResponse = await userAuthMiddleware(c, async () => {});
+    if (authResponse) {
+      return authResponse;
+    }
+    return guard(c, next);
   };
 }
 

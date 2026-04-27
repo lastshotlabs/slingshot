@@ -10,6 +10,8 @@ description: Human-maintained guidance for @lastshotlabs/slingshot-organizations
 @lastshotlabs/slingshot-organizations is the feature package in the Slingshot workspace.
 
 Organizations and groups management plugin for Slingshot
+Organization and group entities follow the shared package-first/entity model; `createOrganizationsPlugin()`
+is the runtime shell that composes auth, invites, and membership flows.
 
 ## Package Boundaries
 

@@ -47,6 +47,15 @@ export async function createTemporalOrchestrationWorker(
   rawOptions: TemporalOrchestrationWorkerOptions,
 ): Promise<TemporalOrchestrationWorkerSupervisor> {
   assertNodeRuntime();
+  return createTemporalOrchestrationWorkerInternal(rawOptions);
+}
+
+/**
+ * Internal worker bootstrap helper used by tests and the Node-gated public entrypoint.
+ */
+export async function createTemporalOrchestrationWorkerInternal(
+  rawOptions: TemporalOrchestrationWorkerOptions,
+): Promise<TemporalOrchestrationWorkerSupervisor> {
   const options = temporalWorkerOptionsSchema.parse(rawOptions);
   const identity = options.identity ?? `slingshot-temporal-worker-${process.pid}@${hostname()}`;
   if (!existsSync(options.definitionsModulePath)) {
@@ -77,6 +86,8 @@ export async function createTemporalOrchestrationWorker(
   });
 
   let workers: Worker[] = [];
+  const createdWorkers: Worker[] = [];
+  let extraWorkerPromises: Promise<Worker>[] = [];
   const queues = new Set<string>();
   try {
     installWorkerRegistries({
@@ -107,35 +118,39 @@ export async function createTemporalOrchestrationWorker(
       queues.add(options.defaultActivityTaskQueue ?? options.workflowTaskQueue);
     }
 
-    workers = [
-      await Worker.create({
-        connection: options.connection as NativeConnection,
-        namespace,
-        taskQueue: options.workflowTaskQueue,
-        workflowsPath: generatedWorkflowsPath,
-        activities,
-        identity,
-        buildId: options.buildId,
-        maxConcurrentWorkflowTaskExecutions: options.maxConcurrentWorkflowTaskExecutions,
-        maxConcurrentActivityTaskExecutions: options.maxConcurrentActivityTaskExecutions,
-      }),
-      ...(await Promise.all(
-        [...queues]
-          .filter(queue => queue !== options.workflowTaskQueue)
-          .map(queue =>
-            Worker.create({
-              connection: options.connection as NativeConnection,
-              namespace,
-              taskQueue: queue,
-              activities,
-              identity,
-              buildId: options.buildId,
-              maxConcurrentActivityTaskExecutions: options.maxConcurrentActivityTaskExecutions,
-            }),
-          ),
-      )),
-    ];
+    const workflowWorker = await Worker.create({
+      connection: options.connection as NativeConnection,
+      namespace,
+      taskQueue: options.workflowTaskQueue,
+      workflowsPath: generatedWorkflowsPath,
+      activities,
+      identity,
+      buildId: options.buildId,
+      maxConcurrentWorkflowTaskExecutions: options.maxConcurrentWorkflowTaskExecutions,
+      maxConcurrentActivityTaskExecutions: options.maxConcurrentActivityTaskExecutions,
+    });
+    createdWorkers.push(workflowWorker);
+
+    extraWorkerPromises = [...queues]
+      .filter(queue => queue !== options.workflowTaskQueue)
+      .map(async queue => {
+        const worker = await Worker.create({
+          connection: options.connection as NativeConnection,
+          namespace,
+          taskQueue: queue,
+          activities,
+          identity,
+          buildId: options.buildId,
+          maxConcurrentActivityTaskExecutions: options.maxConcurrentActivityTaskExecutions,
+        });
+        createdWorkers.push(worker);
+        return worker;
+      });
+
+    workers = [workflowWorker, ...(await Promise.all(extraWorkerPromises))];
   } catch (error) {
+    await Promise.allSettled(extraWorkerPromises);
+    await Promise.allSettled(createdWorkers.map(worker => worker.shutdown()));
     clearWorkerRegistries();
     if (options.ownsConnection) {
       await (options.connection as NativeConnection).close();

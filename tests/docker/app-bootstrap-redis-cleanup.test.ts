@@ -15,6 +15,7 @@
  * Prerequisites: `docker compose -f docker-compose.test.yml up -d --wait redis`
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
 import { connectTestRedis, disconnectTestServices, getTestRedis } from '../setup-docker';
 
@@ -63,6 +64,17 @@ const baseConfig = {
   logging: { onLog: () => {} },
 };
 
+function makeTestBus(shutdown: () => Promise<void>): SlingshotEventBus {
+  return {
+    emit() {},
+    on() {},
+    onEnvelope() {},
+    off() {},
+    offEnvelope() {},
+    shutdown,
+  };
+}
+
 // =========================================================================
 // Redis cleanup during bootstrap failure (app.ts lines 347-354)
 // =========================================================================
@@ -97,22 +109,23 @@ describe('cleanupBootstrapFailure with live Redis', () => {
   });
 
   test('Redis cleanup happens even with custom bus that fails shutdown', async () => {
-    const bus = {
-      publish: async () => {},
-      subscribe: () => ({ unsubscribe: () => {} }),
-      shutdown: async () => {
+    const bus = makeTestBus(async () => {
         throw new Error('bus shutdown failed');
-      },
-    };
+    });
 
-    const error = await createApp({
-      ...baseConfig,
-      eventBus: bus,
-      permissions: { adapter: 'postgres' },
-    }).catch((e: Error) => e);
+    let error: unknown;
+    try {
+      await createApp({
+        ...baseConfig,
+        eventBus: bus,
+        permissions: { adapter: 'postgres' },
+      });
+    } catch (err) {
+      error = err;
+    }
 
     // The original error should propagate (not the bus error)
     expect(error).toBeInstanceOf(Error);
-    expect(error.message).toContain('Postgres');
+    expect((error as Error).message).toContain('Postgres');
   });
 });

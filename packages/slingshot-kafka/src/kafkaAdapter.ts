@@ -909,5 +909,9 @@ export function createKafkaAdapter(
     },
   });
 
+  console.info(
+    `[KafkaAdapter] Adapter created — broker connectivity will be validated on first connect. Brokers: ${config.brokers.join(', ')}`,
+  );
+
   return bus;
 }

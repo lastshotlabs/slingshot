@@ -1,2 +1,2 @@
 export { createBullMQAdapter } from './bullmqAdapter';
-export type { BullMQAdapterHealth, BullMQAdapterOptions } from './bullmqAdapter';
+export type { BullMQAdapterDropReason, BullMQAdapterHealth, BullMQAdapterOptions } from './bullmqAdapter';

@@ -10,7 +10,7 @@
  * which cleans up bus, secrets, sqlite, and all other infrastructure.
  */
 import { describe, expect, mock, test } from 'bun:test';
-import type { SecretRepository } from '@lastshotlabs/slingshot-core';
+import type { SecretRepository, SlingshotEventBus } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
 
 const baseConfig = {
@@ -33,16 +33,22 @@ const baseConfig = {
   logging: { onLog: () => {} },
 };
 
+function makeTestBus(shutdown: () => Promise<void>): SlingshotEventBus {
+  return {
+    emit() {},
+    on() {},
+    onEnvelope() {},
+    off() {},
+    offEnvelope() {},
+    shutdown,
+  };
+}
+
 describe('cleanupBootstrapFailure', () => {
   test('calls bus.shutdown AND secrets.destroy during cleanup', async () => {
     const busShutdown = mock(async () => {});
     const secretDestroy = mock(async () => {});
-    const bus = {
-      publish: async () => {},
-      emit: () => {},
-      subscribe: () => ({ unsubscribe: () => {} }),
-      shutdown: busShutdown,
-    };
+    const bus = makeTestBus(busShutdown);
     const secrets: SecretRepository = {
       name: 'test-secrets',
       get: async () => null,
@@ -66,14 +72,9 @@ describe('cleanupBootstrapFailure', () => {
 
   test('bus.shutdown error does not prevent secrets.destroy from running', async () => {
     const secretDestroy = mock(async () => {});
-    const bus = {
-      publish: async () => {},
-      emit: () => {},
-      subscribe: () => ({ unsubscribe: () => {} }),
-      shutdown: async () => {
+    const bus = makeTestBus(async () => {
         throw new Error('bus shutdown failed');
-      },
-    };
+    });
     const secrets: SecretRepository = {
       name: 'test-secrets',
       get: async () => null,
@@ -81,16 +82,21 @@ describe('cleanupBootstrapFailure', () => {
       destroy: secretDestroy,
     };
 
-    const error = await createApp({
-      ...baseConfig,
-      eventBus: bus,
-      secrets,
-      permissions: { adapter: 'postgres' },
-    }).catch((e: Error) => e);
+    let error: unknown;
+    try {
+      await createApp({
+        ...baseConfig,
+        eventBus: bus,
+        secrets,
+        permissions: { adapter: 'postgres' },
+      });
+    } catch (err) {
+      error = err;
+    }
 
     // The original error propagated, not the bus error
     expect(error).toBeInstanceOf(Error);
-    expect(error.message).toContain('Postgres');
+    expect((error as Error).message).toContain('Postgres');
 
     // secrets.destroy still ran despite bus.shutdown throwing
     expect(secretDestroy).toHaveBeenCalledTimes(1);
@@ -98,12 +104,7 @@ describe('cleanupBootstrapFailure', () => {
 
   test('secrets.destroy error does not change the propagated error', async () => {
     const busShutdown = mock(async () => {});
-    const bus = {
-      publish: async () => {},
-      emit: () => {},
-      subscribe: () => ({ unsubscribe: () => {} }),
-      shutdown: busShutdown,
-    };
+    const bus = makeTestBus(busShutdown);
     const secrets: SecretRepository = {
       name: 'failing-destroy-secrets',
       get: async () => null,
@@ -113,16 +114,21 @@ describe('cleanupBootstrapFailure', () => {
       },
     };
 
-    const error = await createApp({
-      ...baseConfig,
-      eventBus: bus,
-      secrets,
-      permissions: { adapter: 'postgres' },
-    }).catch((e: Error) => e);
+    let error: unknown;
+    try {
+      await createApp({
+        ...baseConfig,
+        eventBus: bus,
+        secrets,
+        permissions: { adapter: 'postgres' },
+      });
+    } catch (err) {
+      error = err;
+    }
 
     // The original error propagated, not the secrets error
     expect(error).toBeInstanceOf(Error);
-    expect(error.message).toContain('Postgres');
+    expect((error as Error).message).toContain('Postgres');
 
     // bus.shutdown still ran (it's called before secrets.destroy in ctx.destroy())
     expect(busShutdown).toHaveBeenCalledTimes(1);

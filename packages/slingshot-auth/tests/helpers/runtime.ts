@@ -67,7 +67,7 @@ export function makeEventBus(onEmit?: (event: string) => void): SlingshotEventBu
   } as unknown as SlingshotEventBus;
 }
 
-function makeEvents(getBus: () => SlingshotEventBus): SlingshotEvents {
+export function makeEvents(getBus: () => SlingshotEventBus): SlingshotEvents {
   return {
     definitions: {
       register() {},

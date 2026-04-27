@@ -57,7 +57,7 @@ describe('createQueueFactory', () => {
   test('creates queues and workers bound to the shared redis connection', () => {
     const redis = { host: 'localhost', port: 6379 } as never;
     const factory = createQueueFactory(() => redis);
-    const processor = async (job: { data: { userId: string } }) => job.data.userId;
+    const processor = async (job: { data: unknown }) => (job.data as { userId: string }).userId;
 
     const queue = factory.createQueue('auth-deletions', {
       defaultJobOptions: { attempts: 4 },

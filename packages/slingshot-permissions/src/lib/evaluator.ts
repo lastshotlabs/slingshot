@@ -14,13 +14,15 @@ interface EvaluatorConfig {
   adapter: PermissionsAdapter;
   groupResolver?: GroupResolver;
   /**
-   * Maximum number of groups to expand per `can()` call for a user.
+   * Maximum number of groups to process per batch when expanding a user's groups.
    *
-   * When a user belongs to more groups than this limit, the excess groups are silently
-   * ignored and a console.warn is emitted. Defaults to 50.
+   * Group expansion is no longer truncated. When a user belongs to more groups than this
+   * batch size, the evaluator processes them in chunks and emits a console.warn so the
+   * operator can see that permission checks are doing a large amount of work. Defaults
+   * to 50.
    *
-   * Set this to a value appropriate for your group model. A low limit protects against
-   * pathological N+1 amplification; a high limit supports deep org hierarchies.
+   * Set this to a value appropriate for your group model. A lower batch size reduces
+   * peak concurrency; a higher batch size reduces round trips.
    */
   maxGroups?: number;
   /**
@@ -69,12 +71,20 @@ function grantMatchesScope(grant: PermissionGrant, scope?: EvaluationScope): boo
 }
 
 function withQueryTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Permission query timed out')), timeoutMs),
-    ),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const clear = () => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+  };
+
+  const timedPromise = promise.finally(clear);
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Permission query timed out')), timeoutMs);
+  }).finally(clear);
+
+  return Promise.race([timedPromise, timeoutPromise]).finally(clear);
 }
 
 /**
@@ -116,6 +126,13 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
   const maxGroups = config.maxGroups ?? 50;
   const { queryTimeoutMs } = config;
 
+  if (maxGroups <= 0) {
+    throw new Error('[slingshot-permissions] maxGroups must be a positive number');
+  }
+  if (queryTimeoutMs !== undefined && queryTimeoutMs <= 0) {
+    throw new Error('[slingshot-permissions] queryTimeoutMs must be a positive number');
+  }
+
   function maybeWithTimeout<T>(promise: Promise<T>): Promise<T> {
     return queryTimeoutMs !== undefined ? withQueryTimeout(promise, queryTimeoutMs) : promise;
   }
@@ -140,29 +157,28 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
         const allGroupIds = await maybeWithTimeout(
           groupResolver.getGroupsForUser(subject.subjectId, tenantId),
         );
-        const groupIds =
-          allGroupIds.length > maxGroups ? allGroupIds.slice(0, maxGroups) : allGroupIds;
         if (allGroupIds.length > maxGroups) {
           console.warn(
-            `[slingshot-permissions] evaluator.can() truncated group expansion for user '${subject.subjectId}': ` +
-              `groupCount=${allGroupIds.length}, limit=${maxGroups}, action='${action}', ` +
-              `tenantId=${scope?.tenantId ?? '(none)'}. ` +
-              `Increase maxGroups in createPermissionEvaluator() config if needed.`,
+            `[slingshot-permissions] evaluator.can() is expanding ${allGroupIds.length} groups for user '${subject.subjectId}' in batches of ${maxGroups}: ` +
+              `action='${action}', tenantId=${scope?.tenantId ?? '(none)'}. ` +
+              `Increase maxGroups in createPermissionEvaluator() config to raise the batch size if needed.`,
           );
         }
-        if (groupIds.length > 0) {
+        for (let i = 0; i < allGroupIds.length; i += maxGroups) {
+          const groupIds = allGroupIds.slice(i, i + maxGroups);
+          if (groupIds.length === 0) continue;
           const groupGrantResults = await Promise.allSettled(
             groupIds.map(groupId =>
               collectGrantsForSubject({ subjectId: groupId, subjectType: 'group' }, scope),
             ),
           );
-          for (let i = 0; i < groupGrantResults.length; i++) {
-            const result = groupGrantResults[i];
+          for (let j = 0; j < groupGrantResults.length; j++) {
+            const result = groupGrantResults[j];
             if (result.status === 'fulfilled') {
               grants = grants.concat(result.value);
             } else {
               console.warn(
-                `[slingshot-permissions] evaluator.can() failed to fetch grants for group '${groupIds[i]}' (user '${subject.subjectId}'): ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+                `[slingshot-permissions] evaluator.can() failed to fetch grants for group '${groupIds[j]}' (user '${subject.subjectId}'): ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
               );
             }
           }

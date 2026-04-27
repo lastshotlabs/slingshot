@@ -378,7 +378,7 @@ describe.skipIf(!TEST_POSTGRES_URL)('Auth postgres adapter integration', () => {
 
   it('bootstrapAuth boots with postgres config', async () => {
     const { bootstrapAuth } = await import('../../src/bootstrap');
-    const { makeEventBus } = await import('../helpers/runtime');
+    const { makeEventBus, makeEvents } = await import('../helpers/runtime');
 
     const bus = makeEventBus();
     const result = await bootstrapAuth(
@@ -410,6 +410,7 @@ describe.skipIf(!TEST_POSTGRES_URL)('Auth postgres adapter integration', () => {
         },
       },
       bus,
+      makeEvents(() => bus),
       undefined,
       {
         signing: { secret: 'integration-test-signing-secret-1234567890' },

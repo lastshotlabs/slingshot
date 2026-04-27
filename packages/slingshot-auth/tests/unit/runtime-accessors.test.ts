@@ -7,10 +7,11 @@ import {
   getAuthRuntimeContextOrNull,
   getAuthRuntimeFromRequest,
 } from '../../src/runtime';
+import { makeTestRuntime } from '../helpers/runtime';
 
 describe('auth runtime accessors', () => {
   test('resolve auth runtime from app, pluginState carrier, and request context', async () => {
-    const runtime = { adapter: {} };
+    const runtime = makeTestRuntime();
     const pluginState = new Map<string, unknown>([[AUTH_RUNTIME_KEY, runtime]]);
     const app = new Hono();
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { createMemoryAuthAdapter } from '../../src/adapters/memoryAuth';
 import { authPluginConfigSchema } from '../../src/types/config';
-import { makeEventBus } from '../helpers/runtime';
+import { makeEventBus, makeEvents } from '../helpers/runtime';
 
 const connectPostgresMock = mock(async (connectionString: string, options?: unknown) => ({
   pool: {
@@ -76,42 +76,7 @@ describe('bootstrapAuth postgres wiring', () => {
   test('uses the shared postgres connector for standalone auth bootstrap', async () => {
     const bootstrapAuth = await loadBootstrapAuth();
     const bus = makeEventBus();
-    const events = {
-      definitions: {
-        register() {},
-        get() {
-          return undefined;
-        },
-        has() {
-          return false;
-        },
-        list() {
-          return [];
-        },
-        freeze() {},
-        frozen: false,
-      },
-      register() {},
-      get() {
-        return undefined;
-      },
-      list() {
-        return [];
-      },
-      publish(key: string, payload: unknown) {
-        return {
-          key,
-          payload,
-          meta: {
-            eventId: 'test-event-id',
-            occurredAt: new Date(0).toISOString(),
-            ownerPlugin: 'slingshot-auth-test',
-            exposure: ['internal'] as const,
-            scope: null,
-          },
-        };
-      },
-    };
+    const events = makeEvents(() => bus);
 
     const result = await bootstrapAuth(
       {
@@ -143,7 +108,7 @@ describe('bootstrapAuth postgres wiring', () => {
         },
       },
       bus,
-      events as any,
+      events,
       undefined,
       {
         signing: { secret: 'integration-test-signing-secret-1234567890' },
@@ -152,7 +117,9 @@ describe('bootstrapAuth postgres wiring', () => {
       },
     );
 
-    const postgresBundle = await connectPostgresMock.mock.results[0]!.value;
+    const postgresBundle = (await connectPostgresMock.mock.results[0]!.value) as {
+      pool: unknown;
+    };
 
     expect(connectPostgresMock).toHaveBeenCalledWith(
       'postgres://slingshot:test@localhost:5432/app',

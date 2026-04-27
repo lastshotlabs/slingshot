@@ -230,6 +230,16 @@ function isSerializedBullMQEnvelope(value: unknown): value is SerializedBullMQEn
 }
 
 /**
+ * Reason a durable event was dropped by `createBullMQAdapter`.
+ *
+ * - `'buffer-full'` — the in-memory pending buffer reached `MAX_PENDING_BUFFER`
+ *   entries; the event was discarded immediately rather than buffered.
+ * - `'max-attempts'` — the buffered event exceeded `MAX_ENQUEUE_ATTEMPTS`
+ *   consecutive Redis failures and was permanently discarded.
+ */
+export type BullMQAdapterDropReason = 'buffer-full' | 'max-attempts';
+
+/**
  * Creates a `SlingshotEventBus` implementation backed by BullMQ and Redis.
  *
  * Non-durable subscriptions (`bus.on(event, handler)`) behave identically to
@@ -243,7 +253,10 @@ function isSerializedBullMQEnvelope(value: unknown): value is SerializedBullMQEn
  * Events in the buffer are lost if the process crashes before they drain. See
  * the inline comment in the source for strategies that eliminate this gap.
  *
- * @param rawOpts - Adapter options (validated with Zod at call time).
+ * @param rawOpts - Adapter options (validated with Zod at call time). Accepts
+ *   an optional `onDrop` callback that is invoked whenever a durable event is
+ *   permanently discarded (buffer-full or max-attempts exceeded). Use this for
+ *   metrics, alerts, or dead-letter forwarding.
  * @returns A `SlingshotEventBus` extended with `_drainPendingBuffer` (internal
  *   test utility — do not call in application code).
  *
@@ -256,6 +269,9 @@ function isSerializedBullMQEnvelope(value: unknown): value is SerializedBullMQEn
  * const bus = createBullMQAdapter({
  *   connection: { host: 'localhost', port: 6379 },
  *   attempts: 3,
+ *   onDrop(event, reason) {
+ *     metrics.increment('bullmq.dropped_events', { event, reason });
+ *   },
  * });
  *
  * // Non-durable: fire-and-forget in this process
@@ -273,9 +289,11 @@ function isSerializedBullMQEnvelope(value: unknown): value is SerializedBullMQEn
  * ```
  */
 export function createBullMQAdapter(
-  rawOpts: BullMQAdapterOptions & EventBusSerializationOptions,
+  rawOpts: BullMQAdapterOptions & EventBusSerializationOptions & {
+    onDrop?: (event: string, reason: BullMQAdapterDropReason) => void;
+  },
 ): SlingshotEventBus & { _drainPendingBuffer: () => Promise<void>; getHealth: () => BullMQAdapterHealth } {
-  const { serializer, schemaRegistry, ...adapterOpts } = rawOpts;
+  const { serializer, schemaRegistry, onDrop, ...adapterOpts } = rawOpts;
   const opts = validatePluginConfig('slingshot-bullmq', adapterOpts, bullmqAdapterOptionsSchema);
   const prefix = opts.prefix ?? 'slingshot:events';
   const attempts = opts.attempts ?? 3;
@@ -391,6 +409,7 @@ export function createBullMQAdapter(
             `[BullMQAdapter] dropping durable event "${item.event}" to queue "${item.name}" after ${MAX_ENQUEUE_ATTEMPTS} attempts:`,
             err,
           );
+          onDrop?.(item.event, 'max-attempts');
         } else {
           retry.push(next);
         }
@@ -546,6 +565,7 @@ export function createBullMQAdapter(
                   `[BullMQAdapter] pending buffer full; dropping durable event "${event}" to queue "${name}":`,
                   err,
                 );
+                onDrop?.(event as string, 'buffer-full');
                 return;
               }
               pendingBuffer.push({

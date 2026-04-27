@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { bootstrapAuth } from '../../packages/slingshot-auth/src/bootstrap';
-import { makeEventBus } from '../../packages/slingshot-auth/tests/helpers/runtime';
+import { makeEventBus, makeEvents } from '../../packages/slingshot-auth/tests/helpers/runtime';
 
 const originalNodeEnv = process.env.NODE_ENV;
 
@@ -9,6 +9,7 @@ afterEach(() => {
 });
 
 function bootstrapWithJwt(jwt: { issuer?: string; audience?: string | string[] }) {
+  const bus = makeEventBus();
   return bootstrapAuth(
     {
       db: {
@@ -32,8 +33,8 @@ function bootstrapWithJwt(jwt: { issuer?: string; audience?: string | string[] }
         jwt,
       },
     },
-    makeEventBus(),
-    undefined,
+    bus,
+    makeEvents(() => bus),
     undefined,
     {
       signing: {
@@ -79,6 +80,7 @@ describe('auth bootstrap hardening', () => {
 
   test('production boot fails when trustProxy is not configured and auth is enabled', async () => {
     process.env.NODE_ENV = 'production';
+    const bus = makeEventBus();
 
     await expect(
       bootstrapAuth(
@@ -106,8 +108,8 @@ describe('auth bootstrap hardening', () => {
             },
           },
         },
-        makeEventBus(),
-        undefined,
+        bus,
+        makeEvents(() => bus),
         undefined,
         {
           signing: {

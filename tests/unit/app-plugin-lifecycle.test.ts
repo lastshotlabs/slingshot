@@ -250,25 +250,26 @@ describe('runPlugin* functions — no tracer branch', () => {
   const dummyApp = new OpenAPIHono<AppEnv>();
   const dummyConfig = {} as any;
   const dummyBus = {} as any;
+  const dummyEvents = {} as import('@lastshotlabs/slingshot-core').SlingshotEvents;
 
   test('runPluginMiddleware calls setupMiddleware without tracer (line 219-220)', async () => {
     const fn = mock(async () => {});
     const plugin: SlingshotPlugin = { name: 'mw', setupMiddleware: fn };
-    await runPluginMiddleware([plugin], dummyApp, dummyConfig, dummyBus);
+    await runPluginMiddleware([plugin], dummyApp, dummyConfig, dummyBus, dummyEvents);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
   test('runPluginRoutes calls setupRoutes without tracer (line 261-262)', async () => {
     const fn = mock(async () => {});
     const plugin: SlingshotPlugin = { name: 'rt', setupRoutes: fn };
-    await runPluginRoutes([plugin], dummyApp, dummyConfig, dummyBus);
+    await runPluginRoutes([plugin], dummyApp, dummyConfig, dummyBus, dummyEvents);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
   test('runPluginPost calls setupPost without tracer (line 303-304)', async () => {
     const fn = mock(async () => {});
     const plugin: SlingshotPlugin = { name: 'ps', setupPost: fn };
-    await runPluginPost([plugin], dummyApp, dummyConfig, dummyBus);
+    await runPluginPost([plugin], dummyApp, dummyConfig, dummyBus, dummyEvents);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

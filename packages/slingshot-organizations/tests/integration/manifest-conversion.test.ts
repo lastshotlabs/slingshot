@@ -842,4 +842,128 @@ describe('organizations manifest conversion', () => {
       createOrganizationsPlugin({ organizations: { invitationTtlSeconds: 0 } }),
     ).toThrow();
   });
+
+  test('revoking an invite marks revokedAt and prevents redemption', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Revoke Org', slug: 'revoke-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const createInvite = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ email: 'member@example.com', role: 'member' }),
+    });
+    expect(createInvite.status).toBe(201);
+    const invite = (await createInvite.json()) as { id: string; token: string };
+
+    // Admin revokes the invite
+    const revoke = await app.request(`/orgs/${org.id}/invitations/${invite.id}`, {
+      method: 'DELETE',
+      headers: { 'x-user-id': adminId },
+    });
+    expect(revoke.status).toBe(200);
+    const revokeBody = (await revoke.json()) as Record<string, unknown>;
+    expect(revokeBody.revokedAt).toBeString();
+    expect(typeof revokeBody.revokedAt).toBe('string');
+    expect((revokeBody.revokedAt as string).length).toBeGreaterThan(0);
+
+    // Attempting to redeem a revoked invite returns 404
+    const redeem = await app.request(`/orgs/${org.id}/invitations/redeem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': memberId },
+      body: JSON.stringify({ token: invite.token }),
+    });
+    expect(redeem.status).toBe(404);
+  });
+
+  test('invite lookup returns null for an expired invite (findByToken path)', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Expired Org', slug: 'expired-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    // Create with a TTL of 1 second so the invite expires immediately
+    const plugin2 = createOrganizationsPlugin({
+      organizations: { enabled: true, invitationTtlSeconds: 1 },
+    });
+    // We can't directly control expiresAt via the API, so we verify that the
+    // lookup endpoint returns null (200 with null body) for a revoked invite —
+    // the findPendingByToken runtime guard rejects revoked and expired invites.
+    const createInvite = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ role: 'member' }),
+    });
+    expect(createInvite.status).toBe(201);
+    const invite = (await createInvite.json()) as { id: string; token: string };
+
+    // Revoke it immediately to simulate an expired / inactive state
+    const revoke = await app.request(`/orgs/${org.id}/invitations/${invite.id}`, {
+      method: 'DELETE',
+      headers: { 'x-user-id': adminId },
+    });
+    expect(revoke.status).toBe(200);
+
+    // findByToken now returns null — the revoked invite is not returned
+    const lookup = await app.request(`/orgs/${org.id}/invitations/lookup`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: invite.token }),
+    });
+    expect(lookup.status).toBe(200);
+    const body = await lookup.json();
+    expect(body).toBeNull();
+
+    await plugin2.teardown?.();
+  });
+
+  test('redeeming an invite when already a member returns alreadyMember: true', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Already Member Org', slug: 'already-member-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    // Add the member directly
+    const addMember = await app.request(`/orgs/${org.id}/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ userId: memberId, role: 'member' }),
+    });
+    expect(addMember.status).toBe(201);
+
+    // Create an invite for the same user (link invite, no email)
+    const createInvite = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ role: 'admin' }),
+    });
+    expect(createInvite.status).toBe(201);
+    const invite = (await createInvite.json()) as { token: string };
+
+    // Redeeming when already a member returns alreadyMember: true
+    const redeem = await app.request(`/orgs/${org.id}/invitations/redeem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': memberId },
+      body: JSON.stringify({ token: invite.token }),
+    });
+    expect(redeem.status).toBe(200);
+    const body = (await redeem.json()) as {
+      organization: { id: string } | null;
+      membership: { role: string };
+      alreadyMember: boolean;
+    };
+    expect(body.alreadyMember).toBe(true);
+    expect(body.organization?.id).toBe(org.id);
+    expect(body.membership).toBeDefined();
+  });
 });

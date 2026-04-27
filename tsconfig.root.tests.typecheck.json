@@ -11,7 +11,7 @@
     "outDir": ".tmp/typecheck/root-tests",
     "noEmit": false
   },
-  "include": ["tests"],
+  "include": ["tests", "packages/slingshot-auth/tests/helpers/runtime.ts"],
   "exclude": ["node_modules", "dist"],
   "references": [
     {

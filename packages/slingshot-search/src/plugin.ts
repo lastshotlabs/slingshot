@@ -142,6 +142,10 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
       }
       if (!disabled.has(SEARCH_ROUTES.ADMIN) && config.adminGate) {
         app.route(mountPath, createAdminRouter(searchManager, config, frameworkConfig.storeInfra));
+      } else if (!disabled.has(SEARCH_ROUTES.ADMIN) && !config.adminGate) {
+        console.warn(
+          '[slingshot-search] Admin routes not mounted — set config.adminGate to enable index management endpoints.',
+        );
       }
     },
 

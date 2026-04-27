@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type {
   PermissionGrant,
   PermissionsAdapter,
@@ -581,12 +581,13 @@ describe('PermissionEvaluator', () => {
     expect(resultB).toBe(false);
   });
 
-  test('maxGroups cap truncates group expansion and emits console.warn', async () => {
+  test('maxGroups batches large group expansion without dropping grants', async () => {
     const capAdapter = createMemoryPermissionsAdapter();
     const capRegistry = createPermissionRegistry();
     capRegistry.register(postDef);
 
-    // Create a group grant for group-5 (which is beyond the cap of 3)
+    // Create a group grant for group-4, which used to be dropped when the
+    // evaluator truncated group expansion at the batch size.
     await capAdapter.createGrant({
       subjectId: 'group-4',
       subjectType: 'group',
@@ -598,7 +599,8 @@ describe('PermissionEvaluator', () => {
       grantedBy: 'system',
     });
 
-    // User belongs to groups 1-4 (4 groups), but cap is 3
+    // User belongs to groups 1-4 (4 groups), but the evaluator now processes
+    // them in batches of 3 instead of truncating the tail.
     const groupResolver = {
       getGroupsForUser: async () => ['group-1', 'group-2', 'group-3', 'group-4'],
     };
@@ -612,7 +614,7 @@ describe('PermissionEvaluator', () => {
     const originalWarn = console.warn;
     let warnMessage: string | undefined;
     console.warn = (msg: string) => {
-      if (msg.includes('truncated')) warnMessage = msg;
+      if (msg.includes('batches')) warnMessage = msg;
     };
     try {
       const result = await cappedEvaluator.can(
@@ -620,12 +622,12 @@ describe('PermissionEvaluator', () => {
         'read',
         { resourceType: 'post' },
       );
-      // group-4 was truncated, so no editor grant → false
-      expect(result).toBe(false);
+      // group-4 is now included, so the editor grant applies.
+      expect(result).toBe(true);
     } finally {
       console.warn = originalWarn;
     }
-    expect(warnMessage).toMatch(/truncated/);
+    expect(warnMessage).toMatch(/batches/);
     expect(warnMessage).toMatch(/4.*3|maxGroups/);
   });
 
@@ -663,6 +665,60 @@ describe('PermissionEvaluator', () => {
         resourceType: 'post',
       }),
     ).rejects.toThrow('Permission query timed out');
+  });
+
+  test('queryTimeoutMs clears the timer when the query resolves quickly', async () => {
+    const clearTimeoutSpy = spyOn(globalThis, 'clearTimeout');
+    const setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      void handler;
+      void timeout;
+      void args;
+      return 123 as ReturnType<typeof setTimeout>;
+    }) as typeof setTimeout);
+
+    const fastAdapter: PermissionsAdapter = {
+      async createGrant() {
+        return '';
+      },
+      async revokeGrant() {
+        return false;
+      },
+      async getGrantsForSubject() {
+        return [];
+      },
+      async getEffectiveGrantsForSubject() {
+        return [];
+      },
+      async listGrantHistory() {
+        return [];
+      },
+      async listGrantsOnResource() {
+        return [];
+      },
+      async deleteAllGrantsForSubject() {},
+    };
+
+    const timedEvaluator = createPermissionEvaluator({
+      registry,
+      adapter: fastAdapter,
+      queryTimeoutMs: 50,
+    });
+
+    await expect(
+      timedEvaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      }),
+    ).resolves.toBe(false);
+
+    expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(123);
+
+    setTimeoutSpy.mockRestore();
+    clearTimeoutSpy.mockRestore();
   });
 
   test('can() continues with other group grants when one group grant fetch fails', async () => {
@@ -728,5 +784,45 @@ describe('PermissionEvaluator', () => {
     // group-good's grant should still be applied even though group-bad failed
     expect(result!).toBe(true);
     expect(warnMessages.some(m => m.includes('group-bad'))).toBe(true);
+  });
+
+  describe('queryTimeoutMs config validation', () => {
+    test('throws when queryTimeoutMs is 0', () => {
+      expect(() =>
+        createPermissionEvaluator({ registry, adapter, queryTimeoutMs: 0 }),
+      ).toThrow('[slingshot-permissions] queryTimeoutMs must be a positive number');
+    });
+
+    test('throws when queryTimeoutMs is negative', () => {
+      expect(() =>
+        createPermissionEvaluator({ registry, adapter, queryTimeoutMs: -100 }),
+      ).toThrow('[slingshot-permissions] queryTimeoutMs must be a positive number');
+    });
+
+    test('accepts a positive queryTimeoutMs', () => {
+      expect(() =>
+        createPermissionEvaluator({ registry, adapter, queryTimeoutMs: 3000 }),
+      ).not.toThrow();
+    });
+  });
+
+  describe('maxGroups config validation', () => {
+    test('throws when maxGroups is 0', () => {
+      expect(() =>
+        createPermissionEvaluator({ registry, adapter, maxGroups: 0 }),
+      ).toThrow('[slingshot-permissions] maxGroups must be a positive number');
+    });
+
+    test('throws when maxGroups is negative', () => {
+      expect(() =>
+        createPermissionEvaluator({ registry, adapter, maxGroups: -10 }),
+      ).toThrow('[slingshot-permissions] maxGroups must be a positive number');
+    });
+
+    test('accepts a positive maxGroups', () => {
+      expect(() =>
+        createPermissionEvaluator({ registry, adapter, maxGroups: 100 }),
+      ).not.toThrow();
+    });
   });
 });

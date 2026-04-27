@@ -402,3 +402,79 @@ describe('createBullMQAdapter — invalid options', () => {
     ).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// onDrop callback
+// ---------------------------------------------------------------------------
+
+describe('createBullMQAdapter — onDrop callback', () => {
+  test('onDrop is called with "buffer-full" when pending buffer is at capacity', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const dropped: Array<{ event: string; reason: string }> = [];
+    const bus = createBullMQAdapter({
+      connection: {},
+      onDrop: (event, reason) => dropped.push({ event, reason }),
+    });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'drop-buffer-test' });
+
+    // Fill the pending buffer to capacity (MAX_PENDING_BUFFER = 1000)
+    // Each emit needs a failure so the event lands in the buffer
+    const MAX_PENDING_BUFFER = 1000;
+    for (let i = 0; i <= MAX_PENDING_BUFFER; i++) {
+      fakeBullMQState.nextAddError(new Error('Redis down'));
+    }
+    // Emit MAX_PENDING_BUFFER events — each should buffer
+    for (let i = 0; i < MAX_PENDING_BUFFER; i++) {
+      bus.emit('auth:login' as any, { userId: `u${i}` } as any);
+    }
+    await new Promise(r => setTimeout(r, 50));
+    expect(bus.getHealth().pendingBufferSize).toBe(MAX_PENDING_BUFFER);
+
+    // Emit one more event — buffer is full, should be dropped and onDrop called
+    bus.emit('auth:login' as any, { userId: 'overflow' } as any);
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]).toMatchObject({ event: 'auth:login', reason: 'buffer-full' });
+
+    errorSpy.mockRestore();
+  });
+
+  test('onDrop is called with "max-attempts" when a buffered event exceeds the retry limit', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const dropped: Array<{ event: string; reason: string }> = [];
+    const bus = createBullMQAdapter({
+      connection: {},
+      onDrop: (event, reason) => dropped.push({ event, reason }),
+    });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'drop-maxattempts-test' });
+
+    // Fail the initial enqueue to buffer the event (codeless error buffers the event at attempts=1)
+    fakeBullMQState.nextAddError(new Error('Redis down'));
+    bus.emit('auth:login' as any, { userId: 'retry-me' } as any);
+    await new Promise(r => setTimeout(r, 10));
+    expect(bus.getHealth().pendingBufferSize).toBe(1);
+
+    // MAX_ENQUEUE_ATTEMPTS = 5; event starts at attempts=1 after buffering.
+    // Drain with retryable errors (ECONNREFUSED code) so the item re-queues each time.
+    // After 4 retryable drain failures, attempts reaches 5 = MAX_ENQUEUE_ATTEMPTS → drop.
+    const retryableError = () => Object.assign(new Error('Redis down'), { code: 'ECONNREFUSED' });
+    for (let i = 0; i < 3; i++) {
+      fakeBullMQState.nextAddError(retryableError());
+      await bus._drainPendingBuffer();
+      expect(bus.getHealth().pendingBufferSize).toBe(1);
+    }
+
+    // 4th retryable drain failure — attempts goes to 5 = MAX_ENQUEUE_ATTEMPTS, event is dropped
+    fakeBullMQState.nextAddError(retryableError());
+    await bus._drainPendingBuffer();
+
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0]).toMatchObject({ event: 'auth:login', reason: 'max-attempts' });
+    expect(bus.getHealth().pendingBufferSize).toBe(0);
+
+    errorSpy.mockRestore();
+  });
+});

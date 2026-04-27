@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import { createEventSchemaRegistry } from '@lastshotlabs/slingshot-core';
 import {
@@ -229,6 +229,32 @@ describe('kafkaAdapter', () => {
       expect(bus.health().consumers).toHaveLength(0);
     } finally {
       console.error = originalError;
+    }
+  });
+
+  test('logs broker addresses on adapter creation', () => {
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      createKafkaAdapter({
+        brokers: ['broker1:9092', 'broker2:9092'],
+        replicationFactor: 3,
+        autoCreateTopics: false,
+      });
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('broker1:9092'),
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('broker2:9092'),
+      );
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('broker connectivity will be validated on first connect'),
+      );
+    } finally {
+      infoSpy.mockRestore();
+      warnSpy.mockRestore();
     }
   });
 

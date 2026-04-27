@@ -9,6 +9,7 @@ import {
 import { createSamlRouter } from '../../src/routes/saml';
 import { makeEventBus, makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
 import type { MutableTestRuntime } from '../helpers/runtime';
+import type { SamlProfile, SamlifySpInstance } from '../../src/lib/saml';
 
 function buildApp(runtime: MutableTestRuntime) {
   const app = wrapWithRuntime(runtime);
@@ -18,14 +19,30 @@ function buildApp(runtime: MutableTestRuntime) {
       (err instanceof HttpError ? err.status : 500) as ContentfulStatusCode,
     ),
   );
-  const samlImpl = {
-    initSaml: async () => ({ sp: { entityId: 'sp' }, idp: { entityId: 'idp' } }),
-    createAuthnRequest: () => ({ redirectUrl: 'https://idp.example.test/login', id: 'req-1' }),
-    validateSamlResponse: async () => ({
-      nameId: 'saml-user-1',
-      email: 'saml-user@example.com',
+  const sp: SamlifySpInstance = {
+    createLoginRequest: () => ({
+      id: 'req-1',
+      context: 'SAMLRequest=test',
+      entityEndpoint: 'https://idp.example.test/login',
     }),
-    samlProfileToIdentityProfile: (profile: { email?: string }) => ({
+    parseLoginResponse: async () => ({
+      extract: {
+        attributes: { email: 'saml-user@example.com' },
+        nameID: 'saml-user-1',
+      },
+    }),
+    getMetadata: () => '<xml />',
+  };
+  const profile: SamlProfile = {
+    nameId: 'saml-user-1',
+    email: 'saml-user@example.com',
+    attributes: { email: 'saml-user@example.com' },
+  };
+  const samlImpl = {
+    initSaml: async () => ({ sp, idp: { entityId: 'idp' } }),
+    createAuthnRequest: () => ({ redirectUrl: 'https://idp.example.test/login', id: 'req-1' }),
+    validateSamlResponse: async () => profile,
+    samlProfileToIdentityProfile: (profile: SamlProfile) => ({
       email: profile.email,
     }),
     getSamlSpMetadata: () => '<xml />',
@@ -57,7 +74,7 @@ describe('SAML router', () => {
       emailVerification: { required: false },
     });
     runtime.eventBus = makeEventBus();
-    runtime.repos.samlRequestId = createMemorySamlRequestIdRepository();
+    Object.assign(runtime.repos, { samlRequestId: createMemorySamlRequestIdRepository() });
     app = buildApp(runtime);
   });
 

@@ -1,4 +1,5 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock, spyOn } from 'bun:test';
+import { DEFAULT_MAX_ENTRIES } from '@lastshotlabs/slingshot-core';
 import { createWebhookMemoryQueue } from '../../src/queues/memory';
 import { WebhookDeliveryError } from '../../src/types/queue';
 import type { WebhookJob } from '../../src/types/queue';
@@ -156,5 +157,28 @@ describe('memory queue', () => {
     await drainPromise;
     expect(drained).toBe(true);
     await q.stop();
+  });
+
+  it('dead-letters evicted jobs and keeps depth accurate when the queue is over capacity', async () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const deadLetters: string[] = [];
+    const q = createWebhookMemoryQueue({
+      maxAttempts: 1,
+      onDeadLetter: job => {
+        deadLetters.push(job.id);
+      },
+    });
+
+    for (let i = 0; i < DEFAULT_MAX_ENTRIES + 1; i++) {
+      await q.enqueue(makeJob({ deliveryId: `del-${i}` }));
+    }
+
+    await Promise.resolve();
+
+    expect(deadLetters).toHaveLength(1);
+    expect(await q.depth!()).toBe(DEFAULT_MAX_ENTRIES);
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 });

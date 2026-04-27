@@ -139,7 +139,27 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
       if (running && processor) {
         trackJob(job);
       } else {
-        evictOldestArray(jobs, DEFAULT_MAX_ENTRIES);
+        const overflow = jobs.length + 1 - DEFAULT_MAX_ENTRIES;
+        if (overflow > 0) {
+          for (let i = 0; i < overflow; i++) {
+            const oldest = jobs.shift();
+            if (!oldest) break;
+            pending--;
+            if (onDeadLetter) {
+              try {
+                void Promise.resolve(
+                  onDeadLetter(oldest, new Error('[slingshot-webhooks] Memory queue at capacity — job evicted')),
+                ).catch(err => {
+                  console.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+                });
+              } catch (err) {
+                console.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+              }
+            }
+          }
+        } else {
+          evictOldestArray(jobs, DEFAULT_MAX_ENTRIES);
+        }
         jobs.push(job);
       }
       return Promise.resolve(id);

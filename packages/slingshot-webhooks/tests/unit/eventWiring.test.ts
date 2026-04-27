@@ -328,7 +328,7 @@ describe('eventWiring', () => {
     for (const unsub of unsubs) unsub();
   });
 
-  it('passes durable subscription options through to the bus and skips offEnvelope teardown', async () => {
+  it('passes durable subscription options through to the bus and still unsubscribes on teardown', async () => {
     const events = createEventPublisher({
       definitions: createEventDefinitionRegistry(),
       bus: createInProcessAdapter(),
@@ -375,6 +375,10 @@ describe('eventWiring', () => {
 
     for (const unsub of unsubs) unsub();
 
-    expect(offEnvelopeMock).not.toHaveBeenCalled();
+    expect(offEnvelopeMock).toHaveBeenCalledTimes(1);
+    expect(offEnvelopeMock).toHaveBeenCalledWith(
+      'test:webhook.tenant.created',
+      expect.any(Function),
+    );
   });
 });

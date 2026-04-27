@@ -55,6 +55,7 @@ describe('deliverWebhook', () => {
     expect(init.headers).toHaveProperty('X-Webhook-Delivery', 'del-1');
     expect(init.headers).toHaveProperty('Content-Type', 'application/json');
     expect(init.body).toBe('{"userId":"u1"}');
+    expect(init.signal).toBeDefined();
   });
 
   it('throws retryable WebhookDeliveryError on 500', async () => {

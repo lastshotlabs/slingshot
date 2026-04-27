@@ -343,16 +343,16 @@ export function createPushRouter(options: {
       const topic = await options.repos.topics.findByName({ tenantId, name: topicName });
       if (!topic) return 0;
 
-      const MEMBERSHIP_CAP = 10_000;
+      const LARGE_TOPIC_WARNING_THRESHOLD = 10_000;
       const allMemberships = asItems(
         await options.repos.topicMemberships.listByTopic({ topicId: topic.id }),
       );
-      if (allMemberships.length > MEMBERSHIP_CAP) {
+      if (allMemberships.length > LARGE_TOPIC_WARNING_THRESHOLD) {
         console.warn(
-          `[slingshot-push] Topic '${topicName}' has ${allMemberships.length} members; publishing to first ${MEMBERSHIP_CAP} only. Consider batched fan-out for large topics.`,
+          `[slingshot-push] Topic '${topicName}' has ${allMemberships.length} members; publishing sequentially may be slow. Consider batched fan-out for large topics.`,
         );
       }
-      const memberships = allMemberships.slice(0, MEMBERSHIP_CAP);
+      const memberships = allMemberships;
       const subscriptions: RouterSubscriptionRecord[] = [];
       for (const membership of memberships) {
         const subscription = await options.repos.subscriptions.getById(membership.subscriptionId);

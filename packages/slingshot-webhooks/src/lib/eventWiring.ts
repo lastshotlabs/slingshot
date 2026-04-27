@@ -86,9 +86,6 @@ export function wireEventSubscriptions(
       }
     };
     bus.onEnvelope(key, handler, subscriptionOpts);
-    if (subscriptionOpts?.durable) {
-      return () => {};
-    }
     return () => bus.offEnvelope(key, handler);
   });
 }

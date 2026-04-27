@@ -669,7 +669,7 @@ describe('createPushRouter — publishTopic', () => {
     expect(count).toBe(0);
   });
 
-  test('caps delivery at 10,000 members and warns when exceeded', async () => {
+  test('delivers to all members and warns when topic fan-out is large', async () => {
     const repos = createFakeRepos();
     const sentIds: string[] = [];
     const provider = createMockProvider(async sub => {
@@ -703,9 +703,9 @@ describe('createPushRouter — publishTopic', () => {
 
     const count = await router.publishTopic('broadcast', { title: 'Hello' });
 
-    expect(count).toBe(CAP);
-    expect(sentIds).toHaveLength(CAP);
-    const capWarning = warnSpy.mock.calls.find(c => String(c[0]).includes('10000'));
+    expect(count).toBe(CAP + 5);
+    expect(sentIds).toHaveLength(CAP + 5);
+    const capWarning = warnSpy.mock.calls.find(c => String(c[0]).includes('10005'));
     expect(capWarning).toBeDefined();
     expect(String(capWarning?.[0])).toContain('slingshot-push');
 

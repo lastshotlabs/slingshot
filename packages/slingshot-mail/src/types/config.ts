@@ -33,6 +33,24 @@ export interface MailSubscription<K extends keyof SlingshotEventMap = keyof Slin
   tags?: Record<string, string>;
 }
 
+export interface MailSubscriptionDrop {
+  /** Event bus key that triggered the subscription handler. */
+  event: string;
+  /** Template configured for the subscription. */
+  template: string;
+  /** Why the subscription did not produce an enqueued mail job. */
+  reason:
+    | 'missing-recipient'
+    | 'template-not-found'
+    | 'enqueue-timeout'
+    | 'enqueue-error'
+    | 'handler-error';
+  /** Original event payload. Avoid logging this wholesale in production. */
+  payload: unknown;
+  /** Error that caused the drop, when available. */
+  error?: Error;
+}
+
 const mailAddressSchema = z.union([
   z.string(),
   z
@@ -105,6 +123,24 @@ export const mailPluginConfigSchema = z.object({
     .optional()
     .describe(
       'Event-bus subscriptions that trigger mail sends. Omit to disable event-driven mail delivery.',
+    ),
+  /** Timeout for subscription-triggered queue.enqueue() calls. Default: 30000. */
+  subscriptionEnqueueTimeoutMs: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'Maximum milliseconds a subscription handler may wait for queue.enqueue(). Set 0 to disable the timeout.',
+    ),
+  /** Called when a subscription event cannot be converted into an enqueued mail job. */
+  onSubscriptionDrop: z
+    .custom<(drop: MailSubscriptionDrop) => void | Promise<void>>(v => typeof v === 'function', {
+      message: 'Expected a function',
+    })
+    .optional()
+    .describe(
+      'Callback invoked when an event-driven mail subscription drops a payload before enqueueing.',
     ),
   /** Use durable bus subscriptions (requires BullMQ adapter). Default: false */
   durableSubscriptions: z

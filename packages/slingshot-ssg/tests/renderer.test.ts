@@ -200,6 +200,27 @@ describe('renderSsgPage — error paths', () => {
     expect(result.path).toBe('/broken');
     expect(result.filePath).toBeTruthy();
   });
+
+  it('returns an error when a single page render exceeds renderPageTimeoutMs', async () => {
+    const config = makeConfig({ renderPageTimeoutMs: 1 });
+    const hangingRenderer: SlingshotSsrRenderer = {
+      async resolve(url): Promise<SsrRouteMatch> {
+        return makeRouteMatch(url);
+      },
+      async render(): Promise<Response> {
+        return new Promise<Response>(() => {});
+      },
+      async renderChain(): Promise<Response> {
+        return new Promise<Response>(() => {});
+      },
+    };
+
+    const result = await renderSsgPage('/hang', hangingRenderer, config);
+
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toContain('timed out');
+    expect(existsSync(join(config.outDir, 'hang', 'index.html'))).toBe(false);
+  });
 });
 
 describe('renderSsgPages — batch rendering', () => {
@@ -245,5 +266,29 @@ describe('renderSsgPages — batch rendering', () => {
     expect(result.pages).toHaveLength(2);
     expect(result.succeeded).toBe(2);
     expect(result.failed).toBe(0);
+  });
+
+  it('does not let one hung page block the rest of the batch', async () => {
+    const config = makeConfig({ concurrency: 2, renderPageTimeoutMs: 1 });
+    const renderer: SlingshotSsrRenderer = {
+      async resolve(url): Promise<SsrRouteMatch> {
+        return makeRouteMatch(url);
+      },
+      async render(match: SsrRouteMatch): Promise<Response> {
+        if (match.url.pathname === '/hang') return new Promise<Response>(() => {});
+        return new Response('<html><body>ok</body></html>', { status: 200 });
+      },
+      async renderChain(chain: SsrRouteChain): Promise<Response> {
+        if (chain.page.url.pathname === '/hang') return new Promise<Response>(() => {});
+        return new Response('<html><body>ok</body></html>', { status: 200 });
+      },
+    };
+
+    const result = await renderSsgPages(['/hang', '/ok'], renderer, config);
+
+    expect(result.pages).toHaveLength(2);
+    expect(result.failed).toBe(1);
+    expect(result.succeeded).toBe(1);
+    expect(existsSync(join(config.outDir, 'ok', 'index.html'))).toBe(true);
   });
 });

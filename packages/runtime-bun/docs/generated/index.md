@@ -29,6 +29,7 @@ bun add @lastshotlabs/slingshot-runtime-bun
 
 - `build`: `tsc --noEmit`
 - `lint`: `eslint src/ --cache`
+- `test`: `bun test`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

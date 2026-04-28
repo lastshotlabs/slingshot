@@ -166,6 +166,16 @@ export const webhookPluginConfigSchema = z.object({
       'Custom secret encryptor. When provided, the runtime envelope-encrypts endpoint secrets through this implementation instead of using secretEncryptionKey.',
     ),
   /**
+   * Explicitly permit plaintext endpoint secret storage in production when no
+   * `secretEncryptionKey` or custom `encryptor` is configured. Defaults to false.
+   */
+  allowPlaintextSecrets: z
+    .boolean()
+    .optional()
+    .describe(
+      'Explicitly allow plaintext webhook endpoint secrets when encryption is not configured. Do not enable in production unless a custom adapter encrypts at rest.',
+    ),
+  /**
    * When true, the dispatcher resolves the target hostname and validates each
    * resolved IP against the SSRF blocklist before issuing the request. Default: true.
    */

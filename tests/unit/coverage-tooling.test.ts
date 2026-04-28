@@ -131,7 +131,7 @@ describe('coverage tooling', () => {
   test('merges multiple LCOV artifacts into a single output', async () => {
     const firstPath = join(tempDir, 'first.info');
     const secondPath = join(tempDir, 'second.info');
-    const mergedPath = join(tempDir, 'merged.info');
+    const mergedPath = join(tempDir, 'nested', 'coverage', 'merged.info');
 
     await writeFile(firstPath, 'SF:src/a.ts\nLF:1\nLH:1\nend_of_record\n', 'utf8');
     await writeFile(secondPath, 'SF:src/b.ts\nLF:1\nLH:0\nend_of_record\n', 'utf8');

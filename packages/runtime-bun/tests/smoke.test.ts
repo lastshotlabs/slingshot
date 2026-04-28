@@ -443,4 +443,61 @@ describe('runtime-bun smoke', () => {
       Object.assign(Bun, { serve: originalServe });
     }
   });
+
+  test('stop closes active websocket connections before stopping Bun server', async () => {
+    const originalServe = Bun.serve;
+    const calls: string[] = [];
+    let captured: {
+      websocket?: {
+        open?: (ws: unknown) => unknown;
+      };
+    } = {};
+
+    Object.assign(Bun, {
+      serve(opts: typeof captured) {
+        captured = opts;
+        return {
+          port: 1234,
+          stop() {
+            calls.push('server-stop');
+            return undefined;
+          },
+          publish() {
+            return undefined;
+          },
+          upgrade() {
+            return true;
+          },
+        };
+      },
+    });
+
+    try {
+      const runtime = bunRuntime();
+      const server = runtime.server.listen({
+        port: 0,
+        fetch: () => new Response('ok'),
+        websocket: {
+          open() {},
+          message() {},
+          close() {},
+        },
+      });
+      const rawWs = {
+        data: {},
+        send() {},
+        close: (code?: number, reason?: string) => calls.push(`ws-close:${code}:${reason}`),
+        ping() {},
+        subscribe() {},
+        unsubscribe() {},
+      };
+
+      await Promise.resolve(captured.websocket?.open?.(rawWs));
+      await server.stop();
+
+      expect(calls).toEqual(['ws-close:1001:Server shutting down', 'server-stop']);
+    } finally {
+      Object.assign(Bun, { serve: originalServe });
+    }
+  });
 });

@@ -183,12 +183,17 @@ function wrapFetch(
  * `message`, `close`, or `pong` is logged with phase context instead of being
  * silently swallowed by Bun.
  */
-function wrapWebSocketHandler(handler: RuntimeWebSocketHandler): RuntimeWebSocketHandler {
+function wrapWebSocketHandler(
+  handler: RuntimeWebSocketHandler,
+  activeSockets?: Set<BunRuntimeWebSocket>,
+): RuntimeWebSocketHandler {
   return {
     ...handler,
     async open(ws: RuntimeWebSocket): Promise<void> {
+      const raw = ws as BunRuntimeWebSocket;
+      activeSockets?.add(raw);
       try {
-        await handler.open(toRuntimeWebSocket(ws as BunRuntimeWebSocket));
+        await handler.open(toRuntimeWebSocket(raw));
       } catch (err) {
         logRuntimeError('websocket', 'open', err);
       }
@@ -201,8 +206,10 @@ function wrapWebSocketHandler(handler: RuntimeWebSocketHandler): RuntimeWebSocke
       }
     },
     async close(ws: RuntimeWebSocket, code: number, reason: string): Promise<void> {
+      const raw = ws as BunRuntimeWebSocket;
+      activeSockets?.delete(raw);
       try {
-        await handler.close(toRuntimeWebSocket(ws as BunRuntimeWebSocket), code, reason);
+        await handler.close(toRuntimeWebSocket(raw), code, reason);
       } catch (err) {
         logRuntimeError('websocket', 'close', err);
       }
@@ -313,7 +320,10 @@ export function bunRuntime(): SlingshotRuntime {
     server: {
       listen(opts): RuntimeServerInstance {
         const fetchHandler = wrapFetch(opts.fetch, opts.error);
-        const websocketHandler = opts.websocket ? wrapWebSocketHandler(opts.websocket) : undefined;
+        const activeWebSockets = new Set<BunRuntimeWebSocket>();
+        const websocketHandler = opts.websocket
+          ? wrapWebSocketHandler(opts.websocket, activeWebSockets)
+          : undefined;
 
         // Build options as `unknown` then cast at the Bun.serve boundary. Bun's
         // overload narrows on the presence of `unix` (mutually exclusive with
@@ -344,8 +354,17 @@ export function bunRuntime(): SlingshotRuntime {
           get port(): number {
             return server.port ?? opts.port ?? 3000;
           },
-          stop(close?: boolean): Promise<void> {
-            return server.stop(close);
+          async stop(close?: boolean): Promise<void> {
+            for (const ws of [...activeWebSockets]) {
+              try {
+                ws.close(1001, 'Server shutting down');
+              } catch (err) {
+                logRuntimeError('websocket', 'close-during-stop', err);
+              } finally {
+                activeWebSockets.delete(ws);
+              }
+            }
+            await server.stop(close);
           },
           upgrade(req: Request, o: { data: unknown }): boolean {
             return server.upgrade(req, o);

@@ -1,4 +1,4 @@
-import { DEFAULT_MAX_ENTRIES, evictOldest } from '@lastshotlabs/slingshot-core';
+import { DEFAULT_MAX_ENTRIES } from '@lastshotlabs/slingshot-core';
 import { TemplateNotFoundError } from '@lastshotlabs/slingshot-core';
 import type { MailMessage, MailProvider } from '../types/provider';
 import { MailSendError } from '../types/provider';
@@ -99,8 +99,6 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
               new Error('[slingshot-mail] Memory queue at capacity — job evicted'),
             );
           }
-        } else {
-          evictOldest(pending, DEFAULT_MAX_ENTRIES);
         }
         if (running && provider) {
           trackJob(job);

@@ -216,3 +216,30 @@ describe('ssgConfigSchema — staticPathsTimeoutMs', () => {
     expect(config.staticPathsTimeoutMs).toBe(120_000);
   });
 });
+
+// ---------------------------------------------------------------------------
+// renderPageTimeoutMs validation
+// ---------------------------------------------------------------------------
+
+describe('ssgConfigSchema — renderPageTimeoutMs', () => {
+  test('accepts valid non-negative integer timeout', () => {
+    const data = valid({ ...minimalValid, renderPageTimeoutMs: 30_000 });
+    expect(data?.renderPageTimeoutMs).toBe(30_000);
+  });
+
+  test('accepts zero to disable page render timeout', () => {
+    const data = valid({ ...minimalValid, renderPageTimeoutMs: 0 });
+    expect(data?.renderPageTimeoutMs).toBe(0);
+  });
+
+  test('rejects negative timeout', () => {
+    const err = invalid({ ...minimalValid, renderPageTimeoutMs: -1 });
+    const paths = err?.issues.map(i => i.path.join('.'));
+    expect(paths?.some(p => p.includes('renderPageTimeoutMs'))).toBe(true);
+  });
+
+  test('rejects fractional timeout', () => {
+    const err = invalid({ ...minimalValid, renderPageTimeoutMs: 1.5 });
+    expect(err).toBeDefined();
+  });
+});

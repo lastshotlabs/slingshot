@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { isAbsolute, relative } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, relative } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import fg from 'fast-glob';
 import ts from 'typescript';
@@ -239,6 +239,7 @@ export function mergeLcovArtifacts(paths: string[], outputPath: string): void {
     .filter(content => content.length > 0)
     .join('\n');
 
+  mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, merged.length > 0 ? `${merged}\n` : '', 'utf8');
 }
 

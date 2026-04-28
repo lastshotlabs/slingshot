@@ -53,4 +53,26 @@ describe('createWebhookPlugin', () => {
       }),
     ).toThrow(/busSubscription\.name is required/i);
   });
+
+  it('requires endpoint secret encryption in production unless explicitly opted out', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const plugin = createWebhookPlugin({});
+      await expect(
+        plugin.setupMiddleware?.({
+          app: {} as never,
+          config: {} as never,
+          bus: {} as never,
+          events: {} as never,
+        }),
+      ).rejects.toThrow(/secret encryption is required in production/i);
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+  });
 });

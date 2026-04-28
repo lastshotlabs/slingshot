@@ -21,7 +21,7 @@ describe('chat notifications', () => {
 
     expect(res.status).toBe(201);
     const message = (await res.json()) as { id: string };
-    const rows = await notifications.listByUser({ 'actor.id': 'user-2' });
+    const rows = await notifications.listByUser({ userId: 'user-2' });
 
     expect(rows.items).toHaveLength(1);
     expect(rows.items[0]?.type).toBe('chat:mention');
@@ -47,7 +47,7 @@ describe('chat notifications', () => {
     });
 
     expect(res.status).toBe(201);
-    const rows = await notifications.listByUser({ 'actor.id': 'user-2' });
+    const rows = await notifications.listByUser({ userId: 'user-2' });
     expect(rows.items).toHaveLength(0);
   });
 
@@ -73,7 +73,7 @@ describe('chat notifications', () => {
     });
 
     expect(res.status).toBe(201);
-    const rows = await notifications.listByUser({ 'actor.id': 'user-2' });
+    const rows = await notifications.listByUser({ userId: 'user-2' });
 
     expect(rows.items).toHaveLength(1);
     expect(rows.items[0]?.type).toBe('chat:reply');
@@ -92,7 +92,7 @@ describe('chat notifications', () => {
     });
 
     expect(res.status).toBe(201);
-    const rows = await notifications.listByUser({ 'actor.id': 'user-2' });
+    const rows = await notifications.listByUser({ userId: 'user-2' });
 
     expect(rows.items).toHaveLength(1);
     expect(rows.items[0]?.type).toBe('chat:invite');

@@ -1678,7 +1678,7 @@ describe('contract enforcement', () => {
     });
     const reqPromise = fetch(`http://127.0.0.1:${server.port}/`);
     await handlerStarted.promise;
-    const stopPromise = (server.stop as (o: { timeoutMs: number }) => Promise<void>)({
+    const stopPromise = (server.stop as unknown as (o: { timeoutMs: number }) => Promise<void>)({
       timeoutMs: 5_000,
     });
     resolveHandler();
@@ -1702,7 +1702,9 @@ describe('contract enforcement', () => {
     const reqPromise = fetch(`http://127.0.0.1:${server.port}/`).catch(err => err);
     await handlerStarted.promise;
     const start = Date.now();
-    await (server.stop as (o: { timeoutMs: number }) => Promise<void>)({ timeoutMs: 250 });
+    await (server.stop as unknown as (o: { timeoutMs: number }) => Promise<void>)({
+      timeoutMs: 250,
+    });
     const elapsed = Date.now() - start;
     expect(elapsed).toBeGreaterThanOrEqual(200);
     expect(elapsed).toBeLessThan(2_500);

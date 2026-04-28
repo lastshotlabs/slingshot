@@ -745,7 +745,7 @@ describe('createCommunityPlugin â€” shared notifications wiring', () => {
 
     expect(res.status).toBeLessThan(300);
 
-    const notifications = await harness.notifications.listByUser({ 'actor.id': 'user-42' });
+    const notifications = await harness.notifications.listByUser({ userId: 'user-42' });
     expect(notifications.items).toHaveLength(1);
     expect(notifications.items[0]?.type).toBe('community:ban');
     expect(notifications.items[0]?.source).toBe('community');

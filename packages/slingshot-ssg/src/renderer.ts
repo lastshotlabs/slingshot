@@ -7,6 +7,8 @@ import type { SsgConfig, SsgPageResult, SsgResult } from './types';
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+const DEFAULT_RENDER_PAGE_TIMEOUT_MS = 60_000;
+
 function writeFileAtomicSync(filePath: string, contents: string): void {
   mkdirSync(dirname(filePath), { recursive: true });
   const tmpPath = join(
@@ -50,6 +52,27 @@ export async function renderSsgPage(
 ): Promise<SsgPageResult> {
   const start = Date.now();
   const filePath = resolveOutputPath(urlPath, config.outDir);
+  const renderPromise = renderSsgPageUnchecked(
+    urlPath,
+    renderer,
+    config,
+    assetTagsHtml,
+    start,
+    filePath,
+  );
+  const timeoutMs = config.renderPageTimeoutMs ?? DEFAULT_RENDER_PAGE_TIMEOUT_MS;
+  if (timeoutMs <= 0) return renderPromise;
+  return withPageTimeout(renderPromise, urlPath, filePath, start, timeoutMs);
+}
+
+async function renderSsgPageUnchecked(
+  urlPath: string,
+  renderer: SlingshotSsrRenderer,
+  config: SsgConfig,
+  assetTagsHtml: string,
+  start: number,
+  filePath: string,
+): Promise<SsgPageResult> {
   const url = new URL(urlPath, 'http://localhost');
 
   // Build a minimal stub — satisfies the SlingshotContext structural contract at
@@ -216,6 +239,30 @@ export async function renderSsgPages(
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
+
+async function withPageTimeout(
+  renderPromise: Promise<SsgPageResult>,
+  urlPath: string,
+  filePath: string,
+  start: number,
+  timeoutMs: number,
+): Promise<SsgPageResult> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      renderPromise,
+      new Promise<SsgPageResult>(resolve => {
+        timeout = setTimeout(() => {
+          const error = new Error(`SSG render timed out after ${timeoutMs}ms for "${urlPath}"`);
+          console.warn(`[slingshot-ssg] ${error.message}`);
+          resolve({ path: urlPath, filePath, durationMs: Date.now() - start, error });
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 /**
  * Compute the absolute output file path for a URL path.

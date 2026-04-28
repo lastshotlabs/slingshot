@@ -57,6 +57,12 @@ export interface SsgConfig {
    * output. Default: 10000.
    */
   readonly maxStaticPathsPerRoute?: number;
+  /**
+   * Maximum milliseconds a single page render may take before it is recorded
+   * as failed so the rest of the batch can continue. Default: 60000.
+   * Set to 0 to disable.
+   */
+  readonly renderPageTimeoutMs?: number;
 }
 
 /**

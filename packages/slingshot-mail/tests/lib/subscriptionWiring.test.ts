@@ -349,6 +349,7 @@ describe('wireSubscriptions', () => {
     const bus = makeBus();
     const queue = makeQueue();
     const renderer = makeRenderer();
+    const onSubscriptionDrop = mock(async () => {});
 
     const config: MailPluginConfig = {
       provider: {
@@ -357,6 +358,7 @@ describe('wireSubscriptions', () => {
       },
       renderer,
       from: 'no-reply@example.com',
+      onSubscriptionDrop,
       subscriptions: [{ event: 'auth:delivery.password_reset', template: 'tpl' }],
     };
 
@@ -368,6 +370,81 @@ describe('wireSubscriptions', () => {
 
     expect(queue.enqueue).not.toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(onSubscriptionDrop).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'auth:delivery.password_reset',
+        template: 'tpl',
+        reason: 'missing-recipient',
+      }),
+    );
+  });
+
+  it('queue enqueue rejection is reported to onSubscriptionDrop', async () => {
+    const bus = makeBus();
+    const queue = makeQueue();
+    const renderer = makeRenderer();
+    const failure = new Error('queue unavailable');
+    const onSubscriptionDrop = mock(async () => {});
+    (queue.enqueue as ReturnType<typeof mock>).mockImplementation(async () => {
+      throw failure;
+    });
+
+    const config: MailPluginConfig = {
+      provider: {
+        name: 'test',
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
+      },
+      renderer,
+      from: 'no-reply@example.com',
+      onSubscriptionDrop,
+      subscriptions: [{ event: 'auth:delivery.password_reset', template: 'tpl' }],
+    };
+
+    wireSubscriptions(bus as SlingshotEventBus, config, queue);
+    await bus.emit('auth:delivery.password_reset', { email: 'u@example.com', token: 't' });
+
+    expect(onSubscriptionDrop).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'auth:delivery.password_reset',
+        template: 'tpl',
+        reason: 'enqueue-error',
+        error: failure,
+      }),
+    );
+  });
+
+  it('slow queue enqueue is timed out and reported to onSubscriptionDrop', async () => {
+    const bus = makeBus();
+    const queue = makeQueue();
+    const renderer = makeRenderer();
+    const onSubscriptionDrop = mock(async () => {});
+    (queue.enqueue as ReturnType<typeof mock>).mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return 'late-job';
+    });
+
+    const config: MailPluginConfig = {
+      provider: {
+        name: 'test',
+        send: mock(async (): Promise<SendResult> => ({ status: 'sent' })),
+      },
+      renderer,
+      from: 'no-reply@example.com',
+      subscriptionEnqueueTimeoutMs: 1,
+      onSubscriptionDrop,
+      subscriptions: [{ event: 'auth:delivery.password_reset', template: 'tpl' }],
+    };
+
+    wireSubscriptions(bus as SlingshotEventBus, config, queue);
+    await bus.emit('auth:delivery.password_reset', { email: 'u@example.com', token: 't' });
+
+    expect(onSubscriptionDrop).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'auth:delivery.password_reset',
+        template: 'tpl',
+        reason: 'enqueue-timeout',
+      }),
+    );
   });
 
   it('durableSubscriptions: true → bus.on called with durable opts and valid name', async () => {

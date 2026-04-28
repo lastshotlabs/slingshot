@@ -62,6 +62,14 @@ export const ssgConfigSchema = z.object({
     .describe(
       'Maximum number of parameter sets a single dynamic route may return. Omit to use the default (10000).',
     ),
+  renderPageTimeoutMs: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      'Maximum milliseconds a single page render may take before being recorded as failed. Omit to use the default (60000); set 0 to disable.',
+    ),
 });
 
 export type SsgConfigParsed = z.infer<typeof ssgConfigSchema>;

@@ -260,16 +260,23 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       if (config.adapter) {
         runtimeAdapter = config.adapter;
       } else {
-        const { createEntityPlugin } = await import('@lastshotlabs/slingshot-entity');
-        const { createWebhooksManifestRuntime } = await import('./manifest/runtime');
-        const { webhooksManifest } = await import('./manifest/webhooksManifest');
         if (!config.secretEncryptionKey && !config.encryptor) {
+          if (process.env.NODE_ENV === 'production' && !config.allowPlaintextSecrets) {
+            throw new Error(
+              '[slingshot-webhooks] secret encryption is required in production. ' +
+                'Set secretEncryptionKey, supply a custom encryptor, or explicitly set ' +
+                'allowPlaintextSecrets: true if storage encryption is handled externally.',
+            );
+          }
           console.warn(
             '[slingshot-webhooks] no secret encryption is configured. Endpoint secrets ' +
               'will be stored as plaintext. Set secretEncryptionKey to a base64 32-byte AES key, ' +
               'or supply a custom `encryptor`, before exposing this app to production traffic.',
           );
         }
+        const { createEntityPlugin } = await import('@lastshotlabs/slingshot-entity');
+        const { createWebhooksManifestRuntime } = await import('./manifest/runtime');
+        const { webhooksManifest } = await import('./manifest/webhooksManifest');
         innerPlugin = createEntityPlugin({
           name: WEBHOOKS_PLUGIN_STATE_KEY,
           mountPath,

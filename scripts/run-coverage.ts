@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { filterLcovContentToOwnedFiles } from './coverage-lcov';
+import { filterLcovContentToOwnedFiles, waitForCoverageArtifacts } from './coverage-lcov';
 import { coverageArtifactPath, coverageSuites } from './workspace-test-suites';
 
 const repoRoot = process.cwd();
@@ -171,6 +171,13 @@ export async function runCoverage(
   for (const suite of suites) {
     const result = await runSuite(suite.name, suite.command, spawnFn, io);
     const artifactPath = coverageArtifactPath(suite);
+    const missingArtifacts = await waitForCoverageArtifacts([artifactPath]);
+    if (missingArtifacts.length > 0) {
+      io.stderr.write(`[coverage] Missing LCOV artifact for ${suite.name}: ${artifactPath}\n`);
+      if (exitCode === 0) {
+        exitCode = 1;
+      }
+    }
     rawArtifacts.push(existsSync(artifactPath) ? readFileSync(artifactPath, 'utf8').trim() : '');
     failures.push(...collectCoverageFailures(result.output, suite.name));
     if (result.exitCode !== 0 && exitCode === 0) {

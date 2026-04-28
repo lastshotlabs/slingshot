@@ -1,6 +1,7 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeLcovArtifacts } from './coverage-lcov';
+import { mergeLcovArtifacts, waitForCoverageArtifacts } from './coverage-lcov';
 import { fileRequiresIsolatedProcess } from './root-test-files';
 
 export interface ParsedArgs {
@@ -97,10 +98,11 @@ export async function runCoverageFiles(
 
   rmSync(coverageDir, { recursive: true, force: true });
   mkdirSync(coverageDir, { recursive: true });
+  const runsDir = mkdtempSync(join(tmpdir(), `slingshot-coverage-${label}-`));
 
   function nextRunCoverageDir(kind: string): string {
     runCounter += 1;
-    return join(coverageDir, '.runs', `${String(runCounter).padStart(3, '0')}-${kind}`);
+    return join(runsDir, `${String(runCounter).padStart(3, '0')}-${kind}`);
   }
 
   for (let index = 0; index < bulk.length; index += chunkSize) {
@@ -131,8 +133,22 @@ export async function runCoverageFiles(
     }
   }
 
-  mergeLcovArtifacts(artifacts, join(coverageDir, 'lcov.info'));
-  return exitCode;
+  const missingArtifacts = await waitForCoverageArtifacts(artifacts);
+  if (missingArtifacts.length > 0) {
+    console.error(
+      `[coverage] Missing LCOV artifact(s) for ${label}: ${missingArtifacts.join(', ')}`,
+    );
+    if (exitCode === 0) {
+      exitCode = 1;
+    }
+  }
+
+  try {
+    mergeLcovArtifacts(artifacts, join(coverageDir, 'lcov.info'));
+    return exitCode;
+  } finally {
+    rmSync(runsDir, { recursive: true, force: true });
+  }
 }
 
 if (import.meta.main) {

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { isAbsolute, relative } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import fg from 'fast-glob';
 import ts from 'typescript';
 import { type CoverageSuite } from './workspace-test-suites';
@@ -239,6 +240,23 @@ export function mergeLcovArtifacts(paths: string[], outputPath: string): void {
     .join('\n');
 
   writeFileSync(outputPath, merged.length > 0 ? `${merged}\n` : '', 'utf8');
+}
+
+export async function waitForCoverageArtifacts(
+  paths: string[],
+  options: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<string[]> {
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const intervalMs = options.intervalMs ?? 25;
+  const deadline = Date.now() + timeoutMs;
+  let missing = paths.filter(path => !existsSync(path));
+
+  while (missing.length > 0 && Date.now() < deadline) {
+    await sleep(intervalMs);
+    missing = paths.filter(path => !existsSync(path));
+  }
+
+  return missing;
 }
 
 export async function filterLcovContentToOwnedFiles(

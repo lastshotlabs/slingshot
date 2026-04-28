@@ -180,7 +180,7 @@ export function createPushRouter(options: {
       const provider = options.providers[platform];
       if (!provider) continue;
 
-      let delivery: RouterDeliveryRecord | null = null;
+      let delivery: RouterDeliveryRecord;
       try {
         delivery = await options.repos.deliveries.create({
           tenantId: opts.tenantId,
@@ -353,10 +353,7 @@ export function createPushRouter(options: {
             failureReason: 'transient',
           });
         } catch (err) {
-          console.error(
-            `[slingshot-push] Failed to mark delivery="${delivery.id}" failed`,
-            err,
-          );
+          console.error(`[slingshot-push] Failed to mark delivery="${delivery.id}" failed`, err);
         }
         options.bus?.emit('push:delivery.failed', {
           deliveryId: delivery.id,

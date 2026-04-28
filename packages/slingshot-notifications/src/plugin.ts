@@ -37,6 +37,65 @@ type DynamicBus = {
   on(event: string, handler: (payload: unknown) => void | Promise<void>): void;
   off(event: string, handler: (payload: unknown) => void | Promise<void>): void;
 };
+type ActorParam = { 'actor.id': string };
+type GeneratedNotificationAdapter = NotificationAdapter & {
+  listByUser(params: ActorParam): ReturnType<NotificationAdapter['listByUser']>;
+  listUnread(params: ActorParam): ReturnType<NotificationAdapter['listUnread']>;
+  markRead(params: { id: string } & ActorParam): ReturnType<NotificationAdapter['markRead']>;
+  markAllRead(params: ActorParam): ReturnType<NotificationAdapter['markAllRead']>;
+  unreadCount(params: ActorParam): ReturnType<NotificationAdapter['unreadCount']>;
+  unreadCountBySource(
+    params: { source: string } & ActorParam,
+  ): ReturnType<NotificationAdapter['unreadCountBySource']>;
+  unreadCountByScope(
+    params: { source: string; scopeId: string } & ActorParam,
+  ): ReturnType<NotificationAdapter['unreadCountByScope']>;
+  hasUnreadByDedupKey(
+    params: { dedupKey: string } & ActorParam,
+  ): ReturnType<NotificationAdapter['hasUnreadByDedupKey']>;
+};
+type GeneratedPreferenceAdapter = NotificationPreferenceAdapter & {
+  listByUser(params: ActorParam): ReturnType<NotificationPreferenceAdapter['listByUser']>;
+};
+
+function toActorParam(params: { userId: string }): ActorParam {
+  return { 'actor.id': params.userId };
+}
+
+function wrapNotificationAdapter(adapter: NotificationAdapter): NotificationAdapter {
+  const generated = adapter as GeneratedNotificationAdapter;
+  return {
+    ...adapter,
+    listByUser: params => generated.listByUser(toActorParam(params)),
+    listUnread: params => generated.listUnread(toActorParam(params)),
+    markRead: params => generated.markRead({ id: params.id, ...toActorParam(params) }),
+    markAllRead: params => generated.markAllRead(toActorParam(params)),
+    unreadCount: params => generated.unreadCount(toActorParam(params)),
+    unreadCountBySource: params =>
+      generated.unreadCountBySource({ source: params.source, ...toActorParam(params) }),
+    unreadCountByScope: params =>
+      generated.unreadCountByScope({
+        source: params.source,
+        scopeId: params.scopeId,
+        ...toActorParam(params),
+      }),
+    hasUnreadByDedupKey: params =>
+      generated.hasUnreadByDedupKey({
+        dedupKey: params.dedupKey,
+        ...toActorParam(params),
+      }),
+  };
+}
+
+function wrapPreferenceAdapter(
+  adapter: NotificationPreferenceAdapter,
+): NotificationPreferenceAdapter {
+  const generated = adapter as GeneratedPreferenceAdapter;
+  return {
+    ...adapter,
+    listByUser: params => generated.listByUser(toActorParam(params)),
+  };
+}
 
 /**
  * Create the shared notifications plugin.
@@ -125,8 +184,8 @@ export function createNotificationsPlugin(
           '[slingshot-notifications] Entity adapters were not resolved during setupRoutes',
         );
       }
-      const notifications = notificationsAdapter;
-      const preferences = preferencesAdapter;
+      const notifications = wrapNotificationAdapter(notificationsAdapter);
+      const preferences = wrapPreferenceAdapter(preferencesAdapter);
 
       const rateLimitBackend = resolveRateLimitBackend(config.rateLimit.backend);
       const dispatcher = config.dispatcher.enabled
@@ -169,8 +228,8 @@ export function createNotificationsPlugin(
 
       const state: NotificationsPluginState = deepFreeze({
         config,
-        notifications: notificationsAdapter,
-        preferences: preferencesAdapter,
+        notifications,
+        preferences,
         dispatcher,
         createBuilder: ({ source }) =>
           createNotificationBuilder({

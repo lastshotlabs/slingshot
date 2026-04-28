@@ -1,8 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-export const KAFKAJS_TIMEOUT_PATCH_MARKER =
-  'slingshot-local-patch(kafkajs-timeoutnegativewarning)';
+export const KAFKAJS_TIMEOUT_PATCH_MARKER = 'slingshot-local-patch(kafkajs-timeoutnegativewarning)';
 
 const OLD_SNIPPET = `  scheduleCheckPendingRequests() {
     // If we're throttled: Schedule checkPendingRequests when the throttle

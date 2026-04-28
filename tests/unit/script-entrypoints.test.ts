@@ -454,24 +454,28 @@ describe('script entrypoints', () => {
     }) as typeof Bun.spawn;
 
     expect(
-      await runCoverageModule.runCoverage(coverageSuites as never, spawnFn, {
-        log: (message: string) => logs.push(message),
-        stdout: {
-          write: (chunk: string | Uint8Array) =>
-            stdoutChunks.push(
-              typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true }),
-            ),
+      await runCoverageModule.runCoverage(
+        coverageSuites as never,
+        spawnFn,
+        {
+          log: (message: string) => logs.push(message),
+          stdout: {
+            write: (chunk: string | Uint8Array) =>
+              stdoutChunks.push(
+                typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true }),
+              ),
+          },
+          stderr: {
+            write: (chunk: string | Uint8Array) =>
+              stderrChunks.push(
+                typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true }),
+              ),
+          },
         },
-        stderr: {
-          write: (chunk: string | Uint8Array) =>
-            stderrChunks.push(
-              typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true }),
-            ),
+        {
+          coverageRoot,
         },
-      },
-      {
-        coverageRoot,
-      }),
+      ),
     ).toBe(1);
 
     expect(stdoutChunks.join('')).toContain(

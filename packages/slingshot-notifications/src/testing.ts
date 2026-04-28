@@ -84,6 +84,10 @@ function toNotificationRecord(row: Record<string, unknown>): NotificationRecord 
   };
 }
 
+function toActorParam(params: { userId: string }): { 'actor.id': string } {
+  return { 'actor.id': params.userId };
+}
+
 function toPreferenceRecord(row: Record<string, unknown>): NotificationPreferenceRecord {
   return {
     id: String(row.id),
@@ -141,7 +145,7 @@ function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): Noti
       return adapter.clear();
     },
     async listByUser(params) {
-      const result = await adapter.listByUser(params);
+      const result = await adapter.listByUser(toActorParam(params));
       return {
         items: result.items.map(item => toNotificationRecord(item as Record<string, unknown>)),
         nextCursor: result.nextCursor,
@@ -149,7 +153,7 @@ function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): Noti
       };
     },
     async listUnread(params) {
-      const result = await adapter.listUnread(params);
+      const result = await adapter.listUnread(toActorParam(params));
       return {
         items: result.items.map(item => toNotificationRecord(item as Record<string, unknown>)),
         nextCursor: result.nextCursor,
@@ -157,23 +161,37 @@ function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): Noti
       };
     },
     async markRead(params) {
-      const row = (await markRead(params)) as Record<string, unknown> | null;
+      const row = (await markRead({ id: params.id, ...toActorParam(params) })) as Record<
+        string,
+        unknown
+      > | null;
       return row ? toNotificationRecord(row) : null;
     },
     async markAllRead(params) {
-      return (await markAllRead(params)) as { count: number } | number;
+      return (await markAllRead(toActorParam(params))) as { count: number } | number;
     },
     async unreadCount(params) {
-      return toCountResult(await unreadCount(params));
+      return toCountResult(await unreadCount(toActorParam(params)));
     },
     async unreadCountBySource(params) {
-      return toCountResult(await unreadCountBySource(params));
+      return toCountResult(
+        await unreadCountBySource({ ...toActorParam(params), source: params.source }),
+      );
     },
     async unreadCountByScope(params) {
-      return toCountResult(await unreadCountByScope(params));
+      return toCountResult(
+        await unreadCountByScope({
+          ...toActorParam(params),
+          source: params.source,
+          scopeId: params.scopeId,
+        }),
+      );
     },
     hasUnreadByDedupKey(params) {
-      return adapter.hasUnreadByDedupKey(params);
+      return adapter.hasUnreadByDedupKey({
+        ...toActorParam(params),
+        dedupKey: params.dedupKey,
+      });
     },
     async findByDedupKey(params) {
       const row = (await adapter.findByDedupKey(params)) as Record<string, unknown> | null;
@@ -223,7 +241,7 @@ function wrapPreferenceAdapter(
       return adapter.clear();
     },
     async listByUser(params) {
-      const result = await adapter.listByUser(params);
+      const result = await adapter.listByUser(toActorParam(params));
       return {
         items: result.items.map(item => toPreferenceRecord(item as Record<string, unknown>)),
         nextCursor: result.nextCursor,

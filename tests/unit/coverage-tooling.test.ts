@@ -1,3 +1,4 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -323,6 +324,18 @@ describe('coverage tooling', () => {
     }> = [];
     const spawnFn = ((cmd: string[], opts: Record<string, unknown>) => {
       spawnCalls.push({ cmd, opts });
+      const coverageDirFlagIndex = cmd.indexOf('--coverage-dir');
+      if (coverageDirFlagIndex >= 0) {
+        const coverageDir = cmd[coverageDirFlagIndex + 1];
+        if (coverageDir) {
+          mkdirSync(coverageDir, { recursive: true });
+          writeFileSync(
+            join(coverageDir, 'lcov.info'),
+            'SF:scripts/run-coverage-files.ts\nLF:1\nLH:1\nend_of_record\n',
+            'utf8',
+          );
+        }
+      }
       return { exited: Promise.resolve(0) };
     }) as typeof Bun.spawn;
 

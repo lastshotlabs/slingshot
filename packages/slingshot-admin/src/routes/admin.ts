@@ -1132,7 +1132,6 @@ export function createAdminRouter(config: AdminRouterConfig) {
         );
       }
 
-      const principal = c.get('adminPrincipal');
       if (!(await getScopedUser(c, managedUserProvider, userId))) {
         await tryLogAuditEntry(
           config.auditLog,
@@ -1228,7 +1227,6 @@ export function createAdminRouter(config: AdminRouterConfig) {
         );
       }
 
-      const principal = c.get('adminPrincipal');
       if (!(await getScopedUser(c, managedUserProvider, userId))) {
         await tryLogAuditEntry(
           config.auditLog,

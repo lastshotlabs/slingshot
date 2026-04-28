@@ -168,15 +168,10 @@ export const rootCoverageSuite: CoverageSuite = {
 const temporalWorkerSuite: TestCommandSuite = {
   name: 'slingshot-orchestration-temporal (worker isolated)',
   testsPath: 'packages/slingshot-orchestration-temporal/tests',
-  testFiles: [
-    'packages/slingshot-orchestration-temporal/tests/worker.test.ts',
-  ],
+  testFiles: ['packages/slingshot-orchestration-temporal/tests/worker.test.ts'],
 };
 
-export const packageTestSuites = applySuiteFilter([
-  ...packageSuites(),
-  temporalWorkerSuite,
-]);
+export const packageTestSuites = applySuiteFilter([...packageSuites(), temporalWorkerSuite]);
 
 function packageCoverageSuites(): CoverageSuite[] {
   const packagesDir = join(process.cwd(), 'packages');

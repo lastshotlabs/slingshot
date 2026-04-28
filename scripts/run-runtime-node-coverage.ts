@@ -1,6 +1,7 @@
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeLcovArtifacts } from './coverage-lcov';
+import { mergeLcovArtifacts, waitForCoverageArtifacts } from './coverage-lcov';
 
 async function collectFiles(pattern: string): Promise<string[]> {
   const files: string[] = [];
@@ -29,7 +30,8 @@ export async function runRuntimeNodeCoverage(
   spawnFn: typeof Bun.spawn = Bun.spawn,
   coverageDir = 'coverage/runtime-node',
 ): Promise<number> {
-  const vitestCoverageDir = join(coverageDir, '.runs', 'vitest');
+  const runsDir = mkdtempSync(join(tmpdir(), 'slingshot-runtime-node-coverage-'));
+  const vitestCoverageDir = join(runsDir, 'vitest');
   const artifacts: string[] = [];
   let exitCode = 0;
 
@@ -83,8 +85,22 @@ export async function runRuntimeNodeCoverage(
     }
   }
 
-  mergeLcovArtifacts(artifacts, join(coverageDir, 'lcov.info'));
-  return exitCode;
+  const missingArtifacts = await waitForCoverageArtifacts(artifacts);
+  if (missingArtifacts.length > 0) {
+    console.error(
+      `[coverage] Missing runtime-node LCOV artifact(s): ${missingArtifacts.join(', ')}`,
+    );
+    if (exitCode === 0) {
+      exitCode = 1;
+    }
+  }
+
+  try {
+    mergeLcovArtifacts(artifacts, join(coverageDir, 'lcov.info'));
+    return exitCode;
+  } finally {
+    rmSync(runsDir, { recursive: true, force: true });
+  }
 }
 
 if (import.meta.main) {

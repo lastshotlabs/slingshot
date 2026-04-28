@@ -77,9 +77,8 @@ describe('root entrypoints', () => {
 
   test('orchestration worker command exposes Temporal manifest worker wiring', async () => {
     const WorkerCommand = (await import('../../src/cli/commands/orchestration/worker.ts')).default;
-    const temporalWorkerFactory = await import(
-      '../../src/lib/createTemporalOrchestrationWorkerFromManifest.ts'
-    );
+    const temporalWorkerFactory =
+      await import('../../src/lib/createTemporalOrchestrationWorkerFromManifest.ts');
 
     expect(typeof temporalWorkerFactory.createTemporalOrchestrationWorkerFromManifest).toBe(
       'function',

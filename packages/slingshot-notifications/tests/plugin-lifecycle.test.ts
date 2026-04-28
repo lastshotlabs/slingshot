@@ -171,7 +171,7 @@ describe('createNotificationsPlugin lifecycle', () => {
     expect(created).toBeTruthy();
     expect(deliver).toHaveBeenCalledTimes(1);
 
-    const persisted = await state?.notifications.listByUser({ 'actor.id': 'user-1' });
+    const persisted = await state?.notifications.listByUser({ userId: 'user-1' });
     expect(persisted?.items).toHaveLength(1);
     expect(persisted?.items[0]?.source).toBe('community');
 

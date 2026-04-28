@@ -8,6 +8,15 @@
  */
 import type { GeoSearchConfig } from '@lastshotlabs/slingshot-core';
 
+/** Detailed outcome of an attempted geo transform. */
+export type GeoTransformOutcome =
+  | { readonly applied: true; readonly document: Record<string, unknown> }
+  | {
+      readonly applied: false;
+      readonly document: Record<string, unknown>;
+      readonly reason: 'missingLat' | 'missingLng' | 'missingBoth';
+    };
+
 /**
  * Transform a search document by merging separate latitude and longitude fields
  * into the composite `_geo: { lat, lng }` field required by search providers.
@@ -57,10 +66,31 @@ export function applyGeoTransform(
   doc: Record<string, unknown>,
   geoConfig: GeoSearchConfig,
 ): Record<string, unknown> {
+  const result = applyGeoTransformDetailed(doc, geoConfig);
+  return result.document;
+}
+
+/**
+ * Like {@link applyGeoTransform} but returns a structured outcome that names
+ * the missing field when the transform is skipped. Used by the event-sync
+ * manager to surface a `search:geoTransform.skipped` event with diagnostics
+ * rather than dropping the geo data silently.
+ */
+export function applyGeoTransformDetailed(
+  doc: Record<string, unknown>,
+  geoConfig: GeoSearchConfig,
+): GeoTransformOutcome {
   const lat = doc[geoConfig.latField];
   const lng = doc[geoConfig.lngField];
-  if (lat != null && lng != null) {
-    return { ...doc, _geo: { lat: Number(lat), lng: Number(lng) } };
+  const latMissing = lat == null;
+  const lngMissing = lng == null;
+  if (!latMissing && !lngMissing) {
+    return {
+      applied: true,
+      document: { ...doc, _geo: { lat: Number(lat), lng: Number(lng) } },
+    };
   }
-  return doc;
+  const reason: 'missingLat' | 'missingLng' | 'missingBoth' =
+    latMissing && lngMissing ? 'missingBoth' : latMissing ? 'missingLat' : 'missingLng';
+  return { applied: false, document: doc, reason };
 }

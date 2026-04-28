@@ -109,7 +109,7 @@ describe('event-sync DLQ + restore ordering', () => {
       attempts: 3,
     });
 
-    const health = mgr.getHealth();
+    const health = mgr.getEventSyncHealth();
     expect(health.deadLetterCount).toBe(1);
     expect(health.pendingCount).toBe(0);
 

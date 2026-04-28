@@ -17,6 +17,8 @@
  * | `search:reindex.completed` | After a full reindex operation finishes |
  * | `search:sync.failed` | After a sync operation fails (event-bus or write-through) |
  * | `search:sync.dead` | After event-bus sync exhausts its retry budget |
+ * | `search:dlq.evicted` | After a dead-letter entry is evicted from the bounded in-memory DLQ |
+ * | `search:geoTransform.skipped` | After a geo transform is skipped because the document lacks expected fields |
  *
  * `search:index.updated` and `search:reindex.completed` are the intended
  * external-facing events when a consumer registers definitions with
@@ -78,6 +80,34 @@ declare module '@lastshotlabs/slingshot-core' {
       attempts: number;
       error: string;
       syncMode: 'event-bus';
+    };
+
+    /**
+     * Emitted when a dead-letter entry is evicted because the bounded in-memory
+     * DLQ exceeded `maxDeadLetterEntries`. The eviction is permanent unless the
+     * caller has wired a durable `dlqStore` to persist entries.
+     */
+    'search:dlq.evicted': {
+      indexName: string;
+      documentId: string;
+      entityName: string;
+      operation: 'index' | 'delete';
+      attempts: number;
+      error: string;
+      reason: 'capacity';
+    };
+
+    /**
+     * Emitted when geo transform is skipped because the user transform omitted
+     * the configured `latField` / `lngField` (or either value is null).
+     */
+    'search:geoTransform.skipped': {
+      indexName: string;
+      entityName: string;
+      documentId: string;
+      latField: string;
+      lngField: string;
+      reason: 'missingLat' | 'missingLng' | 'missingBoth';
     };
   }
 }

@@ -148,6 +148,28 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
           }),
         );
       }
+      if (!events.get('search:dlq.evicted')) {
+        events.register(
+          defineEvent('search:dlq.evicted', {
+            ownerPlugin: SEARCH_PLUGIN_STATE_KEY,
+            exposure: ['internal'],
+            resolveScope() {
+              return null;
+            },
+          }),
+        );
+      }
+      if (!events.get('search:geoTransform.skipped')) {
+        events.register(
+          defineEvent('search:geoTransform.skipped', {
+            ownerPlugin: SEARCH_PLUGIN_STATE_KEY,
+            exposure: ['internal'],
+            resolveScope() {
+              return null;
+            },
+          }),
+        );
+      }
       // Provider connection happens during setupPost (after entity discovery).
       // Middleware phase is reserved for future request-level concerns
       // (e.g. search-related request middleware).

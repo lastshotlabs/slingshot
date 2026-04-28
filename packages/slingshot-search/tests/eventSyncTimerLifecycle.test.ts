@@ -178,7 +178,7 @@ describe('event-sync timer lifecycle', () => {
 
     errSpy.mockRestore();
 
-    const health = mgr.getHealth();
+    const health = mgr.getEventSyncHealth();
     // 5 inserted, 2 evicted, 3 retained.
     expect(health.deadLetterCount).toBe(3);
     expect(health.evictedFromDeadLetter).toBe(2);

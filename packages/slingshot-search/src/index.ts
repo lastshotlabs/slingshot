@@ -5,6 +5,16 @@ import './events';
 /** Build the search plugin that discovers searchable entities, mounts routes, and wires indexing. */
 export { createSearchPlugin } from './plugin';
 
+// --- Event-sync manager (used by package tests and operators wiring custom DLQ stores) ---
+export type {
+  DlqStore,
+  EventSyncHealth,
+  EventSyncManager,
+  EventSyncManagerConfig,
+  FlushDeadLetterEntry,
+} from './eventSync';
+export { createEventSyncManager } from './eventSync';
+
 // --- Provider factories ---
 /** First-party provider factories for external and hosted search backends. */
 export { createTypesenseProvider, ProviderUnavailableError } from './providers/typesense';

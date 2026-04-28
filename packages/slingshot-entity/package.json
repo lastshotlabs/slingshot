@@ -6,17 +6,17 @@
   "type": "module",
   "exports": {
     ".": {
-      "bun": "./src/index.ts",
+      "bun": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
     },
     "./routing": {
-      "bun": "./src/routing/index.ts",
+      "bun": "./dist/src/routing/index.js",
       "types": "./dist/src/routing/index.d.ts",
       "import": "./dist/src/routing/index.js"
     },
     "./seeder": {
-      "bun": "./src/seeder/index.ts",
+      "bun": "./dist/src/seeder/index.js",
       "types": "./dist/src/seeder/index.d.ts",
       "import": "./dist/src/seeder/index.js"
     }

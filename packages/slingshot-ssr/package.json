@@ -6,22 +6,22 @@
   "type": "module",
   "exports": {
     ".": {
-      "bun": "./src/index.ts",
+      "bun": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
     },
     "./isr": {
-      "bun": "./src/isr/index.ts",
+      "bun": "./dist/src/isr/index.js",
       "types": "./dist/src/isr/index.d.ts",
       "import": "./dist/src/isr/index.js"
     },
     "./actions": {
-      "bun": "./src/actions/index.ts",
+      "bun": "./dist/src/actions/index.js",
       "types": "./dist/src/actions/index.d.ts",
       "import": "./dist/src/actions/index.js"
     },
     "./draft": {
-      "bun": "./src/draft/index.ts",
+      "bun": "./dist/src/draft/index.js",
       "types": "./dist/src/draft/index.d.ts",
       "import": "./dist/src/draft/index.js"
     }

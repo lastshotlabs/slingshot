@@ -6,22 +6,22 @@
   "type": "module",
   "exports": {
     ".": {
-      "bun": "./src/index.ts",
+      "bun": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
     },
     "./testing": {
-      "bun": "./src/testing.ts",
+      "bun": "./dist/src/testing.js",
       "types": "./dist/src/testing.d.ts",
       "import": "./dist/src/testing.js"
     },
     "./content": {
-      "bun": "./src/content.public.ts",
+      "bun": "./dist/src/content.public.js",
       "types": "./dist/src/content.public.d.ts",
       "import": "./dist/src/content.public.js"
     },
     "./faker": {
-      "bun": "./src/faker/index.ts",
+      "bun": "./dist/src/faker/index.js",
       "types": "./dist/src/faker/index.d.ts",
       "import": "./dist/src/faker/index.js"
     }

@@ -6,17 +6,17 @@
   "type": "module",
   "exports": {
     ".": {
-      "bun": "./src/index.ts",
+      "bun": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
     },
     "./errors": {
-      "bun": "./src/errors.ts",
+      "bun": "./dist/src/errors.js",
       "types": "./dist/src/errors.d.ts",
       "import": "./dist/src/errors.js"
     },
     "./provider": {
-      "bun": "./src/provider/index.ts",
+      "bun": "./dist/src/provider/index.js",
       "types": "./dist/src/provider/index.d.ts",
       "import": "./dist/src/provider/index.js"
     }

@@ -6,12 +6,12 @@
   "type": "module",
   "exports": {
     ".": {
-      "bun": "./src/index.ts",
+      "bun": "./dist/src/index.js",
       "import": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
     },
     "./testing": {
-      "bun": "./src/testing.ts",
+      "bun": "./dist/src/testing.js",
       "import": "./dist/src/testing.js",
       "types": "./dist/src/testing.d.ts"
     }

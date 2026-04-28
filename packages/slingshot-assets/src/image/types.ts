@@ -104,6 +104,14 @@ export interface ImageCacheEntry {
   readonly warningHeader?: string;
   /** Unix timestamp in milliseconds when the cache entry was generated. */
   readonly generatedAt: number;
+  /**
+   * Optional unix-millisecond expiry. When present, callers (and the in-memory
+   * cache adapter) treat the entry as expired once `Date.now() >= expiresAt`,
+   * regardless of the adapter's own ttlMs setting. Allows custom adapters /
+   * external caches to communicate per-entry retention without leaking
+   * adapter-internal state.
+   */
+  readonly expiresAt?: number;
 }
 
 /**

@@ -149,7 +149,18 @@ describe('createDeleteStorageFileMiddleware', () => {
     const storageDelete = mock(async () => {
       throw new Error('permanent storage outage');
     });
-    const error = spyOn(console, 'error').mockImplementation(() => {});
+    const errorCalls: Array<{ msg: string; fields?: Record<string, unknown> }> = [];
+    const logger = {
+      debug() {},
+      info() {},
+      warn() {},
+      error(msg: string, fields?: Record<string, unknown>) {
+        errorCalls.push({ msg, fields });
+      },
+      child() {
+        return logger;
+      },
+    };
 
     const middleware = createDeleteStorageFileMiddleware({
       storage: {
@@ -163,21 +174,21 @@ describe('createDeleteStorageFileMiddleware', () => {
       },
       assetAdapter: makeAssetAdapter(asset),
       retryAttempts: 1,
+      logger,
     });
 
-    try {
-      await middleware(
-        makeContext(asset.id) as never,
-        mock(async () => {}),
-      );
+    await middleware(
+      makeContext(asset.id) as never,
+      mock(async () => {}),
+    );
 
-      expect(storageDelete).toHaveBeenCalledTimes(1);
-      expect(error).toHaveBeenCalledWith(
-        expect.stringContaining('ORPHANED storage object'),
-        expect.any(Error),
-      );
-    } finally {
-      error.mockRestore();
-    }
+    expect(storageDelete).toHaveBeenCalledTimes(1);
+    const exhausted = errorCalls.find(c =>
+      c.msg.includes('asset storage delete exhausted retries'),
+    );
+    expect(exhausted).toBeTruthy();
+    expect(exhausted?.fields?.key).toBe(asset.key);
+    expect(exhausted?.fields?.retries).toBe(1);
+    expect(exhausted?.fields?.lastError).toBe('permanent storage outage');
   });
 });

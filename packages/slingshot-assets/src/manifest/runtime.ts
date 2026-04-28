@@ -1,5 +1,10 @@
 import { HTTPException } from 'hono/http-exception';
-import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
+import type {
+  Logger,
+  SlingshotEvents,
+  StorageAdapter,
+} from '@lastshotlabs/slingshot-core';
+import { noopLogger } from '@lastshotlabs/slingshot-core';
 import type { EntityManifestRuntime } from '@lastshotlabs/slingshot-entity';
 import {
   createEntityAdapterTransformRegistry,
@@ -12,10 +17,17 @@ import { createServeImageResponse } from '../image/serve';
 import type { ResolvedImageConfig } from '../image/serve';
 import type { ImageCacheAdapter } from '../image/types';
 import { generateUploadKeyFromFilename } from '../lib/upload';
-import { createDeleteStorageFileMiddleware } from '../middleware/deleteStorageFile';
+import {
+  type OrphanedKeyRegistry,
+  createDeleteStorageFileMiddleware,
+} from '../middleware/deleteStorageFile';
 import type { AssetAdapter, AssetsPluginConfig } from '../types';
 
-const BLOCKED_MIME_TYPES = new Set([
+/**
+ * MIME types refused at presign time AND forced to a generic content type at
+ * download time. Browsers must never sniff these as executables / scripts.
+ */
+export const BLOCKED_MIME_TYPES: ReadonlySet<string> = new Set([
   'application/x-executable',
   'application/x-sh',
   'application/x-msdownload',
@@ -24,6 +36,19 @@ const BLOCKED_MIME_TYPES = new Set([
   'application/javascript',
   'text/javascript',
 ]);
+
+const DEFAULT_PRESIGN_UPLOAD_MAX_TTL_SECONDS = 7 * 24 * 3600;
+
+/** Per-user idempotency cache entry for `presignUpload`. */
+interface PresignUploadIdempotencyEntry {
+  readonly url: string;
+  readonly key: string;
+  readonly assetId: string;
+  /** Wall-clock millisecond timestamp when this entry expires. */
+  readonly expiresAt: number;
+  /** In-flight promise so concurrent calls with the same key share the result. */
+  readonly inFlight?: Promise<{ url: string; key: string; assetId: string }>;
+}
 
 function mimeMatches(mimeType: string, pattern: string): boolean {
   if (pattern.endsWith('/*')) {
@@ -62,6 +87,32 @@ function readPresignedExpiry(
     throw new HTTPException(400, { message: 'expirySeconds must be positive' });
   }
   return expiry;
+}
+
+/**
+ * Cap a presigned PUT URL's TTL by the smaller of the configured app-wide
+ * ceiling and the asset retention window (P-ASSETS-6). The presign URL must
+ * never outlive the asset record itself — otherwise a long-lived URL would
+ * still be valid against an evicted/expired asset, which is both confusing
+ * for clients and a leakage surface.
+ *
+ * Throws a 400 with a structured message rather than silently shortening so
+ * the caller knows which bound was breached.
+ */
+function validatePresignUploadTtl(config: Readonly<AssetsPluginConfig>, expiry: number): void {
+  const cap = config.presignedUploadMaxTtlSeconds ?? DEFAULT_PRESIGN_UPLOAD_MAX_TTL_SECONDS;
+  if (expiry > cap) {
+    throw new HTTPException(400, {
+      message: `expirySeconds=${expiry} exceeds presignedUploadMaxTtlSeconds=${cap}`,
+    });
+  }
+  const retention =
+    config.presignedUploadAssetRetentionSeconds ?? config.registryTtlSeconds ?? null;
+  if (retention != null && expiry > retention) {
+    throw new HTTPException(400, {
+      message: `expirySeconds=${expiry} exceeds asset retention window=${retention}`,
+    });
+  }
 }
 
 function assertPresignedUrlsEnabled<K extends 'presignPut' | 'presignGet'>(
@@ -104,6 +155,9 @@ function requireAssetAdapter(value: BareEntityAdapter, message: string): AssetAd
  * @param imageConfig - Optional resolved image config.
  * @param setDeleteStorageMiddleware - Setter used to populate the delete middleware before routes mount.
  * @param setAssetAdapter - Setter used to capture the resolved asset adapter.
+ * @param logger - Optional structured logger. Defaults to no-op.
+ * @param events - Optional registry-backed event publisher used for emitting `asset:storageDeleteFailed`.
+ * @param orphanRegistry - Optional bounded registry that captures orphaned-key records for the recovery API.
  * @returns Runtime registries passed to `createEntityPlugin({ manifestRuntime })`.
  */
 export function createAssetsManifestRuntime(args: {
@@ -113,13 +167,41 @@ export function createAssetsManifestRuntime(args: {
   imageConfig: ResolvedImageConfig | null;
   setDeleteStorageMiddleware: (handler: import('hono').MiddlewareHandler) => void;
   setAssetAdapter: (adapter: AssetAdapter) => void;
+  logger?: Logger;
+  events?: SlingshotEvents;
+  orphanRegistry?: OrphanedKeyRegistry;
+  getEvents?: () => SlingshotEvents | undefined;
 }): EntityManifestRuntime {
-  const { config, storage, imageCache, imageConfig, setDeleteStorageMiddleware, setAssetAdapter } =
-    args;
+  const {
+    config,
+    storage,
+    imageCache,
+    imageConfig,
+    setDeleteStorageMiddleware,
+    setAssetAdapter,
+    orphanRegistry,
+    getEvents,
+  } = args;
+  const logger = args.logger ?? noopLogger;
   const customHandlers = createEntityHandlerRegistry();
   const adapterTransforms = createEntityAdapterTransformRegistry();
   const hooks = createEntityPluginHookRegistry();
   let assetAdapterRef: AssetAdapter | undefined;
+  // P-ASSETS-7: per-(user, idempotencyKey) cache of in-flight + recently
+  // completed presignUpload requests so concurrent retries with the same
+  // logical file don't generate distinct keys/records. Bounded by removing
+  // expired entries on every read.
+  const presignUploadIdempotencyCache = new Map<string, PresignUploadIdempotencyEntry>();
+  const PRESIGN_IDEMPOTENCY_RETENTION_MS = 5 * 60_000;
+
+  function purgePresignIdempotency(): void {
+    const now = Date.now();
+    for (const [k, entry] of presignUploadIdempotencyCache) {
+      if (entry.expiresAt < now && !entry.inFlight) {
+        presignUploadIdempotencyCache.delete(k);
+      }
+    }
+  }
 
   adapterTransforms.register('assets.asset.ttl', adapter => {
     const assetAdapter = requireAssetAdapter(
@@ -146,6 +228,13 @@ export function createAssetsManifestRuntime(args: {
       createDeleteStorageFileMiddleware({
         storage,
         assetAdapter,
+        logger,
+        // Resolve events lazily — at hook time the host plugin may have a
+        // captured publisher that wasn't yet available when the runtime was
+        // built (manifest-mode setup ordering).
+        events: args.events ?? getEvents?.(),
+        orphanRegistry,
+        ...(config.onOrphanedKey ? { onOrphanedKey: config.onOrphanedKey } : {}),
       }),
     );
   });
@@ -164,7 +253,10 @@ export function createAssetsManifestRuntime(args: {
     const filename = readOptionalString(params, 'filename');
     const mimeType = readOptionalString(params, 'mimeType');
     const tenantId = readOptionalString(params, 'tenantId') ?? config.tenantId;
+    const idempotencyKey = readOptionalString(params, 'idempotencyKey');
     const expirySeconds = readPresignedExpiry(config, params);
+    // P-ASSETS-6: presigned PUT URL TTL must not outlive the asset record.
+    validatePresignUploadTtl(config, expirySeconds);
 
     if (mimeType && BLOCKED_MIME_TYPES.has(mimeType)) {
       throw new HTTPException(400, { message: 'File type not allowed.' });
@@ -183,31 +275,82 @@ export function createAssetsManifestRuntime(args: {
       }
     }
 
-    const key = generateUploadKeyFromFilename(
-      filename,
-      { userId, tenantId },
-      {
-        keyPrefix: config.keyPrefix,
-        tenantScopedKeys: config.tenantScopedKeys,
-      },
-    );
+    // P-ASSETS-7: idempotency key path. Concurrent (or retried) calls with
+    // the same (userId, idempotencyKey) tuple must return the SAME record /
+    // URL — we never want a second `assets.create()` against a logically-
+    // identical request. We support two cases:
+    //   1. A concurrent in-flight request — share its promise.
+    //   2. A recently-completed request still inside the retention window —
+    //      return the cached record directly.
+    // Apps that want stronger guarantees (idempotency across processes) can
+    // prefix the key with their own request id and use a durable backend.
+    const cacheKey = idempotencyKey ? `${userId}:${idempotencyKey}` : null;
+    if (cacheKey) {
+      purgePresignIdempotency();
+      const existing = presignUploadIdempotencyCache.get(cacheKey);
+      if (existing?.inFlight) return existing.inFlight;
+      if (existing && existing.expiresAt >= Date.now()) {
+        return { url: existing.url, key: existing.key, assetId: existing.assetId };
+      }
+    }
 
-    const url = await storage.presignPut(key, {
-      expirySeconds,
-      mimeType,
-      maxSize: config.maxFileSize,
-    });
-    const asset = await assetAdapter.create({
-      key,
-      ownerUserId: userId,
-      tenantId: tenantId ?? null,
-      mimeType: mimeType ?? null,
-      size: null,
-      bucket: null,
-      originalName: filename ?? null,
-    });
+    const performPresign = async (): Promise<{
+      url: string;
+      key: string;
+      assetId: string;
+    }> => {
+      const key = generateUploadKeyFromFilename(
+        filename,
+        { userId, tenantId },
+        {
+          keyPrefix: config.keyPrefix,
+          tenantScopedKeys: config.tenantScopedKeys,
+        },
+      );
 
-    return { url, key, assetId: asset.id };
+      const url = await storage.presignPut(key, {
+        expirySeconds,
+        mimeType,
+        maxSize: config.maxFileSize,
+      });
+      const asset = await assetAdapter.create({
+        key,
+        ownerUserId: userId,
+        tenantId: tenantId ?? null,
+        mimeType: mimeType ?? null,
+        size: null,
+        bucket: null,
+        originalName: filename ?? null,
+      });
+
+      return { url, key, assetId: asset.id };
+    };
+
+    if (!cacheKey) return performPresign();
+
+    const inFlight = performPresign();
+    presignUploadIdempotencyCache.set(cacheKey, {
+      url: '',
+      key: '',
+      assetId: '',
+      expiresAt: Date.now() + PRESIGN_IDEMPOTENCY_RETENTION_MS,
+      inFlight,
+    });
+    try {
+      const result = await inFlight;
+      presignUploadIdempotencyCache.set(cacheKey, {
+        url: result.url,
+        key: result.key,
+        assetId: result.assetId,
+        expiresAt: Date.now() + PRESIGN_IDEMPOTENCY_RETENTION_MS,
+      });
+      return result;
+    } catch (err) {
+      // Failed presigns are not cached — the caller can retry without
+      // poisoning the slot.
+      presignUploadIdempotencyCache.delete(cacheKey);
+      throw err;
+    }
   });
 
   customHandlers.register('assets.asset.presignDownload', () => () => async (input: unknown) => {
@@ -222,6 +365,7 @@ export function createAssetsManifestRuntime(args: {
 
     const key = readRequiredString(params, 'key', 'key is required');
     const userId = readRequiredString(params, 'actor.id', 'Authenticated user required');
+    const actorKind = readOptionalString(params, 'actor.kind') ?? 'user';
     const tenantId = readOptionalString(params, 'tenantId');
     const expirySeconds = readPresignedExpiry(config, params);
 
@@ -232,13 +376,64 @@ export function createAssetsManifestRuntime(args: {
     if (asset.tenantId && tenantId && asset.tenantId !== tenantId) {
       throw new HTTPException(403, { message: 'Forbidden' });
     }
-    if (!asset.ownerUserId || asset.ownerUserId !== userId) {
+
+    // P-ASSETS-9: ownership / creator binding. Default behavior: actor.id
+    // must match asset.ownerUserId. Apps that need bypass (admin, support
+    // tools, batch processors) wire `presignDownloadAuthorize` to allow it.
+    const isOwner = asset.ownerUserId != null && asset.ownerUserId === userId;
+    let authorized = isOwner;
+    if (!authorized && config.presignDownloadAuthorize) {
+      try {
+        authorized = await Promise.resolve(
+          config.presignDownloadAuthorize({
+            asset,
+            actor: { id: userId, kind: actorKind, tenantId: tenantId ?? null },
+          }),
+        );
+      } catch (err) {
+        logger.warn('presignDownloadAuthorize callback threw', {
+          component: 'slingshot-assets.runtime',
+          err: err instanceof Error ? err.message : String(err),
+        });
+        authorized = false;
+      }
+    }
+    if (!authorized) {
       throw new HTTPException(403, { message: 'Forbidden' });
+    }
+
+    // P-ASSETS-10: refuse to issue presigned URLs for assets whose stored
+    // mimeType is in the blocklist. The bucket can't enforce response-side
+    // safety headers from Slingshot, so the safest action is to refuse the
+    // download outright. Apps with legitimate use cases for those MIME types
+    // must configure their bucket to override the response content-type.
+    const storedMime = asset.mimeType ?? null;
+    if (storedMime && BLOCKED_MIME_TYPES.has(storedMime)) {
+      throw new HTTPException(415, {
+        message: `Refusing to presign download for blocked MIME type "${storedMime}".`,
+      });
     }
 
     const url = await storage.presignGet(key, { expirySeconds });
     const expiresAt = Math.floor(Date.now() / 1000) + expirySeconds;
-    return { url, expiresAt };
+    // Surface the safe response-header recommendation in the JSON payload so
+    // operators using a custom edge / proxy can apply it to the download
+    // response. Always include `nosniff`; for blocked-but-unenforceable MIMEs
+    // (above we already throw, so this branch is defensive) advise the
+    // attachment disposition.
+    return {
+      url,
+      expiresAt,
+      responseHeaders: {
+        'X-Content-Type-Options': 'nosniff',
+        ...(storedMime && BLOCKED_MIME_TYPES.has(storedMime)
+          ? {
+              'Content-Type': 'application/octet-stream',
+              'Content-Disposition': 'attachment',
+            }
+          : {}),
+      },
+    };
   });
 
   customHandlers.register('assets.asset.serveImage', () => () => async (input: unknown) => {

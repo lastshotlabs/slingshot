@@ -230,6 +230,44 @@ export const assetsPluginConfigSchema = z.object({
         "doesn't wire a delete-storage middleware. Default false. Only set true as a " +
         'migration opt-out where cleanup runs elsewhere.',
     ),
+  onOrphanedKey: z
+    .custom<(record: import('./types').OrphanedKeyRecord) => void>(
+      value => typeof value === 'function',
+    )
+    .optional()
+    .describe(
+      'Synchronous callback fired when delete-cascade exhausts its retry budget. ' +
+        'Use to record orphaned keys to a recovery queue / outbox. Errors are caught and logged.',
+    ),
+  presignedUploadMaxTtlSeconds: z
+    .number()
+    .int()
+    .positive()
+    .max(30 * 24 * 3600)
+    .optional()
+    .describe(
+      'Hard upper bound (seconds) on presigned PUT URL TTL. Default 7 days. URLs requested for ' +
+        'longer are rejected with 400 to prevent the URL outliving the asset record.',
+    ),
+  presignedUploadAssetRetentionSeconds: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Asset retention window (seconds) used when validating presign PUT URL TTL. Falls back to ' +
+        'registryTtlSeconds. The presign TTL is rejected when it exceeds the smaller of this ' +
+        'value and presignedUploadMaxTtlSeconds.',
+    ),
+  presignDownloadAuthorize: z
+    .custom<NonNullable<import('./types').AssetsPluginConfig['presignDownloadAuthorize']>>(
+      value => typeof value === 'function',
+    )
+    .optional()
+    .describe(
+      'Callback invoked when the calling actor is not the asset owner. Return true to permit the ' +
+        'download (e.g. role-based admin bypass). Default behavior denies non-owner downloads.',
+    ),
 });
 
 /**

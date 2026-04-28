@@ -118,6 +118,71 @@ export interface AssetsPluginConfig {
    * asynchronously elsewhere); the plugin will continue to log a warning.
    */
   readonly allowOrphanedStorage?: boolean;
+
+  /**
+   * Optional callback invoked synchronously when the delete-cascade middleware
+   * exhausts its retry budget and the storage object is orphaned. Use this to
+   * push the orphaned key onto a recovery queue / outbox table.
+   *
+   * The callback runs after the failure is logged and the
+   * `asset:storageDeleteFailed` event is emitted. Errors thrown by the
+   * callback are caught and logged — the orphan recording path is never
+   * aborted.
+   */
+  readonly onOrphanedKey?: (record: OrphanedKeyRecord) => void;
+
+  /**
+   * Hard upper bound (in seconds) on a presigned PUT URL TTL. Defaults to
+   * `7 * 24 * 3600` (7 days). When the configured/asked-for `expirySeconds`
+   * exceeds this cap, `presignUpload` throws a 400 instead of issuing a URL
+   * that can outlive the asset record (P-ASSETS-6).
+   */
+  readonly presignedUploadMaxTtlSeconds?: number;
+
+  /**
+   * Optional default for asset-record retention used when validating presign
+   * PUT URL TTL (P-ASSETS-6). Falls back to `registryTtlSeconds`. The presign
+   * TTL is rejected when it exceeds the smaller of this value and
+   * `presignedUploadMaxTtlSeconds`.
+   */
+  readonly presignedUploadAssetRetentionSeconds?: number;
+
+  /**
+   * Optional bypass hook for `presignDownload`. When the calling actor is not
+   * the asset's `ownerUserId`, the runtime delegates to this callback. Return
+   * `true` to permit the download (e.g. when the caller has a `support` role
+   * or the actor kind is `service-account`). The default — when unset — is
+   * to deny non-owner downloads with 403.
+   *
+   * The callback receives the asset record plus a small actor projection
+   * (id/kind/tenantId). The plugin does not read `actor.roles` directly
+   * because manifest-mode handlers only see flattened param fields. Apps
+   * needing fine-grained role checks resolve their permission service inside
+   * the callback.
+   */
+  readonly presignDownloadAuthorize?: (input: {
+    asset: Asset;
+    actor: { id: string; kind: string; tenantId: string | null };
+  }) => boolean | Promise<boolean>;
+}
+
+/**
+ * Record passed to {@link AssetsPluginConfig.onOrphanedKey} and surfaced via
+ * the `listOrphanedKeys()` recovery API.
+ */
+export interface OrphanedKeyRecord {
+  /** Storage key of the orphaned object. */
+  readonly key: string;
+  /** Asset entity id, when the asset record was loaded before the failure. */
+  readonly assetId: string | null;
+  /** Tenant scope of the asset, when known. */
+  readonly tenantId: string | null;
+  /** Number of failed delete attempts. */
+  readonly retries: number;
+  /** Last error message returned by the storage adapter. */
+  readonly lastError: string;
+  /** Wall-clock millisecond timestamp when the failure was recorded. */
+  readonly recordedAt: number;
 }
 
 /**

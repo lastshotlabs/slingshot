@@ -47,6 +47,14 @@ export function createMemoryImageCache(opts?: MemoryImageCacheOptions): ImageCac
   let ttlEvictionCount = 0;
 
   function isExpired(entry: ImageCacheEntry): boolean {
+    // P-ASSETS-8: prefer the entry's explicit `expiresAt` when present so
+    // callers (or external adapters that reuse this contract) can communicate
+    // per-entry retention without depending on the adapter's ttlMs. Falls
+    // back to `generatedAt + ttlMs` for entries written before `expiresAt`
+    // was added or by callers that omit it.
+    if (typeof entry.expiresAt === 'number') {
+      return now() >= entry.expiresAt;
+    }
     if (ttlMs === 0) return false;
     return now() - entry.generatedAt >= ttlMs;
   }
@@ -76,7 +84,14 @@ export function createMemoryImageCache(opts?: MemoryImageCacheOptions): ImageCac
           evictionCount += 1;
         }
       }
-      store.set(key, entry);
+      // Pin an explicit `expiresAt` when the caller did not. Subsequent reads
+      // hit the fast `Date.now() >= expiresAt` branch above, eliminating any
+      // ambiguity about the stored TTL.
+      const stored: ImageCacheEntry =
+        entry.expiresAt !== undefined || ttlMs === 0
+          ? entry
+          : { ...entry, expiresAt: entry.generatedAt + ttlMs };
+      store.set(key, stored);
       return Promise.resolve();
     },
 

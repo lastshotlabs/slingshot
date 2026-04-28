@@ -1,12 +1,16 @@
 import type {
+  Logger,
   PermissionsState,
   PluginSetupContext,
+  SlingshotEvents,
   SlingshotPlugin,
   StorageAdapter,
 } from '@lastshotlabs/slingshot-core';
 import {
+  defineEvent,
   getPermissionsStateOrNull,
   getPluginState,
+  noopLogger,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -20,12 +24,17 @@ import type { ImageCacheAdapter } from './image/types';
 import { assetManifest } from './manifest/assetManifest';
 import { createAssetsManifestRuntime } from './manifest/runtime';
 import {
+  type OrphanedKeyRegistry,
+  createOrphanedKeyRegistry,
+} from './middleware/deleteStorageFile';
+import {
   ASSETS_PLUGIN_STATE_KEY,
   type AssetAdapter,
   type AssetsHealth,
   type AssetsHealthDetails,
   type AssetsPluginConfig,
   type AssetsPluginState,
+  type OrphanedKeyRecord,
   type StorageAdapterRef,
 } from './types';
 
@@ -66,7 +75,20 @@ function describeStorageKind(
  */
 export function createAssetsPlugin(
   rawConfig: AssetsPluginConfig,
-): SlingshotPlugin & { getHealth(): AssetsHealth } {
+  options?: {
+    /** Structured logger handle. Defaults to noopLogger. */
+    logger?: Logger;
+  },
+): SlingshotPlugin & {
+  getHealth(): AssetsHealth;
+  /**
+   * Snapshot of orphaned-storage records the delete-cascade middleware has
+   * recorded since startup (or `since`, when provided). The list is bounded
+   * in memory; durable retention is the operator's responsibility via
+   * `onOrphanedKey`.
+   */
+  listOrphanedKeys(since?: Date): ReadonlyArray<OrphanedKeyRecord>;
+} {
   const config = Object.freeze(
     validatePluginConfig(ASSETS_PLUGIN_STATE_KEY, rawConfig, assetsPluginConfigSchema),
   );
@@ -123,11 +145,22 @@ export function createAssetsPlugin(
   let assetAdapterRef: AssetAdapter | undefined;
   let innerPlugin: EntityPlugin | undefined;
 
+  const logger: Logger = options?.logger ?? noopLogger;
+  const orphanRegistry: OrphanedKeyRegistry = createOrphanedKeyRegistry();
+  // `events` is populated lazily during setupMiddleware once the host has
+  // initialised the registry-backed publisher. The manifest runtime captures
+  // a getter so the delete-cascade middleware can be wired before the
+  // publisher exists.
+  let publisher: SlingshotEvents | undefined;
+
   const manifestRuntime = createAssetsManifestRuntime({
     config,
     storage,
     imageCache,
     imageConfig,
+    logger,
+    orphanRegistry,
+    getEvents: () => publisher,
     setDeleteStorageMiddleware(handler) {
       deleteStorageFileRef.handler = handler;
       deleteMiddlewareWired = true;
@@ -187,8 +220,27 @@ export function createAssetsPlugin(
     name: ASSETS_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth', 'slingshot-permissions'],
     getHealth,
+    listOrphanedKeys(since?: Date) {
+      return orphanRegistry.listOrphanedKeys(since);
+    },
 
     async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      // Register the operational events the assets plugin emits before any
+      // route can fire them (delete-cascade-cleanup, presign retry exhaustion).
+      if (!events.get('asset:storageDeleteFailed')) {
+        events.register(
+          defineEvent('asset:storageDeleteFailed', {
+            ownerPlugin: ASSETS_PLUGIN_STATE_KEY,
+            exposure: ['internal'],
+            resolveScope() {
+              return null;
+            },
+          }),
+        );
+      }
+      // Hand the publisher to the manifest runtime via the captured getter.
+      publisher = events;
+
       const permissions: PermissionsState =
         getPermissionsStateOrNull(getPluginState(app)) ??
         (() => {

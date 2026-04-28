@@ -4,6 +4,9 @@
  * Entity-driven asset storage package for Slingshot.
  */
 
+// --- Events (module augmentation — imported for side effects) ---
+import './events';
+
 /**
  * Create the slingshot-assets plugin.
  */
@@ -20,10 +23,17 @@ export type {
   AssetsPluginState,
   CreateAssetInput,
   ImageConfig,
+  OrphanedKeyRecord,
   PresignedUrlConfig,
   StorageAdapterRef,
   UpdateAssetInput,
 } from './types';
+
+/**
+ * Bounded in-memory orphan-key registry used for the recovery API.
+ */
+export type { OrphanedKeyRegistry } from './middleware/deleteStorageFile';
+export { createOrphanedKeyRegistry } from './middleware/deleteStorageFile';
 
 /**
  * Create an S3-compatible storage adapter.

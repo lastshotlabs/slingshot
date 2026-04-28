@@ -566,9 +566,7 @@ export const notificationOperations = defineOperations(Notification, {
       },
   }),
 
-  countPendingDispatch: op.custom<
-    (args: { now: Date; signal?: AbortSignal }) => Promise<number>
-  >({
+  countPendingDispatch: op.custom<(args: { now: Date; signal?: AbortSignal }) => Promise<number>>({
     memory:
       store =>
       ({ now }) => {

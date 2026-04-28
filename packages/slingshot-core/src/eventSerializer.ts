@@ -1,4 +1,5 @@
 import type { EventSchemaRegistry } from './eventSchemaRegistry';
+import type { ValidationMode } from './eventTypes';
 
 /**
  * Controls how event payloads are encoded for durable transport (Kafka topics,
@@ -45,10 +46,7 @@ export class JsonEventSerializer implements EventSerializer {
  */
 export const JSON_SERIALIZER: EventSerializer = new JsonEventSerializer();
 
-/**
- * Controls how adapters handle schema validation failures.
- */
-export type ValidationMode = 'strict' | 'warn' | 'off';
+export type { ValidationMode } from './eventTypes';
 
 /**
  * Shared adapter options for runtime event validation and custom durable

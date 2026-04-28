@@ -1,5 +1,5 @@
 import { type z } from 'zod';
-import type { ValidationMode } from './eventSerializer';
+import type { ValidationMode } from './eventTypes';
 
 /**
  * Result of validating an event payload against a registered schema.

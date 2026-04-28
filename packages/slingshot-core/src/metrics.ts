@@ -255,11 +255,7 @@ export function createInProcessMetricsEmitter(): InProcessMetricsEmitter {
   const gauges = new Map<string, Map<string, GaugeCell>>();
   const timings = new Map<string, Map<string, TimingCell>>();
 
-  function counterImpl(
-    name: string,
-    value: number = 1,
-    labels?: Record<string, string>,
-  ): void {
+  function counterImpl(name: string, value: number = 1, labels?: Record<string, string>): void {
     if (!Number.isFinite(value)) return;
     let series = counters.get(name);
     if (!series) {

@@ -7,8 +7,8 @@
  * could be extended with a real Docker harness — see notes in the task that
  * introduced this file.
  */
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { notificationOperations } from '../src/entities/notification';
 import { createNotificationsTestAdapters } from '../src/testing';
 

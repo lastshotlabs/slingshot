@@ -5,7 +5,6 @@
  * and entity packages (`slingshot-entity`) can import without creating a
  * cross-layer dependency.
  */
-import type { WsState } from './context/slingshotContext';
 import type { ChannelIncomingEventDeclaration } from './entityChannelConfig';
 
 /** Valid WebSocket room name pattern. 1–128 chars: alphanumeric, underscore, colon, dot, slash, hyphen. */
@@ -27,8 +26,8 @@ const ROOM_NAME_RE = /^[a-zA-Z0-9_:./-]{1,128}$/;
  * @param data - Payload; will be JSON-serialised.
  * @param options - Optional exclude set and volatile/trackDelivery flags.
  */
-export type WsPublishFn = (
-  state: WsState,
+export type WsPublishFn<TState = unknown> = (
+  state: TState,
   endpoint: string,
   room: string,
   data: unknown,

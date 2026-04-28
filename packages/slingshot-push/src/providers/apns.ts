@@ -18,6 +18,14 @@ function parseRetryAfterMs(value: string | null): number | undefined {
   return undefined;
 }
 
+async function readResponseTextSafe(response: Response): Promise<string> {
+  try {
+    return await response.text();
+  } catch {
+    return '';
+  }
+}
+
 /**
  * Default consecutive transient/server-side send failures before the provider's
  * circuit breaker opens. Token-specific failures (`invalidToken`,
@@ -240,19 +248,23 @@ export function createApnsProvider(config: {
         if (response.status === 410 || response.status === 400 || response.status === 404) {
           // Token-specific failure — does not contribute to the provider-wide
           // breaker. Leave the failure counter untouched.
-          return { ok: false, reason: 'invalidToken', error: await response.text() };
+          return { ok: false, reason: 'invalidToken', error: await readResponseTextSafe(response) };
         }
         if (response.status === 413) {
           // Payload-level failure — also subscription/message specific, not
           // provider-wide. Do not trip the breaker.
-          return { ok: false, reason: 'payloadTooLarge', error: await response.text() };
+          return {
+            ok: false,
+            reason: 'payloadTooLarge',
+            error: await readResponseTextSafe(response),
+          };
         }
         if (response.status === 429) {
           recordFailure();
           return {
             ok: false,
             reason: 'rateLimited',
-            error: await response.text(),
+            error: await readResponseTextSafe(response),
             retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')),
           };
         }
@@ -260,7 +272,7 @@ export function createApnsProvider(config: {
         return {
           ok: false,
           reason: 'transient',
-          error: await response.text(),
+          error: await readResponseTextSafe(response),
           retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')),
         };
       } catch (error) {

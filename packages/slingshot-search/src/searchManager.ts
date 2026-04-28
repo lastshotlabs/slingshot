@@ -5,12 +5,7 @@
  * lifecycle, index creation/update, entity search clients, federated search,
  * and reindex operations. All state is closure-owned — no singletons.
  */
-import type {
-  GeoSearchConfig,
-  MetricsEmitter,
-  ResolvedEntityConfig,
-} from '@lastshotlabs/slingshot-core';
-import { createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
+import type { GeoSearchConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { applyGeoTransform } from './geoTransform';
 import { deriveIndexSettings } from './indexSettings';
 import { createAlgoliaProvider } from './providers/algolia';

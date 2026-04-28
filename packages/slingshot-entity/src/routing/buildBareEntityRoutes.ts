@@ -29,6 +29,7 @@ import { createRoute, getActor } from '@lastshotlabs/slingshot-core';
 import { entityToPath } from '../generators/routeHelpers';
 import { buildEntityZodSchemas } from '../lib/entityZodSchemas';
 import { policyAppliesToOp, resolvePolicy } from '../policy/resolvePolicy';
+import type { BareEntityAdapter } from './adapterTypes';
 import type {
   EntityRouteExecutionContext,
   EntityRouteExecutor,
@@ -37,6 +38,8 @@ import type {
 } from './entityRoutePlanning';
 import { resolveNamedOperationRoute } from './namedOperationRouting';
 import { findScopedFieldInBody, normalizeDataScopes, resolveDataScopes } from './resolveDataScope';
+
+export type { BareEntityAdapter, BareEntityAdapterCrud } from './adapterTypes';
 
 /**
  * The typed CRUD surface of a bare entity adapter.
@@ -63,44 +66,6 @@ import { findScopedFieldInBody, normalizeDataScopes, resolveDataScopes } from '.
  * };
  * ```
  */
-export interface BareEntityAdapterCrud {
-  create(data: unknown): Promise<unknown>;
-  getById(id: string, filter?: Record<string, unknown>): Promise<unknown>;
-  list(opts: {
-    filter?: unknown;
-    limit?: number;
-    cursor?: string;
-    sortDir?: 'asc' | 'desc';
-  }): Promise<{ items: unknown[]; cursor?: string; nextCursor?: string; hasMore?: boolean }>;
-  update(id: string, data: unknown, filter?: Record<string, unknown>): Promise<unknown>;
-  delete(id: string, filter?: Record<string, unknown>): Promise<boolean>;
-}
-
-/**
- * A full entity adapter: typed CRUD methods plus a dynamic index for named
- * operation methods (e.g. `adapter.byRoom(input)`).
- *
- * Produced by `EntityPluginEntry.buildAdapter()` and consumed by
- * `buildBareEntityRoutes()`.
- *
- * @example
- * ```ts
- * import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
- * import { createEntityFactories, resolveRepo } from '@lastshotlabs/slingshot-core';
- * import { Message, MessageOps } from './message';
- *
- * // Typically resolved via EntityPluginEntry.buildAdapter():
- * const adapter: BareEntityAdapter = resolveRepo(
- *   createEntityFactories(Message, MessageOps.operations),
- *   storeType,
- *   infra,
- * );
- * // adapter.create(data)        — CRUD method
- * // adapter.byRoom(input)       — named operation method
- * ```
- */
-export type BareEntityAdapter = BareEntityAdapterCrud & { [key: string]: unknown };
-
 type OperationFunction = (...args: unknown[]) => Promise<unknown>;
 type RouteDefinition = ReturnType<typeof createRoute>;
 type OpenApiRouteRegistrar = {

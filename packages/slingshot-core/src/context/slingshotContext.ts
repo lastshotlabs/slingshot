@@ -601,7 +601,7 @@ export interface SlingshotContext {
    * `wsPublish` is populated alongside `wsEndpoints` during server startup.
    * Both are `null` during `setupMiddleware` and `setupRoutes`.
    */
-  wsPublish: import('../wsHelpers').WsPublishFn | null;
+  wsPublish: import('../wsHelpers').WsPublishFn<WsState> | null;
 
   /**
    * Resolved persistence repositories — upload registry, idempotency,
@@ -641,7 +641,10 @@ export interface SlingshotContext {
    * operations such as `runPluginSeed()`. Plugins appear in topological
    * dependency order (same order as the framework lifecycle phases).
    */
-  readonly plugins: readonly import('../plugin').SlingshotPlugin[];
+  readonly plugins: readonly {
+    readonly name: string;
+    teardown?(): void | Promise<void>;
+  }[];
 
   /**
    * Frozen set of public-path patterns declared by registered plugins.

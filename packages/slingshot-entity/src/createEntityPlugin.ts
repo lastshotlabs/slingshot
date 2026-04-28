@@ -28,6 +28,7 @@ import type {
   SlingshotPlugin,
   StoreInfra,
   StoreType,
+  WsState,
 } from '@lastshotlabs/slingshot-core';
 import {
   PERMISSIONS_STATE_KEY,
@@ -792,7 +793,7 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
 
   const getAppContext = () => (capturedApp ? getContextOrNull(capturedApp) : null);
   const getWsState = () => getAppContext()?.ws ?? null;
-  const publishToWs: WsPublishFn = (state, targetEndpoint, room, data, options) => {
+  const publishToWs: WsPublishFn<WsState> = (state, targetEndpoint, room, data, options) => {
     const publish = getAppContext()?.wsPublish;
     if (!publish) return;
     if (options !== undefined) {

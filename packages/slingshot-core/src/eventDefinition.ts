@@ -1,62 +1,19 @@
-import type { z } from 'zod';
-import type { SlingshotEventMap } from './eventBus';
-import type { EventEnvelope } from './eventEnvelope';
+import type {
+  EventDefinition,
+  EventExposure,
+  EventKey,
+  EventScope,
+  EventSubscriptionPrincipal,
+} from './eventTypes';
 
-export type EventKey = Extract<keyof SlingshotEventMap, string>;
-
-export type EventExposure =
-  | 'internal'
-  | 'client-safe'
-  | 'tenant-webhook'
-  | 'user-webhook'
-  | 'app-webhook'
-  | 'connector';
-
-export interface EventScope {
-  tenantId?: string | null;
-  userId?: string | null;
-  appId?: string | null;
-  actorId?: string | null;
-  resourceType?: string;
-  resourceId?: string;
-}
-
-export interface EventPublishContext {
-  /**
-   * Request-scoped tenant ID captured by tenant-resolution middleware
-   * (pre-auth). REQUIRED on every publish — set explicitly to `null` for
-   * system-source / background emissions that have no originating HTTP
-   * request. This field is the canonical request-tenant carrier; callers
-   * must never reuse `actor.tenantId` (identity-bound) here.
-   */
-  requestTenantId: string | null;
-  userId?: string | null;
-  appId?: string | null;
-  actorId?: string | null;
-  requestId?: string;
-  correlationId?: string;
-  source?: 'http' | 'system' | 'job' | 'connector';
-}
-
-export interface EventSubscriptionPrincipal {
-  kind: 'system' | 'tenant' | 'user' | 'app' | 'connector';
-  ownerId: string;
-  tenantId?: string | null;
-}
-
-export interface EventDefinition<K extends EventKey = EventKey> {
-  key: K;
-  ownerPlugin: string;
-  exposure: readonly EventExposure[];
-  schema?: z.ZodType<SlingshotEventMap[K]>;
-  resolveScope(payload: SlingshotEventMap[K], ctx: EventPublishContext): EventScope | null;
-  authorizeSubscriber?(principal: EventSubscriptionPrincipal, envelope: EventEnvelope<K>): boolean;
-  projectPayload?(
-    payload: SlingshotEventMap[K],
-    principal: EventSubscriptionPrincipal,
-    envelope: EventEnvelope<K>,
-  ): unknown;
-}
+export type {
+  EventDefinition,
+  EventExposure,
+  EventKey,
+  EventPublishContext,
+  EventScope,
+  EventSubscriptionPrincipal,
+} from './eventTypes';
 
 const EXTERNAL_EXPOSURES = new Set<EventExposure>([
   'client-safe',

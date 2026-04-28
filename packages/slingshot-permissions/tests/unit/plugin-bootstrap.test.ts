@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import {
   PERMISSIONS_STATE_KEY,
@@ -19,6 +19,10 @@ type MockBus = {
 function asNever<T>(v: T): never {
   return v as never;
 }
+
+afterEach(() => {
+  mock.restore();
+});
 
 describe('slingshot-permissions bootstrap and plugin wiring', () => {
   test('seedSuperAdmin writes a global super-admin allow grant with defaults', async () => {
@@ -173,6 +177,37 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     );
 
     expect(ctx.pluginState.get(PERMISSIONS_STATE_KEY)).toBe(sentinel);
+  });
+
+  test('createPermissionsPlugin reflects a pre-seeded adapter in health', async () => {
+    const app = new Hono();
+    const adapter = { name: 'preseeded-adapter' };
+    const sentinel = Object.freeze({ adapter });
+    const ctx = { pluginState: new Map([[PERMISSIONS_STATE_KEY, sentinel]]) };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin();
+
+    await plugin.setupMiddleware?.(
+      asNever({
+        app,
+        config: {
+          resolvedStores: { authStore: 'memory' },
+          storeInfra: {},
+        },
+        bus: {},
+      }),
+    );
+
+    expect(ctx.pluginState.get(PERMISSIONS_STATE_KEY)).toBe(sentinel);
+    expect(plugin.getHealth()).toEqual({
+      status: 'healthy',
+      details: {
+        adapterAvailable: true,
+        adapterName: 'preseeded-adapter',
+        evaluator: null,
+      },
+    });
   });
 
   test('createPermissionsPlugin with no groupResolver disables group expansion', async () => {
@@ -331,6 +366,142 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     expect(() => plugin.setupPost?.(asNever({ app, bus }))).not.toThrow();
     // No handlers registered — bus is empty
     expect(bus.handlers.size).toBe(0);
+  });
+
+  test('setupPost: no-op when permissions state has no adapter', () => {
+    const app = new Hono();
+    const ctx = { pluginState: new Map([[PERMISSIONS_STATE_KEY, {}]]) };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin();
+    const bus: MockBus = {
+      handlers: new Map(),
+      on(event, handler) {
+        const list = this.handlers.get(event) ?? [];
+        list.push(handler);
+        this.handlers.set(event, list);
+      },
+      async emit(event, data) {
+        for (const h of this.handlers.get(event) ?? []) await h(data);
+      },
+    };
+
+    expect(() => plugin.setupPost?.(asNever({ app, bus }))).not.toThrow();
+    expect(bus.handlers.size).toBe(0);
+  });
+
+  test('seed: returns without adapter state', async () => {
+    const app = new Hono();
+    const ctx = { pluginState: new Map([[PERMISSIONS_STATE_KEY, {}]]) };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin();
+
+    await expect(
+      plugin.seed?.(
+        asNever({
+          app,
+          seedState: new Map([['superAdmin:admin@example.test', true]]),
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  test('seed: grants super-admin and warns when a requested user is missing', async () => {
+    const app = new Hono();
+    const getGrantsForSubject = mock(async () => []);
+    const createGrant = mock(async () => 'grant-1');
+    const ctx = {
+      pluginState: new Map([
+        [
+          PERMISSIONS_STATE_KEY,
+          {
+            adapter: {
+              getGrantsForSubject,
+              createGrant,
+            },
+          },
+        ],
+      ]),
+    };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin();
+    const warn = spyOn(console, 'warn').mockImplementation(() => {});
+    const log = spyOn(console, 'log').mockImplementation(() => {});
+
+    await plugin.seed?.(
+      asNever({
+        app,
+        seedState: new Map<string, unknown>([
+          ['superAdmin:missing@example.test', true],
+          ['superAdmin:admin@example.test', true],
+          ['user:admin@example.test', 'user-1'],
+          ['superAdmin:disabled@example.test', false],
+        ]),
+      }),
+    );
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing@example.test'));
+    expect(getGrantsForSubject).toHaveBeenCalledWith('user-1', 'user', {
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+    });
+    expect(createGrant).toHaveBeenCalledWith({
+      subjectId: 'user-1',
+      subjectType: 'user',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['super-admin'],
+      effect: 'allow',
+      grantedBy: 'manifest-seed',
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('Granted super-admin'));
+  });
+
+  test('seed: skips users that already have a live super-admin grant', async () => {
+    const app = new Hono();
+    const getGrantsForSubject = mock(async () => [
+      {
+        id: 'existing-admin',
+        roles: ['super-admin'],
+        effect: 'allow',
+        revokedAt: null,
+      },
+    ]);
+    const createGrant = mock(async () => 'grant-1');
+    const ctx = {
+      pluginState: new Map([
+        [
+          PERMISSIONS_STATE_KEY,
+          {
+            adapter: {
+              getGrantsForSubject,
+              createGrant,
+            },
+          },
+        ],
+      ]),
+    };
+    attachContext(app, ctx as never);
+
+    const plugin = createPermissionsPlugin();
+    const log = spyOn(console, 'log').mockImplementation(() => {});
+
+    await plugin.seed?.(
+      asNever({
+        app,
+        seedState: new Map<string, unknown>([
+          ['superAdmin:admin@example.test', true],
+          ['user:admin@example.test', 'user-1'],
+        ]),
+      }),
+    );
+
+    expect(createGrant).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('already has super-admin'));
   });
 
   test('createPermissionsPlugin with groupResolver wires auth-backed group expansion', async () => {

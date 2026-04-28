@@ -1,41 +1,8 @@
 import { deepFreeze } from './deepFreeze';
-import type { SlingshotEventMap } from './eventBus';
-import type { EventExposure, EventKey, EventPublishContext, EventScope } from './eventDefinition';
+import type { SlingshotEventMap } from './eventMap';
+import type { CreateEventEnvelopeParams, EventEnvelope, EventKey } from './eventTypes';
 
-export interface EventEnvelopeMeta {
-  eventId: string;
-  occurredAt: string;
-  ownerPlugin: string;
-  exposure: readonly EventExposure[];
-  scope: EventScope | null;
-  requestId?: string;
-  correlationId?: string;
-  source?: EventPublishContext['source'];
-  /**
-   * Request-scoped tenant ID captured by tenant-resolution middleware (pre-auth).
-   * REQUIRED on every envelope — `null` for system / background emissions with
-   * no originating HTTP request. Distinct from `scope.tenantId` (delivery filter).
-   */
-  requestTenantId: string | null;
-}
-
-export interface EventEnvelope<K extends EventKey = EventKey> {
-  key: K;
-  payload: SlingshotEventMap[K];
-  meta: EventEnvelopeMeta;
-}
-
-export interface CreateEventEnvelopeParams<K extends EventKey> {
-  key: K;
-  payload: SlingshotEventMap[K];
-  ownerPlugin: string;
-  exposure: readonly EventExposure[];
-  scope: EventScope | null;
-  requestId?: string;
-  correlationId?: string;
-  source?: EventPublishContext['source'];
-  requestTenantId: string | null;
-}
+export type { CreateEventEnvelopeParams, EventEnvelope, EventEnvelopeMeta } from './eventTypes';
 
 export function createEventEnvelope<K extends EventKey>(
   params: CreateEventEnvelopeParams<K>,

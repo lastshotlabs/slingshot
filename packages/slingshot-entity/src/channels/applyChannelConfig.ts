@@ -392,7 +392,7 @@ export function wireChannelForwarding(
   getWsState: () => WsState | null,
   bus: SlingshotEventBus,
   endpoint: string,
-  publishFn: WsPublishFn,
+  publishFn: WsPublishFn<WsState>,
 ): () => void {
   const dynamicBus = bus as unknown as DynamicEventBus;
   const cleanups: Array<() => void> = [];
@@ -474,7 +474,7 @@ export function buildEntityReceiveHandlers(
   channelConfig: EntityChannelConfig,
   entity: ResolvedEntityConfig,
   getWsState: () => WsState | null,
-  publishFn: WsPublishFn,
+  publishFn: WsPublishFn<WsState>,
   endpoint: string,
 ): Record<string, ChannelIncomingEventDeclaration> {
   const handlers: Record<string, ChannelIncomingEventDeclaration> = {};

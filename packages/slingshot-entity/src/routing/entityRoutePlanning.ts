@@ -10,7 +10,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { resolveOpConfig } from '@lastshotlabs/slingshot-core';
 import { entityToPath } from '../generators/routeHelpers';
-import type { BareEntityAdapter } from './buildBareEntityRoutes';
+import type { BareEntityAdapter } from './adapterTypes';
 import { resolveNamedOperationRoute } from './namedOperationRouting';
 
 export type EntityGeneratedRouteKey =

@@ -1,4 +1,5 @@
 import type { ZodType } from 'zod';
+import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type {
   FunctionsRuntime,
   FunctionsRuntimeConfig,
@@ -10,6 +11,27 @@ import { type BootstrapResult, bootstrap } from './bootstrap';
 import { invokeWithAdapter } from './invocationLoop';
 import { isStreamingSupported, wrapStreamingHandler } from './streaming';
 import { type LambdaTriggerKind, resolveLambdaTrigger } from './triggers';
+
+/**
+ * Default upper-bound on graceful drain in `SIGTERM` (P-LAMBDA-1).
+ * Lambda's actual SIGTERM-to-SIGKILL grace window is platform-defined and
+ * varies by runtime (typically ~6s for managed runtimes). 5 s is a safe
+ * default that leaves headroom for the user-supplied `onShutdown` hook.
+ */
+const DEFAULT_SHUTDOWN_DRAIN_MS = 5_000;
+
+let runtimeLogger: Logger = createConsoleLogger({ base: { runtime: 'lambda' } });
+
+/**
+ * Replace the runtime-level structured logger. Pass `null` to reset to the
+ * default JSON console logger. Returns the previous logger so tests can
+ * save and restore state.
+ */
+export function configureRuntimeLogger(logger: Logger | null): Logger {
+  const previous = runtimeLogger;
+  runtimeLogger = logger ?? createConsoleLogger({ base: { runtime: 'lambda' } });
+  return previous;
+}
 
 type LambdaContextLike = {
   awsRequestId?: string;
@@ -36,6 +58,14 @@ export interface LambdaRuntimeOptions extends FunctionsRuntimeConfig {
    * Default: `false`.
    */
   streamingHandler?: boolean;
+  /**
+   * P-LAMBDA-1: maximum time in milliseconds to wait for in-flight invocations
+   * to complete on `SIGTERM` before running the `onShutdown` hook. The Lambda
+   * platform's SIGTERM-to-SIGKILL grace window caps the total runway; this
+   * value should be set well below it. Defaults to {@link DEFAULT_SHUTDOWN_DRAIN_MS}
+   * (5 s).
+   */
+  shutdownDrainMs?: number;
 }
 
 /**
@@ -83,8 +113,21 @@ export function createLambdaRuntime(
 ): LambdaRuntime {
   let cached: BootstrapResult | null = null;
   let coldStart = true;
+  // P-LAMBDA-5: when bootstrap fails on cold start we still flip coldStart
+  // to false (so a successful warm invoke is correctly labelled) and set
+  // bootstrapError so the first warm invocation knows the previous
+  // bootstrap aborted. The flag is cleared as soon as a bootstrap succeeds.
+  let bootstrapError = false;
   let shutdownRegistered = false;
+  // P-LAMBDA-1: track in-flight invocations so SIGTERM can await them
+  // before running onShutdown.
+  const inflight = new Set<Promise<unknown>>();
   const streamingRequested = (config as LambdaRuntimeOptions).streamingHandler === true;
+  const shutdownDrainMs =
+    typeof (config as LambdaRuntimeOptions).shutdownDrainMs === 'number' &&
+    (config as LambdaRuntimeOptions).shutdownDrainMs! >= 0
+      ? (config as LambdaRuntimeOptions).shutdownDrainMs!
+      : DEFAULT_SHUTDOWN_DRAIN_MS;
   // Resolve once at construction time. Logging here makes the deploy-time
   // fallback visible in CloudWatch even before the first invocation.
   const streamingActive = streamingRequested && isStreamingSupported();
@@ -96,40 +139,78 @@ export function createLambdaRuntime(
 
   async function ensureBootstrap(): Promise<BootstrapResult> {
     if (!cached) {
-      const bootstrapped = await bootstrap(config);
       try {
-        await config.hooks?.onInit?.(bootstrapped.ctx);
+        const bootstrapped = await bootstrap(config);
+        try {
+          await config.hooks?.onInit?.(bootstrapped.ctx);
+        } catch (err) {
+          await bootstrapped.teardown().catch(() => {});
+          throw err;
+        }
+        cached = bootstrapped;
+        bootstrapError = false;
       } catch (err) {
-        await bootstrapped.teardown().catch(() => {});
+        // P-LAMBDA-5: a failed bootstrap must NOT leave coldStart=true so
+        // the first SUCCESSFUL warm invocation is mislabelled. Mark the
+        // cold start as consumed and remember the failure so the first
+        // recovery invocation can be flagged.
+        coldStart = false;
+        bootstrapError = true;
         throw err;
       }
-      cached = bootstrapped;
     }
-    if (!shutdownRegistered && config.hooks?.onShutdown) {
+    if (!shutdownRegistered) {
+      // Always register a SIGTERM handler — even without onShutdown — so we
+      // can drain in-flight invocations. The drain is the safety-critical
+      // part; the user hook is optional.
       shutdownRegistered = true;
       const shutdownTimeoutMs = config.shutdownTimeoutMs ?? 1500;
       process.once('SIGTERM', () => {
-        // Wrap the hook in a Promise so synchronous throws are also captured.
-        const hookPromise = Promise.resolve()
-          .then(() => config.hooks?.onShutdown?.(cached?.ctx as SlingshotContext))
-          .catch(err => {
-            // Hook rejected — log and continue. Without this, the rejection
-            // would surface as an unhandledRejection on the Lambda container
-            // during shutdown and obscure the real cause.
-            console.error('[lambda] onShutdown hook threw during SIGTERM:', err);
+        // P-LAMBDA-1: wait for in-flight invocations first, bounded by the
+        // shutdownDrainMs window. Lambda's actual SIGTERM grace caps total
+        // runway; we leave the remaining time for the user's onShutdown.
+        const drainStart = Date.now();
+        const drainPromise = Promise.allSettled([...inflight]).then(() => 'drained' as const);
+        let drainTimer: ReturnType<typeof setTimeout> | undefined;
+        const drainTimeout = new Promise<'timeout'>(resolve => {
+          drainTimer = setTimeout(() => resolve('timeout'), shutdownDrainMs);
+        });
+        const fullShutdown = (async () => {
+          const outcome = await Promise.race([drainPromise, drainTimeout]);
+          if (drainTimer) clearTimeout(drainTimer);
+          if (outcome === 'timeout' && inflight.size > 0) {
+            runtimeLogger.warn('shutdown-drain-timeout', {
+              shutdownDrainMs,
+              inflight: inflight.size,
+            });
+          }
+          if (!config.hooks?.onShutdown) return;
+          // Use the time remaining within shutdownTimeoutMs (subtract drain
+          // elapsed). If the drain already took longer than the hook's
+          // timeout budget, give the hook at least 250 ms.
+          const remaining = Math.max(250, shutdownTimeoutMs - (Date.now() - drainStart));
+          const hookPromise = Promise.resolve()
+            .then(() => config.hooks?.onShutdown?.(cached?.ctx as SlingshotContext))
+            .catch(err => {
+              runtimeLogger.error('onShutdown-hook-threw', {
+                phase: 'sigterm',
+                message: err instanceof Error ? err.message : String(err),
+                stack: err instanceof Error ? err.stack : undefined,
+              });
+            });
+          let hookTimer: ReturnType<typeof setTimeout> | undefined;
+          const hookTimeout = new Promise<void>(resolve => {
+            hookTimer = setTimeout(() => {
+              runtimeLogger.warn('onShutdown-hook-timeout', {
+                timeoutMs: remaining,
+              });
+              resolve();
+            }, remaining);
           });
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        const timeoutPromise = new Promise<void>(resolve => {
-          timeoutId = setTimeout(() => {
-            console.warn(
-              `[lambda] onShutdown hook exceeded ${shutdownTimeoutMs}ms — abandoning wait`,
-            );
-            resolve();
-          }, shutdownTimeoutMs);
-        });
-        void Promise.race([hookPromise, timeoutPromise]).finally(() => {
-          if (timeoutId) clearTimeout(timeoutId);
-        });
+          await Promise.race([hookPromise, hookTimeout]);
+          if (hookTimer) clearTimeout(hookTimer);
+        })();
+        void fullShutdown;
       });
     }
     return cached;
@@ -142,20 +223,33 @@ export function createLambdaRuntime(
       const adapter = resolveLambdaTrigger(trigger);
       const baseHandler = async (event: unknown, context: LambdaContextLike) => {
         const runtime = await ensureBootstrap();
+        // P-LAMBDA-1: track this invocation so SIGTERM can await it.
+        const invocation: Promise<unknown> = (async () => {
+          try {
+            return await invokeWithAdapter(
+              handler,
+              adapter,
+              event,
+              runtime.ctx,
+              config.hooks,
+              opts,
+              coldStart,
+              context,
+              config.handlerTimeoutMs,
+            );
+          } finally {
+            coldStart = false;
+            // P-LAMBDA-5: clear bootstrapError after the first successful
+            // recovery invocation so subsequent invocations are not
+            // permanently flagged.
+            bootstrapError = false;
+          }
+        })();
+        inflight.add(invocation);
         try {
-          return await invokeWithAdapter(
-            handler,
-            adapter,
-            event,
-            runtime.ctx,
-            config.hooks,
-            opts,
-            coldStart,
-            context,
-            config.handlerTimeoutMs,
-          );
+          return await invocation;
         } finally {
-          coldStart = false;
+          inflight.delete(invocation);
         }
       };
       // Streaming is only meaningful for HTTP-shaped triggers. For event-source
@@ -181,7 +275,23 @@ export function createLambdaRuntime(
       await cached.teardown();
       cached = null;
       coldStart = true;
+      bootstrapError = false;
     },
+    // Test-only inspection surface. Not part of the public contract — the
+    // shape of these getters is allowed to change without notice.
+    _internals: {
+      get coldStart(): boolean {
+        return coldStart;
+      },
+      get bootstrapError(): boolean {
+        return bootstrapError;
+      },
+      get inflightCount(): number {
+        return inflight.size;
+      },
+    },
+  } as LambdaRuntime & {
+    _internals: { coldStart: boolean; bootstrapError: boolean; inflightCount: number };
   };
 }
 

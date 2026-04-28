@@ -4,6 +4,7 @@ import {
   HandlerError,
   type HandlerMeta,
   type IdentityResolver,
+  type Logger,
   type RecordOutcome,
   type SlingshotContext,
   type SlingshotHandler,
@@ -11,8 +12,27 @@ import {
   type TriggerOpts,
   type TriggerRecord,
   ValidationError,
+  createConsoleLogger,
 } from '@lastshotlabs/slingshot-core';
 import { IdempotencyConflictError, invokeWithRecordIdempotency } from './idempotency';
+
+/**
+ * Structured `Logger` (slingshot-core) used for hook-exception events
+ * (P-LAMBDA-2/-3) and other operational records that should be
+ * machine-parseable. Defaults to a JSON console logger.
+ */
+let lambdaLogger: Logger = createConsoleLogger({ base: { runtime: 'lambda' } });
+
+/**
+ * Replace the runtime's structured logger. Pass `null` to reset to the
+ * default JSON console logger. Returns the previous logger so tests can
+ * save and restore state.
+ */
+export function configureRuntimeLambdaLogger(logger: Logger | null): Logger {
+  const previous = lambdaLogger;
+  lambdaLogger = logger ?? createConsoleLogger({ base: { runtime: 'lambda' } });
+  return previous;
+}
 
 const RETRY_WHOLE_BATCH_TRIGGERS = new Set(['msk', 'kinesis', 'dynamodb-streams']);
 const AUTO_IDEMPOTENT_TRIGGERS = new Set(['sqs', 'msk', 'kinesis', 'dynamodb-streams']);
@@ -143,6 +163,7 @@ export async function invokeWithAdapter(
 
     try {
       let aborted: Awaited<ReturnType<NonNullable<FunctionsHooks['beforeInvoke']>>> | undefined;
+      let beforeInvokeFailed = false;
       try {
         aborted = await hooks?.beforeInvoke?.({
           input: record.body,
@@ -152,8 +173,31 @@ export async function invokeWithAdapter(
           ctx,
         });
       } catch (err) {
-        console.error('[lambda] beforeInvoke hook threw:', err);
+        // P-LAMBDA-2: a thrown beforeInvoke must not silently allow the
+        // invocation to proceed with partial state. Log structurally,
+        // re-throw as a HandlerError so the standard error path runs
+        // (onError, outcome assembly) — `aborted` stays undefined and
+        // we never reach the handler.
+        beforeInvokeFailed = true;
+        const wrapped =
+          err instanceof Error
+            ? err
+            : new Error(typeof err === 'string' ? err : 'beforeInvoke hook threw');
+        lambdaLogger.error('hook-threw', {
+          hook: 'beforeInvoke',
+          message: wrapped.message,
+          stack: wrapped.stack,
+          requestId: meta.requestId,
+        });
+        throw new HandlerError(`beforeInvoke hook failed: ${wrapped.message}`, {
+          status: 500,
+          code: 'hook-failed',
+          details: { hook: 'beforeInvoke' },
+        });
       }
+      // Defensive: if the catch above re-threw, we should never reach here
+      // with beforeInvokeFailed=true, but make the invariant explicit.
+      void beforeInvokeFailed;
       if (aborted && typeof aborted === 'object' && 'abort' in aborted && aborted.abort) {
         output = aborted.response;
       } else {
@@ -199,7 +243,18 @@ export async function invokeWithAdapter(
           ctx,
         });
       } catch (err) {
-        console.error('[lambda] onError hook threw:', err);
+        // P-LAMBDA-2: a throwing onError must NOT silently apply a partial
+        // disposition. Discard it explicitly and log structurally so the
+        // record is reported as a clean failure (not falsely suppressed).
+        const wrapped = err instanceof Error ? err : new Error(String(err));
+        lambdaLogger.error('hook-threw', {
+          hook: 'onError',
+          message: wrapped.message,
+          stack: wrapped.stack,
+          requestId: meta.requestId,
+          originalError: capturedError.message,
+        });
+        disposition = undefined;
       }
 
       if (disposition?.replaceWith) {
@@ -228,7 +283,20 @@ export async function invokeWithAdapter(
               ctx,
             })) ?? 'retry';
         } catch (err) {
-          console.error('[lambda] onRecordError hook threw:', err);
+          // P-LAMBDA-3: a throwing onRecordError must surface as a
+          // structured error event (not a console.error line) and the
+          // record stays in `retry` (the safer of the two valid actions),
+          // which assembles into `result: 'error'` below — i.e. the record
+          // is reported as failed, not silently dropped.
+          const wrapped = err instanceof Error ? err : new Error(String(err));
+          lambdaLogger.error('hook-threw', {
+            hook: 'onRecordError',
+            message: wrapped.message,
+            stack: wrapped.stack,
+            requestId: meta.requestId,
+            originalError: capturedError.message,
+          });
+          recordAction = 'retry';
         }
         if (recordAction === 'retry') {
           outcomes.push({
@@ -285,7 +353,16 @@ export async function invokeWithAdapter(
           latencyMs: Date.now() - startedAt,
         });
       } catch (err) {
-        console.error('[lambda] afterInvoke hook threw:', err);
+        // P-LAMBDA-2: afterInvoke is observability-only — its throw must
+        // not corrupt the record's outcome (already pushed to `outcomes`
+        // above). Log structurally so operators can correlate.
+        const wrapped = err instanceof Error ? err : new Error(String(err));
+        lambdaLogger.error('hook-threw', {
+          hook: 'afterInvoke',
+          message: wrapped.message,
+          stack: wrapped.stack,
+          requestId: meta.requestId,
+        });
       }
     }
   }

@@ -12,6 +12,32 @@ export class IdempotencyConflictError extends Error {
   }
 }
 
+/**
+ * Outcome of an `onIdempotencyConflict` callback.
+ *
+ * - `'reject'` — current/default behaviour: throw `IdempotencyConflictError`,
+ *   which is classified as `'idempotency'` by the invocation loop and routed
+ *   through `onError` like any other failure.
+ * - `'replay'` — return the previously cached response as the result of this
+ *   call (the second caller observes the first caller's output).
+ * - `'accept'` — treat the request as new: skip the cached entry, run the
+ *   handler again, and overwrite the stored response with the new one.
+ */
+export type IdempotencyConflictResolution = 'reject' | 'replay' | 'accept';
+
+export interface IdempotencyConflictInfo {
+  /** Idempotency key that triggered the conflict. */
+  key: string;
+  /** Stored fingerprint at the time of conflict (`null` if fingerprint was disabled originally). */
+  storedFingerprint: string | null;
+  /** Fingerprint of the current request. */
+  incomingFingerprint: string;
+  /** Handler name (for logging / routing). */
+  handlerName: string;
+  /** Meta surrounding the current invocation. */
+  meta: HandlerMeta;
+}
+
 export interface RuntimeIdempotencyConfig {
   ttl?: number;
   scope?: 'global' | 'tenant' | 'user';
@@ -21,6 +47,19 @@ export interface RuntimeIdempotencyConfig {
     meta: Record<string, unknown>;
     naturalKey?: string;
   }) => string | null;
+  /**
+   * P-LAMBDA-4: hook invoked when the incoming request fingerprint does not
+   * match the previously stored fingerprint. Return `'reject'` (default,
+   * preserves the prior throw-on-mismatch behaviour), `'replay'` (return the
+   * cached response anyway), or `'accept'` (overwrite the cached entry with
+   * the new result).
+   *
+   * Synchronous or async; either is fine. Throws are caught and treated as
+   * `'reject'` so a buggy hook never bypasses the safety check.
+   */
+  onIdempotencyConflict?: (
+    info: IdempotencyConflictInfo,
+  ) => IdempotencyConflictResolution | Promise<IdempotencyConflictResolution>;
 }
 
 function stableStringify(value: unknown): string {
@@ -99,9 +138,41 @@ export async function invokeWithRecordIdempotency<T>(
   }
   if (cached) {
     if (fingerprint && cached.requestFingerprint && cached.requestFingerprint !== fingerprint) {
-      throw new IdempotencyConflictError('Idempotency key conflict');
+      // P-LAMBDA-4: defer to caller-supplied hook. Default is the original
+      // throw-on-mismatch behaviour. The hook may also opt to replay the
+      // cached response or accept the new request as authoritative.
+      let resolution: IdempotencyConflictResolution = 'reject';
+      if (config?.onIdempotencyConflict) {
+        try {
+          resolution = await Promise.resolve(
+            config.onIdempotencyConflict({
+              key,
+              storedFingerprint: cached.requestFingerprint,
+              incomingFingerprint: fingerprint,
+              handlerName,
+              meta,
+            }),
+          );
+        } catch (err) {
+          // Buggy hook must NOT bypass the safety check — fall back to reject.
+          console.error(
+            '[lambda] onIdempotencyConflict hook threw; falling back to reject:',
+            err,
+          );
+          resolution = 'reject';
+        }
+      }
+      if (resolution === 'replay') {
+        return deserializeOutput<T>(cached.response);
+      }
+      if (resolution === 'reject') {
+        throw new IdempotencyConflictError('Idempotency key conflict');
+      }
+      // resolution === 'accept' — fall through to running the handler and
+      // overwriting the cached entry.
+    } else {
+      return deserializeOutput<T>(cached.response);
     }
-    return deserializeOutput<T>(cached.response);
   }
 
   const output = await invoke();

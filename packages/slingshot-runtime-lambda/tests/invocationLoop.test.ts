@@ -10,7 +10,7 @@ import {
   ValidationError,
   createDefaultIdentityResolver,
 } from '@lastshotlabs/slingshot-core';
-import { invokeWithAdapter } from '../src/invocationLoop';
+import { configureRuntimeLambdaLogger, invokeWithAdapter } from '../src/invocationLoop';
 import { apigwTrigger } from '../src/triggers/apigw';
 import { kinesisTrigger } from '../src/triggers/kinesis';
 import { scheduleTrigger } from '../src/triggers/schedule';
@@ -400,15 +400,29 @@ describe('invokeWithAdapter', () => {
     });
   });
 
-  test('beforeInvoke hook throwing does not crash the invocation — handler still runs', async () => {
-    const errorSpy = mock(() => {});
-    const originalConsoleError = console.error;
-    console.error = errorSpy;
+  test('beforeInvoke hook throwing routes to onError without invoking the handler (P-LAMBDA-2)', async () => {
+    const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+    const previous = configureRuntimeLambdaLogger({
+      debug() {},
+      info() {},
+      warn() {},
+      error(event, fields) {
+        events.push({ event, fields });
+      },
+      child(): typeof previous {
+        return previous;
+      },
+    });
 
     const ctx = createContextFixture();
-    const handler = createHandler(async () => ({ ok: true }));
+    let handlerCalls = 0;
+    const handler = createHandler(async () => {
+      handlerCalls += 1;
+      return { ok: true };
+    });
 
     let result: unknown;
+    const onErrorSeen: { kind?: string; message?: string } = {};
     try {
       result = await invokeWithAdapter(
         handler,
@@ -419,25 +433,46 @@ describe('invokeWithAdapter', () => {
           async beforeInvoke() {
             throw new Error('beforeInvoke hook crashed');
           },
+          async onError(args) {
+            onErrorSeen.kind = args.kind;
+            onErrorSeen.message = args.error.message;
+            return undefined;
+          },
         },
         undefined,
         false,
       );
     } finally {
-      console.error = originalConsoleError;
+      configureRuntimeLambdaLogger(previous);
     }
 
-    // Handler still ran — no batch failures since the handler itself succeeded
-    const batchResult = result as { batchItemFailures: unknown[] };
-    expect(batchResult.batchItemFailures).toHaveLength(0);
-    expect(errorSpy).toHaveBeenCalled();
-    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('beforeInvoke hook threw');
+    // Handler MUST NOT run when beforeInvoke throws — the invocation must
+    // route through the error path with explicit failure state.
+    expect(handlerCalls).toBe(0);
+    const batchResult = result as { batchItemFailures: Array<{ itemIdentifier: string }> };
+    expect(batchResult.batchItemFailures).toHaveLength(1);
+    expect(batchResult.batchItemFailures[0]?.itemIdentifier).toBe('msg-1');
+    // Structured logger received the hook-threw event.
+    const ev = events.find(e => e.event === 'hook-threw' && e.fields?.hook === 'beforeInvoke');
+    expect(ev).toBeDefined();
+    // onError fired with the wrapped HandlerError.
+    expect(onErrorSeen.kind).toBe('handler');
+    expect(onErrorSeen.message).toContain('beforeInvoke hook failed');
   });
 
-  test('onRecordError hook throw defaults to retry and does not crash batch', async () => {
-    const errorSpy = mock(() => {});
-    const originalConsoleError = console.error;
-    console.error = errorSpy;
+  test('onRecordError hook throw logs structurally and reports records as error (P-LAMBDA-3)', async () => {
+    const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+    const previous = configureRuntimeLambdaLogger({
+      debug() {},
+      info() {},
+      warn() {},
+      error(event, fields) {
+        events.push({ event, fields });
+      },
+      child(): typeof previous {
+        return previous;
+      },
+    });
 
     const handler = createHandler(async () => {
       throw new Error('record-failed');
@@ -465,20 +500,32 @@ describe('invokeWithAdapter', () => {
         false,
       );
     } finally {
-      console.error = originalConsoleError;
+      configureRuntimeLambdaLogger(previous);
     }
 
-    // Should not throw — the batch result is returned
-    // Both records should be marked for retry (the hook defaulted to 'retry')
+    // Should not throw — the batch result is returned with both records as
+    // failed (recordAction defaults to 'retry' which produces result:'error').
     const batchResult = result as { batchItemFailures: unknown[] };
     expect(batchResult.batchItemFailures).toHaveLength(2);
-    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('onRecordError hook threw');
+    // Structured event was emitted with the hook name.
+    expect(
+      events.some(e => e.event === 'hook-threw' && e.fields?.hook === 'onRecordError'),
+    ).toBe(true);
   });
 
-  test('onError hook throwing does not prevent error handling — invocation returns failure', async () => {
-    const errorSpy = mock(() => {});
-    const originalConsoleError = console.error;
-    console.error = errorSpy;
+  test('onError hook throwing does not prevent error handling — invocation returns failure (P-LAMBDA-2)', async () => {
+    const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+    const previous = configureRuntimeLambdaLogger({
+      debug() {},
+      info() {},
+      warn() {},
+      error(event, fields) {
+        events.push({ event, fields });
+      },
+      child(): typeof previous {
+        return previous;
+      },
+    });
 
     const ctx = createContextFixture();
     const handler = createHandler(async () => {
@@ -501,13 +548,56 @@ describe('invokeWithAdapter', () => {
         false,
       );
     } finally {
-      console.error = originalConsoleError;
+      configureRuntimeLambdaLogger(previous);
     }
 
-    // Record failed (handler threw) — appears in batchItemFailures
+    // Record failed (handler threw) — appears in batchItemFailures.
+    // The thrown onError is discarded (no false suppression).
     const batchResult = result as { batchItemFailures: Array<{ itemIdentifier: string }> };
     expect(batchResult.batchItemFailures).toHaveLength(1);
-    expect(batchResult.batchItemFailures[0].itemIdentifier).toBe('msg-2');
-    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('onError hook threw');
+    expect(batchResult.batchItemFailures[0]?.itemIdentifier).toBe('msg-2');
+    expect(events.some(e => e.event === 'hook-threw' && e.fields?.hook === 'onError')).toBe(true);
+  });
+
+  // P-LAMBDA-2 — afterInvoke hook throw is observability-only.
+  test('afterInvoke hook throwing does not corrupt the record outcome (P-LAMBDA-2)', async () => {
+    const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+    const previous = configureRuntimeLambdaLogger({
+      debug() {},
+      info() {},
+      warn() {},
+      error(event, fields) {
+        events.push({ event, fields });
+      },
+      child(): typeof previous {
+        return previous;
+      },
+    });
+
+    const ctx = createContextFixture();
+    const handler = createHandler(async () => ({ ok: true }));
+
+    try {
+      const result = (await invokeWithAdapter(
+        handler,
+        sqsTrigger as TriggerAdapter,
+        { Records: [{ messageId: 'msg-9', body: '{}' }] },
+        ctx,
+        {
+          async afterInvoke() {
+            throw new Error('afterInvoke hook crashed');
+          },
+        },
+        undefined,
+        false,
+      )) as { batchItemFailures: unknown[] };
+      // Handler succeeded — afterInvoke throw must not invent a failure.
+      expect(result.batchItemFailures).toHaveLength(0);
+    } finally {
+      configureRuntimeLambdaLogger(previous);
+    }
+    expect(events.some(e => e.event === 'hook-threw' && e.fields?.hook === 'afterInvoke')).toBe(
+      true,
+    );
   });
 });

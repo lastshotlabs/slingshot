@@ -141,6 +141,8 @@ export function createPushPlugin(
   let membershipsRef: PushRouterRepos['topicMemberships'] | undefined;
   let deliveriesRef: PushRouterRepos['deliveries'] | undefined;
   let providersRef: Partial<Record<'web' | 'ios' | 'android', PushProvider>> = {};
+  // Captured during setupPost so teardown can abort in-flight retry sleeps.
+  let routerRef: ReturnType<typeof createPushRouter> | null = null;
 
   // The unified metrics emitter is owned by the framework context and not
   // available until `setupPost` runs (the router is constructed there). We
@@ -400,7 +402,14 @@ export function createPushPlugin(
         retries: config.retries,
         bus: bus as { emit(event: string, payload: unknown): void },
         metrics: metricsProxy,
+        ...(config.providerTimeoutMs !== undefined
+          ? { providerTimeoutMs: config.providerTimeoutMs }
+          : {}),
+        ...(config.topicMaxRecipients !== undefined
+          ? { topicMaxRecipients: config.topicMaxRecipients }
+          : {}),
       });
+      routerRef = router;
       const formatters = compilePushFormatters(config.formatters ?? {});
 
       const state: PushPluginState = {
@@ -427,6 +436,18 @@ export function createPushPlugin(
       const notificationsState = getNotificationsStateOrNull(pluginState);
       if (notificationsState) {
         notificationsState.registerDeliveryAdapter(state.createDeliveryAdapter());
+      }
+    },
+    teardown(): void {
+      // P-PUSH-6: abort in-flight retry sleeps so a graceful shutdown unwinds
+      // promptly instead of running attempts past teardown.
+      if (routerRef) {
+        try {
+          routerRef.stop();
+        } catch {
+          // Stop must never throw during teardown.
+        }
+        routerRef = null;
       }
     },
   };

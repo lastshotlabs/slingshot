@@ -1,4 +1,9 @@
-import { HeaderInjectionError, sanitizeHeaderValue } from '@lastshotlabs/slingshot-core';
+import {
+  HeaderInjectionError,
+  TimeoutError,
+  sanitizeHeaderValue,
+  withTimeout,
+} from '@lastshotlabs/slingshot-core';
 import webpush from 'web-push';
 import type { PushSendResult } from '../types/models';
 import type { PushProvider, PushProviderHealth } from './provider';
@@ -47,6 +52,14 @@ const DEFAULT_WEB_FAILURE_CIRCUIT = 5;
 const DEFAULT_WEB_CIRCUIT_COOLDOWN_MS = 30_000;
 
 /**
+ * Default upper bound on a single `webpush.sendNotification` call. The
+ * `web-push` library does not honour AbortSignal end-to-end, so a hung
+ * subscription endpoint without this guard would block the entire delivery
+ * worker indefinitely. P-PUSH-7.
+ */
+const DEFAULT_WEB_PROVIDER_TIMEOUT_MS = 30_000;
+
+/**
  * Create a Web Push provider using the VAPID protocol.
  *
  * Uses the `web-push` npm package to sign and deliver push messages to browser
@@ -89,6 +102,11 @@ export function createWebPushProvider(config: {
   vapid: { publicKey: string; privateKey: string; subject: string };
   failureCircuitThreshold?: number;
   circuitCooldownMs?: number;
+  /**
+   * Maximum milliseconds a single `webpush.sendNotification` call may run
+   * before it is treated as a transient failure. Default: 30000.
+   */
+  providerTimeoutMs?: number;
 }): PushProvider {
   const circuitThreshold = Math.max(
     1,
@@ -97,6 +115,10 @@ export function createWebPushProvider(config: {
   const circuitCooldownMs = Math.max(
     0,
     config.circuitCooldownMs ?? DEFAULT_WEB_CIRCUIT_COOLDOWN_MS,
+  );
+  const providerTimeoutMs = Math.max(
+    0,
+    config.providerTimeoutMs ?? DEFAULT_WEB_PROVIDER_TIMEOUT_MS,
   );
   let consecutiveFailures = 0;
   let lastFailureAt: number | null = null;
@@ -175,7 +197,7 @@ export function createWebPushProvider(config: {
       }
 
       try {
-        await webpush.sendNotification(
+        const sendPromise = webpush.sendNotification(
           {
             endpoint: subscription.platformData.endpoint,
             keys: subscription.platformData.keys,
@@ -186,9 +208,27 @@ export function createWebPushProvider(config: {
             headers,
           },
         );
+        if (providerTimeoutMs > 0) {
+          await withTimeout(sendPromise, providerTimeoutMs, 'web-push.sendNotification');
+        } else {
+          await sendPromise;
+        }
         recordSuccess();
         return { ok: true, providerIdempotencyKey: idempotencyKey };
       } catch (error) {
+        if (error instanceof TimeoutError) {
+          // A hung subscription endpoint is a transient, provider-wide event
+          // — count it toward the breaker so a misbehaving push service
+          // backs the whole provider off rather than burning per-call slots.
+          recordFailure();
+          return {
+            ok: false,
+            reason: 'transient',
+            error: error.message,
+            retryAfterMs: providerTimeoutMs,
+            providerIdempotencyKey: idempotencyKey,
+          };
+        }
         const errObj = error as { statusCode?: number; headers?: unknown; body?: unknown };
         const statusCode = errObj.statusCode;
         const retryAfterMs = parseRetryAfterMs(extractRetryAfterHeader(errObj.headers));

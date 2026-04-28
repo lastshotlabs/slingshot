@@ -231,6 +231,22 @@ export const pushPluginConfigSchema = z
       .describe(
         "URL path prefix for push routes. Must start with '/'. Trailing slashes are trimmed. Default: /push.",
       ),
+    providerTimeoutMs: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe(
+        'Maximum milliseconds for a single provider.send() call. Default: 30000. Set 0 to disable.',
+      ),
+    topicMaxRecipients: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Hard cap on subscriptions delivered per publishTopic call. Default: 10000. Excess members are skipped and surfaced via push:topic.fanout.truncated.',
+      ),
   })
   .superRefine((config, ctx) => {
     for (const platform of config.enabledPlatforms) {

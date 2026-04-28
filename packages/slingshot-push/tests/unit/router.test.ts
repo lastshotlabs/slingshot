@@ -884,7 +884,7 @@ describe('createPushRouter — publishTopic', () => {
     expect(result.allFailed).toBe(false);
   });
 
-  test('delivers to all members and warns when topic fan-out is large', async () => {
+  test('truncates topic fan-out at topicMaxRecipients and emits truncated event (P-PUSH-11)', async () => {
     const repos = createFakeRepos();
     const sentIds: string[] = [];
     const provider = createMockProvider(async sub => {
@@ -895,7 +895,7 @@ describe('createPushRouter — publishTopic', () => {
     const topic = { id: 'topic-big', tenantId: '', name: 'broadcast', createdAt: new Date() };
     repos._topics.push(topic);
 
-    const CAP = 10_000;
+    const CAP = 50;
     for (let i = 0; i < CAP + 5; i++) {
       const subId = `sub-${i}`;
       repos._subscriptions.push(makeSubscription({ id: subId, userId: `user-${i}` }));
@@ -910,19 +910,37 @@ describe('createPushRouter — publishTopic', () => {
     }
 
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const events: Array<{ event: string; payload: unknown }> = [];
+    const bus = {
+      emit(event: string, payload: unknown) {
+        events.push({ event, payload });
+      },
+    };
     const router = createPushRouter({
       providers: { web: provider },
       repos,
       retries: { maxAttempts: 1 },
+      topicMaxRecipients: CAP,
+      bus,
     });
 
     const result = await router.publishTopic('broadcast', { title: 'Hello' });
 
-    expect(result.delivered).toBe(CAP + 5);
-    expect(sentIds).toHaveLength(CAP + 5);
-    const capWarning = warnSpy.mock.calls.find(c => String(c[0]).includes('10005'));
+    expect(result.delivered).toBe(CAP);
+    expect(sentIds).toHaveLength(CAP);
+    const truncatedEvent = events.find(e => e.event === 'push:topic.fanout.truncated');
+    expect(truncatedEvent).toBeDefined();
+    const payload = truncatedEvent!.payload as {
+      totalMembers: number;
+      truncatedTo: number;
+      dropped: number;
+    };
+    expect(payload.totalMembers).toBe(CAP + 5);
+    expect(payload.truncatedTo).toBe(CAP);
+    expect(payload.dropped).toBe(5);
+
+    const capWarning = warnSpy.mock.calls.find(c => String(c[0]).includes(`${CAP + 5}`));
     expect(capWarning).toBeDefined();
-    expect(String(capWarning?.[0])).toContain('slingshot-push');
 
     warnSpy.mockRestore();
   });

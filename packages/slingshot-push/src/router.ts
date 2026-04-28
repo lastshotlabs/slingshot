@@ -42,8 +42,34 @@ type DynamicBus = {
   emit(event: string, payload: unknown): void;
 };
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+/**
+ * Cancellable sleep used by router retry backoff. When `signal` is provided
+ * and aborted, the sleep rejects immediately with an `'aborted'` error so the
+ * outer retry loop can unwind and stop spawning further attempts. Without
+ * cancellation, in-flight sleeps would tick through `stop()` and continue
+ * touching repositories long after teardown began. P-PUSH-6.
+ */
+function cancellableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new Error('aborted'));
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (signal && onAbort) signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    let onAbort: (() => void) | null = null;
+    if (signal) {
+      onAbort = (): void => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', onAbort!);
+        reject(new Error('aborted'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
 }
 
 async function sendWithProviderTimeout(
@@ -163,18 +189,40 @@ export interface PushRouter {
   sendToUser(
     userId: string,
     message: PushMessage,
-    opts?: { tenantId?: string; notificationId?: string },
+    opts?: {
+      tenantId?: string;
+      notificationId?: string;
+      /**
+       * Per-call override for the provider send timeout. When omitted, the
+       * router uses `providerTimeoutMs` from `createPushRouter`. Plumbed by
+       * the notifications delivery adapter (P-PUSH-12).
+       */
+      providerTimeoutMs?: number;
+    },
   ): Promise<PushSendResultSummary>;
   sendToUsers(
     userIds: readonly string[],
     message: PushMessage,
-    opts?: { tenantId?: string; notificationId?: string },
+    opts?: {
+      tenantId?: string;
+      notificationId?: string;
+      providerTimeoutMs?: number;
+    },
   ): Promise<PushSendResultSummary>;
   publishTopic(
     topicName: string,
     message: PushMessage,
-    opts?: { tenantId?: string; notificationId?: string },
+    opts?: {
+      tenantId?: string;
+      notificationId?: string;
+      providerTimeoutMs?: number;
+    },
   ): Promise<PushSendResultSummary>;
+  /**
+   * Abort all in-flight retry sleeps so a graceful shutdown unwinds promptly
+   * instead of running attempts past teardown. P-PUSH-6.
+   */
+  stop(): void;
 }
 
 function asItems<T>(result: { items: T[] } | T[]): T[] {
@@ -222,16 +270,26 @@ export function createPushRouter(options: {
    * a no-op emitter.
    */
   metrics?: MetricsEmitter;
+  /**
+   * Maximum subscriptions that may receive a single topic publish before the
+   * router emits `push:topic.fanout.truncated`, returns a partial result, and
+   * stops scheduling further batches. Default: 10000. P-PUSH-11.
+   */
+  topicMaxRecipients?: number;
 }): PushRouter {
   const maxAttempts = options.retries?.maxAttempts ?? 3;
   const initialDelayMs = options.retries?.initialDelayMs ?? 1_000;
   // Upper bound on a single retry-wait, to clamp absurd `Retry-After` hints
   // (e.g. a server returning hours) and prevent worker starvation.
   const maxRetryDelayMs = options.retries?.maxDelayMs ?? 5 * 60_000;
-  const providerTimeoutMs = options.providerTimeoutMs ?? 30_000;
+  const defaultProviderTimeoutMs = options.providerTimeoutMs ?? 30_000;
   const topicFanoutBatchSize = Math.max(1, options.topicFanoutBatchSize ?? 1000);
   const topicFanoutMaxPending = Math.max(1, options.topicFanoutMaxPending ?? 10);
+  const topicMaxRecipients = Math.max(1, options.topicMaxRecipients ?? 10_000);
   const metrics: MetricsEmitter = options.metrics ?? createNoopMetricsEmitter();
+  // Lifecycle abort signal used to unwind in-flight retry sleeps on stop().
+  const lifecycleController = new AbortController();
+  const lifecycleSignal = lifecycleController.signal;
 
   const CIRCUIT_STATE_VALUES: Record<'closed' | 'open' | 'half-open', number> = {
     closed: 0,
@@ -254,8 +312,9 @@ export function createPushRouter(options: {
   async function sendToSubscriptions(
     subscriptions: readonly RouterSubscriptionRecord[],
     message: PushMessage,
-    opts: { tenantId: string; notificationId?: string },
+    opts: { tenantId: string; notificationId?: string; providerTimeoutMs?: number },
   ): Promise<{ delivered: number; attempted: number }> {
+    const effectiveTimeoutMs = opts.providerTimeoutMs ?? defaultProviderTimeoutMs;
     let deliveredCount = 0;
     let attemptedCount = 0;
 
@@ -317,7 +376,7 @@ export function createPushRouter(options: {
               provider,
               toProviderSubscription(subscription, platform),
               payload,
-              providerTimeoutMs,
+              effectiveTimeoutMs,
               { idempotencyKey },
             );
           } catch (err) {
@@ -360,14 +419,49 @@ export function createPushRouter(options: {
           }
 
           if (result.reason === 'invalidToken') {
+            // P-PUSH-8: markFailed FIRST so the delivery record is in a
+            // terminal state regardless of subsequent cleanup outcomes. If
+            // the delete or membership purge fails, emit
+            // `push:subscription.deletePending` so a sweeper can clean later
+            // — never lose track of an orphaned subscription silently.
             await options.repos.deliveries.markFailed({
               id: delivery.id,
               failureReason: 'invalidToken',
             });
-            await options.repos.subscriptions.delete(subscription.id);
-            await options.repos.topicMemberships.removeBySubscription({
-              subscriptionId: subscription.id,
-            });
+            try {
+              await options.repos.subscriptions.delete(subscription.id);
+            } catch (delErr) {
+              console.error(
+                `[slingshot-push] Failed to delete invalid subscription="${sanitizeLogValue(subscription.id)}"`,
+                delErr,
+              );
+              options.bus?.emit('push:subscription.deletePending', {
+                subscriptionId: subscription.id,
+                userId: subscription.userId,
+                platform,
+                reason: result.error ?? 'invalidToken',
+                error: delErr instanceof Error ? delErr.message : String(delErr),
+              });
+              sent = true;
+              break;
+            }
+            try {
+              await options.repos.topicMemberships.removeBySubscription({
+                subscriptionId: subscription.id,
+              });
+            } catch (memErr) {
+              console.error(
+                `[slingshot-push] Failed to remove memberships for subscription="${sanitizeLogValue(subscription.id)}"`,
+                memErr,
+              );
+              options.bus?.emit('push:subscription.deletePending', {
+                subscriptionId: subscription.id,
+                userId: subscription.userId,
+                platform,
+                reason: 'membership-cleanup-failed',
+                error: memErr instanceof Error ? memErr.message : String(memErr),
+              });
+            }
             metrics.counter('push.subscription.cleanup.count', 1, {
               provider: platform,
               reason: 'invalidToken',
@@ -450,7 +544,13 @@ export function createPushRouter(options: {
               ? Math.max(0, result.retryAfterMs)
               : exponentialDelay;
           const delay = Math.min(requestedDelay, maxRetryDelayMs);
-          await sleep(delay);
+          try {
+            await cancellableSleep(delay, lifecycleSignal);
+          } catch {
+            // Lifecycle abort: drop out of the retry loop without mutating
+            // the delivery further. The fan-out caller will move on.
+            break;
+          }
         }
       } catch (err) {
         const safeDeliveryId = sanitizeLogValue(delivery.id);
@@ -514,7 +614,7 @@ export function createPushRouter(options: {
   async function sendToUser(
     userId: string,
     message: PushMessage,
-    opts: { tenantId?: string; notificationId?: string } = {},
+    opts: { tenantId?: string; notificationId?: string; providerTimeoutMs?: number } = {},
   ): Promise<{ delivered: number; attempted: number }> {
     const tenantId = opts.tenantId ?? '';
     const subscriptions = asItems(
@@ -523,6 +623,7 @@ export function createPushRouter(options: {
     return sendToSubscriptions(subscriptions, message, {
       tenantId,
       notificationId: opts.notificationId,
+      providerTimeoutMs: opts.providerTimeoutMs,
     });
   }
 
@@ -538,6 +639,7 @@ export function createPushRouter(options: {
         const r = await sendToUser(userId, message, {
           tenantId,
           notificationId: opts.notificationId,
+          providerTimeoutMs: opts.providerTimeoutMs,
         });
         delivered += r.delivered;
         attempted += r.attempted;
@@ -549,26 +651,43 @@ export function createPushRouter(options: {
       const topic = await options.repos.topics.findByName({ tenantId, name: topicName });
       if (!topic) return summarize({ delivered: 0, attempted: 0 });
 
-      const LARGE_TOPIC_WARNING_THRESHOLD = 10_000;
       const allMemberships = asItems(
         await options.repos.topicMemberships.listByTopic({ topicId: topic.id }),
       );
-      metrics.counter('push.topic.fanout.count', allMemberships.length, { topic: topicName });
       // topicName is caller-supplied; sanitize before interpolating into a
       // log line so a hostile name cannot inject newlines and forge a
       // separate log record.
       const safeTopicName = sanitizeLogValue(topicName);
-      if (allMemberships.length > LARGE_TOPIC_WARNING_THRESHOLD) {
+
+      // P-PUSH-11: hard cap topic fan-out at `topicMaxRecipients`. When
+      // exceeded, emit `push:topic.fanout.truncated` with totals so
+      // operators can see partial delivery without parsing logs, then
+      // proceed with only the first `topicMaxRecipients` members. Callers
+      // observe `truncated=true` on the returned summary.
+      let memberships = allMemberships;
+      let truncated = false;
+      const totalMembers = allMemberships.length;
+      if (memberships.length > topicMaxRecipients) {
+        truncated = true;
+        memberships = allMemberships.slice(0, topicMaxRecipients);
         console.warn(
-          `[slingshot-push] Topic '${safeTopicName}' has ${allMemberships.length} members; publishing in batched fan-out (batchSize=${topicFanoutBatchSize}, maxPending=${topicFanoutMaxPending}).`,
+          `[slingshot-push] Topic '${safeTopicName}' has ${totalMembers} members; truncating to topicMaxRecipients=${topicMaxRecipients}.`,
         );
+        options.bus?.emit('push:topic.fanout.truncated', {
+          topicName,
+          totalMembers,
+          truncatedTo: topicMaxRecipients,
+          dropped: totalMembers - topicMaxRecipients,
+        });
       }
+      metrics.counter('push.topic.fanout.count', memberships.length, { topic: topicName });
 
       // Chunk memberships into batches; resolve each batch's subscriptions in
       // parallel, then dispatch to subscribers. Apply back-pressure when the
       // number of pending batches exceeds `topicFanoutMaxPending` so a single
       // huge topic cannot overwhelm downstream providers.
-      const totalBatches = Math.ceil(allMemberships.length / topicFanoutBatchSize);
+      const allMembershipsLength = memberships.length;
+      const totalBatches = Math.ceil(allMembershipsLength / topicFanoutBatchSize);
       const pending: Array<Promise<{ delivered: number; attempted: number }>> = [];
       let totalDelivered = 0;
       let totalAttempted = 0;
@@ -583,8 +702,8 @@ export function createPushRouter(options: {
           pending.splice(settled.idx, 1);
         }
         const start = batchIndex * topicFanoutBatchSize;
-        const end = Math.min(start + topicFanoutBatchSize, allMemberships.length);
-        const batchMemberships = allMemberships.slice(start, end);
+        const end = Math.min(start + topicFanoutBatchSize, allMembershipsLength);
+        const batchMemberships = memberships.slice(start, end);
         const dispatchPromise = (async () => {
           const subscriptionResults = await Promise.all(
             batchMemberships.map(m => options.repos.subscriptions.getById(m.subscriptionId)),
@@ -604,6 +723,7 @@ export function createPushRouter(options: {
           return sendToSubscriptions(subscriptions, message, {
             tenantId,
             notificationId: opts.notificationId,
+            providerTimeoutMs: opts.providerTimeoutMs,
           });
         })();
         pending.push(dispatchPromise);
@@ -613,7 +733,16 @@ export function createPushRouter(options: {
         totalDelivered += value.delivered;
         totalAttempted += value.attempted;
       }
-      return summarize({ delivered: totalDelivered, attempted: totalAttempted });
+      const summary = summarize({ delivered: totalDelivered, attempted: totalAttempted });
+      return truncated
+        ? ({ ...summary, truncated: true, totalMembers } as PushSendResultSummary & {
+            truncated: true;
+            totalMembers: number;
+          })
+        : summary;
+    },
+    stop(): void {
+      lifecycleController.abort();
     },
   };
 }

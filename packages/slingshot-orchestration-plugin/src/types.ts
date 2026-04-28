@@ -49,6 +49,13 @@ type OrchestrationPluginRouteOptions = {
   routes?: boolean;
   routePrefix?: string;
   routeMiddleware?: MiddlewareHandler[];
+  /**
+   * Optional middleware stack used to gate `/health` and `/metrics` admin routes.
+   * If omitted, admin routes are protected by the same `routeMiddleware` chain.
+   * Provide a separate gate (e.g., basic auth, IP allowlist) so ops tooling can
+   * authenticate without exposing user-tier credentials to the orchestration API.
+   */
+  adminAuth?: MiddlewareHandler[];
   resolveRequestContext?: OrchestrationRequestContextResolver;
   authorizeRun?: OrchestrationRunAuthorizer;
 };

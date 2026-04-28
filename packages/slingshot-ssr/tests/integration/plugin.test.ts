@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { ssrPluginConfigSchema } from '../../src/config.schema';
 import { createSsrPlugin } from '../../src/plugin';
 import type { SlingshotSsrRenderer, SsrRouteChain, SsrRouteMatch } from '../../src/types';
@@ -188,7 +189,7 @@ describe('createSsrPlugin — production mode manifest check', () => {
     });
 
     const { Hono } = await import('hono');
-    const app = new Hono();
+    const app = new Hono() as unknown as import('hono').Hono<AppEnv>;
 
     const mockBus = {
       on: () => {},
@@ -200,6 +201,7 @@ describe('createSsrPlugin — production mode manifest check', () => {
       plugin.setupMiddleware!({
         app,
         bus: mockBus as any,
+        events: mockBus as any,
         config: {} as any,
       }),
     ).toThrow('[slingshot-ssr]');
@@ -214,7 +216,7 @@ describe('createSsrPlugin — production mode manifest check', () => {
     });
 
     const { Hono } = await import('hono');
-    const app = new Hono();
+    const app = new Hono() as unknown as import('hono').Hono<AppEnv>;
 
     const mockBus = {
       on: () => {},
@@ -226,6 +228,7 @@ describe('createSsrPlugin — production mode manifest check', () => {
       plugin.setupMiddleware!({
         app,
         bus: mockBus as any,
+        events: mockBus as any,
         config: {} as any,
       }),
     ).not.toThrow();

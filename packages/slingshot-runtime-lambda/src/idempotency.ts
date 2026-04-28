@@ -85,7 +85,18 @@ export async function invokeWithRecordIdempotency<T>(
 
   const fingerprint = config?.fingerprint === false ? null : sha256(stableStringify(record.body));
   const key = deriveKey(handlerName, rawKey, meta, scope);
-  const cached = await ctx.persistence.idempotency.get(key);
+
+  // Idempotency store I/O failures should NOT crash the handler. If the store
+  // is unreachable (e.g. transient Redis blip, DynamoDB throttle) we degrade
+  // to non-idempotent execution rather than failing the whole invocation —
+  // a duplicate replay is preferable to a hard 500 for an event that may
+  // already have been processed by a sibling worker.
+  let cached: Awaited<ReturnType<typeof ctx.persistence.idempotency.get>> | null = null;
+  try {
+    cached = await ctx.persistence.idempotency.get(key);
+  } catch (err) {
+    console.error('[lambda] idempotency.get failed; proceeding without replay:', err);
+  }
   if (cached) {
     if (fingerprint && cached.requestFingerprint && cached.requestFingerprint !== fingerprint) {
       throw new IdempotencyConflictError('Idempotency key conflict');
@@ -94,8 +105,15 @@ export async function invokeWithRecordIdempotency<T>(
   }
 
   const output = await invoke();
-  await ctx.persistence.idempotency.set(key, serializeOutput(output), 200, ttl, {
-    requestFingerprint: fingerprint ?? undefined,
-  });
+  try {
+    await ctx.persistence.idempotency.set(key, serializeOutput(output), 200, ttl, {
+      requestFingerprint: fingerprint ?? undefined,
+    });
+  } catch (err) {
+    // Failing to persist the result means a future replay won't see it — same
+    // outcome as if the store were unreachable on read. Log and continue; the
+    // handler already produced its output.
+    console.error('[lambda] idempotency.set failed; result will not be replay-cached:', err);
+  }
   return output;
 }

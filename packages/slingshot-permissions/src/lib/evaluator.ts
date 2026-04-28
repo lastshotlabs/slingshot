@@ -9,6 +9,56 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { SUPER_ADMIN_ROLE } from '@lastshotlabs/slingshot-core';
 
+/**
+ * Minimal logger interface used by the evaluator for structured warn/error output.
+ *
+ * Defaults to `console`. Inject a custom logger (e.g. pino, bunyan, slog) to capture
+ * evaluator diagnostics in your application's structured logging pipeline.
+ */
+export interface EvaluatorLogger {
+  warn(message: string, context?: Record<string, unknown>): void;
+  error?(message: string, context?: Record<string, unknown>): void;
+}
+
+/**
+ * Structured error thrown when an adapter query exceeds `queryTimeoutMs`.
+ *
+ * Carries `adapter`, `scope`, and `subjectId` context so operators can identify
+ * which call timed out without parsing log strings.
+ */
+export class PermissionQueryTimeoutError extends Error {
+  readonly adapter: string;
+  readonly scope: EvaluationScope | undefined;
+  readonly subjectId: string | undefined;
+  readonly timeoutMs: number;
+
+  constructor(
+    message: string,
+    context: {
+      adapter: string;
+      scope?: EvaluationScope;
+      subjectId?: string;
+      timeoutMs: number;
+    },
+  ) {
+    super(message);
+    this.name = 'PermissionQueryTimeoutError';
+    this.adapter = context.adapter;
+    this.scope = context.scope;
+    this.subjectId = context.subjectId;
+    this.timeoutMs = context.timeoutMs;
+  }
+}
+
+/**
+ * One element of the failure list passed to `onGroupExpansionError`.
+ */
+export interface GroupExpansionFailure {
+  groupId: string;
+  userId: string;
+  reason: unknown;
+}
+
 interface EvaluatorConfig {
   registry: PermissionRegistry;
   adapter: PermissionsAdapter;
@@ -30,7 +80,8 @@ interface EvaluatorConfig {
    *
    * When set, `can()` races each call to `adapter.getEffectiveGrantsForSubject` and
    * `groupResolver.getGroupsForUser` against a timeout promise. If the query does not
-   * resolve within `queryTimeoutMs`, the call rejects with an `Error('Permission query timed out')`.
+   * resolve within `queryTimeoutMs`, the call rejects with a `PermissionQueryTimeoutError`
+   * that carries `{ adapter, scope, subjectId, timeoutMs }` context.
    *
    * Not set by default. The SQLite adapter runs synchronously via `Promise.resolve` and
    * will not actually hang, so this option primarily guards the Postgres adapter and any
@@ -38,6 +89,25 @@ interface EvaluatorConfig {
    * slow DB from blocking all permission checks indefinitely.
    */
   queryTimeoutMs?: number;
+  /**
+   * Injected logger for structured warn/error output. Defaults to `console`.
+   */
+  logger?: EvaluatorLogger;
+  /**
+   * Sample rate for non-critical `warn` output (range `(0, 1]`). Defaults to `1`
+   * (every warning is emitted). Set to e.g. `0.01` in high-volume environments to
+   * sample 1% of warnings. Group-expansion failure warnings are NOT sampled — they
+   * always emit. The unscoped-resourceType warning and the large-group-batch warning
+   * are sampled.
+   */
+  warnSampleRate?: number;
+  /**
+   * Optional callback invoked when one or more group-grant fetches fail during
+   * group expansion. Receives the full list of failures for the call. The evaluator
+   * still proceeds with whatever grants it managed to collect — this hook gives the
+   * caller visibility, not control.
+   */
+  onGroupExpansionError?: (failures: GroupExpansionFailure[]) => void;
 }
 
 function grantMatchesScope(grant: PermissionGrant, scope?: EvaluationScope): boolean {
@@ -70,7 +140,17 @@ function grantMatchesScope(grant: PermissionGrant, scope?: EvaluationScope): boo
   return resourceId !== undefined && grant.resourceId === resourceId;
 }
 
-function withQueryTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+interface TimeoutContext {
+  adapter: string;
+  scope?: EvaluationScope;
+  subjectId?: string;
+}
+
+function withQueryTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  context: TimeoutContext,
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const clear = () => {
     if (timer !== undefined) {
@@ -81,7 +161,28 @@ function withQueryTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T>
 
   const timedPromise = promise.finally(clear);
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error('Permission query timed out')), timeoutMs);
+    timer = setTimeout(() => {
+      const scopeDesc =
+        context.scope === undefined
+          ? '(none)'
+          : JSON.stringify({
+              tenantId: context.scope.tenantId,
+              resourceType: context.scope.resourceType,
+              resourceId: context.scope.resourceId,
+            });
+      reject(
+        new PermissionQueryTimeoutError(
+          `[slingshot-permissions] Permission query timed out after ${timeoutMs}ms ` +
+            `(adapter='${context.adapter}', subjectId='${context.subjectId ?? '(none)'}', scope=${scopeDesc})`,
+          {
+            adapter: context.adapter,
+            scope: context.scope,
+            subjectId: context.subjectId,
+            timeoutMs,
+          },
+        ),
+      );
+    }, timeoutMs);
   }).finally(clear);
 
   return Promise.race([timedPromise, timeoutPromise]).finally(clear);
@@ -125,6 +226,9 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
   const { registry, adapter, groupResolver } = config;
   const maxGroups = config.maxGroups ?? 50;
   const { queryTimeoutMs } = config;
+  const logger: EvaluatorLogger = config.logger ?? console;
+  const warnSampleRate = config.warnSampleRate ?? 1;
+  const { onGroupExpansionError } = config;
 
   if (maxGroups <= 0) {
     throw new Error('[slingshot-permissions] maxGroups must be a positive number');
@@ -132,9 +236,31 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
   if (queryTimeoutMs !== undefined && queryTimeoutMs <= 0) {
     throw new Error('[slingshot-permissions] queryTimeoutMs must be a positive number');
   }
+  if (warnSampleRate <= 0 || warnSampleRate > 1) {
+    throw new Error('[slingshot-permissions] warnSampleRate must be in the range (0, 1]');
+  }
 
-  function maybeWithTimeout<T>(promise: Promise<T>): Promise<T> {
-    return queryTimeoutMs !== undefined ? withQueryTimeout(promise, queryTimeoutMs) : promise;
+  // Best-effort identifier for the adapter implementation. Falls back to 'unknown'
+  // when the adapter is created without a recognizable constructor name.
+  const adapterName = (adapter as { name?: string }).name ?? adapter.constructor?.name ?? 'unknown';
+
+  function shouldEmitSampledWarn(): boolean {
+    if (warnSampleRate >= 1) return true;
+    return Math.random() < warnSampleRate;
+  }
+
+  function maybeWithTimeout<T>(
+    promise: Promise<T>,
+    operation: string,
+    subject: SubjectRef,
+    scope: EvaluationScope | undefined,
+  ): Promise<T> {
+    if (queryTimeoutMs === undefined) return promise;
+    return withQueryTimeout(promise, queryTimeoutMs, {
+      adapter: `${adapterName}.${operation}`,
+      scope,
+      subjectId: subject.subjectId,
+    });
   }
 
   async function collectGrantsForSubject(
@@ -143,6 +269,9 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
   ): Promise<PermissionGrant[]> {
     return maybeWithTimeout(
       adapter.getEffectiveGrantsForSubject(subject.subjectId, subject.subjectType, scope),
+      'getEffectiveGrantsForSubject',
+      subject,
+      scope,
     );
   }
 
@@ -156,14 +285,27 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
         const tenantId = scope?.tenantId ?? null;
         const allGroupIds = await maybeWithTimeout(
           groupResolver.getGroupsForUser(subject.subjectId, tenantId),
+          'groupResolver.getGroupsForUser',
+          subject,
+          scope,
         );
-        if (allGroupIds.length > maxGroups) {
-          console.warn(
+        if (allGroupIds.length > maxGroups && shouldEmitSampledWarn()) {
+          logger.warn(
             `[slingshot-permissions] evaluator.can() is expanding ${allGroupIds.length} groups for user '${subject.subjectId}' in batches of ${maxGroups}: ` +
               `action='${action}', tenantId=${scope?.tenantId ?? '(none)'}. ` +
               `Increase maxGroups in createPermissionEvaluator() config to raise the batch size if needed.`,
+            {
+              adapter: adapterName,
+              event: 'group_expansion_batched',
+              userId: subject.subjectId,
+              action,
+              groupCount: allGroupIds.length,
+              maxGroups,
+              scope,
+            },
           );
         }
+        const failures: GroupExpansionFailure[] = [];
         for (let i = 0; i < allGroupIds.length; i += maxGroups) {
           const groupIds = allGroupIds.slice(i, i + maxGroups);
           if (groupIds.length === 0) continue;
@@ -177,8 +319,51 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
             if (result.status === 'fulfilled') {
               grants = grants.concat(result.value);
             } else {
-              console.warn(
-                `[slingshot-permissions] evaluator.can() failed to fetch grants for group '${groupIds[j]}' (user '${subject.subjectId}'): ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+              failures.push({
+                groupId: groupIds[j],
+                userId: subject.subjectId,
+                reason: result.reason,
+              });
+            }
+          }
+        }
+        if (failures.length > 0) {
+          // Group-expansion failures are NOT sampled — operators always need to see them.
+          // We still proceed with whatever grants we did collect (deny-wins still applies
+          // to the partial set). The first failure's reason is included in the message
+          // for quick diagnostics; the full list goes to the structured context and the
+          // optional callback.
+          const first = failures[0];
+          const firstReasonMessage =
+            first.reason instanceof Error ? first.reason.message : String(first.reason);
+          logger.warn(
+            `[slingshot-permissions] evaluator.can() failed to fetch grants for ${failures.length} group(s) ` +
+              `(user '${subject.subjectId}', first failure on group '${first.groupId}': ${firstReasonMessage}). ` +
+              `Proceeding with partial grants.`,
+            {
+              adapter: adapterName,
+              event: 'group_expansion_error',
+              userId: subject.subjectId,
+              action,
+              scope,
+              failureCount: failures.length,
+              failures: failures.map(f => ({
+                groupId: f.groupId,
+                reason: f.reason instanceof Error ? f.reason.message : String(f.reason),
+              })),
+            },
+          );
+          if (onGroupExpansionError) {
+            try {
+              onGroupExpansionError(failures);
+            } catch (cbErr) {
+              logger.warn(
+                `[slingshot-permissions] onGroupExpansionError callback threw: ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+                {
+                  adapter: adapterName,
+                  event: 'group_expansion_error_callback_threw',
+                  userId: subject.subjectId,
+                },
               );
             }
           }
@@ -197,11 +382,18 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
 
       const resourceType = scope?.resourceType ?? '';
 
-      if (!resourceType && activeGrants.length > 0) {
-        console.warn(
+      if (!resourceType && activeGrants.length > 0 && shouldEmitSampledWarn()) {
+        logger.warn(
           `[slingshot-permissions] evaluator.can('${action}') called without scope.resourceType — ` +
             "registry lookup uses '' which matches no registered type. " +
             "Add scope: { resourceType: 'your-type' } to the permission config or can() call.",
+          {
+            adapter: adapterName,
+            event: 'missing_resource_type_scope',
+            userId: subject.subjectId,
+            action,
+            scope,
+          },
         );
       }
 

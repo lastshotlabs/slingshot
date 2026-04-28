@@ -1,6 +1,6 @@
 import { Queue, Worker } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
-import { z } from 'zod';
+import { ZodError, z } from 'zod';
 import type {
   EventBusSerializationOptions,
   EventEnvelope,
@@ -15,6 +15,39 @@ import {
   validateEventPayload,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+
+/**
+ * Minimal structured-logger surface used by the adapter. Compatible with
+ * `console`, pino, bunyan, or any logger exposing `.warn`/`.error`/`.info`.
+ *
+ * Each method accepts a structured-context object as the first argument and an
+ * optional message string as the second. Implementations are free to ignore
+ * either argument.
+ */
+export interface BullMQAdapterLogger {
+  warn: (ctx: Record<string, unknown>, msg?: string) => void;
+  error: (ctx: Record<string, unknown>, msg?: string) => void;
+  info?: (ctx: Record<string, unknown>, msg?: string) => void;
+}
+
+function makeConsoleLogger(): BullMQAdapterLogger {
+  const fmt = (msg: string | undefined, ctx: Record<string, unknown>): string => {
+    const prefix = '[BullMQAdapter]';
+    if (msg) return `${prefix} ${msg} ${JSON.stringify(ctx)}`;
+    return `${prefix} ${JSON.stringify(ctx)}`;
+  };
+  return {
+    warn(ctx, msg) {
+      console.warn(fmt(msg, ctx));
+    },
+    error(ctx, msg) {
+      console.error(fmt(msg, ctx));
+    },
+    info(ctx, msg) {
+      console.log(fmt(msg, ctx));
+    },
+  };
+}
 
 /**
  * Zod schema for `BullMQAdapterOptions`. Validated at adapter-creation time.
@@ -64,6 +97,32 @@ export const bullmqAdapterOptionsSchema = z.object({
    * Default: 10_000 (10 seconds).
    */
   enqueueTimeoutMs: z.number().int().positive().optional(),
+  /**
+   * Name of the validation dead-letter queue. When a strict-mode validation
+   * failure occurs inside a durable worker processor, the offending job
+   * (payload + error metadata) is enqueued to this queue instead of being
+   * retried by BullMQ. If not provided, a default name of
+   * `${queueName}:validation-dlq` is derived per source queue. Set to an empty
+   * string to disable the DLQ entirely (failures are logged and skipped).
+   */
+  validationDlqQueueName: z.string().optional(),
+  /**
+   * Base delay in milliseconds for the first drain retry after an enqueue failure.
+   * Subsequent retries use exponential backoff: `drainBaseMs * 2^drainBackoffCount`,
+   * capped at `drainMaxMs`. Resets to zero when the buffer drains completely.
+   * Default: 2_000.
+   */
+  drainBaseMs: z.number().int().positive().optional(),
+  /**
+   * Maximum delay in milliseconds between drain retries (caps the exponential
+   * backoff). Default: 30_000.
+   */
+  drainMaxMs: z.number().int().positive().optional(),
+  /**
+   * Maximum number of enqueue attempts before a buffered event is permanently
+   * dropped from the in-memory pending buffer. Default: 5.
+   */
+  maxEnqueueAttempts: z.number().int().min(1).optional(),
 });
 
 /**
@@ -83,6 +142,29 @@ export interface BullMQAdapterHealth {
   workerCount: number;
   /** Number of events currently buffered for retry (waiting for Redis to recover). */
   pendingBufferSize: number;
+  /**
+   * Total number of jobs currently in the BullMQ "failed" state across all
+   * durable queues. Aggregated by iterating each queue's `getJobCounts('failed')`.
+   * NOTE: this property is populated only by `getHealthAsync()`. The synchronous
+   * `getHealth()` accessor returns a cached snapshot of the last async refresh
+   * (or `0` if it has not been refreshed).
+   */
+  failedJobsCount: number;
+  /**
+   * Number of jobs that have been routed to the validation DLQ (or dropped
+   * because no DLQ is configured) since the adapter was created.
+   */
+  validationDroppedCount: number;
+  /**
+   * Number of durable events that were dropped from the in-memory pending
+   * buffer because the buffer was full or `maxEnqueueAttempts` was exceeded.
+   */
+  bufferDroppedCount: number;
+  /**
+   * Number of times a worker entered a paused state. Currently incremented
+   * when a `worker.error` event fires (treated as a transient pause signal).
+   */
+  workerPausedCount: number;
 }
 
 /**
@@ -133,6 +215,26 @@ const NON_RETRYABLE_CODES = new Set(['EINVAL', 'ENOENT', 'EACCES', 'EBADF']);
  * @param err - The error to classify.
  * @returns `true` if the error is likely transient and worth retrying.
  */
+/**
+ * Reduce an unknown error value to a JSON-friendly shape for structured logs.
+ *
+ * Prefers `name`, `message`, `code` from `Error`-like objects. Stringifies
+ * primitives. Returns `{ value: '<unserializable>' }` if `JSON.stringify`
+ * cannot represent the value.
+ */
+function errInfo(err: unknown): Record<string, unknown> | string {
+  if (err === null || err === undefined) return String(err);
+  if (typeof err !== 'object') return String(err);
+  const e = err as { name?: string; message?: string; code?: string; cause?: unknown };
+  const out: Record<string, unknown> = {};
+  if (typeof e.name === 'string') out.name = e.name;
+  if (typeof e.message === 'string') out.message = e.message;
+  if (typeof e.code === 'string') out.code = e.code;
+  if (e.cause !== undefined)
+    out.cause = e.cause instanceof Error ? e.cause.message : String(e.cause);
+  return out;
+}
+
 function isRetryableError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const code = (err as { code?: string }).code;
@@ -198,26 +300,14 @@ interface PendingEnqueue {
  */
 const MAX_PENDING_BUFFER = 1000;
 
-/**
- * Maximum number of enqueue attempts before a buffered event is permanently dropped.
- *
- * After `MAX_ENQUEUE_ATTEMPTS` failures the entry is removed from the pending buffer
- * and an error is logged. The event is lost.
- */
-const MAX_ENQUEUE_ATTEMPTS = 5;
+/** Default maximum number of enqueue attempts before a buffered event is dropped. */
+const DEFAULT_MAX_ENQUEUE_ATTEMPTS = 5;
 
-/**
- * Base delay in milliseconds for the first drain retry after an enqueue failure.
- *
- * Subsequent retries use exponential backoff: `DRAIN_BASE_MS * 2^drainBackoffCount`,
- * capped at `DRAIN_MAX_MS`. Resets to zero when the buffer drains completely.
- */
-const DRAIN_BASE_MS = 2000;
+/** Default base delay in milliseconds for the first drain retry. */
+const DEFAULT_DRAIN_BASE_MS = 2000;
 
-/**
- * Maximum delay in milliseconds between drain retries (caps the exponential backoff).
- */
-const DRAIN_MAX_MS = 30_000;
+/** Default maximum delay in milliseconds between drain retries. */
+const DEFAULT_DRAIN_MAX_MS = 30_000;
 
 interface SerializedBullMQEnvelope {
   __slingshot_serialized: string;
@@ -297,18 +387,44 @@ export function createBullMQAdapter(
   rawOpts: BullMQAdapterOptions &
     EventBusSerializationOptions & {
       onDrop?: (event: string, reason: BullMQAdapterDropReason) => void;
+      /**
+       * Optional structured logger. Falls back to a `console`-backed logger
+       * when omitted. All warn/error paths in the adapter route through this
+       * logger with structured context fields.
+       */
+      logger?: BullMQAdapterLogger;
     },
 ): SlingshotEventBus & {
   _drainPendingBuffer: () => Promise<void>;
   getHealth: () => BullMQAdapterHealth;
+  getHealthAsync: () => Promise<BullMQAdapterHealth>;
 } {
-  const { serializer, schemaRegistry, onDrop, ...adapterOpts } = rawOpts;
+  const { serializer, schemaRegistry, onDrop, logger: rawLogger, ...adapterOpts } = rawOpts;
   const opts = validatePluginConfig('slingshot-bullmq', adapterOpts, bullmqAdapterOptionsSchema);
   const prefix = opts.prefix ?? 'slingshot:events';
   const attempts = opts.attempts ?? 3;
   const enqueueTimeoutMs = opts.enqueueTimeoutMs ?? 10_000;
   const eventSerializer = serializer ?? JSON_SERIALIZER;
   const validationMode = opts.validation ?? 'off';
+  const logger: BullMQAdapterLogger = rawLogger ?? makeConsoleLogger();
+  const drainBaseMs = opts.drainBaseMs ?? DEFAULT_DRAIN_BASE_MS;
+  const drainMaxMs = opts.drainMaxMs ?? DEFAULT_DRAIN_MAX_MS;
+  const maxEnqueueAttempts = opts.maxEnqueueAttempts ?? DEFAULT_MAX_ENQUEUE_ATTEMPTS;
+  const validationDlqQueueNameOpt = opts.validationDlqQueueName;
+
+  // Counters surfaced via getHealth().
+  let validationDroppedCount = 0;
+  let bufferDroppedCount = 0;
+  let workerPausedCount = 0;
+  // Cached failed-jobs aggregate; refreshed by getHealthAsync().
+  let failedJobsCount = 0;
+
+  // Cache of validation DLQ queues, keyed by sanitized queue name. Created
+  // lazily on first failure so that adapters that never see validation errors
+  // do not open extra Redis connections. The actual `Queue` instances are
+  // appended to `queues` for unified shutdown.
+  const validationDlqs = new Map<string, Queue>();
+
   const envelopeListeners = new Map<
     string,
     Set<(envelope: EventEnvelope) => void | Promise<void>>
@@ -335,6 +451,36 @@ export function createBullMQAdapter(
   // Keys use the raw (colon-containing) strings for lookup; actual BullMQ queue
   // names passed to Queue/Worker constructors are sanitized (colons → '_').
   const durableQueues = new Map<string, Queue>();
+
+  function getValidationDlq(sourceQueueName: string): Queue | null {
+    // Empty string disables the DLQ; explicit name shares one DLQ across queues.
+    if (validationDlqQueueNameOpt === '') return null;
+    const dlqName =
+      validationDlqQueueNameOpt && validationDlqQueueNameOpt.length > 0
+        ? sanitizeQueueName(validationDlqQueueNameOpt)
+        : sanitizeQueueName(`${sourceQueueName}:validation-dlq`);
+    let dlq = validationDlqs.get(dlqName);
+    if (!dlq) {
+      dlq = new Queue(dlqName, { connection: opts.connection });
+      validationDlqs.set(dlqName, dlq);
+      queues.push(dlq);
+    }
+    return dlq;
+  }
+
+  /**
+   * Determine whether the given error came from `validateEventPayload` in
+   * strict mode. Strict-mode failures are surfaced as a vanilla `Error` whose
+   * `cause` is a `ZodError` and whose message starts with the
+   * `[EventSchemaRegistry]` prefix.
+   */
+  function isValidationError(err: unknown): boolean {
+    if (!err || typeof err !== 'object') return false;
+    const e = err as { cause?: unknown; message?: string };
+    if (e.cause instanceof ZodError) return true;
+    if (typeof e.message === 'string' && e.message.startsWith('[EventSchemaRegistry]')) return true;
+    return false;
+  }
 
   // In-memory buffer for events that failed to reach Redis (transient blip, failover).
   //
@@ -370,13 +516,25 @@ export function createBullMQAdapter(
   /**
    * Schedules a drain of the pending buffer using exponential backoff.
    *
-   * Delay doubles with each consecutive failed drain cycle, from `DRAIN_BASE_MS`
-   * up to `DRAIN_MAX_MS`. Resets when the buffer drains completely. Idempotent —
-   * only one timer is ever active at a time.
+   * ### Strategy
+   *
+   * - The first failure schedules a drain after `drainBaseMs` (default 2 000 ms).
+   * - Each subsequent drain that still leaves items in the buffer increments
+   *   `drainBackoffCount` and doubles the delay: `drainBaseMs * 2^count`.
+   * - The delay is capped at `drainMaxMs` (default 30 000 ms) so retries never
+   *   stop entirely while the buffer is non-empty.
+   * - When a drain pass empties the buffer, `drainBackoffCount` resets to zero
+   *   so a fresh failure starts back at `drainBaseMs`.
+   * - The function is idempotent: if a timer is already scheduled or a drain
+   *   is in progress, it returns immediately. Only one timer is active at a
+   *   time.
+   *
+   * Tunable via the `drainBaseMs`, `drainMaxMs`, and `maxEnqueueAttempts`
+   * adapter options.
    */
   function scheduleDrain(): void {
     if (drainTimer !== null || isDraining) return;
-    const delayMs = Math.min(DRAIN_MAX_MS, DRAIN_BASE_MS * 2 ** drainBackoffCount);
+    const delayMs = Math.min(drainMaxMs, drainBaseMs * 2 ** drainBackoffCount);
     drainTimer = setTimeout(() => {
       drainTimer = null;
       void drainPendingBuffer();
@@ -409,17 +567,24 @@ export function createBullMQAdapter(
         await addWithTimeout(item.queue, item.event, item.payload, enqueueTimeoutMs);
       } catch (err: unknown) {
         if (!isRetryableError(err)) {
-          console.error(
-            `[BullMQAdapter] dropping durable event "${item.event}" to queue "${item.name}" — non-retryable error:`,
-            err,
+          bufferDroppedCount += 1;
+          logger.error(
+            { event: item.event, queue: item.name, err: errInfo(err) },
+            'dropping durable event — non-retryable error',
           );
           continue;
         }
         const next = { ...item, attempts: item.attempts + 1 };
-        if (next.attempts >= MAX_ENQUEUE_ATTEMPTS) {
-          console.error(
-            `[BullMQAdapter] dropping durable event "${item.event}" to queue "${item.name}" after ${MAX_ENQUEUE_ATTEMPTS} attempts:`,
-            err,
+        if (next.attempts >= maxEnqueueAttempts) {
+          bufferDroppedCount += 1;
+          logger.error(
+            {
+              event: item.event,
+              queue: item.name,
+              attempts: maxEnqueueAttempts,
+              err: errInfo(err),
+            },
+            'dropping durable event after max attempts',
           );
           onDrop?.(item.event, 'max-attempts');
         } else {
@@ -475,31 +640,109 @@ export function createBullMQAdapter(
               Buffer.from(job.data.__slingshot_serialized, 'base64'),
             );
           }
-          const envelope = isEventEnvelope(decoded, event)
-            ? decoded
-            : createRawEventEnvelope(
-                event as Extract<keyof SlingshotEventMap, string>,
-                validateEventPayload(
-                  event as string,
-                  decoded,
-                  schemaRegistry,
-                  validationMode,
-                ) as SlingshotEventMap[K],
+          let envelope: unknown;
+          if (isEventEnvelope(decoded, event)) {
+            envelope = decoded;
+          } else {
+            // Strict-mode validation throws — capture it here so it does not
+            // bubble back to BullMQ as a job error (which would consume all
+            // configured retries before landing in the failed set). Validation
+            // failures are deterministic: the same payload will fail every
+            // retry. Route to the validation DLQ instead.
+            let validatedPayload: unknown;
+            try {
+              validatedPayload = validateEventPayload(
+                event as string,
+                decoded,
+                schemaRegistry,
+                validationMode,
               );
+            } catch (validationErr: unknown) {
+              if (!isValidationError(validationErr)) {
+                // Not a validation error; let BullMQ retry as before.
+                throw validationErr;
+              }
+              validationDroppedCount += 1;
+              const dlq = getValidationDlq(bullmqQueueName);
+              const dlqPayload = {
+                event: event as string,
+                sourceQueue: bullmqQueueName,
+                jobId: job.id,
+                originalData: job.data,
+                error: errInfo(validationErr),
+                droppedAt: new Date().toISOString(),
+              };
+              if (dlq) {
+                try {
+                  await addWithTimeout(
+                    dlq,
+                    `${event as string}:validation-failed`,
+                    dlqPayload,
+                    enqueueTimeoutMs,
+                  );
+                  logger.warn(
+                    {
+                      event: event as string,
+                      queue: bullmqQueueName,
+                      dlq: dlq.name,
+                      jobId: job.id,
+                      err: errInfo(validationErr),
+                    },
+                    'routed strict-validation failure to validation DLQ',
+                  );
+                } catch (dlqErr: unknown) {
+                  // DLQ unreachable — log but still complete the job so it
+                  // does not retry indefinitely.
+                  logger.error(
+                    {
+                      event: event as string,
+                      queue: bullmqQueueName,
+                      dlq: dlq.name,
+                      jobId: job.id,
+                      err: errInfo(dlqErr),
+                      validationErr: errInfo(validationErr),
+                    },
+                    'failed to enqueue strict-validation failure to DLQ; dropping',
+                  );
+                }
+              } else {
+                logger.warn(
+                  {
+                    event: event as string,
+                    queue: bullmqQueueName,
+                    jobId: job.id,
+                    err: errInfo(validationErr),
+                  },
+                  'strict-validation failure dropped (no validation DLQ configured)',
+                );
+              }
+              return; // mark job complete, no retry
+            }
+            envelope = createRawEventEnvelope(
+              event as Extract<keyof SlingshotEventMap, string>,
+              validatedPayload as SlingshotEventMap[K],
+            );
+          }
           await Promise.resolve(listener(envelope as EventEnvelope<K>));
         },
         { connection: opts.connection },
       );
 
       worker.on('error', err => {
-        console.error(`[BullMQAdapter] worker error on queue "${bullmqQueueName}":`, err);
+        workerPausedCount += 1;
+        logger.error({ queue: bullmqQueueName, err: errInfo(err) }, 'worker error');
       });
 
       worker.on('failed', (job, err) => {
-        const attemptsStr = job ? `(attempt ${job.attemptsMade}/${attempts})` : '(job unavailable)';
-        console.error(
-          `[BullMQAdapter] job failed on queue "${bullmqQueueName}" ${attemptsStr}:`,
-          err,
+        logger.error(
+          {
+            queue: bullmqQueueName,
+            attempt: job?.attemptsMade ?? null,
+            maxAttempts: attempts,
+            jobId: job?.id ?? null,
+            err: errInfo(err),
+          },
+          'job failed',
         );
       });
 
@@ -553,11 +796,11 @@ export function createBullMQAdapter(
           try {
             result = fn(envelope as EventEnvelope);
           } catch (err: unknown) {
-            console.error(`[BullMQAdapter] listener error on event "${event}":`, err);
+            logger.error({ event: event as string, err: errInfo(err) }, 'listener error');
             continue;
           }
           Promise.resolve(result).catch((err: unknown) => {
-            console.error(`[BullMQAdapter] listener error on event "${event}":`, err);
+            logger.error({ event: event as string, err: errInfo(err) }, 'listener error');
           });
         }
       }
@@ -578,9 +821,10 @@ export function createBullMQAdapter(
           addWithTimeout(queue, event as string, durablePayload, enqueueTimeoutMs).catch(
             (err: unknown) => {
               if (pendingBuffer.length >= MAX_PENDING_BUFFER) {
-                console.error(
-                  `[BullMQAdapter] pending buffer full; dropping durable event "${event}" to queue "${name}":`,
-                  err,
+                bufferDroppedCount += 1;
+                logger.error(
+                  { event: event as string, queue: name, err: errInfo(err) },
+                  'pending buffer full; dropping durable event',
                 );
                 onDrop?.(event as string, 'buffer-full');
                 return;
@@ -683,9 +927,12 @@ export function createBullMQAdapter(
         drainTimer = null;
       }
       if (pendingBuffer.length > 0) {
+        // Keep the legacy console.warn so existing tests that match
+        // "discarding" against console output continue to work.
         console.warn(
           `[BullMQAdapter] shutdown: discarding ${pendingBuffer.length} buffered event(s) that could not be enqueued to Redis. These events will not be retried.`,
         );
+        logger.warn({ discarded: pendingBuffer.length }, 'shutdown: discarding buffered events');
         pendingBuffer.length = 0;
       }
       envelopeListeners.clear();
@@ -703,6 +950,52 @@ export function createBullMQAdapter(
         queueCount: queues.length,
         workerCount: workers.length,
         pendingBufferSize: pendingBuffer.length,
+        failedJobsCount,
+        validationDroppedCount,
+        bufferDroppedCount,
+        workerPausedCount,
+      };
+    },
+
+    /**
+     * Async variant of `getHealth()` that refreshes `failedJobsCount` by
+     * aggregating `getJobCounts('failed')` across every durable queue. The
+     * result is cached so subsequent synchronous `getHealth()` calls return
+     * the freshly observed value until the next async refresh.
+     *
+     * @remarks Calling this requires Redis round-trips per queue. Use
+     *   `getHealth()` for hot-path checks and `getHealthAsync()` for
+     *   periodic monitoring.
+     */
+    async getHealthAsync(): Promise<BullMQAdapterHealth> {
+      let total = 0;
+      for (const q of queues) {
+        const counts = (
+          q as Queue & {
+            getJobCounts?: (...statuses: string[]) => Promise<Record<string, number>>;
+          }
+        ).getJobCounts;
+        if (typeof counts !== 'function') continue;
+        try {
+          const result = await counts.call(q, 'failed');
+          const failed = (result as { failed?: number })?.failed;
+          if (typeof failed === 'number') total += failed;
+        } catch (err: unknown) {
+          logger.warn(
+            { queue: (q as { name?: string }).name ?? null, err: errInfo(err) },
+            'getJobCounts failed during health refresh',
+          );
+        }
+      }
+      failedJobsCount = total;
+      return {
+        queueCount: queues.length,
+        workerCount: workers.length,
+        pendingBufferSize: pendingBuffer.length,
+        failedJobsCount,
+        validationDroppedCount,
+        bufferDroppedCount,
+        workerPausedCount,
       };
     },
   };

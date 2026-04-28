@@ -28,9 +28,7 @@ class FakeTaskJob {
   }
 }
 
-type QueueEntry =
-  | { type: 'success'; value: unknown }
-  | { type: 'failure'; error: Error };
+type QueueEntry = { type: 'success'; value: unknown } | { type: 'failure'; error: Error };
 
 class FakeQueue {
   addCalls: Array<{ name: string; data: Record<string, unknown>; opts?: Record<string, unknown> }> =
@@ -207,11 +205,7 @@ describe('bullmq workflow processor', () => {
 // Helper to build a minimal fake workflow job
 // ---------------------------------------------------------------------------
 
-function makeWorkflowJob(
-  workflowName: string,
-  input: Record<string, unknown>,
-  id = 'wf-run-1',
-) {
+function makeWorkflowJob(workflowName: string, input: Record<string, unknown>, id = 'wf-run-1') {
   const job = {
     id,
     name: workflowName,
@@ -409,9 +403,9 @@ describe('bullmq workflow processor – parallel steps', () => {
       eventSink,
     });
 
-    await expect(
-      processor(makeWorkflowJob(workflow.name, {}) as never),
-    ).rejects.toThrow('hard failure');
+    await expect(processor(makeWorkflowJob(workflow.name, {}) as never)).rejects.toThrow(
+      'hard failure',
+    );
 
     const eventNames = events.map(e => e.name);
     expect(eventNames).toContain('orchestration.step.failed');

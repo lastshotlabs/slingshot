@@ -14,6 +14,11 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { getOrganizationsAuthRuntime } from './lib/authRuntime';
+import {
+  type OrganizationsRateLimitStore,
+  createMemoryOrganizationsRateLimitStore,
+} from './lib/rateLimit';
+import { DEFAULT_RESERVED_ORG_SLUGS, createOrgSlugSchema } from './lib/slugValidation';
 import { organizationsManifest } from './manifest/organizationsManifest';
 import { createOrganizationsManifestRuntime } from './manifest/runtime';
 import { ORGANIZATIONS_ORG_SERVICE_STATE_KEY, type OrganizationsOrgService } from './orgService';
@@ -34,6 +39,25 @@ function normalizeMountPath(value: string): string {
   return normalized;
 }
 
+const inviteRateLimitSchema = z
+  .object({
+    create: z
+      .object({
+        limit: z.number().int().positive().default(10),
+        windowMs: z.number().int().positive().default(60_000),
+      })
+      .partial()
+      .optional(),
+    lookup: z
+      .object({
+        limit: z.number().int().positive().default(30),
+        windowMs: z.number().int().positive().default(60_000),
+      })
+      .partial()
+      .optional(),
+  })
+  .optional();
+
 const organizationsPluginConfigSchema = z.object({
   mountPath: z
     .string()
@@ -47,6 +71,15 @@ const organizationsPluginConfigSchema = z.object({
       enabled: z.boolean().default(true),
       invitationTtlSeconds: z.number().int().positive().optional(),
       defaultMemberRole: memberRoleSchema.optional(),
+      reservedSlugs: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'List of reserved slug values that organizations cannot use. Defaults to a small set of common conflict-prone words.',
+        ),
+      inviteRateLimit: inviteRateLimitSchema.describe(
+        'Sliding-window rate limits for invitation create + lookup endpoints.',
+      ),
     })
     .optional(),
   groups: z
@@ -62,6 +95,22 @@ const organizationsPluginConfigSchema = z.object({
     })
     .optional(),
 });
+
+/**
+ * Optional non-JSON dependencies the organizations plugin accepts at construction time.
+ *
+ * These cannot be expressed in the manifest and so are passed via the second
+ * argument of `createOrganizationsPlugin()`.
+ */
+export interface OrganizationsPluginDeps {
+  /**
+   * Backing store for the invitation rate-limit middleware.
+   *
+   * Defaults to a process-local in-memory store. Provide a Redis-backed
+   * implementation in production for shared rate limiting.
+   */
+  rateLimitStore?: OrganizationsRateLimitStore;
+}
 
 /**
  * JSON-safe organizations plugin configuration.
@@ -88,11 +137,66 @@ function composeAuthenticatedGuard(
   };
 }
 
+function getActorId(c: Parameters<MiddlewareHandler>[0]): string | null {
+  const actor = c.get('actor' as never) as { id?: unknown } | undefined;
+  if (!actor || typeof actor.id !== 'string' || actor.id.length === 0) return null;
+  return actor.id;
+}
+
+function getClientIp(c: Parameters<MiddlewareHandler>[0]): string {
+  const fwd = c.req.header('x-forwarded-for');
+  if (typeof fwd === 'string' && fwd.length > 0) {
+    return fwd.split(',')[0]?.trim() ?? 'unknown';
+  }
+  return c.req.header('x-real-ip') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
+}
+
+function rateLimitResponse(c: Parameters<MiddlewareHandler>[0], retryAfterMs: number): Response {
+  const retryAfterSeconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
+  return c.json({ error: 'Too Many Requests' }, 429, {
+    'retry-after': String(retryAfterSeconds),
+  });
+}
+
+function createInviteCreateRateLimit(args: {
+  store: OrganizationsRateLimitStore;
+  limit: number;
+  windowMs: number;
+}): MiddlewareHandler {
+  return async (c, next) => {
+    const orgId = c.req.param('orgId') ?? 'unknown';
+    const actorId = getActorId(c) ?? `anon:${getClientIp(c)}`;
+    const key = `invite-create:${orgId}:${actorId}`;
+    const decision = await args.store.hit(key, args.limit, args.windowMs);
+    if (!decision.allowed) {
+      return rateLimitResponse(c, decision.retryAfterMs);
+    }
+    return next();
+  };
+}
+
+function createInviteLookupRateLimit(args: {
+  store: OrganizationsRateLimitStore;
+  limit: number;
+  windowMs: number;
+}): MiddlewareHandler {
+  return async (c, next) => {
+    const ip = getClientIp(c);
+    const key = `invite-lookup:${ip}`;
+    const decision = await args.store.hit(key, args.limit, args.windowMs);
+    if (!decision.allowed) {
+      return rateLimitResponse(c, decision.retryAfterMs);
+    }
+    return next();
+  };
+}
+
 /**
  * Create the organizations plugin using the manifest-driven entity system.
  */
 export function createOrganizationsPlugin(
   rawConfig: OrganizationsPluginConfig = {},
+  deps: OrganizationsPluginDeps = {},
 ): SlingshotPlugin {
   const config = deepFreeze(
     validatePluginConfig('slingshot-organizations', rawConfig, organizationsPluginConfigSchema),
@@ -110,6 +214,15 @@ export function createOrganizationsPlugin(
     joinMountPath(mountPath, '/groups'),
     `${joinMountPath(mountPath, '/groups')}/*`,
   ];
+
+  const reservedSlugs = config.organizations?.reservedSlugs ?? DEFAULT_RESERVED_ORG_SLUGS;
+  const orgSlugSchema = createOrgSlugSchema(reservedSlugs);
+
+  const rateLimitStore = deps.rateLimitStore ?? createMemoryOrganizationsRateLimitStore();
+  const inviteCreateLimit = config.organizations?.inviteRateLimit?.create?.limit ?? 10;
+  const inviteCreateWindow = config.organizations?.inviteRateLimit?.create?.windowMs ?? 60_000;
+  const inviteLookupLimit = config.organizations?.inviteRateLimit?.lookup?.limit ?? 30;
+  const inviteLookupWindow = config.organizations?.inviteRateLimit?.lookup?.windowMs ?? 60_000;
 
   let innerPlugin: ReturnType<typeof createEntityPlugin> | undefined;
   let orgAdapterRef:
@@ -159,6 +272,7 @@ export function createOrganizationsPlugin(
           authRuntime,
           invitationTtlSeconds,
           defaultMemberRole: config.organizations?.defaultMemberRole ?? 'member',
+          slugSchema: orgSlugSchema,
           onAdaptersCaptured(adapters) {
             orgAdapterRef = adapters.organizations as typeof orgAdapterRef;
             memberAdapterRef = adapters.members as typeof memberAdapterRef;
@@ -181,6 +295,16 @@ export function createOrganizationsPlugin(
             routeAuth.userAuth,
             routeAuth.requireRole(groupAdminRole),
           ),
+          inviteCreateRateLimit: createInviteCreateRateLimit({
+            store: rateLimitStore,
+            limit: inviteCreateLimit,
+            windowMs: inviteCreateWindow,
+          }),
+          inviteLookupRateLimit: createInviteLookupRateLimit({
+            store: rateLimitStore,
+            limit: inviteLookupLimit,
+            windowMs: inviteLookupWindow,
+          }),
         },
       });
       await innerPlugin.setupMiddleware?.(ctx);
@@ -207,9 +331,10 @@ export function createOrganizationsPlugin(
           return org && typeof org.id === 'string' ? { id: org.id } : null;
         },
         async createOrg(data) {
+          const validatedSlug = orgSlugSchema.parse(data.slug);
           const created = await orgAdapter.create({
             name: data.name,
-            slug: data.slug,
+            slug: validatedSlug,
             ...(data.tenantId !== undefined ? { tenantId: data.tenantId } : {}),
             ...(data.metadata !== undefined ? { metadata: data.metadata } : {}),
           });

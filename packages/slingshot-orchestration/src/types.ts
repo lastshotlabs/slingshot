@@ -124,6 +124,12 @@ export interface StepOptions<TWorkflowInput = unknown> {
   retry?: RetryPolicy;
   timeout?: number;
   continueOnFailure?: boolean;
+  /**
+   * Optional explicit step dependencies used for DAG-style authoring. Slingshot
+   * detects cycles eagerly in `defineWorkflow()` so authoring-time bugs surface
+   * immediately. When omitted the workflow steps execute in array order.
+   */
+  dependsOn?: readonly string[];
 }
 
 /**
@@ -279,12 +285,14 @@ export interface RunHandle<TOutput = unknown> {
  */
 export type OrchestrationErrorCode =
   | 'INVALID_CONFIG'
+  | 'INVALID_WORKFLOW'
   | 'TASK_NOT_FOUND'
   | 'WORKFLOW_NOT_FOUND'
   | 'RUN_NOT_FOUND'
   | 'CAPABILITY_NOT_SUPPORTED'
   | 'VALIDATION_FAILED'
-  | 'ADAPTER_ERROR';
+  | 'ADAPTER_ERROR'
+  | 'PAYLOAD_TOO_LARGE';
 
 /**
  * Portable run options understood by all adapters.

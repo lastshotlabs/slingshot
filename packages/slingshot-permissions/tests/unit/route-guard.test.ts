@@ -7,8 +7,15 @@ import {
   getPluginState,
   route,
 } from '@lastshotlabs/slingshot-core';
-import { createApp } from '../../../../src/app';
 import { createPermissionsPlugin } from '../../src/plugin';
+
+const rootAppModulePath = '../../../../src/app';
+const { createApp } = await import(rootAppModulePath);
+
+type TestMiddlewareContext = {
+  set(key: 'actor', value: Actor): void;
+};
+type TestNext = () => Promise<void>;
 
 const baseConfig = {
   meta: { name: 'Permissions Route Guard Test App' },
@@ -114,7 +121,7 @@ describe('permissions route guard — HTTP level', () => {
     const result = await createApp({
       ...baseConfig,
       middleware: [
-        async (c, next) => {
+        async (c: TestMiddlewareContext, next: TestNext) => {
           c.set('actor', userActor('user-no-grant'));
           await next();
         },
@@ -141,7 +148,7 @@ describe('permissions route guard — HTTP level', () => {
     const result = await createApp({
       ...baseConfig,
       middleware: [
-        async (c, next) => {
+        async (c: TestMiddlewareContext, next: TestNext) => {
           c.set('actor', userActor(userId));
           await next();
         },
@@ -200,7 +207,7 @@ describe('permissions route guard — HTTP level', () => {
     const result = await createApp({
       ...baseConfig,
       middleware: [
-        async (c, next) => {
+        async (c: TestMiddlewareContext, next: TestNext) => {
           c.set('actor', userActor(userId));
           await next();
         },
@@ -269,7 +276,7 @@ describe('permissions route guard — HTTP level', () => {
     const result = await createApp({
       ...baseConfig,
       middleware: [
-        async (c, next) => {
+        async (c: TestMiddlewareContext, next: TestNext) => {
           c.set('actor', userActor(userId));
           await next();
         },
@@ -318,7 +325,7 @@ describe('permissions route guard — HTTP level', () => {
     const result = await createApp({
       ...baseConfig,
       middleware: [
-        async (c, next) => {
+        async (c: TestMiddlewareContext, next: TestNext) => {
           c.set('actor', userActor(userId));
           await next();
         },

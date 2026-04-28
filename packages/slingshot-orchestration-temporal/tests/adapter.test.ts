@@ -153,7 +153,10 @@ class FakeScheduleClient {
   handles = new Map<string, FakeScheduleHandle>();
 
   create = mock(async (options: { scheduleId: string; [k: string]: unknown }) => {
-    this.created.push({ scheduleId: options.scheduleId, options: options as Record<string, unknown> });
+    this.created.push({
+      scheduleId: options.scheduleId,
+      options: options as Record<string, unknown>,
+    });
   });
 
   getHandle(scheduleId: string): FakeScheduleHandle {
@@ -955,6 +958,144 @@ describe('shutdown', () => {
     // Should not throw even though connection is undefined
     await expect(adapter.shutdown()).resolves.toBeUndefined();
   });
+
+  test('calls client.close() if the SDK exposes one, before closing the connection', async () => {
+    const fakeConnection = new FakeConnection();
+    const fakeClient = new FakeClient(fakeConnection);
+    const order: string[] = [];
+    (fakeClient as unknown as { close: () => Promise<void> }).close = async () => {
+      order.push('client');
+    };
+    fakeConnection.close = mock(async () => {
+      order.push('connection');
+      fakeConnection.closed = true;
+    }) as never;
+
+    const adapter = buildAdapter(fakeClient, fakeConnection, true);
+    await adapter.shutdown();
+
+    expect(order).toEqual(['client', 'connection']);
+  });
+
+  test('continues shutdown when client.close() throws', async () => {
+    const fakeConnection = new FakeConnection();
+    const fakeClient = new FakeClient(fakeConnection);
+    (fakeClient as unknown as { close: () => Promise<void> }).close = async () => {
+      throw new Error('client close failed');
+    };
+
+    const origConsoleError = console.error;
+    console.error = () => {};
+    try {
+      const adapter = buildAdapter(fakeClient, fakeConnection, true);
+      await expect(adapter.shutdown()).resolves.toBeUndefined();
+      expect(fakeConnection.close).toHaveBeenCalledTimes(1);
+    } finally {
+      console.error = origConsoleError;
+    }
+  });
+
+  test('continues shutdown when connection.close() throws', async () => {
+    const fakeConnection = new FakeConnection();
+    fakeConnection.close = mock(async () => {
+      throw new Error('connection close failed');
+    }) as never;
+    const fakeClient = new FakeClient(fakeConnection);
+
+    const origConsoleError = console.error;
+    console.error = () => {};
+    try {
+      const adapter = buildAdapter(fakeClient, fakeConnection, true);
+      // Must not throw — shutdown logs failures and returns
+      await expect(adapter.shutdown()).resolves.toBeUndefined();
+    } finally {
+      console.error = origConsoleError;
+    }
+  });
+
+  test('disposes active onProgress polling intervals during shutdown', async () => {
+    const fakeConnection = new FakeConnection();
+    const fakeClient = new FakeClient(fakeConnection);
+    const adapter = buildAdapter(fakeClient, fakeConnection, true);
+
+    const runId = 'run_shutdown_dispose_01';
+    let queryCalls = 0;
+    fakeClient.workflow.handles.set(runId, {
+      workflowId: runId,
+      async describe() {
+        return { status: { name: 'RUNNING' }, startTime: new Date() };
+      },
+      async result() {
+        return undefined;
+      },
+      async cancel() {},
+      async signal() {},
+      async query<T>() {
+        queryCalls += 1;
+        return { progress: { percent: queryCalls * 10 } } as unknown as T;
+      },
+    });
+
+    adapter.onProgress!(runId, () => {});
+    await new Promise(resolve => setTimeout(resolve, 30));
+
+    const before = queryCalls;
+    await adapter.shutdown();
+    // After shutdown, the polling timer must be cleared so no further
+    // queries can fire against the (potentially closed) connection.
+    await new Promise(resolve => setTimeout(resolve, 60));
+    expect(queryCalls).toBe(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dataConverter / interceptors option pass-through (P1-2 / P1-3)
+// ---------------------------------------------------------------------------
+
+describe('adapter options: dataConverter and interceptors', () => {
+  test('accepts dataConverter and interceptors without throwing in validation', async () => {
+    const { temporalAdapterOptionsSchema } = await import('../src/validation');
+
+    const fakeClient = new FakeClient(new FakeConnection());
+    const fakeDataConverter = { payloadConverterPath: '/tmp/codec.js' };
+    const fakeInterceptors = {
+      workflow: [{ create: () => ({}) }],
+      workflowModules: ['/tmp/wfMod.js'],
+    };
+
+    const parsed = temporalAdapterOptionsSchema.parse({
+      client: fakeClient,
+      workflowTaskQueue: 'test-queue',
+      dataConverter: fakeDataConverter,
+      interceptors: fakeInterceptors,
+    });
+
+    expect(parsed.dataConverter).toBe(fakeDataConverter as never);
+    expect(parsed.interceptors).toBe(fakeInterceptors as never);
+  });
+
+  test('worker schema accepts dataConverter and interceptors', async () => {
+    const { temporalWorkerOptionsSchema } = await import('../src/validation');
+
+    const fakeConnection = new FakeConnection();
+    const fakeDataConverter = { payloadConverterPath: '/tmp/codec.js' };
+    const fakeInterceptors = {
+      workflowModules: ['/tmp/wfMod.js'],
+      activityInbound: [],
+    };
+
+    const parsed = temporalWorkerOptionsSchema.parse({
+      connection: fakeConnection,
+      workflowTaskQueue: 'wf-q',
+      buildId: 'build-1',
+      definitionsModulePath: '/tmp/defs.ts',
+      dataConverter: fakeDataConverter,
+      interceptors: fakeInterceptors,
+    });
+
+    expect(parsed.dataConverter).toBe(fakeDataConverter as never);
+    expect(parsed.interceptors).toBe(fakeInterceptors as never);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1079,11 +1220,9 @@ describe('schedule', () => {
 
     adapter.registerTask(sampleTask);
 
-    const handle = await adapter.schedule!(
-      { type: 'task', name: sampleTask.name },
-      '0 * * * *',
-      { value: 'scheduled' },
-    );
+    const handle = await adapter.schedule!({ type: 'task', name: sampleTask.name }, '0 * * * *', {
+      value: 'scheduled',
+    });
 
     expect(handle.id).toMatch(/^sched_task_sample-task_/);
     expect(handle.target).toEqual({ type: 'task', name: sampleTask.name });

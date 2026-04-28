@@ -73,6 +73,13 @@ function createMockConnection(): { conn: MongoConnectionLike; store: Map<string,
       return { _id: doc._id };
     },
 
+    async insertMany(docs: GrantDoc[]): Promise<unknown> {
+      for (const doc of docs) {
+        store.set(doc._id, { ...doc });
+      }
+      return docs.map(doc => ({ _id: doc._id }));
+    },
+
     async findOneAndUpdate(
       filter: GrantFilter,
       update: { $set: Partial<GrantDoc> },
@@ -89,9 +96,22 @@ function createMockConnection(): { conn: MongoConnectionLike; store: Map<string,
     },
 
     find(filter: GrantQuery) {
+      let skipCount = 0;
+      let limitCount: number | null = null;
       return {
+        skip(n: number) {
+          skipCount = n;
+          return this;
+        },
+        limit(n: number) {
+          limitCount = n;
+          return this;
+        },
         async lean(): Promise<GrantDoc[]> {
-          return Array.from(store.values()).filter(doc => matchesFilter(doc, filter));
+          let rows = Array.from(store.values()).filter(doc => matchesFilter(doc, filter));
+          if (skipCount > 0) rows = rows.slice(skipCount);
+          if (limitCount !== null) rows = rows.slice(0, limitCount);
+          return rows;
         },
       };
     },
@@ -331,6 +351,7 @@ describe('Mongo permissions adapter — expiry filtering', () => {
       expiresAt: new Date(Date.now() - 10_000),
       revokedBy: null,
       revokedAt: null,
+      revokedReason: null,
     });
 
     const grants = await adapter.getGrantsForSubject('user-1');
@@ -407,6 +428,7 @@ describe('Mongo permissions adapter — listGrantHistory', () => {
       expiresAt: new Date(Date.now() - 10_000),
       revokedBy: null,
       revokedAt: null,
+      revokedReason: null,
     });
     const history = await adapter.listGrantHistory('user-1', 'user');
     expect(history).toHaveLength(1);

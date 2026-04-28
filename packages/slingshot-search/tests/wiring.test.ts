@@ -20,22 +20,37 @@ import type {
   EntityRegistry,
   SearchClientLike,
   SearchPluginRuntime,
+  StoreInfra,
 } from '@lastshotlabs/slingshot-core';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
-import {
-  type FrameworkStoreInfra,
-  REGISTER_ENTITY,
-  RESOLVE_SEARCH_CLIENT,
-  RESOLVE_SEARCH_SYNC,
-  type ResolvedSearchSync,
-} from '../../../src/framework/persistence/internalRepoResolution';
-import { replyFactories, threadFactories } from '../../slingshot-community/src/entities/factories';
-import { Reply } from '../../slingshot-community/src/entities/reply';
-import { Thread } from '../../slingshot-community/src/entities/thread';
 import { createSearchManager } from '../src/searchManager';
 import type { SearchManager } from '../src/searchManager';
 import { createSearchTransformRegistry } from '../src/transformRegistry';
+
+type FrameworkStoreInfra = StoreInfra & Record<PropertyKey, unknown>;
+type ResolvedSearchSync = {
+  syncMode: 'manual' | 'write-through' | 'event-bus';
+  ensureReady(): Promise<void>;
+  indexDocument?(entity: Record<string, unknown>): Promise<void>;
+  deleteDocument?(id: string): Promise<void>;
+};
+type TestRepoAdapter = {
+  create(input: Record<string, unknown>): Promise<{ id: string }>;
+  update(id: string, input: Record<string, unknown>): Promise<unknown>;
+  delete(id: string): Promise<unknown>;
+};
+
+const repoResolutionModulePath = '../../../src/framework/persistence/internalRepoResolution';
+const { REGISTER_ENTITY, RESOLVE_SEARCH_CLIENT, RESOLVE_SEARCH_SYNC } = await import(
+  repoResolutionModulePath
+);
+const communityFactoriesModulePath = '../../slingshot-community/src/entities/factories';
+const { replyFactories, threadFactories } = await import(communityFactoriesModulePath);
+const replyModulePath = '../../slingshot-community/src/entities/reply';
+const { Reply } = await import(replyModulePath);
+const threadModulePath = '../../slingshot-community/src/entities/thread';
+const { Thread } = await import(threadModulePath);
 
 // ============================================================================
 // Test bootstrap helpers
@@ -88,13 +103,13 @@ function createTestInfra(options: {
       return {
         syncMode,
         ensureReady,
-        indexDocument: async entity => {
+        indexDocument: async (entity: Record<string, unknown>) => {
           await runtime.ensureConfigEntity(config);
           const client = runtime.getSearchClient(config._storageName);
           if (!client) return;
           await client.indexDocument(entity);
         },
-        deleteDocument: async id => {
+        deleteDocument: async (id: string) => {
           await runtime.ensureConfigEntity(config);
           const client = runtime.getSearchClient(config._storageName);
           if (!client) return;
@@ -402,14 +417,14 @@ describe('P0.2 — Test 3: community Thread entity search wiring', () => {
 
   it('Thread CRUD mutations are write-through synced to the search provider', async () => {
     const infra = createTestInfra({ entityRegistry, searchManager, pluginState });
-    const adapter = resolveRepo(threadFactories, 'memory', infra);
+    const adapter = resolveRepo(threadFactories, 'memory', infra) as unknown as TestRepoAdapter;
 
     const thread = await adapter.create({
       containerId: 'container-1',
       authorId: 'user-1',
       title: 'Search Test Thread',
       status: 'published' as const,
-    } as unknown as Parameters<typeof adapter.create>[0]);
+    });
 
     // Wait for async write-through + ensureConfigEntity
     await new Promise(r => setTimeout(r, 30));
@@ -482,14 +497,14 @@ describe('P0.2 — Test 4: community Reply entity search wiring', () => {
 
   it('Reply CRUD mutations are write-through synced to the search provider', async () => {
     const infra = createTestInfra({ entityRegistry, searchManager, pluginState });
-    const adapter = resolveRepo(replyFactories, 'memory', infra);
+    const adapter = resolveRepo(replyFactories, 'memory', infra) as unknown as TestRepoAdapter;
 
     const reply = await adapter.create({
       threadId: 'thread-1',
       authorId: 'user-1',
       body: 'Search Test Reply body',
       status: 'published' as const,
-    } as unknown as Parameters<typeof adapter.create>[0]);
+    });
 
     // Wait for async write-through + ensureConfigEntity
     await new Promise(r => setTimeout(r, 30));

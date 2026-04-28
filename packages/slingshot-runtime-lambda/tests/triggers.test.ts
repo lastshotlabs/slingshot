@@ -273,4 +273,182 @@ describe('lambda trigger adapters', () => {
       "Unsupported Lambda trigger 'unknown-trigger'",
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // Error-path tests for every adapter — malformed payloads, missing fields,
+  // null values, decode failures. The adapters must not throw on bad input;
+  // they should produce defensible records that downstream handlers can validate.
+  // ---------------------------------------------------------------------------
+
+  describe('error paths', () => {
+    test('apigwTrigger handles null body and empty headers', () => {
+      const records = apigwTrigger.extractInputs({
+        body: null,
+        headers: undefined,
+        queryStringParameters: null,
+        pathParameters: null,
+        requestContext: undefined,
+      });
+      expect(records).toHaveLength(1);
+      expect(records[0].body).toEqual({});
+      expect(records[0].naturalKey).toBeUndefined();
+    });
+
+    test('apigwTrigger does not throw on malformed JSON body', () => {
+      // Body is non-JSON text — decodeMaybeJson returns the raw string.
+      const records = apigwTrigger.extractInputs({
+        body: 'not-json-at-all{{{',
+        isBase64Encoded: false,
+        headers: {},
+      });
+      expect(records[0].body).toEqual({ body: 'not-json-at-all{{{' });
+    });
+
+    test('apigwTrigger does not throw on malformed base64 body', () => {
+      // Buffer.from('!!!', 'base64') silently returns garbage; the inner decoder
+      // catches the resulting JSON.parse failure and returns the raw text.
+      expect(() =>
+        apigwTrigger.extractInputs({
+          body: '@@@@@',
+          isBase64Encoded: true,
+          headers: {},
+        }),
+      ).not.toThrow();
+    });
+
+    test('apigwV2Trigger handles missing requestContext.http', () => {
+      const records = apigwV2Trigger.extractInputs({
+        body: null,
+        headers: {},
+        requestContext: { requestId: 'r-1' },
+      });
+      expect(records).toHaveLength(1);
+      const meta = apigwV2Trigger.extractMeta({ requestContext: { requestId: 'r-1' } }, records[0]);
+      expect(meta.method).toBeUndefined();
+      expect(meta.path).toBeUndefined();
+    });
+
+    test('apigwV2Trigger error outcome assembles 500 with default body', () => {
+      const result = apigwV2Trigger.assembleResult([
+        { meta: {}, result: 'error', error: new Error('handler-fail') },
+      ]) as { statusCode: number; body: string };
+      expect(result.statusCode).toBe(500);
+      expect(JSON.parse(result.body)).toEqual({ error: 'handler-fail' });
+    });
+
+    test('albTrigger error outcome assembles 500 status description', () => {
+      const result = albTrigger.assembleResult([
+        { meta: {}, result: 'error', error: new Error('alb-fail') },
+      ]) as { statusCode: number; statusDescription: string };
+      expect(result.statusCode).toBe(500);
+      expect(result.statusDescription).toBe('500 Error');
+    });
+
+    test('sqsTrigger handles empty Records array', () => {
+      const records = sqsTrigger.extractInputs({ Records: [] });
+      expect(records).toEqual([]);
+      const result = sqsTrigger.assembleResult([]);
+      expect(result).toEqual({ batchItemFailures: [] });
+    });
+
+    test('sqsTrigger does not throw on non-JSON message body', () => {
+      const records = sqsTrigger.extractInputs({
+        Records: [{ messageId: 'm-1', body: 'plain text not json', messageAttributes: {} }],
+      });
+      expect(records[0].body).toBe('plain text not json');
+    });
+
+    test('s3Trigger handles missing sequencer (uses "none" suffix)', () => {
+      const records = s3Trigger.extractInputs({
+        Records: [{ s3: { bucket: { name: 'b' }, object: { key: 'k' } } }],
+      });
+      expect(records[0].naturalKey).toBe('s3:b:k:none');
+    });
+
+    test('s3Trigger handles empty Records array without throwing', () => {
+      expect(() => s3Trigger.extractInputs({ Records: [] })).not.toThrow();
+    });
+
+    test('snsTrigger does not throw on non-JSON message', () => {
+      const records = snsTrigger.extractInputs({
+        Records: [{ Sns: { MessageId: 'm', Message: 'text only', MessageAttributes: {} } }],
+      });
+      expect(records[0].body).toBe('text only');
+    });
+
+    test('snsTrigger handles missing MessageAttributes', () => {
+      const records = snsTrigger.extractInputs({
+        Records: [{ Sns: { MessageId: 'm', Message: '{}' } }],
+      });
+      expect(records).toHaveLength(1);
+      const meta = snsTrigger.extractMeta({ Records: [] }, records[0]);
+      expect(meta.idempotencyKey).toBe('sns:m');
+    });
+
+    test('eventbridgeTrigger handles missing detail', () => {
+      const event = { id: 'eb-2', detailType: 'Test', source: 'test' };
+      const records = eventbridgeTrigger.extractInputs(event);
+      expect(records[0].body).toEqual(event); // falls back to whole event
+      const meta = eventbridgeTrigger.extractMeta(event, records[0]);
+      expect(meta.requestId).toBe('eb-2');
+    });
+
+    test('eventbridgeTrigger handles missing id', () => {
+      const records = eventbridgeTrigger.extractInputs({ detail: { foo: 'bar' } });
+      expect(records[0].naturalKey).toBeUndefined();
+    });
+
+    test('scheduleTrigger generates a UUID when no id is present', () => {
+      const records = scheduleTrigger.extractInputs({ resources: [] });
+      const meta = scheduleTrigger.extractMeta({}, records[0]);
+      expect(typeof meta.correlationId).toBe('string');
+      expect(meta.correlationId).toMatch(/^[0-9a-f-]{36}$/);
+    });
+
+    test('kinesisTrigger does not throw on malformed base64', () => {
+      const records = kinesisTrigger.extractInputs({
+        Records: [
+          {
+            kinesis: { sequenceNumber: 's-1', data: '@@not-base64@@', partitionKey: 'p' },
+          },
+        ],
+      });
+      expect(records).toHaveLength(1);
+      // decodeBase64JsonOrText falls back to the raw input on a decode failure.
+      expect(typeof records[0].body).toBe('string');
+    });
+
+    test('kinesisTrigger handles empty Records array', () => {
+      expect(() => kinesisTrigger.extractInputs({ Records: [] })).not.toThrow();
+    });
+
+    test('dynamodbStreamsTrigger handles empty NewImage', () => {
+      const records = dynamodbStreamsTrigger.extractInputs({
+        Records: [{ eventID: 'd-1', eventName: 'INSERT', dynamodb: {} }],
+      });
+      expect(records[0].naturalKey).toBe('dynamodb:d-1');
+    });
+
+    test('mskTrigger handles empty topic-partitions', () => {
+      const records = mskTrigger.extractInputs({ records: {} });
+      expect(records).toEqual([]);
+    });
+
+    test('mskTrigger does not throw on missing headers', () => {
+      const records = mskTrigger.extractInputs({
+        records: {
+          't-0': [
+            {
+              topic: 'topic',
+              partition: 0,
+              offset: 1,
+              value: Buffer.from('{"x":1}').toString('base64'),
+            },
+          ],
+        },
+      });
+      const meta = mskTrigger.extractMeta({ records: {} }, records[0]);
+      expect(meta.requestId).toBe('topic:0:1');
+    });
+  });
 });

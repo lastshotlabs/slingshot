@@ -32,6 +32,37 @@ interface HttpClientConfig {
   readonly timeoutMs: number;
   readonly retries: number;
   readonly retryDelayMs: number;
+  /** Circuit breaker — consecutive failures before opening. */
+  readonly circuitBreakerThreshold: number;
+  /** Circuit breaker — cooldown duration in ms before half-open probe. */
+  readonly circuitBreakerCooldownMs: number;
+  /** Circuit breaker — clock for cooldown comparisons (override in tests). */
+  readonly now: () => number;
+}
+
+/** Snapshot of the provider-level circuit breaker. */
+export interface CircuitBreakerHealth {
+  readonly state: 'closed' | 'open' | 'half-open';
+  readonly consecutiveFailures: number;
+  /** Epoch ms when the breaker last opened. `undefined` while closed. */
+  readonly openedAt: number | undefined;
+  /** Earliest epoch ms at which a half-open probe will be allowed. */
+  readonly nextProbeAt: number | undefined;
+}
+
+/**
+ * Structured error thrown when the circuit breaker is open. Callers can
+ * pattern-match on `code === 'PROVIDER_UNAVAILABLE'` to fail fast without
+ * waiting for the underlying request retries.
+ */
+export class ProviderUnavailableError extends Error {
+  readonly code = 'PROVIDER_UNAVAILABLE' as const;
+  readonly retryAfterMs: number;
+  constructor(message: string, retryAfterMs: number) {
+    super(message);
+    this.name = 'ProviderUnavailableError';
+    this.retryAfterMs = retryAfterMs;
+  }
 }
 
 interface HttpResponse<T = unknown> {
@@ -51,10 +82,71 @@ interface HttpClient {
   patch<T>(path: string, body?: unknown): Promise<{ readonly status: number; readonly data: T }>;
   delete<T>(path: string): Promise<{ readonly status: number; readonly data: T }>;
   send<T>(method: string, path: string, body?: unknown): Promise<HttpResponse<T>>;
+  /** Inspect the circuit breaker state — stable observability surface. */
+  getBreakerHealth(): CircuitBreakerHealth;
 }
 
 function createHttpClient(config: HttpClientConfig) {
-  const { baseUrl, apiKey, timeoutMs, retries, retryDelayMs } = config;
+  const {
+    baseUrl,
+    apiKey,
+    timeoutMs,
+    retries,
+    retryDelayMs,
+    circuitBreakerThreshold,
+    circuitBreakerCooldownMs,
+    now,
+  } = config;
+
+  // Circuit breaker state — closure-owned so tests can drive it deterministically.
+  // States:
+  //   closed      — normal operation; failures increment a counter
+  //   open        — fail fast; reject every request until cooldown elapses
+  //   half-open   — let exactly one probe through; success resets, failure re-opens
+  let breakerState: 'closed' | 'open' | 'half-open' = 'closed';
+  let consecutiveFailures = 0;
+  let openedAt: number | undefined;
+  let halfOpenInFlight = false;
+
+  function getBreakerHealth(): CircuitBreakerHealth {
+    const nextProbeAt =
+      breakerState === 'open' && openedAt !== undefined
+        ? openedAt + circuitBreakerCooldownMs
+        : undefined;
+    return { state: breakerState, consecutiveFailures, openedAt, nextProbeAt };
+  }
+
+  function recordSuccess(): void {
+    consecutiveFailures = 0;
+    breakerState = 'closed';
+    openedAt = undefined;
+    halfOpenInFlight = false;
+  }
+
+  function recordFailure(): void {
+    consecutiveFailures += 1;
+    if (breakerState === 'half-open') {
+      // Probe failed — reopen and back off again.
+      breakerState = 'open';
+      openedAt = now();
+      halfOpenInFlight = false;
+      return;
+    }
+    if (consecutiveFailures >= circuitBreakerThreshold && breakerState === 'closed') {
+      breakerState = 'open';
+      openedAt = now();
+    }
+  }
+
+  function tryEnterHalfOpen(): boolean {
+    if (breakerState !== 'open') return true;
+    if (openedAt === undefined) return true;
+    if (now() - openedAt < circuitBreakerCooldownMs) return false;
+    if (halfOpenInFlight) return false;
+    breakerState = 'half-open';
+    halfOpenInFlight = true;
+    return true;
+  }
 
   function buildUrl(path: string): string {
     const base = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
@@ -75,6 +167,20 @@ function createHttpClient(config: HttpClientConfig) {
     body?: unknown,
     options?: { contentType?: string; rawBody?: string },
   ): Promise<HttpResponse<T>> {
+    // Fail fast when the breaker is open and the cooldown has not yet elapsed.
+    // `tryEnterHalfOpen()` mutates state to 'half-open' when it admits a probe;
+    // the per-attempt loop below treats the probe like any other request and
+    // will trigger `recordSuccess` / `recordFailure` accordingly.
+    if (!tryEnterHalfOpen()) {
+      const retryAfterMs =
+        openedAt !== undefined ? Math.max(0, openedAt + circuitBreakerCooldownMs - now()) : 0;
+      throw new ProviderUnavailableError(
+        `[slingshot-search:typesense] Circuit breaker open after ${consecutiveFailures} ` +
+          `consecutive failures. Retrying in ~${retryAfterMs}ms. Method: ${method} ${path}`,
+        retryAfterMs,
+      );
+    }
+
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -105,13 +211,18 @@ function createHttpClient(config: HttpClientConfig) {
             `[slingshot-search:typesense] HTTP ${response.status} ${method} ${path}: ${errorBody}`,
           );
 
-          // Don't retry client errors (4xx) except 408 (timeout) and 429 (rate limit)
+          // Don't retry client errors (4xx) except 408 (timeout) and 429 (rate limit).
+          // 4xx (except 408/429) are caller errors and do not feed the breaker —
+          // they would otherwise trip the circuit on intentional bad requests.
           if (
             response.status >= 400 &&
             response.status < 500 &&
             response.status !== 408 &&
             response.status !== 429
           ) {
+            // Successful round-trip from the breaker's perspective: the host
+            // is responsive even though the request was rejected.
+            recordSuccess();
             throw error;
           }
 
@@ -121,10 +232,12 @@ function createHttpClient(config: HttpClientConfig) {
 
         // 204 No Content — no body to parse
         if (response.status === 204) {
+          recordSuccess();
           return { status: response.status, data: undefined };
         }
 
         const data = (await response.json()) as T;
+        recordSuccess();
         return { status: response.status, data };
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
@@ -140,6 +253,8 @@ function createHttpClient(config: HttpClientConfig) {
       }
     }
 
+    // All retries exhausted — feed the breaker a single failure for this op.
+    recordFailure();
     throw lastError ?? new Error(`[slingshot-search:typesense] Request failed: ${method} ${path}`);
   }
 
@@ -181,6 +296,7 @@ function createHttpClient(config: HttpClientConfig) {
     delete: remove,
     /** For endpoints that may return 204 No Content. */
     send,
+    getBreakerHealth,
   };
 
   return client;
@@ -805,6 +921,9 @@ export function createTypesenseProvider(config: TypesenseProviderConfig): Search
     timeoutMs: config.timeoutMs ?? 5000,
     retries: config.retries ?? 3,
     retryDelayMs: config.retryDelayMs ?? 200,
+    circuitBreakerThreshold: config.circuitBreakerThreshold ?? 5,
+    circuitBreakerCooldownMs: config.circuitBreakerCooldownMs ?? 30_000,
+    now: config.now ?? (() => Date.now()),
   });
 
   // Cache searchable fields per collection for query_by parameter
@@ -842,19 +961,38 @@ export function createTypesenseProvider(config: TypesenseProviderConfig): Search
 
     async healthCheck(): Promise<SearchHealthResult> {
       const start = performance.now();
+      // Snapshot the breaker BEFORE making the call so the returned health
+      // result reflects the breaker state used to gate the request itself.
+      const breakerBefore = http.getBreakerHealth();
       try {
         const { data } = await http.get<{ ok: boolean }>('/health');
+        const breakerAfter = http.getBreakerHealth();
         return {
           healthy: data.ok,
           provider: 'typesense',
           latencyMs: Math.round(performance.now() - start),
+          circuitBreaker: {
+            state: breakerAfter.state,
+            consecutiveFailures: breakerAfter.consecutiveFailures,
+            openedAt: breakerAfter.openedAt,
+            nextProbeAt: breakerAfter.nextProbeAt,
+          },
         };
       } catch (err) {
+        const breakerAfter = http.getBreakerHealth();
         return {
           healthy: false,
           provider: 'typesense',
           latencyMs: Math.round(performance.now() - start),
           error: err instanceof Error ? err.message : String(err),
+          circuitBreaker: {
+            // If breaker was already open and request short-circuited, prefer
+            // the pre-call snapshot to surface that fast-fail state.
+            state: breakerBefore.state === 'open' ? breakerBefore.state : breakerAfter.state,
+            consecutiveFailures: breakerAfter.consecutiveFailures,
+            openedAt: breakerAfter.openedAt,
+            nextProbeAt: breakerAfter.nextProbeAt,
+          },
         };
       }
     },

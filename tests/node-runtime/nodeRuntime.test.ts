@@ -1191,7 +1191,10 @@ describe('WebSocket (ws)', () => {
     const errorLogged = deferred();
     const originalError = console.error;
     console.error = (...args: unknown[]) => {
-      if (String(args[0]).includes('websocket message handler failed')) {
+      if (
+        String(args[0]).includes('websocket-handler-error') &&
+        String(args[0]).includes('phase=message')
+      ) {
         errorLogged.resolve();
       }
     };
@@ -1235,7 +1238,10 @@ describe('WebSocket (ws)', () => {
     const errorLogged = deferred();
     const originalError = console.error;
     console.error = (...args: unknown[]) => {
-      if (String(args[0]).includes('websocket open handler failed')) {
+      if (
+        String(args[0]).includes('websocket-handler-error') &&
+        String(args[0]).includes('phase=open')
+      ) {
         errorLogged.resolve();
       }
     };
@@ -1274,7 +1280,10 @@ describe('WebSocket (ws)', () => {
     const errorLogged = deferred();
     const originalError = console.error;
     console.error = (...args: unknown[]) => {
-      if (String(args[0]).includes('websocket close handler failed')) {
+      if (
+        String(args[0]).includes('websocket-handler-error') &&
+        String(args[0]).includes('phase=close')
+      ) {
         errorLogged.resolve();
       }
     };
@@ -1315,7 +1324,10 @@ describe('WebSocket (ws)', () => {
     const errorLogged = deferred();
     const originalError = console.error;
     console.error = (...args: unknown[]) => {
-      if (String(args[0]).includes('websocket pong handler failed')) {
+      if (
+        String(args[0]).includes('websocket-handler-error') &&
+        String(args[0]).includes('phase=pong')
+      ) {
         errorLogged.resolve();
       }
     };
@@ -1576,4 +1588,214 @@ describe('SlingshotRuntime shape', () => {
     expect(typeof runtime.readFile).toBe('function');
     expect(typeof runtime.supportsAsyncLocalStorage).toBe('boolean');
   });
+});
+
+// ---------------------------------------------------------------------------
+// Contract enforcement: maxRequestBodySize / graceful drain / WS leak / logger
+// ---------------------------------------------------------------------------
+
+describe('contract enforcement', () => {
+  it('rejects requests exceeding maxRequestBodySize with 413', async () => {
+    const runtime = nodeRuntime();
+    const server = await runtime.server.listen({
+      port: 0,
+      maxRequestBodySize: 16,
+      fetch: () => new Response('handler-should-not-run'),
+    });
+    try {
+      const big = new Uint8Array(64);
+      const res = await fetch(`http://127.0.0.1:${server.port}/`, {
+        method: 'POST',
+        body: big,
+      });
+      expect(res.status).toBe(413);
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  it('forwards async fetch handler errors to opts.error', async () => {
+    const runtime = nodeRuntime();
+    const errors: Error[] = [];
+    const server = await runtime.server.listen({
+      port: 0,
+      async fetch() {
+        await Promise.resolve();
+        throw new Error('async-boom');
+      },
+      error(err) {
+        errors.push(err);
+        return new Response('caught', { status: 500 });
+      },
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
+      expect(res.status).toBe(500);
+      expect(await res.text()).toBe('caught');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.message).toBe('async-boom');
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  it('returns 500 and logs when async fetch throws without error callback', async () => {
+    const runtime = nodeRuntime();
+    const lines: string[] = [];
+    const orig = console.error;
+    console.error = (...args: unknown[]) => {
+      lines.push(args.map(String).join(' '));
+    };
+    const server = await runtime.server.listen({
+      port: 0,
+      async fetch() {
+        throw new Error('uncaught-async');
+      },
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
+      expect(res.status).toBe(500);
+      expect(lines.some(l => l.includes('fetch-handler-error'))).toBe(true);
+    } finally {
+      console.error = orig;
+      await server.stop(true);
+    }
+  });
+
+  it('graceful stop({ timeoutMs }) waits for in-flight requests then returns', async () => {
+    const runtime = nodeRuntime();
+    let resolveHandler!: () => void;
+    const handlerStarted = deferred();
+    const server = await runtime.server.listen({
+      port: 0,
+      async fetch() {
+        handlerStarted.resolve();
+        await new Promise<void>(r => {
+          resolveHandler = r;
+        });
+        return new Response('done');
+      },
+    });
+    const reqPromise = fetch(`http://127.0.0.1:${server.port}/`);
+    await handlerStarted.promise;
+    const stopPromise = (server.stop as (o: { timeoutMs: number }) => Promise<void>)({
+      timeoutMs: 5_000,
+    });
+    resolveHandler();
+    const res = await reqPromise;
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('done');
+    await stopPromise;
+  });
+
+  it('graceful stop({ timeoutMs }) force-closes after timeout', async () => {
+    const runtime = nodeRuntime();
+    const handlerStarted = deferred();
+    const server = await runtime.server.listen({
+      port: 0,
+      async fetch() {
+        handlerStarted.resolve();
+        await new Promise(() => {});
+        return new Response('never');
+      },
+    });
+    const reqPromise = fetch(`http://127.0.0.1:${server.port}/`).catch(err => err);
+    await handlerStarted.promise;
+    const start = Date.now();
+    await (server.stop as (o: { timeoutMs: number }) => Promise<void>)({ timeoutMs: 250 });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(200);
+    expect(elapsed).toBeLessThan(2_500);
+    await reqPromise;
+  });
+
+  it('clears channel membership on abnormal close (no leak)', async () => {
+    const runtime = nodeRuntime();
+    let inst!: import('@lastshotlabs/slingshot-core').RuntimeServerInstance;
+    const server = await runtime.server.listen({
+      port: 0,
+      websocket: {
+        open(ws) {
+          ws.subscribe('room');
+          ws.send('subscribed');
+        },
+        message() {},
+        close() {},
+      },
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          inst.upgrade!(req, { data: null });
+          return new Response(null);
+        }
+        return new Response('ok');
+      },
+    });
+    inst = server;
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}/`);
+      const opened = deferred();
+      ws.on('open', () => opened.resolve());
+      await opened.promise;
+      ws.terminate();
+      await new Promise(r => setTimeout(r, 100));
+      // No throw — channel was cleaned up despite abnormal close.
+      server.publish!('room', 'echo');
+      // Reconnect and verify pub/sub still works.
+      const ws2 = new WebSocket(`ws://127.0.0.1:${server.port}/`);
+      const got = deferred<string>();
+      // Register message listener BEFORE open so the 'subscribed' frame is not
+      // missed if it arrives before the open event handler runs.
+      ws2.on('message', d => got.resolve(d.toString()));
+      const first = await got.promise;
+      expect(first).toBe('subscribed');
+      ws2.close();
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  it('idleTimeout closes silent websockets after the configured window', async () => {
+    const runtime = nodeRuntime();
+    let inst!: import('@lastshotlabs/slingshot-core').RuntimeServerInstance;
+    const closedDeferred = deferred();
+    const server = await runtime.server.listen({
+      port: 0,
+      websocket: {
+        idleTimeout: 2,
+        open(ws) {
+          ws.send('ready');
+        },
+        message() {},
+        close() {
+          closedDeferred.resolve();
+        },
+      },
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          inst.upgrade!(req, { data: null });
+          return new Response(null);
+        }
+        return new Response('ok');
+      },
+    });
+    inst = server;
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${server.port}/`);
+      const opened = deferred();
+      ws.on('open', () => {
+        // Pause the underlying socket so the server's pings cannot be read
+        // and auto-pong'd by ws — making the connection appear idle.
+        const sock = (ws as unknown as { _socket: import('node:net').Socket })._socket;
+        sock.pause();
+        opened.resolve();
+      });
+      ws.on('error', () => {});
+      await opened.promise;
+      // Wait for the server to detect the silent socket and call close().
+      await closedDeferred.promise;
+      ws.terminate();
+    } finally {
+      await server.stop(true);
+    }
+  }, 15_000);
 });

@@ -87,6 +87,14 @@ export const memoryAdapterOptionsSchema = z.object({
     .positive()
     .optional()
     .describe('Maximum concurrent task executions in the in-memory adapter.'),
+  maxPayloadBytes: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum serialized JSON payload size in bytes for task/workflow input and task output. Defaults to 1 MiB.',
+    ),
 });
 
 /**
@@ -103,6 +111,14 @@ export const sqliteAdapterOptionsSchema = z.object({
     .positive()
     .optional()
     .describe('Maximum concurrent task executions in the SQLite adapter.'),
+  maxPayloadBytes: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum serialized JSON payload size in bytes for task/workflow input and task output. Defaults to 1 MiB.',
+    ),
 });
 
 /**

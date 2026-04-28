@@ -35,6 +35,17 @@ export interface EdgeRuntimeOptions {
    * verifier is used (paired with the default `hashPassword`).
    */
   verifyPassword?: (plain: string, hash: string) => Promise<boolean>;
+
+  /**
+   * Maximum size in bytes for a `readFile()` result.
+   *
+   * `fileStore` returns a fully-buffered string. On Cloudflare Workers the
+   * isolate heap budget is ~128 MB shared with app code; a single oversized
+   * file can OOM the worker. When set, `readFile()` throws if the returned
+   * string exceeds this size (measured by UTF-8 byte length). Defaults to
+   * 4 * 1024 * 1024 (4 MiB). Set to 0 to disable the check.
+   */
+  maxFileBytes?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,6 +285,7 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
   const fileStore = options.fileStore ?? (() => Promise.resolve(null));
   const hashFn = options.hashPassword ?? hashWithWebCrypto;
   const verifyFn = options.verifyPassword ?? verifyWithWebCrypto;
+  const maxFileBytes = options.maxFileBytes ?? 4 * 1024 * 1024;
 
   return Object.freeze({
     password: Object.freeze({
@@ -299,9 +311,28 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
      *
      * Returns `null` for any path not found in the bundle. On Cloudflare Workers,
      * wire this to `env.ASSETS.fetch()` or a KV namespace.
+     *
+     * Throws if the result exceeds `maxFileBytes` (default 4 MiB). Edge isolates
+     * have ~128 MB of heap shared with app code; an oversized buffered read can
+     * OOM the worker. Stream large assets at the platform level instead.
      */
-    readFile(path: string): Promise<string | null> {
-      return fileStore(path);
+    async readFile(path: string): Promise<string | null> {
+      const result = await fileStore(path);
+      if (result === null) return null;
+      if (maxFileBytes > 0) {
+        // UTF-8 byte length, not character count. crypto.subtle / TextEncoder
+        // are available in every supported edge runtime.
+        const byteLength = new TextEncoder().encode(result).byteLength;
+        if (byteLength > maxFileBytes) {
+          throw new Error(
+            `[runtime-edge] readFile('${path}') returned ${byteLength} bytes; ` +
+              `exceeds maxFileBytes=${maxFileBytes}. ` +
+              `Stream large assets at the platform level (e.g. env.ASSETS.fetch()) ` +
+              `or raise maxFileBytes if you've confirmed the isolate has headroom.`,
+          );
+        }
+      }
+      return result;
     },
     /**
      * Edge runtimes do not support `AsyncLocalStorage`.

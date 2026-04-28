@@ -483,7 +483,9 @@ describe('kafkaAdapter', () => {
           offset: '11',
           key: null,
           headers: {},
-          value: Buffer.from(JSON.stringify(createRawEventEnvelope('auth:login', { userId: 'u2', sessionId: 's2' }))),
+          value: Buffer.from(
+            JSON.stringify(createRawEventEnvelope('auth:login', { userId: 'u2', sessionId: 's2' })),
+          ),
         },
         heartbeat: async () => {},
       });
@@ -500,7 +502,7 @@ describe('kafkaAdapter', () => {
     const listener = mock(() => {});
     try {
       const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
-      await bus.shutdown();
+      await bus.shutdown?.();
       const healthBefore = bus.health();
       expect(healthBefore.isShutdown).toBe(true);
 
@@ -558,7 +560,7 @@ describe('kafkaAdapter', () => {
       await flushAsyncWork();
 
       expect(bus.health().pendingBufferSize).toBe(1);
-      await bus.shutdown();
+      await bus.shutdown?.();
 
       expect(bus.health().pendingBufferSize).toBe(0);
       expect(warnSpy).toHaveBeenCalledWith(
@@ -566,6 +568,145 @@ describe('kafkaAdapter', () => {
       );
     } finally {
       warnSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
+  });
+
+  test('flushes uncommitted offsets when the consumer rebalances', async () => {
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    let inHandler = false;
+    let releaseHandler: (() => void) | null = null;
+    const handlerStarted = new Promise<void>(resolve => {
+      releaseHandler = resolve;
+    });
+    const listener = mock(async () => {
+      inHandler = true;
+      releaseHandler?.();
+      await new Promise(resolve => setTimeout(resolve, 30));
+      inHandler = false;
+    });
+
+    try {
+      const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
+      bus.on('auth:login', listener, { durable: true, name: 'rebalance-worker' });
+      await flushAsyncWork();
+
+      const consumer = fakeKafkaState.consumers[0]!;
+      // First commit attempt fails so the offset stays recorded as pending;
+      // the rebalance hook must flush it on the next commitOffsets call.
+      fakeKafkaState.commitOffsetErrors.push(new Error('first commit blocked'));
+
+      const envelope = createRawEventEnvelope('auth:login', {
+        userId: 'u-rebal',
+        sessionId: 's-rebal',
+      });
+      const handlerPromise = consumer.eachMessage?.({
+        topic: 'slingshot.events.auth.login',
+        partition: 0,
+        message: {
+          offset: '99',
+          key: null,
+          headers: {},
+          value: Buffer.from(JSON.stringify(envelope)),
+        },
+        heartbeat: async () => {},
+      });
+
+      // Wait until the handler has actually started before triggering rebalance
+      // so we can assert the rebalance hook quiesces in-flight work.
+      await handlerStarted;
+      expect(inHandler).toBe(true);
+      await consumer.emitEvent?.('consumer.rebalancing');
+      // After rebalance the handler should have completed and we should have
+      // observed at least one commitOffsets call carrying offset 100.
+      await handlerPromise;
+
+      const flushed = consumer.commitOffsetCallArgs.flat().some(call => call.offset === '100');
+      expect(flushed).toBe(true);
+      expect(listener).toHaveBeenCalledTimes(1);
+      // GROUP_JOIN clears the rebalance flag.
+      await consumer.emitEvent?.('consumer.group_join', { payload: { memberId: 'm-1' } });
+    } finally {
+      infoSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  test('health() exposes drop counters and the last drop reason', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const drops: Array<{ reason: string; event: string }> = [];
+    try {
+      const bus = createKafkaAdapter({
+        brokers: ['localhost:19092'],
+        onDrop: event => {
+          drops.push({ reason: event.reason, event: event.event });
+        },
+      });
+      bus.on('auth:login', () => {}, { durable: true, name: 'drop-stat-worker' });
+      await flushAsyncWork();
+
+      const consumer = fakeKafkaState.consumers[0]!;
+      // Two null-value messages each record a drop with reason 'null-message-value'.
+      await consumer.eachMessage?.({
+        topic: 'slingshot.events.auth.login',
+        partition: 0,
+        message: { offset: '0', key: null, headers: {}, value: null },
+        heartbeat: async () => {},
+      });
+      await consumer.eachMessage?.({
+        topic: 'slingshot.events.auth.login',
+        partition: 0,
+        message: { offset: '1', key: null, headers: {}, value: null },
+        heartbeat: async () => {},
+      });
+
+      const health = bus.health();
+      expect(health.droppedMessages.totalDrops).toBe(2);
+      expect(health.droppedMessages.byReason['null-message-value']).toBe(2);
+      expect(health.droppedMessages.lastDropReason).toBe('null-message-value');
+      expect(typeof health.droppedMessages.lastDropAt).toBe('number');
+      expect(drops).toHaveLength(2);
+      expect(drops[0]?.reason).toBe('null-message-value');
+    } finally {
+      errorSpy.mockRestore();
+      infoSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('onDrop fires when the pending buffer overflows', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const drops: Array<{ reason: string }> = [];
+    try {
+      const bus = createKafkaAdapter({
+        brokers: ['localhost:19092'],
+        onDrop: event => {
+          drops.push({ reason: event.reason });
+        },
+      });
+      bus.on('auth:login', () => {}, { durable: true, name: 'overflow-worker' });
+      await flushAsyncWork();
+
+      // Force every send to fail. The first 1000 fill the pending buffer; the
+      // rest hit the buffer-full path and call notifyDrop.
+      for (let i = 0; i < 1010; i++) {
+        fakeKafkaState.producerSendErrors.push(new Error('broker down'));
+      }
+      for (let i = 0; i < 1010; i++) {
+        bus.emit('auth:login', { userId: `u-${i}`, sessionId: `s-${i}` });
+      }
+      await flushAsyncWork(20);
+
+      const bufferFull = drops.filter(d => d.reason === 'pending-buffer-full');
+      expect(bufferFull.length).toBeGreaterThan(0);
+      expect(bus.health().droppedMessages.byReason['pending-buffer-full']).toBeGreaterThan(0);
+      expect(bus.health().droppedMessages.lastDropReason).toBe('pending-buffer-full');
+    } finally {
+      errorSpy.mockRestore();
       infoSpy.mockRestore();
     }
   });

@@ -69,12 +69,12 @@ describe('createIntervalDispatcher', () => {
     const events = createNotificationsTestEvents(bus);
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
     const originalPublish = events.publish.bind(events);
-    events.publish = (key: unknown, ...args: unknown[]) => {
+    events.publish = ((key: unknown, ...args: unknown[]) => {
       if (String(key) === 'notifications:notification.created') {
         throw new Error('publish failed');
       }
       return (originalPublish as (...publishArgs: unknown[]) => unknown)(key, ...args);
-    };
+    }) as typeof events.publish;
 
     const builder = adapters.createBuilder('community');
     const notification = await builder.schedule({
@@ -120,15 +120,15 @@ describe('createIntervalDispatcher', () => {
       intervalMs: 1_000,
       maxPerTick: 10,
     });
-    (dispatcher as { tick: typeof tick }).tick = tick;
+    (dispatcher as unknown as { tick: typeof tick }).tick = tick;
     const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(((
       handler: TimerHandler,
     ) => {
       if (typeof handler === 'function') {
         void handler();
       }
-      return 1 as ReturnType<typeof setInterval>;
-    }) as typeof setInterval);
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
 
     dispatcher.start();
     await Promise.resolve();
@@ -154,7 +154,7 @@ describe('createIntervalDispatcher', () => {
       return [];
     });
     (
-      adapters.notifications as { listPendingDispatch: typeof listPendingDispatch }
+      adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;
 
     const dispatcher = createIntervalDispatcher({
@@ -170,8 +170,8 @@ describe('createIntervalDispatcher', () => {
       handler: TimerHandler,
     ) => {
       if (typeof handler === 'function') void handler();
-      return 1 as ReturnType<typeof setInterval>;
-    }) as typeof setInterval);
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
 
     dispatcher.start();
     await Promise.resolve();
@@ -198,7 +198,7 @@ describe('createIntervalDispatcher', () => {
     const bus = new InProcessAdapter();
     const events = createNotificationsTestEvents(bus);
     const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(
-      (() => 1) as typeof setInterval,
+      (() => 1) as unknown as typeof setInterval,
     );
 
     const dispatcher = createIntervalDispatcher({
@@ -258,7 +258,7 @@ describe('createIntervalDispatcher', () => {
 
     const listPendingDispatch = mock(async () => oversizeRows);
     (
-      adapters.notifications as { listPendingDispatch: typeof listPendingDispatch }
+      adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;
 
     const dispatcher = createIntervalDispatcher({
@@ -282,11 +282,9 @@ describe('createIntervalDispatcher', () => {
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
 
     // A tick that never resolves
-    const listPendingDispatch = mock(
-      () => new Promise<never>(() => {}),
-    );
+    const listPendingDispatch = mock(() => new Promise<never>(() => {}));
     (
-      adapters.notifications as { listPendingDispatch: typeof listPendingDispatch }
+      adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;
 
     const dispatcher = createIntervalDispatcher({
@@ -303,8 +301,8 @@ describe('createIntervalDispatcher', () => {
       handler: TimerHandler,
     ) => {
       if (typeof handler === 'function') void handler();
-      return 1 as ReturnType<typeof setInterval>;
-    }) as typeof setInterval);
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
 
     dispatcher.start();
     await Promise.resolve();
@@ -334,7 +332,7 @@ describe('createIntervalDispatcher', () => {
       return [];
     });
     (
-      adapters.notifications as { listPendingDispatch: typeof listPendingDispatch }
+      adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;
 
     const dispatcher = createIntervalDispatcher({
@@ -353,8 +351,8 @@ describe('createIntervalDispatcher', () => {
         void handler();
         void handler();
       }
-      return 1 as ReturnType<typeof setInterval>;
-    }) as typeof setInterval);
+      return 1 as unknown as ReturnType<typeof setInterval>;
+    }) as unknown as typeof setInterval);
 
     dispatcher.start();
     await Promise.resolve();

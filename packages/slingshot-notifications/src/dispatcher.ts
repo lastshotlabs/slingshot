@@ -80,7 +80,10 @@ export function createIntervalDispatcher(
           ),
         ]);
       } catch (err) {
-        console.error('[slingshot-notifications] Dispatcher stop(): inflight tick did not settle', err);
+        console.error(
+          '[slingshot-notifications] Dispatcher stop(): inflight tick did not settle',
+          err,
+        );
       }
     },
     async tick() {

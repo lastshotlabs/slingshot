@@ -2,7 +2,6 @@ import { describe, expect, mock, test } from 'bun:test';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
 import { createSlingshotEventSink } from '../src/eventSink';
-
 // Import the augmentation so orchestration events are registered on SlingshotEventMap.
 import '../src/events';
 
@@ -11,7 +10,7 @@ describe('createSlingshotEventSink', () => {
     const bus = createInProcessAdapter();
     const received: unknown[] = [];
 
-    bus.on('orchestration.task.started', (payload) => {
+    bus.on('orchestration.task.started', payload => {
       received.push(payload);
     });
 
@@ -34,7 +33,7 @@ describe('createSlingshotEventSink', () => {
     const bus = createInProcessAdapter();
     const received: unknown[] = [];
 
-    bus.on('orchestration.task.completed', (payload) => {
+    bus.on('orchestration.task.completed', payload => {
       received.push(payload);
     });
 
@@ -56,7 +55,7 @@ describe('createSlingshotEventSink', () => {
     const bus = createInProcessAdapter();
     const received: unknown[] = [];
 
-    bus.on('orchestration.task.failed', (payload) => {
+    bus.on('orchestration.task.failed', payload => {
       received.push(payload);
     });
 
@@ -100,8 +99,8 @@ describe('createSlingshotEventSink', () => {
     const startedEvents: unknown[] = [];
     const completedEvents: unknown[] = [];
 
-    bus.on('orchestration.task.started', (p) => startedEvents.push(p));
-    bus.on('orchestration.task.completed', (p) => completedEvents.push(p));
+    bus.on('orchestration.task.started', p => startedEvents.push(p));
+    bus.on('orchestration.task.completed', p => completedEvents.push(p));
 
     const sink = createSlingshotEventSink(bus);
     sink.emit('orchestration.task.started', { runId: 'r1', task: 't1', input: {} });

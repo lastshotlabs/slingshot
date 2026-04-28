@@ -135,6 +135,21 @@ export interface FunctionsRuntimeConfig {
    * Only honoured by the Lambda runtime (`@lastshotlabs/slingshot-runtime-lambda`).
    */
   shutdownTimeoutMs?: number;
+  /**
+   * Maximum time in milliseconds a single record handler invocation may run.
+   *
+   * If the handler does not resolve within this window the runtime rejects with
+   * a `HandlerError(code: 'handler-timeout', status: 504)` so observability and
+   * retry policy treat it consistently with other failures. Without this, a hung
+   * handler runs until the platform-level timeout (e.g. Lambda's 15 minute hard
+   * cap) and consumes the full execution budget.
+   *
+   * When omitted the runtime imposes no timeout — the underlying platform
+   * timeout still applies.
+   *
+   * Only honoured by the Lambda runtime (`@lastshotlabs/slingshot-runtime-lambda`).
+   */
+  handlerTimeoutMs?: number;
 }
 
 export interface IdempotencyOpts {

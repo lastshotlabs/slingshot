@@ -54,9 +54,9 @@ describe('createSearchPlugin — adminGate startup warning', () => {
 
     plugin.setupRoutes!(makeSetupContext());
 
-    const warnMessages = warnSpy.mock.calls.map(c => String(c[0]));
+    const warnMessages = warnSpy.mock.calls.map((c: unknown[]) => String(c[0]));
     expect(
-      warnMessages.some(m => m.includes('[slingshot-search]') && m.includes('adminGate')),
+      warnMessages.some((m: string) => m.includes('[slingshot-search]') && m.includes('adminGate')),
     ).toBe(true);
   });
 
@@ -74,8 +74,8 @@ describe('createSearchPlugin — adminGate startup warning', () => {
 
     plugin.setupRoutes!(makeSetupContext());
 
-    const warnMessages = warnSpy.mock.calls.map(c => String(c[0]));
-    expect(warnMessages.some(m => m.includes('adminGate'))).toBe(false);
+    const warnMessages = warnSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(warnMessages.some((m: string) => m.includes('adminGate'))).toBe(false);
   });
 
   it('does not emit a warning when the ADMIN route is explicitly disabled', () => {
@@ -88,7 +88,7 @@ describe('createSearchPlugin — adminGate startup warning', () => {
 
     plugin.setupRoutes!(makeSetupContext());
 
-    const warnMessages = warnSpy.mock.calls.map(c => String(c[0]));
-    expect(warnMessages.some(m => m.includes('adminGate'))).toBe(false);
+    const warnMessages = warnSpy.mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(warnMessages.some((m: string) => m.includes('adminGate'))).toBe(false);
   });
 });

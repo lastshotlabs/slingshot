@@ -10,6 +10,10 @@ const MOCK_CFG = {} as unknown as SlingshotFrameworkConfig;
 const MOCK_APP_RAW = {};
 const MOCK_APP = MOCK_APP_RAW as never;
 
+function setupContext(bus: SlingshotEventBus) {
+  return { app: MOCK_APP, config: MOCK_CFG, bus, events: bus as never };
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -80,7 +84,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     bus.emit('auth:delivery.password_reset', {
       email: 'user@example.com',
@@ -127,7 +131,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     bus.emit('auth:delivery.welcome', {
       email: 'new@example.com',
@@ -167,7 +171,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     // Teardown before emitting
     await plugin.teardown!();
@@ -208,7 +212,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     bus.emit('auth:delivery.email_otp', { email: 'user@example.com', code: '123456' });
     await flushMicrotasks();
@@ -242,7 +246,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     // Should not throw
     bus.emit('security.auth.login.success', { userId: 'u1', ip: '127.0.0.1' });
@@ -262,11 +266,9 @@ describe('createMailPlugin integration', () => {
 
     const plugin = createMailPlugin({ provider, renderer, from: 'noreply@example.com', queue });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
-    await expect(plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus })).rejects.toThrow(
-      'already activated',
-    );
+    await expect(plugin.setupPost!(setupContext(bus))).rejects.toThrow('already activated');
 
     await plugin.teardown!();
   });
@@ -283,9 +285,7 @@ describe('createMailPlugin integration', () => {
       // No custom queue → defaults to memory queue
     });
 
-    await expect(plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus })).rejects.toThrow(
-      'durable queue',
-    );
+    await expect(plugin.setupPost!(setupContext(bus))).rejects.toThrow('durable queue');
   });
 
   it('teardown() does not throw when an unsubscriber throws', async () => {
@@ -308,7 +308,7 @@ describe('createMailPlugin integration', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     // Patch the bus to make off() throw during teardown
     const originalOff = (bus as unknown as { off: (e: string, h: unknown) => void }).off;

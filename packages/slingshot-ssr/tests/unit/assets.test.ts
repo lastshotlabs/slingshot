@@ -44,7 +44,7 @@ describe('readAssetManifest', () => {
   it('parses valid manifest file', () => {
     writeFileSync(MANIFEST_PATH, JSON.stringify(SAMPLE_MANIFEST));
     const manifest = readAssetManifest(MANIFEST_PATH);
-    expect(manifest['index.html'].file).toBe('assets/index-B3xk9aJi.js');
+    expect(manifest['index.html']!.file).toBe('assets/index-B3xk9aJi.js');
   });
 
   it('throws SsrAssetManifestError for missing file', () => {

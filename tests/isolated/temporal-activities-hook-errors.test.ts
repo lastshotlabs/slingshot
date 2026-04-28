@@ -133,33 +133,28 @@ let registeredHooks: Record<
   }
 > = {};
 
-mock.module(
-  '../../packages/slingshot-orchestration-temporal/src/workerRegistry',
-  () => ({
-    getRegisteredTask: mock((name: string) => {
-      if (name === 'registered-task') {
-        return {
-          name: 'registered-task',
-          concurrency: undefined,
-          input: { parse: (v: unknown) => v },
-          output: { parse: (v: unknown) => v },
-          handler: async (_input: unknown) => ({ result: 'ok' }),
-        };
-      }
-      return undefined;
-    }),
-    getRegisteredWorkflowHooks: mock((name: string) => {
-      return registeredHooks[name];
-    }),
+mock.module('../../packages/slingshot-orchestration-temporal/src/workerRegistry', () => ({
+  getRegisteredTask: mock((name: string) => {
+    if (name === 'registered-task') {
+      return {
+        name: 'registered-task',
+        concurrency: undefined,
+        input: { parse: (v: unknown) => v },
+        output: { parse: (v: unknown) => v },
+        handler: async (_input: unknown) => ({ result: 'ok' }),
+      };
+    }
+    return undefined;
   }),
-);
+  getRegisteredWorkflowHooks: mock((name: string) => {
+    return registeredHooks[name];
+  }),
+}));
 
 let createTemporalActivities: (typeof import('../../packages/slingshot-orchestration-temporal/src/activities'))['createTemporalActivities'];
 
 beforeAll(async () => {
-  const mod = await import(
-    '../../packages/slingshot-orchestration-temporal/src/activities'
-  );
+  const mod = await import('../../packages/slingshot-orchestration-temporal/src/activities');
   createTemporalActivities = mod.createTemporalActivities;
 });
 

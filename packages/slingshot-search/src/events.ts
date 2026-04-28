@@ -16,6 +16,7 @@
  * | `search:index.deleted` | After an index is deleted |
  * | `search:reindex.completed` | After a full reindex operation finishes |
  * | `search:sync.failed` | After a sync operation fails (event-bus or write-through) |
+ * | `search:sync.dead` | After event-bus sync exhausts its retry budget |
  *
  * `search:index.updated` and `search:reindex.completed` are the intended
  * external-facing events when a consumer registers definitions with
@@ -66,6 +67,17 @@ declare module '@lastshotlabs/slingshot-core' {
       entityName: string;
       error: string;
       syncMode: 'write-through' | 'event-bus';
+    };
+
+    /** Emitted when event-bus search sync exhausts its retry budget. */
+    'search:sync.dead': {
+      indexName: string;
+      documentId: string;
+      entityName: string;
+      operation: 'index' | 'delete';
+      attempts: number;
+      error: string;
+      syncMode: 'event-bus';
     };
   }
 }

@@ -180,6 +180,7 @@ async function setupRuntime(options?: {
   deliveries?: DeliveryRecord[];
   endpointAdapter?: BareEntityAdapter;
   deliveryAdapter?: BareEntityAdapter;
+  manifestRuntimeOptions?: Parameters<typeof createWebhooksManifestRuntime>[1];
 }): Promise<{
   runtime: WebhookRuntimeAdapter;
   endpointCrud: BareEntityAdapter;
@@ -187,7 +188,7 @@ async function setupRuntime(options?: {
   let runtimeAdapter: WebhookRuntimeAdapter | undefined;
   const manifestRuntime = createWebhooksManifestRuntime(adapter => {
     runtimeAdapter = adapter;
-  });
+  }, options?.manifestRuntimeOptions);
 
   const endpointAdapter =
     options?.endpointAdapter ??
@@ -423,5 +424,62 @@ describe('webhooks manifest runtime', () => {
         permissions: null,
       }),
     ).toThrow('[slingshot-webhooks] delivery adapter runtime hooks are missing');
+  });
+
+  it('routes endpoint secret writes through a custom SecretEncryptor and reads them back', async () => {
+    // Track encrypt/decrypt calls so we can prove the runtime is using the
+    // injected encryptor (rather than the default plaintext passthrough).
+    const calls: { op: 'encrypt' | 'decrypt'; value: string }[] = [];
+    const PREFIX = 'kms:';
+    const encryptor = {
+      encrypt: async (plaintext: string) => {
+        calls.push({ op: 'encrypt', value: plaintext });
+        return PREFIX + Buffer.from(plaintext).toString('base64');
+      },
+      decrypt: async (stored: string) => {
+        calls.push({ op: 'decrypt', value: stored });
+        if (!stored.startsWith(PREFIX)) return stored;
+        return Buffer.from(stored.slice(PREFIX.length), 'base64').toString('utf8');
+      },
+    };
+
+    const definitions = createDefinitions();
+    const records: EndpointRecord[] = [];
+    const { runtime, endpointCrud } = await setupRuntime({
+      endpoints: records,
+      manifestRuntimeOptions: { encryptor },
+    });
+    await runtime.initializeGovernance(definitions);
+
+    const created = (await endpointCrud.create({
+      url: 'https://example.com/hook',
+      secret: 'super-secret-value',
+      enabled: true,
+      ownerType: 'tenant',
+      ownerId: 'tenant-a',
+      tenantId: 'tenant-a',
+      subscriptions: [{ event: 'test:webhook.visible' }],
+    })) as { id: string; secret: string };
+
+    // Stored secret on disk must be the encrypted form, never the plaintext.
+    const storedRow = records.find(r => r.id === created.id);
+    expect(storedRow).toBeDefined();
+    expect(storedRow!.secret.startsWith(PREFIX)).toBe(true);
+    expect(storedRow!.secret).not.toContain('super-secret-value');
+    expect(calls.some(c => c.op === 'encrypt' && c.value === 'super-secret-value')).toBe(true);
+
+    // Sanitized response from the create path must mask the secret.
+    expect(created.secret).toBe('****');
+
+    // getEndpoint reveals the plaintext for HMAC signing by routing through
+    // the decryptor.
+    const revealed = await runtime.getEndpoint(created.id);
+    expect(revealed?.secret).toBe('super-secret-value');
+    expect(calls.some(c => c.op === 'decrypt' && c.value === storedRow!.secret)).toBe(true);
+
+    // listEnabledEndpoints must also decrypt.
+    const enabled = await runtime.listEnabledEndpoints();
+    const matching = enabled.find(e => e.id === created.id);
+    expect(matching?.secret).toBe('super-secret-value');
   });
 });

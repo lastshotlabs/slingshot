@@ -13,6 +13,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { deliverWebhook } from './lib/dispatcher';
 import { wireEventSubscriptions } from './lib/eventWiring';
+import { logWebhookEvent } from './lib/log';
 import type { GovernedWebhookRuntime } from './manifest/runtime';
 import { createWebhookMemoryQueue } from './queues/memory';
 import { createInboundRouter } from './routes/inbound';
@@ -107,13 +108,23 @@ async function activate(
     const attemptedAt = new Date().toISOString();
     const start = Date.now();
     try {
-      await deliverWebhook(job, config.deliveryTimeoutMs ?? 30_000);
+      await deliverWebhook(job, {
+        timeoutMs: config.deliveryTimeoutMs ?? 30_000,
+        validateResolvedIp: config.validateResolvedIp ?? true,
+      });
       const durationMs = Date.now() - start;
       await runtime.updateDelivery(job.deliveryId, {
         status: 'delivered',
         attempts: job.attempts + 1,
         nextRetryAt: null,
         lastAttempt: { attemptedAt, durationMs },
+      });
+      logWebhookEvent('info', 'webhook delivered', {
+        deliveryId: job.deliveryId,
+        endpointId: job.endpointId,
+        event: String(job.event),
+        attempt: job.attempts + 1,
+        durationMs,
       });
     } catch (err) {
       const durationMs = Date.now() - start;
@@ -132,6 +143,17 @@ async function activate(
           durationMs,
           error: err instanceof Error ? err.message : String(err),
         },
+      });
+      logWebhookEvent(isLast ? 'error' : 'warn', 'webhook delivery failed', {
+        deliveryId: job.deliveryId,
+        endpointId: job.endpointId,
+        event: String(job.event),
+        attempt: job.attempts + 1,
+        durationMs,
+        statusCode: code,
+        retryable,
+        terminal: isLast,
+        error: err instanceof Error ? err.message : String(err),
       });
       throw err;
     }
@@ -241,13 +263,26 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
         const { createEntityPlugin } = await import('@lastshotlabs/slingshot-entity');
         const { createWebhooksManifestRuntime } = await import('./manifest/runtime');
         const { webhooksManifest } = await import('./manifest/webhooksManifest');
+        if (!config.secretEncryptionKey && !config.encryptor) {
+          console.warn(
+            '[slingshot-webhooks] no secret encryption is configured. Endpoint secrets ' +
+              'will be stored as plaintext. Set secretEncryptionKey to a base64 32-byte AES key, ' +
+              'or supply a custom `encryptor`, before exposing this app to production traffic.',
+          );
+        }
         innerPlugin = createEntityPlugin({
           name: WEBHOOKS_PLUGIN_STATE_KEY,
           mountPath,
           manifest: webhooksManifest,
-          manifestRuntime: createWebhooksManifestRuntime(adapter => {
-            runtimeAdapter = adapter;
-          }),
+          manifestRuntime: createWebhooksManifestRuntime(
+            adapter => {
+              runtimeAdapter = adapter;
+            },
+            {
+              secretEncryptionKey: config.secretEncryptionKey ?? null,
+              encryptor: config.encryptor ?? null,
+            },
+          ),
           middleware: {
             webhooksAdminGuard: requireWebhookAdmin,
           },
@@ -286,7 +321,12 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       }
 
       if ((config.inbound?.length ?? 0) > 0 && !disabled.has(WEBHOOK_ROUTES.INBOUND)) {
-        app.route(`${mountPath}/inbound`, createInboundRouter([...(config.inbound ?? [])], bus));
+        app.route(
+          `${mountPath}/inbound`,
+          createInboundRouter([...(config.inbound ?? [])], bus, {
+            maxBodyBytes: config.inboundMaxBodyBytes,
+          }),
+        );
       }
     },
 

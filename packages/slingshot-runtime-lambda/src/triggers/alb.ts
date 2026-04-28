@@ -1,5 +1,6 @@
 import type { HandlerMeta, TriggerAdapter, TriggerRecord } from '@lastshotlabs/slingshot-core';
 import { decodeHttpBody, firstString, readHeader } from '../correlation';
+import { safeStringify } from './_httpResponse';
 
 type AlbEvent = {
   body?: string | null;
@@ -49,18 +50,30 @@ export const albTrigger: TriggerAdapter<AlbEvent, Record<string, unknown>> = {
   assembleResult(outcomes): Record<string, unknown> {
     const outcome = outcomes[0];
     const httpMeta = (outcome?.meta.http ?? {}) as { status?: number; body?: unknown };
-    const statusCode =
+    const baseStatus =
       outcome?.result === 'error' ? (httpMeta.status ?? 500) : (httpMeta.status ?? 200);
     const body =
       outcome?.result === 'error'
         ? (httpMeta.body ?? { error: outcome.error?.message ?? 'Internal Server Error' })
         : (outcome?.output ?? httpMeta.body ?? null);
+    if (body === null) {
+      return {
+        statusCode: baseStatus,
+        statusDescription: `${baseStatus} ${outcome?.result === 'error' ? 'Error' : 'OK'}`,
+        isBase64Encoded: false,
+        headers: { 'content-type': 'application/json' },
+        body: '',
+      };
+    }
+    const serialized = safeStringify(body);
+    const statusCode = serialized.failed ? serialized.statusCode : baseStatus;
+    const isError = statusCode >= 400;
     return {
       statusCode,
-      statusDescription: `${statusCode} ${outcome?.result === 'error' ? 'Error' : 'OK'}`,
+      statusDescription: `${statusCode} ${isError ? 'Error' : 'OK'}`,
       isBase64Encoded: false,
       headers: { 'content-type': 'application/json' },
-      body: body === null ? '' : JSON.stringify(body),
+      body: serialized.body,
     };
   },
 };

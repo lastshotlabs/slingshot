@@ -215,6 +215,107 @@ describe('createLambdaRuntime', () => {
     }
   });
 
+  test('SIGTERM swallows synchronous throws from onShutdown without unhandled rejection', async () => {
+    const { createLambdaRuntime } = await import('../src/runtime');
+
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    let capturedListener: (() => void) | undefined;
+    const onceSpy = spyOn(process, 'once').mockImplementation(((event, listener) => {
+      if (event === 'SIGTERM') {
+        capturedListener = listener as () => void;
+      }
+      return process;
+    }) as typeof process.once);
+
+    try {
+      const runtime = createLambdaRuntime({
+        manifest: { manifestVersion: 1 },
+        hooks: {
+          onShutdown() {
+            // Synchronous throw — must not bubble out as unhandled.
+            throw new Error('sync-throw-from-shutdown');
+          },
+        },
+      });
+      await runtime.getContext();
+      capturedListener?.();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(
+        errorSpy.mock.calls.some((args: unknown[]) =>
+          String(args[0] ?? '').includes('onShutdown hook threw'),
+        ),
+      ).toBe(true);
+    } finally {
+      onceSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  test('SIGTERM swallows asynchronous rejections from onShutdown', async () => {
+    const { createLambdaRuntime } = await import('../src/runtime');
+
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    let capturedListener: (() => void) | undefined;
+    const onceSpy = spyOn(process, 'once').mockImplementation(((event, listener) => {
+      if (event === 'SIGTERM') {
+        capturedListener = listener as () => void;
+      }
+      return process;
+    }) as typeof process.once);
+
+    try {
+      const runtime = createLambdaRuntime({
+        manifest: { manifestVersion: 1 },
+        hooks: {
+          async onShutdown() {
+            await Promise.resolve();
+            throw new Error('async-throw-from-shutdown');
+          },
+        },
+      });
+      await runtime.getContext();
+      capturedListener?.();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(
+        errorSpy.mock.calls.some((args: unknown[]) =>
+          String(args[0] ?? '').includes('onShutdown hook threw'),
+        ),
+      ).toBe(true);
+    } finally {
+      onceSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  test('shutdown() swallows onShutdown rejection and still tears down', async () => {
+    const { createLambdaRuntime } = await import('../src/runtime');
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const runtime = createLambdaRuntime({
+        manifest: { manifestVersion: 1 },
+        hooks: {
+          async onShutdown() {
+            throw new Error('shutdown-fail');
+          },
+        },
+      });
+      await runtime.getContext();
+      await runtime.shutdown(); // must not throw
+      expect(runtimeState.teardown).toHaveBeenCalledTimes(1);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  test('wrap() validates trigger kind eagerly', async () => {
+    const { createLambdaRuntime } = await import('../src/runtime');
+    const runtime = createLambdaRuntime({ manifest: { manifestVersion: 1 } });
+    const handler = createHandler(async () => ({ ok: true }));
+    expect(() => runtime.wrap(handler, 'not-a-trigger' as never)).toThrow(
+      /Unsupported Lambda trigger/,
+    );
+  });
+
   test('SIGTERM does not hang when onShutdown exceeds shutdownTimeoutMs', async () => {
     const { createLambdaRuntime } = await import('../src/runtime');
 

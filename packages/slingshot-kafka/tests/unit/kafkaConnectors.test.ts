@@ -507,4 +507,194 @@ describe('kafkaConnectors', () => {
 
     await connectors.stop();
   });
+
+  test('inbound consumer dedupes by slingshot.message-id using the in-memory store', async () => {
+    const handler = mock(async () => {});
+    const bus = createInProcessAdapter();
+    const connectors = createKafkaConnectors({
+      brokers: ['localhost:19092'],
+      inbound: [{ topic: 'incoming.dedup', groupId: 'dedup-group', handler }],
+    });
+
+    try {
+      await connectors.start(bus);
+      const consumer = fakeKafkaState.consumers[0];
+
+      const message = {
+        offset: '0',
+        key: null,
+        headers: { 'slingshot.message-id': Buffer.from('msg-123') },
+        value: Buffer.from(JSON.stringify({ id: 'event-1' })),
+      };
+
+      await consumer?.eachMessage?.({
+        topic: 'incoming.dedup',
+        partition: 0,
+        message,
+        heartbeat: async () => {},
+        pause: () => {},
+      });
+
+      // Same messageId, second delivery — handler must NOT run again.
+      await consumer?.eachMessage?.({
+        topic: 'incoming.dedup',
+        partition: 0,
+        message: { ...message, offset: '1' },
+        heartbeat: async () => {},
+        pause: () => {},
+      });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      // Both messages still committed so dedup doesn't stall the partition.
+      expect(consumer?.commitOffsetCalls).toBeGreaterThanOrEqual(2);
+      expect(connectors.health().droppedMessages.inboundDeduped).toBe(1);
+    } finally {
+      await connectors.stop();
+    }
+  });
+
+  test('inbound consumer with custom dedup store delegates to has() and set()', async () => {
+    const seen = new Set<string>();
+    const dedupStore = {
+      has: mock(async (id: string) => seen.has(id)),
+      set: mock(async (id: string, _ttlMs: number) => {
+        seen.add(id);
+      }),
+    };
+    const handler = mock(async () => {});
+    const bus = createInProcessAdapter();
+    const connectors = createKafkaConnectors({
+      brokers: ['localhost:19092'],
+      dedupStore,
+      inbound: [{ topic: 'incoming.custom-dedup', groupId: 'cd-group', handler }],
+    });
+
+    try {
+      await connectors.start(bus);
+      const consumer = fakeKafkaState.consumers[0];
+      const message = {
+        offset: '0',
+        key: null,
+        headers: { 'slingshot.message-id': Buffer.from('msg-x') },
+        value: Buffer.from(JSON.stringify({ ok: true })),
+      };
+
+      await consumer?.eachMessage?.({
+        topic: 'incoming.custom-dedup',
+        partition: 0,
+        message,
+        heartbeat: async () => {},
+        pause: () => {},
+      });
+
+      expect(dedupStore.has).toHaveBeenCalledTimes(1);
+      expect(dedupStore.set).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      // Replay: dedupStore.has now returns true; handler should be skipped.
+      await consumer?.eachMessage?.({
+        topic: 'incoming.custom-dedup',
+        partition: 0,
+        message: { ...message, offset: '1' },
+        heartbeat: async () => {},
+        pause: () => {},
+      });
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(connectors.health().droppedMessages.inboundDeduped).toBe(1);
+    } finally {
+      await connectors.stop();
+    }
+  });
+
+  test('outbound buffer-full overflow increments connector drop counter and fires hook', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const drops: Array<{ reason: string; topic: string }> = [];
+    const { bus, events } = createPublishedBus();
+    const connectors = createKafkaConnectors({
+      brokers: ['localhost:19092'],
+      maxPendingBuffer: 2,
+      outbound: [{ event: 'auth:user.created', topic: 'external.users.overflow' }],
+      hooks: {
+        onOutboundDrop: (event, topic, reason) => {
+          drops.push({ reason, topic });
+        },
+      },
+    });
+
+    try {
+      await connectors.start(bus);
+
+      // Make every produce attempt fail; the first two should land in the
+      // buffer (size 2), the rest should be dropped with reason buffer-full.
+      for (let i = 0; i < 10; i++) {
+        fakeKafkaState.producerSendErrors.push(new Error('broker down'));
+      }
+      for (let i = 0; i < 5; i++) {
+        events.publish('auth:user.created', { userId: `u-${i}` } as never, {
+          requestTenantId: null,
+        });
+      }
+      await flushAsyncWork(10);
+
+      const bufferDrops = drops.filter(d => d.reason === 'pending-buffer-full');
+      expect(bufferDrops.length).toBeGreaterThan(0);
+      const health = connectors.health();
+      expect(health.droppedMessages.bufferFull).toBeGreaterThan(0);
+      expect(health.droppedMessages.totalDrops).toBeGreaterThan(0);
+      expect(typeof health.droppedMessages.lastDropAt).toBe('number');
+    } finally {
+      errorSpy.mockRestore();
+      await connectors.stop();
+    }
+  });
+
+  test('inbound consumer flushes pending offsets when REBALANCING fires', async () => {
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    let releaseHandler: (() => void) | null = null;
+    const handlerStarted = new Promise<void>(resolve => {
+      releaseHandler = resolve;
+    });
+    const handler = mock(async () => {
+      releaseHandler?.();
+      await new Promise(resolve => setTimeout(resolve, 25));
+    });
+    const bus = createInProcessAdapter();
+    const connectors = createKafkaConnectors({
+      brokers: ['localhost:19092'],
+      inbound: [{ topic: 'incoming.rebal', groupId: 'rebal-group', handler }],
+    });
+
+    try {
+      await connectors.start(bus);
+      const consumer = fakeKafkaState.consumers[0]!;
+
+      const inflight = consumer.eachMessage?.({
+        topic: 'incoming.rebal',
+        partition: 2,
+        message: {
+          offset: '41',
+          key: null,
+          headers: {},
+          value: Buffer.from(JSON.stringify({ id: 'rebal-1' })),
+        },
+        heartbeat: async () => {},
+        pause: () => {},
+      });
+
+      await handlerStarted;
+      // Trigger rebalance while the handler is still running.
+      await consumer.emitEvent?.('consumer.rebalancing');
+      await inflight;
+
+      const offsets = consumer.commitOffsetCallArgs.flat();
+      // After rebalance handling, offset 42 (next-after-41) must have been
+      // committed at least once. The committed set may include the
+      // trackedCommit call too — both are valid.
+      expect(offsets.some(o => o.offset === '42' && o.partition === 2)).toBe(true);
+    } finally {
+      infoSpy.mockRestore();
+      await connectors.stop();
+    }
+  });
 });

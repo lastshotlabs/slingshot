@@ -9,6 +9,7 @@ import { type AppEnv, createRoute, errorResponse } from '@lastshotlabs/slingshot
 import type { SearchManager } from '../searchManager';
 import type { SearchPluginConfig } from '../types/config';
 import type { SuggestQuery } from '../types/query';
+import { type RateLimitOptions, createRateLimitMiddleware } from './rateLimiter';
 
 const tags = ['Search'];
 
@@ -97,8 +98,15 @@ const suggestRoute = createRoute({
 export function createSuggestRouter(
   manager: SearchManager,
   config: SearchPluginConfig,
+  rateLimitOptions?: RateLimitOptions | false,
 ): OpenAPIHono<AppEnv> {
   const router = new OpenAPIHono<AppEnv>();
+
+  // Same shape as the /search router — defaults to 60/min per (tenant, ip),
+  // disable with `false`, or override.
+  if (rateLimitOptions !== false) {
+    router.use('/:entity/suggest', createRateLimitMiddleware(rateLimitOptions));
+  }
 
   router.openapi(suggestRoute, async c => {
     const entityParam = c.req.param('entity') ?? '';

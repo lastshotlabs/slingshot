@@ -1,10 +1,10 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import type { AuditLogProvider } from '@lastshotlabs/slingshot-core';
 import { createMemoryManagedUserProvider } from '../../src/providers/memoryAccess';
 import { createAdminRouter } from '../../src/routes/admin';
 import type { AdminEnv } from '../../src/types/env';
-import type { AuditLogProvider } from '@lastshotlabs/slingshot-core';
 
 function buildApp(auditLog?: AuditLogProvider) {
   const managedUserProvider = createMemoryManagedUserProvider();
@@ -43,7 +43,7 @@ describe('tryLogAuditEntry — audit failures do not propagate to HTTP callers',
       logEntry: mock(() => {
         throw new Error('audit backend down');
       }),
-      listEntries: mock(async () => ({ items: [], nextCursor: undefined })),
+      getLogs: mock(async () => ({ items: [], nextCursor: undefined })),
     };
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
 
@@ -67,7 +67,7 @@ describe('tryLogAuditEntry — audit failures do not propagate to HTTP callers',
   test('route returns 200 even when auditLog.logEntry rejects asynchronously', async () => {
     const rejectingAuditLog: AuditLogProvider = {
       logEntry: mock(() => Promise.reject(new Error('async audit failure'))),
-      listEntries: mock(async () => ({ items: [], nextCursor: undefined })),
+      getLogs: mock(async () => ({ items: [], nextCursor: undefined })),
     };
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
 

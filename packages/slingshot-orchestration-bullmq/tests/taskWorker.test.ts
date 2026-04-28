@@ -272,6 +272,8 @@ describe('bullmq task processor – job data corruption', () => {
       caught = err;
     }
     // Should be a ZodError (or similar validation error), not a raw TypeError from undefined access
-    expect(caught instanceof TypeError && (caught as TypeError).message.includes('Cannot read')).toBe(false);
+    expect(
+      caught instanceof TypeError && (caught as TypeError).message.includes('Cannot read'),
+    ).toBe(false);
   });
 });

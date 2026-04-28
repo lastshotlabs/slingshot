@@ -141,6 +141,10 @@ export function createTemporalOrchestrationAdapter(
   const connection = options.connection as Connection | undefined;
   const tasks = new Map<string, AnyResolvedTask>();
   const workflows = new Map<string, AnyResolvedWorkflow>();
+  // Track active onProgress disposers so shutdown can release any in-flight
+  // polling intervals before closing the client/connection. Without this,
+  // a late-firing tick can run a query against an already-closed connection.
+  const progressIntervals = new Set<() => void>();
   let started = false;
 
   function rebuildRegistry(): void {
@@ -474,12 +478,32 @@ export function createTemporalOrchestrationAdapter(
       let lastSerialized: string | undefined;
       let disposed = false;
       let inFlight = false;
+      // Track the interval handle in a stable slot so the dispose function
+      // can reach it without depending on hoisting/closure ordering. This
+      // also lets every early-exit branch in `poll()` clear the same timer
+      // through a single helper.
+      let timer: ReturnType<typeof setInterval> | undefined;
+
+      const stop = () => {
+        disposed = true;
+        if (timer !== undefined) {
+          clearInterval(timer);
+          timer = undefined;
+        }
+        progressIntervals.delete(stop);
+      };
 
       const poll = async () => {
+        // Guard early so a tick that fired just before disposal returns
+        // immediately instead of doing any work after dispose() ran.
         if (disposed || inFlight) return;
         inFlight = true;
         try {
+          // Re-check after any await — disposal may have happened while the
+          // previous tick was queued.
+          if (disposed) return;
           const state = await maybeQueryState(handle);
+          if (disposed) return;
           if (state?.progress !== undefined) {
             const serialized = JSON.stringify(state.progress);
             if (serialized !== lastSerialized) {
@@ -493,34 +517,30 @@ export function createTemporalOrchestrationAdapter(
                   '[slingshot-orchestration-temporal] onProgress callback threw; stopping poll',
                   callbackError,
                 );
-                disposed = true;
-                clearInterval(timer);
+                stop();
                 return;
               }
             }
           }
           const description = await handle.describe();
+          if (disposed) return;
           if (description.status.name !== 'RUNNING') {
-            disposed = true;
-            clearInterval(timer);
+            stop();
           }
         } catch {
-          disposed = true;
-          clearInterval(timer);
+          stop();
         } finally {
           inFlight = false;
         }
       };
 
-      const timer = setInterval(() => {
+      timer = setInterval(() => {
         void poll();
       }, 1000);
+      progressIntervals.add(stop);
       void poll();
 
-      return () => {
-        disposed = true;
-        clearInterval(timer);
-      };
+      return stop;
     },
     async start() {
       if (started) return;
@@ -537,8 +557,49 @@ export function createTemporalOrchestrationAdapter(
       }
     },
     async shutdown() {
+      // Ordering: stop scheduled polling intervals → close any client-level
+      // resources → close the underlying connection. Each step is wrapped
+      // independently so a failure in one stage does not prevent the others
+      // from running. Errors are surfaced via structured logs because
+      // callers typically invoke shutdown() during process teardown when
+      // throwing would mask the original exit reason.
+      for (const dispose of [...progressIntervals]) {
+        try {
+          dispose();
+        } catch (error) {
+          console.error(
+            '[slingshot-orchestration-temporal] failed to dispose onProgress poller during shutdown',
+            error,
+          );
+        }
+      }
+      progressIntervals.clear();
+
+      // The current `@temporalio/client` Client class does not expose a
+      // dedicated `close()` method — its only releasable resource is the
+      // connection it wraps. If a future SDK adds one, we duck-type the
+      // call here so the adapter releases everything the SDK owns.
+      const maybeClient = client as unknown as { close?: () => Promise<void> | void };
+      if (typeof maybeClient.close === 'function') {
+        try {
+          await maybeClient.close();
+        } catch (error) {
+          console.error(
+            '[slingshot-orchestration-temporal] failed to close Temporal client during shutdown',
+            error,
+          );
+        }
+      }
+
       if (options.ownsConnection && connection) {
-        await connection.close();
+        try {
+          await connection.close();
+        } catch (error) {
+          console.error(
+            '[slingshot-orchestration-temporal] failed to close Temporal connection during shutdown',
+            error,
+          );
+        }
       }
     },
   };

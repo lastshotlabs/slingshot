@@ -31,7 +31,7 @@ function makeEntity(storageName: string): ResolvedEntityConfig {
         body: { searchable: true },
       },
     },
-  };
+  } as unknown as ResolvedEntityConfig;
 }
 
 function makeGeoEntity(storageName: string): ResolvedEntityConfig {
@@ -56,7 +56,7 @@ function makeGeoEntity(storageName: string): ResolvedEntityConfig {
         lngField: 'longitude',
       },
     },
-  };
+  } as unknown as ResolvedEntityConfig;
 }
 
 /** Create an async iterable from an array. */
@@ -158,7 +158,7 @@ describe('searchManager.reindex()', () => {
       transformRegistry: registry,
     });
 
-    const entity: ResolvedEntityConfig = {
+    const entity = {
       name: 'TransformedDocs',
       _pkField: 'id',
       _storageName: 'transformed_docs',
@@ -174,7 +174,7 @@ describe('searchManager.reindex()', () => {
         },
         transform: 'titleUppercase',
       },
-    };
+    } as unknown as ResolvedEntityConfig;
 
     await transformManager.initialize([entity]);
 

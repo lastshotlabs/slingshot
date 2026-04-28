@@ -43,6 +43,99 @@ const orchestrationPlugin = createOrchestrationPlugin({
 });
 ```
 
+## Adapter Selection in Manifest
+
+The manifest `adapter.type` field selects which orchestration backend the
+plugin instantiates at boot. Supported values are `memory`, `sqlite`,
+`bullmq`, and `temporal`. The framework's manifest resolver in
+`src/lib/manifestBuiltinConfig.ts` (function
+`resolveOrchestrationManifestConfig()`) reads `adapter.type` and
+`adapter.config`, dynamically imports the matching adapter package, and
+constructs the adapter instance before invoking `createOrchestrationPlugin()`.
+
+Switching backends is a manifest-only change — task and workflow handler
+references continue to work across adapters, provided each adapter's
+capability set covers the features the app uses (e.g., `signals` and
+`scheduling` only on `temporal`; `bullmq` adds durable queueing).
+
+```json
+{
+  "plugins": [
+    {
+      "plugin": "slingshot-orchestration",
+      "config": {
+        "adapter": { "type": "memory", "config": { "concurrency": 10 } },
+        "tasks": ["resizeImage"]
+      }
+    }
+  ]
+}
+```
+
+```json
+{
+  "plugins": [
+    {
+      "plugin": "slingshot-orchestration",
+      "config": {
+        "adapter": {
+          "type": "sqlite",
+          "config": { "path": "./orchestration.db", "concurrency": 4 }
+        },
+        "tasks": ["resizeImage"]
+      }
+    }
+  ]
+}
+```
+
+```json
+{
+  "plugins": [
+    {
+      "plugin": "slingshot-orchestration",
+      "config": {
+        "adapter": {
+          "type": "bullmq",
+          "config": {
+            "queueName": "orchestration",
+            "connection": { "host": "127.0.0.1", "port": 6379 }
+          }
+        },
+        "tasks": ["resizeImage"]
+      }
+    }
+  ]
+}
+```
+
+```json
+{
+  "plugins": [
+    {
+      "plugin": "slingshot-orchestration",
+      "config": {
+        "adapter": {
+          "type": "temporal",
+          "config": {
+            "address": "temporal.svc:7233",
+            "namespace": "production",
+            "workflowTaskQueue": "orchestration"
+          }
+        },
+        "tasks": ["resizeImage"],
+        "workflows": ["onboardUser"]
+      }
+    }
+  ]
+}
+```
+
+The Zod schema in `packages/slingshot-orchestration-plugin/src/validation.ts`
+enforces required fields per adapter type — `address` and `workflowTaskQueue`
+are required for `temporal`. The resolver throws `INVALID_CONFIG` if a
+required runtime dependency (e.g., `@temporalio/client`) is missing.
+
 ## Manifest setup
 
 Manifest mode supports orchestration route hooks too. Tasks and workflows are referenced by exported
@@ -98,10 +191,28 @@ Current endpoints:
 - `POST /workflows/:name/runs`
 - `GET /runs/:id`
 - `DELETE /runs/:id`
+- `POST /runs/:id/replay`
 - `GET /runs`
 - `POST /runs/:id/signal/:signalName`
+- `GET /health` (admin)
+- `GET /metrics` (admin)
 
 Signal routes return `501` for adapters without signal support.
+
+`POST /runs/:id/replay` reads the original run via the adapter, then re-issues
+`runTask` or `runWorkflow` with the same input plus a fresh idempotency-key
+suffix. It returns `202` with the new `runId` and a `replayOf` field pointing at
+the original. If the adapter has stripped the run input on completion, replay
+returns `501` rather than synthesizing an empty payload. Replay shares the
+`routeMiddleware` chain and is authorized using the same `authorizeRun()` hook
+as cancellation (`action: 'cancel'`).
+
+`GET /health` and `GET /metrics` are gated by an optional `adminAuth`
+middleware chain that is applied independently of `routeMiddleware`. Use this
+to put ops endpoints behind a different identity (basic auth, IP allowlist,
+infra-only mTLS) than the user-facing API. If the configured adapter
+implements `getHealth()` or `getMetrics()`, those snapshots are surfaced;
+otherwise `/health` returns `{ status: 'ok' }` and `/metrics` returns `501`.
 
 Create-run requests accept idempotency in either place:
 

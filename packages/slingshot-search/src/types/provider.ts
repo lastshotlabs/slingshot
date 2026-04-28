@@ -156,6 +156,16 @@ export interface SearchHealthResult {
   readonly version?: string;
   /** Error message when `healthy` is `false`. */
   readonly error?: string;
+  /**
+   * Provider-level circuit breaker state. Populated when the provider supports
+   * an internal breaker (e.g. typesense). Omitted on providers that do not.
+   */
+  readonly circuitBreaker?: {
+    readonly state: 'closed' | 'open' | 'half-open';
+    readonly consecutiveFailures: number;
+    readonly openedAt?: number;
+    readonly nextProbeAt?: number;
+  };
 }
 
 // ============================================================================
@@ -410,6 +420,21 @@ export interface TypesenseProviderConfig extends SearchProviderBaseConfig {
     readonly port: number;
     readonly protocol: 'http' | 'https';
   };
+  /**
+   * Consecutive request failures (after retries) at which the circuit
+   * breaker opens and starts failing fast. Default: `5`.
+   */
+  readonly circuitBreakerThreshold?: number;
+  /**
+   * How long the circuit breaker stays open before letting a single probe
+   * through (half-open). Default: `30000` (30s).
+   */
+  readonly circuitBreakerCooldownMs?: number;
+  /**
+   * Clock source for breaker cooldown calculations. Default: `Date.now`.
+   * Override in tests to drive the breaker deterministically.
+   */
+  readonly now?: () => number;
 }
 
 /**

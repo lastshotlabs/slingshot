@@ -207,12 +207,17 @@ export function createTaskRunner(options: {
       const execution = (async () => {
         const startedAt = Date.now();
         await options.callbacks.onStarted(next.options.runId);
-        safeEmit(options.eventSink, 'orchestration.task.started', {
-          runId: next.options.runId,
-          task: next.def.name,
-          input: next.input,
-          tenantId: next.options.tenantId,
-        }, 'task.started');
+        safeEmit(
+          options.eventSink,
+          'orchestration.task.started',
+          {
+            runId: next.options.runId,
+            task: next.def.name,
+            input: next.input,
+            tenantId: next.options.tenantId,
+          },
+          'task.started',
+        );
 
         try {
           let attempt = 0;
@@ -246,11 +251,16 @@ export function createTaskRunner(options: {
                 tenantId: next.options.tenantId,
                 reportProgress: data => {
                   void options.callbacks.onProgress(next.options.runId, next.def.name, data);
-                  safeEmit(options.eventSink, 'orchestration.task.progress', {
-                    runId: next.options.runId,
-                    task: next.def.name,
-                    data,
-                  }, 'task.progress');
+                  safeEmit(
+                    options.eventSink,
+                    'orchestration.task.progress',
+                    {
+                      runId: next.options.runId,
+                      task: next.def.name,
+                      data,
+                    },
+                    'task.progress',
+                  );
                 },
               });
               const output = next.def.output.parse(result);
@@ -260,13 +270,18 @@ export function createTaskRunner(options: {
                 output,
                 Date.now() - startedAt,
               );
-              safeEmit(options.eventSink, 'orchestration.task.completed', {
-                runId: next.options.runId,
-                task: next.def.name,
-                output,
-                durationMs: Date.now() - startedAt,
-                tenantId: next.options.tenantId,
-              }, 'task.completed');
+              safeEmit(
+                options.eventSink,
+                'orchestration.task.completed',
+                {
+                  runId: next.options.runId,
+                  task: next.def.name,
+                  output,
+                  durationMs: Date.now() - startedAt,
+                  tenantId: next.options.tenantId,
+                },
+                'task.completed',
+              );
               next.resolve(output);
               return output;
             } catch (error) {
@@ -294,12 +309,17 @@ export function createTaskRunner(options: {
                 isCancelled ? 'cancelled' : 'failed',
               );
               if (!isCancelled) {
-                safeEmit(options.eventSink, 'orchestration.task.failed', {
-                  runId: next.options.runId,
-                  task: next.def.name,
-                  error: runError,
-                  tenantId: next.options.tenantId,
-                }, 'task.failed');
+                safeEmit(
+                  options.eventSink,
+                  'orchestration.task.failed',
+                  {
+                    runId: next.options.runId,
+                    task: next.def.name,
+                    error: runError,
+                    tenantId: next.options.tenantId,
+                  },
+                  'task.failed',
+                );
               }
               next.reject(
                 isCancelled ? new OrchestrationError('ADAPTER_ERROR', 'Run cancelled') : error,

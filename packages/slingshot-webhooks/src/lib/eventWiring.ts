@@ -4,15 +4,50 @@ import type {
   SlingshotEvents,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
-import { resolveWebhookDeliveries } from '../manifest/runtime';
+import { type RuntimeLogger, resolveWebhookDeliveries } from '../manifest/runtime';
 import type { WebhookAdapter } from '../types/adapter';
 import type { WebhookPluginConfig } from '../types/config';
 import type { WebhookQueue } from '../types/queue';
 import { matchGlob } from './globMatch';
 
 /**
+ * Optional logger surface accepted by {@link wireEventSubscriptions}. Falls
+ * back to a `console`-backed JSON line emitter when not supplied.
+ */
+export interface EventWiringLogger {
+  error(fields: Record<string, unknown>): void;
+  warn(fields: Record<string, unknown>): void;
+}
+
+/**
+ * Emit a structured log line with a stable shape so production log
+ * aggregators can index by `endpointId`, `deliveryId`, and `event`.
+ */
+function defaultStructuredLog(
+  level: 'warn' | 'error',
+  message: string,
+  fields: Record<string, unknown>,
+): void {
+  const line = JSON.stringify({
+    level,
+    plugin: 'slingshot-webhooks',
+    message,
+    ...fields,
+    timestamp: new Date().toISOString(),
+  });
+  if (level === 'error') {
+    console.error(line);
+  } else {
+    console.warn(line);
+  }
+}
+
+/**
  * Subscribes the webhook plugin to registry-backed webhook-visible events and
  * returns an array of unsubscribe functions.
+ *
+ * @param logger - Optional structured logger. When omitted, error and warn
+ *   diagnostics are emitted as JSON lines on `console`.
  */
 export function wireEventSubscriptions(
   bus: SlingshotEventBus,
@@ -20,7 +55,26 @@ export function wireEventSubscriptions(
   config: WebhookPluginConfig,
   queue: WebhookQueue,
   adapter: WebhookAdapter,
+  logger?: EventWiringLogger,
 ): Array<() => void> {
+  const log = (level: 'warn' | 'error', message: string, fields: Record<string, unknown>) => {
+    if (logger) {
+      const payload = { message, ...fields };
+      if (level === 'error') logger.error(payload);
+      else logger.warn(payload);
+      return;
+    }
+    defaultStructuredLog(level, message, fields);
+  };
+
+  const runtimeLogger: RuntimeLogger = {
+    error(message, fields) {
+      log('error', message, fields ?? {});
+    },
+    warn(message, fields) {
+      log('warn', message, fields ?? {});
+    },
+  };
   const patterns = config.events ?? ['*'];
   const subscribedKeys = events
     .list()
@@ -51,12 +105,14 @@ export function wireEventSubscriptions(
           events.definitions,
           envelope,
           maxAttempts,
+          runtimeLogger,
         );
       } catch (error) {
-        console.error(
-          `[slingshot-webhooks] failed to resolve webhook deliveries for "${String(key)}"`,
-          error,
-        );
+        log('error', 'failed to resolve webhook deliveries', {
+          event: String(key),
+          eventId: envelope.meta.eventId,
+          err: error instanceof Error ? error.message : String(error),
+        });
         return;
       }
 
@@ -64,10 +120,14 @@ export function wireEventSubscriptions(
         try {
           await queue.enqueue(resolved.job);
         } catch (err) {
-          console.error(
-            `[slingshot-webhooks] failed to enqueue delivery for "${String(key)}"`,
-            err,
-          );
+          log('error', 'failed to enqueue webhook delivery', {
+            event: String(key),
+            eventId: envelope.meta.eventId,
+            endpointId: resolved.endpoint.id,
+            deliveryId: resolved.delivery.id,
+            attempt: 0,
+            err: err instanceof Error ? err.message : String(err),
+          });
           try {
             await adapter.updateDelivery(resolved.delivery.id, {
               status: 'dead',
@@ -77,10 +137,12 @@ export function wireEventSubscriptions(
               },
             });
           } catch (updateErr) {
-            console.error(
-              `[slingshot-webhooks] failed to mark delivery ${resolved.delivery.id} as dead`,
-              updateErr,
-            );
+            log('error', 'failed to mark delivery dead after enqueue failure', {
+              event: String(key),
+              endpointId: resolved.endpoint.id,
+              deliveryId: resolved.delivery.id,
+              err: updateErr instanceof Error ? updateErr.message : String(updateErr),
+            });
           }
         }
       }

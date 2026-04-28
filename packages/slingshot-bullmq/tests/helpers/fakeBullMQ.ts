@@ -70,6 +70,8 @@ export function createFakeBullMQModule(state: FakeBullMQState = fakeBullMQState)
   class Queue {
     name: string;
     readonly _record: FakeQueueRecord;
+    /** Configurable failed-job count returned by `getJobCounts('failed')`. */
+    _failedJobs = 0;
 
     constructor(name: string, _opts?: unknown) {
       this.name = name;
@@ -83,6 +85,14 @@ export function createFakeBullMQModule(state: FakeBullMQState = fakeBullMQState)
         throw err;
       }
       this._record.addCalls.push({ queueName: this.name, event, data });
+    }
+
+    async getJobCounts(...statuses: string[]): Promise<Record<string, number>> {
+      const result: Record<string, number> = {};
+      for (const s of statuses) {
+        result[s] = s === 'failed' ? this._failedJobs : 0;
+      }
+      return result;
     }
 
     async close(): Promise<void> {

@@ -4,6 +4,7 @@ import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
 import { OrchestrationError } from '../errors';
 import { createIdempotencyScope } from '../idempotency';
+import { resolveMaxPayloadBytes, serializeWithLimit } from '../serialization';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -129,8 +130,10 @@ export function createSqliteAdapter(options: {
   path: string;
   concurrency?: number;
   eventSink?: OrchestrationEventSink;
+  maxPayloadBytes?: number;
 }): OrchestrationAdapter & ObservabilityCapability {
   const parsed = sqliteAdapterOptionsSchema.parse(options);
+  const maxPayloadBytes = resolveMaxPayloadBytes(parsed.maxPayloadBytes, 'sqlite adapter');
   let db: Database.Database;
   try {
     db = new Database(parsed.path);
@@ -316,11 +319,32 @@ export function createSqliteAdapter(options: {
         updateRunProgress.run({ id: runId, progress: json(data) });
         notifyProgress(runId, data);
       },
-      onCompleted(runId, _taskName, output) {
+      onCompleted(runId, taskName, output) {
+        let serializedOutput: string;
+        try {
+          serializedOutput = serializeWithLimit(
+            output,
+            maxPayloadBytes,
+            `task '${taskName}' output`,
+          );
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : `task '${taskName}' output rejected`;
+          updateRunStatus.run({
+            id: runId,
+            status: 'failed',
+            output: null,
+            error: json({ message }),
+            startedAt: getRunRow.get(runId)?.started_at ?? new Date().toISOString(),
+            completedAt: new Date().toISOString(),
+            progress: getRunRow.get(runId)?.progress ?? null,
+          });
+          return;
+        }
         updateRunStatus.run({
           id: runId,
           status: 'completed',
-          output: json(output),
+          output: serializedOutput,
           error: null,
           startedAt: getRunRow.get(runId)?.started_at ?? new Date().toISOString(),
           completedAt: new Date().toISOString(),
@@ -437,9 +461,7 @@ export function createSqliteAdapter(options: {
         onStepStarted(runId, stepName, taskName) {
           // Preserve existing attempt count from persisted state so retries are
           // counted correctly after crash recovery.
-          const existingRow = stepRowsByRun
-            .all(runId)
-            .find(s => s.name === stepName);
+          const existingRow = stepRowsByRun.all(runId).find(s => s.name === stepName);
           const previousAttempts = existingRow?.attempts ?? 0;
           upsertStep.run({
             runId,
@@ -587,13 +609,14 @@ export function createSqliteAdapter(options: {
         if (existing) return createHandle(existing.id);
       }
       const runId = generateRunId();
+      const serializedInput = serializeWithLimit(input, maxPayloadBytes, `task '${name}' input`);
       try {
         insertRun.run({
           id: runId,
           type: 'task',
           name,
           status: 'pending',
-          input: json(input),
+          input: serializedInput,
           output: null,
           error: null,
           idempotencyKey: scopedIdempotencyKey ?? null,
@@ -641,13 +664,18 @@ export function createSqliteAdapter(options: {
         if (existing) return createHandle(existing.id);
       }
       const runId = generateRunId();
+      const serializedInput = serializeWithLimit(
+        input,
+        maxPayloadBytes,
+        `workflow '${name}' input`,
+      );
       try {
         insertRun.run({
           id: runId,
           type: 'workflow',
           name,
           status: 'pending',
-          input: json(input),
+          input: serializedInput,
           output: null,
           error: null,
           idempotencyKey: scopedIdempotencyKey ?? null,

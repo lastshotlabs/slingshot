@@ -14,6 +14,10 @@ const MOCK_CFG = {} as unknown as SlingshotFrameworkConfig;
 const MOCK_APP_RAW = {};
 const MOCK_APP = MOCK_APP_RAW as never;
 
+function setupContext(bus: SlingshotEventBus) {
+  return { app: MOCK_APP, config: MOCK_CFG, bus, events: bus as never };
+}
+
 function makeMockProvider(opts?: { healthCheckFails?: boolean }): MailProvider {
   const provider: MailProvider = {
     name: 'mock',
@@ -67,7 +71,7 @@ describe('createMailPlugin lifecycle', () => {
       subscriptions: [{ event: 'auth:delivery.password_reset', template: 'missing_template' }],
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     const warnMsgs = warnSpy.mock.calls.map(call => (call as string[])[0]);
     const templateWarnMsg = warnMsgs.find(m => m.includes('missing_template'));
@@ -96,7 +100,7 @@ describe('createMailPlugin lifecycle', () => {
       subscriptions: [{ event: 'auth:delivery.password_reset', template: 'missing_template' }],
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     expect(warnSpy).not.toHaveBeenCalled();
 
@@ -124,7 +128,7 @@ describe('createMailPlugin lifecycle', () => {
     });
 
     // Should not throw
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     expect(warnSpy).not.toHaveBeenCalled();
 
@@ -146,7 +150,7 @@ describe('createMailPlugin lifecycle', () => {
     });
 
     // Should not throw
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
     const warnMsg = (warnSpy.mock.calls[0] as string[])[0];
@@ -170,7 +174,7 @@ describe('createMailPlugin lifecycle', () => {
       queue,
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     expect(warnSpy).not.toHaveBeenCalled();
 
@@ -205,15 +209,11 @@ describe('createMailPlugin lifecycle', () => {
       subscriptions: [],
     });
 
-    await expect(plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus })).rejects.toThrow(
-      'queue offline',
-    );
+    await expect(plugin.setupPost!(setupContext(bus))).rejects.toThrow('queue offline');
     expect(start).toHaveBeenCalledTimes(1);
     expect(stop).toHaveBeenCalledTimes(1);
 
-    await expect(
-      plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus }),
-    ).resolves.toBeUndefined();
+    await expect(plugin.setupPost!(setupContext(bus))).resolves.toBeUndefined();
     expect(start).toHaveBeenCalledTimes(2);
 
     await plugin.teardown!();
@@ -256,7 +256,7 @@ describe('createMailPlugin lifecycle', () => {
       ],
     });
 
-    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+    await plugin.setupPost!(setupContext(bus));
 
     expect(warnSpy).toHaveBeenCalledTimes(2);
     const warnMsgs = warnSpy.mock.calls.map(call => (call as string[])[0]);

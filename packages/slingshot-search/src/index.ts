@@ -7,7 +7,8 @@ export { createSearchPlugin } from './plugin';
 
 // --- Provider factories ---
 /** First-party provider factories for external and hosted search backends. */
-export { createTypesenseProvider } from './providers/typesense';
+export { createTypesenseProvider, ProviderUnavailableError } from './providers/typesense';
+export type { CircuitBreakerHealth } from './providers/typesense';
 export { createElasticsearchProvider } from './providers/elasticsearch';
 export { createAlgoliaProvider } from './providers/algolia';
 
@@ -15,6 +16,10 @@ export { createAlgoliaProvider } from './providers/algolia';
 /** Canonical route ids for the HTTP surface mounted by `createSearchPlugin()`. */
 export { SEARCH_ROUTES } from './routes/index';
 export type { SearchRoute } from './routes/index';
+
+// --- Rate limiting ---
+export { createInMemoryRateLimitStore, createRateLimitMiddleware } from './routes/rateLimiter';
+export type { RateLimitOptions, RateLimitStore } from './routes/rateLimiter';
 
 // --- Config types ---
 /** Plugin config and admin-gating types for configuring the search runtime. */

@@ -82,10 +82,17 @@ describe('SAML login parity', () => {
     eventBus.on('auth:login', payload => {
       authLoginEvents.push(payload);
     });
+    const events = {
+      publish: (key: string, payload: unknown) => {
+        eventBus.emit(key as never, payload as never);
+        return { key, payload };
+      },
+    };
 
     const runtime = {
       adapter: {} as any,
       eventBus,
+      events,
       config,
       stores: {
         sessions: 'memory',

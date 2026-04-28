@@ -76,7 +76,7 @@ describe('createNotificationSseRoute', () => {
     const app = makeApp(bus, null);
     const res = await app.fetch(new Request('http://localhost/sse'));
     expect(res.status).toBe(401);
-    const body = await res.json() as { error: string };
+    const body = (await res.json()) as { error: string };
     expect(body.error).toBe('Unauthorized');
   });
 
@@ -195,7 +195,7 @@ describe('createNotificationSseRoute', () => {
     await new Promise(r => setTimeout(r, 0));
 
     expect(offSpy).toHaveBeenCalledTimes(2);
-    const removedEvents = offSpy.mock.calls.map(c => c[0] as string);
+    const removedEvents = (offSpy.mock.calls as unknown as [string][]).map(c => c[0]);
     expect(removedEvents).toContain('notifications:notification.created');
     expect(removedEvents).toContain('notifications:notification.updated');
   });

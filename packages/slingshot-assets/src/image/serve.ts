@@ -2,18 +2,9 @@ import { HTTPException } from 'hono/http-exception';
 import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
 import type { Asset, ImageConfig } from '../types';
 import { buildCacheKey } from './cache';
-import { transformImage } from './transform';
-import type {
-  ImageCacheAdapter,
-  ImageCacheEntry,
-  ImageFormat,
-  ImageTransformResult,
-} from './types';
-import {
-  ImageInputTooLargeError,
-  ImageTransformError,
-  ImageTransformTimeoutError,
-} from './types';
+import { transformImageStream } from './transform';
+import type { ImageCacheAdapter, ImageCacheEntry, ImageFormat } from './types';
+import { ImageInputTooLargeError, ImageTransformError, ImageTransformTimeoutError } from './types';
 
 /**
  * Hard upper bound for image transform dimensions.
@@ -230,6 +221,11 @@ export async function fetchSourceImage(
 /**
  * Fetch bytes for a storage-backed asset, bounded by `maxBytes`.
  *
+ * The size is checked against `asset.size` (when known from the entity record)
+ * and again against the storage adapter's reported `size`, BEFORE streaming
+ * any bytes into memory. This rejects oversized assets with 413 instead of
+ * loading the full payload and OOM-ing.
+ *
  * @param storage - Storage adapter used by the assets plugin.
  * @param asset - Asset record to load.
  * @param maxBytes - Hard cap on source bytes.
@@ -251,6 +247,19 @@ export async function fetchStoredImage(
     throw new HTTPException(404, { message: 'Asset content not found' });
   }
 
+  // Storage adapter may know the size even when the entity record does not.
+  // Reject oversized assets BEFORE we begin reading bytes.
+  if (typeof stored.size === 'number' && stored.size > maxBytes) {
+    try {
+      await stored.stream.cancel();
+    } catch {
+      // ignore
+    }
+    throw new HTTPException(413, {
+      message: `Stored asset exceeds maximum input size (${stored.size} > ${maxBytes} bytes).`,
+    });
+  }
+
   return {
     buffer: await streamToBoundedArrayBuffer(stored.stream, maxBytes),
     contentType: stored.mimeType ?? asset.mimeType ?? 'application/octet-stream',
@@ -262,7 +271,7 @@ function isUrlBackedAssetKey(key: string): boolean {
 }
 
 function buildResponseHeaders(
-  result: ImageTransformResult | ImageCacheEntry,
+  result: { contentType: string; warningHeader?: string },
   cacheStatus: 'HIT' | 'MISS',
 ): Headers {
   const headers = new Headers({
@@ -342,35 +351,59 @@ export async function createServeImageResponse(deps: {
     });
   }
 
+  // Source fetch + transform share a single wall-clock budget. If reading the
+  // source from storage hangs (slow network, frozen adapter), the budget fires
+  // and we surface 504 to the caller rather than tying up the request thread.
   let source: { buffer: ArrayBuffer; contentType: string };
+  const sourceTimeoutController = new AbortController();
+  const sourceTimer = setTimeout(
+    () => sourceTimeoutController.abort(),
+    imageConfig.transformTimeoutMs,
+  );
   try {
-    if (isUrlBackedAssetKey(asset.key)) {
-      const validatedUrl = validateSourceUrl(asset.key, imageConfig.allowedOrigins);
-      if (!validatedUrl) {
-        throw new HTTPException(400, {
-          message:
-            'Invalid or disallowed image URL. Only relative paths and approved origins are permitted.',
-        });
+    const sourcePromise = (async () => {
+      if (isUrlBackedAssetKey(asset.key)) {
+        const validatedUrl = validateSourceUrl(asset.key, imageConfig.allowedOrigins);
+        if (!validatedUrl) {
+          throw new HTTPException(400, {
+            message:
+              'Invalid or disallowed image URL. Only relative paths and approved origins are permitted.',
+          });
+        }
+        return fetchSourceImage(
+          validatedUrl,
+          requestHostHeader,
+          imageConfig.maxInputBytes,
+          imageConfig.transformTimeoutMs,
+        );
       }
-      source = await fetchSourceImage(
-        validatedUrl,
-        requestHostHeader,
-        imageConfig.maxInputBytes,
-        imageConfig.transformTimeoutMs,
+      return fetchStoredImage(storage, asset, imageConfig.maxInputBytes);
+    })();
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      sourceTimeoutController.signal.addEventListener(
+        'abort',
+        () => reject(new ImageTransformTimeoutError(imageConfig.transformTimeoutMs)),
+        { once: true },
       );
-    } else {
-      source = await fetchStoredImage(storage, asset, imageConfig.maxInputBytes);
-    }
+    });
+
+    source = await Promise.race([sourcePromise, timeoutPromise]);
   } catch (error: unknown) {
     if (error instanceof ImageInputTooLargeError) {
       throw new HTTPException(413, { message: error.message });
     }
+    if (error instanceof ImageTransformTimeoutError) {
+      throw new HTTPException(504, { message: error.message });
+    }
     throw error;
+  } finally {
+    clearTimeout(sourceTimer);
   }
 
-  let result: ImageTransformResult;
+  let transform: Awaited<ReturnType<typeof transformImageStream>>;
   try {
-    result = await transformImage(source.buffer, source.contentType, {
+    transform = await transformImageStream(source.buffer, source.contentType, {
       width,
       height,
       format,
@@ -378,30 +411,133 @@ export async function createServeImageResponse(deps: {
       maxWidth: imageConfig.maxWidth,
       maxHeight: imageConfig.maxHeight,
       timeoutMs: imageConfig.transformTimeoutMs,
+      maxBufferBytes: imageConfig.maxInputBytes,
     });
   } catch (error: unknown) {
     if (error instanceof ImageTransformError) {
       throw new HTTPException(400, { message: error.message });
     }
-    if (error instanceof ImageTransformTimeoutError) {
-      throw new HTTPException(408, { message: error.message });
-    }
     throw error;
   }
 
-  const cacheEntry: ImageCacheEntry = {
-    buffer: result.buffer,
-    contentType: result.contentType,
-    ...(result.warningHeader ? { warningHeader: result.warningHeader } : {}),
-    generatedAt: Date.now(),
-  };
-  try {
-    await cache.set(cacheKey, cacheEntry);
-  } catch {
-    // Cache write failure is non-fatal — return the transformed image anyway
-  }
+  // Wall-clock timeout for the transform pipeline. If the transform hangs
+  // (malformed input, decoder deadlock), abort the pipeline and return 504.
+  // The race resolves when the pipeline produces its first byte; once the
+  // response is streaming, the AbortController is no longer needed.
+  const timeoutController = new AbortController();
+  const timeoutHandle = setTimeout(() => {
+    timeoutController.abort();
+    transform.abort();
+  }, imageConfig.transformTimeoutMs);
 
-  return new Response(result.buffer, {
-    headers: buildResponseHeaders(result, 'MISS'),
+  // Wait for the first chunk so timeouts surface as 504 instead of a streamed
+  // error response. We do this by tee()ing once more and reading the first chunk
+  // off one branch while keeping the other for the response body.
+  const [probeBranch, bodyBranch] = transform.stream.tee();
+  let firstChunk: Uint8Array | null = null;
+  let probeDone: boolean;
+  try {
+    const probeReader = probeBranch.getReader();
+    const probeRead = probeReader.read();
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutController.signal.addEventListener(
+        'abort',
+        () => reject(new ImageTransformTimeoutError(imageConfig.transformTimeoutMs)),
+        { once: true },
+      );
+    });
+    try {
+      const result = await Promise.race([probeRead, timeoutPromise]);
+      firstChunk = result.done ? null : (result.value as Uint8Array);
+      probeDone = result.done;
+    } finally {
+      try {
+        probeReader.releaseLock();
+      } catch {
+        // ignore
+      }
+      // Drain the probe branch in the background so the tee() consumer doesn't
+      // back up. We don't care about the bytes — they're already in bodyBranch.
+      void probeBranch.cancel().catch(() => {});
+    }
+  } catch (error: unknown) {
+    clearTimeout(timeoutHandle);
+    if (error instanceof ImageTransformTimeoutError) {
+      throw new HTTPException(504, { message: error.message });
+    }
+    if (error instanceof ImageTransformError) {
+      throw new HTTPException(400, { message: error.message });
+    }
+    throw error;
+  }
+  clearTimeout(timeoutHandle);
+
+  // Cache asynchronously; failures are non-fatal.
+  void transform.cachePromise
+    .then(async cachedBuffer => {
+      if (cachedBuffer == null) return;
+      const cacheEntry: ImageCacheEntry = {
+        buffer: cachedBuffer,
+        contentType: transform.contentType,
+        ...(transform.warningHeader ? { warningHeader: transform.warningHeader } : {}),
+        generatedAt: Date.now(),
+      };
+      try {
+        await cache.set(cacheKey, cacheEntry);
+      } catch {
+        // Cache write failure is non-fatal — the response already streamed.
+      }
+    })
+    .catch(() => {
+      // ignore — caching is best-effort
+    });
+
+  // Compose response stream: first chunk (if any) prepended in front of the
+  // remaining body branch. This preserves the streaming property — we only
+  // bufferred a single chunk to detect timeouts.
+  const responseStream =
+    firstChunk == null && probeDone
+      ? bodyBranch
+      : new ReadableStream<Uint8Array>({
+          async start(controller) {
+            if (firstChunk != null) {
+              controller.enqueue(firstChunk);
+            }
+            const reader = bodyBranch.getReader();
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                if (value instanceof Uint8Array) controller.enqueue(value);
+              }
+              controller.close();
+            } catch (err) {
+              try {
+                controller.error(err);
+              } catch {
+                // ignore
+              }
+            } finally {
+              try {
+                reader.releaseLock();
+              } catch {
+                // ignore
+              }
+            }
+          },
+          cancel() {
+            void bodyBranch.cancel().catch(() => {});
+            transform.abort();
+          },
+        });
+
+  return new Response(responseStream, {
+    headers: buildResponseHeaders(
+      {
+        contentType: transform.contentType,
+        ...(transform.warningHeader ? { warningHeader: transform.warningHeader } : {}),
+      },
+      'MISS',
+    ),
   });
 }

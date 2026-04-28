@@ -437,7 +437,7 @@ export function createDbNativeProvider(): SearchProvider {
 
     // --- Search ---
 
-    search(indexName: string, query: SearchQuery): Promise<SearchResponse> {
+    async search(indexName: string, query: SearchQuery): Promise<SearchResponse> {
       const start = performance.now();
       const idx = getIndex(indexName);
       const { settings } = idx;
@@ -499,13 +499,17 @@ export function createDbNativeProvider(): SearchProvider {
       }
 
       // 5. Pagination
+      // dbNative materializes the entire filtered/sorted set in memory before
+      // slicing, so deep pagination is a heap-pressure DoS vector. Cap the
+      // effective offset at MAX_DB_NATIVE_OFFSET (10,000) and reject anything
+      // beyond — callers should switch to filter-by-cursor for deeper scans.
+      const MAX_DB_NATIVE_OFFSET = 10_000;
       let offset: number;
       let limit: number;
       let page: number | undefined;
       let hitsPerPage: number | undefined;
 
       if (query.page !== undefined) {
-        // Page-based pagination
         hitsPerPage = query.hitsPerPage ?? 20;
         page = query.page;
         offset = (page - 1) * hitsPerPage;
@@ -513,6 +517,14 @@ export function createDbNativeProvider(): SearchProvider {
       } else {
         offset = query.offset ?? 0;
         limit = query.limit ?? 20;
+      }
+
+      if (offset > MAX_DB_NATIVE_OFFSET) {
+        throw new Error(
+          `[slingshot-search:db-native] offset ${offset} exceeds the safe maximum ` +
+            `${MAX_DB_NATIVE_OFFSET}. Use a more selective filter or a cursor-based scan ` +
+            `for deeper pagination.`,
+        );
       }
 
       const paginatedDocs = deduped.slice(offset, offset + limit);
@@ -583,7 +595,7 @@ export function createDbNativeProvider(): SearchProvider {
         limit: page !== undefined ? undefined : limit,
       };
 
-      return Promise.resolve(response);
+      return response;
     },
 
     async multiSearch(

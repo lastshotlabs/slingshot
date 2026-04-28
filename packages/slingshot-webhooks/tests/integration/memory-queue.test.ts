@@ -144,7 +144,7 @@ describe('memory queue', () => {
 
     await q.enqueue(makeJob());
 
-    const drainPromise = q.drain();
+    const drainPromise = q.drain?.() ?? Promise.resolve();
     let drained = false;
     void drainPromise.then(() => {
       drained = true;

@@ -104,6 +104,79 @@ void worker.run();
 - Set `generatedWorkflowsDir` when you want generated workflow bundles in a predictable location.
 - Attach an `eventSink` if workflow/task lifecycle events should be mirrored back into Slingshot.
 
+## Sensitive Data: Payload Codecs
+
+Both the adapter and the worker accept a `dataConverter` slot for installing a custom Temporal
+`DataConverter` — most commonly a payload codec for PII redaction at the Temporal boundary. Pass
+the same converter to the `Client` you hand to the adapter and to `createTemporalOrchestrationWorker`
+so encoded payloads round-trip cleanly.
+
+```ts
+import { Client, Connection, defaultPayloadConverter } from '@temporalio/client';
+import type { DataConverter } from '@temporalio/common';
+import {
+  createTemporalOrchestrationAdapter,
+  createTemporalOrchestrationWorker,
+} from '@lastshotlabs/slingshot-orchestration-temporal';
+
+// Your codec implements `PayloadCodec` and lives at a path the worker can require.
+const dataConverter: DataConverter = {
+  payloadConverter: defaultPayloadConverter,
+  payloadCodecs: [
+    /* your encrypting / redacting codec */
+  ],
+};
+
+const connection = await Connection.connect({ address: 'localhost:7233' });
+const client = new Client({ connection, namespace: 'default', dataConverter });
+
+const adapter = createTemporalOrchestrationAdapter({
+  client,
+  connection,
+  workflowTaskQueue: 'slingshot-workflows',
+  dataConverter, // documents the symmetric converter the Client was built with
+});
+
+const worker = await createTemporalOrchestrationWorker({
+  connection,
+  workflowTaskQueue: 'slingshot-workflows',
+  buildId: 'dev-build-1',
+  definitionsModulePath: new URL('./definitions.ts', import.meta.url).pathname,
+  dataConverter, // applied to every Worker the supervisor creates
+});
+```
+
+## Interceptors
+
+The `interceptors` slot accepts the union of `ClientInterceptors` and `WorkerInterceptors`
+(`workflowModules`, `activityInbound`, `activity`). Use it for auth-header injection, tracing,
+or workflow-module interceptors:
+
+```ts
+const adapter = createTemporalOrchestrationAdapter({
+  client,
+  workflowTaskQueue: 'slingshot-workflows',
+  interceptors: {
+    workflow: [
+      /* ClientInterceptors.workflow */
+    ],
+  },
+});
+
+const worker = await createTemporalOrchestrationWorker({
+  connection,
+  workflowTaskQueue: 'slingshot-workflows',
+  buildId: 'dev-build-1',
+  definitionsModulePath: new URL('./definitions.ts', import.meta.url).pathname,
+  interceptors: {
+    workflowModules: [require.resolve('./my-wf-interceptor')],
+    activityInbound: [
+      /* factories */
+    ],
+  },
+});
+```
+
 ## Gotchas
 
 - Temporal workers must run on real Node.js. Bun is not supported for worker startup.

@@ -11,6 +11,7 @@ import { FilterParseError, parseUrlFilter, parseUrlSort } from '../queryParser';
 import type { SearchManager } from '../searchManager';
 import type { SearchPluginConfig } from '../types/config';
 import type { SearchQuery } from '../types/query';
+import { type RateLimitOptions, createRateLimitMiddleware } from './rateLimiter';
 
 const tags = ['Search'];
 
@@ -131,8 +132,16 @@ const entitySearchRoute = createRoute({
 export function createSearchRouter(
   manager: SearchManager,
   config: SearchPluginConfig,
+  rateLimitOptions?: RateLimitOptions | false,
 ): OpenAPIHono<AppEnv> {
   const router = new OpenAPIHono<AppEnv>();
+
+  // Rate limiting — defaults to 60/min per (tenant, ip). Pass `false` to
+  // disable in tests that don't exercise this surface, or pass a custom
+  // `RateLimitOptions` to plug in a different store / window / max.
+  if (rateLimitOptions !== false) {
+    router.use('/:entity', createRateLimitMiddleware(rateLimitOptions));
+  }
 
   router.openapi(entitySearchRoute, async c => {
     const entityParam = c.req.param('entity') ?? '';

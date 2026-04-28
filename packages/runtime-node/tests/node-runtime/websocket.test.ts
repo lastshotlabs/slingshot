@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { WebSocket as WsClient } from 'ws';
-import { nodeRuntime } from '../../src/index';
 import type { RuntimeServerInstance } from '@lastshotlabs/slingshot-core';
+import { nodeRuntime } from '../../src/index';
 
 // ---------------------------------------------------------------------------
 // Helpers

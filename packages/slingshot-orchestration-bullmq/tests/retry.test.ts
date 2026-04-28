@@ -145,7 +145,13 @@ class MockWorker {
 
   on(_event: string, _listener: (...args: unknown[]) => void) {}
 
-  async close() {}
+  async pause(_force?: boolean) {}
+
+  async getActiveCount() {
+    return 0;
+  }
+
+  async close(_force?: boolean) {}
 }
 
 mock.module('bullmq', () => ({

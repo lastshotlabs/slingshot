@@ -5,7 +5,13 @@
 // guarantees should wrap cache adapter calls in Promise.race() with a timeout.
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { IsrCacheEntry } from '@lastshotlabs/slingshot-ssr';
-import { type KvNamespace, createKvIsrCache } from '../../src/kv-isr';
+import {
+  type KvNamespace,
+  configureRuntimeEdgeLogger,
+  createKvIsrCache,
+  flushTagLocks,
+  tagLocksSize,
+} from '../../src/kv-isr';
 
 // ---------------------------------------------------------------------------
 // In-memory KV mock
@@ -215,7 +221,9 @@ describe('createKvIsrCache()', () => {
       let callCount = 0;
       const store = new Map<string, string>();
       const failingKv = {
-        async get(key: string) { return store.get(key) ?? null; },
+        async get(key: string) {
+          return store.get(key) ?? null;
+        },
         async put(key: string, value: string) {
           callCount++;
           // First put is the page entry write — let it succeed.
@@ -224,7 +232,9 @@ describe('createKvIsrCache()', () => {
           store.set(key, value);
         },
         async delete() {},
-        async list() { return { keys: [] }; },
+        async list() {
+          return { keys: [] };
+        },
       };
 
       const consoleSpy = mock(() => {});
@@ -236,7 +246,13 @@ describe('createKvIsrCache()', () => {
       try {
         // cache.set rejects because updateTagIndex returns the raw (uncaught) promise
         await expect(
-          cache.set('/page', { html: '<p>hi</p>', headers: {}, tags: ['t1'], revalidateAfter: 0, generatedAt: Date.now() }),
+          cache.set('/page', {
+            html: '<p>hi</p>',
+            headers: {},
+            tags: ['t1'],
+            revalidateAfter: 0,
+            generatedAt: Date.now(),
+          }),
         ).rejects.toThrow('kv-quota-exceeded');
 
         // Yield to the microtask queue so the .catch() log handler on tagLocks fires
@@ -244,13 +260,19 @@ describe('createKvIsrCache()', () => {
 
         // Error was logged by the catch handler on the tag lock chain
         expect(consoleSpy).toHaveBeenCalledWith(
-          expect.stringContaining('[runtime-edge]'),
-          expect.any(Error),
+          expect.stringContaining('tag-index-update-failed'),
+          expect.objectContaining({ message: expect.stringContaining('kv-quota-exceeded') }),
         );
 
         // The chain is cleared — subsequent calls for the same tag should not be blocked
         await expect(
-          cache.set('/page2', { html: '<p>ok</p>', headers: {}, tags: ['t1'], revalidateAfter: 0, generatedAt: Date.now() }),
+          cache.set('/page2', {
+            html: '<p>ok</p>',
+            headers: {},
+            tags: ['t1'],
+            revalidateAfter: 0,
+            generatedAt: Date.now(),
+          }),
         ).resolves.toBeUndefined();
       } finally {
         console.error = originalError;
@@ -316,6 +338,91 @@ describe('createKvIsrCache()', () => {
       // Only /posts/1 is tagged 'posts'
       expect(kv._store.has('isr:page:/posts/1')).toBe(false);
       expect(kv._store.has('isr:page:/posts/2')).toBe(true);
+    });
+  });
+
+  describe('tagLocks bounded growth', () => {
+    it('evicts settled chains so the lock map does not grow unbounded', async () => {
+      // Write many pages with unique tags. After all chains settle the map
+      // must be empty — otherwise it would leak ~1 KB per tag in long-running
+      // Workers (the original prod-readiness audit blocker).
+      const before = tagLocksSize();
+      for (let i = 0; i < 50; i++) {
+        await cache.set(`/p/${i}`, makeEntry(`/p/${i}`, [`tag-${i}`]));
+      }
+      await flushTagLocks();
+      expect(tagLocksSize()).toBe(before);
+    });
+
+    it('preserves the chain while pending operations are still queued', async () => {
+      // Gate only the tag-index PUT so the chain entry is observable in-flight.
+      let release!: () => void;
+      const gate = new Promise<void>(r => {
+        release = r;
+      });
+      const slowKv: KvNamespace = {
+        get: kv.get.bind(kv),
+        async put(key, value, options) {
+          if (key.startsWith('isr:tag:')) await gate;
+          await kv.put(key, value, options);
+        },
+        delete: kv.delete.bind(kv),
+        list: kv.list.bind(kv),
+      };
+      const slowCache = createKvIsrCache(slowKv);
+      const p = slowCache.set('/q/1', makeEntry('/q/1', ['shared']));
+      // Yield long enough for runUnderTagLock to register the chain entry.
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      expect(tagLocksSize()).toBeGreaterThanOrEqual(1);
+      release();
+      await p;
+      await flushTagLocks();
+      expect(tagLocksSize()).toBe(0);
+    });
+  });
+
+  describe('tag deduplication', () => {
+    it('records duplicate tags only once in the index', async () => {
+      await cache.set('/dup', makeEntry('/dup', ['t', 't', 't']));
+      const idx = JSON.parse(kv._store.get('isr:tag:t') ?? '[]') as string[];
+      expect(idx).toEqual(['/dup']);
+    });
+  });
+
+  describe('configureRuntimeEdgeLogger', () => {
+    it('routes errors through the configured logger and restores on reset', async () => {
+      const captured: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+      const previous = configureRuntimeEdgeLogger({
+        error(event, fields) {
+          captured.push({ event, fields });
+        },
+      });
+      try {
+        // Fail only on tag index writes (the second put), not on the page write.
+        let putCount = 0;
+        const failingKv: KvNamespace = {
+          async get() {
+            return null;
+          },
+          async put() {
+            putCount++;
+            if (putCount > 1) throw new Error('tag-write-boom');
+          },
+          async delete() {},
+          async list() {
+            return { keys: [] };
+          },
+        };
+        const c = createKvIsrCache(failingKv);
+        await expect(c.set('/x', makeEntry('/x', ['t']))).rejects.toThrow('tag-write-boom');
+        // Allow the .catch() on the chain to fire.
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(captured.some(c => c.event === 'tag-index-update-failed')).toBe(true);
+      } finally {
+        configureRuntimeEdgeLogger(previous);
+      }
     });
   });
 });

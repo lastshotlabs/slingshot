@@ -35,7 +35,7 @@ function makeEntity(storageName: string): ResolvedEntityConfig {
         category: { searchable: false, filterable: true },
       },
     },
-  };
+  } as unknown as ResolvedEntityConfig;
 }
 
 // ============================================================================

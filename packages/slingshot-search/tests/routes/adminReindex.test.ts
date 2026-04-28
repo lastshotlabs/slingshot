@@ -30,7 +30,7 @@ function makeEntity(storageName: string): ResolvedEntityConfig {
     search: {
       fields: { title: { searchable: true } },
     },
-  };
+  } as unknown as ResolvedEntityConfig;
 }
 
 async function* arraySource(
@@ -156,7 +156,7 @@ describe('POST /admin/indexes/:entity/rebuild', () => {
   it('resolves entity by class name (name → storageName)', async () => {
     // Manager initialized with storageName 'articles', class name also 'articles' here.
     // Use a separate entity where name differs from storageName to confirm resolution.
-    const entityWithDiffName: ResolvedEntityConfig = {
+    const entityWithDiffName = {
       name: 'Article',
       _pkField: 'id',
       _storageName: 'articles',
@@ -165,7 +165,7 @@ describe('POST /admin/indexes/:entity/rebuild', () => {
         title: { type: 'string', optional: false, primary: false, immutable: false },
       },
       search: { fields: { title: { searchable: true } } },
-    };
+    } as unknown as ResolvedEntityConfig;
     const altManager = createSearchManager({
       pluginConfig: { providers: { default: { provider: 'db-native' } } },
       transformRegistry: createSearchTransformRegistry(),

@@ -1,7 +1,22 @@
 import type { Context } from 'hono';
 import type { AppEnv } from './context';
 
-type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 410 | 418 | 422 | 429 | 500 | 501 | 502 | 503;
+type ErrorStatus =
+  | 400
+  | 401
+  | 403
+  | 404
+  | 408
+  | 409
+  | 410
+  | 413
+  | 418
+  | 422
+  | 429
+  | 500
+  | 501
+  | 502
+  | 503;
 
 /**
  * Build a consistent JSON error response that always includes `requestId`.

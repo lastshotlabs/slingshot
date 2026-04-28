@@ -24,12 +24,33 @@ function freezeStepOptions<TWorkflowInput>(
     );
   }
 
+  if (options?.dependsOn !== undefined) {
+    if (!Array.isArray(options.dependsOn)) {
+      throw new OrchestrationError(
+        'INVALID_CONFIG',
+        `Step '${stepName}' dependsOn must be an array of step names.`,
+      );
+    }
+    for (const dep of options.dependsOn) {
+      if (typeof dep !== 'string' || dep.length === 0) {
+        throw new OrchestrationError(
+          'INVALID_CONFIG',
+          `Step '${stepName}' dependsOn entries must be non-empty strings.`,
+        );
+      }
+      if (dep === stepName) {
+        throw new OrchestrationError('INVALID_WORKFLOW', `Step '${stepName}' depends on itself.`);
+      }
+    }
+  }
+
   return Object.freeze({
     input: options?.input,
     condition: options?.condition,
     retry: options?.retry ? normalizeRetryPolicy(options.retry, `Step '${stepName}'`) : undefined,
     timeout: options?.timeout,
     continueOnFailure: options?.continueOnFailure ?? false,
+    dependsOn: options?.dependsOn ? Object.freeze([...options.dependsOn]) : undefined,
   });
 }
 
@@ -124,6 +145,10 @@ export function defineWorkflow<TInput, TOutput>(
   }
 
   const seen = new Set<string>();
+  // Build adjacency list of explicit dependsOn edges keyed by step name so we
+  // can validate the DAG eagerly. Sleep entries can be referenced as
+  // dependencies but never declare them themselves.
+  const dependencyEdges = new Map<string, readonly string[]>();
   for (const entry of config.steps) {
     if (entry._tag === 'Step' || entry._tag === 'Sleep') {
       if (seen.has(entry.name)) {
@@ -133,6 +158,11 @@ export function defineWorkflow<TInput, TOutput>(
         );
       }
       seen.add(entry.name);
+      if (entry._tag === 'Step') {
+        dependencyEdges.set(entry.name, entry.options.dependsOn ?? []);
+      } else {
+        dependencyEdges.set(entry.name, []);
+      }
       continue;
     }
 
@@ -144,7 +174,30 @@ export function defineWorkflow<TInput, TOutput>(
         );
       }
       seen.add(child.name);
+      dependencyEdges.set(child.name, child.options.dependsOn ?? []);
     }
+  }
+
+  // Validate that every dependsOn references a step that exists in the workflow.
+  for (const [stepName, deps] of dependencyEdges) {
+    for (const dep of deps) {
+      if (!dependencyEdges.has(dep)) {
+        throw new OrchestrationError(
+          'INVALID_WORKFLOW',
+          `Workflow '${config.name}' step '${stepName}' depends on unknown step '${dep}'.`,
+        );
+      }
+    }
+  }
+
+  // Detect cycles via DFS. Iterative state machine so we don't blow the call
+  // stack on deep dependency graphs.
+  const cycle = findCycle(dependencyEdges);
+  if (cycle) {
+    throw new OrchestrationError(
+      'INVALID_WORKFLOW',
+      `Workflow '${config.name}' contains a dependency cycle: ${cycle.join(' -> ')}.`,
+    );
   }
 
   return Object.freeze({
@@ -160,6 +213,54 @@ export function defineWorkflow<TInput, TOutput>(
     onComplete: config.onComplete,
     onFail: config.onFail,
   });
+}
+
+/**
+ * Detect a dependency cycle using iterative DFS over the adjacency map. Returns
+ * the cycle path (e.g. `['a', 'b', 'c', 'a']`) when one is found, or `undefined`
+ * otherwise.
+ */
+function findCycle(edges: Map<string, readonly string[]>): string[] | undefined {
+  const WHITE = 0; // unvisited
+  const GRAY = 1; // on current DFS stack
+  const BLACK = 2; // fully explored
+  const color = new Map<string, number>();
+  for (const node of edges.keys()) color.set(node, WHITE);
+
+  for (const start of edges.keys()) {
+    if (color.get(start) !== WHITE) continue;
+
+    type Frame = { node: string; iter: Iterator<string> };
+    const stack: Frame[] = [{ node: start, iter: (edges.get(start) ?? [])[Symbol.iterator]() }];
+    color.set(start, GRAY);
+    const path: string[] = [start];
+
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const next = frame.iter.next();
+      if (next.done) {
+        color.set(frame.node, BLACK);
+        stack.pop();
+        path.pop();
+        continue;
+      }
+      const child = next.value;
+      const childColor = color.get(child) ?? WHITE;
+      if (childColor === GRAY) {
+        // Found a back-edge: extract the cycle from path[child..end] + child.
+        const cycleStart = path.indexOf(child);
+        const cycleNodes = cycleStart >= 0 ? path.slice(cycleStart) : [child];
+        cycleNodes.push(child);
+        return cycleNodes;
+      }
+      if (childColor === WHITE) {
+        color.set(child, GRAY);
+        path.push(child);
+        stack.push({ node: child, iter: (edges.get(child) ?? [])[Symbol.iterator]() });
+      }
+    }
+  }
+  return undefined;
 }
 
 /**

@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { resolve } from 'node:path';
-import { type NativeConnection, Worker } from '@temporalio/worker';
+import type { DataConverter } from '@temporalio/common';
+import { type NativeConnection, Worker, type WorkerInterceptors } from '@temporalio/worker';
 import {
   OrchestrationError,
   type OrchestrationEventSink,
@@ -118,6 +119,14 @@ export async function createTemporalOrchestrationWorkerInternal(
       queues.add(options.defaultActivityTaskQueue ?? options.workflowTaskQueue);
     }
 
+    // `dataConverter` and `interceptors` are pass-through configuration
+    // surfaces. Plumb them into every Worker we construct so payload codecs
+    // (e.g. PII redaction) and worker interceptors (auth headers, tracing,
+    // workflow modules) are applied symmetrically across the workflow
+    // worker and any per-queue activity workers.
+    const workerDataConverter = options.dataConverter as DataConverter | undefined;
+    const workerInterceptors = options.interceptors as WorkerInterceptors | undefined;
+
     const workflowWorker = await Worker.create({
       connection: options.connection as NativeConnection,
       namespace,
@@ -128,6 +137,8 @@ export async function createTemporalOrchestrationWorkerInternal(
       buildId: options.buildId,
       maxConcurrentWorkflowTaskExecutions: options.maxConcurrentWorkflowTaskExecutions,
       maxConcurrentActivityTaskExecutions: options.maxConcurrentActivityTaskExecutions,
+      ...(workerDataConverter ? { dataConverter: workerDataConverter } : {}),
+      ...(workerInterceptors ? { interceptors: workerInterceptors } : {}),
     });
     createdWorkers.push(workflowWorker);
 
@@ -142,6 +153,8 @@ export async function createTemporalOrchestrationWorkerInternal(
           identity,
           buildId: options.buildId,
           maxConcurrentActivityTaskExecutions: options.maxConcurrentActivityTaskExecutions,
+          ...(workerDataConverter ? { dataConverter: workerDataConverter } : {}),
+          ...(workerInterceptors ? { interceptors: workerInterceptors } : {}),
         });
         createdWorkers.push(worker);
         return worker;

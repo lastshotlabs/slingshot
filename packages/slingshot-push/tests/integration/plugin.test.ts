@@ -80,6 +80,7 @@ function createFrameworkConfig(): SlingshotFrameworkConfig & {
       authStore: 'memory' as StoreType,
       sqlite: undefined,
     },
+    logging: { enabled: false, verbose: false, authTrace: false, auditWarnings: false },
     security: { cors: '*' },
     signing: null,
     dataEncryptionKeys: [],
@@ -211,7 +212,7 @@ async function createPushHarness(opts?: {
           const actorId = getActorId(c as import('hono').Context<AppEnv>);
           if (!actorId) return null;
           const rt = opts.authRuntime!;
-          const suspensionStatus = await rt.adapter.getSuspended(actorId);
+          const suspensionStatus = await rt.adapter.getSuspended?.(actorId);
           if (suspensionStatus?.suspended) {
             return {
               error: 'ACCOUNT_SUSPENDED',
@@ -663,7 +664,6 @@ describe('createPushPlugin — provider fan-out resilience', () => {
       return { ok: true };
     });
     providers.web = {
-      platform: 'web',
       send,
     };
 

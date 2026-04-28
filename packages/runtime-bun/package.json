@@ -26,7 +26,8 @@
   "scripts": {
     "build": "tsc --noEmit",
     "lint": "eslint src/ --cache",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"

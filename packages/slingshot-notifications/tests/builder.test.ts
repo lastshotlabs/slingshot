@@ -153,12 +153,12 @@ describe('createNotificationBuilder', () => {
     // Make events.publish throw for the created event
     const events = createNotificationsTestEvents(bus);
     const originalPublish = events.publish.bind(events);
-    events.publish = (key: unknown, ...args: unknown[]) => {
+    events.publish = ((key: unknown, ...args: unknown[]) => {
       if (String(key) === 'notifications:notification.created') {
         throw new Error('event bus unavailable');
       }
       return (originalPublish as (...a: unknown[]) => unknown)(key, ...args);
-    };
+    }) as typeof events.publish;
 
     const errorSpy = mock(() => {});
     const originalConsoleError = console.error;
@@ -200,12 +200,12 @@ describe('createNotificationBuilder', () => {
     // Make events.publish throw for the updated event (dedup path)
     const events = createNotificationsTestEvents(bus);
     const originalPublish = events.publish.bind(events);
-    events.publish = (key: unknown, ...args: unknown[]) => {
+    events.publish = ((key: unknown, ...args: unknown[]) => {
       if (String(key) === 'notifications:notification.updated') {
         throw new Error('event bus down during dedup');
       }
       return (originalPublish as (...a: unknown[]) => unknown)(key, ...args);
-    };
+    }) as typeof events.publish;
 
     const errorSpy = mock(() => {});
     const originalConsoleError = console.error;

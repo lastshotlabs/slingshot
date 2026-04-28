@@ -90,8 +90,13 @@ describe('createPushDeliveryAdapter', () => {
     await adapter.deliver(event);
 
     expect(sendToUser).toHaveBeenCalledTimes(1);
-    expect(sendToUser.mock.calls[0][0]).toBe('user-7');
-    expect(sendToUser.mock.calls[0][2]).toMatchObject({
+    const [userId, , deliveryOptions] = sendToUser.mock.calls[0] as unknown as [
+      string,
+      unknown,
+      { tenantId: string; notificationId: string },
+    ];
+    expect(userId).toBe('user-7');
+    expect(deliveryOptions).toMatchObject({
       tenantId: 'tenant-x',
       notificationId: 'notif-42',
     });
@@ -113,7 +118,7 @@ describe('createPushDeliveryAdapter', () => {
 
     await adapter.deliver(makeEvent({ targetId: '/items/99' }));
 
-    const formatterArg = formatFn.mock.calls[0][1] as { url?: string };
+    const formatterArg = (formatFn.mock.calls[0] as unknown as [unknown, { url?: string }])[1];
     expect(formatterArg.url).toBe('/items/99');
   });
 
@@ -133,7 +138,7 @@ describe('createPushDeliveryAdapter', () => {
 
     await adapter.deliver(makeEvent({ targetId: null }));
 
-    const formatterArg = formatFn.mock.calls[0][1] as { url?: string };
+    const formatterArg = (formatFn.mock.calls[0] as unknown as [unknown, { url?: string }])[1];
     expect(formatterArg.url).toBe('/home');
   });
 
@@ -146,7 +151,9 @@ describe('createPushDeliveryAdapter', () => {
 
     await adapter.deliver(makeEvent({ tenantId: null }));
 
-    const opts = sendToUser.mock.calls[0][2] as { tenantId: string };
+    const opts = (
+      sendToUser.mock.calls[0] as unknown as [unknown, unknown, { tenantId: string }]
+    )[2];
     expect(opts.tenantId).toBe('');
   });
 });

@@ -1,5 +1,6 @@
 import type { HandlerMeta, TriggerAdapter, TriggerRecord } from '@lastshotlabs/slingshot-core';
 import { decodeHttpBody, firstString, readHeader } from '../correlation';
+import { safeStringify } from './_httpResponse';
 
 type ApiGatewayV1Event = {
   body?: string | null;
@@ -62,10 +63,19 @@ export const apigwTrigger: TriggerAdapter<ApiGatewayV1Event, Record<string, unkn
       outcome?.result === 'error'
         ? (httpMeta.body ?? { error: outcome.error?.message ?? 'Internal Server Error' })
         : (outcome?.output ?? httpMeta.body ?? null);
+    if (body === null) {
+      return {
+        statusCode,
+        headers: { 'content-type': 'application/json' },
+        body: '',
+        isBase64Encoded: false,
+      };
+    }
+    const serialized = safeStringify(body);
     return {
-      statusCode,
+      statusCode: serialized.failed ? serialized.statusCode : statusCode,
       headers: { 'content-type': 'application/json' },
-      body: body === null ? '' : JSON.stringify(body),
+      body: serialized.body,
       isBase64Encoded: false,
     };
   },

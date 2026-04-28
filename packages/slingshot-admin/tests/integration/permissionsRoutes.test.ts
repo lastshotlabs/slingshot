@@ -22,6 +22,15 @@ function createMemoryPermissionsAdapter(): PermissionsAdapter {
       grants.set(id, { ...input, id, grantedAt: new Date() });
       return Promise.resolve(id);
     },
+    async createGrants(inputs: Omit<PermissionGrant, 'id' | 'grantedAt'>[]): Promise<string[]> {
+      const ids: string[] = [];
+      for (const input of inputs) {
+        const id = `grant-${++seq}`;
+        grants.set(id, { ...input, id, grantedAt: new Date() });
+        ids.push(id);
+      }
+      return ids;
+    },
     revokeGrant(id: string): Promise<boolean> {
       if (!grants.has(id)) return Promise.resolve(false);
       grants.delete(id);
@@ -50,6 +59,9 @@ function createMemoryPermissionsAdapter(): PermissionsAdapter {
       );
     },
     deleteAllGrantsForSubject(): Promise<void> {
+      return Promise.resolve();
+    },
+    deleteAllGrantsOnResource(): Promise<void> {
       return Promise.resolve();
     },
   };

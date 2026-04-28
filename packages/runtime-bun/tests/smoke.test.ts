@@ -132,7 +132,12 @@ describe('runtime-bun smoke', () => {
 
   test('server stop() returns a Promise', async () => {
     const runtime = bunRuntime();
-    const server = runtime.server.listen({ port: 0, fetch() { return new Response('ok'); } });
+    const server = runtime.server.listen({
+      port: 0,
+      fetch() {
+        return new Response('ok');
+      },
+    });
     const result = server.stop();
     expect(result).toBeInstanceOf(Promise);
     await result;
@@ -143,7 +148,9 @@ describe('runtime-bun smoke', () => {
     const errors: Error[] = [];
     const server = runtime.server.listen({
       port: 0,
-      fetch() { throw new Error('handler-boom'); },
+      fetch() {
+        throw new Error('handler-boom');
+      },
       error(err: Error) {
         errors.push(err);
         return new Response('caught', { status: 500 });
@@ -180,7 +187,9 @@ describe('runtime-bun smoke', () => {
     expect(() =>
       runtime.server.listen({
         port: 0,
-        fetch() { return new Response('ok'); },
+        fetch() {
+          return new Response('ok');
+        },
         tls: { key: 'not-a-real-key', cert: 'not-a-real-cert' },
       }),
     ).toThrow();
@@ -214,9 +223,9 @@ describe('runtime-bun smoke', () => {
   test('async fetch rejection without error callback returns 500 and logs', async () => {
     const runtime = bunRuntime();
     const originalErr = console.error;
-    const calls: unknown[][] = [];
+    const calls: string[] = [];
     console.error = (...args: unknown[]) => {
-      calls.push(args);
+      calls.push(args.map(String).join(' '));
     };
     const server = runtime.server.listen({
       port: 0,
@@ -227,10 +236,8 @@ describe('runtime-bun smoke', () => {
     try {
       const res = await fetch(`http://127.0.0.1:${server.port}/`);
       expect(res.status).toBe(500);
-      const logged = calls.some(args =>
-        args.some(a => a instanceof Error && a.message === 'lonely-async-boom'),
-      );
-      expect(logged).toBe(true);
+      // Structured log includes phase and message — match on either form.
+      expect(calls.some(line => line.includes('lonely-async-boom'))).toBe(true);
     } finally {
       console.error = originalErr;
       await server.stop();
@@ -274,7 +281,10 @@ describe('runtime-bun smoke', () => {
       errs.push(args.map(String).join(' '));
     };
     const originalServe = Bun.serve;
-    let captured: { open?: (ws: unknown) => unknown; message?: (ws: unknown, m: string) => unknown } = {};
+    let captured: {
+      open?: (ws: unknown) => unknown;
+      message?: (ws: unknown, m: string) => unknown;
+    } = {};
     Object.assign(Bun, {
       serve(opts: { websocket?: typeof captured }) {
         captured = (opts.websocket ?? {}) as typeof captured;

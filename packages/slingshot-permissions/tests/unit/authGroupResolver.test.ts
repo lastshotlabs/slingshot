@@ -38,9 +38,7 @@ describe('createAuthGroupResolver', () => {
     const resolver = createAuthGroupResolver(() => ({
       adapter: {
         getUserGroups: async (userId: string) =>
-          userId === 'user-1'
-            ? [{ group: { id: 'group-a' } }, { group: { id: 'group-b' } }]
-            : [],
+          userId === 'user-1' ? [{ group: { id: 'group-a' } }, { group: { id: 'group-b' } }] : [],
       },
     }));
     const groups = await resolver.getGroupsForUser('user-1', null);
@@ -108,7 +106,14 @@ describe('createAuthGroupResolver', () => {
   });
 
   test('re-reads runtime on every call (lazy resolution)', async () => {
-    let currentRuntime: { adapter: { getUserGroups: (userId: string, tenantId: string | null) => Promise<Array<{ group: { id: string } }>> } } | null = null;
+    let currentRuntime: {
+      adapter: {
+        getUserGroups: (
+          userId: string,
+          tenantId: string | null,
+        ) => Promise<Array<{ group: { id: string } }>>;
+      };
+    } | null = null;
     const resolver = createAuthGroupResolver(() => currentRuntime);
 
     // Before runtime is available — returns empty

@@ -6,6 +6,7 @@ import {
   resolveEffectivePriority,
   resolvePreferences,
 } from '../src';
+import type { NotificationPreferenceAdapter } from '../src';
 import {
   createInMemoryRateLimitBackend,
   createNoopRateLimitBackend,
@@ -38,14 +39,17 @@ describe('notification preferences', () => {
         async resolveForNotification() {
           return [
             {
+              id: 'pref-global',
               userId: 'user-1',
               scope: 'global',
               muted: false,
               pushEnabled: false,
               emailEnabled: true,
               inAppEnabled: true,
+              updatedAt: new Date(),
             },
             {
+              id: 'pref-source',
               userId: 'user-1',
               scope: 'source',
               source: 'community',
@@ -53,8 +57,10 @@ describe('notification preferences', () => {
               pushEnabled: true,
               emailEnabled: false,
               inAppEnabled: true,
+              updatedAt: new Date(),
             },
             {
+              id: 'pref-type',
               userId: 'user-1',
               scope: 'type',
               type: 'community:mention',
@@ -64,10 +70,11 @@ describe('notification preferences', () => {
               inAppEnabled: false,
               quietStart: '22:00',
               quietEnd: '06:00',
+              updatedAt: new Date(),
             },
           ];
         },
-      },
+      } as unknown as NotificationPreferenceAdapter,
       'user-1',
       'community',
       'community:mention',

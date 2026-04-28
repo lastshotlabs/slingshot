@@ -41,14 +41,58 @@ function resolveContentType(format: ImageFormat, originalContentType: string): s
   return FORMAT_CONTENT_TYPE[format];
 }
 
-function withTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
+/**
+ * Race a promise against a wall-clock timeout. The supplied `AbortController`
+ * is aborted on timeout so downstream consumers (Sharp pipeline, fs reads)
+ * can terminate work in-flight rather than leaking resources.
+ */
+function withAbortableTimeout<T>(
+  task: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new ImageTransformTimeoutError(timeoutMs)), timeoutMs);
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new ImageTransformTimeoutError(timeoutMs));
+    }, timeoutMs);
   });
-  return Promise.race([p, timeout]).finally(() => {
+  return Promise.race([task(controller.signal), timeout]).finally(() => {
     if (timer) clearTimeout(timer);
   });
+}
+
+/**
+ * Apply common Sharp pipeline configuration: resize and format conversion.
+ */
+function applySharpPipeline(
+  pipeline: import('sharp').Sharp,
+  opts: ImageTransformOptions,
+): import('sharp').Sharp {
+  let p = pipeline.resize({
+    width: opts.width,
+    height: opts.height,
+    fit: 'inside',
+    withoutEnlargement: false,
+  });
+  if (opts.format !== 'original') {
+    switch (opts.format) {
+      case 'avif':
+        p = p.avif({ quality: opts.quality });
+        break;
+      case 'webp':
+        p = p.webp({ quality: opts.quality });
+        break;
+      case 'jpeg':
+        p = p.jpeg({ quality: opts.quality });
+        break;
+      case 'png':
+        p = p.png({ quality: opts.quality });
+        break;
+    }
+  }
+  return p;
 }
 
 /**
@@ -57,6 +101,10 @@ function withTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
  * The Sharp pipeline is bounded by `opts.timeoutMs` to defend against malformed
  * inputs that hang decoders. Sharp internal limits (`limitInputPixels`) are also
  * applied so a 50000x50000 image header is rejected before allocation.
+ *
+ * NOTE: this entry point still produces a single ArrayBuffer because callers
+ * need it for in-memory caching and `<= 25 MiB` payload sizes are bounded by
+ * `maxInputBytes`. For unbounded streaming output, use {@link transformImageStream}.
  *
  * @param buffer - Raw source image bytes.
  * @param originalContentType - MIME type of the source image.
@@ -92,38 +140,185 @@ export async function transformImage(
 
   const input = Buffer.from(buffer);
   const limitInputPixels = opts.maxWidth * opts.maxHeight * 4;
-  let pipeline = sharpFnResolved(input, { limitInputPixels, failOn: 'truncated' });
+  const pipeline = applySharpPipeline(
+    sharpFnResolved(input, { limitInputPixels, failOn: 'truncated' }),
+    opts,
+  );
 
-  pipeline = pipeline.resize({
-    width: opts.width,
-    height: opts.height,
-    fit: 'inside',
-    withoutEnlargement: false,
-  });
+  const outputBuffer = await withAbortableTimeout(signal => {
+    // Abort the Sharp pipeline if the timeout fires while the pipeline is busy.
+    signal.addEventListener(
+      'abort',
+      () => {
+        try {
+          pipeline.destroy();
+        } catch {
+          // pipeline already destroyed — ignore
+        }
+      },
+      { once: true },
+    );
+    return pipeline.toBuffer();
+  }, opts.timeoutMs);
 
-  if (opts.format !== 'original') {
-    switch (opts.format) {
-      case 'avif':
-        pipeline = pipeline.avif({ quality: opts.quality });
-        break;
-      case 'webp':
-        pipeline = pipeline.webp({ quality: opts.quality });
-        break;
-      case 'jpeg':
-        pipeline = pipeline.jpeg({ quality: opts.quality });
-        break;
-      case 'png':
-        pipeline = pipeline.png({ quality: opts.quality });
-        break;
-    }
-  }
-
-  const outputBuffer = await withTimeout(pipeline.toBuffer(), opts.timeoutMs);
   return {
     buffer: outputBuffer.buffer.slice(
       outputBuffer.byteOffset,
       outputBuffer.byteOffset + outputBuffer.byteLength,
     ) as ArrayBuffer,
     contentType: resolveContentType(opts.format, originalContentType),
+  };
+}
+
+/**
+ * Streaming counterpart to {@link transformImage}.
+ *
+ * Wires the Sharp pipeline output to a `ReadableStream` so transformed bytes
+ * flow to the response body without ever materializing a complete buffer in
+ * memory. Includes a `tee()` branch so callers may opportunistically populate
+ * a cache while the response streams; that branch is bounded by `maxBufferBytes`
+ * and is dropped if it would exceed the cap.
+ *
+ * @param buffer - Raw source image bytes (already bounded by maxInputBytes).
+ * @param originalContentType - MIME type of the source image.
+ * @param opts - Requested transform parameters and configured limits.
+ * @returns A streaming output stream, plus a `cachePromise` that resolves with
+ *          the buffered output when it fits within the cache cap, otherwise null.
+ * @throws {ImageTransformError} When requested dimensions exceed configured limits.
+ */
+export async function transformImageStream(
+  buffer: ArrayBuffer,
+  originalContentType: string,
+  opts: ImageTransformOptions & { readonly maxBufferBytes: number },
+): Promise<{
+  readonly stream: ReadableStream<Uint8Array>;
+  readonly contentType: string;
+  readonly warningHeader?: string;
+  readonly cachePromise: Promise<ArrayBuffer | null>;
+  /** Abort the underlying pipeline (used by request timeout). */
+  abort(): void;
+}> {
+  if (opts.width > opts.maxWidth) {
+    throw new ImageTransformError(
+      `Requested width ${opts.width} exceeds maximum allowed width ${opts.maxWidth}.`,
+    );
+  }
+  if (opts.height !== undefined && opts.height > opts.maxHeight) {
+    throw new ImageTransformError(
+      `Requested height ${opts.height} exceeds maximum allowed height ${opts.maxHeight}.`,
+    );
+  }
+
+  const sharpFnResolved = await loadSharp();
+  if (!sharpFnResolved) {
+    // Sharp unavailable: emit the original bytes as a single-chunk stream.
+    const sourceBytes = new Uint8Array(buffer);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(sourceBytes);
+        controller.close();
+      },
+    });
+    return {
+      stream,
+      contentType: originalContentType,
+      warningHeader: 'sharp unavailable; served original image',
+      cachePromise: Promise.resolve(buffer),
+      abort() {},
+    };
+  }
+
+  const input = Buffer.from(buffer);
+  const limitInputPixels = opts.maxWidth * opts.maxHeight * 4;
+  const pipeline = applySharpPipeline(
+    sharpFnResolved(input, { limitInputPixels, failOn: 'truncated' }),
+    opts,
+  );
+
+  // Build a ReadableStream that pulls Node Buffer chunks out of the Sharp
+  // duplex stream. This avoids materializing the full output in memory.
+  let aborted = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      pipeline.on('data', (chunk: Buffer) => {
+        if (aborted) return;
+        // Copy out of the Node Buffer so we don't keep the underlying pool alive.
+        controller.enqueue(new Uint8Array(chunk));
+      });
+      pipeline.on('end', () => {
+        if (!aborted) controller.close();
+      });
+      pipeline.on('error', err => {
+        try {
+          controller.error(err);
+        } catch {
+          // controller already errored — ignore
+        }
+      });
+    },
+    cancel() {
+      aborted = true;
+      try {
+        pipeline.destroy();
+      } catch {
+        // already destroyed
+      }
+    },
+  });
+
+  // Tee the stream so we can both pipe to the response and capture into cache.
+  const [responseStream, cacheStream] = stream.tee();
+
+  const cachePromise = (async (): Promise<ArrayBuffer | null> => {
+    const reader = cacheStream.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!(value instanceof Uint8Array)) continue;
+        total += value.byteLength;
+        if (total > opts.maxBufferBytes) {
+          // Output too large to cache — drop the buffered branch.
+          try {
+            await reader.cancel();
+          } catch {
+            // ignore
+          }
+          return null;
+        }
+        chunks.push(value);
+      }
+    } catch {
+      return null;
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // ignore
+      }
+    }
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      out.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
+  })();
+
+  return {
+    stream: responseStream,
+    contentType: resolveContentType(opts.format, originalContentType),
+    cachePromise,
+    abort() {
+      aborted = true;
+      try {
+        pipeline.destroy();
+      } catch {
+        // ignore
+      }
+    },
   };
 }

@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 
 let sendCallCount = 0;
@@ -39,7 +40,7 @@ afterEach(() => {
   mock.restore();
 });
 
-const fakeData = new Uint8Array([1, 2, 3]);
+const fakeData = Buffer.from([1, 2, 3]);
 const fakeMeta = { mimeType: 'application/octet-stream', size: 3 };
 
 describe('withRetry — put()', () => {
@@ -67,12 +68,14 @@ describe('withRetry — put()', () => {
 
     const delays: number[] = [];
     const realSetTimeout = globalThis.setTimeout;
-    const spy = spyOn(globalThis, 'setTimeout').mockImplementation(
-      (fn: TimerHandler, delay?: number, ...args: unknown[]) => {
-        delays.push(delay ?? 0);
-        return realSetTimeout(fn as (...a: unknown[]) => void, 0, ...args);
-      },
-    );
+    const spy = spyOn(globalThis, 'setTimeout').mockImplementation(((
+      fn: TimerHandler,
+      delay?: number,
+      ...args: unknown[]
+    ) => {
+      delays.push(delay ?? 0);
+      return realSetTimeout(fn as (...a: unknown[]) => void, 0, ...args);
+    }) as unknown as typeof setTimeout);
 
     await adapter.put('key', fakeData, fakeMeta);
 

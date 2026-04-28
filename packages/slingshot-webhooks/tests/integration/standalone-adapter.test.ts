@@ -81,7 +81,7 @@ describe('standalone adapter mode', () => {
       events.publish(
         'auth:login',
         { userId: 'user-123', sessionId: 'sess-1', tenantId: 'tenant-a' },
-        { tenantId: 'tenant-a', userId: 'user-123', actorId: 'user-123' },
+        { requestTenantId: 'tenant-a', userId: 'user-123', actorId: 'user-123' },
       );
       await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -132,7 +132,7 @@ describe('standalone adapter mode', () => {
       await new Promise(resolve => setTimeout(resolve, 100));
       const delivery = await runtime.getDelivery(body.deliveryId);
       expect(delivery).not.toBeNull();
-      expect(delivery!.event).toBe('webhook:test');
+      expect(String(delivery!.event)).toBe('webhook:test');
     } finally {
       await teardown();
     }

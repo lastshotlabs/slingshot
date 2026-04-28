@@ -131,16 +131,20 @@ class MockQueue {
   static instances: MockQueue[] = [];
 
   name: string;
+  options: Record<string, unknown> | undefined;
   jobs: MockJob[] = [];
   schedulers: Array<{ key: string; name: string; pattern?: string; memo?: unknown }> = [];
 
-  constructor(name: string) {
+  constructor(name: string, options?: Record<string, unknown>) {
     this.name = name;
+    this.options = options;
     MockQueue.instances.push(this);
   }
 
   async add(name: string, data: Record<string, unknown>, opts?: Record<string, unknown>) {
-    const jobId = (opts?.['jobId'] as string | undefined) ?? String(data['runId'] ?? `${this.name}-${this.jobs.length + 1}`);
+    const jobId =
+      (opts?.['jobId'] as string | undefined) ??
+      String(data['runId'] ?? `${this.name}-${this.jobs.length + 1}`);
     const job = new MockJob({
       queue: this,
       id: jobId,
@@ -149,7 +153,12 @@ class MockQueue {
       opts,
     });
     // Track repeatable jobs as schedulers
-    if (opts && typeof opts['jobId'] === 'string' && opts['repeat'] && typeof opts['repeat'] === 'object') {
+    if (
+      opts &&
+      typeof opts['jobId'] === 'string' &&
+      opts['repeat'] &&
+      typeof opts['repeat'] === 'object'
+    ) {
       const repeat = opts['repeat'] as Record<string, unknown>;
       this.schedulers.push({
         key: opts['jobId'] as string,
@@ -211,6 +220,13 @@ class MockWorker {
   static failOnConstruction: Error | null = null;
 
   eventListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+  paused = false;
+  pauseCalls = 0;
+  closed = false;
+  closedForce: boolean | undefined = undefined;
+  // Tests can override this to simulate in-flight jobs during drain.
+  activeCounts: number[] = [0];
+  activeCountCalls = 0;
 
   constructor(
     public name: string,
@@ -237,7 +253,23 @@ class MockWorker {
     }
   }
 
-  async close() {}
+  async pause(_force?: boolean) {
+    this.pauseCalls += 1;
+    this.paused = true;
+  }
+
+  async getActiveCount() {
+    this.activeCountCalls += 1;
+    if (this.activeCounts.length === 1) {
+      return this.activeCounts[0] ?? 0;
+    }
+    return this.activeCounts.shift() ?? 0;
+  }
+
+  async close(force?: boolean) {
+    this.closed = true;
+    this.closedForce = force;
+  }
 }
 
 mock.module('bullmq', () => ({
@@ -548,11 +580,9 @@ describe('bullmq orchestration adapter – schedule management', () => {
     });
     adapter.registerTask(task);
 
-    const handle = await adapter.schedule(
-      { type: 'task', name: task.name },
-      '0 * * * *',
-      { run: true },
-    );
+    const handle = await adapter.schedule({ type: 'task', name: task.name }, '0 * * * *', {
+      run: true,
+    });
 
     expect(handle.id).toMatch(/^slingshot-schedule-task-sched-task-/);
     expect(handle.cron).toBe('0 * * * *');
@@ -583,11 +613,9 @@ describe('bullmq orchestration adapter – schedule management', () => {
     });
     adapter.registerTask(task);
 
-    const handle = await adapter.schedule(
-      { type: 'task', name: task.name },
-      '*/5 * * * *',
-      { run: true },
-    );
+    const handle = await adapter.schedule({ type: 'task', name: task.name }, '*/5 * * * *', {
+      run: true,
+    });
 
     const taskQueue = MockQueue.instances.find(q => q.name === 'sched-remove:tasks');
     expect(taskQueue!.schedulers).toHaveLength(1);
@@ -624,11 +652,7 @@ describe('bullmq orchestration adapter – schedule management', () => {
     });
     adapter.registerTask(task);
 
-    await adapter.schedule(
-      { type: 'task', name: task.name },
-      '0 9 * * 1',
-      { run: true },
-    );
+    await adapter.schedule({ type: 'task', name: task.name }, '0 9 * * 1', { run: true });
 
     const schedules = await adapter.listSchedules();
     expect(schedules).toHaveLength(1);
@@ -684,13 +708,228 @@ describe('bullmq orchestration adapter – stalled job logging', () => {
       // Simulate BullMQ emitting a 'stalled' event
       taskWorker!.emit('stalled', 'job-42');
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('job-42'),
-      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('job-42'));
     } finally {
       consoleErrorSpy?.mockRestore();
     }
 
     await adapter.shutdown();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Graceful shutdown: pause + drain + force-close
+// ---------------------------------------------------------------------------
+
+describe('bullmq orchestration adapter – shutdown drain', () => {
+  beforeEach(() => {
+    MockQueue.instances = [];
+    MockQueueEvents.instances = [];
+    MockWorker.instances = [];
+    MockWorker.failOnConstruction = null;
+    mockRedis.reset();
+  });
+
+  test('shutdown pauses workers and waits for active jobs to drain to zero', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'drain-success',
+      shutdownDrainTimeoutMs: 2_000,
+    });
+    const task = defineTask({
+      name: 'drain-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+    await adapter.start();
+
+    const taskWorker = MockWorker.instances.find(w => w.name === 'drain-success:tasks');
+    expect(taskWorker).toBeDefined();
+    // Simulate 2 jobs in flight, then 1, then 0
+    taskWorker!.activeCounts = [2, 1, 0];
+
+    await adapter.shutdown();
+
+    expect(taskWorker!.pauseCalls).toBeGreaterThan(0);
+    expect(taskWorker!.paused).toBe(true);
+    expect(taskWorker!.closed).toBe(true);
+    // Drained successfully → close should NOT be forced
+    expect(taskWorker!.closedForce).toBe(false);
+    expect(taskWorker!.activeCountCalls).toBeGreaterThanOrEqual(3);
+  });
+
+  test('shutdown force-closes workers when drain timeout elapses with active jobs', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'drain-timeout',
+      // Very short timeout so the polling loop bails immediately
+      shutdownDrainTimeoutMs: 50,
+    });
+    const task = defineTask({
+      name: 'drain-timeout-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+    await adapter.start();
+
+    const taskWorker = MockWorker.instances.find(w => w.name === 'drain-timeout:tasks');
+    expect(taskWorker).toBeDefined();
+    // Always reports a non-zero active count → drain never reaches zero
+    taskWorker!.activeCounts = [3];
+
+    const consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await adapter.shutdown();
+
+      expect(taskWorker!.pauseCalls).toBeGreaterThan(0);
+      expect(taskWorker!.closed).toBe(true);
+      // Timed out → forced close
+      expect(taskWorker!.closedForce).toBe(true);
+
+      // Should have logged the drain-timeout warning with a structured payload
+      const warnedDrainTimeout = consoleWarnSpy.mock.calls.some(call => {
+        const [msg, payload] = call;
+        return (
+          typeof msg === 'string' &&
+          msg.includes('force-closed') &&
+          msg.includes('drain timeout') &&
+          payload &&
+          typeof payload === 'object' &&
+          (payload as { errorCode?: string }).errorCode === 'WORKER_DRAIN_TIMEOUT'
+        );
+      });
+      expect(warnedDrainTimeout).toBe(true);
+    } finally {
+      consoleWarnSpy.mockRestore();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TLS enforcement
+// ---------------------------------------------------------------------------
+
+describe('bullmq orchestration adapter – requireTls', () => {
+  beforeEach(() => {
+    MockQueue.instances = [];
+    MockQueueEvents.instances = [];
+    MockWorker.instances = [];
+    MockWorker.failOnConstruction = null;
+    mockRedis.reset();
+  });
+
+  test('throws synchronously when requireTls=true and no TLS config provided', () => {
+    expect(() =>
+      createBullMQOrchestrationAdapter({
+        connection: { host: '127.0.0.1', port: 6379 },
+        prefix: 'require-tls-missing',
+        requireTls: true,
+      }),
+    ).toThrow(/requireTls=true/);
+  });
+
+  test('throws when requireTls=true and tls is an empty object', () => {
+    expect(() =>
+      createBullMQOrchestrationAdapter({
+        connection: { host: '127.0.0.1', port: 6379, tls: {} },
+        prefix: 'require-tls-empty',
+        requireTls: true,
+      }),
+    ).toThrow(/requireTls=true/);
+  });
+
+  test('does not throw when requireTls=true and structured tls options provided', () => {
+    expect(() =>
+      createBullMQOrchestrationAdapter({
+        connection: {
+          host: '127.0.0.1',
+          port: 6379,
+          tls: { rejectUnauthorized: true, ca: '<pem>' },
+        },
+        prefix: 'require-tls-ok',
+        requireTls: true,
+      }),
+    ).not.toThrow();
+  });
+
+  test('does not throw when requireTls is omitted (default behavior)', () => {
+    expect(() =>
+      createBullMQOrchestrationAdapter({
+        connection: { host: '127.0.0.1', port: 6379 },
+        prefix: 'require-tls-default',
+      }),
+    ).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Job retention defaults flow through to queue construction
+// ---------------------------------------------------------------------------
+
+describe('bullmq orchestration adapter – job retention defaults', () => {
+  beforeEach(() => {
+    MockQueue.instances = [];
+    MockQueueEvents.instances = [];
+    MockWorker.instances = [];
+    MockWorker.failOnConstruction = null;
+    mockRedis.reset();
+  });
+
+  test('queues are constructed with sensible default removeOnComplete/removeOnFail', () => {
+    createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'retention-default',
+    });
+
+    const taskQueue = MockQueue.instances.find(q => q.name === 'retention-default:tasks');
+    const workflowQueue = MockQueue.instances.find(q => q.name === 'retention-default:workflows');
+    expect(taskQueue?.options).toBeDefined();
+    expect(workflowQueue?.options).toBeDefined();
+
+    const defaultJobOptions = taskQueue!.options!['defaultJobOptions'] as {
+      removeOnComplete: { age: number; count: number };
+      removeOnFail: { age: number; count?: number };
+    };
+    expect(defaultJobOptions.removeOnComplete.age).toBe(3600);
+    expect(defaultJobOptions.removeOnComplete.count).toBe(1000);
+    expect(defaultJobOptions.removeOnFail.age).toBe(86400);
+    expect(defaultJobOptions.removeOnFail.count).toBeUndefined();
+
+    expect(
+      (workflowQueue!.options!['defaultJobOptions'] as { removeOnComplete: { age: number } })
+        .removeOnComplete.age,
+    ).toBe(3600);
+  });
+
+  test('jobRetention overrides flow through to queue options', () => {
+    createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'retention-custom',
+      jobRetention: {
+        removeOnCompleteAge: 60,
+        removeOnCompleteCount: 50,
+        removeOnFailAge: 7 * 24 * 60 * 60,
+        removeOnFailCount: 250,
+      },
+    });
+
+    const taskQueue = MockQueue.instances.find(q => q.name === 'retention-custom:tasks');
+    expect(taskQueue?.options).toBeDefined();
+    const defaultJobOptions = taskQueue!.options!['defaultJobOptions'] as {
+      removeOnComplete: { age: number; count: number };
+      removeOnFail: { age: number; count?: number };
+    };
+    expect(defaultJobOptions.removeOnComplete.age).toBe(60);
+    expect(defaultJobOptions.removeOnComplete.count).toBe(50);
+    expect(defaultJobOptions.removeOnFail.age).toBe(7 * 24 * 60 * 60);
+    expect(defaultJobOptions.removeOnFail.count).toBe(250);
   });
 });

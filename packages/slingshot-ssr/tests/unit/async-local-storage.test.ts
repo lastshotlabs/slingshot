@@ -3,7 +3,7 @@ import { getAsyncLocalStorageConstructor } from '../../src/asyncLocalStorage';
 
 // Save originals so we can restore them after each test
 const originalGlobalAls = (globalThis as Record<string, unknown>).AsyncLocalStorage;
-const originalGetBuiltinModule = (process as Record<string, unknown>).getBuiltinModule;
+const originalGetBuiltinModule = (process as unknown as Record<string, unknown>).getBuiltinModule;
 
 afterEach(() => {
   // Restore globalThis.AsyncLocalStorage
@@ -15,9 +15,9 @@ afterEach(() => {
 
   // Restore process.getBuiltinModule
   if (originalGetBuiltinModule === undefined) {
-    delete (process as Record<string, unknown>).getBuiltinModule;
+    delete (process as unknown as Record<string, unknown>).getBuiltinModule;
   } else {
-    (process as Record<string, unknown>).getBuiltinModule = originalGetBuiltinModule;
+    (process as unknown as Record<string, unknown>).getBuiltinModule = originalGetBuiltinModule;
   }
 });
 
@@ -26,15 +26,15 @@ describe('getAsyncLocalStorageConstructor', () => {
     const fakeAls = class FakeAls {};
     (globalThis as Record<string, unknown>).AsyncLocalStorage = fakeAls;
     // Ensure process.getBuiltinModule won't interfere
-    delete (process as Record<string, unknown>).getBuiltinModule;
+    delete (process as unknown as Record<string, unknown>).getBuiltinModule;
 
     const result = getAsyncLocalStorageConstructor();
-    expect(result).toBe(fakeAls);
+    expect(result).toBe(fakeAls as unknown as typeof result);
   });
 
   it('returns null when globalThis.AsyncLocalStorage is not set and process.getBuiltinModule is not defined', () => {
     delete (globalThis as Record<string, unknown>).AsyncLocalStorage;
-    delete (process as Record<string, unknown>).getBuiltinModule;
+    delete (process as unknown as Record<string, unknown>).getBuiltinModule;
 
     const result = getAsyncLocalStorageConstructor();
     expect(result).toBeNull();
@@ -42,7 +42,7 @@ describe('getAsyncLocalStorageConstructor', () => {
 
   it('returns null when process.getBuiltinModule is defined but returns undefined for node:async_hooks', () => {
     delete (globalThis as Record<string, unknown>).AsyncLocalStorage;
-    (process as Record<string, unknown>).getBuiltinModule = (_id: string) => undefined;
+    (process as unknown as Record<string, unknown>).getBuiltinModule = (_id: string) => undefined;
 
     const result = getAsyncLocalStorageConstructor();
     expect(result).toBeNull();
@@ -50,7 +50,7 @@ describe('getAsyncLocalStorageConstructor', () => {
 
   it('returns null when the module returned by process.getBuiltinModule lacks AsyncLocalStorage', () => {
     delete (globalThis as Record<string, unknown>).AsyncLocalStorage;
-    (process as Record<string, unknown>).getBuiltinModule = (_id: string) => ({
+    (process as unknown as Record<string, unknown>).getBuiltinModule = (_id: string) => ({
       // a module without AsyncLocalStorage
       somethingElse: class {},
     });
@@ -62,11 +62,11 @@ describe('getAsyncLocalStorageConstructor', () => {
   it('returns AsyncLocalStorage from process.getBuiltinModule when it is present', () => {
     delete (globalThis as Record<string, unknown>).AsyncLocalStorage;
     const fakeAls = class FakeAls {};
-    (process as Record<string, unknown>).getBuiltinModule = (_id: string) => ({
+    (process as unknown as Record<string, unknown>).getBuiltinModule = (_id: string) => ({
       AsyncLocalStorage: fakeAls,
     });
 
     const result = getAsyncLocalStorageConstructor();
-    expect(result).toBe(fakeAls);
+    expect(result).toBe(fakeAls as unknown as typeof result);
   });
 });

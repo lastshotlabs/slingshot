@@ -14,12 +14,110 @@ import type {
   SlingshotRuntime,
 } from '@lastshotlabs/slingshot-core';
 
+// ---------------------------------------------------------------------------
+// Logger — structured, redirectable, no-op-friendly
+// ---------------------------------------------------------------------------
+
+/**
+ * Structured logging hook. The runtime emits operational events (websocket
+ * handler errors, upgrade timeouts, body-size rejections, drain timeouts) to
+ * the configured logger. Defaults to {@link defaultLogger} which mirrors the
+ * previous `console.warn` / `console.error` behaviour.
+ *
+ * Pass a custom logger via {@link configureRuntimeNodeLogger} to forward into
+ * pino, bunyan, OpenTelemetry logs, etc. — see the README for examples.
+ */
+export interface RuntimeNodeLogger {
+  warn(event: string, fields?: Record<string, unknown>): void;
+  error(event: string, fields?: Record<string, unknown>): void;
+}
+
+function formatLogLine(event: string, fields?: Record<string, unknown>): string {
+  if (!fields) return `[runtime-node] ${event}`;
+  // Promote scalar field values into the message line so log scrapers and
+  // simple text-based assertions can match on phase/key/etc. without parsing
+  // an object stringified to `[object Object]`.
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined) continue;
+    if (k === 'stack') continue; // stack appended separately
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      parts.push(`${k}=${String(v)}`);
+    }
+  }
+  const summary = parts.length > 0 ? ` ${parts.join(' ')}` : '';
+  return `[runtime-node] ${event}${summary}`;
+}
+
+const defaultLogger: RuntimeNodeLogger = {
+  warn(event, fields) {
+    console.warn(formatLogLine(event, fields));
+  },
+  error(event, fields) {
+    console.error(formatLogLine(event, fields));
+    if (typeof fields?.stack === 'string') {
+      console.error(fields.stack);
+    }
+  },
+};
+
+let activeLogger: RuntimeNodeLogger = defaultLogger;
+
+/**
+ * Replace the runtime's structured logger. Pass `null` to reset to the default
+ * console-backed logger. Returns the previous logger so tests can save and
+ * restore the state.
+ */
+export function configureRuntimeNodeLogger(logger: RuntimeNodeLogger | null): RuntimeNodeLogger {
+  const previous = activeLogger;
+  activeLogger = logger ?? defaultLogger;
+  return previous;
+}
+
 function logWebSocketHandlerError(
   phase: 'open' | 'message' | 'close' | 'pong',
   error: unknown,
 ): void {
-  console.error(`[runtime-node] websocket ${phase} handler failed:`, error);
+  activeLogger.error('websocket-handler-error', {
+    phase,
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
 }
+
+// ---------------------------------------------------------------------------
+// Process-level safety net
+// ---------------------------------------------------------------------------
+
+let processHandlersInstalled = false;
+
+/**
+ * Install once-per-process handlers for `unhandledRejection` and
+ * `uncaughtException`. Both are forwarded to the structured logger so they
+ * surface alongside other runtime events. Without this hook Node defaults to
+ * crashing the process on uncaught exceptions and warning on unhandled
+ * rejections — neither outcome is observable without external instrumentation.
+ *
+ * Idempotent — safe to call across multiple `nodeRuntime()` invocations in the
+ * same process.
+ */
+export function installProcessSafetyNet(): void {
+  if (processHandlersInstalled) return;
+  processHandlersInstalled = true;
+  process.on('unhandledRejection', (reason: unknown) => {
+    activeLogger.error('unhandled-rejection', {
+      message: reason instanceof Error ? reason.message : String(reason),
+      stack: reason instanceof Error ? reason.stack : undefined,
+    });
+  });
+  process.on('uncaughtException', (err: Error) => {
+    activeLogger.error('uncaught-exception', { message: err.message, stack: err.stack });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function toBufferChunk(value: unknown): Buffer | null {
   if (typeof value === 'string') return Buffer.from(value);
@@ -93,6 +191,18 @@ function isEnoentError(err: unknown): err is NodeJS.ErrnoException {
   );
 }
 
+/**
+ * Parse a `Content-Length` header to a non-negative integer, or `null` if the
+ * header is missing or malformed. Used by the request body limiter.
+ */
+function parseContentLength(header: string | null): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number.parseInt(trimmed, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 export const runtimeNodeInternals = {
   toBufferChunk,
   stringifyWsPayload,
@@ -100,6 +210,7 @@ export const runtimeNodeInternals = {
   resolveNodeRequestListener,
   attachNodeRequestListener,
   deleteChannelIfEmpty,
+  parseContentLength,
 };
 
 // ---------------------------------------------------------------------------
@@ -113,23 +224,10 @@ export const runtimeNodeInternals = {
  * dependency is a true peer dep — if `argon2` is not installed the error is
  * surfaced at first use rather than at module load time.
  *
- * @returns A `RuntimePassword` that hashes with argon2id (argon2's default) and
- *   verifies with constant-time comparison.
- *
- * @throws {Error} If the `argon2` package is not installed, `import('argon2')` throws
- *   a module-not-found error at first call to `hash` or `verify`. The error surfaces at
- *   use time, not when `createNodePassword()` is called, because the import is dynamic.
- *
- * @remarks
- * Requires `argon2` to be installed: `npm install argon2` / `bun add argon2`.
- *
- * @example
- * ```ts
- * // Used internally by nodeRuntime() — not needed in application code.
- * const password = createNodePassword();
- * const hash = await password.hash('mysecret');
- * const ok = await password.verify('mysecret', hash); // true
- * ```
+ * @throws {Error} If the `argon2` package is not installed, `import('argon2')`
+ *   throws a module-not-found error at first call to `hash` or `verify`. The
+ *   error surfaces at use time, not when `createNodePassword()` is called,
+ *   because the import is dynamic.
  */
 function createNodePassword(): RuntimePassword {
   return {
@@ -152,29 +250,6 @@ function createNodePassword(): RuntimePassword {
 // SQLite — better-sqlite3
 // ---------------------------------------------------------------------------
 
-/**
- * Wraps a `better-sqlite3` `Database` in the `RuntimeSqliteDatabase` interface.
- *
- * Adapts `better-sqlite3`'s synchronous API to the `RuntimeSqliteDatabase` contract
- * so it can be consumed by slingshot adapters that only depend on the abstract interface.
- * All `params` spread arguments are forwarded unchanged.
- *
- * @param db - An open `better-sqlite3` `Database` instance.
- * @returns A `RuntimeSqliteDatabase` that delegates to `db` for all operations.
- *
- * @remarks
- * `better-sqlite3` uses `prepare().run()` to execute DML; this adapter calls
- * `db.prepare(sql).run(...params)` inside `run()` so every call re-prepares the
- * statement. For hot paths, use `prepare()` directly.
- *
- * @example
- * ```ts
- * // Used internally by nodeRuntime() — not needed in application code.
- * const Database = require('better-sqlite3');
- * const db = new Database('./data.db');
- * const runtimeDb = adaptNodeSqlite(db);
- * ```
- */
 function adaptNodeSqlite(db: BetterSqlite3.Database): RuntimeSqliteDatabase {
   return {
     run(sql: string, ...params: unknown[]): void {
@@ -225,37 +300,30 @@ function adaptNodeSqlite(db: BetterSqlite3.Database): RuntimeSqliteDatabase {
 /**
  * Creates a `RuntimeServerFactory` backed by `@hono/node-server`.
  *
- * `listen()` starts an HTTP (or HTTPS when `opts.tls` is provided) server on
- * the requested port (defaulting to 3000) and resolves with a
- * `RuntimeServerInstance` once the port is bound. If the port is 0, the OS
- * assigns an ephemeral port; the actual port is returned via `instance.port`.
+ * Implements the full {@link RuntimeServerOptions} contract:
+ * - `maxRequestBodySize` — requests whose body exceeds the limit are rejected
+ *   with `413 Payload Too Large` before reaching the handler. Defaults to
+ *   128 MiB to match the Bun runtime.
+ * - `tls` — when present, the server is started over HTTPS.
+ * - `error` — async rejections in `fetch` are forwarded to this callback.
+ * - `websocket.idleTimeout` — server-driven ping every `idleTimeout/2` seconds;
+ *   any connection without a pong response within `idleTimeout` is closed
+ *   with code `1001` (going away).
+ * - `websocket.perMessageDeflate` — forwarded to `ws.WebSocketServer`.
+ * - `websocket.publishToSelf` — when true, `instance.publish()` delivers the
+ *   message to the publishing socket as well as other subscribers.
  *
- * When `opts.websocket` is provided, WebSocket support is enabled via the `ws`
- * peer dependency. Upgrade requests are handled directly on the Node HTTP
- * server's `upgrade` event. Channel-based pub/sub is available via
- * `instance.publish()` and the `subscribe`/`unsubscribe` methods on each
- * `RuntimeWebSocket`.
- *
- * @returns A `RuntimeServerFactory` that wraps `@hono/node-server`'s `serve()`.
- *
- * @remarks
- * Requires `@hono/node-server` as a peer dependency. When WebSocket support is
- * used, `ws` must also be installed.
- *
- * @example
- * ```ts
- * const server = createNodeServer();
- * const instance = await server.listen({ fetch: app.fetch, port: 3000 });
- * console.log(instance.port); // 3000
- * await instance.stop();
- * ```
+ * The returned `RuntimeServerInstance.stop()` accepts a graceful timeout:
+ * - `stop()` — wait for in-flight requests to finish naturally.
+ * - `stop(true)` — force-close all sockets immediately (Node ≥18.2).
+ * - `stop({ timeoutMs })` — drain for up to `timeoutMs` ms then force-close any
+ *   remaining sockets. Recommended for production deploys behind a load balancer.
  */
 function createNodeServer(): RuntimeServerFactory {
   return {
     async listen(opts): Promise<RuntimeServerInstance> {
       const { serve } = await import('@hono/node-server');
 
-      // TLS: create an HTTPS server when tls key/cert are provided
       let httpServer: import('node:http').Server;
       if (opts.tls) {
         const https = await import('node:https');
@@ -270,32 +338,58 @@ function createNodeServer(): RuntimeServerFactory {
       }
 
       let port = resolveListenPort(opts.port);
-
-      // Wrap the fetch handler to forward uncaught errors to opts.error when provided.
-      // Without this, errors from the fetch handler are swallowed by @hono/node-server.
+      const maxBody = opts.maxRequestBodySize ?? 128 * 1024 * 1024;
       const errorHandler = opts.error;
-      const fetchHandler = errorHandler
-        ? async (req: Request) => {
-            try {
-              return await opts.fetch(req);
-            } catch (err) {
-              return errorHandler(err instanceof Error ? err : new Error(String(err)));
-            }
+
+      // Track in-flight fetch handlers so graceful drain can wait for them.
+      // httpServer.close() waits for sockets to drain, but a slow handler that
+      // hasn't yet written the response holds the socket open — we want stop()
+      // to expose that explicitly so callers can observe drain progress.
+      let inFlight = 0;
+      let drainResolve: (() => void) | undefined;
+      const onHandlerEnd = (): void => {
+        inFlight -= 1;
+        if (inFlight === 0 && drainResolve) {
+          drainResolve();
+          drainResolve = undefined;
+        }
+      };
+
+      const fetchHandler = async (req: Request): Promise<Response> => {
+        inFlight += 1;
+        try {
+          const declared = parseContentLength(req.headers.get('content-length'));
+          if (declared !== null && declared > maxBody) {
+            activeLogger.warn('request-body-too-large', {
+              declared,
+              maxBody,
+              method: req.method,
+              url: req.url,
+            });
+            return new Response('Payload Too Large', { status: 413 });
           }
-        : opts.fetch;
+          return await opts.fetch(req);
+        } catch (err) {
+          const wrapped = err instanceof Error ? err : new Error(String(err));
+          if (errorHandler) return errorHandler(wrapped);
+          activeLogger.error('fetch-handler-error', {
+            message: wrapped.message,
+            stack: wrapped.stack,
+          });
+          return new Response('Internal Server Error', { status: 500 });
+        } finally {
+          onHandlerEnd();
+        }
+      };
 
       await new Promise<void>((resolve, reject) => {
-        const errorHandler = (err: Error) => reject(err);
-        httpServer.on('error', errorHandler);
+        const onError = (err: Error) => reject(err);
+        httpServer.on('error', onError);
         serve(
           {
             fetch: fetchHandler,
             port,
             hostname: opts.hostname,
-            // @hono/node-server calls createServer(serverOptions, requestListener).
-            // We return our pre-created server but must register the listener so
-            // incoming requests are actually handled. Handle both 1-arg and 2-arg
-            // calling conventions defensively.
             createServer: ((first: unknown, second?: unknown) => {
               attachNodeRequestListener(
                 httpServer as {
@@ -309,9 +403,23 @@ function createNodeServer(): RuntimeServerFactory {
           },
           info => {
             port = info.port;
-            httpServer.removeListener('error', errorHandler);
+            httpServer.removeListener('error', onError);
             resolve();
           },
+        );
+      });
+
+      // Track active sockets so graceful drain can wait for in-flight responses
+      // to complete before closing the server.
+      const activeSockets = new Set<import('node:net').Socket>();
+      httpServer.on('connection', socket => {
+        activeSockets.add(socket);
+        socket.once('close', () => activeSockets.delete(socket));
+      });
+      httpServer.on('secureConnection', socket => {
+        activeSockets.add(socket as unknown as import('node:net').Socket);
+        socket.once('close', () =>
+          activeSockets.delete(socket as unknown as import('node:net').Socket),
         );
       });
 
@@ -319,10 +427,15 @@ function createNodeServer(): RuntimeServerFactory {
       type WsWebSocket = import('ws').WebSocket;
       let wss: import('ws').WebSocketServer | undefined;
       const channels = new Map<string, Set<WsWebSocket>>();
+      const allSockets = new Set<WsWebSocket>();
       const wsHandler = opts.websocket;
+      const publishToSelf = wsHandler?.publishToSelf === true;
 
-      // Pending upgrade requests waiting for the fetch handler to call upgrade().
-      // Keyed by sec-websocket-key (unique per handshake).
+      // Track which RuntimeWebSocket handle published the current message so
+      // publish() can skip it when publishToSelf is false. Set by RuntimeWebSocket.send
+      // callers via a wrapper - we use a WeakMap from raw ws to the RuntimeWebSocket.
+      const wsToRt = new WeakMap<WsWebSocket, RuntimeWebSocket>();
+
       const pendingUpgrades = new Map<
         string,
         {
@@ -333,11 +446,20 @@ function createNodeServer(): RuntimeServerFactory {
         }
       >();
 
+      // Idle-timeout heartbeat machinery. We track per-socket "alive" markers
+      // and ping at idleTimeout/2 intervals; any socket that has not pong'd
+      // since the last sweep is closed with code 1001.
+      const aliveSockets = new WeakSet<WsWebSocket>();
+      let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+
       if (wsHandler) {
         const { Writable } = await import('node:stream');
         const { ServerResponse } = await import('node:http');
         const { WebSocketServer } = await import('ws');
-        wss = new WebSocketServer({ noServer: true });
+        wss = new WebSocketServer({
+          noServer: true,
+          perMessageDeflate: wsHandler.perMessageDeflate === true,
+        });
 
         const upgradeTimeoutMs = opts.upgradeTimeoutMs ?? 30_000;
 
@@ -351,15 +473,14 @@ function createNodeServer(): RuntimeServerFactory {
           const timer = setTimeout(() => {
             pendingUpgrades.delete(key);
             socket.destroy();
-            console.warn(
-              `[runtime-node] WebSocket upgrade timed out after ${upgradeTimeoutMs}ms for key ${key} — connection destroyed`,
-            );
+            activeLogger.warn('websocket-upgrade-timeout', {
+              key,
+              timeoutMs: upgradeTimeoutMs,
+            });
           }, upgradeTimeoutMs);
 
           pendingUpgrades.set(key, { req, socket, head, timer });
 
-          // Create a dummy socket so @hono/node-server doesn't write to the
-          // real socket that ws will take over.
           const dummySocket = new Writable({
             write(_chunk: unknown, _encoding: string, cb: () => void) {
               cb();
@@ -370,20 +491,54 @@ function createNodeServer(): RuntimeServerFactory {
           res.assignSocket(dummySocket as unknown as import('node:net').Socket);
           httpServer.emit('request', req, res);
         });
+
+        const idleTimeoutSec = wsHandler.idleTimeout;
+        if (idleTimeoutSec && idleTimeoutSec > 0) {
+          const intervalMs = Math.max(1000, Math.floor((idleTimeoutSec * 1000) / 2));
+          heartbeatTimer = setInterval(() => {
+            for (const ws of allSockets) {
+              if (!aliveSockets.has(ws)) {
+                // terminate() over close() — close() waits up to 30s for the
+                // peer's close frame, which a paused/unreachable client will
+                // never send. terminate() drops the socket immediately and
+                // still fires the 'close' event (with code 1006).
+                try {
+                  ws.terminate();
+                } catch {
+                  // ignore — socket may already be torn down
+                }
+                continue;
+              }
+              aliveSockets.delete(ws);
+              try {
+                ws.ping();
+              } catch {
+                // ignore — handled on next sweep
+              }
+            }
+          }, intervalMs);
+          // Don't keep the event loop alive solely for heartbeat ticks.
+          (heartbeatTimer as { unref?: () => void }).unref?.();
+        }
       }
 
-      /** Wrap a raw `ws` WebSocket in the RuntimeWebSocket contract. */
       function wrapWs(ws: WsWebSocket, data: unknown): RuntimeWebSocket {
         const handler = wsHandler;
         if (!handler) {
           throw new Error('WebSocket handler is not configured');
         }
         const subscribedChannels = new Set<string>();
+        allSockets.add(ws);
+        aliveSockets.add(ws);
 
         const rtWs: RuntimeWebSocket = {
           data,
           send(d: string | Buffer) {
-            ws.send(d);
+            try {
+              ws.send(d);
+            } catch (err) {
+              logWebSocketHandlerError('message', err);
+            }
           },
           close(code?: number, reason?: string) {
             ws.close(code, reason);
@@ -408,61 +563,132 @@ function createNodeServer(): RuntimeServerFactory {
           },
         };
 
+        wsToRt.set(ws, rtWs);
+
         ws.on('message', rawData => {
+          aliveSockets.add(ws);
           void Promise.resolve(handler.message(rtWs, stringifyWsPayload(rawData))).catch(
             (error: unknown) => {
               logWebSocketHandlerError('message', error);
             },
           );
         });
-        ws.on('close', (code, reason) => {
-          for (const ch of subscribedChannels) {
-            const subs = channels.get(ch);
-            subs?.delete(ws);
-            deleteChannelIfEmpty(channels as Map<string, Set<unknown>>, ch, subs);
+        ws.on('pong', () => {
+          aliveSockets.add(ws);
+          if (handler.pong) {
+            try {
+              handler.pong(rtWs);
+            } catch (error) {
+              logWebSocketHandlerError('pong', error);
+            }
           }
+        });
+        ws.on('close', (code, reason) => {
+          // Always clean up channel membership — not only those the user
+          // explicitly unsubscribed from. Without this every disconnected client
+          // would leak into the channel map (the original report's leak).
+          for (const [name, subs] of channels) {
+            if (subs.delete(ws)) {
+              deleteChannelIfEmpty(channels as Map<string, Set<unknown>>, name, subs);
+            }
+          }
+          allSockets.delete(ws);
+          subscribedChannels.clear();
           void Promise.resolve(handler.close(rtWs, code, stringifyWsPayload(reason))).catch(
             (error: unknown) => {
               logWebSocketHandlerError('close', error);
             },
           );
         });
-        if (handler.pong) {
-          ws.on('pong', () => {
+
+        return rtWs;
+      }
+
+      const stop = async (
+        opts?: boolean | { timeoutMs?: number; closeActiveConnections?: boolean },
+      ): Promise<void> => {
+        const force = opts === true || (typeof opts === 'object' && opts?.closeActiveConnections);
+        const timeoutMs = typeof opts === 'object' ? opts?.timeoutMs : undefined;
+
+        // Drain pending upgrade handshakes first.
+        for (const [key, pending] of pendingUpgrades) {
+          clearTimeout(pending.timer);
+          pending.socket.destroy();
+          pendingUpgrades.delete(key);
+        }
+        // Stop the heartbeat sweeper before closing sockets.
+        if (heartbeatTimer) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = undefined;
+        }
+        // Close all open websockets cleanly so handshake completion fires.
+        if (wss) {
+          for (const ws of allSockets) {
             try {
-              handler.pong?.(rtWs);
-            } catch (error) {
-              logWebSocketHandlerError('pong', error);
+              ws.close(1001, 'server shutting down');
+            } catch {
+              // ignore
+            }
+          }
+          wss.close();
+        }
+
+        // Wait for in-flight fetch handlers before tearing down sockets.
+        // httpServer.close() resolves on socket close, not handler completion —
+        // a slow handler mid-write can have its socket ripped away on a force
+        // timeout. Tracking inFlight lets us guarantee handler completion (or
+        // a clean timeout) before falling through to socket teardown.
+        if (inFlight > 0 && !force) {
+          await new Promise<void>(resolveDrain => {
+            let drainTimer: ReturnType<typeof setTimeout> | undefined;
+            const settle = () => {
+              drainResolve = undefined;
+              if (drainTimer) clearTimeout(drainTimer);
+              resolveDrain();
+            };
+            drainResolve = settle;
+            if (timeoutMs) {
+              drainTimer = setTimeout(() => {
+                activeLogger.warn('graceful-stop-handler-timeout', {
+                  timeoutMs,
+                  inFlight,
+                });
+                settle();
+              }, timeoutMs);
             }
           });
         }
 
-        return rtWs;
-      }
+        await new Promise<void>(resolve => {
+          let drainTimer: ReturnType<typeof setTimeout> | undefined;
+          if (timeoutMs && !force) {
+            drainTimer = setTimeout(() => {
+              activeLogger.warn('graceful-stop-timeout', {
+                timeoutMs,
+                remainingSockets: activeSockets.size,
+              });
+              (httpServer as { closeAllConnections?: () => void }).closeAllConnections?.();
+            }, timeoutMs);
+          }
+          if (force) {
+            (httpServer as { closeAllConnections?: () => void }).closeAllConnections?.();
+          }
+
+          httpServer.close(() => {
+            if (drainTimer) clearTimeout(drainTimer);
+            resolve();
+          });
+        });
+      };
 
       return {
         get port(): number {
           return port;
         },
-        stop(closeActiveConnections?: boolean): Promise<void> {
-          return new Promise(resolve => {
-            // Drain pending upgrades before closing the server.
-            // clearTimeout + socket.destroy() are synchronous but must complete
-            // before httpServer.close() so destroyed sockets are not counted as
-            // active connections during the close handshake.
-            for (const [key, pending] of pendingUpgrades) {
-              clearTimeout(pending.timer);
-              pending.socket.destroy();
-              pendingUpgrades.delete(key);
-            }
-            if (closeActiveConnections) {
-              // Node 18.2+ API — force-close all active connections
-              (httpServer as { closeAllConnections?: () => void }).closeAllConnections?.();
-            }
-            wss?.close();
-            httpServer.close(() => resolve());
-          });
-        },
+        // Cast retains compatibility with the contract's
+        // `(closeActiveConnections?: boolean) => Promise<void>` while exposing
+        // the richer object-form locally.
+        stop: stop as RuntimeServerInstance['stop'],
         upgrade(req: Request, upgradeOpts: { data: unknown }): boolean {
           if (!wss || !wsHandler) return false;
           const key = req.headers.get('sec-websocket-key');
@@ -479,13 +705,24 @@ function createNodeServer(): RuntimeServerFactory {
           });
           return true;
         },
-        publish(channel: string, message: string): void {
+        publish(channel: string, message: string, fromWs?: WsWebSocket): void {
           const subs = channels.get(channel);
           if (!subs) return;
           for (const ws of subs) {
+            if (!publishToSelf && fromWs && ws === fromWs) continue;
             // ws.OPEN === 1
-            if (ws.readyState === 1) {
+            if (ws.readyState !== 1) continue;
+            // Per-subscriber try/catch — a single bad subscriber must not
+            // crash the entire fan-out. ws.send() can throw synchronously
+            // when the underlying socket is half-closed or write-buffered
+            // beyond the high-water mark.
+            try {
               ws.send(message);
+            } catch (err) {
+              activeLogger.error('publish-send-failed', {
+                channel,
+                message: err instanceof Error ? err.message : String(err),
+              });
             }
           }
         },
@@ -498,33 +735,6 @@ function createNodeServer(): RuntimeServerFactory {
 // Filesystem — Node.js built-ins
 // ---------------------------------------------------------------------------
 
-/**
- * Creates a `RuntimeFs` implementation backed by `node:fs/promises`.
- *
- * - `write` — `fs.writeFile` (creates or overwrites).
- * - `readFile` — `fs.readFile` wrapped to return `null` on `ENOENT` rather than throwing.
- * - `exists` — `fs.access` returning `true` / `false`.
- *
- * All `fs` imports are done lazily via dynamic `import()` so the module loads
- * without side effects in environments that polyfill Node.js APIs.
- *
- * @returns A `RuntimeFs` backed by Node.js built-in file-system APIs.
- *
- * @remarks
- * `readFile` returns `null` specifically on `ENOENT` (file not found). All other
- * `fs.readFile` errors (e.g. `EACCES` for permission denied, `EISDIR` for a directory
- * path) are re-thrown as-is and are not swallowed. `exists` uses `fs.access` and
- * catches all errors to return `false` — it does not distinguish ENOENT from other
- * access errors.
- *
- * @example
- * ```ts
- * // Used internally by nodeRuntime() — not needed in application code.
- * const fs = createNodeFs();
- * await fs.write('./output.json', JSON.stringify(data));
- * const bytes = await fs.readFile('./output.json');
- * ```
- */
 function createNodeFs(): RuntimeFs {
   return {
     async write(path: string, data: string | Uint8Array): Promise<void> {
@@ -558,25 +768,6 @@ function createNodeFs(): RuntimeFs {
 // Glob — fast-glob
 // ---------------------------------------------------------------------------
 
-/**
- * Creates a `RuntimeGlob` implementation backed by `fast-glob`.
- *
- * `scan(pattern, options)` delegates to `fast-glob` with `dot: false` (hidden
- * files excluded by default). The `cwd` option is forwarded unchanged.
- *
- * @returns A `RuntimeGlob` that uses `fast-glob` for file pattern scanning.
- *
- * @remarks
- * Requires `fast-glob` to be installed as a peer dependency:
- * `npm install fast-glob` / `bun add fast-glob`.
- *
- * @example
- * ```ts
- * // Used internally by nodeRuntime() — not needed in application code.
- * const glob = createNodeGlob();
- * const files = await glob.scan('**\/*.ts', { cwd: './src' });
- * ```
- */
 function createNodeGlob(): RuntimeGlob {
   return {
     async scan(pattern: string, options?: { cwd?: string }): Promise<string[]> {
@@ -600,41 +791,53 @@ function createNodeGlob(): RuntimeGlob {
  * - **fs** — `node:fs/promises` for async file I/O with ENOENT-safe `readFile`
  * - **glob** — `fast-glob` (peer dep: `fast-glob`) for file pattern scanning
  *
- * All peer dependencies are loaded lazily at call time so missing deps throw at the point
- * of use rather than at import time.
+ * **Runtime contract enforcement.** Unlike earlier versions, this runtime fully
+ * implements the `RuntimeServerOptions` and `RuntimeWebSocketHandler` contract:
+ * `maxRequestBodySize` (413 enforcement), `idleTimeout` (server-side
+ * heartbeat), `perMessageDeflate` (compression), and `publishToSelf` (publish
+ * fan-out) all behave as documented.
  *
- * @returns A fully-implemented `SlingshotRuntime` backed by Node.js APIs.
+ * **Graceful shutdown.** `instance.stop({ timeoutMs })` drains in-flight
+ * connections for up to `timeoutMs` before force-closing leftover sockets. The
+ * runtime does **not** register `SIGTERM` or `SIGINT` handlers — process
+ * lifecycle belongs to the calling app. In production, register handlers:
  *
- * @remarks
- * This runtime is intended for use in Node.js environments only. For Bun, use
- * `bunRuntime()` from `@lastshotlabs/slingshot-runtime-bun`.
- *
- * Peer dependency failures (missing `argon2`, `better-sqlite3`, `@hono/node-server`,
- * or `fast-glob`) surface at **first use** of the respective capability, not when
- * `nodeRuntime()` is called. The runtime object is constructed eagerly, but each
- * sub-factory (`createNodePassword`, `createNodeServer`, etc.) defers its peer-dep
- * imports to the first method invocation via dynamic `import()`.
- *
- * @example
  * ```ts
- * import { nodeRuntime } from '@lastshotlabs/slingshot-runtime-node';
- * import { createServer } from '@lastshotlabs/slingshot-core';
- *
- * const server = await createServer({ runtime: nodeRuntime(), ...config });
+ * const server = await runtime.server.listen({ ...opts });
+ * const drain = async () => {
+ *   try { await server.stop({ timeoutMs: 25_000 }); } finally { process.exit(0); }
+ * };
+ * process.once('SIGTERM', drain);
+ * process.once('SIGINT', drain);
  * ```
+ *
+ * Optionally call `installProcessSafetyNet()` to forward unhandled rejections
+ * and uncaught exceptions to the structured logger.
+ *
+ * **Structured logging.** Operational events (websocket handler errors,
+ * upgrade timeouts, body-size rejections, drain timeouts, fetch handler
+ * exceptions) are emitted via {@link configureRuntimeNodeLogger}. The default
+ * logger writes to `console.warn` / `console.error`; production deployments
+ * should swap in a logger that forwards to pino/bunyan/OpenTelemetry.
  */
 export function nodeRuntime(): SlingshotRuntime {
   return {
     password: createNodePassword(),
     sqlite: {
       open(path: string): RuntimeSqliteDatabase {
-        // Synchronous open — better-sqlite3 is a native CJS addon that must
-        // be loaded via require(). Use the top-level createRequire so this
-        // works in Node.js ESM where bare `require` is not available.
         const req = createRequire(import.meta.url);
         const Database = req('better-sqlite3') as typeof BetterSqlite3;
         const db = new Database(path);
         db.pragma('journal_mode = WAL');
+        const journalRows = db.pragma('journal_mode') as Array<{ journal_mode: string }>;
+        const mode = journalRows[0]?.journal_mode?.toLowerCase();
+        if (mode && mode !== 'wal') {
+          db.close();
+          throw new Error(
+            `[runtime-node] failed to enable WAL journal mode (got ${mode}); ` +
+              `verify the database file is on a writable, non-network filesystem`,
+          );
+        }
         return adaptNodeSqlite(db);
       },
     },

@@ -5,6 +5,7 @@ import { getActorTenantId } from '@lastshotlabs/slingshot-core';
 import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
+  type OrchestrationAdapter,
   OrchestrationError,
   type OrchestrationRuntime,
   type Run,
@@ -146,11 +147,52 @@ function parseListRunsQuery(url: URL, tenantId?: string): RunFilter {
   };
 }
 
+// Sentinel error that signals an invalid resolver result without leaking the
+// resolver's identity to callers. Routes catch this and translate it into an
+// HTTP 500 with a stable error code so observability tooling can flag the
+// misconfiguration distinctly from generic adapter/internal errors.
+class InvalidResolverResultError extends Error {
+  readonly code = 'INVALID_RESOLVER_RESULT';
+  constructor(detail: string) {
+    super(`Invalid resolveRequestContext result: ${detail}`);
+    this.name = 'InvalidResolverResultError';
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 async function resolveRequestContext(
   c: Context<AppEnv>,
   resolver: OrchestrationRequestContextResolver | undefined,
 ): Promise<OrchestrationRequestContext> {
-  const resolved = (await (resolver ?? defaultRequestContext)(c)) ?? {};
+  const raw = await (resolver ?? defaultRequestContext)(c);
+
+  // null / undefined are explicitly allowed and treated as an empty context.
+  if (raw === null || raw === undefined) {
+    return {};
+  }
+
+  // Anything that isn't a plain object is a contract violation.
+  if (!isPlainObject(raw)) {
+    throw new InvalidResolverResultError('expected an object, null, or undefined');
+  }
+  const resolved = raw as Partial<OrchestrationRequestContext>;
+
+  if (resolved.tenantId !== undefined && typeof resolved.tenantId !== 'string') {
+    throw new InvalidResolverResultError('tenantId must be a string when provided');
+  }
+  if (resolved.actorId !== undefined && typeof resolved.actorId !== 'string') {
+    throw new InvalidResolverResultError('actorId must be a string when provided');
+  }
+  if (resolved.tags !== undefined && !isPlainObject(resolved.tags)) {
+    throw new InvalidResolverResultError('tags must be an object when provided');
+  }
+  if (resolved.metadata !== undefined && !isPlainObject(resolved.metadata)) {
+    throw new InvalidResolverResultError('metadata must be an object when provided');
+  }
+
   return {
     tenantId:
       typeof resolved.tenantId === 'string' && resolved.tenantId.length > 0
@@ -167,10 +209,26 @@ async function resolveRequestContext(
 
 function buildRunLink(c: Context<AppEnv>, runId: string): string {
   const url = new URL(c.req.url);
-  url.pathname = url.pathname.replace(
-    /\/(?:tasks|workflows)\/[^/]+\/runs$/,
-    `/runs/${encodeURIComponent(runId)}`,
-  );
+  // Cover three URL shapes that can produce a run-link:
+  //   POST /tasks/:name/runs
+  //   POST /workflows/:name/runs
+  //   POST /runs/:id/replay
+  // All three should resolve to /runs/<runId> regardless of the originating route.
+  if (/\/(?:tasks|workflows)\/[^/]+\/runs$/.test(url.pathname)) {
+    url.pathname = url.pathname.replace(
+      /\/(?:tasks|workflows)\/[^/]+\/runs$/,
+      `/runs/${encodeURIComponent(runId)}`,
+    );
+  } else if (/\/runs\/[^/]+\/replay$/.test(url.pathname)) {
+    url.pathname = url.pathname.replace(
+      /\/runs\/[^/]+\/replay$/,
+      `/runs/${encodeURIComponent(runId)}`,
+    );
+  } else {
+    // Fallback: append `/runs/<runId>` to the request path so callers always
+    // receive a usable absolute path even when the URL shape is unfamiliar.
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/runs/${encodeURIComponent(runId)}`;
+  }
   url.search = '';
   return `${url.pathname}${url.search}${url.hash}`;
 }
@@ -276,18 +334,136 @@ function mapErrorToStatus(error: unknown): 400 | 404 | 500 {
   return 500;
 }
 
+function buildErrorPayload(error: unknown): { error: string; code: string } {
+  if (error instanceof InvalidResolverResultError) {
+    return { error: error.message, code: error.code };
+  }
+  return {
+    error: error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
+    code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
+  };
+}
+
+function registerAdminRoutes(
+  router: Hono<AppEnv>,
+  options: {
+    adminAuth?: MiddlewareHandler[];
+    adapter?: OrchestrationAdapter;
+  },
+) {
+  const admin = new Hono<AppEnv>();
+  if ((options.adminAuth ?? []).length > 0) {
+    admin.use('*', ...(options.adminAuth ?? []));
+  }
+
+  admin.get('/health', async c => {
+    const adapter = options.adapter as AdapterWithOps | undefined;
+    const adapterName = adapter?.name ?? null;
+    if (!adapter || typeof adapter.getHealth !== 'function') {
+      // Adapter has not opted into health introspection. Still return 200
+      // with adapter identity so the route is usable as a basic liveness probe.
+      return c.json({ status: 'ok', adapter: adapterName }, 200);
+    }
+    try {
+      const health = await adapter.getHealth();
+      const payload: Record<string, unknown> = {
+        status: typeof health?.status === 'string' ? health.status : 'ok',
+        adapter: adapterName,
+        ...health,
+      };
+      return c.json(payload, 200);
+    } catch (error) {
+      return c.json(
+        {
+          status: 'error',
+          adapter: adapterName,
+          error: error instanceof Error ? error.message : 'unknown adapter health error',
+        },
+        503,
+      );
+    }
+  });
+
+  admin.get('/metrics', async c => {
+    const adapter = options.adapter as AdapterWithOps | undefined;
+    if (!adapter || typeof adapter.getMetrics !== 'function') {
+      return c.json(
+        {
+          error: 'Adapter does not expose metrics',
+          code: 'CAPABILITY_NOT_SUPPORTED',
+        },
+        501,
+      );
+    }
+    try {
+      const metrics = await adapter.getMetrics();
+      return c.json(
+        {
+          adapter: adapter.name ?? null,
+          metrics,
+        },
+        200,
+      );
+    } catch (error) {
+      return c.json(
+        {
+          error: error instanceof Error ? error.message : 'unknown adapter metrics error',
+          code: 'ADAPTER_ERROR',
+        },
+        500,
+      );
+    }
+  });
+
+  router.route('/', admin);
+}
+
+/**
+ * Optional adapter health snapshot exposed via `GET /health`.
+ *
+ * Adapters opt in by implementing `getHealth()`; the router treats the method as
+ * advisory so adapters that omit it still get a basic `{ status: 'ok' }` response.
+ */
+export interface OrchestrationAdapterHealth {
+  status?: string;
+  queues?: unknown;
+  droppedMessages?: unknown;
+  [key: string]: unknown;
+}
+
+/**
+ * Optional adapter metrics snapshot exposed via `GET /metrics`.
+ *
+ * Adapters opt in by implementing `getMetrics()`. When omitted the route returns
+ * 501 so callers can discover capability availability without crashing.
+ */
+export type OrchestrationAdapterMetrics = Record<string, unknown>;
+
+type AdapterWithOps = OrchestrationAdapter & {
+  getHealth?: () => Promise<OrchestrationAdapterHealth> | OrchestrationAdapterHealth;
+  getMetrics?: () => Promise<OrchestrationAdapterMetrics> | OrchestrationAdapterMetrics;
+  name?: string;
+};
+
 /**
  * Build the Hono router that exposes orchestration runs over HTTP.
  */
 export function createOrchestrationRouter(options: {
   runtime: OrchestrationRuntime;
   routeMiddleware?: MiddlewareHandler[];
+  adminAuth?: MiddlewareHandler[];
   tasks: AnyResolvedTask[];
   workflows: AnyResolvedWorkflow[];
   resolveRequestContext?: OrchestrationRequestContextResolver;
   authorizeRun?: OrchestrationRunAuthorizer;
+  adapter?: OrchestrationAdapter;
 }) {
   const router = new Hono<AppEnv>();
+  // Mount admin routes first with their own (optional) auth chain so the
+  // wildcard `routeMiddleware` registered below does not also gate /health
+  // and /metrics. This lets ops use a different identity (basic auth, IP
+  // allowlist, etc.) than user-facing API callers.
+  registerAdminRoutes(router, options);
   if ((options.routeMiddleware ?? []).length > 0) {
     router.use('*', ...(options.routeMiddleware ?? []));
   }
@@ -359,14 +535,7 @@ export function createOrchestrationRouter(options: {
       );
     } catch (error) {
       const status = mapErrorToStatus(error);
-      return c.json(
-        {
-          error:
-            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
-          code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
-        },
-        status,
-      );
+      return c.json(buildErrorPayload(error), status);
     }
   });
 
@@ -414,14 +583,7 @@ export function createOrchestrationRouter(options: {
       );
     } catch (error) {
       const status = mapErrorToStatus(error);
-      return c.json(
-        {
-          error:
-            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
-          code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
-        },
-        status,
-      );
+      return c.json(buildErrorPayload(error), status);
     }
   });
 
@@ -438,14 +600,7 @@ export function createOrchestrationRouter(options: {
       return c.json(run, 200);
     } catch (error) {
       const status = mapErrorToStatus(error);
-      return c.json(
-        {
-          error:
-            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
-          code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
-        },
-        status,
-      );
+      return c.json(buildErrorPayload(error), status);
     }
   });
 
@@ -463,14 +618,112 @@ export function createOrchestrationRouter(options: {
       return c.body(null, 204);
     } catch (error) {
       const status = mapErrorToStatus(error);
+      return c.json(buildErrorPayload(error), status);
+    }
+  });
+
+  router.post('/runs/:id/replay', async c => {
+    const sourceId = c.req.param('id');
+    try {
+      const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
+      const sourceRun = await options.runtime.getRun(sourceId);
+      // Authorize replay using `cancel` semantics: replaying a run is a
+      // mutating action on the same logical job, so it should follow the same
+      // authorization policy as cancel rather than the read-only path.
+      if (
+        !sourceRun ||
+        !(await canAccessRun(c, sourceRun, requestContext, 'cancel', options.authorizeRun))
+      ) {
+        return c.json({ error: `Run '${sourceId}' not found`, code: 'RUN_NOT_FOUND' }, 404);
+      }
+      // Some adapters strip `input` once a run completes (storage minimization).
+      // We cannot replay without the original payload, so signal 501 rather
+      // than synthesizing an empty input that could mask a real bug.
+      if (sourceRun.input === undefined) {
+        return c.json(
+          {
+            error: 'Adapter did not retain run input; replay is not supported for this run',
+            code: 'CAPABILITY_NOT_SUPPORTED',
+          },
+          501,
+        );
+      }
+
+      // Optional override body: { idempotencyKey?: string, metadata?: Record<...> }
+      let body: Record<string, unknown> = {};
+      const rawText = await c.req.text();
+      if (rawText.length > 0) {
+        try {
+          const parsed = JSON.parse(rawText);
+          if (isPlainObject(parsed)) {
+            body = parsed;
+          }
+        } catch {
+          return c.json({ error: 'Invalid JSON in request body' }, 400);
+        }
+      }
+
+      // Derive a new idempotency key with a `:replay:<timestamp>` suffix so
+      // the replay does not collide with the original run, while still being
+      // deterministic if the caller retries with the same body.
+      const headerIdempotencyKey = c.req.header('idempotency-key');
+      const overrideIdempotencyKey =
+        typeof body['idempotencyKey'] === 'string' && (body['idempotencyKey'] as string).length > 0
+          ? (body['idempotencyKey'] as string)
+          : typeof headerIdempotencyKey === 'string' && headerIdempotencyKey.length > 0
+            ? headerIdempotencyKey
+            : undefined;
+      const replayIdempotencyKey = overrideIdempotencyKey ?? `${sourceId}:replay:${Date.now()}`;
+
+      const replayOptions: RunOptions = {
+        idempotencyKey: replayIdempotencyKey,
+      };
+      if (sourceRun.tenantId) {
+        replayOptions.tenantId = sourceRun.tenantId;
+      }
+      if (sourceRun.priority !== undefined) {
+        replayOptions.priority = sourceRun.priority;
+      }
+      if (sourceRun.tags && Object.keys(sourceRun.tags).length > 0) {
+        replayOptions.tags = { ...sourceRun.tags };
+      }
+      // Stamp replay metadata so observability tooling can trace the chain
+      // back to the original run without needing a separate join table.
+      const mergedMetadata: Record<string, unknown> = {
+        ...(sourceRun.metadata ?? {}),
+        replayOf: sourceId,
+        replayedAt: new Date().toISOString(),
+      };
+      if (isPlainObject(body['metadata'])) {
+        Object.assign(mergedMetadata, body['metadata'] as Record<string, unknown>);
+      }
+      if (requestContext.actorId) {
+        mergedMetadata['replayedBy'] = requestContext.actorId;
+      }
+      replayOptions.metadata = mergedMetadata;
+
+      const handle =
+        sourceRun.type === 'workflow'
+          ? await options.runtime.runWorkflow(sourceRun.name, sourceRun.input, replayOptions)
+          : await options.runtime.runTask(sourceRun.name, sourceRun.input, replayOptions);
+
+      const newRun = await options.runtime.getRun(handle.id);
       return c.json(
         {
-          error:
-            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
-          code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
+          id: handle.id,
+          type: sourceRun.type,
+          name: sourceRun.name,
+          status: newRun?.status ?? 'pending',
+          replayOf: sourceId,
+          links: {
+            run: buildRunLink(c, handle.id),
+          },
         },
-        status,
+        202,
       );
+    } catch (error) {
+      const status = mapErrorToStatus(error);
+      return c.json(buildErrorPayload(error), status);
     }
   });
 
@@ -493,14 +746,7 @@ export function createOrchestrationRouter(options: {
       return c.json(listed);
     } catch (error) {
       const status = mapErrorToStatus(error);
-      return c.json(
-        {
-          error:
-            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
-          code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
-        },
-        status,
-      );
+      return c.json(buildErrorPayload(error), status);
     }
   });
 
@@ -535,14 +781,7 @@ export function createOrchestrationRouter(options: {
       return c.json({ status: 'accepted' }, 202);
     } catch (error) {
       const status = mapErrorToStatus(error);
-      return c.json(
-        {
-          error:
-            error instanceof OrchestrationError ? error.message : 'Internal orchestration error',
-          code: error instanceof OrchestrationError ? error.code : 'ADAPTER_ERROR',
-        },
-        status,
-      );
+      return c.json(buildErrorPayload(error), status);
     }
   });
 

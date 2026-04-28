@@ -82,6 +82,18 @@ export interface AssetsPluginConfig {
    * are used as-is.
    */
   readonly storageRetryAttempts?: number;
+  /**
+   * Permit asset deletes to leave behind storage objects when the manifest
+   * runtime did not wire a delete-storage middleware. Defaults to `false`.
+   *
+   * When `false` (default), the plugin refuses to start if any asset entity
+   * is declared without a wired delete-cascade — failing fast with the error
+   * code `ASSETS_DELETE_MIDDLEWARE_MISSING` so callers don't accidentally
+   * orphan blobs in the underlying object store. Set to `true` only as a
+   * temporary opt-out (e.g. during a migration where storage cleanup runs
+   * asynchronously elsewhere); the plugin will continue to log a warning.
+   */
+  readonly allowOrphanedStorage?: boolean;
 }
 
 /**

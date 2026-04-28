@@ -145,7 +145,10 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
         try {
           unsub();
         } catch (err) {
-          console.error('[slingshot-mail] Failed to remove event subscription during teardown', err);
+          console.error(
+            '[slingshot-mail] Failed to remove event subscription during teardown',
+            err,
+          );
         }
       }
       unsubscribers = [];

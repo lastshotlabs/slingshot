@@ -5,7 +5,12 @@ import type {
   ResourceTypeDefinition,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryPermissionsAdapter } from '../../src/adapters/memory';
-import { createPermissionEvaluator } from '../../src/lib/evaluator';
+import {
+  type EvaluatorLogger,
+  type GroupExpansionFailure,
+  PermissionQueryTimeoutError,
+  createPermissionEvaluator,
+} from '../../src/lib/evaluator';
 import { createPermissionRegistry } from '../../src/lib/registry';
 
 const postDef: ResourceTypeDefinition = {
@@ -16,6 +21,16 @@ const postDef: ResourceTypeDefinition = {
     reader: ['read'],
     owner: ['create', 'read', 'update', 'delete'],
   },
+};
+
+const noopBatchAdapterMethods: Pick<
+  PermissionsAdapter,
+  'createGrants' | 'deleteAllGrantsOnResource'
+> = {
+  async createGrants() {
+    return [];
+  },
+  async deleteAllGrantsOnResource() {},
 };
 
 describe('PermissionEvaluator', () => {
@@ -109,6 +124,7 @@ describe('PermissionEvaluator', () => {
       grantedAt: new Date(),
     };
     const mockAdapter: PermissionsAdapter = {
+      ...noopBatchAdapterMethods,
       async createGrant() {
         return '';
       },
@@ -224,6 +240,7 @@ describe('PermissionEvaluator', () => {
       expiresAt: pastDate,
     };
     const mockAdapter: PermissionsAdapter = {
+      ...noopBatchAdapterMethods,
       async createGrant() {
         return '';
       },
@@ -444,6 +461,7 @@ describe('PermissionEvaluator', () => {
       grantedAt: new Date(),
     };
     const mockAdapter: PermissionsAdapter = {
+      ...noopBatchAdapterMethods,
       async createGrant() {
         return '';
       },
@@ -633,6 +651,7 @@ describe('PermissionEvaluator', () => {
 
   test('queryTimeoutMs rejects can() when adapter hangs past the deadline', async () => {
     const hangingAdapter: PermissionsAdapter = {
+      ...noopBatchAdapterMethods,
       async createGrant() {
         return '';
       },
@@ -677,10 +696,11 @@ describe('PermissionEvaluator', () => {
       void handler;
       void timeout;
       void args;
-      return 123 as ReturnType<typeof setTimeout>;
-    }) as typeof setTimeout);
+      return 123 as unknown as ReturnType<typeof setTimeout>;
+    }) as unknown as typeof setTimeout);
 
     const fastAdapter: PermissionsAdapter = {
+      ...noopBatchAdapterMethods,
       async createGrant() {
         return '';
       },
@@ -736,6 +756,7 @@ describe('PermissionEvaluator', () => {
     });
 
     const failingAdapter: PermissionsAdapter = {
+      ...noopBatchAdapterMethods,
       async createGrant() {
         return '';
       },
@@ -800,10 +821,7 @@ describe('PermissionEvaluator', () => {
     });
 
     // No scope at all
-    const noScope = await evaluator.can(
-      { subjectId: 'user-1', subjectType: 'user' },
-      'read',
-    );
+    const noScope = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read');
     // Scope with tenantId explicitly undefined
     const explicitUndefined = await evaluator.can(
       { subjectId: 'user-1', subjectType: 'user' },
@@ -827,11 +845,10 @@ describe('PermissionEvaluator', () => {
       grantedBy: 'system',
     });
 
-    const result = await evaluator.can(
-      { subjectId: 'user-1', subjectType: 'user' },
-      'read',
-      { tenantId: undefined, resourceType: 'post' },
-    );
+    const result = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+      tenantId: undefined,
+      resourceType: 'post',
+    });
     expect(result).toBe(true);
   });
 
@@ -848,11 +865,9 @@ describe('PermissionEvaluator', () => {
     });
 
     // Only passing resourceId with no tenantId — grant requires tenantId to match
-    const result = await evaluator.can(
-      { subjectId: 'user-1', subjectType: 'user' },
-      'read',
-      { resourceId: 'post-1' },
-    );
+    const result = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+      resourceId: 'post-1',
+    });
     expect(result).toBe(false);
   });
 
@@ -861,17 +876,28 @@ describe('PermissionEvaluator', () => {
     // A hanging group grant fetch should reject (treated as allSettled failure) and
     // be skipped — the evaluator should continue with remaining groups.
     const hangingGroupAdapter: PermissionsAdapter = {
-      async createGrant() { return ''; },
-      async revokeGrant() { return false; },
-      async getGrantsForSubject() { return []; },
+      ...noopBatchAdapterMethods,
+      async createGrant() {
+        return '';
+      },
+      async revokeGrant() {
+        return false;
+      },
+      async getGrantsForSubject() {
+        return [];
+      },
       async getEffectiveGrantsForSubject(subjectId) {
         if (subjectId === 'group-hang') {
           return new Promise<PermissionGrant[]>(() => {}); // hangs forever
         }
         return []; // group-ok has no grants → user cannot access
       },
-      async listGrantHistory() { return []; },
-      async listGrantsOnResource() { return []; },
+      async listGrantHistory() {
+        return [];
+      },
+      async listGrantsOnResource() {
+        return [];
+      },
       async deleteAllGrantsForSubject() {},
     };
 
@@ -890,15 +916,15 @@ describe('PermissionEvaluator', () => {
 
     const warnMessages: string[] = [];
     const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => { warnMessages.push(String(args[0])); };
+    console.warn = (...args: unknown[]) => {
+      warnMessages.push(String(args[0]));
+    };
 
     let result: boolean;
     try {
-      result = await timedGroupEvaluator.can(
-        { subjectId: 'user-1', subjectType: 'user' },
-        'read',
-        { resourceType: 'post' },
-      );
+      result = await timedGroupEvaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      });
     } finally {
       console.warn = originalWarn;
     }
@@ -937,11 +963,9 @@ describe('PermissionEvaluator', () => {
     });
 
     // Service account — group expansion must NOT run
-    await svcEvaluator.can(
-      { subjectId: 'svc-1', subjectType: 'service-account' },
-      'read',
-      { resourceType: 'post' },
-    );
+    await svcEvaluator.can({ subjectId: 'svc-1', subjectType: 'service-account' }, 'read', {
+      resourceType: 'post',
+    });
     expect(getGroupsCalled).toBe(false);
   });
 
@@ -962,6 +986,282 @@ describe('PermissionEvaluator', () => {
       expect(() =>
         createPermissionEvaluator({ registry, adapter, queryTimeoutMs: 3000 }),
       ).not.toThrow();
+    });
+  });
+
+  describe('structured logging', () => {
+    test('queryTimeoutMs error carries adapter, scope, subjectId, and timeoutMs context', async () => {
+      const hangingAdapter: PermissionsAdapter = {
+        ...noopBatchAdapterMethods,
+        async createGrant() {
+          return '';
+        },
+        async revokeGrant() {
+          return false;
+        },
+        async getGrantsForSubject() {
+          return [];
+        },
+        async getEffectiveGrantsForSubject() {
+          return new Promise(() => {}) as Promise<PermissionGrant[]>;
+        },
+        async listGrantHistory() {
+          return [];
+        },
+        async listGrantsOnResource() {
+          return [];
+        },
+        async deleteAllGrantsForSubject() {},
+      };
+
+      const timedEvaluator = createPermissionEvaluator({
+        registry,
+        adapter: hangingAdapter,
+        queryTimeoutMs: 25,
+      });
+
+      const scope = { tenantId: 'tenant-a', resourceType: 'post' };
+      let caught: unknown;
+      try {
+        await timedEvaluator.can({ subjectId: 'user-42', subjectType: 'user' }, 'read', scope);
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(PermissionQueryTimeoutError);
+      const err = caught as PermissionQueryTimeoutError;
+      expect(err.adapter).toContain('getEffectiveGrantsForSubject');
+      expect(err.subjectId).toBe('user-42');
+      expect(err.scope).toEqual(scope);
+      expect(err.timeoutMs).toBe(25);
+      // Message remains backwards compatible with existing substring assertions
+      expect(err.message).toContain('Permission query timed out');
+      expect(err.message).toContain('user-42');
+    });
+
+    test('uses the injected logger instead of console for warnings', async () => {
+      // User belongs to many groups → triggers the batched-expansion warning.
+      const groupAdapter = createMemoryPermissionsAdapter();
+      const groupResolver = {
+        async getGroupsForUser() {
+          return ['g1', 'g2', 'g3', 'g4', 'g5'];
+        },
+      };
+
+      const calls: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+      const logger: EvaluatorLogger = {
+        warn(msg, ctx) {
+          calls.push({ msg, ctx });
+        },
+      };
+
+      // Spy on console.warn — it should NOT be called when a logger is injected.
+      const consoleWarnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+
+      const ev = createPermissionEvaluator({
+        registry,
+        adapter: groupAdapter,
+        groupResolver,
+        maxGroups: 2,
+        logger,
+      });
+      await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      });
+
+      expect(calls.some(c => c.msg.includes('expanding 5 groups'))).toBe(true);
+      const batchCall = calls.find(c => c.msg.includes('expanding 5 groups'));
+      expect(batchCall?.ctx?.event).toBe('group_expansion_batched');
+      expect(batchCall?.ctx?.userId).toBe('user-1');
+      expect(batchCall?.ctx?.groupCount).toBe(5);
+      expect(batchCall?.ctx?.maxGroups).toBe(2);
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+      consoleWarnSpy.mockRestore();
+    });
+
+    test('warnSampleRate=0.0001 effectively suppresses sampled warns at high call volume', async () => {
+      // Drive many can() calls that would normally each emit the unscoped-resourceType warn.
+      const ev = createPermissionEvaluator({
+        registry,
+        adapter,
+        warnSampleRate: 0.0001,
+      });
+
+      await adapter.createGrant({
+        subjectId: 'user-1',
+        subjectType: 'user',
+        tenantId: null,
+        resourceType: null,
+        resourceId: null,
+        roles: ['editor'],
+        effect: 'allow',
+        grantedBy: 'system',
+      });
+
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        for (let i = 0; i < 100; i++) {
+          await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read');
+        }
+      } finally {
+        warnSpy.mockRestore();
+      }
+      // With rate 0.0001 and 100 calls, expected = 0.01 emissions.
+      // Allow up to 1 in case Math.random crosses the threshold by chance.
+      expect(warnSpy.mock.calls.length).toBeLessThanOrEqual(1);
+    });
+
+    test('throws when warnSampleRate is 0', () => {
+      expect(() => createPermissionEvaluator({ registry, adapter, warnSampleRate: 0 })).toThrow(
+        'warnSampleRate must be in the range (0, 1]',
+      );
+    });
+
+    test('throws when warnSampleRate exceeds 1', () => {
+      expect(() => createPermissionEvaluator({ registry, adapter, warnSampleRate: 1.5 })).toThrow(
+        'warnSampleRate must be in the range (0, 1]',
+      );
+    });
+
+    test('group expansion failures call onGroupExpansionError with all failure reasons', async () => {
+      const groupAdapter = createMemoryPermissionsAdapter();
+      await groupAdapter.createGrant({
+        subjectId: 'group-good',
+        subjectType: 'group',
+        tenantId: null,
+        resourceType: null,
+        resourceId: null,
+        roles: ['editor'],
+        effect: 'allow',
+        grantedBy: 'system',
+      });
+
+      const failingAdapter: PermissionsAdapter = {
+        ...noopBatchAdapterMethods,
+        async createGrant() {
+          return '';
+        },
+        async revokeGrant() {
+          return false;
+        },
+        async getGrantsForSubject() {
+          return [];
+        },
+        async getEffectiveGrantsForSubject(subjectId) {
+          if (subjectId === 'group-bad-1') throw new Error('db error 1');
+          if (subjectId === 'group-bad-2') throw new Error('db error 2');
+          return groupAdapter.getEffectiveGrantsForSubject(subjectId, 'group');
+        },
+        async listGrantHistory() {
+          return [];
+        },
+        async listGrantsOnResource() {
+          return [];
+        },
+        async deleteAllGrantsForSubject() {},
+      };
+
+      const groupResolver = {
+        async getGroupsForUser() {
+          return ['group-bad-1', 'group-bad-2', 'group-good'];
+        },
+      };
+
+      const captured: GroupExpansionFailure[][] = [];
+      const onGroupExpansionError = (failures: GroupExpansionFailure[]) => {
+        captured.push(failures);
+      };
+
+      const loggerCalls: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+      const logger: EvaluatorLogger = {
+        warn(msg, ctx) {
+          loggerCalls.push({ msg, ctx });
+        },
+      };
+
+      const ev = createPermissionEvaluator({
+        registry,
+        adapter: failingAdapter,
+        groupResolver,
+        logger,
+        onGroupExpansionError,
+      });
+
+      // group-good still grants editor → allow path returns true, evaluation proceeds
+      const result = await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      });
+      expect(result).toBe(true);
+
+      expect(captured).toHaveLength(1);
+      expect(captured[0]).toHaveLength(2);
+      const ids = captured[0].map(f => f.groupId).sort();
+      expect(ids).toEqual(['group-bad-1', 'group-bad-2']);
+      expect(captured[0][0].userId).toBe('user-1');
+
+      // Structured warn should be emitted with failure context
+      const failWarn = loggerCalls.find(c => c.ctx?.event === 'group_expansion_error');
+      expect(failWarn).toBeDefined();
+      expect(failWarn?.ctx?.failureCount).toBe(2);
+      expect(Array.isArray(failWarn?.ctx?.failures)).toBe(true);
+    });
+
+    test('callback throw does not crash can() — direct grants still resolve', async () => {
+      const partialAdapter: PermissionsAdapter = {
+        ...noopBatchAdapterMethods,
+        async createGrant() {
+          return '';
+        },
+        async revokeGrant() {
+          return false;
+        },
+        async getGrantsForSubject() {
+          return [];
+        },
+        async getEffectiveGrantsForSubject(subjectId, subjectType) {
+          if (subjectType === 'user') return [];
+          throw new Error('group fetch fail');
+        },
+        async listGrantHistory() {
+          return [];
+        },
+        async listGrantsOnResource() {
+          return [];
+        },
+        async deleteAllGrantsForSubject() {},
+      };
+
+      const groupResolver = {
+        async getGroupsForUser() {
+          return ['group-x'];
+        },
+      };
+
+      const loggerCalls: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+      const logger: EvaluatorLogger = {
+        warn(msg, ctx) {
+          loggerCalls.push({ msg, ctx });
+        },
+      };
+
+      const ev = createPermissionEvaluator({
+        registry,
+        adapter: partialAdapter,
+        groupResolver,
+        logger,
+        onGroupExpansionError() {
+          throw new Error('callback exploded');
+        },
+      });
+
+      const result = await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+        resourceType: 'post',
+      });
+      // No grants found → false, but no throw despite callback exploding
+      expect(result).toBe(false);
+      expect(loggerCalls.some(c => c.ctx?.event === 'group_expansion_error_callback_threw')).toBe(
+        true,
+      );
     });
   });
 

@@ -320,8 +320,8 @@ describe('eventWiring', () => {
 
     // Both enqueue failure and updateDelivery failure should be logged
     const calls = errorSpy.mock.calls.map(c => String(c[0]));
-    expect(calls.some(m => m.includes('failed to enqueue delivery'))).toBe(true);
-    expect(calls.some(m => m.includes('failed to mark delivery'))).toBe(true);
+    expect(calls.some(m => m.includes('failed to enqueue webhook delivery'))).toBe(true);
+    expect(calls.some(m => m.includes('failed to mark delivery dead'))).toBe(true);
 
     errorSpy.mockRestore();
     updateSpy.mockRestore();

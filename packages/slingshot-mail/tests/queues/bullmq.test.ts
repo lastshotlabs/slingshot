@@ -164,7 +164,7 @@ describe('createBullMQMailQueue', () => {
       expect(jobId).toBe('enqueue-job-id');
       expect(mockQueueAdd).toHaveBeenCalledTimes(1);
 
-      const [jobName, data, opts] = mockQueueAdd.mock.calls[0] as [
+      const [jobName, data, opts] = mockQueueAdd.mock.calls[0] as unknown as [
         string,
         unknown,
         { attempts: number; backoff: { type: string; delay: number } },
@@ -206,7 +206,7 @@ describe('createBullMQMailQueue', () => {
   describe('drain()', () => {
     it('drain() before start() resolves immediately without error', async () => {
       const q = createBullMQMailQueue({ redis: { host: 'localhost' } });
-      await expect(q.drain()).resolves.toBeUndefined();
+      await expect(q.drain?.()).resolves.toBeUndefined();
     });
 
     it('drain() after start() calls queue.drain() on the underlying BullMQ queue', async () => {
@@ -224,7 +224,9 @@ describe('createBullMQMailQueue', () => {
       };
 
       mock.module('bullmq', () => ({
-        Queue: function MockQueueWithDrain() { return patchedQueue; },
+        Queue: function MockQueueWithDrain() {
+          return patchedQueue;
+        },
         Worker: MockWorker,
         UnrecoverableError: MockUnrecoverableError,
       }));
@@ -234,7 +236,7 @@ describe('createBullMQMailQueue', () => {
       const q = freshCreate({ redis: { host: 'localhost' } });
       await q.start(makeProvider());
 
-      await q.drain();
+      await q.drain?.();
 
       expect(mockQueueDrain).toHaveBeenCalledTimes(1);
 
@@ -336,7 +338,7 @@ describe('createBullMQMailQueue', () => {
       workerFailedHandler!(failedJob, failErr);
 
       expect(onDeadLetter).toHaveBeenCalledTimes(1);
-      const [deadJob, deadErr] = onDeadLetter.mock.calls[0] as [
+      const [deadJob, deadErr] = onDeadLetter.mock.calls[0] as unknown as [
         { id: string; attempts: number },
         Error,
       ];
@@ -396,7 +398,7 @@ describe('createBullMQMailQueue', () => {
       workerFailedHandler!(failedJob, thrownErr);
 
       expect(onDeadLetter).toHaveBeenCalledTimes(1);
-      const [, receivedErr] = onDeadLetter.mock.calls[0] as [unknown, MailSendError];
+      const [, receivedErr] = onDeadLetter.mock.calls[0] as unknown as [unknown, MailSendError];
       // Original MailSendError with statusCode and providerError is preserved
       expect(receivedErr).toBe(originalErr);
       expect((receivedErr as MailSendError).statusCode).toBe(422);
@@ -434,7 +436,7 @@ describe('createBullMQMailQueue', () => {
 
       // onDeadLetter must still be called via the nonRetryableOrigins.has(err) branch
       expect(onDeadLetter).toHaveBeenCalledTimes(1);
-      const [, receivedErr] = onDeadLetter.mock.calls[0] as [unknown, MailSendError];
+      const [, receivedErr] = onDeadLetter.mock.calls[0] as unknown as [unknown, MailSendError];
       expect(receivedErr).toBe(originalErr);
     });
   });

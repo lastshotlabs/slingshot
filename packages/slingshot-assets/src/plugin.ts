@@ -69,14 +69,18 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
   type LazyMiddleware = { handler: import('hono').MiddlewareHandler };
   // The manifest runtime is responsible for wiring the real handler before
   // routes mount. If it never does, we throw at setupPost rather than letting
-  // entity deletes silently orphan storage objects.
+  // entity deletes silently orphan storage objects (unless the operator has
+  // explicitly opted in to orphans via `allowOrphanedStorage`).
   let deleteMiddlewareWired = false;
-  const unwiredHandler: import('hono').MiddlewareHandler = async () => {
-    throw new Error(
-      '[slingshot-assets] delete cascade fired but storage-delete middleware was never wired. ' +
-        'This indicates a manifest runtime bug — refusing to silently orphan storage objects.',
-    );
-  };
+  const allowOrphanedStorage = config.allowOrphanedStorage === true;
+  const unwiredHandler: import('hono').MiddlewareHandler = allowOrphanedStorage
+    ? async (_c, next) => next()
+    : async () => {
+        throw new Error(
+          '[slingshot-assets] delete cascade fired but storage-delete middleware was never wired. ' +
+            'This indicates a manifest runtime bug — refusing to silently orphan storage objects.',
+        );
+      };
   const deleteStorageFileRef: LazyMiddleware = { handler: unwiredHandler };
 
   let assetAdapterRef: AssetAdapter | undefined;
@@ -140,11 +144,23 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
     async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
 
-      if (!deleteMiddlewareWired) {
-        throw new Error(
-          '[slingshot-assets] storage-delete middleware was not wired by the manifest runtime. ' +
-            'Asset deletes would orphan storage objects. Refusing to start.',
-        );
+      const hasAssetEntities = Object.keys(assetManifest.entities ?? {}).length > 0;
+      if (!deleteMiddlewareWired && hasAssetEntities) {
+        if (allowOrphanedStorage) {
+          console.warn(
+            '[slingshot-assets] storage-delete middleware was not wired and ' +
+              '`allowOrphanedStorage: true` is set. Asset deletes will leave storage objects ' +
+              'behind. Ensure cleanup runs elsewhere.',
+          );
+        } else {
+          const error = new Error(
+            '[slingshot-assets] storage-delete middleware was not wired by the manifest runtime. ' +
+              'Asset deletes would orphan storage objects. Refusing to start. ' +
+              'Set `allowOrphanedStorage: true` to opt out (e.g. during a migration).',
+          );
+          (error as Error & { code?: string }).code = 'ASSETS_DELETE_MIDDLEWARE_MISSING';
+          throw error;
+        }
       }
     },
   };

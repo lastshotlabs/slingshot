@@ -18,6 +18,10 @@ export { createBullMQWorkflowProcessor } from './workflowWorker';
  * Runtime validation and option types for the BullMQ orchestration adapter.
  */
 export {
+  bullmqJobRetentionSchema,
   bullmqOrchestrationAdapterOptionsSchema,
+  bullmqTlsOptionsSchema,
+  type BullMQJobRetentionOptions,
   type BullMQOrchestrationAdapterOptions,
+  type BullMQTlsOptions,
 } from './validation';

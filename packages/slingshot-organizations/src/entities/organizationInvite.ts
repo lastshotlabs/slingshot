@@ -32,12 +32,19 @@ export const OrganizationInvite = defineEntity('OrganizationInvite', {
       { field: 'invitedBy', from: 'ctx:actor.id', applyTo: ['create'] },
       { field: 'expiresAt', from: 'ctx:inviteExpiresAt', applyTo: ['create'] },
     ],
-    create: { middleware: ['inviteCreateDefaults', 'organizationsAdminGuard'] },
+    create: {
+      middleware: ['inviteCreateRateLimit', 'inviteCreateDefaults', 'organizationsAdminGuard'],
+    },
     list: { middleware: ['organizationsAdminGuard'] },
     get: { middleware: ['organizationsAdminGuard'] },
     disable: ['update', 'delete'],
     operations: {
-      findByToken: { auth: 'none', method: 'post', path: 'lookup' },
+      findByToken: {
+        auth: 'none',
+        method: 'post',
+        path: 'lookup',
+        middleware: ['inviteLookupRateLimit'],
+      },
       redeem: { auth: 'userAuth', method: 'post', path: 'redeem' },
       revokeInvite: {
         auth: 'userAuth',
@@ -46,7 +53,12 @@ export const OrganizationInvite = defineEntity('OrganizationInvite', {
         middleware: ['organizationsAdminGuard'],
       },
     },
-    middleware: { inviteCreateDefaults: true, organizationsAdminGuard: true },
+    middleware: {
+      inviteCreateDefaults: true,
+      organizationsAdminGuard: true,
+      inviteCreateRateLimit: true,
+      inviteLookupRateLimit: true,
+    },
   },
 });
 

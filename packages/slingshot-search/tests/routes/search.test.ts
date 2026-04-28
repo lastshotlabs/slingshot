@@ -6,6 +6,7 @@
  */
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { Hono } from 'hono';
+import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { createDbNativeProvider } from '../../src/providers/dbNative';
 import { createFederatedRouter } from '../../src/routes/federated';
 import { createSearchRouter } from '../../src/routes/search';
@@ -126,7 +127,7 @@ async function buildTestApp(overrides?: Partial<SearchPluginConfig>): Promise<Te
           createdAt: { searchable: false, sortable: true },
         },
       },
-    },
+    } as unknown as ResolvedEntityConfig,
     {
       name: 'Product',
       _pkField: 'id',
@@ -148,7 +149,7 @@ async function buildTestApp(overrides?: Partial<SearchPluginConfig>): Promise<Te
           createdAt: { searchable: false, sortable: true },
         },
       },
-    },
+    } as unknown as ResolvedEntityConfig,
   ]);
 
   // Copy indexed data to manager's provider (manager creates its own db-native provider internally)

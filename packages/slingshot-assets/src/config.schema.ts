@@ -181,6 +181,14 @@ export const assetsPluginConfigSchema = z.object({
       'Number of attempts for storage put/delete operations before giving up. Default: 3. ' +
         'Each retry uses an increasing delay (attempt × 500 ms).',
     ),
+  allowOrphanedStorage: z
+    .boolean()
+    .optional()
+    .describe(
+      'Allow asset deletes to leave behind storage objects when the manifest runtime ' +
+        "doesn't wire a delete-storage middleware. Default false. Only set true as a " +
+        'migration opt-out where cleanup runs elsewhere.',
+    ),
 });
 
 /**

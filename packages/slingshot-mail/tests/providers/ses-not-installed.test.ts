@@ -19,7 +19,8 @@ describe('createSesProvider (SDK not installed)', () => {
     }));
 
     try {
-      const { createSesProvider } = await import('../../src/providers/ses.js?missing-sdk');
+      const sesModulePath = '../../src/providers/ses.js?missing-sdk';
+      const { createSesProvider } = await import(sesModulePath);
       const provider = createSesProvider({ region: 'us-east-1' });
       const err = await provider
         .send({
@@ -27,7 +28,7 @@ describe('createSesProvider (SDK not installed)', () => {
           subject: 'X',
           html: '<p>X</p>',
         })
-        .catch(e => e);
+        .catch((e: unknown) => e);
 
       expect(err).toBeInstanceOf(MailSendError);
       expect((err as MailSendError).retryable).toBe(false);

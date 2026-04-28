@@ -1,4 +1,12 @@
-import { type ConnectionOptions, Job, type JobType, Queue, QueueEvents, Worker } from 'bullmq';
+import {
+  type ConnectionOptions,
+  Job,
+  type JobType,
+  Queue,
+  QueueEvents,
+  type QueueOptions,
+  Worker,
+} from 'bullmq';
 import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
@@ -29,6 +37,12 @@ import {
   bullmqOrchestrationAdapterOptionsSchema,
 } from './validation';
 import { createBullMQWorkflowProcessor } from './workflowWorker';
+
+const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 30_000;
+const DEFAULT_REMOVE_ON_COMPLETE_AGE_SECONDS = 3_600;
+const DEFAULT_REMOVE_ON_COMPLETE_COUNT = 1_000;
+const DEFAULT_REMOVE_ON_FAIL_AGE_SECONDS = 86_400;
+const DRAIN_POLL_INTERVAL_MS = 100;
 
 const CANCELLATION_ERROR_MESSAGE = 'Run cancelled';
 
@@ -254,9 +268,50 @@ export function createBullMQOrchestrationAdapter(
   const taskRegistry = new Map<string, AnyResolvedTask>();
   const workflowRegistry = new Map<string, AnyResolvedWorkflow>();
   const prefix = options.prefix ?? 'orch';
+
+  // requireTls: when true, connecting without TLS is treated as a configuration
+  // error rather than a silent fallback to plaintext. Throws synchronously at
+  // construction so misconfigured deployments fail fast at startup.
+  if (options.requireTls) {
+    const connectionTls = (options.connection as { tls?: unknown }).tls;
+    if (
+      !connectionTls ||
+      (typeof connectionTls === 'object' && Object.keys(connectionTls).length === 0)
+    ) {
+      throw new OrchestrationError(
+        'INVALID_CONFIG',
+        'requireTls=true but no TLS options were provided in connection.tls. ' +
+          'Refusing to connect to Redis in plaintext.',
+      );
+    }
+  }
+
   const connection = options.connection as ConnectionOptions;
-  const defaultTaskQueue = new Queue(`${prefix}:tasks`, { connection });
-  const workflowQueue = new Queue(`${prefix}:workflows`, { connection });
+  const shutdownDrainTimeoutMs =
+    options.shutdownDrainTimeoutMs ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS;
+
+  // Default job retention: without these, Redis memory grows unbounded as
+  // completed/failed jobs accumulate. Defaults: 1h/1000 completed, 24h failed.
+  const removeOnCompleteAge =
+    options.jobRetention?.removeOnCompleteAge ?? DEFAULT_REMOVE_ON_COMPLETE_AGE_SECONDS;
+  const removeOnCompleteCount =
+    options.jobRetention?.removeOnCompleteCount ?? DEFAULT_REMOVE_ON_COMPLETE_COUNT;
+  const removeOnFailAge =
+    options.jobRetention?.removeOnFailAge ?? DEFAULT_REMOVE_ON_FAIL_AGE_SECONDS;
+  const removeOnFailCount = options.jobRetention?.removeOnFailCount;
+
+  const defaultJobOptions: QueueOptions['defaultJobOptions'] = {
+    removeOnComplete: { age: removeOnCompleteAge, count: removeOnCompleteCount },
+    removeOnFail:
+      typeof removeOnFailCount === 'number'
+        ? { age: removeOnFailAge, count: removeOnFailCount }
+        : { age: removeOnFailAge },
+  };
+
+  const queueOptions: QueueOptions = { connection, defaultJobOptions };
+
+  const defaultTaskQueue = new Queue(`${prefix}:tasks`, queueOptions);
+  const workflowQueue = new Queue(`${prefix}:workflows`, queueOptions);
   const namedQueues = new Map<string, Queue>();
   const namedWorkers = new Map<string, Worker>();
   const namedQueueEvents = new Map<string, QueueEvents>();
@@ -319,9 +374,7 @@ export function createBullMQOrchestrationAdapter(
             },
           );
           taskWorker.on('stalled', (jobId: string) => {
-            console.error(
-              `[slingshot-orchestration-bullmq] Job stalled in task queue: ${jobId}`,
-            );
+            console.error(`[slingshot-orchestration-bullmq] Job stalled in task queue: ${jobId}`);
           });
         }
         if (!workflowWorker) {
@@ -386,7 +439,7 @@ export function createBullMQOrchestrationAdapter(
           namedWorkers.set(task.queue, worker);
           namedQueueEvents.set(task.queue, queueEvents);
           if (!namedQueues.has(task.queue)) {
-            namedQueues.set(task.queue, new Queue(queueName, { connection }));
+            namedQueues.set(task.queue, new Queue(queueName, queueOptions));
           }
         }
         started = true;
@@ -403,7 +456,7 @@ export function createBullMQOrchestrationAdapter(
     if (!task.queue) return defaultTaskQueue;
     const existing = namedQueues.get(task.queue);
     if (existing) return existing;
-    const queue = new Queue(`${prefix}:${task.queue}:tasks`, { connection });
+    const queue = new Queue(`${prefix}:${task.queue}:tasks`, queueOptions);
     namedQueues.set(task.queue, queue);
     return queue;
   }
@@ -837,18 +890,86 @@ export function createBullMQOrchestrationAdapter(
       cancelledRunSignals.clear();
       runIdToJobId.clear();
 
-      const SHUTDOWN_TIMEOUT_MS = 30_000;
-      const shutdownSequence = async () => {
-        for (const worker of namedWorkers.values()) {
-          await worker.close();
+      // Graceful drain: pause new job pickups, then wait for active jobs to drain
+      // to zero (or until shutdownDrainTimeoutMs elapses). Without this, in-flight
+      // work is interrupted mid-processing and BullMQ relies on stalled-job recovery
+      // to retry — increasing latency, surfacing duplicate side effects, and risking
+      // partial work commits.
+      const drainWorker = async (worker: Worker, label: string): Promise<void> => {
+        try {
+          // pause(true) stops the worker from picking up new jobs immediately.
+          await worker.pause(true);
+        } catch (error) {
+          console.error(
+            `[slingshot-orchestration-bullmq] Failed to pause worker '${label}' during shutdown:`,
+            error,
+          );
         }
+
+        const deadline = Date.now() + shutdownDrainTimeoutMs;
+        let activeCount = 0;
+        // Poll getActiveCount(); BullMQ does not expose a 'drained' Promise.
+        // The poll interval is short relative to typical job durations, so the
+        // overhead is negligible compared to the job work itself.
+        // Some test harnesses do not implement getActiveCount — treat absence as zero.
+        const getActiveCount = (worker as unknown as { getActiveCount?: () => Promise<number> })
+          .getActiveCount;
+        if (typeof getActiveCount === 'function') {
+          while (Date.now() < deadline) {
+            try {
+              activeCount = await getActiveCount.call(worker);
+            } catch (error) {
+              console.error(
+                `[slingshot-orchestration-bullmq] getActiveCount failed for worker '${label}':`,
+                error,
+              );
+              break;
+            }
+            if (activeCount === 0) break;
+            await new Promise<void>(resolve => setTimeout(resolve, DRAIN_POLL_INTERVAL_MS));
+          }
+        }
+
+        // After timeout (or when drained), force-close the worker. force=true tells
+        // BullMQ to skip waiting for jobs and to release the connection promptly.
+        const forceClose = activeCount > 0;
+        if (forceClose) {
+          console.warn(
+            `[slingshot-orchestration-bullmq] Worker '${label}' force-closed with ${activeCount} ` +
+              `active job(s) still in flight after ${shutdownDrainTimeoutMs}ms drain timeout.`,
+            {
+              worker: label,
+              activeCount,
+              shutdownDrainTimeoutMs,
+              errorCode: 'WORKER_DRAIN_TIMEOUT',
+            },
+          );
+        }
+        try {
+          await worker.close(forceClose);
+        } catch (error) {
+          console.error(
+            `[slingshot-orchestration-bullmq] Failed to close worker '${label}':`,
+            error,
+          );
+        }
+      };
+
+      const shutdownSequence = async () => {
+        // Drain named workers first (named queues are typically domain-specific
+        // and may be more sensitive to mid-job interruption), then the default ones.
+        await Promise.all(
+          [...namedWorkers.entries()].map(([queueName, worker]) =>
+            drainWorker(worker, `named:${queueName}`),
+          ),
+        );
         for (const queueEvents of namedQueueEvents.values()) {
           await queueEvents.close();
         }
         namedWorkers.clear();
         namedQueueEvents.clear();
-        if (taskWorker) await taskWorker.close();
-        if (workflowWorker) await workflowWorker.close();
+        if (taskWorker) await drainWorker(taskWorker, 'tasks');
+        if (workflowWorker) await drainWorker(workflowWorker, 'workflows');
         if (taskQueueEvents) await taskQueueEvents.close();
         if (workflowQueueEvents) await workflowQueueEvents.close();
         taskWorker = null;
@@ -865,13 +986,17 @@ export function createBullMQOrchestrationAdapter(
         startPromise = null;
       };
 
+      // Outer hard-deadline: drainWorker has its own per-worker timeout, but we
+      // also bound the total shutdown so that hung Redis connections cannot block
+      // process exit indefinitely.
+      const totalTimeoutMs = shutdownDrainTimeoutMs * 2 + 5_000;
       const timeoutPromise = new Promise<void>(resolve => {
         setTimeout(() => {
           console.warn(
-            '[slingshot-orchestration-bullmq] Shutdown timed out after 30s; forcing exit.',
+            `[slingshot-orchestration-bullmq] Shutdown exceeded ${totalTimeoutMs}ms; forcing exit.`,
           );
           resolve();
-        }, SHUTDOWN_TIMEOUT_MS);
+        }, totalTimeoutMs);
       });
 
       await Promise.race([shutdownSequence(), timeoutPromise]);

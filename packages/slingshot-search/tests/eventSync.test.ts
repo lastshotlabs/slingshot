@@ -36,7 +36,7 @@ function makeEntityConfig(
       fields: { title: { searchable: true } },
       syncMode,
     },
-  };
+  } as unknown as ResolvedEntityConfig;
 }
 
 const BASE_SETTINGS: SearchIndexSettings = {

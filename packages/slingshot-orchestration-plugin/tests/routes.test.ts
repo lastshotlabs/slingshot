@@ -546,7 +546,7 @@ function makeMockRuntime(listRunsImpl: OrchestrationRuntime['listRuns']): Orches
     schedule: mock(async () => ({ id: 'sched-mock' })),
     listRuns: listRunsImpl,
     onProgress: mock(() => () => {}),
-    supports: (cap) => cap === 'observability',
+    supports: cap => cap === 'observability',
   } as unknown as OrchestrationRuntime;
 }
 
@@ -560,7 +560,9 @@ describe('resolveRequestContext — exception handling', () => {
       name: 'ctx-sync-throw-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -594,7 +596,9 @@ describe('resolveRequestContext — exception handling', () => {
       name: 'ctx-validation-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -630,7 +634,9 @@ describe('resolveRequestContext — exception handling', () => {
       name: 'ctx-not-found-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -666,7 +672,9 @@ describe('resolveRequestContext — exception handling', () => {
       name: 'ctx-unknown-error-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -706,7 +714,9 @@ describe('authorizeRun — failure handling', () => {
       name: 'auth-throw-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -738,7 +748,9 @@ describe('authorizeRun — failure handling', () => {
       name: 'auth-false-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -770,7 +782,9 @@ describe('authorizeRun — failure handling', () => {
       name: 'auth-async-reject-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -809,7 +823,7 @@ describe('listAuthorizedRuns — scan cap', () => {
     const fakeRuns: Run[] = Array.from({ length: totalRuns }, (_, i) => makeFakeRun(`run-${i}`));
 
     let totalScanned = 0;
-    const runtime = makeMockRuntime(async (filter) => {
+    const runtime = makeMockRuntime(async filter => {
       const offset = filter?.offset ?? 0;
       const limit = filter?.limit ?? 50;
       const page = fakeRuns.slice(offset, offset + limit);
@@ -842,7 +856,7 @@ describe('listAuthorizedRuns — scan cap', () => {
     const totalRuns = 3_000;
     const fakeRuns: Run[] = Array.from({ length: totalRuns }, (_, i) => makeFakeRun(`run-${i}`));
 
-    const runtime = makeMockRuntime(async (filter) => {
+    const runtime = makeMockRuntime(async filter => {
       const offset = filter?.offset ?? 0;
       const limit = filter?.limit ?? 50;
       const page = fakeRuns.slice(offset, offset + limit);
@@ -879,7 +893,9 @@ describe('metadata size validation', () => {
       name: 'metadata-large-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -912,7 +928,9 @@ describe('metadata size validation', () => {
       name: 'metadata-small-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -949,7 +967,9 @@ describe('invalid JSON body', () => {
       name: 'bad-json-task',
       input: z.any(),
       output: z.any(),
-      async handler(input) { return input; },
+      async handler(input) {
+        return input;
+      },
     });
 
     const runtime = createOrchestrationRuntime({
@@ -972,5 +992,429 @@ describe('invalid JSON body', () => {
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body.error).toMatch(/invalid json/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /runs/:id/replay
+// ---------------------------------------------------------------------------
+
+describe('replay route', () => {
+  test('POST /runs/:id/replay re-runs the task with the same input and a derived idempotency key', async () => {
+    const task = defineTask({
+      name: 'replay-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime, tasks: [task], workflows: [] }),
+    );
+
+    const createResponse = await app.request('/orchestration/tasks/replay-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ input: { value: 'original' } }),
+    });
+    expect(createResponse.status).toBe(202);
+    const original = await createResponse.json();
+
+    const replayResponse = await app.request(`/orchestration/runs/${original.id}/replay`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '',
+    });
+    expect(replayResponse.status).toBe(202);
+    const replay = await replayResponse.json();
+    expect(replay.id).not.toBe(original.id);
+    expect(replay.type).toBe('task');
+    expect(replay.name).toBe('replay-task');
+    expect(replay.replayOf).toBe(original.id);
+    expect(replay.links.run).toContain(replay.id);
+
+    const newRun = await runtime.getRun(replay.id);
+    expect(newRun?.input).toEqual({ value: 'original' });
+    expect(newRun?.metadata?.['replayOf']).toBe(original.id);
+    expect(typeof newRun?.metadata?.['replayedAt']).toBe('string');
+  });
+
+  test('POST /runs/:id/replay returns 404 when source run does not exist', async () => {
+    const task = defineTask({
+      name: 'replay-missing-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime, tasks: [task], workflows: [] }),
+    );
+
+    const response = await app.request('/orchestration/runs/run_nonexistent/replay', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '',
+    });
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.code).toBe('RUN_NOT_FOUND');
+  });
+
+  test('POST /runs/:id/replay returns 501 when adapter strips input on completion', async () => {
+    const task = defineTask({
+      name: 'replay-no-input-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    // Build a stripped-input runtime: getRun returns the run without `input`.
+    const runtime = makeMockRuntime(async () => ({ runs: [], total: 0 }));
+    (runtime.getRun as ReturnType<typeof mock>).mockImplementation(async (id: string) => ({
+      id,
+      type: 'task',
+      name: 'replay-no-input-task',
+      status: 'completed',
+      // no input field — adapter has stripped it
+      tenantId: undefined,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime, tasks: [task], workflows: [] }),
+    );
+
+    const response = await app.request('/orchestration/runs/run_completed/replay', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '',
+    });
+    expect(response.status).toBe(501);
+    const body = await response.json();
+    expect(body.code).toBe('CAPABILITY_NOT_SUPPORTED');
+  });
+
+  test('POST /runs/:id/replay honors authorizeRun and returns 404 when denied', async () => {
+    const task = defineTask({
+      name: 'replay-auth-task',
+      input: z.object({ v: z.number() }),
+      output: z.object({ v: z.number() }),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+    const handle = await runtime.runTask(task, { v: 1 });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        authorizeRun: () => false,
+      }),
+    );
+
+    const response = await app.request(`/orchestration/runs/${handle.id}/replay`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '',
+    });
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.code).toBe('RUN_NOT_FOUND');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Admin routes — /health and /metrics
+// ---------------------------------------------------------------------------
+
+describe('admin routes', () => {
+  test('GET /health without adapter returns ok with null adapter name', async () => {
+    const runtime = makeMockRuntime(async () => ({ runs: [], total: 0 }));
+
+    const app = new Hono();
+    app.route('/orchestration', createOrchestrationRouter({ runtime, tasks: [], workflows: [] }));
+
+    const response = await app.request('/orchestration/health');
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.status).toBe('ok');
+    expect(body.adapter).toBeNull();
+  });
+
+  test('GET /health with adapter.getHealth() merges adapter snapshot into response', async () => {
+    const runtime = makeMockRuntime(async () => ({ runs: [], total: 0 }));
+    const adapter = {
+      registerTask: () => {},
+      registerWorkflow: () => {},
+      runTask: async () => ({ id: 'r', result: async () => ({}) }),
+      runWorkflow: async () => ({ id: 'r', result: async () => ({}) }),
+      getRun: async () => null,
+      cancelRun: async () => {},
+      start: async () => {},
+      shutdown: async () => {},
+      name: 'mock-adapter',
+      getHealth: () => ({
+        status: 'ok',
+        queues: { primary: { waiting: 0, active: 1 } },
+        droppedMessages: 0,
+      }),
+    };
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [],
+        workflows: [],
+        adapter: adapter as never,
+      }),
+    );
+
+    const response = await app.request('/orchestration/health');
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.status).toBe('ok');
+    expect(body.adapter).toBe('mock-adapter');
+    expect(body.queues).toEqual({ primary: { waiting: 0, active: 1 } });
+    expect(body.droppedMessages).toBe(0);
+  });
+
+  test('GET /metrics returns 501 when adapter does not implement getMetrics', async () => {
+    const runtime = makeMockRuntime(async () => ({ runs: [], total: 0 }));
+
+    const app = new Hono();
+    app.route('/orchestration', createOrchestrationRouter({ runtime, tasks: [], workflows: [] }));
+
+    const response = await app.request('/orchestration/metrics');
+    expect(response.status).toBe(501);
+    const body = await response.json();
+    expect(body.code).toBe('CAPABILITY_NOT_SUPPORTED');
+  });
+
+  test('GET /metrics returns adapter metrics snapshot when supported', async () => {
+    const runtime = makeMockRuntime(async () => ({ runs: [], total: 0 }));
+    const adapter = {
+      registerTask: () => {},
+      registerWorkflow: () => {},
+      runTask: async () => ({ id: 'r', result: async () => ({}) }),
+      runWorkflow: async () => ({ id: 'r', result: async () => ({}) }),
+      getRun: async () => null,
+      cancelRun: async () => {},
+      start: async () => {},
+      shutdown: async () => {},
+      name: 'metrics-adapter',
+      getMetrics: () => ({ runs_total: 42, runs_failed: 1 }),
+    };
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [],
+        workflows: [],
+        adapter: adapter as never,
+      }),
+    );
+
+    const response = await app.request('/orchestration/metrics');
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.adapter).toBe('metrics-adapter');
+    expect(body.metrics).toEqual({ runs_total: 42, runs_failed: 1 });
+  });
+
+  test('admin routes are gated by adminAuth and skip routeMiddleware', async () => {
+    const runtime = makeMockRuntime(async () => ({ runs: [], total: 0 }));
+    let routeMiddlewareCalls = 0;
+    let adminAuthCalls = 0;
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [],
+        workflows: [],
+        routeMiddleware: [
+          async (_c, next) => {
+            routeMiddlewareCalls += 1;
+            await next();
+          },
+        ],
+        adminAuth: [
+          async (c, next) => {
+            adminAuthCalls += 1;
+            const auth = c.req.header('x-admin-token');
+            if (auth !== 'secret') {
+              return c.json({ error: 'unauthorized' }, 401);
+            }
+            await next();
+          },
+        ],
+      }),
+    );
+
+    // Missing admin token → 401 from adminAuth, routeMiddleware should not run.
+    const denied = await app.request('/orchestration/health');
+    expect(denied.status).toBe(401);
+    expect(adminAuthCalls).toBe(1);
+    expect(routeMiddlewareCalls).toBe(0);
+
+    // Valid admin token → 200 from /health, routeMiddleware should still not run.
+    const allowed = await app.request('/orchestration/health', {
+      headers: { 'x-admin-token': 'secret' },
+    });
+    expect(allowed.status).toBe(200);
+    expect(adminAuthCalls).toBe(2);
+    expect(routeMiddlewareCalls).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Resolver shape validation
+// ---------------------------------------------------------------------------
+
+describe('resolveRequestContext — shape validation', () => {
+  test('returning a non-object throws a structured 500 with INVALID_RESOLVER_RESULT', async () => {
+    const task = defineTask({
+      name: 'resolver-shape-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        // Returning a string is a contract violation.
+        resolveRequestContext: () => 'not-an-object' as never,
+      }),
+    );
+
+    const response = await app.request('/orchestration/tasks/resolver-shape-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.code).toBe('INVALID_RESOLVER_RESULT');
+  });
+
+  test('returning an object with non-string tenantId throws INVALID_RESOLVER_RESULT', async () => {
+    const task = defineTask({
+      name: 'resolver-tenantid-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        resolveRequestContext: () => ({ tenantId: 12345 }) as never,
+      }),
+    );
+
+    const response = await app.request('/orchestration/tasks/resolver-tenantid-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.code).toBe('INVALID_RESOLVER_RESULT');
+    expect(body.error).toMatch(/tenantId/);
+  });
+
+  test('null is treated as an empty context and does not throw', async () => {
+    const task = defineTask({
+      name: 'resolver-null-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({
+        runtime,
+        tasks: [task],
+        workflows: [],
+        resolveRequestContext: () => null as never,
+      }),
+    );
+
+    const response = await app.request('/orchestration/tasks/resolver-null-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(202);
   });
 });

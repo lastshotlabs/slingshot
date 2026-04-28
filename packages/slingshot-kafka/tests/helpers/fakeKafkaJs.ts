@@ -23,7 +23,13 @@ export interface FakeConsumerRecord {
   subscribeCalls: Array<{ topic: string | RegExp; fromBeginning: boolean }>;
   runCalls: Array<{ autoCommit?: boolean; partitionsConsumedConcurrently?: number }>;
   commitOffsetCalls: number;
+  commitOffsetCallArgs: Array<Array<{ topic: string; partition: number; offset: string }>>;
+  pauseCalls: Array<Array<{ topic: string; partitions?: number[] }>>;
+  resumeCalls: Array<Array<{ topic: string; partitions?: number[] }>>;
+  eventListeners: Map<string, Array<(event: unknown) => void>>;
   eachMessage?: (payload: any) => Promise<void>;
+  /** Trigger a registered event listener (e.g. REBALANCING) for testing. */
+  emitEvent?: (eventName: string, payload?: unknown) => Promise<void>;
 }
 
 export interface FakeKafkaState {
@@ -152,10 +158,23 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
         subscribeCalls: [],
         runCalls: [],
         commitOffsetCalls: 0,
+        commitOffsetCallArgs: [],
+        pauseCalls: [],
+        resumeCalls: [],
+        eventListeners: new Map(),
       };
       state.consumers.push(record);
 
-      return {
+      const consumerObj = {
+        events: {
+          HEARTBEAT: 'consumer.heartbeat',
+          COMMIT_OFFSETS: 'consumer.commit_offsets',
+          GROUP_JOIN: 'consumer.group_join',
+          REBALANCING: 'consumer.rebalancing',
+          DISCONNECT: 'consumer.disconnect',
+          STOP: 'consumer.stop',
+          CRASH: 'consumer.crash',
+        },
         connect: async () => {
           const nextError = state.consumerConnectErrors.shift();
           if (nextError) {
@@ -189,12 +208,43 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
           record.runCalls.push({ autoCommit, partitionsConsumedConcurrently });
           record.eachMessage = eachMessage;
         },
-        commitOffsets: async () => {
+        commitOffsets: async (
+          args: Array<{ topic: string; partition: number; offset: string }>,
+        ) => {
           record.commitOffsetCalls += 1;
+          record.commitOffsetCallArgs.push(args ?? []);
           const nextError = state.commitOffsetErrors.shift();
           if (nextError) throw nextError;
         },
+        pause: (args: Array<{ topic: string; partitions?: number[] }>) => {
+          record.pauseCalls.push(args ?? []);
+        },
+        resume: (args: Array<{ topic: string; partitions?: number[] }>) => {
+          record.resumeCalls.push(args ?? []);
+        },
+        on: (eventName: string, listener: (event: unknown) => void) => {
+          const list = record.eventListeners.get(eventName) ?? [];
+          list.push(listener);
+          record.eventListeners.set(eventName, list);
+          return () => {
+            const current = record.eventListeners.get(eventName);
+            if (!current) return;
+            record.eventListeners.set(
+              eventName,
+              current.filter(l => l !== listener),
+            );
+          };
+        },
       };
+
+      record.emitEvent = async (eventName: string, payload?: unknown) => {
+        const listeners = record.eventListeners.get(eventName) ?? [];
+        for (const listener of listeners) {
+          await Promise.resolve(listener(payload));
+        }
+      };
+
+      return consumerObj;
     }
   }
 

@@ -148,10 +148,7 @@ export function createPermissionsPlugin(config?: PermissionsPluginConfig): Sling
             subjectType: 'user',
           });
         } catch (err) {
-          console.error(
-            '[slingshot-permissions] Failed to delete grants for deleted user:',
-            err,
-          );
+          console.error('[slingshot-permissions] Failed to delete grants for deleted user:', err);
         }
       });
     },

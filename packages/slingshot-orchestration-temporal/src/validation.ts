@@ -29,6 +29,12 @@ export const temporalConnectionConfigSchema = z
 
 /**
  * Validation schema for the server-side Temporal orchestration adapter options.
+ *
+ * `dataConverter` and `interceptors` are pass-through slots forwarded to both
+ * the Temporal `Client` and `Worker` constructors. Use `dataConverter` to
+ * install a payload codec for sensitive-data redaction (PII), and
+ * `interceptors` to inject auth headers, tracing, or custom workflow/activity
+ * interceptor modules.
  */
 export const temporalAdapterOptionsSchema = z.object({
   client: z.custom<object>(value => typeof value === 'object' && value !== null),
@@ -41,6 +47,24 @@ export const temporalAdapterOptionsSchema = z.object({
   workflowNamePrefix: z.string().min(1).optional(),
   visibilityQueryPageSize: z.number().int().positive().max(1000).optional(),
   ownsConnection: z.boolean().optional(),
+  /**
+   * Optional Temporal `DataConverter` used for serializing and deserializing
+   * payloads. Forwarded to both the `Client` and `Worker` so server-side and
+   * worker-side codecs stay symmetric. Default is unchanged (Temporal's
+   * default JSON converter).
+   */
+  dataConverter: z
+    .custom<object>(value => value === undefined || (typeof value === 'object' && value !== null))
+    .optional(),
+  /**
+   * Optional client/worker interceptors. The shape is the union of
+   * `ClientInterceptors` (passed to the `Client`) and the worker-side
+   * `WorkerInterceptors` fields (`workflowModules`, `activityInbound`,
+   * `activity`) so a single config slot can populate both sides.
+   */
+  interceptors: z
+    .custom<object>(value => value === undefined || (typeof value === 'object' && value !== null))
+    .optional(),
 });
 
 /**
@@ -63,6 +87,22 @@ export const temporalWorkerOptionsSchema = z.object({
   identity: z.string().trim().min(1).optional(),
   maxConcurrentWorkflowTaskExecutions: z.number().int().positive().optional(),
   maxConcurrentActivityTaskExecutions: z.number().int().positive().optional(),
+  /**
+   * Optional Temporal `DataConverter` used for serializing and deserializing
+   * payloads. Should match the converter installed on the server-side
+   * `Client` so that codec transforms are symmetric.
+   */
+  dataConverter: z
+    .custom<object>(value => value === undefined || (typeof value === 'object' && value !== null))
+    .optional(),
+  /**
+   * Optional worker interceptors (`WorkerInterceptors`) including
+   * `workflowModules`, `activityInbound`, and `activity`. Pipe-through to
+   * `Worker.create({ interceptors })`.
+   */
+  interceptors: z
+    .custom<object>(value => value === undefined || (typeof value === 'object' && value !== null))
+    .optional(),
 });
 
 /**

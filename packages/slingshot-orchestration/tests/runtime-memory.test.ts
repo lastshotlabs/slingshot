@@ -462,12 +462,7 @@ describe('memory orchestration runtime', () => {
       const workflow = defineWorkflow({
         name: 'par-fail-workflow',
         input: z.object({}),
-        steps: [
-          parallel([
-            step('par-fail-step', failTask),
-            step('par-succeed-step', succeedTask),
-          ]),
-        ],
+        steps: [parallel([step('par-fail-step', failTask), step('par-succeed-step', succeedTask)])],
       });
 
       const adapter = createMemoryAdapter({ concurrency: 5 });

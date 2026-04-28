@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { disableRoutesSchema } from '@lastshotlabs/slingshot-core';
+import type { SecretEncryptor } from '../lib/secretCipher';
 import { WEBHOOK_ROUTES } from '../routes/index';
 import type { WebhookAdapter } from './adapter';
 import type { InboundProvider } from './inbound';
@@ -131,6 +132,58 @@ export const webhookPluginConfigSchema = z.object({
     .describe(
       'Timeout in milliseconds for outbound webhook HTTP delivery requests. Omit to use the default of 30000.',
     ),
+  /**
+   * Base64-encoded 32-byte AES-256-GCM key used to encrypt webhook endpoint
+   * secrets at rest. When omitted, secrets are stored as plaintext and a
+   * warning is logged at boot. Pre-existing plaintext secrets remain readable
+   * after a key is configured; rotate them by re-saving the endpoint.
+   */
+  secretEncryptionKey: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Base64 32-byte AES-256-GCM key for encrypting webhook endpoint secrets at rest. Recommended for production.',
+    ),
+  /**
+   * Pluggable encryptor for webhook endpoint secrets at rest. Apps can supply
+   * a KMS- or Vault-backed implementation. Takes precedence over
+   * `secretEncryptionKey` when provided.
+   */
+  encryptor: z
+    .custom<SecretEncryptor>(
+      value =>
+        value != null &&
+        typeof value === 'object' &&
+        typeof (value as SecretEncryptor).encrypt === 'function' &&
+        typeof (value as SecretEncryptor).decrypt === 'function',
+      {
+        message: 'Expected a SecretEncryptor with encrypt() and decrypt() methods',
+      },
+    )
+    .optional()
+    .describe(
+      'Custom secret encryptor. When provided, the runtime envelope-encrypts endpoint secrets through this implementation instead of using secretEncryptionKey.',
+    ),
+  /**
+   * When true, the dispatcher resolves the target hostname and validates each
+   * resolved IP against the SSRF blocklist before issuing the request. Default: true.
+   */
+  validateResolvedIp: z
+    .boolean()
+    .optional()
+    .describe(
+      'Resolve target hostnames and validate every resolved IP against the SSRF blocklist before delivery. Defends against DNS rebinding. Default true.',
+    ),
+  /**
+   * Maximum body size accepted on inbound webhook routes, in bytes. Default: 1 MiB.
+   */
+  inboundMaxBodyBytes: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Maximum body size (bytes) accepted on inbound webhook routes. Defaults to 1 MiB.'),
   /** Route groups to skip mounting. */
   disableRoutes: disableRoutesSchema(Object.values(WEBHOOK_ROUTES)).describe(
     'Route groups to skip when mounting webhook routes. Omit to mount all webhook routes.',

@@ -64,7 +64,11 @@ export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
       }
 
       // Call staticPaths() to expand all concrete paths for this dynamic route
-      const expandedPaths = await callStaticPaths(filePath, config.serverRoutesDir, staticPathsTimeoutMs);
+      const expandedPaths = await callStaticPaths(
+        filePath,
+        config.serverRoutesDir,
+        staticPathsTimeoutMs,
+      );
       paths.push(...expandedPaths);
     } else {
       // Static route — derive the URL directly from the file path
@@ -267,7 +271,11 @@ function filePathToUrlPath(filePath: string, routesDir: string): string | null {
  * @param routesDir - Absolute path to the server routes directory.
  * @returns Array of concrete URL paths.
  */
-async function callStaticPaths(filePath: string, routesDir: string, timeoutMs: number): Promise<string[]> {
+async function callStaticPaths(
+  filePath: string,
+  routesDir: string,
+  timeoutMs: number,
+): Promise<string[]> {
   let mod: Record<string, unknown>;
   try {
     mod = (await import(filePath)) as Record<string, unknown>;

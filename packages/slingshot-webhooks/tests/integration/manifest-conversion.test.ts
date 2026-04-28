@@ -56,7 +56,7 @@ describe('webhooks manifest conversion', () => {
         tenantId: 'tenant-a',
       },
       {
-        tenantId: 'tenant-a',
+        requestTenantId: 'tenant-a',
         userId: 'user-1',
         actorId: 'user-1',
       },

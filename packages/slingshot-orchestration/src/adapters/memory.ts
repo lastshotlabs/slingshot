@@ -3,6 +3,7 @@ import { createTaskRunner } from '../engine/taskRunner';
 import { executeWorkflow } from '../engine/workflowRunner';
 import { OrchestrationError } from '../errors';
 import { createIdempotencyScope } from '../idempotency';
+import { assertPayloadSize, resolveMaxPayloadBytes } from '../serialization';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -54,9 +55,14 @@ export function createMemoryAdapter(
   options: {
     concurrency?: number;
     eventSink?: OrchestrationEventSink;
+    maxPayloadBytes?: number;
   } = {},
 ): OrchestrationAdapter & ObservabilityCapability {
-  const parsed = memoryAdapterOptionsSchema.parse({ concurrency: options.concurrency });
+  const parsed = memoryAdapterOptionsSchema.parse({
+    concurrency: options.concurrency,
+    maxPayloadBytes: options.maxPayloadBytes,
+  });
+  const maxPayloadBytes = resolveMaxPayloadBytes(parsed.maxPayloadBytes, 'memory adapter');
   const taskRegistry = new Map<string, AnyResolvedTask>();
   const workflowRegistry = new Map<string, AnyResolvedWorkflow>();
   const runs = new Map<string, Run | WorkflowRun>();
@@ -121,9 +127,22 @@ export function createMemoryAdapter(
         run.progress = data;
         notifyProgress(runId, data);
       },
-      onCompleted(runId, _taskName, output) {
+      onCompleted(runId, taskName, output) {
         const run = runs.get(runId);
         if (!run) return;
+        try {
+          assertPayloadSize(output, maxPayloadBytes, `task '${taskName}' output`);
+        } catch (error) {
+          run.status = 'failed';
+          run.error = {
+            message: error instanceof Error ? error.message : `task '${taskName}' output rejected`,
+          };
+          run.completedAt = new Date();
+          notifyProgress(runId, run.progress);
+          resultPromises.delete(runId);
+          progressListeners.delete(runId);
+          return;
+        }
         run.status = 'completed';
         run.output = output;
         run.completedAt = new Date();
@@ -160,6 +179,8 @@ export function createMemoryAdapter(
       if (!def) {
         throw new OrchestrationError('TASK_NOT_FOUND', `Task '${name}' not registered`);
       }
+
+      assertPayloadSize(input, maxPayloadBytes, `task '${name}' input`);
 
       const scopedIdempotencyKey = createIdempotencyScope({ type: 'task', name }, opts ?? {});
       if (scopedIdempotencyKey) {
@@ -217,6 +238,8 @@ export function createMemoryAdapter(
       if (!def) {
         throw new OrchestrationError('WORKFLOW_NOT_FOUND', `Workflow '${name}' not registered`);
       }
+
+      assertPayloadSize(input, maxPayloadBytes, `workflow '${name}' input`);
 
       const scopedIdempotencyKey = createIdempotencyScope({ type: 'workflow', name }, opts ?? {});
       if (scopedIdempotencyKey) {

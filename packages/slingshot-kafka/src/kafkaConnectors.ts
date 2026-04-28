@@ -5,6 +5,7 @@ import type {
   EventEnvelope,
   EventSchemaRegistry,
   EventSerializer,
+  KafkaConnectorDropStats,
   KafkaConnectorHandle,
   KafkaConnectorHealth,
   KafkaInboundConnectorHealth,
@@ -85,6 +86,20 @@ export type OutboundMessageIdExtractor = (envelope: OutboundEnvelope) => string 
 export type OutboundPartitionKeyExtractor = (envelope: OutboundEnvelope) => string | null;
 
 /**
+ * Pluggable consumer-side dedup store keyed by `slingshot.message-id` header.
+ *
+ * Implementations may live in Redis, Memcached, or any TTL-aware store. The
+ * connector calls `has()` before invoking the inbound handler and `set()` after
+ * successful processing. A default in-memory LRU is used when none is provided.
+ */
+export interface MessageDedupStore {
+  /** Resolve `true` if the message id has already been processed. */
+  has(id: string): Promise<boolean>;
+  /** Mark the message id as processed for at least the given TTL. */
+  set(id: string, ttlMs: number): Promise<void>;
+}
+
+/**
  * Optional observability hooks for the connector bridge.
  */
 export interface ConnectorObservabilityHooks {
@@ -108,6 +123,17 @@ export interface ConnectorObservabilityHooks {
     event: string,
     topic: string,
     reason: 'filter' | 'transform-null' | 'validation' | 'not-exposed',
+  ): void;
+  /**
+   * Called when an outbound message is dropped because the pending buffer
+   * is full or its retry budget was exhausted. Use this to emit metrics
+   * so silent overflow is observable.
+   */
+  onOutboundDrop?(
+    event: string,
+    topic: string,
+    reason: 'pending-buffer-full' | 'pending-attempts-exhausted',
+    error: unknown,
   ): void;
 }
 
@@ -208,6 +234,20 @@ export const kafkaConnectorsSchema = z.object({
   maxPendingBuffer: z.number().int().min(0).optional(),
   maxProduceAttempts: z.number().int().min(1).optional(),
   drainIntervalMs: z.number().int().min(500).optional(),
+  /**
+   * Optional consumer-side dedup store for inbound messages keyed by their
+   * `slingshot.message-id` header. When omitted, an in-memory LRU is used
+   * (max 10000 keys, 1h TTL). Use a shared external store across replicas
+   * to dedup at the consumer-group level.
+   */
+  dedupStore: z
+    .custom<MessageDedupStore>(
+      value => !!value && typeof value === 'object' && 'has' in value && 'set' in value,
+      'dedupStore must implement { has(id), set(id, ttlMs) }',
+    )
+    .optional(),
+  /** Override the default inbound dedup TTL (1h). Set to 0 to disable dedup. */
+  dedupTtlMs: z.number().int().min(0).optional(),
 });
 
 /**
@@ -372,6 +412,47 @@ async function waitWithHeartbeat(heartbeat: () => Promise<void>, delayMs: number
   }
 }
 
+const DEFAULT_DEDUP_MAX_KEYS = 10_000;
+const DEFAULT_DEDUP_TTL_MS = 60 * 60 * 1_000;
+
+/**
+ * Build a default in-memory LRU `MessageDedupStore` with TTL eviction.
+ *
+ * Each `set()` records a timestamp and the access order is refreshed by `has()`
+ * lookups. Stale entries past their TTL are treated as misses; cold entries are
+ * evicted when the cache exceeds `maxKeys`.
+ */
+export function createInMemoryDedupStore(options: { maxKeys?: number } = {}): MessageDedupStore {
+  const maxKeys = options.maxKeys ?? DEFAULT_DEDUP_MAX_KEYS;
+  // Map iteration preserves insertion order — re-set on access for LRU.
+  const entries = new Map<string, { expiresAt: number }>();
+
+  return {
+    async has(id: string): Promise<boolean> {
+      const record = entries.get(id);
+      if (!record) return false;
+      if (record.expiresAt > 0 && record.expiresAt < Date.now()) {
+        entries.delete(id);
+        return false;
+      }
+      // Refresh recency.
+      entries.delete(id);
+      entries.set(id, record);
+      return true;
+    },
+    async set(id: string, ttlMs: number): Promise<void> {
+      const expiresAt = ttlMs > 0 ? Date.now() + ttlMs : 0;
+      entries.delete(id);
+      entries.set(id, { expiresAt });
+      while (entries.size > maxKeys) {
+        const oldest = entries.keys().next().value;
+        if (oldest === undefined) break;
+        entries.delete(oldest);
+      }
+    },
+  };
+}
+
 /**
  * Create a programmatic bridge between the Slingshot event bus and Kafka topics.
  *
@@ -462,6 +543,28 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
   const outboundRuntimes: OutboundRuntime[] = [];
   const pendingBuffer: PendingProduceEntry[] = [];
   const pendingCountByTopic = new Map<string, number>();
+  /** entryKey -> Map<topic|partition, nextOffset> pending commit on rebalance. */
+  const pendingCommitOffsetsByConsumer = new Map<number, Map<string, string>>();
+  /** entryKey -> Set of in-flight handler promises, awaited during rebalance. */
+  const inFlightByConsumer = new Map<number, Set<Promise<void>>>();
+  /** Track which consumers are mid-rebalance (best-effort). */
+  const rebalancingConsumers = new Set<number>();
+
+  const dedupStore: MessageDedupStore = opts.dedupStore ?? createInMemoryDedupStore();
+  const dedupTtlMs = opts.dedupTtlMs ?? DEFAULT_DEDUP_TTL_MS;
+  const dedupEnabled = dedupTtlMs > 0;
+
+  let dropTotal = 0;
+  let dropBufferFull = 0;
+  let dropAttemptsExhausted = 0;
+  let inboundDeduped = 0;
+  let lastDropAt: number | null = null;
+  function recordDrop(reason: 'pending-buffer-full' | 'pending-attempts-exhausted'): void {
+    dropTotal += 1;
+    lastDropAt = Date.now();
+    if (reason === 'pending-buffer-full') dropBufferFull += 1;
+    else dropAttemptsExhausted += 1;
+  }
 
   if (opts.sasl && !opts.ssl) {
     console.warn(
@@ -592,9 +695,12 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
           retry.push(entry);
           pendingCountByTopic.set(entry.topic, (pendingCountByTopic.get(entry.topic) ?? 0) + 1);
         } else {
+          recordDrop('pending-attempts-exhausted');
           hooks?.onOutboundError?.(entry.event, entry.topic, err);
+          hooks?.onOutboundDrop?.(entry.event, entry.topic, 'pending-attempts-exhausted', err);
           console.error(
-            `[KafkaConnector:outbound] permanently dropping message for topic "${entry.topic}"`,
+            `[KafkaConnector:outbound] permanently dropping message for topic "${entry.topic}" ` +
+              `after ${entry.attempts} attempts:`,
             err,
           );
         }
@@ -717,10 +823,13 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
         return;
       }
       if (pendingBuffer.length >= maxPendingBuffer) {
+        recordDrop('pending-buffer-full');
         console.error(
-          `[KafkaConnector:outbound] pending buffer full; dropping message for topic "${config.topic}"`,
+          `[KafkaConnector:outbound] pending buffer full; dropping message for topic "${config.topic}" ` +
+            `(buffer=${pendingBuffer.length}/${maxPendingBuffer}, totalDrops=${dropTotal})`,
           err,
         );
+        hooks?.onOutboundDrop?.(config.event, config.topic, 'pending-buffer-full', err);
         return;
       }
 
@@ -784,6 +893,10 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
       await runtime.consumer.disconnect().catch(() => {});
     }
 
+    pendingCommitOffsetsByConsumer.clear();
+    inFlightByConsumer.clear();
+    rebalancingConsumers.clear();
+
     if (producer) {
       await producer.disconnect().catch(() => {});
       producer = null;
@@ -829,6 +942,9 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
     outboundRuntimes.length = 0;
     pendingBuffer.length = 0;
     pendingCountByTopic.clear();
+    pendingCommitOffsetsByConsumer.clear();
+    inFlightByConsumer.clear();
+    rebalancingConsumers.clear();
     boundBus = null;
   }
 
@@ -861,12 +977,15 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
         }
         await ensureTopics(outboundAutoCreate);
 
+        let inboundConsumerIndex = 0;
         for (const config of opts.inbound ?? []) {
           const consumer = kafka.consumer({
             groupId: config.groupId,
             sessionTimeout: config.sessionTimeout ?? 30_000,
             heartbeatInterval: config.heartbeatInterval ?? 3_000,
           });
+          const consumerKey = inboundConsumerIndex;
+          inboundConsumerIndex += 1;
           const runtime: InboundRuntime = {
             consumer,
             config,
@@ -886,88 +1005,210 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
           });
           runtime.health.status = 'active';
 
+          // Wire rebalance lifecycle hooks: on REBALANCING, wait for in-flight
+          // handlers and flush pending offsets so the next assignment doesn't
+          // replay finished messages. On GROUP_JOIN, clear the rebalance flag.
+          const consumerEvents = (consumer as unknown as { events?: Record<string, string> })
+            .events;
+          const consumerOn = (consumer as unknown as { on?: Function }).on;
+          if (consumerEvents && typeof consumerOn === 'function') {
+            try {
+              consumerOn.call(consumer, consumerEvents.REBALANCING, async () => {
+                rebalancingConsumers.add(consumerKey);
+                console.info(
+                  `[KafkaConnectors] rebalancing inbound topic="${runtime.health.topic}" ` +
+                    `group="${config.groupId}"`,
+                );
+                const inflight = inFlightByConsumer.get(consumerKey);
+                if (inflight && inflight.size > 0) {
+                  await Promise.allSettled([...inflight]);
+                }
+                const partitionMap = pendingCommitOffsetsByConsumer.get(consumerKey);
+                if (partitionMap && partitionMap.size > 0) {
+                  const toCommit: Array<{ topic: string; partition: number; offset: string }> = [];
+                  for (const [tp, offset] of partitionMap.entries()) {
+                    const [tt, partitionStr] = tp.split('|');
+                    if (!tt || partitionStr === undefined) continue;
+                    toCommit.push({ topic: tt, partition: Number(partitionStr), offset });
+                  }
+                  if (toCommit.length > 0) {
+                    try {
+                      await consumer.commitOffsets(toCommit);
+                      partitionMap.clear();
+                      console.info(
+                        `[KafkaConnectors] flushed ${toCommit.length} pending offset(s) ` +
+                          `before rebalance for group="${config.groupId}"`,
+                      );
+                    } catch (err) {
+                      console.error(
+                        `[KafkaConnectors] failed to flush offsets during rebalance for "${config.groupId}":`,
+                        err,
+                      );
+                    }
+                  }
+                }
+              });
+              consumerOn.call(consumer, consumerEvents.GROUP_JOIN, () => {
+                rebalancingConsumers.delete(consumerKey);
+                console.info(
+                  `[KafkaConnectors] group join group="${config.groupId}" ` +
+                    `topic="${runtime.health.topic}"`,
+                );
+              });
+            } catch (instErr) {
+              console.warn(
+                `[KafkaConnectors] failed to register rebalance listeners for "${config.groupId}":`,
+                instErr,
+              );
+            }
+          }
+
           await consumer.run({
             autoCommit: false,
             partitionsConsumedConcurrently: config.concurrency ?? 1,
             eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
-              const metadata: InboundMessageMetadata = {
-                topic,
-                groupId: config.groupId,
-                partition,
-                offset: message.offset,
-                key: message.key?.toString() ?? null,
-                headers: headersToStrings(message.headers),
-                sizeBytes: message.value?.byteLength ?? 0,
+              // Track in-flight so a rebalance can quiesce before flushing offsets.
+              let resolveTracker: (() => void) | null = null;
+              const tracker = new Promise<void>(resolve => {
+                resolveTracker = resolve;
+              });
+              const inflightSet = inFlightByConsumer.get(consumerKey) ?? new Set<Promise<void>>();
+              inflightSet.add(tracker);
+              inFlightByConsumer.set(consumerKey, inflightSet);
+              const finish = () => {
+                inflightSet.delete(tracker);
+                resolveTracker?.();
               };
 
-              if (!message.value) {
-                await safeCommitInboundOffset(consumer, topic, partition, message);
-                return;
-              }
+              const trackedCommit = async (
+                tt: string,
+                p: number,
+                m: KafkaMessage,
+              ): Promise<void> => {
+                const offset = (BigInt(m.offset) + 1n).toString();
+                const partitionMap =
+                  pendingCommitOffsetsByConsumer.get(consumerKey) ?? new Map<string, string>();
+                partitionMap.set(`${tt}|${p}`, offset);
+                pendingCommitOffsetsByConsumer.set(consumerKey, partitionMap);
+                await safeCommitInboundOffset(consumer, tt, p, m);
+                pendingCommitOffsetsByConsumer.get(consumerKey)?.delete(`${tt}|${p}`);
+              };
 
               try {
-                const serializer = resolveSerializer(config.serializer, opts.serializer);
-                let payload = serializer.deserialize(topic, message.value);
-                if (config.transform) {
-                  payload = await Promise.resolve(config.transform(payload, metadata));
-                  if (payload == null) {
-                    await safeCommitInboundOffset(consumer, topic, partition, message);
+                const metadata: InboundMessageMetadata = {
+                  topic,
+                  groupId: config.groupId,
+                  partition,
+                  offset: message.offset,
+                  key: message.key?.toString() ?? null,
+                  headers: headersToStrings(message.headers),
+                  sizeBytes: message.value?.byteLength ?? 0,
+                };
+
+                if (!message.value) {
+                  await trackedCommit(topic, partition, message);
+                  return;
+                }
+
+                // Consumer-side dedup: if the producer attached a stable
+                // `slingshot.message-id`, skip the handler for repeats.
+                const messageId = metadata.headers['slingshot.message-id'];
+                if (dedupEnabled && messageId) {
+                  let alreadySeen = false;
+                  try {
+                    alreadySeen = await dedupStore.has(messageId);
+                  } catch (dedupErr) {
+                    console.warn(
+                      '[KafkaConnectors] dedupStore.has() threw; treating as miss:',
+                      dedupErr,
+                    );
+                  }
+                  if (alreadySeen) {
+                    inboundDeduped += 1;
+                    await trackedCommit(topic, partition, message);
                     return;
                   }
                 }
 
-                payload = validatePayload(
-                  config.topic ?? topic,
-                  payload,
-                  config.validationMode ?? validationMode,
-                  config.schema,
-                  opts.schemaRegistry,
-                );
+                try {
+                  const serializer = resolveSerializer(config.serializer, opts.serializer);
+                  let payload = serializer.deserialize(topic, message.value);
+                  if (config.transform) {
+                    payload = await Promise.resolve(config.transform(payload, metadata));
+                    if (payload == null) {
+                      await trackedCommit(topic, partition, message);
+                      return;
+                    }
+                  }
 
-                const maxAttempts = Math.max(1, config.maxRetries ?? 3);
-                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                  try {
-                    const startedAt = Date.now();
-                    await Promise.resolve(config.handler(payload, metadata));
-                    runtime.health.messagesProcessed += 1;
-                    hooks?.onInboundSuccess?.(
-                      topic,
-                      config.groupId,
-                      Date.now() - startedAt,
-                      metadata,
-                    );
-                    await safeCommitInboundOffset(consumer, topic, partition, message);
-                    return;
-                  } catch (err) {
-                    if (attempt >= maxAttempts) {
-                      runtime.health.status = config.errorStrategy === 'pause' ? 'paused' : 'error';
-                      runtime.health.error = err instanceof Error ? err.message : String(err);
-                      hooks?.onInboundError?.(topic, config.groupId, err);
-                      const strategy = config.errorStrategy ?? 'dlq';
-                      if (strategy === 'pause') {
-                        pause();
-                        return;
-                      }
-                      if (strategy === 'dlq') {
+                  payload = validatePayload(
+                    config.topic ?? topic,
+                    payload,
+                    config.validationMode ?? validationMode,
+                    config.schema,
+                    opts.schemaRegistry,
+                  );
+
+                  const maxAttempts = Math.max(1, config.maxRetries ?? 3);
+                  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    try {
+                      const startedAt = Date.now();
+                      await Promise.resolve(config.handler(payload, metadata));
+                      runtime.health.messagesProcessed += 1;
+                      hooks?.onInboundSuccess?.(
+                        topic,
+                        config.groupId,
+                        Date.now() - startedAt,
+                        metadata,
+                      );
+                      // Mark as processed for dedup AFTER success so retries
+                      // are not skipped on a transient handler failure.
+                      if (dedupEnabled && messageId) {
                         try {
-                          await produceToDlq(config, metadata, message, err);
-                          runtime.health.messagesDLQ += 1;
-                        } catch (dlqErr) {
-                          console.error(
-                            '[KafkaConnectors] failed to publish inbound DLQ message:',
-                            dlqErr,
+                          await dedupStore.set(messageId, dedupTtlMs);
+                        } catch (dedupErr) {
+                          console.warn(
+                            '[KafkaConnectors] dedupStore.set() threw; continuing:',
+                            dedupErr,
                           );
                         }
                       }
-                      await safeCommitInboundOffset(consumer, topic, partition, message);
+                      await trackedCommit(topic, partition, message);
                       return;
+                    } catch (err) {
+                      if (attempt >= maxAttempts) {
+                        runtime.health.status =
+                          config.errorStrategy === 'pause' ? 'paused' : 'error';
+                        runtime.health.error = err instanceof Error ? err.message : String(err);
+                        hooks?.onInboundError?.(topic, config.groupId, err);
+                        const strategy = config.errorStrategy ?? 'dlq';
+                        if (strategy === 'pause') {
+                          pause();
+                          return;
+                        }
+                        if (strategy === 'dlq') {
+                          try {
+                            await produceToDlq(config, metadata, message, err);
+                            runtime.health.messagesDLQ += 1;
+                          } catch (dlqErr) {
+                            console.error(
+                              '[KafkaConnectors] failed to publish inbound DLQ message:',
+                              dlqErr,
+                            );
+                          }
+                        }
+                        await trackedCommit(topic, partition, message);
+                        return;
+                      }
+                      await waitWithHeartbeat(heartbeat, backoffMs(attempt));
                     }
-                    await waitWithHeartbeat(heartbeat, backoffMs(attempt));
                   }
+                } catch (err) {
+                  hooks?.onInboundError?.(topic, config.groupId, err);
+                  await trackedCommit(topic, partition, message);
                 }
-              } catch (err) {
-                hooks?.onInboundError?.(topic, config.groupId, err);
-                await safeCommitInboundOffset(consumer, topic, partition, message);
+              } finally {
+                finish();
               }
             },
           });
@@ -1016,11 +1257,19 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
     stop: stopConnector,
 
     health(): KafkaConnectorHealth {
+      const droppedMessages: KafkaConnectorDropStats = {
+        totalDrops: dropTotal,
+        bufferFull: dropBufferFull,
+        attemptsExhausted: dropAttemptsExhausted,
+        inboundDeduped,
+        lastDropAt,
+      };
       return {
         started,
         inbound: inboundRuntimes.map(runtime => ({ ...runtime.health })),
         outbound: outboundRuntimes.map(runtime => ({ ...runtime.health })),
         pendingBufferSize: pendingBuffer.length,
+        droppedMessages,
       };
     },
 

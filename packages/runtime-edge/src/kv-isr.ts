@@ -2,6 +2,89 @@
 import type { IsrCacheAdapter, IsrCacheEntry } from '@lastshotlabs/slingshot-ssr';
 
 // ---------------------------------------------------------------------------
+// Cloudflare Workers platform constants
+// ---------------------------------------------------------------------------
+
+/**
+ * Cloudflare Workers cap each request at 50 subrequests on the free plan and
+ * 1000 on paid. The conservative default keeps writes safe on either tier.
+ * A KV `put`/`delete` counts as one subrequest, so a single `set()` or
+ * `invalidateTag()` that fans out to N tag-index writes burns N subrequests.
+ */
+const DEFAULT_MAX_KV_CONCURRENCY = 25;
+
+/**
+ * Default per-operation timeout for KV reads/writes. Cloudflare Workers enforce
+ * a 30s wall-clock per request; KV calls have no client-side timeout, so a
+ * hung KV operation can consume the entire request budget.
+ */
+const DEFAULT_KV_OP_TIMEOUT_MS = 5_000;
+
+// ---------------------------------------------------------------------------
+// Concurrency-limited fan-out
+// ---------------------------------------------------------------------------
+
+/**
+ * Run async tasks with a maximum concurrency, returning when all settle.
+ * Throws if any task rejects (matches Promise.all semantics).
+ */
+async function runWithConcurrency<T>(
+  tasks: Array<() => Promise<T>>,
+  concurrency: number,
+): Promise<T[]> {
+  if (tasks.length === 0) return [];
+  const results: T[] = new Array(tasks.length);
+  let next = 0;
+  const workers: Promise<void>[] = [];
+  const limit = Math.max(1, Math.min(concurrency, tasks.length));
+  for (let i = 0; i < limit; i++) {
+    workers.push(
+      (async () => {
+        while (true) {
+          const idx = next++;
+          if (idx >= tasks.length) return;
+          results[idx] = await tasks[idx]();
+        }
+      })(),
+    );
+  }
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * Race `op` against a timeout. If the timeout fires first, the returned
+ * promise rejects with a `KvOperationTimeoutError`. The original op promise is
+ * left to complete in the background — Cloudflare Workers will tear down the
+ * isolate when the request ends, so background settling is bounded.
+ */
+class KvOperationTimeoutError extends Error {
+  constructor(opName: string, timeoutMs: number) {
+    super(`[runtime-edge] KV ${opName} timed out after ${timeoutMs}ms`);
+    this.name = 'KvOperationTimeoutError';
+  }
+}
+
+function withTimeout<T>(opName: string, op: Promise<T>, timeoutMs: number): Promise<T> {
+  if (timeoutMs <= 0) return op;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new KvOperationTimeoutError(opName, timeoutMs));
+    }, timeoutMs);
+    op.then(
+      v => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      e => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+// ---------------------------------------------------------------------------
 // KV namespace structural interface
 // ---------------------------------------------------------------------------
 
@@ -9,7 +92,9 @@ import type { IsrCacheAdapter, IsrCacheEntry } from '@lastshotlabs/slingshot-ssr
  * Minimal structural interface for a Cloudflare KV Namespace.
  *
  * Defined structurally so `runtime-edge` does not require `@cloudflare/workers-types`
- * as a dependency. Any KV binding that satisfies these method signatures is compatible.
+ * as a dependency. Any KV binding that satisfies these method signatures is compatible
+ * — Cloudflare KV, Upstash KV (with adapter), Vercel KV, Deno KV (wrapped), or an
+ * in-memory mock.
  *
  * @example
  * ```ts
@@ -21,8 +106,12 @@ export interface KvNamespace {
   /**
    * Get the string value of a KV key.
    * Returns `null` if the key does not exist.
+   *
+   * The `options` argument matches the Cloudflare KV signature; mocks should
+   * accept it (and may ignore it) so test stubs satisfy the interface in
+   * strict-mode TypeScript.
    */
-  get(key: string, options: { type: 'text' }): Promise<string | null>;
+  get(key: string, options?: { type: 'text' }): Promise<string | null>;
   /**
    * Put a value into KV with an optional TTL.
    * @param key - The key to write.
@@ -43,6 +132,47 @@ export interface KvNamespace {
 }
 
 // ---------------------------------------------------------------------------
+// Logger hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Structured logger surface for the edge runtime. Defaults to `console.error`.
+ * Production deployments should swap in a logger that forwards to their
+ * observability backend (Logtail, Datadog, Workers Analytics Engine, etc.).
+ */
+export interface RuntimeEdgeLogger {
+  error(event: string, fields?: Record<string, unknown>): void;
+}
+
+let activeLogger: RuntimeEdgeLogger = {
+  error(event, fields) {
+    if (fields && Object.keys(fields).length > 0) {
+      console.error(`[runtime-edge] ${event}`, fields);
+    } else {
+      console.error(`[runtime-edge] ${event}`);
+    }
+  },
+};
+
+/**
+ * Replace the runtime-edge structured logger. Pass `null` to reset to the
+ * default `console.error`-backed logger. Returns the previous logger.
+ */
+export function configureRuntimeEdgeLogger(logger: RuntimeEdgeLogger | null): RuntimeEdgeLogger {
+  const previous = activeLogger;
+  activeLogger = logger ?? {
+    error(event, fields) {
+      if (fields && Object.keys(fields).length > 0) {
+        console.error(`[runtime-edge] ${event}`, fields);
+      } else {
+        console.error(`[runtime-edge] ${event}`);
+      }
+    },
+  };
+  return previous;
+}
+
+// ---------------------------------------------------------------------------
 // Key scheme constants
 // ---------------------------------------------------------------------------
 
@@ -60,7 +190,7 @@ function tagKey(tag: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Per-tag serialization lock
+// Per-tag serialization lock with bounded growth
 // ---------------------------------------------------------------------------
 
 /**
@@ -71,34 +201,96 @@ function tagKey(tag: string): string {
  * updates through a per-tag promise ensures they execute one at a time within a
  * single Worker isolate, eliminating the in-process race.
  *
- * Note: this does not protect against races across multiple Worker instances
- * (Cloudflare KV is eventually consistent). For strict cross-instance consistency,
- * use Durable Objects.
+ * **Memory safety:** earlier versions of this map grew unbounded — every unique
+ * tag added an entry that was never deleted, leaking ~1 KB of promise chain
+ * state per tag in long-running Workers. We now evict the entry once the
+ * promise settles, provided no later caller has chained onto it. With
+ * `set(tag, current)` we use a sentinel comparison to detect that nobody else
+ * extended the chain before deleting it.
+ *
+ * Cross-instance races are still unprotected — Cloudflare KV is eventually
+ * consistent. For strict cross-instance consistency, use Durable Objects.
  *
  * @internal
  */
 const tagLocks = new Map<string, Promise<void>>();
 
 /**
- * Append `path` to the tag index for `tag` in a serialized, race-safe manner.
+ * Test-only accessor for the tag-lock map size. Used to assert that the map
+ * does not grow unbounded after operations complete.
  *
- * Chains onto any in-progress update for the same tag so concurrent callers
- * do not overwrite each other's writes.
+ * @internal
+ */
+export function tagLocksSize(): number {
+  return tagLocks.size;
+}
+
+/**
+ * Wait for all pending tag-lock chains to settle. Test helper; not part of
+ * the public adapter contract.
+ *
+ * @internal
+ */
+export async function flushTagLocks(): Promise<void> {
+  const pending = Array.from(tagLocks.values());
+  await Promise.allSettled(pending);
+  // Allow the .finally() handlers (which delete entries) to run.
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+/**
+ * Run `op` under the per-tag serialization lock and return both the
+ * caller-visible promise (which surfaces errors) and a fire-and-forget
+ * promise stored in `tagLocks` (which absorbs errors so the chain doesn't
+ * poison subsequent callers). Once the chain settles, the entry is deleted
+ * iff no later caller has overwritten it.
+ */
+function runUnderTagLock(tag: string, op: () => Promise<void>): Promise<void> {
+  const prev = tagLocks.get(tag) ?? Promise.resolve();
+  const visible = prev.then(op);
+  // Build the chain entry: a promise that swallows errors (so future callers
+  // don't inherit a rejection) and self-evicts when no one else has appended.
+  const chained: Promise<void> = visible.catch(err => {
+    activeLogger.error('tag-index-update-failed', {
+      tag,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  });
+  const evicting: Promise<void> = chained.finally(() => {
+    if (tagLocks.get(tag) === evicting) {
+      tagLocks.delete(tag);
+    }
+  });
+  tagLocks.set(tag, evicting);
+  return visible;
+}
+
+/**
+ * Append `path` to the tag index for `tag` in a serialized, race-safe manner.
  *
  * @param kv - The KV namespace to read/write.
  * @param tag - The tag whose index should be updated.
  * @param path - The URL path to append to the tag index.
  * @internal
  */
-function updateTagIndex(kv: KvNamespace, tag: string, path: string): Promise<void> {
-  const prev = tagLocks.get(tag) ?? Promise.resolve();
-  const next = prev.then(async () => {
-    const raw = await kv.get(tagKey(tag), { type: 'text' });
+function updateTagIndex(
+  kv: KvNamespace,
+  tag: string,
+  path: string,
+  timeoutMs: number,
+): Promise<void> {
+  return runUnderTagLock(tag, async () => {
+    const raw = await withTimeout('get', kv.get(tagKey(tag), { type: 'text' }), timeoutMs);
     let paths: string[];
     if (raw !== null) {
       try {
         paths = JSON.parse(raw) as string[];
       } catch {
+        // Index corrupt — log and rebuild with this path. Logging preserves
+        // observability for tag-index divergence (was silently swallowed
+        // pre-hardening).
+        activeLogger.error('tag-index-parse-failed', { tag, op: 'update' });
         paths = [];
       }
     } else {
@@ -106,17 +298,9 @@ function updateTagIndex(kv: KvNamespace, tag: string, path: string): Promise<voi
     }
     if (!paths.includes(path)) {
       paths.push(path);
-      await kv.put(tagKey(tag), JSON.stringify(paths));
+      await withTimeout('put', kv.put(tagKey(tag), JSON.stringify(paths)), timeoutMs);
     }
   });
-  // Don't let a failed update poison the chain for future callers.
-  tagLocks.set(
-    tag,
-    next.catch(err => {
-      console.error('[runtime-edge] tag index update failed, chain cleared:', err);
-    }),
-  );
-  return next;
 }
 
 /**
@@ -127,32 +311,30 @@ function updateTagIndex(kv: KvNamespace, tag: string, path: string): Promise<voi
  * @param path - The URL path to remove from the tag index.
  * @internal
  */
-function removeFromTagIndex(kv: KvNamespace, tag: string, path: string): Promise<void> {
-  const prev = tagLocks.get(tag) ?? Promise.resolve();
-  const next = prev.then(async () => {
-    const raw = await kv.get(tagKey(tag), { type: 'text' });
+function removeFromTagIndex(
+  kv: KvNamespace,
+  tag: string,
+  path: string,
+  timeoutMs: number,
+): Promise<void> {
+  return runUnderTagLock(tag, async () => {
+    const raw = await withTimeout('get', kv.get(tagKey(tag), { type: 'text' }), timeoutMs);
     if (raw === null) return;
     let paths: string[];
     try {
       paths = JSON.parse(raw) as string[];
     } catch {
+      activeLogger.error('tag-index-parse-failed', { tag, op: 'remove' });
       return;
     }
     const filtered = paths.filter(p => p !== path);
     if (filtered.length === paths.length) return; // path wasn't present
     if (filtered.length === 0) {
-      await kv.delete(tagKey(tag));
+      await withTimeout('delete', kv.delete(tagKey(tag)), timeoutMs);
     } else {
-      await kv.put(tagKey(tag), JSON.stringify(filtered));
+      await withTimeout('put', kv.put(tagKey(tag), JSON.stringify(filtered)), timeoutMs);
     }
   });
-  tagLocks.set(
-    tag,
-    next.catch(err => {
-      console.error('[runtime-edge] tag index update failed, chain cleared:', err);
-    }),
-  );
-  return next;
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +363,13 @@ function removeFromTagIndex(kv: KvNamespace, tag: string, path: string): Promise
  * 60 seconds to propagate globally. For strict consistency requirements, use
  * Cloudflare Durable Objects instead.
  *
+ * **Cross-Worker race window:**
+ * Two Worker instances calling `set()` simultaneously for pages that share a tag
+ * may overwrite each other's tag index updates — KV has no compare-and-swap
+ * primitive. Within a single Worker isolate, updates are serialized via an
+ * in-process promise chain. The promise chain is bounded — entries are evicted
+ * once they settle, preventing unbounded memory growth.
+ *
  * @param kv - A Cloudflare KV namespace binding. Satisfies `KvNamespace` structurally.
  * @returns An `IsrCacheAdapter` backed by the given KV namespace.
  *
@@ -207,7 +396,32 @@ function removeFromTagIndex(kv: KvNamespace, tag: string, path: string): Promise
  * };
  * ```
  */
-export function createKvIsrCache(kv: KvNamespace): IsrCacheAdapter {
+/**
+ * Tunable knobs for {@link createKvIsrCache}.
+ */
+export interface KvIsrCacheOptions {
+  /**
+   * Maximum concurrent KV subrequests during fan-out (set/invalidateTag).
+   *
+   * Cloudflare Workers cap subrequests at 50 (free) / 1000 (paid) per request.
+   * The default of 25 stays well under both ceilings; increase only if you've
+   * confirmed your plan tier and request budget allow it.
+   */
+  maxConcurrency?: number;
+  /**
+   * Per-KV-operation timeout in milliseconds. Cloudflare KV has no client-side
+   * timeout; without one a hung KV call can consume the full 30 s request
+   * budget. Defaults to 5 000 ms. Set to 0 to disable.
+   */
+  operationTimeoutMs?: number;
+}
+
+export function createKvIsrCache(
+  kv: KvNamespace,
+  options: KvIsrCacheOptions = {},
+): IsrCacheAdapter {
+  const concurrency = options.maxConcurrency ?? DEFAULT_MAX_KV_CONCURRENCY;
+  const timeoutMs = options.operationTimeoutMs ?? DEFAULT_KV_OP_TIMEOUT_MS;
   return {
     /**
      * Retrieve the cached entry for a URL path.
@@ -216,7 +430,7 @@ export function createKvIsrCache(kv: KvNamespace): IsrCacheAdapter {
      * @returns The cached entry, or `null` on a miss or parse failure.
      */
     async get(path: string): Promise<IsrCacheEntry | null> {
-      const raw = await kv.get(pageKey(path), { type: 'text' });
+      const raw = await withTimeout('get', kv.get(pageKey(path), { type: 'text' }), timeoutMs);
       if (raw === null) return null;
       try {
         return JSON.parse(raw) as IsrCacheEntry;
@@ -228,19 +442,13 @@ export function createKvIsrCache(kv: KvNamespace): IsrCacheAdapter {
 
     /**
      * Store a rendered entry for a URL path and update the tag index.
-     *
-     * Before writing the new entry, the previous entry (if any) is read to
-     * determine which tags are being removed. Paths are removed from stale tag
-     * indexes so that `invalidateTag(oldTag)` cannot evict pages that are no
-     * longer tagged that way. All tag index mutations are serialized per-tag via
-     * `updateTagIndex` / `removeFromTagIndex` to prevent concurrent write races.
-     *
-     * @param path - The URL pathname to cache.
-     * @param entry - The rendered entry to store.
      */
     async set(path: string, entry: IsrCacheEntry): Promise<void> {
-      // Read the old entry (if any) so we can diff its tags against the new ones.
-      const existingRaw = await kv.get(pageKey(path), { type: 'text' });
+      const existingRaw = await withTimeout(
+        'get',
+        kv.get(pageKey(path), { type: 'text' }),
+        timeoutMs,
+      );
       let oldTags: readonly string[] = [];
       if (existingRaw !== null) {
         try {
@@ -252,21 +460,26 @@ export function createKvIsrCache(kv: KvNamespace): IsrCacheAdapter {
       }
 
       const newTags = entry.tags;
+      // De-duplicate new tags — a page tagged ['posts', 'posts'] should record
+      // a single entry in the tag index, not duplicates.
       const newTagSet = new Set(newTags);
       const oldTagSet = new Set(oldTags);
 
-      // Write the new page entry.
-      await kv.put(pageKey(path), JSON.stringify(entry));
+      await withTimeout('put', kv.put(pageKey(path), JSON.stringify(entry)), timeoutMs);
 
-      // Remove path from tag indexes it no longer belongs to.
-      const removedTags = oldTags.filter(t => !newTagSet.has(t));
-      // Add path to tag indexes it newly (or still) belongs to.
-      const addedTags = newTags.filter(t => !oldTagSet.has(t));
+      const removedTags = [...oldTagSet].filter(t => !newTagSet.has(t));
+      const addedTags = [...newTagSet].filter(t => !oldTagSet.has(t));
 
-      await Promise.all([
-        ...removedTags.map(tag => removeFromTagIndex(kv, tag, path)),
-        ...addedTags.map(tag => updateTagIndex(kv, tag, path)),
-      ]);
+      // Batch tag-index writes under a concurrency cap. With 100+ tags an
+      // unbounded Promise.all would burn through Cloudflare's 50-subrequest
+      // budget in a single invocation.
+      await runWithConcurrency(
+        [
+          ...removedTags.map(tag => () => removeFromTagIndex(kv, tag, path, timeoutMs)),
+          ...addedTags.map(tag => () => updateTagIndex(kv, tag, path, timeoutMs)),
+        ],
+        concurrency,
+      );
     },
 
     /**
@@ -278,36 +491,30 @@ export function createKvIsrCache(kv: KvNamespace): IsrCacheAdapter {
      * @param path - The URL pathname to invalidate.
      */
     async invalidatePath(path: string): Promise<void> {
-      await kv.delete(pageKey(path));
+      await withTimeout('delete', kv.delete(pageKey(path)), timeoutMs);
     },
 
     /**
      * Remove all cached entries tagged with the given tag.
-     *
-     * Reads the tag index to find all paths, deletes each page entry, then
-     * removes the tag index key itself.
-     *
-     * @param tag - The tag to invalidate (e.g. `'posts'`, `'post:abc123'`).
      */
     async invalidateTag(tag: string): Promise<void> {
       const indexKey = tagKey(tag);
-      const raw = await kv.get(indexKey, { type: 'text' });
+      const raw = await withTimeout('get', kv.get(indexKey, { type: 'text' }), timeoutMs);
       if (raw === null) return;
 
       let paths: string[];
       try {
         paths = JSON.parse(raw) as string[];
       } catch {
-        // Corrupt tag index — delete it and return.
-        await kv.delete(indexKey);
+        await withTimeout('delete', kv.delete(indexKey), timeoutMs);
         return;
       }
 
-      // Delete all page entries in parallel.
-      await Promise.all(paths.map(p => kv.delete(pageKey(p))));
-
-      // Remove the tag index entry.
-      await kv.delete(indexKey);
+      await runWithConcurrency(
+        paths.map(p => () => withTimeout('delete', kv.delete(pageKey(p)), timeoutMs)),
+        concurrency,
+      );
+      await withTimeout('delete', kv.delete(indexKey), timeoutMs);
     },
   };
 }

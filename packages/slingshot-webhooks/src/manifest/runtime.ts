@@ -20,6 +20,8 @@ import {
 } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import { matchGlob } from '../lib/globMatch';
+import type { SecretEncryptor } from '../lib/secretCipher';
+import { createSecretCipher, wrapSecretEncryptor } from '../lib/secretCipher';
 import { validateWebhookUrl } from '../lib/validateWebhookUrl';
 import type { WebhookAdapter } from '../types/adapter';
 import type {
@@ -66,6 +68,32 @@ type DeliveryRecord = {
   lastAttempt?: WebhookAttempt;
   createdAt: string;
   updatedAt: string;
+};
+
+/**
+ * Minimal logger surface used by the manifest runtime. Apps can inject a
+ * structured logger; otherwise the runtime falls back to `console`.
+ */
+export interface RuntimeLogger {
+  error(message: string, fields?: Record<string, unknown>): void;
+  warn(message: string, fields?: Record<string, unknown>): void;
+}
+
+const consoleRuntimeLogger: RuntimeLogger = {
+  error(message, fields) {
+    if (fields) {
+      console.error(`[slingshot-webhooks] ${message}`, fields);
+    } else {
+      console.error(`[slingshot-webhooks] ${message}`);
+    }
+  },
+  warn(message, fields) {
+    if (fields) {
+      console.warn(`[slingshot-webhooks] ${message}`, fields);
+    } else {
+      console.warn(`[slingshot-webhooks] ${message}`);
+    }
+  },
 };
 
 type EndpointRuntimeAdapter = BareEntityAdapter & {
@@ -618,6 +646,7 @@ function normalizeLegacySubscriptionInput(
 async function migrateLegacyEndpointRows(
   endpoints: EndpointRuntimeAdapter,
   definitions: EventDefinitionRegistry,
+  logger: RuntimeLogger,
 ): Promise<void> {
   const seenCursors = new Set<string>();
   let cursor: string | undefined;
@@ -636,8 +665,8 @@ async function migrateLegacyEndpointRows(
           subscriptions: [],
           events: [],
         });
-        console.error(
-          '[slingshot-webhooks] disabled webhook endpoint during startup migration because ownership could not be resolved',
+        logger.error(
+          'disabled webhook endpoint during startup migration because ownership could not be resolved',
           { endpointId: record.id, tenantId: record.tenantId ?? null },
         );
         continue;
@@ -659,14 +688,14 @@ async function migrateLegacyEndpointRows(
         patch.enabled = false;
         patch.subscriptions = [];
         patch.events = [];
-        console.error(
-          '[slingshot-webhooks] disabled webhook endpoint during startup migration because subscriptions could not be normalized',
+        logger.error(
+          'disabled webhook endpoint during startup migration because subscriptions could not be normalized',
           {
             endpointId: record.id,
             tenantId: record.tenantId ?? null,
             ownerType,
             ownerId,
-            error: error instanceof Error ? error.message : String(error),
+            err: error instanceof Error ? error.message : String(error),
           },
         );
       }
@@ -686,16 +715,35 @@ async function migrateLegacyEndpointRows(
   }
 }
 
+type AsyncCipher = {
+  encrypt(plaintext: string): Promise<string>;
+  decrypt(stored: string): Promise<string>;
+};
+
 function buildRuntimeAdapter(
   endpoints: EndpointRuntimeAdapter,
   deliveries: DeliveryRuntimeAdapter,
+  cipher: AsyncCipher,
+  logger: RuntimeLogger,
 ): WebhookRuntimeAdapter {
   let definitionsRef: EventDefinitionRegistry | undefined;
+
+  async function decryptOrPassthrough(stored: string, endpointId: string): Promise<string> {
+    try {
+      return await cipher.decrypt(stored);
+    } catch (err) {
+      logger.error('failed to decrypt webhook secret; using stored value', {
+        endpointId,
+        err: err instanceof Error ? err.message : String(err),
+      });
+      return stored;
+    }
+  }
 
   return {
     async initializeGovernance(definitions) {
       definitionsRef = definitions;
-      await migrateLegacyEndpointRows(endpoints, definitions);
+      await migrateLegacyEndpointRows(endpoints, definitions, logger);
     },
 
     listSubscribableDefinitions(subscriber) {
@@ -714,7 +762,7 @@ function buildRuntimeAdapter(
         ownerId: record.ownerId ?? record.tenantId ?? '',
         tenantId: record.tenantId ?? null,
         url: record.url,
-        secret: record.secret,
+        secret: await decryptOrPassthrough(record.secret, record.id),
         subscriptions: normalizeStoredSubscriptions(record.subscriptions),
         enabled: record.enabled,
         createdAt: record.createdAt,
@@ -729,22 +777,23 @@ function buildRuntimeAdapter(
 
       while (true) {
         const page = await endpoints.listRaw({ filter: { enabled: true }, limit: 500, cursor });
-        items.push(
-          ...page.items
+        const decrypted = await Promise.all(
+          page.items
             .filter(record => record.enabled)
-            .map(record => ({
+            .map(async record => ({
               id: record.id,
               ownerType: record.ownerType ?? 'tenant',
               ownerId: record.ownerId ?? record.tenantId ?? '',
               tenantId: record.tenantId ?? null,
               url: record.url,
-              secret: record.secret,
+              secret: await decryptOrPassthrough(record.secret, record.id),
               subscriptions: normalizeStoredSubscriptions(record.subscriptions),
               enabled: record.enabled,
               createdAt: record.createdAt,
               updatedAt: record.updatedAt,
             })),
         );
+        items.push(...decrypted);
 
         if (!(page.hasMore ?? false)) {
           return items;
@@ -876,12 +925,14 @@ export async function resolveWebhookDeliveries(
   definitions: EventDefinitionRegistry,
   envelope: EventEnvelope,
   maxAttempts: number,
+  logger: RuntimeLogger = consoleRuntimeLogger,
 ): Promise<ResolvedWebhookDelivery[]> {
   const definition = definitions.get(envelope.key);
   if (!definition) {
-    console.error(
-      `[slingshot-webhooks] skipping "${envelope.key}" because no event definition is registered`,
-    );
+    logger.error('skipping event because no event definition is registered', {
+      event: String(envelope.key),
+      eventId: envelope.meta.eventId,
+    });
     return [];
   }
 
@@ -890,9 +941,10 @@ export async function resolveWebhookDeliveries(
   }
 
   if (envelope.meta.scope === null) {
-    console.error(
-      `[slingshot-webhooks] skipping "${envelope.key}" because webhook delivery requires a resolved scope`,
-    );
+    logger.error('skipping event because webhook delivery requires a resolved scope', {
+      event: String(envelope.key),
+      eventId: envelope.meta.eventId,
+    });
     return [];
   }
 
@@ -926,10 +978,12 @@ export async function resolveWebhookDeliveries(
         envelope.payload;
       payload = serializeProjectedPayload(projected);
     } catch (error) {
-      console.error(
-        `[slingshot-webhooks] skipping "${envelope.key}" for endpoint "${endpoint.id}" because payload projection failed`,
-        error,
-      );
+      logger.error('skipping event for endpoint because payload projection failed', {
+        event: String(envelope.key),
+        eventId: envelope.meta.eventId,
+        endpointId: endpoint.id,
+        err: error instanceof Error ? error.message : String(error),
+      });
       continue;
     }
 
@@ -966,20 +1020,50 @@ export async function resolveWebhookDeliveries(
 }
 
 /**
+ * Options for {@link createWebhooksManifestRuntime}.
+ */
+export interface CreateWebhooksManifestRuntimeOptions {
+  /** Base64 32-byte key for AES-256-GCM secret encryption. Omit for plaintext. */
+  secretEncryptionKey?: string | null;
+  /**
+   * Custom secret encryptor for envelope encryption against KMS, Vault, etc.
+   * Takes precedence over {@link secretEncryptionKey} when provided.
+   */
+  encryptor?: SecretEncryptor | null;
+  /** Logger for runtime warnings/errors. Defaults to a `console`-backed logger. */
+  logger?: RuntimeLogger;
+}
+
+/**
  * Build the manifest runtime for webhook entities.
  *
  * Captures transformed adapters for imperative delivery orchestration while
  * letting the entity framework own CRUD and persistence.
+ *
+ * @param onAdaptersReady - Callback invoked once endpoint and delivery adapters are bound.
+ * @param options - Optional secret-encryption configuration.
  */
 export function createWebhooksManifestRuntime(
   onAdaptersReady: (adapter: WebhookRuntimeAdapter) => void,
+  options: CreateWebhooksManifestRuntimeOptions = {},
 ): EntityManifestRuntime {
   const adapterTransforms = createEntityAdapterTransformRegistry();
   const customHandlers = createEntityHandlerRegistry();
   const hooks = createEntityPluginHookRegistry();
+  const logger = options.logger ?? consoleRuntimeLogger;
+  const cipher: AsyncCipher = options.encryptor
+    ? wrapSecretEncryptor(options.encryptor)
+    : wrapSecretEncryptor(createSecretCipher(options.secretEncryptionKey ?? null));
   let endpointAdapterRef: EndpointRuntimeAdapter | undefined;
   let deliveryAdapterRef: DeliveryRuntimeAdapter | undefined;
   let definitionsRef: EventDefinitionRegistry | undefined;
+
+  async function encryptSecretField<T extends Record<string, unknown>>(input: T): Promise<T> {
+    if (typeof input.secret === 'string' && input.secret.length > 0) {
+      return { ...input, secret: await cipher.encrypt(input.secret) };
+    }
+    return input;
+  }
 
   adapterTransforms.register('webhooks.endpoint.runtime', adapter => {
     const base = adapter;
@@ -991,9 +1075,11 @@ export function createWebhooksManifestRuntime(
             '[slingshot-webhooks] event definitions are not ready for endpoint writes',
           );
         }
-        const created = (await base.create(
-          normalizeEndpointCreateInput(input as Record<string, unknown>, definitionsRef),
-        )) as EndpointRecord;
+        const normalized = normalizeEndpointCreateInput(
+          input as Record<string, unknown>,
+          definitionsRef,
+        );
+        const created = (await base.create(await encryptSecretField(normalized))) as EndpointRecord;
         return sanitizeEndpoint(created);
       },
       getById: async (id: string, filter?: Record<string, unknown>) => {
@@ -1017,9 +1103,14 @@ export function createWebhooksManifestRuntime(
         if (!existing) {
           return null;
         }
+        const normalizedUpdate = normalizeEndpointUpdateInput(
+          existing,
+          input as Record<string, unknown>,
+          definitionsRef,
+        );
         const updated = (await base.update(
           id,
-          normalizeEndpointUpdateInput(existing, input as Record<string, unknown>, definitionsRef),
+          await encryptSecretField(normalizedUpdate),
           filter,
         )) as EndpointRecord | null;
         return updated ? sanitizeEndpoint(updated) : null;
@@ -1028,7 +1119,9 @@ export function createWebhooksManifestRuntime(
         return (await base.getById(id)) as EndpointRecord | null;
       },
       applyRawUpdate: async (id: string, input: Record<string, unknown>) => {
-        return (await base.update(id, input)) as EndpointRecord | null;
+        // Migration writes go through here. Encrypt secret if present so
+        // legacy plaintext rows get rewrapped on first migration touch.
+        return (await base.update(id, await encryptSecretField(input))) as EndpointRecord | null;
       },
       listRaw: async (opts?: { filter?: unknown; limit?: number; cursor?: string }) => {
         return (await base.list(opts ?? {})) as PaginatedResult<EndpointRecord>;
@@ -1091,7 +1184,7 @@ export function createWebhooksManifestRuntime(
   hooks.register('webhooks.captureAdapters', (ctx: EntityPluginAfterAdaptersContext) => {
     endpointAdapterRef = requireEndpointRuntimeAdapter(ctx.adapters.WebhookEndpoint);
     deliveryAdapterRef = requireDeliveryRuntimeAdapter(ctx.adapters.WebhookDelivery);
-    const runtime = buildRuntimeAdapter(endpointAdapterRef, deliveryAdapterRef);
+    const runtime = buildRuntimeAdapter(endpointAdapterRef, deliveryAdapterRef, cipher, logger);
     const runtimeWithDefinitions: WebhookRuntimeAdapter = {
       ...runtime,
       async initializeGovernance(definitions) {

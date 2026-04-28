@@ -469,7 +469,7 @@ describe('BullMQ adapter — failed event handler', () => {
     w.triggerFailed({ attemptsMade: 1 }, new Error('job boom'));
     spy.mockRestore();
     expect(errors).toHaveLength(1);
-    expect(String(errors[0]![0])).toContain('job failed on queue');
+    expect(String(errors[0]![0])).toContain('job failed');
   });
 
   it('failed handler logs attempt count when job is present', () => {
@@ -485,7 +485,10 @@ describe('BullMQ adapter — failed event handler', () => {
     });
     w.triggerFailed({ attemptsMade: 2 }, new Error('oops'));
     spy.mockRestore();
-    expect(String(errors[0]![0])).toContain('attempt 2/4');
+    // Structured log format: {"queue":"...","attempt":2,"maxAttempts":4,...}
+    const msg = String(errors[0]![0]);
+    expect(msg).toContain('"attempt":2');
+    expect(msg).toContain('"maxAttempts":4');
   });
 
   it('failed handler logs "job unavailable" when job is null', () => {
@@ -501,7 +504,8 @@ describe('BullMQ adapter — failed event handler', () => {
     });
     w.triggerFailed(null, new Error('unknown failure'));
     spy.mockRestore();
-    expect(String(errors[0]![0])).toContain('job unavailable');
+    // Null job is logged as attempt: null in structured form.
+    expect(String(errors[0]![0])).toContain('"attempt":null');
   });
 });
 

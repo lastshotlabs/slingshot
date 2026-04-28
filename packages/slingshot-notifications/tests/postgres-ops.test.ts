@@ -54,8 +54,9 @@ class FakeNotificationsPostgresPool {
       const id = String(params[1]);
       const row = this.notifications.find(entry => entry.id === id);
       if (row) {
-        row.dispatched = true;
-        row.dispatchedAt = dispatchedAt;
+        const mutable = row as { dispatched: boolean; dispatchedAt: Date | null };
+        mutable.dispatched = true;
+        mutable.dispatchedAt = dispatchedAt;
       }
       return Promise.resolve({ rows: [] });
     }

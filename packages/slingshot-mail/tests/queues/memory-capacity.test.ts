@@ -46,7 +46,7 @@ describe('createMemoryQueue capacity', () => {
 
     expect(await queue.depth!()).toBe(2);
     expect(deadLetterCallback.mock.calls).toHaveLength(1);
-    const [job, error] = deadLetterCallback.mock.calls[0] as [{ id: string }, Error];
+    const [job, error] = deadLetterCallback.mock.calls[0] as unknown as [{ id: string }, Error];
     expect(job.id).toBe('1');
     expect(error.message).toContain('capacity');
   });

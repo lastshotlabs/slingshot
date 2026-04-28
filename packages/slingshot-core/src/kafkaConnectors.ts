@@ -37,6 +37,22 @@ export interface KafkaOutboundConnectorHealth {
 }
 
 /**
+ * Cumulative drop telemetry for connector outbound publishes and inbound dedup.
+ */
+export interface KafkaConnectorDropStats {
+  /** Total drops across all reasons. */
+  readonly totalDrops: number;
+  /** Drops because the in-memory pending buffer overflowed. */
+  readonly bufferFull: number;
+  /** Drops because retry budget was exhausted. */
+  readonly attemptsExhausted: number;
+  /** Inbound messages skipped because their messageId was already processed. */
+  readonly inboundDeduped: number;
+  /** Wall-clock timestamp (ms) of the most recent drop. */
+  readonly lastDropAt: number | null;
+}
+
+/**
  * Aggregate health for the Kafka connector bridge.
  */
 export interface KafkaConnectorHealth {
@@ -48,6 +64,8 @@ export interface KafkaConnectorHealth {
   readonly outbound: readonly KafkaOutboundConnectorHealth[];
   /** Total outbound messages buffered for retry. */
   readonly pendingBufferSize: number;
+  /** Cumulative drop counters for outbound buffers and inbound dedup skips. */
+  readonly droppedMessages: KafkaConnectorDropStats;
 }
 
 /**

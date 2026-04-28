@@ -122,6 +122,17 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
           }),
         );
       }
+      if (!events.get('search:sync.dead')) {
+        events.register(
+          defineEvent('search:sync.dead', {
+            ownerPlugin: SEARCH_PLUGIN_STATE_KEY,
+            exposure: ['internal'],
+            resolveScope() {
+              return null;
+            },
+          }),
+        );
+      }
       // Provider connection happens during setupPost (after entity discovery).
       // Middleware phase is reserved for future request-level concerns
       // (e.g. search-related request middleware).

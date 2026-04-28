@@ -24,6 +24,7 @@ export function createOrchestrationPlugin(
   const routes = options.routes ?? true;
   const routePrefix = options.routePrefix ?? '/orchestration';
   const routeMiddleware = options.routeMiddleware ?? [];
+  const adminAuth = options.adminAuth;
   const providedRuntime = 'runtime' in options ? options.runtime : undefined;
   const providedAdapter = 'adapter' in options ? options.adapter : undefined;
   let runtime: OrchestrationRuntime | null = providedRuntime ?? null;
@@ -60,10 +61,12 @@ export function createOrchestrationPlugin(
       const router = createOrchestrationRouter({
         runtime,
         routeMiddleware,
+        adminAuth,
         tasks: options.tasks,
         workflows,
         resolveRequestContext: options.resolveRequestContext,
         authorizeRun: options.authorizeRun,
+        adapter: providedAdapter,
       });
       app.route(routePrefix, router);
     },

@@ -17,19 +17,26 @@ import type {
   EntityRegistry,
   SearchClientLike,
   SearchPluginRuntime,
+  StoreInfra,
 } from '@lastshotlabs/slingshot-core';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
-import {
-  type FrameworkStoreInfra,
-  REGISTER_ENTITY,
-  RESOLVE_SEARCH_CLIENT,
-  RESOLVE_SEARCH_SYNC,
-  type ResolvedSearchSync,
-} from '../../../src/framework/persistence/internalRepoResolution';
 import { createSearchManager } from '../src/searchManager';
 import type { SearchManager } from '../src/searchManager';
 import { createSearchTransformRegistry } from '../src/transformRegistry';
+
+type FrameworkStoreInfra = StoreInfra & Record<PropertyKey, unknown>;
+type ResolvedSearchSync = {
+  syncMode: 'manual' | 'write-through' | 'event-bus';
+  ensureReady(): Promise<void>;
+  indexDocument?(entity: Record<string, unknown>): Promise<void>;
+  deleteDocument?(id: string): Promise<void>;
+};
+
+const repoResolutionModulePath = '../../../src/framework/persistence/internalRepoResolution';
+const { REGISTER_ENTITY, RESOLVE_SEARCH_CLIENT, RESOLVE_SEARCH_SYNC } = await import(
+  repoResolutionModulePath
+);
 
 // ============================================================================
 // Shared bootstrap helpers (same pattern as wiring.test.ts)
@@ -86,13 +93,13 @@ function createTestInfra(options: {
         ensureReady: async () => {
           await runtime.ensureConfigEntity(config);
         },
-        indexDocument: async entity => {
+        indexDocument: async (entity: Record<string, unknown>) => {
           await runtime.ensureConfigEntity(config);
           const client = runtime.getSearchClient(config._storageName);
           if (!client) return;
           await client.indexDocument(entity);
         },
-        deleteDocument: async id => {
+        deleteDocument: async (id: string) => {
           await runtime.ensureConfigEntity(config);
           const client = runtime.getSearchClient(config._storageName);
           if (!client) return;

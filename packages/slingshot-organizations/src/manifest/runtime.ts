@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'crypto';
 import { HTTPException } from 'hono/http-exception';
+import type { z } from 'zod';
 import type {
   EntityManifestRuntime,
   EntityPluginAfterAdaptersContext,
@@ -59,6 +60,15 @@ type AdapterRefs = {
 type InviteRuntimeAdapter = BareEntityAdapter & {
   findPendingByToken(rawToken: string): Promise<OrganizationInviteRecord | null>;
   reveal(id: string): Promise<OrganizationInviteRecord | null>;
+};
+
+/**
+ * Optional batch-fetch capability that adapters can implement to short-circuit
+ * `listMine`'s N+1 lookups. When unavailable the runtime falls back to parallel
+ * `getById()` calls.
+ */
+type OrganizationsBatchFetchAdapter = BareEntityAdapter & {
+  listByIds(ids: ReadonlyArray<string>): Promise<ReadonlyArray<OrganizationRecord | null>>;
 };
 
 function sha256(value: string): string {
@@ -149,6 +159,40 @@ async function findMembershipByUser(
   return ((page.items as Record<string, unknown>[])[0] ?? null) as Record<string, unknown> | null;
 }
 
+const LIST_MINE_DEFAULT_LIMIT = 50;
+const LIST_MINE_MAX_LIMIT = 100;
+
+function parsePositiveInt(input: unknown): number | undefined {
+  if (typeof input === 'number' && Number.isFinite(input) && input > 0) {
+    return Math.floor(input);
+  }
+  if (typeof input === 'string') {
+    const n = Number.parseInt(input, 10);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return undefined;
+}
+
+function parseCursor(input: unknown): string | undefined {
+  return typeof input === 'string' && input.length > 0 ? input : undefined;
+}
+
+async function batchFetchOrganizations(
+  adapter: BareEntityAdapter,
+  ids: ReadonlyArray<string>,
+): Promise<Array<OrganizationRecord | null>> {
+  if (ids.length === 0) return [];
+  if (hasMethod(adapter, 'listByIds')) {
+    const batchAdapter = adapter as OrganizationsBatchFetchAdapter;
+    const records = await batchAdapter.listByIds(ids);
+    return [...records];
+  }
+  const settled = await Promise.allSettled(
+    ids.map(id => adapter.getById(id) as Promise<OrganizationRecord | null>),
+  );
+  return settled.map(r => (r.status === 'fulfilled' ? r.value : null));
+}
+
 /**
  * Build the organizations manifest runtime.
  */
@@ -156,13 +200,40 @@ export function createOrganizationsManifestRuntime(args: {
   authRuntime: OrganizationsAuthRuntime;
   invitationTtlSeconds: number;
   defaultMemberRole: MemberRole;
+  /**
+   * Zod schema used to validate org slugs at HTTP-create time.
+   * The same schema is also used by the programmatic `OrganizationsOrgService`.
+   */
+  slugSchema?: z.ZodType<string>;
   onAdaptersCaptured?: (adapters: Required<AdapterRefs>) => void;
 }): EntityManifestRuntime {
-  const { authRuntime, invitationTtlSeconds, defaultMemberRole, onAdaptersCaptured } = args;
+  const { authRuntime, invitationTtlSeconds, defaultMemberRole, slugSchema, onAdaptersCaptured } =
+    args;
   const adapterTransforms = createEntityAdapterTransformRegistry();
   const customHandlers = createEntityHandlerRegistry();
   const hooks = createEntityPluginHookRegistry();
   const refs: AdapterRefs = {};
+
+  if (slugSchema) {
+    adapterTransforms.register('organizations.organization.slugValidation', adapter => {
+      const orgAdapter = requireMethod(adapter, 'create');
+      return {
+        ...adapter,
+        create: async (input: unknown) => {
+          const record = (input ?? {}) as Record<string, unknown>;
+          if ('slug' in record) {
+            const result = slugSchema.safeParse(record.slug);
+            if (!result.success) {
+              const message = result.error.issues[0]?.message ?? 'slug failed validation';
+              throw new HTTPException(400, { message: `Invalid slug: ${message}` });
+            }
+            record.slug = result.data;
+          }
+          return orgAdapter.create(record);
+        },
+      };
+    });
+  }
 
   adapterTransforms.register('organizations.member.identity', adapter => {
     const memberAdapter = requireMethod(adapter, 'create');
@@ -281,22 +352,25 @@ export function createOrganizationsManifestRuntime(args: {
           '[slingshot-organizations] listMine executed before adapters were captured',
         );
       }
+      const requestedLimit = parsePositiveInt(params.limit) ?? LIST_MINE_DEFAULT_LIMIT;
+      const limit = Math.min(LIST_MINE_MAX_LIMIT, Math.max(1, requestedLimit));
+      const cursor = parseCursor(params.cursor);
       const membershipsPage = await memberAdapter.list({
         filter: { userId },
-        limit: 500,
+        limit,
+        ...(cursor ? { cursor } : {}),
       });
       const memberships = membershipsPage.items as OrganizationMemberRecord[];
-      const orgResults = await Promise.allSettled(
-        memberships.map(async membership => {
-          return (await organizationAdapter.getById(membership.orgId)) as OrganizationRecord | null;
-        }),
-      );
-      return orgResults
-        .filter(
-          (r): r is PromiseFulfilledResult<OrganizationRecord> =>
-            r.status === 'fulfilled' && r.value !== null,
-        )
-        .map(r => r.value);
+      const orgIds = memberships.map(m => m.orgId);
+      const records = await batchFetchOrganizations(organizationAdapter, orgIds);
+      const items = records.filter((r): r is OrganizationRecord => r !== null);
+      const nextCursor = membershipsPage.nextCursor ?? membershipsPage.cursor ?? undefined;
+      const hasMore = membershipsPage.hasMore ?? Boolean(nextCursor);
+      return {
+        items,
+        nextCursor: nextCursor ?? null,
+        hasMore,
+      };
     },
   );
 
@@ -379,19 +453,38 @@ export function createOrganizationsManifestRuntime(args: {
       invitedBy: invite.invitedBy,
     })) as OrganizationMemberRecord;
     const revealed = await inviteRuntime.reveal(invite.id);
+    let acceptedAtMarked = true;
     if (revealed) {
       try {
         await inviteAdapter.update(revealed.id, {
           acceptedAt: new Date().toISOString(),
         });
       } catch (err) {
-        console.error('[slingshot-organizations] Failed to mark invite as accepted:', err);
+        // The membership write succeeded — surface the failure so callers know
+        // the invite remains in a non-final state and structured-log the error
+        // for an admin reconciliation job.
+        acceptedAtMarked = false;
+        console.error(
+          JSON.stringify({
+            level: 'error',
+            event: 'organizations.invite.acceptedAt.update_failed',
+            inviteId: revealed.id,
+            orgId: invite.orgId,
+            userId: actorUserId,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        );
       }
     }
     const organization = (await organizationAdapter.getById(
       invite.orgId,
     )) as OrganizationRecord | null;
-    return { organization, membership, alreadyMember: false };
+    return {
+      organization,
+      membership,
+      alreadyMember: false,
+      ...(acceptedAtMarked ? {} : { partial: true as const }),
+    };
   });
 
   customHandlers.register('organizations.invite.revoke', () => () => async (input: unknown) => {

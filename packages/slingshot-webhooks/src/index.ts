@@ -26,3 +26,5 @@ export type { MemoryWebhookAdapter } from './adapters/memory';
 export { createWebhookMemoryQueue } from './queues/memory';
 
 export { signPayload, verifySignature } from './lib/signing';
+export type { SecretEncryptor, SecretCipher } from './lib/secretCipher';
+export { createSecretCipher } from './lib/secretCipher';

@@ -12,10 +12,41 @@ import {
   type TriggerRecord,
   ValidationError,
 } from '@lastshotlabs/slingshot-core';
-import { invokeWithRecordIdempotency, IdempotencyConflictError } from './idempotency';
+import { IdempotencyConflictError, invokeWithRecordIdempotency } from './idempotency';
 
 const RETRY_WHOLE_BATCH_TRIGGERS = new Set(['msk', 'kinesis', 'dynamodb-streams']);
 const AUTO_IDEMPOTENT_TRIGGERS = new Set(['sqs', 'msk', 'kinesis', 'dynamodb-streams']);
+
+/**
+ * Race a handler invocation against a wall-clock timeout. On timeout the outer
+ * promise rejects with a `HandlerError(status: 504, code: 'handler-timeout')`
+ * so observability and retry policy treat it as a typed failure rather than a
+ * hung promise. The handler itself keeps running until the platform reaps the
+ * container — there is no AbortSignal contract on `SlingshotHandler.invoke()`.
+ */
+function raceWithHandlerTimeout<T>(op: Promise<T>, timeoutMs: number): Promise<T> {
+  if (!timeoutMs || timeoutMs <= 0) return op;
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new HandlerError(`Handler exceeded ${timeoutMs}ms`, {
+          status: 504,
+          code: 'handler-timeout',
+        }),
+      );
+    }, timeoutMs);
+    op.then(
+      v => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      e => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
 
 type LambdaContextLike = {
   awsRequestId?: string;
@@ -99,6 +130,7 @@ export async function invokeWithAdapter(
   opts: TriggerOpts | undefined,
   isColdStart: boolean,
   lambdaContext?: LambdaContextLike,
+  handlerTimeoutMs?: number,
 ): Promise<unknown> {
   const records = adapter.extractInputs(event);
   const outcomes: RecordOutcome[] = [];
@@ -132,13 +164,18 @@ export async function invokeWithAdapter(
           record,
           resolveRuntimeIdempotency(adapter, record, opts),
           async () =>
-            handler.invoke(record.body as never, {
-              ctx,
-              meta: {
-                ...meta,
-                idempotencyKey: meta.idempotencyKey ?? record.naturalKey,
-              },
-            }),
+            raceWithHandlerTimeout(
+              Promise.resolve(
+                handler.invoke(record.body as never, {
+                  ctx,
+                  meta: {
+                    ...meta,
+                    idempotencyKey: meta.idempotencyKey ?? record.naturalKey,
+                  },
+                }),
+              ),
+              handlerTimeoutMs ?? 0,
+            ),
         );
       }
 
@@ -183,12 +220,13 @@ export async function invokeWithAdapter(
       } else if (records.length > 1) {
         let recordAction: 'retry' | 'drop' = 'retry';
         try {
-          recordAction = (await hooks?.onRecordError?.({
-            record,
-            error: capturedError,
-            trigger: adapter.kind,
-            ctx,
-          })) ?? 'retry';
+          recordAction =
+            (await hooks?.onRecordError?.({
+              record,
+              error: capturedError,
+              trigger: adapter.kind,
+              ctx,
+            })) ?? 'retry';
         } catch (err) {
           console.error('[lambda] onRecordError hook threw:', err);
         }

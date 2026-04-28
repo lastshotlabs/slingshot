@@ -64,4 +64,65 @@ describe('bullmqOrchestrationAdapterOptionsSchema', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  test('accepts a structured tls object with rejectUnauthorized/ca/cert/key', () => {
+    const result = bullmqOrchestrationAdapterOptionsSchema.safeParse({
+      connection: {
+        host: 'redis.example.com',
+        port: 6380,
+        tls: {
+          rejectUnauthorized: true,
+          ca: '<pem>',
+          cert: '<pem>',
+          key: '<pem>',
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test('accepts requireTls flag', () => {
+    const result = bullmqOrchestrationAdapterOptionsSchema.safeParse({
+      connection: { host: 'redis', port: 6379, tls: { rejectUnauthorized: true } },
+      requireTls: true,
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.requireTls).toBe(true);
+  });
+
+  test('accepts shutdownDrainTimeoutMs and rejects negative values', () => {
+    const ok = bullmqOrchestrationAdapterOptionsSchema.safeParse({
+      connection: {},
+      shutdownDrainTimeoutMs: 5_000,
+    });
+    expect(ok.success).toBe(true);
+
+    const bad = bullmqOrchestrationAdapterOptionsSchema.safeParse({
+      connection: {},
+      shutdownDrainTimeoutMs: -1,
+    });
+    expect(bad.success).toBe(false);
+  });
+
+  test('accepts jobRetention configuration with all fields', () => {
+    const result = bullmqOrchestrationAdapterOptionsSchema.safeParse({
+      connection: {},
+      jobRetention: {
+        removeOnCompleteAge: 60,
+        removeOnCompleteCount: 100,
+        removeOnFailAge: 86_400,
+        removeOnFailCount: 500,
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  test('rejects negative jobRetention values', () => {
+    const result = bullmqOrchestrationAdapterOptionsSchema.safeParse({
+      connection: {},
+      jobRetention: { removeOnCompleteAge: -1 },
+    });
+    expect(result.success).toBe(false);
+  });
 });

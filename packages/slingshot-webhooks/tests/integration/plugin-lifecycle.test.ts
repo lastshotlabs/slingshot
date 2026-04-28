@@ -76,7 +76,7 @@ describe('webhook plugin delivery lifecycle', () => {
       events.publish(
         'auth:login',
         { userId: 'user-1', sessionId: 'sess-1', tenantId: 'tenant-a' },
-        { tenantId: 'tenant-a', userId: 'user-1', actorId: 'user-1' },
+        { requestTenantId: 'tenant-a', userId: 'user-1', actorId: 'user-1' },
       );
 
       const delivery = await waitForDelivery(runtime, endpointId, item => item.status === 'dead');
@@ -103,7 +103,7 @@ describe('webhook plugin delivery lifecycle', () => {
       events.publish(
         'auth:login',
         { userId: 'user-1', sessionId: 'sess-2', tenantId: 'tenant-a' },
-        { tenantId: 'tenant-a', userId: 'user-1', actorId: 'user-1' },
+        { requestTenantId: 'tenant-a', userId: 'user-1', actorId: 'user-1' },
       );
 
       const delivery = await waitForDelivery(runtime, endpointId, item => item.status === 'dead');
@@ -146,7 +146,7 @@ describe('webhook plugin delivery lifecycle', () => {
       const delivery = await waitForDelivery(
         runtime,
         endpointId,
-        item => item.event === 'webhook:test',
+        item => String(item.event) === 'webhook:test',
       );
       expect(delivery.status).toBe('dead');
       expect(delivery.lastAttempt?.error).toContain('enqueue failed');

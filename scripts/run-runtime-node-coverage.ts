@@ -36,7 +36,9 @@ export async function runRuntimeNodeCoverage(
   rmSync(coverageDir, { recursive: true, force: true });
   mkdirSync(coverageDir, { recursive: true });
 
-  const packageTests = await collectFiles('packages/runtime-node/tests/**/*.test.ts');
+  const packageTests = (await collectFiles('packages/runtime-node/tests/**/*.test.ts')).filter(
+    file => !file.includes('/tests/node-runtime/'),
+  );
   const nodeTests = await collectFiles('tests/node-runtime/**/*.test.ts');
 
   if (packageTests.length > 0) {

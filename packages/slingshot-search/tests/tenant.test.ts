@@ -32,7 +32,7 @@ function makeFilteredTenantEntity(storageName: string): ResolvedEntityConfig {
       tenantIsolation: 'filtered',
       tenantField: 'tenantId',
     },
-  };
+  } as unknown as ResolvedEntityConfig;
 }
 
 function makeIndexPerTenantEntity(storageName: string): ResolvedEntityConfig {
@@ -51,7 +51,7 @@ function makeIndexPerTenantEntity(storageName: string): ResolvedEntityConfig {
       tenantIsolation: 'index-per-tenant',
       tenantField: 'tenantId',
     },
-  };
+  } as unknown as ResolvedEntityConfig;
 }
 
 function makeTenantlessEntity(storageName: string): ResolvedEntityConfig {
@@ -69,7 +69,7 @@ function makeTenantlessEntity(storageName: string): ResolvedEntityConfig {
       },
       // No tenant isolation
     },
-  };
+  } as unknown as ResolvedEntityConfig;
 }
 
 // ============================================================================

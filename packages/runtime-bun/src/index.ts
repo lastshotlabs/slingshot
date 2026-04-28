@@ -13,12 +13,94 @@ import type {
 /** Bun's default request body limit when none is supplied (128 MiB). */
 const BUN_DEFAULT_MAX_BODY = 128 * 1024 * 1024;
 
-function logRuntimeError(
-  scope: 'fetch' | 'websocket',
-  phase: string,
-  error: unknown,
-): void {
-  console.error(`[runtime-bun] ${scope} ${phase} handler failed:`, error);
+// ---------------------------------------------------------------------------
+// Logger — structured, redirectable, parity with runtime-node
+// ---------------------------------------------------------------------------
+
+/**
+ * Structured logging hook for the Bun runtime. The runtime emits operational
+ * events (fetch handler errors, websocket handler errors) to the configured
+ * logger. Defaults to a `console.error`-backed implementation.
+ *
+ * Pass a custom logger via {@link configureRuntimeBunLogger} to forward into
+ * pino, OpenTelemetry, etc.
+ */
+export interface RuntimeBunLogger {
+  warn(event: string, fields?: Record<string, unknown>): void;
+  error(event: string, fields?: Record<string, unknown>): void;
+}
+
+function formatLogLine(event: string, fields?: Record<string, unknown>): string {
+  if (!fields) return `[runtime-bun] ${event}`;
+  const parts: string[] = [];
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined) continue;
+    if (k === 'stack') continue;
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+      parts.push(`${k}=${String(v)}`);
+    }
+  }
+  const summary = parts.length > 0 ? ` ${parts.join(' ')}` : '';
+  return `[runtime-bun] ${event}${summary}`;
+}
+
+const defaultLogger: RuntimeBunLogger = {
+  warn(event, fields) {
+    console.warn(formatLogLine(event, fields));
+  },
+  error(event, fields) {
+    console.error(formatLogLine(event, fields));
+    if (typeof fields?.stack === 'string') {
+      console.error(fields.stack);
+    }
+  },
+};
+
+let activeLogger: RuntimeBunLogger = defaultLogger;
+
+/**
+ * Replace the runtime's structured logger. Pass `null` to reset to the default
+ * console-backed logger. Returns the previous logger so tests can save and
+ * restore state.
+ */
+export function configureRuntimeBunLogger(logger: RuntimeBunLogger | null): RuntimeBunLogger {
+  const previous = activeLogger;
+  activeLogger = logger ?? defaultLogger;
+  return previous;
+}
+
+function logRuntimeError(scope: 'fetch' | 'websocket', phase: string, error: unknown): void {
+  activeLogger.error('runtime-handler-error', {
+    scope,
+    phase,
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Process-level safety net (parity with runtime-node)
+// ---------------------------------------------------------------------------
+
+let processHandlersInstalled = false;
+
+/**
+ * Install once-per-process handlers for `unhandledRejection` and
+ * `uncaughtException`. Both are forwarded to the structured logger so they
+ * surface alongside other runtime events. Idempotent.
+ */
+export function installProcessSafetyNet(): void {
+  if (processHandlersInstalled) return;
+  processHandlersInstalled = true;
+  process.on('unhandledRejection', (reason: unknown) => {
+    activeLogger.error('unhandled-rejection', {
+      message: reason instanceof Error ? reason.message : String(reason),
+      stack: reason instanceof Error ? reason.stack : undefined,
+    });
+  });
+  process.on('uncaughtException', (err: Error) => {
+    activeLogger.error('uncaught-exception', { message: err.message, stack: err.stack });
+  });
 }
 
 /**
@@ -48,9 +130,7 @@ function wrapFetch(
  * `message`, `close`, or `pong` is logged with phase context instead of being
  * silently swallowed by Bun.
  */
-function wrapWebSocketHandler(
-  handler: RuntimeWebSocketHandler,
-): RuntimeWebSocketHandler {
+function wrapWebSocketHandler(handler: RuntimeWebSocketHandler): RuntimeWebSocketHandler {
   return {
     ...handler,
     async open(ws: RuntimeWebSocket): Promise<void> {
@@ -160,18 +240,19 @@ export function bunRuntime(): SlingshotRuntime {
     sqlite: {
       open(path: string): RuntimeSqliteDatabase {
         const db = new Database(path, { create: true });
-        // WAL mode is required for concurrent readers + writer. Verify by reading
-        // back the pragma so a silent failure (e.g. read-only mount) is detected
-        // immediately rather than corrupting under concurrent writes later.
-        const journalMode = db
-          .query<{ journal_mode: string }, []>('PRAGMA journal_mode = WAL')
-          .get();
-        if (journalMode && journalMode.journal_mode.toLowerCase() !== 'wal') {
-          db.close();
-          throw new Error(
-            `[runtime-bun] failed to enable WAL journal mode (got ${journalMode.journal_mode}); ` +
-              `verify the database file is on a writable, non-network filesystem`,
-          );
+        // WAL mode is required for concurrent readers + writer on file-based databases.
+        // In-memory databases (':memory:') don't support WAL — skip the check for them.
+        if (path !== ':memory:') {
+          const journalMode = db
+            .query<{ journal_mode: string }, []>('PRAGMA journal_mode = WAL')
+            .get();
+          if (journalMode && journalMode.journal_mode.toLowerCase() !== 'wal') {
+            db.close();
+            throw new Error(
+              `[runtime-bun] failed to enable WAL journal mode (got ${journalMode.journal_mode}); ` +
+                `verify the database file is on a writable, non-network filesystem`,
+            );
+          }
         }
         return adaptBunSqlite(db);
       },
@@ -179,9 +260,7 @@ export function bunRuntime(): SlingshotRuntime {
     server: {
       listen(opts): RuntimeServerInstance {
         const fetchHandler = wrapFetch(opts.fetch, opts.error);
-        const websocketHandler = opts.websocket
-          ? wrapWebSocketHandler(opts.websocket)
-          : undefined;
+        const websocketHandler = opts.websocket ? wrapWebSocketHandler(opts.websocket) : undefined;
 
         // Build options as `unknown` then cast at the Bun.serve boundary. Bun's
         // overload narrows on the presence of `unix` (mutually exclusive with

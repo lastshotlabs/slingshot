@@ -4,6 +4,29 @@ import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
 const require = createRequire(import.meta.url);
 
 /**
+ * Static AWS credentials object. Use this only when credentials never change
+ * during the process lifetime. For long-running services prefer a
+ * {@link AwsCredentialProvider} so STS/EC2/ECS rotation is honored.
+ */
+export interface AwsStaticCredentials {
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+  readonly sessionToken?: string;
+  readonly expiration?: Date;
+}
+
+/**
+ * AWS credential provider — async function the SDK calls each time it needs
+ * fresh credentials. The SDK caches the result until `expiration` passes.
+ *
+ * Plug this in when you load credentials from a secret manager or rotate them
+ * periodically. Without this (and without {@link AwsStaticCredentials}), the
+ * SDK uses its default credential chain (env, profile, EC2/ECS metadata, STS
+ * web identity) which already refreshes automatically.
+ */
+export type AwsCredentialProvider = () => Promise<AwsStaticCredentials>;
+
+/**
  * Configuration for the S3-compatible storage adapter.
  *
  * Compatible with AWS S3, Cloudflare R2, MinIO, and any S3-compatible endpoint.
@@ -21,14 +44,13 @@ export interface S3StorageConfig {
    */
   readonly endpoint?: string;
   /**
-   * Explicit AWS credentials.
+   * Credentials. Either a static value (no rotation) or a provider function the
+   * SDK invokes to refresh credentials before they expire.
    *
-   * When omitted, the AWS SDK falls back to its standard credential chain.
+   * Omit to use the SDK's default credential chain (env, EC2/ECS metadata,
+   * STS web identity), which refreshes automatically.
    */
-  readonly credentials?: {
-    readonly accessKeyId: string;
-    readonly secretAccessKey: string;
-  };
+  readonly credentials?: AwsStaticCredentials | AwsCredentialProvider;
   /**
    * Base URL for publicly accessible objects.
    *
@@ -59,6 +81,7 @@ interface S3ClientModule {
   PutObjectCommand: new (params: Record<string, unknown>) => unknown;
   GetObjectCommand: new (params: Record<string, unknown>) => unknown;
   DeleteObjectCommand: new (params: Record<string, unknown>) => unknown;
+  AbortMultipartUploadCommand: new (params: Record<string, unknown>) => unknown;
 }
 
 interface PresignerModule {
@@ -69,8 +92,13 @@ interface PresignerModule {
   ): Promise<string>;
 }
 
+interface LibStorageUpload {
+  done(): Promise<unknown>;
+  abort(): Promise<unknown>;
+}
+
 interface LibStorageModule {
-  Upload: new (opts: Record<string, unknown>) => { done(): Promise<unknown> };
+  Upload: new (opts: Record<string, unknown>) => LibStorageUpload;
 }
 
 function requireS3Client(): S3ClientModule {
@@ -142,6 +170,8 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
     clientRef = new S3Client({
       region: config.region ?? 'us-east-1',
       ...(config.endpoint ? { endpoint: config.endpoint } : {}),
+      // Pass credentials as-is: the SDK accepts both static objects and
+      // provider functions, and refreshes via provider.expiration.
       ...(config.credentials ? { credentials: config.credentials } : {}),
       ...(config.forcePathStyle !== undefined ? { forcePathStyle: config.forcePathStyle } : {}),
     });
@@ -165,7 +195,18 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
               ContentType: meta.mimeType,
             },
           });
-          await upload.done();
+          try {
+            await upload.done();
+          } catch (err) {
+            // lib-storage usually aborts in-flight multipart on error, but
+            // explicitly abort here to defend against partial-upload bills.
+            try {
+              await upload.abort();
+            } catch {
+              // already aborted or never started — ignore
+            }
+            throw err;
+          }
         } else {
           const { PutObjectCommand } = requireS3Client();
           let body: Blob | Buffer | Uint8Array;

@@ -361,9 +361,9 @@ describe('Postgres permissions adapter — migrations', () => {
       q.sql.includes('UPDATE _permission_schema_version'),
     );
     expect(versionUpdate).toBeDefined();
-    expect(versionUpdate.sql).toContain('UPDATE _permission_schema_version');
+    expect(versionUpdate!.sql).toContain('UPDATE _permission_schema_version');
     // Two migrations applied — final version is 2
-    expect(versionUpdate.params).toEqual([2]);
+    expect(versionUpdate!.params).toEqual([2]);
   });
 
   test('skips migrations when database is already at current version', async () => {
@@ -750,6 +750,7 @@ describe('Postgres permissions adapter — expiry filtering', () => {
       expires_at: new Date(Date.now() - 10_000),
       revoked_by: null,
       revoked_at: null,
+      revoked_reason: null,
     });
 
     const grants = await adapter.getGrantsForSubject('user-1');
@@ -829,6 +830,7 @@ describe('Postgres permissions adapter — listGrantHistory', () => {
       expires_at: new Date(Date.now() - 10_000),
       revoked_by: null,
       revoked_at: null,
+      revoked_reason: null,
     });
     const history = await adapter.listGrantHistory('user-1', 'user');
     expect(history).toHaveLength(1);
@@ -868,6 +870,7 @@ describe('Postgres permissions adapter — row coercion errors', () => {
       expires_at: null,
       revoked_by: null,
       revoked_at: null,
+      revoked_reason: null,
     });
 
     await expect(adapter.listGrantHistory('user-1', 'user')).rejects.toThrow('expected string');
@@ -893,6 +896,7 @@ describe('Postgres permissions adapter — row coercion errors', () => {
       expires_at: null,
       revoked_by: null,
       revoked_at: null,
+      revoked_reason: null,
     });
 
     await expect(adapter.listGrantHistory('user-1', 'user')).rejects.toThrow(
@@ -920,10 +924,98 @@ describe('Postgres permissions adapter — row coercion errors', () => {
       expires_at: 'not-a-date' as never, // wrong type — should be Date | null
       revoked_by: null,
       revoked_at: null,
+      revoked_reason: null,
     });
 
     await expect(adapter.listGrantHistory('user-1', 'user')).rejects.toThrow(
       'expected Date | null',
+    );
+  });
+
+  test('rowToGrant() throws a typed error when subject_type is an unknown variant', async () => {
+    const pool = new MockPool();
+    pool.schemaVersion = 1;
+    const adapter = await makeAdapter(pool);
+
+    // Use getGrantsForSubject(subjectId) without a subjectType so the SQL filter
+    // does NOT exclude the bad subject_type. The bad value reaches rowToGrant()
+    // and isSubjectType() correctly throws.
+    pool['grants'].set('bad-subject-type', {
+      id: 'bad-subject-type',
+      subject_id: 'user-1',
+      subject_type: 'robot', // not 'user' | 'group' | 'service-account'
+      tenant_id: null,
+      resource_type: null,
+      resource_id: null,
+      roles: ['admin'],
+      effect: 'allow',
+      granted_by: 'system',
+      granted_at: new Date(),
+      reason: null,
+      expires_at: null,
+      revoked_by: null,
+      revoked_at: null,
+      revoked_reason: null,
+    });
+
+    await expect(adapter.getGrantsForSubject('user-1')).rejects.toThrow(
+      'invalid subject_type: robot',
+    );
+  });
+
+  test('rowToGrant() throws a typed error when effect is an unknown variant', async () => {
+    const pool = new MockPool();
+    pool.schemaVersion = 1;
+    const adapter = await makeAdapter(pool);
+
+    pool['grants'].set('bad-effect', {
+      id: 'bad-effect',
+      subject_id: 'user-1',
+      subject_type: 'user',
+      tenant_id: null,
+      resource_type: null,
+      resource_id: null,
+      roles: ['admin'],
+      effect: 'maybe', // not 'allow' | 'deny'
+      granted_by: 'system',
+      granted_at: new Date(),
+      reason: null,
+      expires_at: null,
+      revoked_by: null,
+      revoked_at: null,
+      revoked_reason: null,
+    });
+
+    await expect(adapter.listGrantHistory('user-1', 'user')).rejects.toThrow(
+      'invalid effect: maybe',
+    );
+  });
+
+  test('rowToGrant() throws when roles column is not an array', async () => {
+    const pool = new MockPool();
+    pool.schemaVersion = 1;
+    const adapter = await makeAdapter(pool);
+
+    pool['grants'].set('bad-roles', {
+      id: 'bad-roles',
+      subject_id: 'user-1',
+      subject_type: 'user',
+      tenant_id: null,
+      resource_type: null,
+      resource_id: null,
+      roles: 'admin' as never, // wrong type — should be string[]
+      effect: 'allow',
+      granted_by: 'system',
+      granted_at: new Date(),
+      reason: null,
+      expires_at: null,
+      revoked_by: null,
+      revoked_at: null,
+      revoked_reason: null,
+    });
+
+    await expect(adapter.listGrantHistory('user-1', 'user')).rejects.toThrow(
+      'roles must be an array',
     );
   });
 });

@@ -111,7 +111,9 @@ export async function resolveAssetTagsHtml(
       );
       return '';
     }
-    const manifest = parsed as Partial<Record<string, { file?: string; css?: string[]; isEntry?: boolean }>>;
+    const manifest = parsed as Partial<
+      Record<string, { file?: string; css?: string[]; isEntry?: boolean }>
+    >;
 
     // Resolve which manifest key to use for the client entry chunk
     let entryKey: string | undefined = clientEntry;
@@ -246,6 +248,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   } catch (err) {
     throw new Error(
       `[slingshot-ssg] Cannot write to output directory "${config.outDir}": ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
     );
   }
 

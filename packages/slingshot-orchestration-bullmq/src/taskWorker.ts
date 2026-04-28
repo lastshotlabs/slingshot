@@ -27,19 +27,34 @@ export function createBullMQTaskProcessor(options: {
       return { sleptMs: job.data['durationMs'] };
     }
 
-    if (typeof job.data['taskName'] !== 'string' || job.data['taskName'].length === 0) {
+    const rawTaskName =
+      typeof job.data['taskName'] === 'string' ? (job.data['taskName'] as string) : undefined;
+    const runIdForLog =
+      typeof job.data['runId'] === 'string' ? (job.data['runId'] as string) : String(job.id ?? '');
+
+    if (rawTaskName === undefined || rawTaskName.length === 0) {
       const msg = `BullMQ job ${job.id} has invalid data: missing 'taskName' field`;
-      console.error(`[slingshot-orchestration-bullmq] ${msg}`, { jobId: job.id, data: job.data });
+      // NOTE: never log job.data — payload may contain PII / secrets / large blobs.
+      console.error(`[slingshot-orchestration-bullmq] ${msg}`, {
+        runId: runIdForLog,
+        taskName: rawTaskName,
+        errorCode: 'TASK_DATA_MISSING_TASK_NAME',
+      });
       throw new Error(msg);
     }
 
     if (!('input' in job.data)) {
       const msg = `BullMQ job ${job.id} has invalid data: missing 'input' field`;
-      console.error(`[slingshot-orchestration-bullmq] ${msg}`, { jobId: job.id, data: job.data });
+      // NOTE: never log job.data — payload may contain PII / secrets / large blobs.
+      console.error(`[slingshot-orchestration-bullmq] ${msg}`, {
+        runId: runIdForLog,
+        taskName: rawTaskName,
+        errorCode: 'TASK_DATA_MISSING_INPUT',
+      });
       throw new Error(msg);
     }
 
-    const taskName = job.data['taskName'];
+    const taskName = rawTaskName;
     const runId = String(job.data['runId'] ?? job.id ?? '');
     const def = options.taskRegistry.get(taskName);
     if (!def) {

@@ -27,7 +27,7 @@ const createDbNativeProviderSpy = spyOn(realDbNative, 'createDbNativeProvider').
       name: `db-native-${id}`,
       connect,
       teardown,
-    } as SearchProvider;
+    } as unknown as SearchProvider;
   },
 );
 
@@ -73,7 +73,7 @@ describe('search manager startup cleanup', () => {
         name: `db-native-${id}`,
         connect,
         teardown,
-      } as SearchProvider;
+      } as unknown as SearchProvider;
     });
 
     try {

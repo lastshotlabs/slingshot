@@ -4,6 +4,7 @@ import type {
   TriggerOpts,
 } from '@lastshotlabs/slingshot-core';
 import { type LambdaTriggerKind, createLambdaRuntime } from './runtime';
+import { resolveLambdaTrigger } from './triggers';
 
 type ResolveManifestConfig = (
   manifestPathOrObject: string | Record<string, unknown>,
@@ -78,6 +79,21 @@ export async function createFunctionsFromManifest(
     string,
     (event: unknown, context: { awsRequestId?: string }) => Promise<unknown>
   > = {};
+  // Validate every trigger kind up-front so a typo in the manifest is caught at
+  // bootstrap (deploy time) rather than on the first invoke. resolveLambdaTrigger
+  // throws on unknown kinds with a clear message.
+  for (const [exportName, lambdaConfig] of Object.entries(lambdas)) {
+    try {
+      resolveLambdaTrigger(lambdaConfig.trigger as LambdaTriggerKind);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Manifest lambda '${exportName}' has invalid trigger '${lambdaConfig.trigger}': ${reason}`,
+        { cause: err },
+      );
+    }
+  }
+
   for (const [exportName, lambdaConfig] of Object.entries(lambdas)) {
     const resolvedHandler = resolved.registry.resolveHandler(lambdaConfig.handler);
     if (!isSlingshotHandler(resolvedHandler)) {

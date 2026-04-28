@@ -31,6 +31,40 @@ import {
 import { toGroupId, toTopicName } from './kafkaTopicNaming';
 
 /**
+ * Reasons the adapter may drop or skip an event. Surfaced through `onDrop` so
+ * SREs can wire metrics and alerts without log scraping.
+ */
+export type KafkaAdapterDropReason =
+  | 'serialize-failed'
+  | 'pending-buffer-full'
+  | 'pending-attempts-exhausted'
+  | 'deserialize-failed'
+  | 'null-message-value'
+  | 'shutdown-with-pending';
+
+/**
+ * Telemetry signal emitted when the adapter drops or skips a message.
+ */
+export interface KafkaAdapterDropEvent {
+  readonly reason: KafkaAdapterDropReason;
+  readonly event: string;
+  readonly topic: string;
+  /** Present when an underlying error caused the drop. */
+  readonly error?: unknown;
+  /** Present for inbound message drops (deserialize / null value). */
+  readonly partition?: number;
+  readonly offset?: string;
+}
+
+/**
+ * Behavior when the consumer encounters an undecodable message (deserialization
+ * failure or null value). `dlq` (default) routes raw bytes to
+ * `${topic}.deser-dlq` so operators can replay after fixing the schema.
+ * `skip` commits the offset and continues, mirroring legacy behavior.
+ */
+export type KafkaAdapterDeserErrorPolicy = 'dlq' | 'skip';
+
+/**
  * Zod schema for the programmatic Kafka event-bus adapter configuration.
  */
 export const kafkaAdapterOptionsSchema = z.object({
@@ -60,6 +94,21 @@ export const kafkaAdapterOptionsSchema = z.object({
     .optional(),
   compression: compressionSchema.optional(),
   validation: z.enum(['strict', 'warn', 'off']).optional(),
+  /**
+   * Policy for messages that fail to deserialize on the consumer.
+   * `dlq` (default) sends the raw bytes to `${topic}.deser-dlq` before
+   * committing the offset. `skip` commits without forwarding.
+   */
+  deserializationErrorPolicy: z.enum(['dlq', 'skip']).optional(),
+  /**
+   * Optional callback invoked when the adapter drops or skips a message.
+   * Use this to emit metrics / alerts without log scraping.
+   */
+  onDrop: z
+    .custom<
+      (event: KafkaAdapterDropEvent) => void
+    >(value => typeof value === 'function', 'onDrop must be a function')
+    .optional(),
 });
 
 /**
@@ -86,6 +135,8 @@ interface ResolvedKafkaConfig {
   readonly sasl: KafkaAdapterOptions['sasl'];
   readonly ssl: KafkaAdapterOptions['ssl'];
   readonly validation: NonNullable<KafkaAdapterOptions['validation']>;
+  readonly deserializationErrorPolicy: KafkaAdapterDeserErrorPolicy;
+  readonly onDrop: ((event: KafkaAdapterDropEvent) => void) | undefined;
 }
 
 const DEFAULTS = {
@@ -135,6 +186,20 @@ export interface KafkaAdapterHealthConsumer {
 }
 
 /**
+ * Aggregate drop / skip counters surfaced through {@link KafkaAdapterHealth}.
+ */
+export interface KafkaAdapterDropStats {
+  /** Total number of drops observed since adapter creation. */
+  readonly totalDrops: number;
+  /** Drop counts keyed by reason. */
+  readonly byReason: Readonly<Record<KafkaAdapterDropReason, number>>;
+  /** Wall-clock timestamp (ms) of the most recent drop, or null. */
+  readonly lastDropAt: number | null;
+  /** Reason of the most recent drop, or null. */
+  readonly lastDropReason: KafkaAdapterDropReason | null;
+}
+
+/**
  * Health snapshot for the Kafka event-bus adapter.
  */
 export interface KafkaAdapterHealth {
@@ -148,6 +213,8 @@ export interface KafkaAdapterHealth {
   readonly pendingBufferSize: number;
   /** Durable consumer status keyed by event subscription. */
   readonly consumers: readonly KafkaAdapterHealthConsumer[];
+  /** Cumulative drop telemetry; use this to alert on silent overflow. */
+  readonly droppedMessages: KafkaAdapterDropStats;
 }
 
 /**
@@ -258,7 +325,22 @@ export function createKafkaAdapter(
     sasl: opts.sasl,
     ssl: opts.ssl,
     validation: opts.validation ?? DEFAULTS.validation,
+    deserializationErrorPolicy: opts.deserializationErrorPolicy ?? 'dlq',
+    onDrop: opts.onDrop,
   });
+
+  function notifyDrop(event: KafkaAdapterDropEvent): void {
+    dropCounts[event.reason] = (dropCounts[event.reason] ?? 0) + 1;
+    totalDrops += 1;
+    lastDropAt = Date.now();
+    lastDropReason = event.reason;
+    if (!config.onDrop) return;
+    try {
+      config.onDrop(event);
+    } catch (err) {
+      console.error('[KafkaAdapter] onDrop callback threw:', err);
+    }
+  }
 
   if (config.heartbeatInterval >= config.sessionTimeout) {
     throw new Error(
@@ -302,9 +384,26 @@ export function createKafkaAdapter(
   >();
   const durableConsumers = new Map<string, DurableConsumerEntry>();
   const connectedConsumers = new Set<string>();
+  /** entryKey -> Map<topic|partition, nextOffset>: most recent offset waiting to commit during a rebalance. */
+  const pendingCommitOffsets = new Map<string, Map<string, string>>();
+  /** entryKey -> Set of in-flight handler promises so we can quiesce on rebalance. */
+  const inFlightHandlers = new Map<string, Set<Promise<void>>>();
+  /** entryKey -> true while a rebalance is in progress; new messages should pause. */
+  const rebalancingConsumers = new Set<string>();
   const createdTopics = new Set<string>();
   const pendingHandlers = new Set<Promise<void>>();
   const pendingBuffer: PendingProduce[] = [];
+  const dropCounts: Record<KafkaAdapterDropReason, number> = {
+    'serialize-failed': 0,
+    'pending-buffer-full': 0,
+    'pending-attempts-exhausted': 0,
+    'deserialize-failed': 0,
+    'null-message-value': 0,
+    'shutdown-with-pending': 0,
+  };
+  let totalDrops = 0;
+  let lastDropAt: number | null = null;
+  let lastDropReason: KafkaAdapterDropReason | null = null;
   let producer: Producer | null = null;
   let admin: Admin | null = null;
   let producerConnected = false;
@@ -416,6 +515,12 @@ export function createKafkaAdapter(
                 `after ${MAX_PENDING_ATTEMPTS} attempts:`,
               err,
             );
+            notifyDrop({
+              reason: 'pending-attempts-exhausted',
+              event: item.event,
+              topic: item.topic,
+              error: err,
+            });
           } else {
             retry.push(next);
           }
@@ -525,8 +630,57 @@ export function createKafkaAdapter(
             topic,
             fromBeginning: config.startFromBeginning,
           });
+
+          // Wire rebalance lifecycle hooks BEFORE run() so we don't miss the
+          // first GROUP_JOIN. On REBALANCING: pause new processing and flush
+          // any pending offsets so the next assignment doesn't double-process.
+          // On GROUP_JOIN: resume by clearing the rebalance flag.
+          const eventName = event as string;
+          const consumerEvents = (consumer as unknown as { events?: Record<string, string> })
+            .events;
+          const consumerOn = (consumer as unknown as { on?: Function }).on;
+          if (consumerEvents && typeof consumerOn === 'function') {
+            try {
+              consumerOn.call(
+                consumer,
+                consumerEvents.REBALANCING,
+                async (rebalanceEvent: unknown) => {
+                  rebalancingConsumers.add(entryKey);
+                  console.info(
+                    `[KafkaAdapter] rebalancing event="${eventName}" ` +
+                      `group="${groupId}" topic="${topic}"`,
+                  );
+                  // Wait for in-flight handlers to finish; we'll commit their
+                  // offsets next so the next assignment doesn't replay them.
+                  const inflight = inFlightHandlers.get(entryKey);
+                  if (inflight && inflight.size > 0) {
+                    await Promise.allSettled([...inflight]);
+                  }
+                  await flushPendingCommits(entryKey);
+                  void rebalanceEvent;
+                },
+              );
+              consumerOn.call(consumer, consumerEvents.GROUP_JOIN, (joinEvent: unknown) => {
+                rebalancingConsumers.delete(entryKey);
+                const member = (joinEvent as { payload?: { memberId?: string } } | undefined)
+                  ?.payload?.memberId;
+                console.info(
+                  `[KafkaAdapter] group join event="${eventName}" ` +
+                    `group="${groupId}" memberId="${member ?? 'unknown'}"`,
+                );
+              });
+            } catch (instErr) {
+              // Instrumentation hooks are best-effort; log and continue.
+              console.warn(
+                `[KafkaAdapter] failed to register rebalance listeners for "${groupId}":`,
+                instErr,
+              );
+            }
+          }
+
           await consumer.run({
             autoCommit: false,
+            partitionsConsumedConcurrently: 1,
             eachMessage: async payload => {
               const entry = durableConsumers.get(entryKey);
               if (!entry) return;
@@ -571,9 +725,21 @@ export function createKafkaAdapter(
     topic: string,
     partition: number,
     message: KafkaMessage,
+    entryKey?: string,
   ): Promise<void> {
+    const offset = nextOffset(message.offset);
+    if (entryKey) {
+      // Record the latest known commit point so a rebalance can flush it.
+      const partitionMap = pendingCommitOffsets.get(entryKey) ?? new Map<string, string>();
+      partitionMap.set(`${topic}|${partition}`, offset);
+      pendingCommitOffsets.set(entryKey, partitionMap);
+    }
     try {
-      await consumer.commitOffsets([{ topic, partition, offset: nextOffset(message.offset) }]);
+      await consumer.commitOffsets([{ topic, partition, offset }]);
+      // Successful commit clears the recorded pending offset to avoid double-commits.
+      if (entryKey) {
+        pendingCommitOffsets.get(entryKey)?.delete(`${topic}|${partition}`);
+      }
     } catch (err) {
       // Commit failure means at-least-once redelivery on restart — log and continue.
       console.error(
@@ -584,14 +750,46 @@ export function createKafkaAdapter(
     }
   }
 
+  /**
+   * Flush any uncommitted offsets recorded for a consumer entry. Called from
+   * the REBALANCING hook so the next assignment doesn't replay messages whose
+   * handlers already finished.
+   */
+  async function flushPendingCommits(entryKey: string): Promise<void> {
+    const entry = durableConsumers.get(entryKey);
+    const partitionMap = pendingCommitOffsets.get(entryKey);
+    if (!entry || !partitionMap || partitionMap.size === 0) return;
+    const toCommit: Array<{ topic: string; partition: number; offset: string }> = [];
+    for (const [tp, offset] of partitionMap.entries()) {
+      const [topic, partitionStr] = tp.split('|');
+      if (!topic || partitionStr === undefined) continue;
+      toCommit.push({ topic, partition: Number(partitionStr), offset });
+    }
+    if (toCommit.length === 0) return;
+    try {
+      await entry.consumer.commitOffsets(toCommit);
+      partitionMap.clear();
+      console.info(
+        `[KafkaAdapter] flushed ${toCommit.length} pending offset(s) for ` +
+          `event="${entry.event}" group="${entry.groupId}" before rebalance`,
+      );
+    } catch (err) {
+      console.error(
+        `[KafkaAdapter] failed to flush pending offsets during rebalance for "${entry.groupId}":`,
+        err,
+      );
+    }
+  }
+
   async function sendToDlq(
     topic: string,
     partition: number,
     message: KafkaMessage,
     error: unknown,
+    suffix: 'dlq' | 'deser-dlq' = 'dlq',
   ): Promise<void> {
     const ensuredProducer = await ensureProducer();
-    const dlqTopic = `${topic}.dlq`;
+    const dlqTopic = `${topic}.${suffix}`;
     await ensureTopic(dlqTopic);
     await ensuredProducer.send({
       topic: dlqTopic,
@@ -606,6 +804,7 @@ export function createKafkaAdapter(
             'slingshot.original-partition': String(partition),
             'slingshot.original-offset': message.offset,
             'slingshot.error': error instanceof Error ? error.message : String(error),
+            'slingshot.dlq-reason': suffix,
           },
         },
       ],
@@ -621,12 +820,34 @@ export function createKafkaAdapter(
     const { topic, partition, message, heartbeat } = payload;
     let decodedEnvelope: EventEnvelope;
 
+    // Track this handler so a rebalance can wait for it to finish before
+    // flushing offsets. We resolve the tracker after the work below completes.
+    let resolveTracker: (() => void) | null = null;
+    const tracker = new Promise<void>(resolve => {
+      resolveTracker = resolve;
+    });
+    const inflightSet = inFlightHandlers.get(entryKey) ?? new Set<Promise<void>>();
+    inflightSet.add(tracker);
+    inFlightHandlers.set(entryKey, inflightSet);
+    const finish = () => {
+      inflightSet.delete(tracker);
+      resolveTracker?.();
+    };
+
     if (!message.value) {
       console.warn(
         `[KafkaAdapter] null message value on topic "${topic}" partition ${partition} ` +
           `offset ${message.offset}; skipping`,
       );
-      await commitProcessedMessage(entry.consumer, topic, partition, message);
+      notifyDrop({
+        reason: 'null-message-value',
+        event: entry.event,
+        topic,
+        partition,
+        offset: message.offset,
+      });
+      await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
+      finish();
       return;
     }
 
@@ -649,27 +870,53 @@ export function createKafkaAdapter(
           `offset ${message.offset}:`,
         deserializeErr,
       );
-      await commitProcessedMessage(entry.consumer, topic, partition, message);
+      notifyDrop({
+        reason: 'deserialize-failed',
+        event: entry.event,
+        topic,
+        partition,
+        offset: message.offset,
+        error: deserializeErr,
+      });
+      // Route undecodable bytes to a deser-specific DLQ so the original
+      // payload is recoverable after a schema fix; legacy 'skip' policy
+      // only commits and discards.
+      if (config.deserializationErrorPolicy === 'dlq') {
+        try {
+          await sendToDlq(topic, partition, message, deserializeErr, 'deser-dlq');
+        } catch (dlqErr) {
+          console.error(
+            '[KafkaAdapter] failed to publish undecodable message to deser-dlq:',
+            dlqErr,
+          );
+        }
+      }
+      await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
+      finish();
       return;
     }
 
-    for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
-      try {
-        await Promise.resolve(listener(decodedEnvelope));
-        await commitProcessedMessage(entry.consumer, topic, partition, message);
-        return;
-      } catch (err) {
-        if (attempt >= config.maxRetries) {
-          try {
-            await sendToDlq(topic, partition, message, err);
-          } catch (dlqErr) {
-            console.error('[KafkaAdapter] failed to publish exhausted message to DLQ:', dlqErr);
-          }
-          await commitProcessedMessage(entry.consumer, topic, partition, message);
+    try {
+      for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
+        try {
+          await Promise.resolve(listener(decodedEnvelope));
+          await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
           return;
+        } catch (err) {
+          if (attempt >= config.maxRetries) {
+            try {
+              await sendToDlq(topic, partition, message, err);
+            } catch (dlqErr) {
+              console.error('[KafkaAdapter] failed to publish exhausted message to DLQ:', dlqErr);
+            }
+            await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
+            return;
+          }
+          await waitWithHeartbeat(heartbeat, backoffMs(attempt));
         }
-        await waitWithHeartbeat(heartbeat, backoffMs(attempt));
       }
+    } finally {
+      finish();
     }
   }
 
@@ -750,6 +997,12 @@ export function createKafkaAdapter(
               `[KafkaAdapter] failed to serialize event "${event}" for topic "${topic}":`,
               err,
             );
+            notifyDrop({
+              reason: 'serialize-failed',
+              event: event as string,
+              topic,
+              error: err,
+            });
             return;
           }
           if (pendingBuffer.length >= MAX_PENDING_BUFFER) {
@@ -757,6 +1010,12 @@ export function createKafkaAdapter(
               `[KafkaAdapter] pending buffer full; dropping event "${event}" for topic "${topic}":`,
               err,
             );
+            notifyDrop({
+              reason: 'pending-buffer-full',
+              event: event as string,
+              topic,
+              error: err,
+            });
             return;
           }
           pendingBuffer.push({
@@ -846,6 +1105,9 @@ export function createKafkaAdapter(
       const consumers = [...durableConsumers.values()];
       durableConsumers.clear();
       connectedConsumers.clear();
+      pendingCommitOffsets.clear();
+      inFlightHandlers.clear();
+      rebalancingConsumers.clear();
       for (const entry of consumers) {
         try {
           await entry.consumer.disconnect();
@@ -858,6 +1120,13 @@ export function createKafkaAdapter(
         console.warn(
           `[KafkaAdapter] shutdown: discarding ${pendingBuffer.length} buffered message(s).`,
         );
+        for (const item of pendingBuffer) {
+          notifyDrop({
+            reason: 'shutdown-with-pending',
+            event: item.event,
+            topic: item.topic,
+          });
+        }
         pendingBuffer.length = 0;
       }
 
@@ -897,6 +1166,12 @@ export function createKafkaAdapter(
           groupId: entry.groupId,
           connected: connectedConsumers.has(key),
         })),
+        droppedMessages: {
+          totalDrops,
+          byReason: { ...dropCounts },
+          lastDropAt,
+          lastDropReason,
+        },
       };
     },
 

@@ -98,10 +98,10 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     );
   });
 
-  test('permissionsAdapterFactories.mongo calls infra.getMongo() and creates adapter', () => {
+  test('permissionsAdapterFactories.mongo calls infra.getMongo() and creates adapter', async () => {
     const conn = { model: () => ({}) };
     const infra = { getMongo: () => ({ conn }) };
-    const adapter = permissionsAdapterFactories.mongo(infra as never);
+    const adapter = await permissionsAdapterFactories.mongo(infra as never);
     expect(typeof adapter.createGrant).toBe('function');
   });
 

@@ -68,7 +68,7 @@ describe('createMemoryQueue', () => {
       }),
     };
 
-    const queue = createMemoryQueue({ maxAttempts: 3 });
+    const queue = createMemoryQueue({ maxAttempts: 3, retryBaseDelayMs: 0 });
     await queue.start(provider);
     await queue.enqueue(makeMessage());
     await queue.drain!();
@@ -86,7 +86,11 @@ describe('createMemoryQueue', () => {
       }),
     };
 
-    const queue = createMemoryQueue({ maxAttempts: 2, onDeadLetter: deadLetterCallback });
+    const queue = createMemoryQueue({
+      maxAttempts: 2,
+      retryBaseDelayMs: 0,
+      onDeadLetter: deadLetterCallback,
+    });
     await queue.start(provider);
     await queue.enqueue(makeMessage());
     await queue.drain!();

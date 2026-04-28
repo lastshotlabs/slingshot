@@ -85,7 +85,7 @@ describe('mail queue — metrics emitter', () => {
         return { status: 'sent' as const };
       }),
     };
-    const queue = createMemoryQueue({ maxAttempts: 5, metrics });
+    const queue = createMemoryQueue({ maxAttempts: 5, retryBaseDelayMs: 0, metrics });
     await queue.start(provider);
     await queue.enqueue(makeMessage());
     await queue.drain!();

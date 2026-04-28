@@ -14,9 +14,16 @@ import { MailSendError } from '../types/provider';
 interface ResendConfig {
   apiKey: string;
   baseUrl?: string;
+  /**
+   * Maximum milliseconds a single HTTP send may run before the request is
+   * aborted with a retryable timeout error. Default: 30000.
+   */
+  providerTimeoutMs?: number;
   /** Override or disable the consecutive-failure circuit breaker. */
   circuitBreaker?: Pick<MailCircuitBreakerOptions, 'threshold' | 'cooldownMs' | 'now'>;
 }
+
+const DEFAULT_PROVIDER_TIMEOUT_MS = 30_000;
 
 interface ResendBody {
   to: string | string[];
@@ -56,6 +63,7 @@ function formatAddresses(
  */
 export function createResendProvider(config: ResendConfig): MailProvider {
   const baseUrl = config.baseUrl ?? 'https://api.resend.com';
+  const providerTimeoutMs = config.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
   const breaker = createMailCircuitBreaker({
     providerName: 'resend',
     ...(config.circuitBreaker ?? {}),
@@ -91,15 +99,47 @@ export function createResendProvider(config: ResendConfig): MailProvider {
             : {}),
         };
 
-        const res = await fetch(`${baseUrl}/emails`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${config.apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(body),
-          signal: options?.signal,
-        });
+        // Bind a per-request AbortController so we can apply a provider-level
+        // timeout while still respecting any caller-supplied signal. We avoid
+        // AbortSignal.any() because it is not yet broadly available in the
+        // runtimes we target.
+        const controller = new AbortController();
+        const callerSignal = options?.signal;
+        const onCallerAbort = () => controller.abort(callerSignal?.reason);
+        if (callerSignal) {
+          if (callerSignal.aborted) controller.abort(callerSignal.reason);
+          else callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+        }
+        const timer =
+          providerTimeoutMs > 0
+            ? setTimeout(
+                () => controller.abort(new Error(`resend provider timed out after ${providerTimeoutMs}ms`)),
+                providerTimeoutMs,
+              )
+            : undefined;
+        let res: Response;
+        try {
+          res = await fetch(`${baseUrl}/emails`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${config.apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+        } catch (err) {
+          if (controller.signal.aborted && !callerSignal?.aborted) {
+            throw new MailSendError(
+              `Resend provider timed out after ${providerTimeoutMs}ms`,
+              true,
+            );
+          }
+          throw err;
+        } finally {
+          if (timer) clearTimeout(timer);
+          if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
+        }
 
         if (!res.ok) {
           const retryable = res.status === 429 || res.status >= 500;

@@ -1,7 +1,6 @@
-import type { MetricsEmitter } from '@lastshotlabs/slingshot-core';
+import type { DynamicEventBus, MetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { DEFAULT_MAX_ENTRIES, createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
-import { TemplateNotFoundError } from '@lastshotlabs/slingshot-core';
-import { MailCircuitOpenError } from '../lib/circuitBreaker';
+import { classifyMailFailure, retryDelayFor } from '../lib/failureClassification';
 import type { MailMessage, MailProvider } from '../types/provider';
 import { MailSendError } from '../types/provider';
 import type { MailJob, MailQueue, MailQueueConfig } from '../types/queue';
@@ -35,72 +34,114 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
   const drainTimeoutMs = config?.drainTimeoutMs ?? 30_000;
   const sendTimeoutMs = config?.sendTimeoutMs ?? 30_000;
   const maxEntries = config?.maxEntries ?? DEFAULT_MAX_ENTRIES;
+  // Allow tests / fast environments to override the default 1s/4s/16s
+  // backoff schedule. Set to 0 to disable the wait between retries.
+  const retryBaseDelayMs = config?.retryBaseDelayMs;
   // Optional unified metrics emitter. The plugin passes its lazily-resolved
   // proxy in here so the queue does not need to be rebuilt once the framework
   // context is available.
   const metrics: MetricsEmitter = config?.metrics ?? createNoopMetricsEmitter();
+  const bus: DynamicEventBus | null = config?.bus ?? null;
   const pending: Map<string, MailJob> = new Map();
   const activeJobs = new Set<Promise<void>>();
+  // Timer handles for delayed retries — tracked so stop() can clear them.
+  const retryTimers = new Set<ReturnType<typeof setTimeout>>();
   // Maps idempotency key -> original job id so repeated enqueues dedup.
   const idempotencyIndex: Map<string, string> = new Map();
   let provider: MailProvider | null = null;
   let running = false;
   let idCounter = 0;
 
+  function emit(event: string, payload: unknown): void {
+    if (!bus) return;
+    try {
+      bus.emit(event, payload);
+    } catch {
+      // Bus emission must never break the queue.
+    }
+  }
+
+  function deadLetter(job: MailJob, err: Error, classification: 'permanent' | 'exhausted'): void {
+    pending.delete(job.id);
+    metrics.gauge('mail.queue.depth', pending.size);
+    if (classification === 'permanent') {
+      emit('mail:send.permanentFailure', {
+        jobId: job.id,
+        message: job.message,
+        sourceEvent: job.sourceEvent,
+        error: { message: err.message, name: err.name },
+      });
+    }
+    onDeadLetter?.(job, err);
+  }
+
+  function scheduleRetry(job: MailJob, delayMs: number): void {
+    if (delayMs <= 0) {
+      trackJob(job);
+      return;
+    }
+    const timer = setTimeout(() => {
+      retryTimers.delete(timer);
+      if (!running || !provider) return;
+      trackJob(job);
+    }, delayMs);
+    retryTimers.add(timer);
+  }
+
   const resolveSync = <T>(operation: () => T): Promise<T> => Promise.resolve().then(operation);
 
   async function processJob(job: MailJob): Promise<void> {
-    while (job.attempts < maxAttempts) {
-      job.attempts++;
-      try {
-        const activeProvider = provider;
-        if (!activeProvider) {
-          throw new Error('Memory mail queue not started â€” call start() first');
-        }
-        const providerLabel = { provider: activeProvider.name };
-        const sendStart = performance.now();
-        const result = await sendWithTimeout(activeProvider, job.message, sendTimeoutMs);
-        const elapsed = performance.now() - sendStart;
-        // Closed breaker on success — the provider's internal breaker
-        // resets too. Sample the gauge so dashboards show recovery
-        // promptly. 0=closed, 1=open, 2=half-open.
-        metrics.gauge('mail.circuitBreaker.state', 0, providerLabel);
-        metrics.timing('mail.send.duration', elapsed, providerLabel);
-        if (result.status === 'rejected') {
-          metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'failure' });
-          onDeadLetter?.(job, new MailSendError('Provider rejected message', false));
-          pending.delete(job.id);
-          metrics.gauge('mail.queue.depth', pending.size);
-          return;
-        }
-        metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'success' });
-        pending.delete(job.id);
-        metrics.gauge('mail.queue.depth', pending.size);
+    job.attempts++;
+    try {
+      const activeProvider = provider;
+      if (!activeProvider) {
+        throw new Error('Memory mail queue not started â€” call start() first');
+      }
+      const providerLabel = { provider: activeProvider.name };
+      const sendStart = performance.now();
+      const result = await sendWithTimeout(activeProvider, job.message, sendTimeoutMs);
+      const elapsed = performance.now() - sendStart;
+      // Closed breaker on success — the provider's internal breaker
+      // resets too. Sample the gauge so dashboards show recovery
+      // promptly. 0=closed, 1=open, 2=half-open.
+      metrics.gauge('mail.circuitBreaker.state', 0, providerLabel);
+      metrics.timing('mail.send.duration', elapsed, providerLabel);
+      if (result.status === 'rejected') {
+        metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'failure' });
+        deadLetter(job, new MailSendError('Provider rejected message', false), 'permanent');
         return;
-      } catch (err) {
-        const providerLabel = provider ? { provider: provider.name } : { provider: 'unknown' };
-        if (err instanceof MailCircuitOpenError) {
-          // Breaker is currently open — emit a state gauge sample (1 = open)
-          // so operators can see open-state dwell time without scraping logs.
-          metrics.gauge('mail.circuitBreaker.state', 1, providerLabel);
-          metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'circuitOpen' });
-        } else {
-          metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'failure' });
-          if (err instanceof MailSendError && err.retryAfterMs !== undefined) {
-            // Surface the provider's Retry-After hint so operators can see
-            // back-pressure from rate limits even when retries are silent.
-            metrics.gauge('mail.retryAfter', err.retryAfterMs, providerLabel);
-          }
-        }
-        const isRetryable = err instanceof MailSendError ? err.retryable : true;
-        const isPermanent = err instanceof TemplateNotFoundError || !isRetryable;
-        if (isPermanent || job.attempts >= maxAttempts) {
-          onDeadLetter?.(job, err instanceof Error ? err : new Error(String(err)));
-          pending.delete(job.id);
-          metrics.gauge('mail.queue.depth', pending.size);
-          return;
+      }
+      metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'success' });
+      pending.delete(job.id);
+      metrics.gauge('mail.queue.depth', pending.size);
+      return;
+    } catch (err) {
+      const providerLabel = provider ? { provider: provider.name } : { provider: 'unknown' };
+      const classification = classifyMailFailure(err);
+      if (classification === 'circuitOpen') {
+        metrics.gauge('mail.circuitBreaker.state', 1, providerLabel);
+        metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'circuitOpen' });
+      } else {
+        metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'failure' });
+        if (err instanceof MailSendError && err.retryAfterMs !== undefined) {
+          metrics.gauge('mail.retryAfter', err.retryAfterMs, providerLabel);
         }
       }
+      const errorObj = err instanceof Error ? err : new Error(String(err));
+      if (classification === 'permanent') {
+        deadLetter(job, errorObj, 'permanent');
+        return;
+      }
+      if (job.attempts >= maxAttempts) {
+        deadLetter(job, errorObj, 'exhausted');
+        return;
+      }
+      const retryAfterMs =
+        err instanceof MailSendError && err.retryAfterMs !== undefined
+          ? err.retryAfterMs
+          : undefined;
+      const delay = retryDelayFor(job.attempts, retryAfterMs, retryBaseDelayMs);
+      scheduleRetry(job, delay);
     }
   }
 
@@ -170,25 +211,57 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
       return resolveSync(() => {
         running = false;
         provider = null;
+        for (const t of retryTimers) clearTimeout(t);
+        retryTimers.clear();
       });
     },
     depth(): Promise<number> {
       return resolveSync(() => pending.size);
     },
     async drain(): Promise<void> {
-      if (drainTimeoutMs === 0 || activeJobs.size === 0) {
-        await Promise.all([...activeJobs]);
+      // Drain awaits full quiescence: in-flight jobs settled AND no scheduled
+      // retry timers waiting to fire. Retries scheduled by `scheduleRetry`
+      // appear here as `retryTimers` until they re-enter `activeJobs` on the
+      // tick the timer fires.
+      const isQuiescent = (): boolean => activeJobs.size === 0 && retryTimers.size === 0;
+      const settle = async (): Promise<void> => {
+        while (!isQuiescent()) {
+          await Promise.all([...activeJobs]);
+          // After awaiting active jobs, more retries may have been scheduled
+          // synchronously. Yield once so any newly fired timers register
+          // themselves before we re-check quiescence.
+          if (retryTimers.size > 0) {
+            await new Promise<void>(resolve => setImmediate(resolve));
+          }
+        }
+      };
+      if (drainTimeoutMs === 0) {
+        await settle();
         return;
       }
-      const drainAll = Promise.all([...activeJobs]);
-      const timeout = new Promise<'timeout'>(resolve =>
-        setTimeout(() => resolve('timeout'), drainTimeoutMs),
-      );
-      const result = await Promise.race([drainAll.then(() => 'done' as const), timeout]);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<'timeout'>(resolve => {
+        timer = setTimeout(() => resolve('timeout'), drainTimeoutMs);
+      });
+      const result = await Promise.race([settle().then(() => 'done' as const), timeout]);
+      if (timer) clearTimeout(timer);
       if (result === 'timeout') {
+        const remaining = activeJobs.size + retryTimers.size;
+        const pendingJobs = [...pending.values()].map(j => ({
+          id: j.id,
+          sourceEvent: j.sourceEvent,
+          attempts: j.attempts,
+          to: j.message.to,
+          subject: j.message.subject,
+        }));
         console.warn(
-          `[slingshot-mail] drain() timed out after ${drainTimeoutMs}ms — ${activeJobs.size} job(s) still in flight`,
+          `[slingshot-mail] drain() timed out after ${drainTimeoutMs}ms — ${remaining} job(s) still in flight`,
         );
+        emit('mail:drain.timedOut', {
+          drainTimeoutMs,
+          inFlight: remaining,
+          pending: pendingJobs,
+        });
       }
     },
   };

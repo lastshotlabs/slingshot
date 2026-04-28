@@ -171,6 +171,61 @@ export const mailPluginConfigSchema = z.object({
     .describe(
       'Whether all subscription templates are checked at startup. Omit to use the plugin default startup validation behavior.',
     ),
+  /**
+   * Behaviour when the provider's `healthCheck()` rejects during plugin
+   * setup. `'error'` (default) throws and aborts plugin boot. `'warn'`
+   * logs a warning and continues — the historical pre-prod behaviour, kept
+   * available for environments that intentionally want to start before the
+   * upstream provider is reachable.
+   */
+  failOnHealthCheck: z
+    .enum(['warn', 'error'])
+    .optional()
+    .describe(
+      "Behaviour when the provider health check fails on setup. 'error' aborts boot, 'warn' logs and continues. Default: 'error'.",
+    ),
+  /**
+   * Mount point for the provider webhook route. When set, the plugin
+   * registers `POST <route>/:provider` (e.g. `/mail/webhook/resend`) so
+   * providers can deliver bounce/complaint events. Set to an empty string
+   * to disable webhook mounting. Default: `/mail/webhook`.
+   */
+  webhookRoute: z
+    .string()
+    .optional()
+    .describe(
+      'Base mount point for provider bounce/complaint webhook routes. Set to "" to disable.',
+    ),
+  /**
+   * Provider-keyed signing secret used to verify webhook signatures.
+   * Currently honoured by the SES handler (SNS confirmation) when the
+   * provider supplies one. Resend forwards the raw payload directly with
+   * no signature; rely on a strong, secret URL path instead.
+   */
+  webhookSecrets: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe('Per-provider webhook signing secrets keyed by provider name.'),
+  /**
+   * Optional callback invoked when a provider webhook reports a bounce or
+   * spam complaint. Apps wire this to mark addresses unsubscribed in their
+   * own user store.
+   */
+  markEmailUnsubscribed: z
+    .custom<
+      (input: {
+        email: string;
+        reason: 'bounce' | 'complaint' | 'permanent';
+        provider: string;
+        raw?: unknown;
+      }) => void | Promise<void>
+    >(v => typeof v === 'function', {
+      message: 'Expected a function',
+    })
+    .optional()
+    .describe(
+      'Callback invoked on provider bounce/complaint webhooks so apps can flag the address.',
+    ),
 });
 
 /**

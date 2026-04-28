@@ -1,4 +1,8 @@
-import type { MetricsEmitter, QueueLifecycle } from '@lastshotlabs/slingshot-core';
+import type {
+  DynamicEventBus,
+  MetricsEmitter,
+  QueueLifecycle,
+} from '@lastshotlabs/slingshot-core';
 import type { MailMessage } from './provider';
 import type { MailProvider } from './provider';
 
@@ -70,6 +74,13 @@ export interface MailQueueConfig {
    * - `mail.circuitBreaker.state` gauge per provider (`0=closed`, `1=open`, `2=half-open`)
    */
   metrics?: MetricsEmitter;
+  /**
+   * Optional event bus used to publish queue-level events such as
+   * `mail:send.permanentFailure` and `mail:drain.timedOut`. The plugin
+   * injects the framework bus when the in-memory queue is auto-created;
+   * users wiring a custom queue may pass their own.
+   */
+  bus?: DynamicEventBus;
 }
 
 /**

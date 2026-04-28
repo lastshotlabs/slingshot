@@ -139,7 +139,38 @@ describe('createMailPlugin lifecycle', () => {
     await bus.shutdown?.();
   });
 
-  it('provider healthCheck() failing → console.warn logged, plugin still activates', async () => {
+  it('provider healthCheck() failing with failOnHealthCheck="warn" → warn logged, plugin still activates', async () => {
+    const bus: SlingshotEventBus = createInProcessAdapter();
+    const renderer = createRawHtmlRenderer({ templates: {} });
+    const queue = freshQueue();
+    const provider = makeMockProvider({ healthCheckFails: true });
+
+    const plugin = createMailPlugin({
+      provider,
+      renderer,
+      from: 'noreply@example.com',
+      queue,
+      failOnHealthCheck: 'warn',
+    });
+
+    // Should not throw
+    await plugin.setupPost!(setupContext(bus));
+
+    // The structured logger writes JSON; assert the message + err field appear
+    // somewhere in the warn output.
+    const warnEntry = warnSpy.mock.calls.find(call => {
+      const line = (call as unknown[])[0];
+      return typeof line === 'string' && line.includes('provider health check failed');
+    });
+    expect(warnEntry).toBeDefined();
+    const warnLine = (warnEntry as unknown[])[0] as string;
+    expect(warnLine).toContain('provider unreachable');
+
+    await plugin.teardown!();
+    await bus.shutdown?.();
+  });
+
+  it('provider healthCheck() failing with default failOnHealthCheck="error" → setupPost throws', async () => {
     const bus: SlingshotEventBus = createInProcessAdapter();
     const renderer = createRawHtmlRenderer({ templates: {} });
     const queue = freshQueue();
@@ -152,15 +183,9 @@ describe('createMailPlugin lifecycle', () => {
       queue,
     });
 
-    // Should not throw
-    await plugin.setupPost!(setupContext(bus));
+    await expect(plugin.setupPost!(setupContext(bus))).rejects.toThrow(/health check failed/);
 
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    const warnMsg = (warnSpy.mock.calls[0] as string[])[0];
-    expect(warnMsg).toContain('health check failed');
-    expect(warnMsg).toContain('provider unreachable');
-
-    await plugin.teardown!();
+    // Plugin must clean up partially-initialized state so re-activation is safe.
     await bus.shutdown?.();
   });
 

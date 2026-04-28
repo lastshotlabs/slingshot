@@ -1,16 +1,24 @@
 import type {
+  DynamicEventBus,
+  Logger,
   MetricsEmitter,
   PluginSetupContext,
   SlingshotEventBus,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
+  createConsoleLogger,
   createNoopMetricsEmitter,
   getContextOrNull,
   validateAdapterShape,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { validateSubscriptionTemplates, wireSubscriptions } from './lib/subscriptionWiring';
+import {
+  fanOutBounce,
+  parseResendWebhook,
+  parseSesWebhook,
+} from './lib/webhookHandlers';
 import { createMemoryQueue } from './queues/memory';
 import type { MailPluginConfig } from './types/config';
 import { mailPluginConfigSchema } from './types/config';
@@ -63,6 +71,8 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
   let queue: MailQueue | null = null;
   let unsubscribers: Array<() => void> = [];
   let activated = false;
+  let busRef: DynamicEventBus | null = null;
+  const logger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-mail' } });
 
   // Lazy metrics resolution — the framework-owned emitter is not available
   // until setupPost runs, but the in-memory queue is constructed at that
@@ -82,6 +92,7 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
       );
     }
     activated = true;
+    busRef = bus as unknown as DynamicEventBus;
 
     // Resolve the framework-owned metrics emitter so the queue (and any
     // user-supplied queue that observed config.metrics) publishes mail
@@ -98,7 +109,11 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
       createMemoryQueue({
         maxAttempts: config.queueConfig?.maxAttempts,
         onDeadLetter: config.onDeadLetter,
+        drainTimeoutMs: config.queueConfig?.drainTimeoutMs,
+        sendTimeoutMs: config.queueConfig?.sendTimeoutMs,
+        maxEntries: config.queueConfig?.maxEntries,
         metrics: metricsProxy,
+        bus: bus as unknown as DynamicEventBus,
       });
 
     if (config.durableSubscriptions && queue.name === 'memory') {
@@ -119,14 +134,23 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
         await validateSubscriptionTemplates(config);
       }
 
-      // 4. Optional provider health check
+      // 4. Optional provider health check. `failOnHealthCheck` defaults to
+      // 'error' so a misconfigured provider aborts boot rather than silently
+      // accepting traffic. Set to 'warn' to keep the historical permissive
+      // behaviour (e.g. for ephemeral test environments).
       if (config.provider.healthCheck) {
         try {
           await config.provider.healthCheck();
         } catch (err) {
-          console.warn(
-            `[slingshot-mail] Provider health check failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          const mode = config.failOnHealthCheck ?? 'error';
+          const message =
+            err instanceof Error ? err.message : String(err);
+          if (mode === 'error') {
+            throw new Error(
+              `[slingshot-mail] Provider health check failed: ${message}`,
+            );
+          }
+          logger.warn('provider health check failed', { err: message });
         }
       }
 
@@ -154,6 +178,49 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
     dependencies: [],
 
     /**
+     * Mount the optional bounce/complaint webhook route. Apps wire their
+     * mail provider's webhook delivery URL to this endpoint so the plugin
+     * can surface bounces and complaints on the bus and through the
+     * `markEmailUnsubscribed` callback.
+     */
+    setupRoutes({ app }: PluginSetupContext): void {
+      const route = config.webhookRoute ?? '/mail/webhook';
+      if (route === '') return;
+      app.post(`${route}/:provider`, async c => {
+        const provider = c.req.param('provider');
+        if (provider !== 'resend' && provider !== 'ses') {
+          return c.json({ ok: false, error: 'unsupported provider' }, 400);
+        }
+        let body: unknown;
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ ok: false, error: 'invalid json' }, 400);
+        }
+        // SES delivers webhooks via SNS. The first request after wiring the
+        // topic is a `SubscriptionConfirmation` — surface it for operators.
+        if (provider === 'ses' && isObject(body) && body.Type === 'SubscriptionConfirmation') {
+          logger.warn('SES webhook subscription confirmation received', {
+            subscribeURL: typeof body.SubscribeURL === 'string' ? body.SubscribeURL : undefined,
+          });
+          return c.json({ ok: true, action: 'confirm-required' });
+        }
+        const records =
+          provider === 'resend' ? parseResendWebhook(body) : parseSesWebhook(body);
+        if (!busRef) {
+          // Without an active bus we still want a 2xx so the provider stops
+          // retrying. Operators see the warning in logs.
+          logger.warn('webhook received before plugin activation', { provider });
+          return c.json({ ok: true, processed: 0 });
+        }
+        for (const rec of records) {
+          await fanOutBounce(rec, busRef, config.markEmailUnsubscribed, logger);
+        }
+        return c.json({ ok: true, processed: records.length });
+      });
+    },
+
+    /**
      * Post-assembly phase — used when running inside the Slingshot framework.
      * Mail doesn't need routes or middleware; it only needs the event bus.
      */
@@ -166,18 +233,32 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
         try {
           unsub();
         } catch (err) {
-          console.error(
-            '[slingshot-mail] Failed to remove event subscription during teardown',
-            err,
-          );
+          logger.error('failed to remove event subscription during teardown', {
+            err: err instanceof Error ? err.message : String(err),
+          });
         }
       }
       unsubscribers = [];
       if (queue) {
+        // Drain pending mails up to the configured timeout so graceful
+        // shutdown does not silently lose in-flight traffic. Drain emits
+        // `mail:drain.timedOut` if the deadline elapses.
+        try {
+          if (typeof queue.drain === 'function') await queue.drain();
+        } catch (err) {
+          logger.warn('drain raised during teardown', {
+            err: err instanceof Error ? err.message : String(err),
+          });
+        }
         await queue.stop();
         queue = null;
       }
+      busRef = null;
       activated = false;
     },
   };
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
 }

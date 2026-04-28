@@ -19,9 +19,16 @@ import { MailSendError } from '../types/provider';
 interface SesConfig {
   region: string;
   credentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
+  /**
+   * Maximum milliseconds a single SDK send may run before the request is
+   * aborted with a retryable timeout error. Default: 30000.
+   */
+  providerTimeoutMs?: number;
   /** Override or disable the consecutive-failure circuit breaker. */
   circuitBreaker?: Pick<MailCircuitBreakerOptions, 'threshold' | 'cooldownMs' | 'now'>;
 }
+
+const DEFAULT_PROVIDER_TIMEOUT_MS = 30_000;
 
 type SesHandle = {
   client: SESv2Client;
@@ -53,6 +60,7 @@ type SesHandle = {
  */
 export function createSesProvider(config: SesConfig): MailProvider {
   let _ses: SesHandle | null = null;
+  const providerTimeoutMs = config.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
   const breaker = createMailCircuitBreaker({
     providerName: 'ses',
     ...(config.circuitBreaker ?? {}),
@@ -120,12 +128,34 @@ export function createSesProvider(config: SesConfig): MailProvider {
             : {}),
         };
 
+        // Combine caller's signal with our own timeout signal. SES SDK accepts
+        // a single AbortSignal so we union via a controller.
+        const controller = new AbortController();
+        const callerSignal = options?.signal;
+        const onCallerAbort = () => controller.abort(callerSignal?.reason);
+        if (callerSignal) {
+          if (callerSignal.aborted) controller.abort(callerSignal.reason);
+          else callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+        }
+        const timer =
+          providerTimeoutMs > 0
+            ? setTimeout(
+                () => controller.abort(new Error(`ses provider timed out after ${providerTimeoutMs}ms`)),
+                providerTimeoutMs,
+              )
+            : undefined;
         try {
           const result: SendEmailCommandOutput = await client.send(new SESCommand(input), {
-            abortSignal: options?.signal,
+            abortSignal: controller.signal,
           });
           return { status: 'sent', messageId: result.MessageId, raw: result };
         } catch (err) {
+          if (controller.signal.aborted && !callerSignal?.aborted) {
+            throw new MailSendError(
+              `SES provider timed out after ${providerTimeoutMs}ms`,
+              true,
+            );
+          }
           const e = err as {
             $metadata?: { httpStatusCode?: number };
             $response?: { headers?: unknown };
@@ -141,6 +171,9 @@ export function createSesProvider(config: SesConfig): MailProvider {
             err instanceof Error ? err : new Error(String(err)),
             retryAfterMs,
           );
+        } finally {
+          if (timer) clearTimeout(timer);
+          if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
         }
       });
     },

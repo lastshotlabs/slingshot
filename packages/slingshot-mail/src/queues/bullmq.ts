@@ -6,13 +6,14 @@ import type {
   Worker as BullWorker,
 } from 'bullmq';
 import type { Redis } from 'ioredis';
-import type { MetricsEmitter } from '@lastshotlabs/slingshot-core';
+import type { DynamicEventBus, MetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
-import { MailCircuitOpenError } from '../lib/circuitBreaker';
+import { classifyMailFailure } from '../lib/failureClassification';
 import type { MailMessage, MailProvider } from '../types/provider';
 import { MailSendError } from '../types/provider';
 import type { MailJob, MailQueue, MailQueueConfig } from '../types/queue';
 import { sendWithTimeout } from './sendWithTimeout';
+// MailCircuitOpenError is referenced indirectly through classifyMailFailure.
 
 interface BullMQMailQueueConfig extends MailQueueConfig {
   redis: { host: string; port?: number; password?: string } | string;
@@ -56,6 +57,7 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
   const retryBaseDelayMs = config.retryBaseDelayMs ?? 1000;
   const sendTimeoutMs = config.sendTimeoutMs ?? 30_000;
   const metrics: MetricsEmitter = config.metrics ?? createNoopMetricsEmitter();
+  const bus: DynamicEventBus | null = config.bus ?? null;
   let queue: BullQueue | null = null;
   let worker: BullWorker | null = null;
   let connection: Redis | null = null;
@@ -161,7 +163,8 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
             result = await sendWithTimeout(provider, message, sendTimeoutMs);
           } catch (err) {
             const elapsed = performance.now() - sendStart;
-            if (err instanceof MailCircuitOpenError) {
+            const classification = classifyMailFailure(err);
+            if (classification === 'circuitOpen') {
               metrics.gauge('mail.circuitBreaker.state', 1, providerLabel);
               metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'circuitOpen' });
             } else {
@@ -171,11 +174,30 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
                 metrics.gauge('mail.retryAfter', err.retryAfterMs, providerLabel);
               }
             }
-            if (err instanceof MailSendError && !err.retryable) {
-              // Use BullMQ's UnrecoverableError to prevent retries, and preserve the
-              // original MailSendError so onDeadLetter receives full provider context.
-              const unrecoverable = new UnrecoverableError(err.message);
-              nonRetryableOrigins.set(unrecoverable, err);
+            if (classification === 'permanent') {
+              // Permanent failure (4xx other than 408/429, explicit retryable=false,
+              // template-not-found). Use BullMQ's UnrecoverableError to prevent
+              // retries; preserve the original error for onDeadLetter and emit
+              // `mail:send.permanentFailure` so apps can react.
+              const wrapped = err instanceof Error ? err : new Error(String(err));
+              const unrecoverable = new UnrecoverableError(wrapped.message);
+              // Cast: nonRetryableOrigins keys MailSendError specifically. For
+              // non-MailSendError permanent failures (TemplateNotFoundError,
+              // unknown errors classified as permanent) we still want the
+              // original surfaced to onDeadLetter.
+              nonRetryableOrigins.set(unrecoverable, wrapped as MailSendError);
+              if (bus) {
+                try {
+                  bus.emit('mail:send.permanentFailure', {
+                    jobId: String(job.id ?? ''),
+                    message: job.data.message,
+                    sourceEvent: job.data.sourceEvent,
+                    error: { message: wrapped.message, name: wrapped.name },
+                  });
+                } catch {
+                  // Bus emission must never break the worker.
+                }
+              }
               throw unrecoverable;
             }
             throw err;

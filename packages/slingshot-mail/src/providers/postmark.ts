@@ -13,9 +13,16 @@ import { MailSendError } from '../types/provider';
 interface PostmarkConfig {
   serverToken: string;
   baseUrl?: string;
+  /**
+   * Maximum milliseconds a single HTTP send may run before the request is
+   * aborted with a retryable timeout error. Default: 30000.
+   */
+  providerTimeoutMs?: number;
   /** Override or disable the consecutive-failure circuit breaker. */
   circuitBreaker?: Pick<MailCircuitBreakerOptions, 'threshold' | 'cooldownMs' | 'now'>;
 }
+
+const DEFAULT_PROVIDER_TIMEOUT_MS = 30_000;
 
 interface PostmarkBody {
   To: string;
@@ -46,6 +53,7 @@ interface PostmarkBody {
  */
 export function createPostmarkProvider(config: PostmarkConfig): MailProvider {
   const baseUrl = config.baseUrl ?? 'https://api.postmarkapp.com';
+  const providerTimeoutMs = config.providerTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
   const breaker = createMailCircuitBreaker({
     providerName: 'postmark',
     ...(config.circuitBreaker ?? {}),
@@ -81,16 +89,44 @@ export function createPostmarkProvider(config: PostmarkConfig): MailProvider {
             : {}),
         };
 
-        const res = await fetch(`${baseUrl}/email`, {
-          method: 'POST',
-          headers: {
-            'X-Postmark-Server-Token': config.serverToken,
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-          body: JSON.stringify(body),
-          signal: options?.signal,
-        });
+        const controller = new AbortController();
+        const callerSignal = options?.signal;
+        const onCallerAbort = () => controller.abort(callerSignal?.reason);
+        if (callerSignal) {
+          if (callerSignal.aborted) controller.abort(callerSignal.reason);
+          else callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+        }
+        const timer =
+          providerTimeoutMs > 0
+            ? setTimeout(
+                () => controller.abort(new Error(`postmark provider timed out after ${providerTimeoutMs}ms`)),
+                providerTimeoutMs,
+              )
+            : undefined;
+        let res: Response;
+        try {
+          res = await fetch(`${baseUrl}/email`, {
+            method: 'POST',
+            headers: {
+              'X-Postmark-Server-Token': config.serverToken,
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+        } catch (err) {
+          if (controller.signal.aborted && !callerSignal?.aborted) {
+            throw new MailSendError(
+              `Postmark provider timed out after ${providerTimeoutMs}ms`,
+              true,
+            );
+          }
+          throw err;
+        } finally {
+          if (timer) clearTimeout(timer);
+          if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
+        }
 
         if (!res.ok) {
           const retryable = res.status === 429 || res.status >= 500;

@@ -17,6 +17,8 @@ export interface Auth0AccessProviderConfig {
   domain: string;
   /** Expected `aud` claim in the JWT. Must match the API identifier configured in Auth0. */
   audience: string;
+  /** Maximum milliseconds for JWT verification (JWKS fetch + signature check). Default: 5000. */
+  verifyTimeoutMs?: number;
 }
 
 /** Auth0 JWT payload fields beyond the standard JWTPayload that we read. */
@@ -121,10 +123,16 @@ export function createAuth0AccessProvider(
         if (!authHeader.startsWith('Bearer ')) return null;
         const token = authHeader.slice(7);
 
-        const { payload } = await deps.jwtVerify(token, JWKS, {
-          audience: config.audience,
-          issuer: `https://${config.domain}/`,
-        });
+        const timeoutMs = config.verifyTimeoutMs ?? 5_000;
+        const { payload } = await Promise.race([
+          deps.jwtVerify(token, JWKS, {
+            audience: config.audience,
+            issuer: `https://${config.domain}/`,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('JWT verification timed out')), timeoutMs),
+          ),
+        ]);
 
         const auth0Payload = payload as Auth0JwtPayload;
         if (!auth0Payload.sub) return null;

@@ -572,7 +572,16 @@ export function createKafkaAdapter(
     partition: number,
     message: KafkaMessage,
   ): Promise<void> {
-    await consumer.commitOffsets([{ topic, partition, offset: nextOffset(message.offset) }]);
+    try {
+      await consumer.commitOffsets([{ topic, partition, offset: nextOffset(message.offset) }]);
+    } catch (err) {
+      // Commit failure means at-least-once redelivery on restart — log and continue.
+      console.error(
+        `[KafkaAdapter] failed to commit offset for topic "${topic}" partition ${partition} ` +
+          `offset ${message.offset}:`,
+        err,
+      );
+    }
   }
 
   async function sendToDlq(

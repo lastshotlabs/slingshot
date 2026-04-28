@@ -248,4 +248,23 @@ describe('slingshot-ssg CLI --rsc-manifest', () => {
     expect(result.combined).toContain('does not implement ssgConfigure');
     expect(existsSync(join(fixture.outDir, 'about', 'index.html'))).toBe(true);
   });
+
+  it('exits with error when outDir cannot be created (unwritable parent)', () => {
+    const fixture = createSsgFixture(makeTempDir());
+    const unwritableOut = '/proc/slingshot-test-unwritable/out';
+
+    const result = runCli([
+      '--routes-dir',
+      fixture.routesDir,
+      '--assets-manifest',
+      fixture.assetsManifestPath,
+      '--out',
+      unwritableOut,
+      '--renderer',
+      fixture.rendererWithoutHookPath,
+    ]);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.combined).toContain('Cannot write to output directory');
+  });
 });

@@ -40,6 +40,7 @@ import type { SsgConfig, SsgStaticPathsFn } from './types';
 export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
   const routeFiles = await collectRouteFiles(config.serverRoutesDir);
   const paths: string[] = [];
+  const staticPathsTimeoutMs = config.staticPathsTimeoutMs ?? 60_000;
 
   for (const filePath of routeFiles) {
     const source = safeReadSource(filePath);
@@ -63,7 +64,7 @@ export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
       }
 
       // Call staticPaths() to expand all concrete paths for this dynamic route
-      const expandedPaths = await callStaticPaths(filePath, config.serverRoutesDir);
+      const expandedPaths = await callStaticPaths(filePath, config.serverRoutesDir, staticPathsTimeoutMs);
       paths.push(...expandedPaths);
     } else {
       // Static route — derive the URL directly from the file path
@@ -106,26 +107,32 @@ const CONVENTION_BASENAMES = new Set([
  * directory. Excludes convention side-car files (meta, layout, loading, error,
  * not-found, middleware).
  */
+const COLLECT_CONCURRENCY = 32;
+
 async function collectRouteFiles(dir: string): Promise<string[]> {
   const results: string[] = [];
   if (!existsSync(dir)) return results;
 
   const entries = await readdir(dir);
-  await Promise.all(
-    entries.map(async entry => {
-      const full = join(dir, entry);
-      const fileStat = await stat(full);
 
-      if (fileStat.isDirectory()) {
-        results.push(...(await collectRouteFiles(full)));
-      } else if (/\.(ts|tsx|js)$/.test(entry)) {
-        const basename = entry.replace(/\.(ts|tsx|js)$/, '');
-        if (!CONVENTION_BASENAMES.has(basename)) {
-          results.push(full);
+  // Process in bounded batches to avoid exhausting file descriptors on large directories.
+  for (let i = 0; i < entries.length; i += COLLECT_CONCURRENCY) {
+    await Promise.all(
+      entries.slice(i, i + COLLECT_CONCURRENCY).map(async entry => {
+        const full = join(dir, entry);
+        const fileStat = await stat(full);
+
+        if (fileStat.isDirectory()) {
+          results.push(...(await collectRouteFiles(full)));
+        } else if (/\.(ts|tsx|js)$/.test(entry)) {
+          const basename = entry.replace(/\.(ts|tsx|js)$/, '');
+          if (!CONVENTION_BASENAMES.has(basename)) {
+            results.push(full);
+          }
         }
-      }
-    }),
-  );
+      }),
+    );
+  }
   return results.sort();
 }
 
@@ -260,7 +267,7 @@ function filePathToUrlPath(filePath: string, routesDir: string): string | null {
  * @param routesDir - Absolute path to the server routes directory.
  * @returns Array of concrete URL paths.
  */
-async function callStaticPaths(filePath: string, routesDir: string): Promise<string[]> {
+async function callStaticPaths(filePath: string, routesDir: string, timeoutMs: number): Promise<string[]> {
   let mod: Record<string, unknown>;
   try {
     mod = (await import(filePath)) as Record<string, unknown>;
@@ -293,8 +300,7 @@ async function callStaticPaths(filePath: string, routesDir: string): Promise<str
 
   let paramSets: StaticParamSet[];
   try {
-    const STATIC_PATHS_TIMEOUT_MS = 60_000;
-    const timeoutSignal = AbortSignal.timeout(STATIC_PATHS_TIMEOUT_MS);
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const callPromise =
       resolvedFnName === 'generateStaticParams'
         ? (resolvedFn as GenerateStaticParams)(createBuildTimeContext())
@@ -303,7 +309,7 @@ async function callStaticPaths(filePath: string, routesDir: string): Promise<str
       timeoutSignal.addEventListener('abort', () => {
         reject(
           new Error(
-            `staticPaths() timed out after 60s — check for infinite generators or unresolved promises`,
+            `staticPaths() timed out after ${timeoutMs}ms — check for infinite generators or unresolved promises`,
           ),
         );
       });

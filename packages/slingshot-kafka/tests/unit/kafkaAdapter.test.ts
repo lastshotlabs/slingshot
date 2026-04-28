@@ -438,6 +438,62 @@ describe('kafkaAdapter', () => {
     }
   });
 
+  test('logs a warning when commitOffsets fails and continues processing subsequent messages', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
+    const listener = mock(async () => {});
+    try {
+      const bus = createKafkaAdapter({ brokers: ['localhost:19092'] });
+      bus.on('auth:login', listener, { durable: true, name: 'commit-fail-worker' });
+      await flushAsyncWork();
+
+      // Make the first commitOffsets call throw
+      fakeKafkaState.commitOffsetErrors.push(new Error('broker unavailable'));
+
+      const envelope = createRawEventEnvelope('auth:login', {
+        userId: 'u-commit-fail',
+        sessionId: 's-commit-fail',
+      });
+      const consumer = fakeKafkaState.consumers[0];
+      await consumer?.eachMessage?.({
+        topic: 'slingshot.events.auth.login',
+        partition: 0,
+        message: {
+          offset: '10',
+          key: null,
+          headers: {},
+          value: Buffer.from(JSON.stringify(envelope)),
+        },
+        heartbeat: async () => {},
+      });
+
+      // Listener still ran despite commit failure
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('failed to commit offset'),
+        expect.anything(),
+      );
+
+      // Second message succeeds end-to-end (no lingering error state)
+      const consumer2 = fakeKafkaState.consumers[0];
+      await consumer2?.eachMessage?.({
+        topic: 'slingshot.events.auth.login',
+        partition: 0,
+        message: {
+          offset: '11',
+          key: null,
+          headers: {},
+          value: Buffer.from(JSON.stringify(createRawEventEnvelope('auth:login', { userId: 'u2', sessionId: 's2' }))),
+        },
+        heartbeat: async () => {},
+      });
+      expect(listener).toHaveBeenCalledTimes(2);
+    } finally {
+      errorSpy.mockRestore();
+      infoSpy.mockRestore();
+    }
+  });
+
   test('emit() and on() after shutdown log a warning and do nothing', async () => {
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     const infoSpy = spyOn(console, 'info').mockImplementation(() => {});

@@ -203,6 +203,55 @@ describe('createBullMQMailQueue', () => {
     });
   });
 
+  describe('drain()', () => {
+    it('drain() before start() resolves immediately without error', async () => {
+      const q = createBullMQMailQueue({ redis: { host: 'localhost' } });
+      await expect(q.drain()).resolves.toBeUndefined();
+    });
+
+    it('drain() after start() calls queue.drain() on the underlying BullMQ queue', async () => {
+      const mockQueueDrain = mock(async () => {});
+      // Override MockQueue to include drain
+      const originalMockQueueAdd = mockQueueAdd;
+      void originalMockQueueAdd;
+
+      // Patch the mock queue to expose drain
+      const patchedQueue = {
+        add: mockQueueAdd,
+        close: mockQueueClose,
+        count: mockQueueCount,
+        drain: mockQueueDrain,
+      };
+
+      mock.module('bullmq', () => ({
+        Queue: function MockQueueWithDrain() { return patchedQueue; },
+        Worker: MockWorker,
+        UnrecoverableError: MockUnrecoverableError,
+      }));
+
+      // Re-import after mock patch
+      const { createBullMQMailQueue: freshCreate } = await import('../../src/queues/bullmq.js');
+      const q = freshCreate({ redis: { host: 'localhost' } });
+      await q.start(makeProvider());
+
+      await q.drain();
+
+      expect(mockQueueDrain).toHaveBeenCalledTimes(1);
+
+      // Restore original mock
+      mock.module('bullmq', () => ({
+        Queue: MockQueue,
+        Worker: MockWorker,
+        UnrecoverableError: MockUnrecoverableError,
+      }));
+    });
+
+    it('drain() is defined on the returned MailQueue object', async () => {
+      const q = createBullMQMailQueue({ redis: { host: 'localhost' } });
+      expect(typeof q.drain).toBe('function');
+    });
+  });
+
   describe('Worker processor', () => {
     it('successful send → processor resolves without throwing', async () => {
       const q = createBullMQMailQueue({ redis: { host: 'localhost' } });

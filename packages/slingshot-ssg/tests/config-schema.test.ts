@@ -179,3 +179,40 @@ describe('parseSsgConfig', () => {
     expect(() => parseSsgConfig({ ...minimalValid, concurrency: 0 })).toThrow('[slingshot-ssg]');
   });
 });
+
+// ---------------------------------------------------------------------------
+// staticPathsTimeoutMs validation
+// ---------------------------------------------------------------------------
+
+describe('ssgConfigSchema — staticPathsTimeoutMs', () => {
+  test('accepts valid positive integer timeout', () => {
+    const data = valid({ ...minimalValid, staticPathsTimeoutMs: 30_000 });
+    expect(data?.staticPathsTimeoutMs).toBe(30_000);
+  });
+
+  test('accepts omitted timeout (uses default)', () => {
+    const data = valid(minimalValid);
+    expect(data?.staticPathsTimeoutMs).toBeUndefined();
+  });
+
+  test('rejects zero timeout', () => {
+    const err = invalid({ ...minimalValid, staticPathsTimeoutMs: 0 });
+    const paths = err?.issues.map(i => i.path.join('.'));
+    expect(paths?.some(p => p.includes('staticPathsTimeoutMs'))).toBe(true);
+  });
+
+  test('rejects negative timeout', () => {
+    const err = invalid({ ...minimalValid, staticPathsTimeoutMs: -1000 });
+    expect(err).toBeDefined();
+  });
+
+  test('rejects fractional timeout', () => {
+    const err = invalid({ ...minimalValid, staticPathsTimeoutMs: 1.5 });
+    expect(err).toBeDefined();
+  });
+
+  test('parseSsgConfig passes staticPathsTimeoutMs through', () => {
+    const config = parseSsgConfig({ ...minimalValid, staticPathsTimeoutMs: 120_000 });
+    expect(config.staticPathsTimeoutMs).toBe(120_000);
+  });
+});

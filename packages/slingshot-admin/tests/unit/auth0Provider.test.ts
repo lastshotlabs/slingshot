@@ -141,4 +141,30 @@ describe('createAuth0AccessProvider', () => {
     const url = (deps.createRemoteJWKSet as ReturnType<typeof mock>).mock.calls[0]?.[0] as URL;
     expect(url.href).toBe(`https://${DOMAIN}/.well-known/jwks.json`);
   });
+
+  test('returns null when jwtVerify exceeds verifyTimeoutMs', async () => {
+    // jwtVerify that never resolves — simulates a hung JWKS network call
+    const hangingVerify = mock(
+      () => new Promise<never>(() => {}),
+    ) as unknown as Auth0Deps['jwtVerify'];
+
+    const deps = makeStubDeps({ jwtVerify: hangingVerify });
+    const provider = createAuth0AccessProvider(
+      { domain: DOMAIN, audience: AUDIENCE, verifyTimeoutMs: 1 },
+      deps,
+    );
+
+    const principal = await provider.verifyRequest(makeContext('valid.token'));
+    expect(principal).toBeNull();
+  });
+
+  test('uses 5000ms default timeout when verifyTimeoutMs is omitted', async () => {
+    // Verify that a fast jwtVerify still resolves correctly (timeout does not interfere)
+    const deps = makeStubDeps();
+    const provider = createAuth0AccessProvider({ domain: DOMAIN, audience: AUDIENCE }, deps);
+
+    const principal = await provider.verifyRequest(makeContext('valid.jwt.token'));
+    expect(principal).not.toBeNull();
+    expect(principal?.subject).toBe('auth0|user-123');
+  });
 });

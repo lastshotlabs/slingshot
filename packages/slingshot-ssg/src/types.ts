@@ -46,6 +46,11 @@ export interface SsgConfig {
    * @example 'src/client/main.ts'
    */
   readonly clientEntry?: string;
+  /**
+   * Maximum milliseconds that `staticPaths()` / `generateStaticParams()` may run
+   * before being treated as timed out and skipped. Default: 60000.
+   */
+  readonly staticPathsTimeoutMs?: number;
 }
 
 /**

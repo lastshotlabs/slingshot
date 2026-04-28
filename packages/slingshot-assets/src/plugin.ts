@@ -67,13 +67,17 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
       : null;
 
   type LazyMiddleware = { handler: import('hono').MiddlewareHandler };
-  const noop: import('hono').MiddlewareHandler = async (_c, next) => {
-    console.warn(
-      '[assets] delete cascade fired but no handler configured — storage file not deleted',
+  // The manifest runtime is responsible for wiring the real handler before
+  // routes mount. If it never does, we throw at setupPost rather than letting
+  // entity deletes silently orphan storage objects.
+  let deleteMiddlewareWired = false;
+  const unwiredHandler: import('hono').MiddlewareHandler = async () => {
+    throw new Error(
+      '[slingshot-assets] delete cascade fired but storage-delete middleware was never wired. ' +
+        'This indicates a manifest runtime bug — refusing to silently orphan storage objects.',
     );
-    return next();
   };
-  const deleteStorageFileRef: LazyMiddleware = { handler: noop };
+  const deleteStorageFileRef: LazyMiddleware = { handler: unwiredHandler };
 
   let assetAdapterRef: AssetAdapter | undefined;
   let innerPlugin: EntityPlugin | undefined;
@@ -85,6 +89,7 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
     imageConfig,
     setDeleteStorageMiddleware(handler) {
       deleteStorageFileRef.handler = handler;
+      deleteMiddlewareWired = true;
     },
     setAssetAdapter(adapter) {
       assetAdapterRef = adapter;
@@ -134,6 +139,13 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
 
     async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
+
+      if (!deleteMiddlewareWired) {
+        throw new Error(
+          '[slingshot-assets] storage-delete middleware was not wired by the manifest runtime. ' +
+            'Asset deletes would orphan storage objects. Refusing to start.',
+        );
+      }
     },
   };
 }

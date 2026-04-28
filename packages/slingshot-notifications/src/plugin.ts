@@ -151,15 +151,17 @@ export function createNotificationsPlugin(
 
       const createdListener = async (payload: unknown) => {
         const event = payload as NotificationCreatedEventPayload;
+        let adapterIndex = 0;
         for (const adapter of deliveryAdapters) {
           try {
             await adapter.deliver(event);
           } catch (err) {
             console.error(
-              '[slingshot-notifications] Delivery adapter failed for notifications:notification.created',
+              `[slingshot-notifications] Delivery adapter [${adapterIndex}] threw for notification "${event.notification.id}"`,
               err,
             );
           }
+          adapterIndex++;
         }
       };
 

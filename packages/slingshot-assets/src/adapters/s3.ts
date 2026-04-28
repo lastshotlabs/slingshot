@@ -197,23 +197,24 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
 
     async get(key) {
       const { GetObjectCommand } = requireS3Client();
-
-      try {
-        const result = await getClient().send(
-          new GetObjectCommand({ Bucket: config.bucket, Key: key }),
-        );
-        return {
-          stream: result.Body as ReadableStream,
-          mimeType: result.ContentType,
-          size: result.ContentLength,
-        };
-      } catch (error: unknown) {
-        const typed = error as { name?: string; $metadata?: { httpStatusCode?: number } };
-        if (typed.name === 'NoSuchKey' || typed.$metadata?.httpStatusCode === 404) {
-          return null;
+      return withRetry(async () => {
+        try {
+          const result = await getClient().send(
+            new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+          );
+          return {
+            stream: result.Body as ReadableStream,
+            mimeType: result.ContentType,
+            size: result.ContentLength,
+          };
+        } catch (error: unknown) {
+          const typed = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+          if (typed.name === 'NoSuchKey' || typed.$metadata?.httpStatusCode === 404) {
+            return null;
+          }
+          throw error;
         }
-        throw error;
-      }
+      }, retryAttempts);
     },
 
     async delete(key) {
@@ -240,10 +241,14 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
     async presignGet(key, opts) {
       const { GetObjectCommand } = requireS3Client();
       const presigner = requirePresigner();
-      return presigner.getSignedUrl(
-        getClient(),
-        new GetObjectCommand({ Bucket: config.bucket, Key: key }),
-        { expiresIn: opts.expirySeconds },
+      return withRetry(
+        () =>
+          presigner.getSignedUrl(
+            getClient(),
+            new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+            { expiresIn: opts.expirySeconds },
+          ),
+        retryAttempts,
       );
     },
   };

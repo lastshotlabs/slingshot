@@ -1,5 +1,9 @@
 // packages/runtime-edge/tests/unit/kv-isr.test.ts
-import { beforeEach, describe, expect, it } from 'bun:test';
+// Note: Cloudflare KV operations have no client-side timeout.
+// Edge runtimes enforce a 30s wall-clock limit; KV calls that stall
+// will exhaust the request lifetime. Applications that require timeout
+// guarantees should wrap cache adapter calls in Promise.race() with a timeout.
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { IsrCacheEntry } from '@lastshotlabs/slingshot-ssr';
 import { type KvNamespace, createKvIsrCache } from '../../src/kv-isr';
 
@@ -203,6 +207,54 @@ describe('createKvIsrCache()', () => {
         cache.set('/posts/2', makeEntry('/posts/2', ['posts'])),
       ).resolves.toBeUndefined();
       expect(JSON.parse(kv._store.get('isr:tag:posts') ?? '[]')).toEqual(['/posts/1', '/posts/2']);
+    });
+  });
+
+  describe('updateTagIndex error logging', () => {
+    it('updateTagIndex logs errors and clears chain on KV failure', async () => {
+      let callCount = 0;
+      const store = new Map<string, string>();
+      const failingKv = {
+        async get(key: string) { return store.get(key) ?? null; },
+        async put(key: string, value: string) {
+          callCount++;
+          // First put is the page entry write — let it succeed.
+          // Second put is the tag index write — fail it.
+          if (callCount === 2) throw new Error('kv-quota-exceeded');
+          store.set(key, value);
+        },
+        async delete() {},
+        async list() { return { keys: [] }; },
+      };
+
+      const consoleSpy = mock(() => {});
+      const originalError = console.error;
+      console.error = consoleSpy;
+
+      const cache = createKvIsrCache(failingKv as any);
+
+      try {
+        // cache.set rejects because updateTagIndex returns the raw (uncaught) promise
+        await expect(
+          cache.set('/page', { html: '<p>hi</p>', headers: {}, tags: ['t1'], revalidateAfter: 0, generatedAt: Date.now() }),
+        ).rejects.toThrow('kv-quota-exceeded');
+
+        // Yield to the microtask queue so the .catch() log handler on tagLocks fires
+        await Promise.resolve();
+
+        // Error was logged by the catch handler on the tag lock chain
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('[runtime-edge]'),
+          expect.any(Error),
+        );
+
+        // The chain is cleared — subsequent calls for the same tag should not be blocked
+        await expect(
+          cache.set('/page2', { html: '<p>ok</p>', headers: {}, tags: ['t1'], revalidateAfter: 0, generatedAt: Date.now() }),
+        ).resolves.toBeUndefined();
+      } finally {
+        console.error = originalError;
+      }
     });
   });
 

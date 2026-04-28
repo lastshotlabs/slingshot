@@ -271,3 +271,41 @@ describe('collectSsgRoutes — directory form routes', () => {
     expect(paths).toContain('/docs/intro');
   });
 });
+
+describe('collectSsgRoutes — staticPathsTimeoutMs config', () => {
+  it('uses custom staticPathsTimeoutMs from config when calling staticPaths()', async () => {
+    writeRoute(
+      'articles/[slug].ts',
+      `
+export async function staticPaths() {
+  return [{ slug: 'hello' }];
+}
+export async function load() { return { data: {}, revalidate: false } }
+`,
+    );
+
+    // Custom short timeout should still work for fast functions
+    const paths = await collectSsgRoutes(makeConfig({ staticPathsTimeoutMs: 5_000 }));
+    expect(paths).toContain('/articles/hello');
+  });
+
+  it('times out staticPaths() that hangs when staticPathsTimeoutMs is short', async () => {
+    writeRoute(
+      'slow/[id].ts',
+      `
+export async function staticPaths() {
+  // This would hang forever without a timeout
+  await new Promise(() => {});
+  return [{ id: '1' }];
+}
+export async function load() { return { data: {}, revalidate: false } }
+`,
+    );
+
+    // With 1ms timeout the crawl should skip this route and return empty
+    const paths = await collectSsgRoutes(makeConfig({ staticPathsTimeoutMs: 1 }));
+    expect(paths).not.toContain('/slow/1');
+    // Other routes are unaffected
+    expect(Array.isArray(paths)).toBe(true);
+  });
+});

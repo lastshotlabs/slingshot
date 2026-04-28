@@ -12,7 +12,7 @@ import {
   type TriggerRecord,
   ValidationError,
 } from '@lastshotlabs/slingshot-core';
-import { invokeWithRecordIdempotency } from './idempotency';
+import { invokeWithRecordIdempotency, IdempotencyConflictError } from './idempotency';
 
 const RETRY_WHOLE_BATCH_TRIGGERS = new Set(['msk', 'kinesis', 'dynamodb-streams']);
 const AUTO_IDEMPOTENT_TRIGGERS = new Set(['sqs', 'msk', 'kinesis', 'dynamodb-streams']);
@@ -24,7 +24,7 @@ type LambdaContextLike = {
 function classifyError(error: Error): 'validation' | 'handler' | 'idempotency' | 'unknown' {
   if (error instanceof ValidationError) return 'validation';
   if (error instanceof HandlerError) return 'handler';
-  if (error.message.toLowerCase().includes('idempotency')) return 'idempotency';
+  if (error instanceof IdempotencyConflictError) return 'idempotency';
   return 'unknown';
 }
 
@@ -181,13 +181,17 @@ export async function invokeWithAdapter(
           output,
         });
       } else if (records.length > 1) {
-        const recordAction =
-          (await hooks?.onRecordError?.({
+        let recordAction: 'retry' | 'drop' = 'retry';
+        try {
+          recordAction = (await hooks?.onRecordError?.({
             record,
             error: capturedError,
             trigger: adapter.kind,
             ctx,
           })) ?? 'retry';
+        } catch (err) {
+          console.error('[lambda] onRecordError hook threw:', err);
+        }
         if (recordAction === 'retry') {
           outcomes.push({
             meta: {

@@ -559,7 +559,7 @@ export function buildSsrMiddleware(
         },
       });
       response.body.pipeTo(writable).catch((err: unknown) => {
-        console.error('[ssr] response stream error:', err);
+        console.error('[slingshot-ssr] response stream error:', err);
       });
       response = new Response(readable, {
         status: response.status,

@@ -5,8 +5,86 @@ import type {
   RuntimeSqlitePreparedStatement,
   RuntimeSqliteRunResult,
   RuntimeSqliteStatement,
+  RuntimeWebSocket,
+  RuntimeWebSocketHandler,
   SlingshotRuntime,
 } from '@lastshotlabs/slingshot-core';
+
+/** Bun's default request body limit when none is supplied (128 MiB). */
+const BUN_DEFAULT_MAX_BODY = 128 * 1024 * 1024;
+
+function logRuntimeError(
+  scope: 'fetch' | 'websocket',
+  phase: string,
+  error: unknown,
+): void {
+  console.error(`[runtime-bun] ${scope} ${phase} handler failed:`, error);
+}
+
+/**
+ * Wraps the user fetch handler so async rejections are forwarded to `opts.error`
+ * (matching the node runtime). Bun.serve catches sync throws but, depending on
+ * version, may surface async rejections as unhandled if the consumer didn't
+ * supply an `error` handler — this guarantees a single observable error path.
+ */
+function wrapFetch(
+  fetchFn: (req: Request) => Response | Promise<Response>,
+  errorFn?: (err: Error) => Response | Promise<Response>,
+): (req: Request) => Response | Promise<Response> {
+  return async (req: Request) => {
+    try {
+      return await fetchFn(req);
+    } catch (err) {
+      const wrapped = err instanceof Error ? err : new Error(String(err));
+      if (errorFn) return errorFn(wrapped);
+      logRuntimeError('fetch', 'unhandled', wrapped);
+      return new Response('Internal Server Error', { status: 500 });
+    }
+  };
+}
+
+/**
+ * Wrap the optional websocket handler so any throw or rejection in `open`,
+ * `message`, `close`, or `pong` is logged with phase context instead of being
+ * silently swallowed by Bun.
+ */
+function wrapWebSocketHandler(
+  handler: RuntimeWebSocketHandler,
+): RuntimeWebSocketHandler {
+  return {
+    ...handler,
+    async open(ws: RuntimeWebSocket): Promise<void> {
+      try {
+        await handler.open(ws);
+      } catch (err) {
+        logRuntimeError('websocket', 'open', err);
+      }
+    },
+    async message(ws: RuntimeWebSocket, message: string | Buffer): Promise<void> {
+      try {
+        await handler.message(ws, message);
+      } catch (err) {
+        logRuntimeError('websocket', 'message', err);
+      }
+    },
+    async close(ws: RuntimeWebSocket, code: number, reason: string): Promise<void> {
+      try {
+        await handler.close(ws, code, reason);
+      } catch (err) {
+        logRuntimeError('websocket', 'close', err);
+      }
+    },
+    pong: handler.pong
+      ? (ws: RuntimeWebSocket) => {
+          try {
+            handler.pong?.(ws);
+          } catch (err) {
+            logRuntimeError('websocket', 'pong', err);
+          }
+        }
+      : undefined,
+  };
+}
 
 /**
  * Creates a `SlingshotRuntime` implementation powered by the Bun runtime.
@@ -14,7 +92,7 @@ import type {
  * Provides the following capabilities using Bun's built-in APIs:
  * - **password** — `Bun.password.hash` / `Bun.password.verify` (argon2id by default)
  * - **sqlite** — `bun:sqlite` Database (WAL mode, `create: true`)
- * - **server** — `Bun.serve` HTTP server with WebSocket upgrade support
+ * - **server** — `Bun.serve` HTTP server with WebSocket upgrade support and optional TLS
  * - **fs** — `Bun.write`, `Bun.file` for async file I/O
  * - **glob** — `Bun.Glob` for file pattern scanning
  *
@@ -26,12 +104,42 @@ import type {
  * This runtime is intended for use in Bun environments only. For Node.js, use
  * `nodeRuntime()` from `@lastshotlabs/slingshot-runtime-node`.
  *
+ * **Signal handling**: this runtime does not register `SIGTERM` or `SIGINT` handlers.
+ * Process lifecycle management belongs to the calling application — registering
+ * signal handlers from a library would conflict with consumers that already do so.
+ * Forgetting to register a handler results in hard-killed processes during deploy:
+ * in-flight requests are dropped, websocket clients receive `1006`, and active
+ * SQLite transactions are rolled back. Always register handlers in production:
+ *
+ * ```ts
+ * const server = await createServer({ runtime: bunRuntime(), ...config });
+ * const drain = async () => {
+ *   try { await server.stop(); } finally { process.exit(0); }
+ * };
+ * process.once('SIGTERM', drain);
+ * process.once('SIGINT', drain);
+ * ```
+ *
+ * **Async error handling**: the fetch handler is wrapped so async rejections are
+ * forwarded to `opts.error` (or logged with a 500 fallback if `opts.error` is omitted).
+ * Without this wrapper rejections from async middleware would bypass `opts.error`.
+ *
+ * **WebSocket error handling**: when `opts.websocket` is provided, every lifecycle
+ * callback (`open`, `message`, `close`, `pong`) is wrapped to log with phase context
+ * instead of crashing or being silently dropped by Bun.
+ *
  * @example
  * ```ts
  * import { bunRuntime } from '@lastshotlabs/slingshot-runtime-bun';
  * import { createServer } from '@lastshotlabs/slingshot-core';
  *
  * const server = await createServer({ runtime: bunRuntime(), ...config });
+ *
+ * // REQUIRED in production — see remarks above.
+ * process.once('SIGTERM', async () => {
+ *   await server.stop();
+ *   process.exit(0);
+ * });
  * ```
  */
 export function bunRuntime(): SlingshotRuntime {
@@ -41,25 +149,71 @@ export function bunRuntime(): SlingshotRuntime {
         return Bun.password.hash(plain);
       },
       async verify(plain: string, hash: string): Promise<boolean> {
-        return Bun.password.verify(plain, hash);
+        try {
+          return await Bun.password.verify(plain, hash);
+        } catch {
+          // Malformed hash material — surface as a non-match rather than rejecting.
+          return false;
+        }
       },
     },
     sqlite: {
       open(path: string): RuntimeSqliteDatabase {
         const db = new Database(path, { create: true });
+        // WAL mode is required for concurrent readers + writer. Verify by reading
+        // back the pragma so a silent failure (e.g. read-only mount) is detected
+        // immediately rather than corrupting under concurrent writes later.
+        const journalMode = db
+          .query<{ journal_mode: string }, []>('PRAGMA journal_mode = WAL')
+          .get();
+        if (journalMode && journalMode.journal_mode.toLowerCase() !== 'wal') {
+          db.close();
+          throw new Error(
+            `[runtime-bun] failed to enable WAL journal mode (got ${journalMode.journal_mode}); ` +
+              `verify the database file is on a writable, non-network filesystem`,
+          );
+        }
         return adaptBunSqlite(db);
       },
     },
     server: {
       listen(opts): RuntimeServerInstance {
-        // Cast opts to avoid fighting Bun.serve's complex overloaded types at the opaque runtime boundary
-        const server = Bun.serve(opts as unknown as Parameters<typeof Bun.serve>[0]);
+        const fetchHandler = wrapFetch(opts.fetch, opts.error);
+        const websocketHandler = opts.websocket
+          ? wrapWebSocketHandler(opts.websocket)
+          : undefined;
+
+        // Build options as `unknown` then cast at the Bun.serve boundary. Bun's
+        // overload narrows on the presence of `unix` (mutually exclusive with
+        // hostname/port); modeling that statically here would require a discriminated
+        // union the contract does not enforce. Bun validates at serve() time.
+        const sharedOpts: Record<string, unknown> = {
+          fetch: fetchHandler,
+          maxRequestBodySize: opts.maxRequestBodySize ?? BUN_DEFAULT_MAX_BODY,
+        };
+        if (opts.error) {
+          sharedOpts.error = (err: Error) => opts.error?.(err);
+        }
+        if (websocketHandler) {
+          sharedOpts.websocket = websocketHandler;
+        }
+        if (opts.tls) {
+          sharedOpts.tls = { key: opts.tls.key, cert: opts.tls.cert };
+        }
+
+        const serveOpts: Parameters<typeof Bun.serve>[0] = (
+          opts.unix
+            ? { ...sharedOpts, unix: opts.unix }
+            : { ...sharedOpts, port: opts.port, hostname: opts.hostname }
+        ) as Parameters<typeof Bun.serve>[0];
+
+        const server = Bun.serve(serveOpts);
         return {
           get port(): number {
             return server.port ?? opts.port ?? 3000;
           },
-          stop(close?: boolean): void {
-            void server.stop(close);
+          stop(close?: boolean): Promise<void> {
+            return server.stop(close);
           },
           upgrade(req: Request, o: { data: unknown }): boolean {
             return server.upgrade(req, o);

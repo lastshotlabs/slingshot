@@ -48,6 +48,15 @@ describe('edgeRuntime()', () => {
       });
       expect(await runtime.readFile('/nonexistent')).toBeNull();
     });
+
+    it('readFile propagates errors thrown by fileStore', async () => {
+      const runtime = edgeRuntime({
+        fileStore: async (_path: string) => {
+          throw new Error('store-unavailable');
+        },
+      });
+      await expect(runtime.readFile('/any/path')).rejects.toThrow('store-unavailable');
+    });
   });
 
   describe('password hashing (Web Crypto)', () => {

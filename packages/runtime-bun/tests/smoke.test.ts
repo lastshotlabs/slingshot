@@ -122,6 +122,196 @@ describe('runtime-bun smoke', () => {
     }
   });
 
+  test('sqlite opens in WAL mode', () => {
+    const runtime = bunRuntime();
+    const db = runtime.sqlite.open(join(tempDir, 'wal.db'));
+    const result = db.query<{ journal_mode: string }>('PRAGMA journal_mode').get();
+    expect(result?.journal_mode).toBe('wal');
+    db.close();
+  });
+
+  test('server stop() returns a Promise', async () => {
+    const runtime = bunRuntime();
+    const server = runtime.server.listen({ port: 0, fetch() { return new Response('ok'); } });
+    const result = server.stop();
+    expect(result).toBeInstanceOf(Promise);
+    await result;
+  });
+
+  test('server calls error callback when fetch handler throws', async () => {
+    const runtime = bunRuntime();
+    const errors: Error[] = [];
+    const server = runtime.server.listen({
+      port: 0,
+      fetch() { throw new Error('handler-boom'); },
+      error(err: Error) {
+        errors.push(err);
+        return new Response('caught', { status: 500 });
+      },
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
+      expect(res.status).toBe(500);
+      expect(await res.text()).toBe('caught');
+      expect(errors.length).toBe(1);
+      expect(errors[0].message).toBe('handler-boom');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  test('sqlite transaction rolls back on throw', () => {
+    const runtime = bunRuntime();
+    const db = runtime.sqlite.open(join(tempDir, 'tx.db'));
+    db.run('CREATE TABLE t (id TEXT PRIMARY KEY)');
+    const failing = db.transaction(() => {
+      db.run('INSERT INTO t VALUES (?)', 'x');
+      throw new Error('rollback me');
+    });
+    expect(() => failing()).toThrow('rollback me');
+    expect(db.query<{ count: number }>('SELECT COUNT(*) as count FROM t').get()?.count).toBe(0);
+    db.close();
+  });
+
+  test('tls option is forwarded to Bun.serve and throws on invalid cert material', () => {
+    const runtime = bunRuntime();
+    // Passing invalid TLS key/cert should produce a deterministic error from Bun.serve
+    // rather than silently ignoring the tls option.
+    expect(() =>
+      runtime.server.listen({
+        port: 0,
+        fetch() { return new Response('ok'); },
+        tls: { key: 'not-a-real-key', cert: 'not-a-real-cert' },
+      }),
+    ).toThrow();
+  });
+
+  test('async fetch rejection forwards to error callback', async () => {
+    const runtime = bunRuntime();
+    const errors: Error[] = [];
+    const server = runtime.server.listen({
+      port: 0,
+      async fetch() {
+        await Promise.resolve();
+        throw new Error('async-boom');
+      },
+      error(err: Error) {
+        errors.push(err);
+        return new Response('async-caught', { status: 500 });
+      },
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
+      expect(res.status).toBe(500);
+      expect(await res.text()).toBe('async-caught');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]?.message).toBe('async-boom');
+    } finally {
+      await server.stop();
+    }
+  });
+
+  test('async fetch rejection without error callback returns 500 and logs', async () => {
+    const runtime = bunRuntime();
+    const originalErr = console.error;
+    const calls: unknown[][] = [];
+    console.error = (...args: unknown[]) => {
+      calls.push(args);
+    };
+    const server = runtime.server.listen({
+      port: 0,
+      async fetch() {
+        throw new Error('lonely-async-boom');
+      },
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
+      expect(res.status).toBe(500);
+      const logged = calls.some(args =>
+        args.some(a => a instanceof Error && a.message === 'lonely-async-boom'),
+      );
+      expect(logged).toBe(true);
+    } finally {
+      console.error = originalErr;
+      await server.stop();
+    }
+  });
+
+  test('password verify returns false for malformed hash', async () => {
+    const runtime = bunRuntime();
+    expect(await runtime.password.verify('password', 'not-a-real-hash')).toBe(false);
+  });
+
+  test('maxRequestBodySize default is 128 MiB and override is forwarded', () => {
+    const originalServe = Bun.serve;
+    const calls: Array<Record<string, unknown>> = [];
+    Object.assign(Bun, {
+      serve(opts: Record<string, unknown>) {
+        calls.push(opts);
+        return {
+          port: 1234,
+          stop: () => undefined,
+          publish: () => undefined,
+          upgrade: () => true,
+        };
+      },
+    });
+    try {
+      const runtime = bunRuntime();
+      runtime.server.listen({ port: 0, fetch: () => new Response('ok') });
+      expect(calls[0]?.maxRequestBodySize).toBe(128 * 1024 * 1024);
+      runtime.server.listen({ port: 0, maxRequestBodySize: 1024, fetch: () => new Response('ok') });
+      expect(calls[1]?.maxRequestBodySize).toBe(1024);
+    } finally {
+      Object.assign(Bun, { serve: originalServe });
+    }
+  });
+
+  test('websocket handler errors are logged but do not crash the server', async () => {
+    const originalErr = console.error;
+    const errs: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errs.push(args.map(String).join(' '));
+    };
+    const originalServe = Bun.serve;
+    let captured: { open?: (ws: unknown) => unknown; message?: (ws: unknown, m: string) => unknown } = {};
+    Object.assign(Bun, {
+      serve(opts: { websocket?: typeof captured }) {
+        captured = (opts.websocket ?? {}) as typeof captured;
+        return {
+          port: 4321,
+          stop: () => undefined,
+          publish: () => undefined,
+          upgrade: () => true,
+        };
+      },
+    });
+    try {
+      const runtime = bunRuntime();
+      runtime.server.listen({
+        port: 0,
+        fetch: () => new Response('ok'),
+        websocket: {
+          open() {
+            throw new Error('open-boom');
+          },
+          message() {
+            throw new Error('msg-boom');
+          },
+          close() {},
+        },
+      });
+      // Both should be wrapped to swallow + log
+      await Promise.resolve(captured.open?.({}));
+      await Promise.resolve(captured.message?.({}, 'hello'));
+      expect(errs.some(e => e.includes('open-boom'))).toBe(true);
+      expect(errs.some(e => e.includes('msg-boom'))).toBe(true);
+    } finally {
+      console.error = originalErr;
+      Object.assign(Bun, { serve: originalServe });
+    }
+  });
+
   test('delegates publish and upgrade to the underlying Bun server', () => {
     const originalServe = Bun.serve;
     const publishCalls: Array<{ channel: string; msg: string }> = [];

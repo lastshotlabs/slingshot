@@ -42,21 +42,50 @@ export function createMemoryImageCache(opts?: MemoryImageCacheOptions): ImageCac
 }
 
 /**
- * Build a deterministic cache key for an image transform request.
+ * Inputs to {@link buildCacheKey}.
+ */
+export interface ImageCacheKeyInput {
+  /** Tenant identifier scope, or `null` for un-scoped/global tenancy. */
+  readonly tenantId: string | null;
+  /** Owner user identifier scope, or `null` when not owned by a user. */
+  readonly ownerUserId: string | null;
+  /** Asset source identifier (storage key or URL). */
+  readonly source: string;
+  /** Requested width. */
+  readonly width: number;
+  /** Requested height, or `undefined` to preserve aspect. */
+  readonly height: number | undefined;
+  /** Requested output format. */
+  readonly format: string;
+  /** Requested output quality. */
+  readonly quality: number;
+}
+
+function escapeKeyComponent(value: string): string {
+  return value.replace(/\|/g, '%7C');
+}
+
+/**
+ * Build a deterministic cache key for an image transform request, scoped by
+ * tenant and owner to prevent cross-tenant leakage.
  *
- * @param source - Asset source identifier.
- * @param width - Requested width.
- * @param height - Requested height.
- * @param format - Requested output format.
- * @param quality - Requested output quality.
+ * The key is structured as a pipe-delimited tuple so individual components are
+ * unambiguously parseable. Each component is escaped to prevent boundary
+ * confusion when a component contains a pipe character.
+ *
+ * @param input - Tenant, owner, source, and transform parameters.
  * @returns Stable cache key for the request.
  */
-export function buildCacheKey(
-  source: string,
-  width: number,
-  height: number | undefined,
-  format: string,
-  quality: number,
-): string {
-  return `${source}:${width}:${height ?? ''}:${format}:${quality}`;
+export function buildCacheKey(input: ImageCacheKeyInput): string {
+  const { tenantId, ownerUserId, source, width, height, format, quality } = input;
+  return [
+    'v2',
+    escapeKeyComponent(tenantId ?? ''),
+    escapeKeyComponent(ownerUserId ?? ''),
+    escapeKeyComponent(source),
+    String(width),
+    height === undefined ? '' : String(height),
+    escapeKeyComponent(format),
+    String(quality),
+  ].join('|');
 }

@@ -207,12 +207,17 @@ const MAX_PENDING_BUFFER = 1000;
 const MAX_ENQUEUE_ATTEMPTS = 5;
 
 /**
- * Interval in milliseconds between drain attempts when the pending buffer is non-empty.
+ * Base delay in milliseconds for the first drain retry after an enqueue failure.
  *
- * When a durable enqueue fails, `scheduleDrain` sets a `setTimeout` for this delay.
- * The drain timer is cancelled on `shutdown()`.
+ * Subsequent retries use exponential backoff: `DRAIN_BASE_MS * 2^drainBackoffCount`,
+ * capped at `DRAIN_MAX_MS`. Resets to zero when the buffer drains completely.
  */
-const DRAIN_INTERVAL_MS = 2000;
+const DRAIN_BASE_MS = 2000;
+
+/**
+ * Maximum delay in milliseconds between drain retries (caps the exponential backoff).
+ */
+const DRAIN_MAX_MS = 30_000;
 
 interface SerializedBullMQEnvelope {
   __slingshot_serialized: string;
@@ -359,20 +364,23 @@ export function createBullMQAdapter(
   const pendingBuffer: PendingEnqueue[] = [];
   let drainTimer: ReturnType<typeof setTimeout> | null = null;
   let isDraining = false;
+  /** Consecutive drain cycles that left items in the buffer — drives exponential backoff. */
+  let drainBackoffCount = 0;
 
   /**
-   * Schedules a drain of the pending buffer after `DRAIN_INTERVAL_MS` if one
-   * is not already scheduled or currently in progress.
+   * Schedules a drain of the pending buffer using exponential backoff.
    *
-   * Idempotent — safe to call multiple times; only one timer is ever active
-   * at a time. The timer is cleared on `shutdown()`.
+   * Delay doubles with each consecutive failed drain cycle, from `DRAIN_BASE_MS`
+   * up to `DRAIN_MAX_MS`. Resets when the buffer drains completely. Idempotent —
+   * only one timer is ever active at a time.
    */
   function scheduleDrain(): void {
     if (drainTimer !== null || isDraining) return;
+    const delayMs = Math.min(DRAIN_MAX_MS, DRAIN_BASE_MS * 2 ** drainBackoffCount);
     drainTimer = setTimeout(() => {
       drainTimer = null;
       void drainPendingBuffer();
-    }, DRAIN_INTERVAL_MS);
+    }, delayMs);
   }
 
   /**
@@ -422,7 +430,12 @@ export function createBullMQAdapter(
     pendingBuffer.length = 0;
     pendingBuffer.push(...retry);
     isDraining = false;
-    if (pendingBuffer.length > 0) scheduleDrain();
+    if (pendingBuffer.length > 0) {
+      drainBackoffCount += 1;
+      scheduleDrain();
+    } else {
+      drainBackoffCount = 0;
+    }
   }
 
   function registerEnvelopeListener<K extends keyof SlingshotEventMap>(

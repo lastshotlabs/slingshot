@@ -9,12 +9,26 @@ import type {
   ImageFormat,
   ImageTransformResult,
 } from './types';
-import { ImageTransformError } from './types';
+import {
+  ImageInputTooLargeError,
+  ImageTransformError,
+  ImageTransformTimeoutError,
+} from './types';
 
 /**
  * Hard upper bound for image transform dimensions.
  */
 export const ABSOLUTE_MAX_DIMENSION = 4096;
+
+/**
+ * Default cap for source image bytes loaded into memory before transform.
+ */
+export const DEFAULT_MAX_INPUT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Default wall-clock timeout for an image transform pipeline.
+ */
+export const DEFAULT_TRANSFORM_TIMEOUT_MS = 10_000;
 
 /**
  * Resolved image configuration with defaults applied.
@@ -26,6 +40,10 @@ export interface ResolvedImageConfig {
   readonly maxWidth: number;
   /** Maximum output height. */
   readonly maxHeight: number;
+  /** Hard ceiling on source bytes (defends against image-bomb DoS). */
+  readonly maxInputBytes: number;
+  /** Wall-clock budget for the Sharp pipeline. */
+  readonly transformTimeoutMs: number;
 }
 
 /**
@@ -44,8 +62,48 @@ export interface ServeImageParams {
   readonly q?: unknown;
 }
 
-function streamToArrayBuffer(stream: ReadableStream): Promise<ArrayBuffer> {
-  return new Response(stream).arrayBuffer();
+/**
+ * Read a `ReadableStream` into an `ArrayBuffer`, aborting if total bytes
+ * read would exceed `maxBytes`. Throws `ImageInputTooLargeError` on overflow.
+ */
+async function streamToBoundedArrayBuffer(
+  stream: ReadableStream,
+  maxBytes: number,
+): Promise<ArrayBuffer> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // already cancelled or stream closed — ignore
+        }
+        throw new ImageInputTooLargeError(maxBytes);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // lock already released — ignore
+    }
+  }
+
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
 }
 
 function coercePositiveInteger(value: unknown, field: string): number {
@@ -124,52 +182,77 @@ export function validateSourceUrl(
  * Fetch bytes from a validated URL-backed asset source.
  *
  * Relative URLs are resolved against the current host when provided, otherwise
- * `http://localhost:3000`.
+ * `http://localhost:3000`. The fetch is bounded by `maxBytes` and
+ * `timeoutMs` to defend against slow-loris and image-bomb attacks.
  *
  * @param sourceUrl - Validated source URL.
  * @param requestHostHeader - Current request host header, when available.
+ * @param maxBytes - Hard cap on source bytes.
+ * @param timeoutMs - Wall-clock budget for the fetch + read.
  * @returns Image bytes and resolved content type.
  */
 export async function fetchSourceImage(
   sourceUrl: string,
-  requestHostHeader?: string,
+  requestHostHeader: string | undefined,
+  maxBytes: number,
+  timeoutMs: number,
 ): Promise<{ buffer: ArrayBuffer; contentType: string }> {
   const fetchUrl = sourceUrl.startsWith('/')
     ? `http://${requestHostHeader ?? 'localhost:3000'}${sourceUrl}`
     : sourceUrl;
 
-  const response = await fetch(fetchUrl);
+  const response = await fetch(fetchUrl, { signal: AbortSignal.timeout(timeoutMs) });
   if (!response.ok) {
     throw new HTTPException(502, {
       message: `Failed to fetch source image: ${response.status} ${response.statusText}`,
     });
   }
 
+  const declaredLength = Number(response.headers.get('content-length') ?? 'NaN');
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new HTTPException(413, {
+      message: `Source image exceeds maximum input size (${declaredLength} > ${maxBytes} bytes).`,
+    });
+  }
+
+  if (!response.body) {
+    throw new HTTPException(502, { message: 'Source image response has no body.' });
+  }
+
+  const buffer = await streamToBoundedArrayBuffer(response.body, maxBytes);
   const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
   return {
-    buffer: await response.arrayBuffer(),
+    buffer,
     contentType: contentType.split(';')[0]?.trim() ?? 'application/octet-stream',
   };
 }
 
 /**
- * Fetch bytes for a storage-backed asset.
+ * Fetch bytes for a storage-backed asset, bounded by `maxBytes`.
  *
  * @param storage - Storage adapter used by the assets plugin.
  * @param asset - Asset record to load.
+ * @param maxBytes - Hard cap on source bytes.
  * @returns Image bytes and content type for the stored asset.
  */
 export async function fetchStoredImage(
   storage: StorageAdapter,
   asset: Asset,
+  maxBytes: number,
 ): Promise<{ buffer: ArrayBuffer; contentType: string }> {
+  if (asset.size != null && asset.size > maxBytes) {
+    throw new HTTPException(413, {
+      message: `Stored asset exceeds maximum input size (${asset.size} > ${maxBytes} bytes).`,
+    });
+  }
+
   const stored = await storage.get(asset.key);
   if (!stored) {
     throw new HTTPException(404, { message: 'Asset content not found' });
   }
 
   return {
-    buffer: await streamToArrayBuffer(stored.stream),
+    buffer: await streamToBoundedArrayBuffer(stored.stream, maxBytes),
     contentType: stored.mimeType ?? asset.mimeType ?? 'application/octet-stream',
   };
 }
@@ -205,6 +288,8 @@ export function resolveImageConfig(config: ImageConfig | undefined): ResolvedIma
     allowedOrigins: config.allowedOrigins ?? [],
     maxWidth: config.maxWidth ?? ABSOLUTE_MAX_DIMENSION,
     maxHeight: config.maxHeight ?? ABSOLUTE_MAX_DIMENSION,
+    maxInputBytes: config.maxInputBytes ?? DEFAULT_MAX_INPUT_BYTES,
+    transformTimeoutMs: config.transformTimeoutMs ?? DEFAULT_TRANSFORM_TIMEOUT_MS,
   });
 }
 
@@ -213,6 +298,10 @@ export function resolveImageConfig(config: ImageConfig | undefined): ResolvedIma
  *
  * The asset is usually read from storage by `asset.key`. If the key itself is a
  * relative or absolute URL, the request is SSRF-validated and fetched remotely.
+ *
+ * Source bytes are streamed with a hard `maxInputBytes` cap and the Sharp
+ * pipeline is bounded by `transformTimeoutMs`. Cache keys are scoped by
+ * tenant and owner to prevent cross-tenant leakage.
  *
  * @param deps - Asset source, storage adapter, cache, and request params.
  * @returns A binary `Response` containing the transformed image.
@@ -231,9 +320,22 @@ export async function createServeImageResponse(deps: {
   const height = coerceOptionalHeight(params.h);
   const format = parseImageFormat(params.f);
   const quality = parseQuality(params.q);
-  const cacheKey = buildCacheKey(asset.key, width, height, format, quality);
+  const cacheKey = buildCacheKey({
+    tenantId: asset.tenantId ?? null,
+    ownerUserId: asset.ownerUserId ?? null,
+    source: asset.key,
+    width,
+    height,
+    format,
+    quality,
+  });
 
-  const cached = await cache.get(cacheKey);
+  let cached: ImageCacheEntry | null = null;
+  try {
+    cached = await cache.get(cacheKey);
+  } catch {
+    // Cache read failure is non-fatal — proceed to transform
+  }
   if (cached) {
     return new Response(cached.buffer, {
       headers: buildResponseHeaders(cached, 'HIT'),
@@ -241,17 +343,29 @@ export async function createServeImageResponse(deps: {
   }
 
   let source: { buffer: ArrayBuffer; contentType: string };
-  if (isUrlBackedAssetKey(asset.key)) {
-    const validatedUrl = validateSourceUrl(asset.key, imageConfig.allowedOrigins);
-    if (!validatedUrl) {
-      throw new HTTPException(400, {
-        message:
-          'Invalid or disallowed image URL. Only relative paths and approved origins are permitted.',
-      });
+  try {
+    if (isUrlBackedAssetKey(asset.key)) {
+      const validatedUrl = validateSourceUrl(asset.key, imageConfig.allowedOrigins);
+      if (!validatedUrl) {
+        throw new HTTPException(400, {
+          message:
+            'Invalid or disallowed image URL. Only relative paths and approved origins are permitted.',
+        });
+      }
+      source = await fetchSourceImage(
+        validatedUrl,
+        requestHostHeader,
+        imageConfig.maxInputBytes,
+        imageConfig.transformTimeoutMs,
+      );
+    } else {
+      source = await fetchStoredImage(storage, asset, imageConfig.maxInputBytes);
     }
-    source = await fetchSourceImage(validatedUrl, requestHostHeader);
-  } else {
-    source = await fetchStoredImage(storage, asset);
+  } catch (error: unknown) {
+    if (error instanceof ImageInputTooLargeError) {
+      throw new HTTPException(413, { message: error.message });
+    }
+    throw error;
   }
 
   let result: ImageTransformResult;
@@ -263,10 +377,14 @@ export async function createServeImageResponse(deps: {
       quality,
       maxWidth: imageConfig.maxWidth,
       maxHeight: imageConfig.maxHeight,
+      timeoutMs: imageConfig.transformTimeoutMs,
     });
   } catch (error: unknown) {
     if (error instanceof ImageTransformError) {
       throw new HTTPException(400, { message: error.message });
+    }
+    if (error instanceof ImageTransformTimeoutError) {
+      throw new HTTPException(408, { message: error.message });
     }
     throw error;
   }
@@ -277,7 +395,11 @@ export async function createServeImageResponse(deps: {
     ...(result.warningHeader ? { warningHeader: result.warningHeader } : {}),
     generatedAt: Date.now(),
   };
-  await cache.set(cacheKey, cacheEntry);
+  try {
+    await cache.set(cacheKey, cacheEntry);
+  } catch {
+    // Cache write failure is non-fatal — return the transformed image anyway
+  }
 
   return new Response(result.buffer, {
     headers: buildResponseHeaders(result, 'MISS'),

@@ -176,5 +176,9 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
       if (!queue) return 0;
       return await queue.count();
     },
+    async drain(): Promise<void> {
+      if (!queue) return;
+      await queue.drain();
+    },
   };
 }

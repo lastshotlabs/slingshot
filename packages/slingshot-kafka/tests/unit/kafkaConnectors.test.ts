@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import {
   createEventDefinitionRegistry,
@@ -375,6 +375,108 @@ describe('kafkaConnectors', () => {
         ],
       }),
     ).toThrow('autoCreateDLQ is only meaningful when errorStrategy is "dlq"');
+  });
+
+  test('inbound connector logs and continues when commitOffsets fails', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const handler = mock(async () => {});
+    const bus = createInProcessAdapter();
+    const connectors = createKafkaConnectors({
+      brokers: ['localhost:19092'],
+      inbound: [{ topic: 'commit-fail.topic', groupId: 'cf-group', handler }],
+    });
+
+    try {
+      await connectors.start(bus);
+
+      // Make the next commitOffsets throw
+      fakeKafkaState.commitOffsetErrors.push(new Error('broker gone'));
+
+      const consumer = fakeKafkaState.consumers[0];
+      await consumer?.eachMessage?.({
+        topic: 'commit-fail.topic',
+        partition: 0,
+        message: {
+          offset: '5',
+          key: null,
+          headers: {},
+          value: Buffer.from(JSON.stringify({ id: 1 })),
+        },
+        heartbeat: async () => {},
+        pause: () => {},
+      });
+
+      // Handler ran despite commit failure
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('failed to commit offset'),
+        expect.anything(),
+      );
+
+      // Second message succeeds end-to-end
+      await consumer?.eachMessage?.({
+        topic: 'commit-fail.topic',
+        partition: 0,
+        message: {
+          offset: '6',
+          key: null,
+          headers: {},
+          value: Buffer.from(JSON.stringify({ id: 2 })),
+        },
+        heartbeat: async () => {},
+        pause: () => {},
+      });
+      expect(handler).toHaveBeenCalledTimes(2);
+    } finally {
+      errorSpy.mockRestore();
+      await connectors.stop();
+    }
+  });
+
+  test('inbound connector skips validation-rejected messages in strict mode and commits offset', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const handler = mock(async () => {});
+    const bus = createInProcessAdapter();
+    const connectors = createKafkaConnectors({
+      brokers: ['localhost:19092'],
+      inbound: [
+        {
+          topic: 'ext.users',
+          groupId: 'schema-strict-group',
+          validationMode: 'strict',
+          // Inline schema: userId must be non-empty
+          schema: z.object({ userId: z.string().min(1) }),
+          handler,
+        },
+      ],
+    });
+
+    try {
+      await connectors.start(bus);
+      const consumer = fakeKafkaState.consumers[0];
+
+      // Message that fails schema validation (empty userId)
+      await consumer?.eachMessage?.({
+        topic: 'ext.users',
+        partition: 0,
+        message: {
+          offset: '0',
+          key: null,
+          headers: {},
+          value: Buffer.from(JSON.stringify({ userId: '' })),
+        },
+        heartbeat: async () => {},
+        pause: () => {},
+      });
+
+      // Handler must NOT be called for an invalid payload
+      expect(handler).not.toHaveBeenCalled();
+      // Offset must still be committed (so the bad message is not reprocessed)
+      expect(fakeKafkaState.consumers[0]?.commitOffsetCalls).toBeGreaterThan(0);
+    } finally {
+      errorSpy.mockRestore();
+      await connectors.stop();
+    }
   });
 
   test('outbound validation can use the shared event schema registry', async () => {

@@ -346,7 +346,12 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
   /** Maps entity name (e.g., "Thread") to storage name (e.g., "community_threads"). */
   const entityNameToStorageName = new Map<string, string>();
   const pendingEntityInitializations = new Map<string, Promise<void>>();
-  /** Tracks tenant indexes already created for index-per-tenant entities. Key: baseIndexName__tenant_{tenantId} */
+  /**
+   * Tracks tenant indexes already created for index-per-tenant entities.
+   * Key: `baseIndexName__tenant_{tenantId}`. Capped at MAX_TENANT_INDEXES_CACHE
+   * entries with LRU eviction to prevent unbounded growth in high-tenancy deployments.
+   */
+  const MAX_TENANT_INDEXES_CACHE = 10_000;
   const createdTenantIndexes = new Map<string, boolean>();
   let initialized = false;
   let providersConnected = false;
@@ -563,6 +568,12 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
         if (tenantIsolation !== 'index-per-tenant') return;
         if (targetIndex === indexName) return; // base index, not tenant-scoped
         if (createdTenantIndexes.has(targetIndex)) return;
+
+        // LRU eviction: remove the oldest entry when the cache is full.
+        if (createdTenantIndexes.size >= MAX_TENANT_INDEXES_CACHE) {
+          const oldest = createdTenantIndexes.keys().next().value;
+          if (oldest !== undefined) createdTenantIndexes.delete(oldest);
+        }
 
         await provider.createOrUpdateIndex(targetIndex, settings);
         createdTenantIndexes.set(targetIndex, true);
@@ -871,7 +882,16 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
       const results: Record<string, SearchHealthResult> = {};
 
       for (const [name, provider] of providers) {
-        results[name] = await provider.healthCheck();
+        try {
+          results[name] = await provider.healthCheck();
+        } catch (err) {
+          results[name] = {
+            healthy: false,
+            provider: name,
+            latencyMs: 0,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
       }
 
       return results;

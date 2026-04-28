@@ -5,6 +5,13 @@ import {
   sha256,
 } from '@lastshotlabs/slingshot-core';
 
+export class IdempotencyConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'IdempotencyConflictError';
+  }
+}
+
 export interface RuntimeIdempotencyConfig {
   ttl?: number;
   scope?: 'global' | 'tenant' | 'user';
@@ -81,7 +88,7 @@ export async function invokeWithRecordIdempotency<T>(
   const cached = await ctx.persistence.idempotency.get(key);
   if (cached) {
     if (fingerprint && cached.requestFingerprint && cached.requestFingerprint !== fingerprint) {
-      throw new Error('Idempotency key conflict');
+      throw new IdempotencyConflictError('Idempotency key conflict');
     }
     return deserializeOutput<T>(cached.response);
   }

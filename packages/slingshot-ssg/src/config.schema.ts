@@ -46,6 +46,14 @@ export const ssgConfigSchema = z.object({
     .describe(
       'Vite manifest key for the client entry chunk. Omit to auto-detect from common conventions.',
     ),
+  staticPathsTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum milliseconds for staticPaths() / generateStaticParams() to run before timing out. Default: 60000.',
+    ),
 });
 
 export type SsgConfigParsed = z.infer<typeof ssgConfigSchema>;

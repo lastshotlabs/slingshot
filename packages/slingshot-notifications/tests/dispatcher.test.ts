@@ -275,6 +275,52 @@ describe('createIntervalDispatcher', () => {
     expect(listPendingDispatch).toHaveBeenCalledTimes(1);
   });
 
+  test('stop() times out and logs warning when inflight tick does not settle', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    // A tick that never resolves
+    const listPendingDispatch = mock(
+      () => new Promise<never>(() => {}),
+    );
+    (
+      adapters.notifications as { listPendingDispatch: typeof listPendingDispatch }
+    ).listPendingDispatch = listPendingDispatch;
+
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      intervalMs: 1_000,
+      maxPerTick: 10,
+      stopTimeoutMs: 10, // very short timeout to keep test fast
+    });
+
+    const setIntervalSpy = spyOn(globalThis, 'setInterval').mockImplementation(((
+      handler: TimerHandler,
+    ) => {
+      if (typeof handler === 'function') void handler();
+      return 1 as ReturnType<typeof setInterval>;
+    }) as typeof setInterval);
+
+    dispatcher.start();
+    await Promise.resolve();
+
+    // stop() should resolve (via timeout) instead of hanging
+    await expect(dispatcher.stop()).resolves.toBeUndefined();
+
+    // The timeout error is caught and logged
+    expect(errorSpy).toHaveBeenCalled();
+    const logMsg = errorSpy.mock.calls[0]?.[0] as string;
+    expect(logMsg).toContain('did not settle');
+
+    setIntervalSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
   test('does not re-enter while a dispatcher tick is already running', async () => {
     const adapters = createNotificationsTestAdapters();
     const bus = new InProcessAdapter();

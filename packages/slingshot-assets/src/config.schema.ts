@@ -63,6 +63,22 @@ const imageConfigSchema = z.object({
     .describe(
       'Maximum transformed image height in pixels. Omit to use the plugin default height limit.',
     ),
+  maxInputBytes: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Hard cap on source bytes loaded into memory before image transform. Defends against image-bomb DoS. Default 25 MiB.',
+    ),
+  transformTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Wall-clock timeout for the Sharp transform pipeline in milliseconds. Default 10 000 ms.',
+    ),
   cache: z
     .unknown()
     .optional()

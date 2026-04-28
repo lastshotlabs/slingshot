@@ -112,7 +112,9 @@ function updateTagIndex(kv: KvNamespace, tag: string, path: string): Promise<voi
   // Don't let a failed update poison the chain for future callers.
   tagLocks.set(
     tag,
-    next.catch(() => {}),
+    next.catch(err => {
+      console.error('[runtime-edge] tag index update failed, chain cleared:', err);
+    }),
   );
   return next;
 }
@@ -146,7 +148,9 @@ function removeFromTagIndex(kv: KvNamespace, tag: string, path: string): Promise
   });
   tagLocks.set(
     tag,
-    next.catch(() => {}),
+    next.catch(err => {
+      console.error('[runtime-edge] tag index update failed, chain cleared:', err);
+    }),
   );
   return next;
 }

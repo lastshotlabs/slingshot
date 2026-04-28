@@ -159,9 +159,12 @@ export function createPushRouter(options: {
   repos: PushRouterRepos;
   retries?: { maxAttempts?: number; initialDelayMs?: number };
   bus?: DynamicBus;
+  /** Maximum milliseconds for a single provider.send() call before it is treated as transient failure. Default: 30000. */
+  providerTimeoutMs?: number;
 }): PushRouter {
   const maxAttempts = options.retries?.maxAttempts ?? 3;
   const initialDelayMs = options.retries?.initialDelayMs ?? 1_000;
+  const providerTimeoutMs = options.providerTimeoutMs ?? 30_000;
 
   async function sendToSubscriptions(
     subscriptions: readonly RouterSubscriptionRecord[],
@@ -202,13 +205,24 @@ export function createPushRouter(options: {
 
         let result;
         try {
-          result = await provider.send(toProviderSubscription(subscription, platform), payload);
+          result = await Promise.race([
+            provider.send(toProviderSubscription(subscription, platform), payload),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`push provider timed out after ${providerTimeoutMs}ms`)),
+                providerTimeoutMs,
+              ),
+            ),
+          ]);
         } catch (err) {
-          console.error('[slingshot-push] Provider threw while sending push delivery', err);
+          console.error(
+            `[slingshot-push] Provider threw or timed out for platform="${platform}" userId="${subscription.userId}"`,
+            err,
+          );
           result = {
             ok: false,
             reason: 'transient' as const,
-            error: err instanceof Error ? err.message : 'push provider threw',
+            error: err instanceof Error ? err.message : 'push provider threw or timed out',
           };
         }
         if (result.ok) {
@@ -352,12 +366,12 @@ export function createPushRouter(options: {
           `[slingshot-push] Topic '${topicName}' has ${allMemberships.length} members; publishing sequentially may be slow. Consider batched fan-out for large topics.`,
         );
       }
-      const memberships = allMemberships;
-      const subscriptions: RouterSubscriptionRecord[] = [];
-      for (const membership of memberships) {
-        const subscription = await options.repos.subscriptions.getById(membership.subscriptionId);
-        if (subscription) subscriptions.push(subscription);
-      }
+      const subscriptionResults = await Promise.all(
+        allMemberships.map(m => options.repos.subscriptions.getById(m.subscriptionId)),
+      );
+      const subscriptions = subscriptionResults.filter(
+        (s): s is RouterSubscriptionRecord => s !== null,
+      );
 
       return sendToSubscriptions(subscriptions, message, {
         tenantId,

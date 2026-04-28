@@ -75,6 +75,13 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
         onDeadLetter: config.onDeadLetter,
       });
 
+    if (config.durableSubscriptions && queue.name === 'memory') {
+      throw new Error(
+        '[slingshot-mail] durableSubscriptions: true requires a durable queue (e.g. BullMQ). ' +
+          'The memory queue does not support durable subscriptions.',
+      );
+    }
+
     try {
       // 2. Start queue (throws immediately if backend is unavailable)
       await queue.start(config.provider);
@@ -134,7 +141,13 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
     },
 
     async teardown(): Promise<void> {
-      for (const unsub of unsubscribers) unsub();
+      for (const unsub of unsubscribers) {
+        try {
+          unsub();
+        } catch (err) {
+          console.error('[slingshot-mail] Failed to remove event subscription during teardown', err);
+        }
+      }
       unsubscribers = [];
       if (queue) {
         await queue.stop();

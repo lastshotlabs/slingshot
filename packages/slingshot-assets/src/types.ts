@@ -35,6 +35,16 @@ export interface ImageConfig {
   readonly maxWidth?: number;
   /** Maximum output height in pixels. */
   readonly maxHeight?: number;
+  /**
+   * Hard cap on source bytes loaded into memory before transform.
+   * Defends against image-bomb DoS (huge file → OOM). Default: 25 MiB.
+   */
+  readonly maxInputBytes?: number;
+  /**
+   * Wall-clock timeout for the Sharp transform pipeline. Defends against
+   * malformed inputs that hang decoders. Default: 10 000 ms.
+   */
+  readonly transformTimeoutMs?: number;
   /** Optional cache adapter used for transformed image responses. */
   readonly cache?: unknown;
 }

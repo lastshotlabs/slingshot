@@ -136,12 +136,17 @@ export function generateUploadKeyFromFilename(
  * @param input - Optional app or request carrier providing default upload config.
  * @returns An error message when invalid, otherwise `null`.
  */
+const MAX_FILENAME_BYTES = 255;
+
 export function validateFile(
   file: File,
   opts: { maxFileSize?: number; allowedMimeTypes?: string[] },
   input?: UploadCarrier,
 ): string | null {
   const merged = mergeUploadConfig(input, opts);
+  if (new TextEncoder().encode(file.name).length > MAX_FILENAME_BYTES) {
+    return `File name exceeds the maximum allowed length of ${MAX_FILENAME_BYTES} bytes`;
+  }
   const maxFileSize = merged.maxFileSize ?? 10 * 1024 * 1024;
   if (file.size > maxFileSize) {
     return `File "${file.name}" exceeds maximum size of ${maxFileSize} bytes`;

@@ -270,4 +270,60 @@ describe('createMailPlugin integration', () => {
 
     await plugin.teardown!();
   });
+
+  it('throws on activation when durableSubscriptions=true and queue is memory', async () => {
+    const provider = makeMockProvider();
+    const renderer = createRawHtmlRenderer({ templates: {} });
+
+    const plugin = createMailPlugin({
+      provider,
+      renderer,
+      from: 'noreply@example.com',
+      durableSubscriptions: true,
+      // No custom queue → defaults to memory queue
+    });
+
+    await expect(plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus })).rejects.toThrow(
+      'durable queue',
+    );
+  });
+
+  it('teardown() does not throw when an unsubscriber throws', async () => {
+    const provider = makeMockProvider();
+    const renderer = createRawHtmlRenderer({ templates: {} });
+    const queue = createMemoryQueue();
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const plugin = createMailPlugin({
+      provider,
+      renderer,
+      from: 'noreply@example.com',
+      queue,
+      subscriptions: [
+        {
+          event: 'security.auth.login.success',
+          template: 'welcome',
+          recipientMapper: () => 'u@example.com',
+        },
+      ],
+    });
+
+    await plugin.setupPost!({ app: MOCK_APP, config: MOCK_CFG, bus });
+
+    // Patch the bus to make off() throw during teardown
+    const originalOff = (bus as unknown as { off: (e: string, h: unknown) => void }).off;
+    (bus as unknown as { off: (e: string, h: unknown) => void }).off = () => {
+      throw new Error('unsubscribe failed');
+    };
+
+    // teardown() should not propagate the error
+    await expect(plugin.teardown!()).resolves.toBeUndefined();
+
+    // But the error should be logged
+    expect(errorSpy).toHaveBeenCalled();
+
+    // Restore
+    (bus as unknown as { off: (e: string, h: unknown) => void }).off = originalOff;
+    errorSpy.mockRestore();
+  });
 });

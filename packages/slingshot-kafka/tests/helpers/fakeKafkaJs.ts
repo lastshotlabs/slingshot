@@ -22,6 +22,7 @@ export interface FakeConsumerRecord {
   disconnectCalls: number;
   subscribeCalls: Array<{ topic: string | RegExp; fromBeginning: boolean }>;
   runCalls: Array<{ autoCommit?: boolean; partitionsConsumedConcurrently?: number }>;
+  commitOffsetCalls: number;
   eachMessage?: (payload: any) => Promise<void>;
 }
 
@@ -42,6 +43,8 @@ export interface FakeKafkaState {
   consumerConnectErrors: unknown[];
   consumerSubscribeErrors: unknown[];
   consumerRunErrors: unknown[];
+  /** Errors to throw from the next consumer.commitOffsets() call(s). */
+  commitOffsetErrors: unknown[];
 }
 
 export const fakeKafkaState: FakeKafkaState = {
@@ -61,6 +64,7 @@ export const fakeKafkaState: FakeKafkaState = {
   consumerConnectErrors: [],
   consumerSubscribeErrors: [],
   consumerRunErrors: [],
+  commitOffsetErrors: [],
 };
 
 export function resetFakeKafkaState(): void {
@@ -80,6 +84,7 @@ export function resetFakeKafkaState(): void {
   fakeKafkaState.consumerConnectErrors.length = 0;
   fakeKafkaState.consumerSubscribeErrors.length = 0;
   fakeKafkaState.consumerRunErrors.length = 0;
+  fakeKafkaState.commitOffsetErrors.length = 0;
 }
 
 export function flushAsyncWork(ms = 0): Promise<void> {
@@ -146,6 +151,7 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
         disconnectCalls: 0,
         subscribeCalls: [],
         runCalls: [],
+        commitOffsetCalls: 0,
       };
       state.consumers.push(record);
 
@@ -183,7 +189,11 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
           record.runCalls.push({ autoCommit, partitionsConsumedConcurrently });
           record.eachMessage = eachMessage;
         },
-        commitOffsets: async () => {},
+        commitOffsets: async () => {
+          record.commitOffsetCalls += 1;
+          const nextError = state.commitOffsetErrors.shift();
+          if (nextError) throw nextError;
+        },
       };
     }
   }

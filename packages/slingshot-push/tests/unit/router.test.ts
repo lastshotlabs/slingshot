@@ -768,4 +768,93 @@ describe('createPushRouter — publishTopic', () => {
 
     warnSpy.mockRestore();
   });
+
+  test('publishTopic fetches all member subscriptions in parallel (no serial N+1)', async () => {
+    const repos = createFakeRepos();
+    const provider = createMockProvider(async () => ({ ok: true }));
+    const topic = { id: 'topic-par', tenantId: '', name: 'parallel', createdAt: new Date() };
+    repos._topics.push(topic);
+
+    for (let i = 0; i < 5; i++) {
+      const subId = `par-sub-${i}`;
+      repos._subscriptions.push(makeSubscription({ id: subId, userId: `par-user-${i}` }));
+      repos._memberships.push({
+        id: `par-m-${i}`,
+        topicId: 'topic-par',
+        subscriptionId: subId,
+        userId: `par-user-${i}`,
+        tenantId: '',
+        createdAt: new Date(),
+      });
+    }
+
+    // Track peak concurrency: with Promise.all all 5 increment before any yield
+    let activeCalls = 0;
+    let peakConcurrency = 0;
+    const originalGetById = repos.subscriptions.getById.bind(repos.subscriptions);
+    repos.subscriptions.getById = async (id: string) => {
+      activeCalls++;
+      peakConcurrency = Math.max(peakConcurrency, activeCalls);
+      await Promise.resolve(); // one microtask yield — serial would cap at 1
+      activeCalls--;
+      return originalGetById(id);
+    };
+
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 1 },
+    });
+
+    await router.publishTopic('parallel', { title: 'Parallel' });
+
+    // All 5 getById calls must have been in-flight at the same time
+    expect(peakConcurrency).toBe(5);
+  });
+});
+
+describe('createPushRouter — provider timeout', () => {
+  test('treats a provider that hangs past providerTimeoutMs as transient failure', async () => {
+    const repos = createFakeRepos();
+    repos._subscriptions.push(makeSubscription({ id: 'timeout-sub', userId: 'user-timeout' }));
+
+    const provider = createMockProvider(
+      () => new Promise<never>(() => {}), // never resolves
+    );
+
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 1 },
+      providerTimeoutMs: 1, // 1ms — ensures immediate timeout in test
+    });
+
+    // Should not hang; router should resolve after timeout
+    const count = await router.sendToUser('user-timeout', { title: 'Ping' });
+
+    // Delivery was attempted but failed (transient), so count is 0
+    expect(count).toBe(0);
+
+    // Delivery record should be marked failed
+    const delivery = repos._deliveries.find(d => d.subscriptionId === 'timeout-sub');
+    expect(delivery?.status).toBe('failed');
+    expect(delivery?.failureReason).toBe('transient');
+  });
+
+  test('successful send under timeout limit completes normally', async () => {
+    const repos = createFakeRepos();
+    repos._subscriptions.push(makeSubscription({ id: 'fast-sub', userId: 'user-fast' }));
+
+    const provider = createMockProvider(async () => ({ ok: true }));
+
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 1 },
+      providerTimeoutMs: 5_000,
+    });
+
+    const count = await router.sendToUser('user-fast', { title: 'Fast' });
+    expect(count).toBe(1);
+  });
 });

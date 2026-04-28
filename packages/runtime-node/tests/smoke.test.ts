@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -185,5 +186,100 @@ describe('runtime-node smoke', () => {
     expect(typeof runtime.glob.scan).toBe('function');
     expect(typeof runtime.readFile).toBe('function');
     expect(typeof runtime.supportsAsyncLocalStorage).toBe('boolean');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Error callback
+  // ---------------------------------------------------------------------------
+
+  test('server error callback fires when fetch handler throws', async () => {
+    const runtime = nodeRuntime();
+    const errors: Error[] = [];
+    const instance = await runtime.server.listen({
+      port: 0,
+      fetch() {
+        throw new Error('boom');
+      },
+      error(err) {
+        errors.push(err);
+        return new Response('error-caught', { status: 500 });
+      },
+    });
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${instance.port}/`);
+      expect(res.status).toBe(500);
+      expect(await res.text()).toBe('error-caught');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.message).toBe('boom');
+    } finally {
+      await instance.stop();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // WAL mode
+  // ---------------------------------------------------------------------------
+
+  // better-sqlite3 is a native Node.js addon — it is not supported in Bun.
+  // This test runs only in a Node.js context. When executed under Bun the test
+  // is skipped rather than failing, matching the behaviour of the other SQLite
+  // tests in tests/node-runtime/nodeRuntime.test.ts.
+  test.skipIf(typeof Bun !== 'undefined')('sqlite WAL mode is enabled', () => {
+    const runtime = nodeRuntime();
+    const db = runtime.sqlite.open(join(tempDir, 'wal.db'));
+    try {
+      type JournalRow = { journal_mode: string };
+      const rows = db.query<JournalRow>('PRAGMA journal_mode').all();
+      expect(rows[0]?.journal_mode).toBe('wal');
+    } finally {
+      db.close();
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // TLS / HTTPS server
+  // ---------------------------------------------------------------------------
+
+  test('server starts with TLS when key and cert are provided', async () => {
+    // Generate a temporary self-signed certificate using the system openssl binary.
+    // The generated files are placed in tempDir so they are cleaned up after the test.
+    let opensslAvailable = true;
+    try {
+      execSync('openssl version', { stdio: 'ignore' });
+    } catch {
+      opensslAvailable = false;
+    }
+
+    if (!opensslAvailable) {
+      // openssl not available — skip silently.
+      return;
+    }
+
+    const keyPath = join(tempDir, 'tls.key');
+    const certPath = join(tempDir, 'tls.crt');
+    execSync(
+      `openssl req -x509 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -days 1 -nodes -subj "/CN=localhost"`,
+      { stdio: 'ignore' },
+    );
+
+    const { readFile } = await import('node:fs/promises');
+    const [key, cert] = await Promise.all([readFile(keyPath, 'utf8'), readFile(certPath, 'utf8')]);
+
+    const runtime = nodeRuntime();
+    const instance = await runtime.server.listen({
+      port: 0,
+      tls: { key, cert },
+      fetch() {
+        return new Response('tls-ok');
+      },
+    });
+
+    try {
+      // TLS server binds on a valid ephemeral port
+      expect(instance.port).toBeGreaterThan(0);
+    } finally {
+      await instance.stop();
+    }
   });
 });

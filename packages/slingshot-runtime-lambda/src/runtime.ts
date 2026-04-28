@@ -27,6 +27,26 @@ export interface LambdaRuntime extends Omit<FunctionsRuntime, 'wrap'> {
 
 /**
  * Create an AWS Lambda runtime with cold-start bootstrap caching and trigger-aware wrappers.
+ *
+ * On the first invocation, the runtime bootstraps the Slingshot app from the provided
+ * manifest and caches the resulting context. Subsequent invocations reuse the cached
+ * context (warm start). The `onInit` hook is called once after the first bootstrap.
+ *
+ * Registers a `SIGTERM` handler (once per process) if `config.hooks.onShutdown` is provided.
+ * The shutdown hook runs best-effort within `shutdownTimeoutMs` (default: 1500ms).
+ *
+ * @param config - Runtime configuration: manifest, optional custom runtime, lifecycle hooks,
+ *   and shutdown timeout.
+ * @returns A `LambdaRuntime` with `wrap()`, `getContext()`, and `shutdown()`.
+ *
+ * @example
+ * ```ts
+ * import { createLambdaRuntime } from '@lastshotlabs/slingshot-runtime-lambda';
+ *
+ * const runtime = createLambdaRuntime({ manifest: './app.manifest.json' });
+ *
+ * export const handler = runtime.wrap(myHandler, 'sqs');
+ * ```
  */
 export function createLambdaRuntime(config: FunctionsRuntimeConfig): LambdaRuntime {
   let cached: BootstrapResult | null = null;

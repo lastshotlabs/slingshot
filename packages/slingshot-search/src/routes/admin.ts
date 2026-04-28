@@ -56,6 +56,10 @@ const entityHealthRoute = createRoute({
       content: { 'application/json': { schema: ErrorResponseSchema } },
       description: 'Entity not found',
     },
+    503: {
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+      description: 'Provider health check failed',
+    },
   },
 });
 
@@ -196,7 +200,16 @@ export function createAdminRouter(
       return errorResponse(c, `No provider found for entity '${entityParam}'`, 404);
     }
 
-    const health = await provider.healthCheck();
+    let health: import('../types/provider').SearchHealthResult;
+    try {
+      health = await provider.healthCheck();
+    } catch (err) {
+      return errorResponse(
+        c,
+        `Provider health check failed: ${err instanceof Error ? err.message : String(err)}`,
+        503,
+      );
+    }
 
     if (gate?.logAuditEntry) {
       await gate.logAuditEntry({ action: 'entity-health-check', entity: entityParam });

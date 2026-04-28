@@ -1,5 +1,5 @@
 import type { ImageFormat, ImageTransformOptions, ImageTransformResult } from './types';
-import { ImageTransformError } from './types';
+import { ImageTransformError, ImageTransformTimeoutError } from './types';
 
 const FORMAT_CONTENT_TYPE: Record<Exclude<ImageFormat, 'original'>, string> = {
   avif: 'image/avif',
@@ -8,7 +8,13 @@ const FORMAT_CONTENT_TYPE: Record<Exclude<ImageFormat, 'original'>, string> = {
   png: 'image/png',
 };
 
-type SharpConstructor = (input?: Buffer) => import('sharp').Sharp;
+type SharpConstructor = (
+  input?: Buffer,
+  options?: {
+    limitInputPixels?: number | boolean;
+    failOn?: 'none' | 'truncated' | 'error' | 'warning';
+  },
+) => import('sharp').Sharp;
 
 let sharpFn: SharpConstructor | null | undefined;
 
@@ -35,17 +41,29 @@ function resolveContentType(format: ImageFormat, originalContentType: string): s
   return FORMAT_CONTENT_TYPE[format];
 }
 
+function withTimeout<T>(p: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new ImageTransformTimeoutError(timeoutMs)), timeoutMs);
+  });
+  return Promise.race([p, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
 /**
  * Transform image bytes using `sharp` when available.
  *
- * When `sharp` is unavailable, this returns the original bytes unchanged and
- * includes a warning header value so callers can signal the degradation.
+ * The Sharp pipeline is bounded by `opts.timeoutMs` to defend against malformed
+ * inputs that hang decoders. Sharp internal limits (`limitInputPixels`) are also
+ * applied so a 50000x50000 image header is rejected before allocation.
  *
  * @param buffer - Raw source image bytes.
  * @param originalContentType - MIME type of the source image.
  * @param opts - Requested transform parameters and configured limits.
  * @returns Transformed image bytes and response metadata.
  * @throws {ImageTransformError} When requested dimensions exceed configured limits.
+ * @throws {ImageTransformTimeoutError} When the pipeline exceeds opts.timeoutMs.
  */
 export async function transformImage(
   buffer: ArrayBuffer,
@@ -73,7 +91,8 @@ export async function transformImage(
   }
 
   const input = Buffer.from(buffer);
-  let pipeline = sharpFnResolved(input);
+  const limitInputPixels = opts.maxWidth * opts.maxHeight * 4;
+  let pipeline = sharpFnResolved(input, { limitInputPixels, failOn: 'truncated' });
 
   pipeline = pipeline.resize({
     width: opts.width,
@@ -99,7 +118,7 @@ export async function transformImage(
     }
   }
 
-  const outputBuffer = await pipeline.toBuffer();
+  const outputBuffer = await withTimeout(pipeline.toBuffer(), opts.timeoutMs);
   return {
     buffer: outputBuffer.buffer.slice(
       outputBuffer.byteOffset,

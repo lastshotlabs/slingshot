@@ -21,6 +21,8 @@ export interface CreateIntervalDispatcherOptions {
   readonly defaultPreferences?: NotificationPreferenceDefaults;
   readonly intervalMs?: number;
   readonly maxPerTick?: number;
+  /** Maximum ms to wait for an in-flight tick to complete on stop(). Default: 10000. */
+  readonly stopTimeoutMs?: number;
 }
 
 /**
@@ -65,10 +67,20 @@ export function createIntervalDispatcher(
       if (!timer) return;
       clearInterval(timer);
       timer = null;
+      if (!inflightTick) return;
+      const stopTimeoutMs = options.stopTimeoutMs ?? 10_000;
       try {
-        await inflightTick;
+        await Promise.race([
+          inflightTick,
+          new Promise<void>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`stop() timed out after ${stopTimeoutMs}ms`)),
+              stopTimeoutMs,
+            ),
+          ),
+        ]);
       } catch (err) {
-        console.error('[slingshot-notifications] Dispatcher stop(): inflight tick rejected', err);
+        console.error('[slingshot-notifications] Dispatcher stop(): inflight tick did not settle', err);
       }
     },
     async tick() {

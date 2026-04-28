@@ -19,6 +19,28 @@ export interface ImageTransformOptions {
   readonly maxWidth: number;
   /** Maximum allowed height from plugin config. */
   readonly maxHeight: number;
+  /** Hard ceiling for transform wall-clock time. */
+  readonly timeoutMs: number;
+}
+
+/**
+ * Error thrown when transformation exceeds the configured wall-clock budget.
+ */
+export class ImageTransformTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Image transform exceeded ${timeoutMs}ms`);
+    this.name = 'ImageTransformTimeoutError';
+  }
+}
+
+/**
+ * Error thrown when source bytes exceed the configured input size limit.
+ */
+export class ImageInputTooLargeError extends Error {
+  constructor(maxBytes: number) {
+    super(`Image source bytes exceed maxInputBytes=${maxBytes}`);
+    this.name = 'ImageInputTooLargeError';
+  }
 }
 
 /**

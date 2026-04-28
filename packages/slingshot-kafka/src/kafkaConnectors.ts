@@ -734,6 +734,28 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
     }
   }
 
+  /**
+   * Commit the next offset for a processed message, logging on failure.
+   *
+   * Commit failure means at-least-once redelivery on restart — never crash the consumer.
+   */
+  async function safeCommitInboundOffset(
+    consumer: Consumer,
+    topic: string,
+    partition: number,
+    message: KafkaMessage,
+  ): Promise<void> {
+    const offset = (BigInt(message.offset) + 1n).toString();
+    try {
+      await consumer.commitOffsets([{ topic, partition, offset }]);
+    } catch (err) {
+      console.error(
+        `[KafkaConnectors] failed to commit offset for topic "${topic}" partition ${partition} offset ${offset}:`,
+        err,
+      );
+    }
+  }
+
   async function stopConnector(): Promise<void> {
     if (stopped) return;
     stopped = true;
@@ -879,9 +901,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
               };
 
               if (!message.value) {
-                await consumer.commitOffsets([
-                  { topic, partition, offset: (BigInt(message.offset) + 1n).toString() },
-                ]);
+                await safeCommitInboundOffset(consumer, topic, partition, message);
                 return;
               }
 
@@ -891,9 +911,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
                 if (config.transform) {
                   payload = await Promise.resolve(config.transform(payload, metadata));
                   if (payload == null) {
-                    await consumer.commitOffsets([
-                      { topic, partition, offset: (BigInt(message.offset) + 1n).toString() },
-                    ]);
+                    await safeCommitInboundOffset(consumer, topic, partition, message);
                     return;
                   }
                 }
@@ -918,9 +936,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
                       Date.now() - startedAt,
                       metadata,
                     );
-                    await consumer.commitOffsets([
-                      { topic, partition, offset: (BigInt(message.offset) + 1n).toString() },
-                    ]);
+                    await safeCommitInboundOffset(consumer, topic, partition, message);
                     return;
                   } catch (err) {
                     if (attempt >= maxAttempts) {
@@ -943,9 +959,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
                           );
                         }
                       }
-                      await consumer.commitOffsets([
-                        { topic, partition, offset: (BigInt(message.offset) + 1n).toString() },
-                      ]);
+                      await safeCommitInboundOffset(consumer, topic, partition, message);
                       return;
                     }
                     await waitWithHeartbeat(heartbeat, backoffMs(attempt));
@@ -953,9 +967,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
                 }
               } catch (err) {
                 hooks?.onInboundError?.(topic, config.groupId, err);
-                await consumer.commitOffsets([
-                  { topic, partition, offset: (BigInt(message.offset) + 1n).toString() },
-                ]);
+                await safeCommitInboundOffset(consumer, topic, partition, message);
               }
             },
           });

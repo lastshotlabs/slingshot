@@ -98,6 +98,49 @@ function createHandler(impl: (input: unknown) => Promise<unknown>): SlingshotHan
 }
 
 describe('invokeWithAdapter', () => {
+  test('idempotency key conflict is classified as idempotency error kind', async () => {
+    let errorKind: string | undefined;
+    const handler = createHandler(async () => 'ok');
+    const ctx = createContextFixture({
+      persistence: {
+        idempotency: {
+          async get() {
+            return {
+              response: JSON.stringify({ value: 'cached' }),
+              requestFingerprint: 'different-fingerprint',
+            };
+          },
+          async set() {},
+        },
+        auditLog: {
+          async logEntry() {},
+          async getLogs() {
+            return { items: [] };
+          },
+        },
+      } as unknown as SlingshotContext['persistence'],
+    });
+
+    await invokeWithAdapter(
+      handler,
+      sqsTrigger as TriggerAdapter,
+      {
+        Records: [{ messageId: 'msg-1', body: JSON.stringify({ x: 1 }) }],
+      },
+      ctx,
+      {
+        async onError({ kind }) {
+          errorKind = kind;
+          return undefined;
+        },
+      },
+      { idempotency: { fingerprint: true } },
+      false,
+    );
+
+    expect(errorKind).toBe('idempotency');
+  });
+
   test('returns SQS partial batch failures for record-level errors', async () => {
     const ctx = createContextFixture();
     const handler = createHandler(async input => {
@@ -389,6 +432,47 @@ describe('invokeWithAdapter', () => {
     expect(batchResult.batchItemFailures).toHaveLength(0);
     expect(errorSpy).toHaveBeenCalled();
     expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('beforeInvoke hook threw');
+  });
+
+  test('onRecordError hook throw defaults to retry and does not crash batch', async () => {
+    const errorSpy = mock(() => {});
+    const originalConsoleError = console.error;
+    console.error = errorSpy;
+
+    const handler = createHandler(async () => {
+      throw new Error('record-failed');
+    });
+    const ctx = createContextFixture();
+
+    let result: unknown;
+    try {
+      result = await invokeWithAdapter(
+        handler,
+        sqsTrigger as TriggerAdapter,
+        {
+          Records: [
+            { messageId: 'msg-1', body: '{}' },
+            { messageId: 'msg-2', body: '{}' },
+          ],
+        },
+        ctx,
+        {
+          async onRecordError() {
+            throw new Error('hook-boom');
+          },
+        },
+        undefined,
+        false,
+      );
+    } finally {
+      console.error = originalConsoleError;
+    }
+
+    // Should not throw — the batch result is returned
+    // Both records should be marked for retry (the hook defaulted to 'retry')
+    const batchResult = result as { batchItemFailures: unknown[] };
+    expect(batchResult.batchItemFailures).toHaveLength(2);
+    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('onRecordError hook threw');
   });
 
   test('onError hook throwing does not prevent error handling — invocation returns failure', async () => {

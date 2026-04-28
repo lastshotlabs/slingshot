@@ -1,5 +1,32 @@
 // packages/runtime-edge/src/index.ts
+import {
+  type Logger,
+  TimeoutError,
+  createConsoleLogger,
+  withTimeout,
+} from '@lastshotlabs/slingshot-core';
 import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
+
+/** Default upper-bound on a single `fileStore` call (5 s). */
+const DEFAULT_FILE_STORE_TIMEOUT_MS = 5_000;
+
+/**
+ * Structured `Logger` (slingshot-core). Used for the fileStore-timeout warn
+ * event. Defaults to a JSON console logger; consumers swap it via
+ * {@link configureRuntimeEdgeLogger}.
+ */
+let edgeLogger: Logger = createConsoleLogger({ base: { runtime: 'edge' } });
+
+/**
+ * Replace the runtime's structured logger. Pass `null` to reset to the
+ * default JSON console logger. Returns the previous logger so tests can
+ * save and restore state.
+ */
+export function configureRuntimeEdgeLogger(logger: Logger | null): Logger {
+  const previous = edgeLogger;
+  edgeLogger = logger ?? createConsoleLogger({ base: { runtime: 'edge' } });
+  return previous;
+}
 
 /**
  * Streaming descriptor returned by `fileStore`.
@@ -86,6 +113,22 @@ export interface EdgeRuntimeOptions {
    * 4 * 1024 * 1024 (4 MiB). Set to 0 to disable the check.
    */
   maxFileBytes?: number;
+
+  /**
+   * Maximum time in milliseconds to wait for a single `fileStore(path)` call
+   * before treating the lookup as a miss.
+   *
+   * When the cap is reached, the in-flight promise is abandoned (the runtime
+   * cannot reliably cancel a user-supplied promise), a structured warn is
+   * emitted via the configured {@link Logger}, and `readFile()` returns `null`.
+   * Returning `null` rather than throwing keeps the caller's manifest-resolution
+   * path on its happy path: a hung KV/R2 binding manifests as a missing file
+   * rather than a stalled isolate.
+   *
+   * Defaults to {@link DEFAULT_FILE_STORE_TIMEOUT_MS} (5 s). Set to 0 to
+   * disable the timeout entirely (not recommended for production).
+   */
+  fileStoreTimeoutMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -379,6 +422,10 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
   const hashFn = options.hashPassword ?? hashWithWebCrypto;
   const verifyFn = options.verifyPassword ?? verifyWithWebCrypto;
   const maxFileBytes = options.maxFileBytes ?? 4 * 1024 * 1024;
+  const fileStoreTimeoutMs =
+    typeof options.fileStoreTimeoutMs === 'number' && options.fileStoreTimeoutMs >= 0
+      ? options.fileStoreTimeoutMs
+      : DEFAULT_FILE_STORE_TIMEOUT_MS;
 
   return Object.freeze({
     password: Object.freeze({
@@ -421,7 +468,34 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
      *    source that may produce large files).
      */
     async readFile(path: string): Promise<string | null> {
-      const result = await fileStore(path);
+      // P-EDGE-3: bound fileStore latency. A user-supplied store backed by
+      // KV/R2 over the network can stall on bad bindings or transient
+      // service errors; without a timeout the request handler stays open
+      // until the platform forcibly recycles the isolate, dropping every
+      // queued caller in the meantime. Treat a timeout as a miss (return
+      // null) rather than throwing — the calling manifest-resolution path
+      // already handles missing files gracefully.
+      let result: FileStoreResult;
+      try {
+        if (fileStoreTimeoutMs > 0) {
+          result = await withTimeout(
+            Promise.resolve().then(() => fileStore(path)),
+            fileStoreTimeoutMs,
+            `fileStore('${path}')`,
+          );
+        } else {
+          result = await fileStore(path);
+        }
+      } catch (err) {
+        if (err instanceof TimeoutError) {
+          edgeLogger.warn('file-store-timeout', {
+            path,
+            timeoutMs: fileStoreTimeoutMs,
+          });
+          return null;
+        }
+        throw err;
+      }
       if (result === null) return null;
 
       const tooLarge = (bytes: number): Error =>

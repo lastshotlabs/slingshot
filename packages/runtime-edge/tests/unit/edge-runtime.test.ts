@@ -1,6 +1,6 @@
 // packages/runtime-edge/tests/unit/edge-runtime.test.ts
 import { describe, expect, it } from 'bun:test';
-import { edgeRuntime } from '../../src/index';
+import { configureRuntimeEdgeLogger, edgeRuntime } from '../../src/index';
 
 describe('edgeRuntime()', () => {
   describe('factory', () => {
@@ -314,6 +314,67 @@ describe('edgeRuntime()', () => {
     it('glob.scan() rejects with a clear message', async () => {
       const runtime = edgeRuntime();
       await expect(runtime.glob.scan('**/*.ts')).rejects.toThrow('[runtime-edge]');
+    });
+  });
+
+  // P-EDGE-3: fileStore timeout
+  describe('fileStore timeout', () => {
+    it('returns null and logs a warning when fileStore exceeds the timeout', async () => {
+      const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+      const previous = configureRuntimeEdgeLogger({
+        debug() {},
+        info() {},
+        warn(event, fields) {
+          events.push({ event, fields });
+        },
+        error() {},
+        child(): typeof previous {
+          return previous;
+        },
+      });
+      try {
+        // fileStore returns a promise that never resolves.
+        const runtime = edgeRuntime({
+          fileStoreTimeoutMs: 60,
+          fileStore: () => new Promise(() => {}),
+        });
+        const start = Date.now();
+        const result = await runtime.readFile('/never');
+        const elapsed = Date.now() - start;
+        expect(result).toBeNull();
+        // Should resolve close to the timeout (60ms), well below 2s.
+        expect(elapsed).toBeGreaterThanOrEqual(40);
+        expect(elapsed).toBeLessThan(2_000);
+        const ev = events.find(e => e.event === 'file-store-timeout');
+        expect(ev).toBeDefined();
+        expect(ev?.fields?.path).toBe('/never');
+        expect(ev?.fields?.timeoutMs).toBe(60);
+      } finally {
+        configureRuntimeEdgeLogger(previous);
+      }
+    });
+
+    it('honours fileStoreTimeoutMs=0 to disable the timeout', async () => {
+      // fileStore that resolves quickly — disabled timeout should not affect.
+      const runtime = edgeRuntime({
+        fileStoreTimeoutMs: 0,
+        fileStore: async path => `content of ${path}`,
+      });
+      const result = await runtime.readFile('/quick');
+      expect(result).toBe('content of /quick');
+    });
+
+    it('default timeout is 5 seconds and applies when not configured', async () => {
+      // We use a slow promise (resolves after 80ms) — well below the
+      // default 5s — so it must succeed (not time out).
+      const runtime = edgeRuntime({
+        fileStore: () =>
+          new Promise<string>(resolve => {
+            setTimeout(() => resolve('ok'), 80);
+          }),
+      });
+      const result = await runtime.readFile('/slow');
+      expect(result).toBe('ok');
     });
   });
 });

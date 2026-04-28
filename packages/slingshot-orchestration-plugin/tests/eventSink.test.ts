@@ -117,4 +117,57 @@ describe('createSlingshotEventSink', () => {
     expect(startedEvents).toHaveLength(2);
     expect(completedEvents).toHaveLength(1);
   });
+
+  test('subscribe() returns an unsubscribe handle and dispose() drops all subscriptions (P-OPLUGIN-3)', async () => {
+    const bus = createInProcessAdapter();
+    const sink = createSlingshotEventSink(bus);
+
+    const captured: unknown[] = [];
+    const handler = (payload: unknown) => {
+      captured.push(payload);
+    };
+
+    sink.subscribe('orchestration.task.started', handler);
+    sink.subscribe('orchestration.task.completed', handler);
+
+    bus.emit('orchestration.task.started', {
+      runId: 'r1',
+      task: 't1',
+      input: {},
+    });
+    await (bus as ReturnType<typeof createInProcessAdapter> & { drain(): Promise<void> }).drain();
+    expect(captured).toHaveLength(1);
+
+    sink.dispose();
+
+    bus.emit('orchestration.task.started', {
+      runId: 'r2',
+      task: 't1',
+      input: {},
+    });
+    bus.emit('orchestration.task.completed', {
+      runId: 'r1',
+      task: 't1',
+      output: {},
+      durationMs: 10,
+    });
+    await (bus as ReturnType<typeof createInProcessAdapter> & { drain(): Promise<void> }).drain();
+
+    // Listeners removed after dispose — the captured list should be unchanged.
+    expect(captured).toHaveLength(1);
+
+    // dispose() is idempotent.
+    expect(() => sink.dispose()).not.toThrow();
+
+    // subscribe() after dispose is a no-op returning a no-op handle.
+    const unsub = sink.subscribe('orchestration.task.started', handler);
+    expect(typeof unsub).toBe('function');
+    bus.emit('orchestration.task.started', {
+      runId: 'r3',
+      task: 't1',
+      input: {},
+    });
+    await (bus as ReturnType<typeof createInProcessAdapter> & { drain(): Promise<void> }).drain();
+    expect(captured).toHaveLength(1);
+  });
 });

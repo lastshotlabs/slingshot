@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getActorTenantId } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, HealthCheck, HealthReport } from '@lastshotlabs/slingshot-core';
+import { TimeoutError, getActorTenantId, withTimeout } from '@lastshotlabs/slingshot-core';
 import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
@@ -14,6 +14,18 @@ import {
   type RunStatus,
   type WorkflowRun,
 } from '@lastshotlabs/slingshot-orchestration';
+
+const DEFAULT_ROUTE_TIMEOUT_MS = 30_000;
+
+function timeoutErrorBody(
+  err: TimeoutError,
+): { error: string; code: 'ROUTE_TIMEOUT'; timeoutMs: number } {
+  return {
+    error: `Adapter call exceeded route timeout (${err.timeoutMs}ms)`,
+    code: 'ROUTE_TIMEOUT',
+    timeoutMs: err.timeoutMs,
+  };
+}
 import type {
   OrchestrationRequestContext,
   OrchestrationRequestContextResolver,
@@ -258,9 +270,10 @@ async function listAuthorizedRuns(
   filter: RunFilter,
   requestContext: OrchestrationRequestContext,
   authorizeRun: OrchestrationRunAuthorizer | undefined,
+  wrap: <T>(p: Promise<T>, label: string) => Promise<T>,
 ): Promise<{ runs: Array<Run | WorkflowRun>; total: number }> {
   if (!authorizeRun && !requestContext.tenantId) {
-    return runtime.listRuns(filter);
+    return wrap(runtime.listRuns(filter), 'runtime.listRuns');
   }
 
   const requestedOffset = filter.offset ?? 0;
@@ -287,10 +300,13 @@ async function listAuthorizedRuns(
       break;
     }
 
-    const page = await runtime.listRuns({
-      ...baseFilter,
-      offset: scanOffset,
-    });
+    const page = await wrap(
+      runtime.listRuns({
+        ...baseFilter,
+        offset: scanOffset,
+      }),
+      'runtime.listRuns',
+    );
     if (page.runs.length === 0) {
       break;
     }
@@ -359,13 +375,47 @@ function registerAdminRoutes(
   admin.get('/health', async c => {
     const adapter = options.adapter as AdapterWithOps | undefined;
     const adapterName = adapter?.name ?? null;
-    if (!adapter || typeof adapter.getHealth !== 'function') {
+    const hasCheckHealth = typeof adapter?.checkHealth === 'function';
+    const hasGetHealth = typeof adapter?.getHealth === 'function';
+    if (!adapter || (!hasCheckHealth && !hasGetHealth)) {
       // Adapter has not opted into health introspection. Still return 200
       // with adapter identity so the route is usable as a basic liveness probe.
       return c.json({ status: 'ok', adapter: adapterName }, 200);
     }
+
+    if (hasCheckHealth) {
+      let report: HealthReport;
+      try {
+        report = await adapter.checkHealth!();
+      } catch (error) {
+        // The probe itself failed — treat as a permanent (non-retryable)
+        // adapter contract bug.
+        return c.json(
+          {
+            status: 'error',
+            adapter: adapterName,
+            error: error instanceof Error ? error.message : 'unknown adapter health error',
+          },
+          500,
+        );
+      }
+      const payload: Record<string, unknown> = {
+        adapter: adapterName,
+        state: report.state,
+        message: report.message,
+        details: report.details,
+        component: report.component,
+      };
+      if (report.state === 'healthy') {
+        return c.json(payload, 200);
+      }
+      // degraded and unhealthy are transient by the HealthCheck contract.
+      c.header('Retry-After', String(HEALTH_RETRY_AFTER_SECONDS));
+      return c.json(payload, 503);
+    }
+
     try {
-      const health = await adapter.getHealth();
+      const health = await adapter.getHealth!();
       const payload: Record<string, unknown> = {
         status: typeof health?.status === 'string' ? health.status : 'ok',
         adapter: adapterName,
@@ -373,13 +423,15 @@ function registerAdminRoutes(
       };
       return c.json(payload, 200);
     } catch (error) {
+      // Legacy getHealth() path: a throw is treated as permanent — adapters that
+      // need transient semantics should migrate to checkHealth().
       return c.json(
         {
           status: 'error',
           adapter: adapterName,
           error: error instanceof Error ? error.message : 'unknown adapter health error',
         },
-        503,
+        500,
       );
     }
   });
@@ -442,8 +494,22 @@ export type OrchestrationAdapterMetrics = Record<string, unknown>;
 type AdapterWithOps = OrchestrationAdapter & {
   getHealth?: () => Promise<OrchestrationAdapterHealth> | OrchestrationAdapterHealth;
   getMetrics?: () => Promise<OrchestrationAdapterMetrics> | OrchestrationAdapterMetrics;
+  /**
+   * Optional structured probe matching the framework `HealthCheck` contract. When
+   * present the `/health` route uses it to distinguish transient
+   * (`degraded`/`unhealthy` -> 503 with `Retry-After`) from permanent
+   * (probe throw -> 500) failures.
+   */
+  checkHealth?: HealthCheck['checkHealth'];
   name?: string;
 };
+
+/**
+ * Default `Retry-After` header (seconds) returned with 503 responses.
+ * Five seconds gives transient adapter blips room to recover without burning a
+ * client tight loop.
+ */
+const HEALTH_RETRY_AFTER_SECONDS = 5;
 
 /**
  * Build the Hono router that exposes orchestration runs over HTTP.
@@ -457,8 +523,12 @@ export function createOrchestrationRouter(options: {
   resolveRequestContext?: OrchestrationRequestContextResolver;
   authorizeRun?: OrchestrationRunAuthorizer;
   adapter?: OrchestrationAdapter;
+  routeTimeoutMs?: number;
 }) {
   const router = new Hono<AppEnv>();
+  const routeTimeoutMs = options.routeTimeoutMs ?? DEFAULT_ROUTE_TIMEOUT_MS;
+  const wrap = <T>(promise: Promise<T>, label: string): Promise<T> =>
+    withTimeout(promise, routeTimeoutMs, label);
   // Mount admin routes first with their own (optional) auth chain so the
   // wildcard `routeMiddleware` registered below does not also gate /health
   // and /metrics. This lets ops use a different identity (basic auth, IP
@@ -517,12 +587,11 @@ export function createOrchestrationRouter(options: {
     const input = body['input'];
     try {
       const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
-      const handle = await options.runtime.runTask(
-        c.req.param('name'),
-        input,
-        parseRunOptions(body, requestContext, c),
+      const handle = await wrap(
+        options.runtime.runTask(c.req.param('name'), input, parseRunOptions(body, requestContext, c)),
+        'runtime.runTask',
       );
-      const run = await options.runtime.getRun(handle.id);
+      const run = await wrap(options.runtime.getRun(handle.id), 'runtime.getRun');
       return c.json(
         {
           id: handle.id,
@@ -536,6 +605,9 @@ export function createOrchestrationRouter(options: {
         202,
       );
     } catch (error) {
+      if (error instanceof TimeoutError) {
+        return c.json(timeoutErrorBody(error), 504);
+      }
       const status = mapErrorToStatus(error);
       return c.json(buildErrorPayload(error), status);
     }
@@ -566,12 +638,15 @@ export function createOrchestrationRouter(options: {
     const input = body['input'];
     try {
       const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
-      const handle = await options.runtime.runWorkflow(
-        c.req.param('name'),
-        input,
-        parseRunOptions(body, requestContext, c),
+      const handle = await wrap(
+        options.runtime.runWorkflow(
+          c.req.param('name'),
+          input,
+          parseRunOptions(body, requestContext, c),
+        ),
+        'runtime.runWorkflow',
       );
-      const run = await options.runtime.getRun(handle.id);
+      const run = await wrap(options.runtime.getRun(handle.id), 'runtime.getRun');
       return c.json(
         {
           id: handle.id,
@@ -585,6 +660,9 @@ export function createOrchestrationRouter(options: {
         202,
       );
     } catch (error) {
+      if (error instanceof TimeoutError) {
+        return c.json(timeoutErrorBody(error), 504);
+      }
       const status = mapErrorToStatus(error);
       return c.json(buildErrorPayload(error), status);
     }
@@ -745,9 +823,13 @@ export function createOrchestrationRouter(options: {
         parseListRunsQuery(new URL(c.req.url), requestContext.tenantId),
         requestContext,
         options.authorizeRun,
+        wrap,
       );
       return c.json(listed);
     } catch (error) {
+      if (error instanceof TimeoutError) {
+        return c.json(timeoutErrorBody(error), 504);
+      }
       const status = mapErrorToStatus(error);
       return c.json(buildErrorPayload(error), status);
     }

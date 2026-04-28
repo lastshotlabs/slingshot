@@ -366,7 +366,13 @@ export type PageData =
   | { readonly type: 'form-edit'; readonly item: Readonly<Record<string, unknown>> }
   | {
       readonly type: 'dashboard';
-      readonly stats: readonly { readonly label: string; readonly value: number }[];
+      readonly stats: readonly {
+        readonly label: string;
+        /** Aggregate value when the stat resolved successfully; `null` when it failed. */
+        readonly value: number | null;
+        /** Error placeholder when the stat adapter rejected or aggregation threw. */
+        readonly error?: { readonly message: string; readonly name: string };
+      }[];
       readonly activity?: readonly Record<string, unknown>[];
       readonly chart?: readonly Record<string, unknown>[];
     }

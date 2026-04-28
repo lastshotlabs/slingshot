@@ -16,7 +16,7 @@ import {
   createIsrInvalidators,
 } from './isr/revalidate';
 import { registerMetadataRoutes } from './metadata/index';
-import { buildSsrMiddleware } from './middleware';
+import { buildSsrMiddleware, createIsrTracker } from './middleware';
 import { buildPageRouteTable } from './pageResolver';
 import { initRouteTree, invalidateRouteTree } from './resolver';
 import type { SsrPluginConfig } from './types';
@@ -64,6 +64,14 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
   const isDevMode = config.devMode ?? process.env.NODE_ENV === 'development';
   const isrAdapter =
     config.isr !== undefined ? (config.isr.adapter ?? createMemoryIsrCache()) : null;
+  // P-SSR-1 / P-SSR-7: shared per-instance tracker for in-flight ISR regen
+  // tasks (cap concurrency) and pending fire-and-forget cache writes (drained
+  // on teardown). null when ISR is disabled.
+  const isrTracker =
+    isrAdapter !== null
+      ? createIsrTracker(config.isr?.maxConcurrentRegenerations ?? 32)
+      : null;
+  const cacheFlushTimeoutMs = config.isr?.cacheFlushTimeoutMs ?? 5_000;
   let isrInvalidators: IsrInvalidators | undefined;
   let entityConfigMap = new Map<string, ResolvedEntityConfig>();
   const unsubscribers: Array<() => void> = [];
@@ -128,7 +136,7 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
 
       registerMetadataRoutes(app, config.serverRoutesDir);
 
-      app.use('*', buildSsrMiddleware(config, manifest, app, isrAdapter));
+      app.use('*', buildSsrMiddleware(config, manifest, app, isrAdapter, isrTracker));
 
       if (isDevMode) {
         setupDevWatcher(config.serverRoutesDir);
@@ -143,6 +151,12 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
       );
 
       if (config.pages) {
+        // P-SSR-3: fail plugin init when a page references an entity that has
+        // no registered config (i.e. no adapter will resolve at request time).
+        // Without this, the misconfiguration surfaces as a 500 on the first
+        // request to the page; with this, the plugin refuses to start with a
+        // descriptive message naming the offending page route.
+        validateEntityReferences(config.pages, entityConfigMap);
         buildPageRouteTable(config.pages, entityConfigMap);
       }
 
@@ -186,14 +200,57 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
       }
     },
 
-    teardown() {
+    async teardown() {
       for (const unsubscribe of unsubscribers) {
         unsubscribe();
       }
       unsubscribers.length = 0;
-      return Promise.resolve();
+      // P-SSR-7: drain pending fire-and-forget ISR cache writes with a bounded
+      // timeout (default 5s) so graceful shutdown does not silently drop
+      // in-flight writes that were issued on the hot path.
+      if (isrTracker) {
+        await isrTracker.drainPendingWrites(cacheFlushTimeoutMs);
+      }
     },
   };
+}
+
+/**
+ * P-SSR-3: validate every entity referenced by a page declaration is present
+ * in the entity registry. Called at plugin setup so misconfiguration fails
+ * boot rather than the first request.
+ */
+function validateEntityReferences(
+  pages: Readonly<Record<string, NonNullable<SsrPluginConfig['pages']>[string]>>,
+  entityConfigs: ReadonlyMap<string, ResolvedEntityConfig>,
+): void {
+  const missing: Array<{ pageKey: string; route: string; entity: string }> = [];
+  for (const [pageKey, page] of Object.entries(pages)) {
+    const refs = new Set<string>();
+    if ('entity' in page && typeof page.entity === 'string') {
+      refs.add(page.entity);
+    }
+    if (page.type === 'entity-dashboard') {
+      for (const stat of page.stats) refs.add(stat.entity);
+      if (page.activity) refs.add(page.activity.entity);
+      if (page.chart) refs.add(page.chart.entity);
+    }
+    for (const entity of refs) {
+      if (!entityConfigs.has(entity)) {
+        missing.push({ pageKey, route: page.path, entity });
+      }
+    }
+  }
+  if (missing.length === 0) return;
+  const lines = missing.map(
+    ({ pageKey, route, entity }) =>
+      `  - page "${pageKey}" (route ${route}): no entity adapter registered for "${entity}"`,
+  );
+  throw new Error(
+    `[slingshot-ssr] Missing entity adapters for ${missing.length} page reference${
+      missing.length > 1 ? 's' : ''
+    }:\n${lines.join('\n')}\nRegister these entities before plugin setup completes.`,
+  );
 }
 
 function collectReferencedEntities(

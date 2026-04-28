@@ -1219,6 +1219,30 @@ export interface SsrPluginConfig {
    */
   readonly maxRouteParamBytes?: number;
   /**
+   * Optional structured logger used for ISR background regen, response stream
+   * errors, and other internal diagnostics. When omitted, an internal noop
+   * logger is used and prior `console.error` callsites are preserved as a
+   * fallback for back-compat with environments that scrape stderr.
+   *
+   * Provide an instance from `createConsoleLogger()` (or your platform's
+   * logger of choice) to capture structured records. Each record includes
+   * stable fields like `requestId`, `route`, and the underlying error.
+   */
+  readonly logger?: import('@lastshotlabs/slingshot-core').Logger;
+  /**
+   * Optional callback invoked when the response body stream errors during
+   * pipeTo (P-SSR-2). Receives the error and request metadata so apps can
+   * wire metrics/circuit breakers without subscribing to a logger sink.
+   *
+   * The callback runs synchronously inside the catch handler; throwing from
+   * it is logged but not propagated.
+   */
+  readonly onStreamError?: (info: {
+    readonly error: Error;
+    readonly route: string;
+    readonly requestId: string | undefined;
+  }) => void;
+  /**
    * Strategy for client-side hydration mismatch reporting.
    *
    * Hydration mismatches occur when the SSR-produced HTML differs from the

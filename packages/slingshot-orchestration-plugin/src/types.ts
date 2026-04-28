@@ -58,6 +58,12 @@ type OrchestrationPluginRouteOptions = {
   adminAuth?: MiddlewareHandler[];
   resolveRequestContext?: OrchestrationRequestContextResolver;
   authorizeRun?: OrchestrationRunAuthorizer;
+  /**
+   * Per-request timeout (ms) applied to adapter awaits inside HTTP routes.
+   * Adapter calls that exceed the timeout return HTTP 504 with a structured body.
+   * Default: 30_000.
+   */
+  routeTimeoutMs?: number;
 };
 
 /**

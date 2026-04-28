@@ -2,7 +2,13 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { MiddlewareHandler } from 'hono';
-import { PathTraversalError, getContext, safeJoin } from '@lastshotlabs/slingshot-core';
+import {
+  type Logger,
+  PathTraversalError,
+  getContext,
+  noopLogger,
+  safeJoin,
+} from '@lastshotlabs/slingshot-core';
 import { buildAfterFn, drainAfterCallbacks, withAfterContext } from './after/index';
 import type { ViteManifest } from './assets';
 import { buildDevAssetTags, resolveAssetTags } from './assets';
@@ -26,6 +32,89 @@ import type {
 
 /** URL prefixes always excluded from SSR — cannot be overridden by config. */
 const ALWAYS_EXCLUDE = ['/api/', '/_slingshot/'];
+
+/**
+ * Tracks in-flight ISR background regenerations and pending cache writes for a
+ * single SSR plugin instance.
+ *
+ * - **In-flight regens (P-SSR-1):** caps concurrent regen tasks per route key
+ *   so flaky stale traffic cannot accumulate unbounded work. When the cap is
+ *   reached the new regen request is dropped and the dropped counter is
+ *   incremented; subsequent requests still see the cached entry.
+ * - **Pending cache writes (P-SSR-7):** the hot path issues `cache.set()`
+ *   fire-and-forget. The tracker holds the write promises so `dispose()` can
+ *   await them with a bounded timeout, surfacing draining behavior on
+ *   graceful shutdown.
+ */
+export interface IsrTracker {
+  /** Try to claim a regen slot for `key`. Returns false when at the cap or already in-flight. */
+  tryClaimRegen(key: string): boolean;
+  releaseRegen(key: string): void;
+  /** Number of regen requests dropped because the cap was reached. */
+  getDroppedCount(): number;
+  /** Track a pending fire-and-forget cache write so dispose() can drain it. */
+  trackWrite(promise: Promise<unknown>): void;
+  /** Wait for all currently pending cache writes to settle, with a timeout. */
+  drainPendingWrites(timeoutMs: number): Promise<void>;
+}
+
+/**
+ * Build an {@link IsrTracker} with a cap of {@link maxConcurrent} concurrent
+ * in-flight regen tasks. Exported for the SSR plugin so it can share a single
+ * tracker between the middleware (read/write) and dispose() drain.
+ *
+ * @param maxConcurrent - Maximum concurrent in-flight regens per cache instance.
+ * @internal
+ */
+export function createIsrTracker(maxConcurrent: number): IsrTracker {
+  const inFlight = new Set<string>();
+  const pendingWrites = new Set<Promise<unknown>>();
+  let droppedCount = 0;
+  return {
+    tryClaimRegen(key) {
+      if (inFlight.has(key)) {
+        droppedCount += 1;
+        return false;
+      }
+      if (inFlight.size >= maxConcurrent) {
+        droppedCount += 1;
+        return false;
+      }
+      inFlight.add(key);
+      return true;
+    },
+    releaseRegen(key) {
+      inFlight.delete(key);
+    },
+    getDroppedCount() {
+      return droppedCount;
+    },
+    trackWrite(promise) {
+      pendingWrites.add(promise);
+      // Use .then(..., ..) (with both arms a no-op) to install handlers
+      // synchronously without leaving a rejection unhandled. .finally() fires
+      // after error propagation begins, so a synchronously-rejected promise
+      // could surface as an "unhandled rejection" before the cleanup runs.
+      promise.then(
+        () => pendingWrites.delete(promise),
+        () => pendingWrites.delete(promise),
+      );
+    },
+    async drainPendingWrites(timeoutMs) {
+      if (pendingWrites.size === 0) return;
+      const snapshot = Array.from(pendingWrites);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<void>(resolve => {
+        timer = setTimeout(resolve, timeoutMs);
+      });
+      try {
+        await Promise.race([Promise.allSettled(snapshot).then(() => undefined), timeout]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    },
+  };
+}
 
 /**
  * Module-scope flag so the dev-mode hydration mismatch nudge is emitted at
@@ -128,9 +217,12 @@ export function buildSsrMiddleware(
   manifest: ViteManifest | null,
   app: object,
   isrAdapter: IsrCacheAdapter | null = null,
+  isrTracker: IsrTracker | null = null,
 ): MiddlewareHandler {
   const entryPoint = config.entryPoint ?? 'index.html';
   const isDevMode = config.devMode ?? process.env.NODE_ENV === 'development';
+  const logger: Logger = config.logger ?? noopLogger;
+  const onStreamError = config.onStreamError;
 
   const assetTags = isDevMode
     ? buildDevAssetTags()
@@ -239,34 +331,55 @@ export function buildSsrMiddleware(
           // The background regeneration is a fire-and-forget microtask — it never
           // blocks or delays the current response (spec: SWR behavior).
           // A 30-second timeout guards against hung renderers blocking worker resources.
-          try {
-            const staleBsCtx = getContext(app);
-            const timeoutMs = config.isr?.backgroundRegenTimeoutMs ?? 30_000;
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), timeoutMs);
-            regeneratePage(
-              cacheKey,
-              url,
-              query,
-              config,
-              assetTags,
-              staleBsCtx,
-              isrAdapter,
-              controller.signal,
-            )
-              .catch((err: unknown) => {
-                console.error('[slingshot-ssr] ISR background regen failed for', cacheKey, err);
-              })
-              .finally(() => clearTimeout(timeout));
-            controller.signal.addEventListener('abort', () => {
-              console.error(
-                '[slingshot-ssr] ISR background regen timed out for',
-                cacheKey,
-                `after ${timeoutMs}ms`,
-              );
+          //
+          // P-SSR-1: cap concurrent in-flight regens per cache instance via the
+          // shared IsrTracker. When the cap is hit (or this key already has a
+          // regen in flight), drop the new request and emit a structured warn
+          // so operators can see the cap engaging under sustained stale load.
+          const claimed = isrTracker?.tryClaimRegen(cacheKey) ?? true;
+          if (!claimed) {
+            logger.warn('isr.regen.dropped', {
+              route: cacheKey,
+              droppedCount: isrTracker?.getDroppedCount(),
+              reason: 'maxConcurrentRegenerations',
             });
-          } catch {
-            // No Slingshot context attached — serve stale content but skip background regeneration.
+          } else {
+            try {
+              const staleBsCtx = getContext(app);
+              const timeoutMs = config.isr?.backgroundRegenTimeoutMs ?? 30_000;
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), timeoutMs);
+              regeneratePage(
+                cacheKey,
+                url,
+                query,
+                config,
+                assetTags,
+                staleBsCtx,
+                isrAdapter,
+                controller.signal,
+                logger,
+              )
+                .catch((err: unknown) => {
+                  logger.error('isr.regen.failed', {
+                    route: cacheKey,
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                })
+                .finally(() => {
+                  clearTimeout(timeout);
+                  isrTracker?.releaseRegen(cacheKey);
+                });
+              controller.signal.addEventListener('abort', () => {
+                logger.error('isr.regen.timeout', {
+                  route: cacheKey,
+                  timeoutMs,
+                });
+              });
+            } catch {
+              // No Slingshot context attached — release claim and serve stale.
+              isrTracker?.releaseRegen(cacheKey);
+            }
           }
         }
 
@@ -627,9 +740,15 @@ export function buildSsrMiddleware(
 
       // Fire-and-forget — never await cache writes on the hot path.
       // Use the full URL key (pathname + search) to match the cache read above.
-      isrAdapter.set(cacheKey, entry).catch((err: unknown) => {
-        console.error('[slingshot-ssr] ISR cache.set() failed for', cacheKey, err);
+      // P-SSR-7: track the pending write on the IsrTracker so dispose() can
+      // drain in-flight writes with a bounded timeout instead of dropping them.
+      const writePromise = isrAdapter.set(cacheKey, entry).catch((err: unknown) => {
+        logger.error('isr.cache_write.failed', {
+          route: cacheKey,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
+      isrTracker?.trackWrite(writePromise);
     }
     // ── End ISR cache write ────────────────────────────────────────────────
 
@@ -715,8 +834,28 @@ export function buildSsrMiddleware(
           return drainAfterCallbacks();
         },
       });
+      // P-SSR-2: replace bare console.error with structured logger output and
+      // an optional onStreamError callback so apps can wire metrics/circuit
+      // breakers without subscribing to a logger sink.
+      const requestId =
+        c.req.header('x-request-id') ?? c.req.header('x-correlation-id') ?? undefined;
       response.body.pipeTo(writable).catch((err: unknown) => {
-        console.error('[slingshot-ssr] response stream error:', err);
+        const error = err instanceof Error ? err : new Error(String(err));
+        logger.error('response.stream.error', {
+          route: pathname,
+          requestId,
+          error: error.message,
+        });
+        if (onStreamError) {
+          try {
+            onStreamError({ error, route: pathname, requestId });
+          } catch (cbErr: unknown) {
+            logger.error('response.stream.onStreamError.threw', {
+              route: pathname,
+              error: cbErr instanceof Error ? cbErr.message : String(cbErr),
+            });
+          }
+        }
       });
       response = new Response(readable, {
         status: response.status,
@@ -750,6 +889,7 @@ async function regeneratePage(
   bsCtx: ReturnType<typeof getContext>,
   isrAdapter: IsrCacheAdapter,
   signal?: AbortSignal,
+  logger: Logger = noopLogger,
 ): Promise<void> {
   signal?.throwIfAborted();
   const pathname = url.pathname;
@@ -761,7 +901,7 @@ async function regeneratePage(
   } catch (err) {
     if (isRouteParamTooLargeError(err)) {
       // Background regen — log and bail. The original request returned 414.
-      console.error('[slingshot-ssr] ISR regen aborted: route param exceeded cap for', pathname);
+      logger.error('isr.regen.aborted.route_param_too_large', { route: pathname });
       return;
     }
     throw err;
@@ -792,7 +932,10 @@ async function regeneratePage(
         });
       }
     } catch (err) {
-      console.error('[slingshot-ssr] ISR regen renderer.resolve() error for', pathname, err);
+      logger.error('isr.regen.resolve.failed', {
+        route: pathname,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return;
     }
   }
@@ -817,7 +960,10 @@ async function regeneratePage(
     response = await withAfterContext(() => config.renderer.renderChain(chain, shell, bsCtx));
     signal?.throwIfAborted();
   } catch (err) {
-    console.error('[slingshot-ssr] ISR regen render error for', pathname, err);
+    logger.error('isr.regen.render.failed', {
+      route: pathname,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return;
   }
 

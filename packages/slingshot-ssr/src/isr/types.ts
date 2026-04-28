@@ -137,6 +137,28 @@ export interface IsrConfig {
    * @default 30000
    */
   readonly backgroundRegenTimeoutMs?: number;
+  /**
+   * Maximum number of concurrent in-flight background regenerations the SSR
+   * middleware will allow per cache instance. Excess regen requests are
+   * dropped with a structured warn log entry rather than spawning unbounded
+   * regen tasks under sustained stale traffic.
+   *
+   * P-SSR-1: prior versions had no cap; flaky upstreams or slow renderers
+   * could accumulate regen tasks indefinitely.
+   *
+   * @default 32
+   */
+  readonly maxConcurrentRegenerations?: number;
+  /**
+   * Maximum time to wait for in-flight ISR cache writes to settle when the
+   * SSR plugin is disposed. Cache writes are issued fire-and-forget on the
+   * hot path; this bounds the graceful shutdown drain.
+   *
+   * P-SSR-7: prior versions could drop pending writes on graceful shutdown.
+   *
+   * @default 5000
+   */
+  readonly cacheFlushTimeoutMs?: number;
 }
 
 /**

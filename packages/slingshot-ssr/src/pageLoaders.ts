@@ -24,6 +24,43 @@ interface PageEntityAdapter {
   [key: string]: unknown;
 }
 
+/**
+ * P-SSR-3: Validate at plugin setup time that every entity referenced by a
+ * page declaration has a registered adapter. Without this, missing adapters
+ * surface only when the page is requested, returning a 500. Catching at setup
+ * fails the plugin init with a descriptive message that includes the
+ * offending page route.
+ *
+ * @param pages - The page declarations from `SsrPluginConfig.pages`.
+ * @param adapters - The adapter map keyed by entity name.
+ * @throws When any referenced entity is missing from `adapters`.
+ */
+export function validatePageAdapters(
+  pages: Readonly<Record<string, PageDeclaration>>,
+  adapters: Readonly<Record<string, PageEntityAdapter | undefined>>,
+): void {
+  const missing: Array<{ pageKey: string; route: string; entity: string }> = [];
+  for (const [pageKey, page] of Object.entries(pages)) {
+    const referenced = collectReferencedEntities(page);
+    for (const entity of referenced) {
+      if (!adapters[entity]) {
+        missing.push({ pageKey, route: page.path, entity });
+      }
+    }
+  }
+  if (missing.length > 0) {
+    const lines = missing.map(
+      ({ pageKey, route, entity }) =>
+        `  - page "${pageKey}" (route ${route}): no adapter registered for entity "${entity}"`,
+    );
+    throw new Error(
+      `[slingshot-ssr] Missing entity adapters for ${missing.length} page reference${
+        missing.length > 1 ? 's' : ''
+      }:\n${lines.join('\n')}\nRegister these adapters before plugin setup completes.`,
+    );
+  }
+}
+
 const DEFAULT_BATCH_SIZE = 100;
 
 function toText(value: unknown): string {
@@ -276,15 +313,28 @@ async function loadEntityDashboard(
   entityConfigs: ReadonlyMap<string, ResolvedEntityConfig>,
   navigation?: NavigationConfig,
 ): Promise<PageLoaderResult> {
-  const statResults = await Promise.all(
+  // P-SSR-5: use Promise.allSettled so a single flaky stat does not collapse
+  // the whole dashboard. Per-stat failures surface as `value: null` and a
+  // serialized `error` placeholder; the rendered page shows the stats that
+  // succeeded with a clearly-marked error placeholder for the failed ones.
+  const settled = await Promise.allSettled(
     declaration.stats.map(async stat => {
       const records = await enumerateRecords(requireAdapter(stat.entity, adapters));
-      return Object.freeze({
-        label: stat.label,
-        value: aggregateRecords(records, stat.aggregate, stat.field, stat.filter),
-      });
+      return aggregateRecords(records, stat.aggregate, stat.field, stat.filter);
     }),
   );
+  const statResults = settled.map((outcome, i) => {
+    const stat = declaration.stats[i];
+    if (outcome.status === 'fulfilled') {
+      return Object.freeze({ label: stat.label, value: outcome.value });
+    }
+    const err = outcome.reason;
+    const errorInfo = Object.freeze({
+      message: err instanceof Error ? err.message : String(err),
+      name: err instanceof Error ? err.name : 'Error',
+    });
+    return Object.freeze({ label: stat.label, value: null, error: errorInfo });
+  });
 
   let activity: readonly Record<string, unknown>[] | undefined;
   if (declaration.activity) {

@@ -92,6 +92,15 @@ export function createFakeBullMQModule(state: FakeBullMQState = fakeBullMQState)
       if (err) {
         throw err;
       }
+      // Optional artificial delay (e.g. simulating a hung Redis) — set per
+      // test via `state._nextAddDelays.push(ms)` for one-shot or
+      // `state._addDelayMs = ms` for sticky.
+      const oneShotDelay = (state as any)._nextAddDelays?.shift?.();
+      const stickyDelay = (state as any)._addDelayMs ?? 0;
+      const delayMs = typeof oneShotDelay === 'number' ? oneShotDelay : stickyDelay;
+      if (delayMs > 0) {
+        await new Promise(r => setTimeout(r, delayMs));
+      }
       this._record.addCalls.push({ queueName: this.name, event, data });
     }
 

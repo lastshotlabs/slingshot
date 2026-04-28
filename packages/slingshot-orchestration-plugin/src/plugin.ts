@@ -6,7 +6,7 @@ import {
   createOrchestrationRuntime,
 } from '@lastshotlabs/slingshot-orchestration';
 import { ORCHESTRATION_PLUGIN_KEY } from './context';
-import { createSlingshotEventSink } from './eventSink';
+import { type SlingshotEventSink, createSlingshotEventSink } from './eventSink';
 import { createOrchestrationRouter } from './routes';
 import type { ConfigurableOrchestrationPluginOptions } from './types';
 
@@ -28,6 +28,7 @@ export function createOrchestrationPlugin(
   const providedRuntime = 'runtime' in options ? options.runtime : undefined;
   const providedAdapter = 'adapter' in options ? options.adapter : undefined;
   let runtime: OrchestrationRuntime | null = providedRuntime ?? null;
+  let eventSink: SlingshotEventSink | null = null;
 
   return {
     name: ORCHESTRATION_PLUGIN_KEY,
@@ -40,11 +41,12 @@ export function createOrchestrationPlugin(
             'Orchestration plugin requires either a runtime or an adapter.',
           );
         }
+        eventSink = createSlingshotEventSink(bus);
         runtime = createOrchestrationRuntime({
           adapter: providedAdapter,
           tasks: options.tasks,
           workflows,
-          eventSink: createSlingshotEventSink(bus),
+          eventSink,
         });
       }
 
@@ -67,6 +69,7 @@ export function createOrchestrationPlugin(
         resolveRequestContext: options.resolveRequestContext,
         authorizeRun: options.authorizeRun,
         adapter: providedAdapter,
+        routeTimeoutMs: options.routeTimeoutMs,
       });
       app.route(routePrefix, router);
     },
@@ -76,8 +79,15 @@ export function createOrchestrationPlugin(
       }
     },
     async teardown() {
-      if (providedAdapter) {
-        await providedAdapter.shutdown();
+      try {
+        if (providedAdapter) {
+          await providedAdapter.shutdown();
+        }
+      } finally {
+        if (eventSink) {
+          eventSink.dispose();
+          eventSink = null;
+        }
       }
     },
   };

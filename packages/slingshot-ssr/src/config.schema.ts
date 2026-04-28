@@ -46,6 +46,22 @@ export const isrConfigSchema = z
       .describe(
         'Maximum milliseconds to wait for a background ISR regeneration before abandoning it. Default: 30000.',
       ),
+    maxConcurrentRegenerations: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Maximum number of concurrent in-flight background regenerations per cache instance. Excess regen requests are dropped (logged as warn) so flaky stale traffic cannot exhaust resources. Default: 32.',
+      ),
+    cacheFlushTimeoutMs: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe(
+        'Maximum milliseconds to wait for in-flight ISR cache writes to settle during dispose(). Default: 5000.',
+      ),
   })
   .optional();
 
@@ -215,5 +231,17 @@ export const ssrPluginConfigSchema = z.object({
     .optional()
     .describe(
       "Hydration mismatch reporting strategy. 'warn-dev' emits a console.warn in dev mode reminding developers to watch the browser console; 'silent' disables the nudge. Default: 'warn-dev'.",
+    ),
+  logger: z
+    .custom<import('@lastshotlabs/slingshot-core').Logger>()
+    .optional()
+    .describe(
+      'Structured logger used for ISR background regen and response stream diagnostics. Omit to fall back to console output.',
+    ),
+  onStreamError: z
+    .function()
+    .optional()
+    .describe(
+      'Callback invoked when the response body stream errors during pipeTo. Receives error and request metadata for metrics wiring.',
     ),
 });

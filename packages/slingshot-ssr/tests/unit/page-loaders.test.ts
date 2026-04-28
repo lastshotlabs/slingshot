@@ -1,7 +1,11 @@
 import { describe, expect, it, mock, test } from 'bun:test';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
-import type { ResolvedPageDeclaration } from '../../src/pageDeclarations';
-import { PageNotFoundError, resolvePageLoader } from '../../src/pageLoaders';
+import type { PageDeclaration, ResolvedPageDeclaration } from '../../src/pageDeclarations';
+import {
+  PageNotFoundError,
+  resolvePageLoader,
+  validatePageAdapters,
+} from '../../src/pageLoaders';
 
 function makeCustomDeclaration(
   overrides: Partial<{
@@ -602,5 +606,164 @@ describe('resolvePageLoader — entity pages with filters, forms, dashboards, an
       { category: 'published', value: 25 },
     ]);
     expect(result.tags).toEqual(['entity:post']);
+  });
+});
+
+// P-SSR-5 / P-SSR-6: dashboard stats use Promise.allSettled — one failed stat
+// must NOT collapse the rest of the dashboard. Per-stat failures surface as
+// `value: null` and a serialized `error` placeholder; successful stats render
+// normally alongside the placeholder.
+describe('resolvePageLoader — entity-dashboard stats failure isolation (P-SSR-5/6)', () => {
+  function makeEntityConfig(name: string): ResolvedEntityConfig {
+    return {
+      name,
+      _pkField: 'id',
+      fields: {
+        id: { type: 'string', optional: false, primary: true, immutable: true },
+        views: { type: 'number', optional: false, primary: false, immutable: false },
+      },
+    } as unknown as ResolvedEntityConfig;
+  }
+
+  function makeFlakyAdapter(opts: { fail?: boolean; items?: Record<string, unknown>[] } = {}) {
+    return {
+      getById: mock(async (_id: string) => null),
+      list: mock(async () =>
+        opts.fail
+          ? Promise.reject(new Error('flaky adapter blew up'))
+          : { items: opts.items ?? [], hasMore: false },
+      ),
+    };
+  }
+
+  test('renders successful stats and a serialized error placeholder for the failed one', async () => {
+    const declaration = {
+      key: 'dashboard',
+      declaration: {
+        type: 'entity-dashboard',
+        path: '/dashboard',
+        title: 'Dashboard',
+        stats: [
+          { label: 'Healthy', entity: 'good', aggregate: 'count' },
+          { label: 'Flaky', entity: 'bad', aggregate: 'count' },
+          { label: 'Also Healthy', entity: 'good', aggregate: 'sum', field: 'views' },
+        ],
+      },
+      entityConfig: null,
+      pattern: /^\/dashboard$/,
+      paramNames: [],
+    } as unknown as ResolvedPageDeclaration;
+
+    const adapters = {
+      good: makeFlakyAdapter({ items: [{ id: '1', views: 10 }, { id: '2', views: 20 }] }),
+      bad: makeFlakyAdapter({ fail: true }),
+    };
+    const entityConfigs = new Map([
+      ['good', makeEntityConfig('good')],
+      ['bad', makeEntityConfig('bad')],
+    ]);
+
+    const result = await resolvePageLoader(declaration, {}, {}, adapters, entityConfigs);
+    if (result.data.type !== 'dashboard') throw new Error('unexpected type');
+    expect(result.data.stats).toHaveLength(3);
+    expect(result.data.stats[0]).toMatchObject({ label: 'Healthy', value: 2 });
+    expect(result.data.stats[1].label).toBe('Flaky');
+    expect(result.data.stats[1].value).toBeNull();
+    expect(result.data.stats[1].error).toBeDefined();
+    expect(result.data.stats[1].error?.message).toContain('flaky adapter blew up');
+    expect(result.data.stats[1].error?.name).toBe('Error');
+    expect(result.data.stats[2]).toMatchObject({ label: 'Also Healthy', value: 30 });
+  });
+
+  test('a failing stat does not throw out of resolvePageLoader', async () => {
+    const declaration = {
+      key: 'dashboard',
+      declaration: {
+        type: 'entity-dashboard',
+        path: '/dashboard',
+        title: 'Dashboard',
+        stats: [{ label: 'Flaky', entity: 'bad', aggregate: 'count' }],
+      },
+      entityConfig: null,
+      pattern: /^\/dashboard$/,
+      paramNames: [],
+    } as unknown as ResolvedPageDeclaration;
+
+    const adapters = { bad: makeFlakyAdapter({ fail: true }) };
+    const entityConfigs = new Map([['bad', makeEntityConfig('bad')]]);
+    const result = await resolvePageLoader(declaration, {}, {}, adapters, entityConfigs);
+    if (result.data.type !== 'dashboard') throw new Error('unexpected type');
+    expect(result.data.stats[0].value).toBeNull();
+    expect(result.data.stats[0].error).toBeDefined();
+  });
+});
+
+// P-SSR-3: validatePageAdapters() is called at plugin setup; fail with a
+// descriptive message naming the offending page route when an adapter is
+// missing for any referenced entity. Catches misconfiguration at boot rather
+// than the first request.
+describe('validatePageAdapters (P-SSR-3)', () => {
+  function makeListPage(entity: string, route = '/list'): PageDeclaration {
+    return {
+      type: 'entity-list',
+      path: route,
+      title: 'List',
+      entity,
+      fields: ['id'],
+    } as unknown as PageDeclaration;
+  }
+
+  test('returns silently when every referenced entity has an adapter', () => {
+    const pages = { list: makeListPage('post') };
+    const adapters = {
+      post: { getById: async () => null, list: async () => ({ items: [], hasMore: false }) },
+    };
+    expect(() => validatePageAdapters(pages, adapters)).not.toThrow();
+  });
+
+  test('throws naming the page route when an adapter is missing', () => {
+    const pages = { list: makeListPage('post', '/posts') };
+    expect(() => validatePageAdapters(pages, {})).toThrow(/no adapter registered for entity "post"/);
+    expect(() => validatePageAdapters(pages, {})).toThrow(/route \/posts/);
+  });
+
+  test('reports every missing adapter when multiple pages misconfigured', () => {
+    const pages = {
+      a: makeListPage('alpha', '/a'),
+      b: makeListPage('beta', '/b'),
+    };
+    let captured: Error | undefined;
+    try {
+      validatePageAdapters(pages, {});
+    } catch (err) {
+      captured = err as Error;
+    }
+    expect(captured).toBeInstanceOf(Error);
+    expect(captured?.message).toContain('alpha');
+    expect(captured?.message).toContain('beta');
+    expect(captured?.message).toContain('/a');
+    expect(captured?.message).toContain('/b');
+  });
+
+  test('walks dashboard stats / activity / chart entities', () => {
+    const pages: Record<string, PageDeclaration> = {
+      dash: {
+        type: 'entity-dashboard',
+        path: '/dash',
+        title: 'Dash',
+        stats: [{ label: 'A', entity: 'stat-entity', aggregate: 'count' }],
+        activity: { entity: 'activity-entity', fields: ['id'] },
+        chart: {
+          entity: 'chart-entity',
+          chartType: 'bar',
+          categoryField: 'k',
+          valueField: 'v',
+          aggregate: 'sum',
+        },
+      } as unknown as PageDeclaration,
+    };
+    expect(() => validatePageAdapters(pages, {})).toThrow(/stat-entity/);
+    expect(() => validatePageAdapters(pages, {})).toThrow(/activity-entity/);
+    expect(() => validatePageAdapters(pages, {})).toThrow(/chart-entity/);
   });
 });

@@ -67,7 +67,7 @@ export { buildPageRouteTable, buildPageChain, resolvePageDeclaration } from './p
 /** Expand `generateStaticParams` exports into concrete route entries at build time. */
 export { generatePageStaticParams } from './static-params/pageStaticParams';
 /** Load SSR page modules and surface the error thrown when a page module is missing. */
-export { resolvePageLoader, PageNotFoundError } from './pageLoaders';
+export { resolvePageLoader, PageNotFoundError, validatePageAdapters } from './pageLoaders';
 
 /** Page declaration and navigation types used by the page-based SSR surface. */
 export type {

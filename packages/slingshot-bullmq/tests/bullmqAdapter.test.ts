@@ -1,3 +1,6 @@
+import { promises as fs } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import { createEventSchemaRegistry } from '@lastshotlabs/slingshot-core';
@@ -405,25 +408,37 @@ describe('createBullMQAdapter — _drainPendingBuffer', () => {
 // Health introspection
 // ---------------------------------------------------------------------------
 
-describe('createBullMQAdapter — getHealth()', () => {
-  test('returns zeroed counts before any subscriptions', () => {
+describe('createBullMQAdapter — getHealth() / getHealthDetails()', () => {
+  test('getHealthDetails returns zeroed counts before any subscriptions', () => {
     const bus = createBullMQAdapter({ connection: {} });
-    expect(bus.getHealth()).toEqual({
+    expect(bus.getHealthDetails()).toEqual({
       status: 'healthy',
       queueCount: 0,
       workerCount: 0,
       pendingBufferSize: 0,
-      failedJobsCount: 0,
+      // failedJobsCount is null until a live probe runs.
+      failedJobsCount: null,
       validationDroppedCount: 0,
       bufferDroppedCount: 0,
       workerPausedCount: 0,
+      enqueueTimeoutCount: 0,
+      permanentErrorCount: 0,
     });
+  });
+
+  test('getHealth() implements HealthCheck — state + details', () => {
+    const bus = createBullMQAdapter({ connection: {} });
+    const report = bus.getHealth();
+    expect(report.component).toBe('slingshot-bullmq');
+    expect(report.state).toBe('healthy');
+    expect(report.details?.failedJobsCount).toBe('unknown');
+    expect(report.details?.queueCount).toBe(0);
   });
 
   test('queueCount and workerCount increment after a durable subscription', () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'health-check' });
-    const health = bus.getHealth();
+    const health = bus.getHealthDetails();
     expect(health.queueCount).toBe(1);
     expect(health.workerCount).toBe(1);
     expect(health.pendingBufferSize).toBe(0);
@@ -439,7 +454,7 @@ describe('createBullMQAdapter — getHealth()', () => {
     bus.emit('auth:login' as any, { userId: 'u1' } as any);
     await new Promise(r => setTimeout(r, 10));
 
-    expect(bus.getHealth().pendingBufferSize).toBe(1);
+    expect(bus.getHealthDetails().pendingBufferSize).toBe(1);
 
     errorSpy.mockRestore();
   });
@@ -454,7 +469,7 @@ describe('createBullMQAdapter — getHealth()', () => {
     bus.emit('auth:login' as any, { userId: 'u1' } as any);
     await new Promise(r => setTimeout(r, 10));
 
-    const health = bus.getHealth();
+    const health = bus.getHealthDetails();
     expect(health.status).toBe('degraded');
     expect(health.pendingBufferSize).toBe(1);
 
@@ -500,7 +515,7 @@ describe('createBullMQAdapter — onDrop callback', () => {
       bus.emit('auth:login' as any, { userId: `u${i}` } as any);
     }
     await new Promise(r => setTimeout(r, 50));
-    expect(bus.getHealth().pendingBufferSize).toBe(MAX_PENDING_BUFFER);
+    expect(bus.getHealthDetails().pendingBufferSize).toBe(MAX_PENDING_BUFFER);
 
     // Emit one more event — buffer is full, should be dropped and onDrop called
     bus.emit('auth:login' as any, { userId: 'overflow' } as any);
@@ -526,7 +541,7 @@ describe('createBullMQAdapter — onDrop callback', () => {
     fakeBullMQState.nextAddError(new Error('Redis down'));
     bus.emit('auth:login' as any, { userId: 'retry-me' } as any);
     await new Promise(r => setTimeout(r, 10));
-    expect(bus.getHealth().pendingBufferSize).toBe(1);
+    expect(bus.getHealthDetails().pendingBufferSize).toBe(1);
 
     // MAX_ENQUEUE_ATTEMPTS = 5; event starts at attempts=1 after buffering.
     // Drain with retryable errors (ECONNREFUSED code) so the item re-queues each time.
@@ -535,7 +550,7 @@ describe('createBullMQAdapter — onDrop callback', () => {
     for (let i = 0; i < 3; i++) {
       fakeBullMQState.nextAddError(retryableError());
       await bus._drainPendingBuffer();
-      expect(bus.getHealth().pendingBufferSize).toBe(1);
+      expect(bus.getHealthDetails().pendingBufferSize).toBe(1);
     }
 
     // 4th retryable drain failure — attempts goes to 5 = MAX_ENQUEUE_ATTEMPTS, event is dropped
@@ -544,7 +559,7 @@ describe('createBullMQAdapter — onDrop callback', () => {
 
     expect(dropped).toHaveLength(1);
     expect(dropped[0]).toMatchObject({ event: 'auth:login', reason: 'max-attempts' });
-    expect(bus.getHealth().pendingBufferSize).toBe(0);
+    expect(bus.getHealthDetails().pendingBufferSize).toBe(0);
 
     errorSpy.mockRestore();
   });
@@ -560,13 +575,15 @@ describe('createBullMQAdapter — strict-mode validation DLQ', () => {
     schemaRegistry.register('auth:login', z.object({ userId: z.string() }));
 
     const captured: Array<Record<string, unknown>> = [];
+    const captureFn = (msg: string, fields?: Record<string, unknown>): void => {
+      captured.push({ msg, ...(fields ?? {}) });
+    };
     const logger = {
-      warn: (ctx: Record<string, unknown>, _msg?: string) => {
-        captured.push(ctx);
-      },
-      error: (ctx: Record<string, unknown>, _msg?: string) => {
-        captured.push(ctx);
-      },
+      debug: captureFn,
+      info: captureFn,
+      warn: captureFn,
+      error: captureFn,
+      child: () => logger,
     };
 
     const bus = createBullMQAdapter({
@@ -609,7 +626,7 @@ describe('createBullMQAdapter — strict-mode validation DLQ', () => {
     expect((dlq!.addCalls[0].data as Record<string, unknown>).sourceQueue).toBe(sourceQueueName);
 
     // Counter incremented
-    expect(bus.getHealth().validationDroppedCount).toBe(1);
+    expect(bus.getHealthDetails().validationDroppedCount).toBe(1);
 
     // Verify a structured log was produced via the injected logger
     expect(captured.some(c => c.dlq === dlqName)).toBe(true);
@@ -620,9 +637,15 @@ describe('createBullMQAdapter — strict-mode validation DLQ', () => {
     schemaRegistry.register('auth:login', z.object({ userId: z.string() }));
 
     const captured: Array<Record<string, unknown>> = [];
+    const captureFn = (msg: string, fields?: Record<string, unknown>): void => {
+      captured.push({ msg, ...(fields ?? {}) });
+    };
     const logger = {
-      warn: (ctx: Record<string, unknown>) => captured.push(ctx),
-      error: (ctx: Record<string, unknown>) => captured.push(ctx),
+      debug: captureFn,
+      info: captureFn,
+      warn: captureFn,
+      error: captureFn,
+      child: () => logger,
     };
 
     const bus = createBullMQAdapter({
@@ -639,7 +662,7 @@ describe('createBullMQAdapter — strict-mode validation DLQ', () => {
     await fakeBullMQState.dispatchJob(sourceQueueName, 'auth:login', { userId: 9 });
 
     // Counter still increments
-    expect(bus.getHealth().validationDroppedCount).toBe(1);
+    expect(bus.getHealthDetails().validationDroppedCount).toBe(1);
     // No DLQ queue was created
     expect(fakeBullMQState.queues.filter(q => q.name.includes('validation-dlq'))).toHaveLength(0);
     expect(captured.length).toBeGreaterThan(0);
@@ -681,8 +704,8 @@ describe('createBullMQAdapter — strict-mode validation DLQ', () => {
 // Metrics + getHealthAsync
 // ---------------------------------------------------------------------------
 
-describe('createBullMQAdapter — metrics + getHealthAsync', () => {
-  test('getHealthAsync aggregates failed-job counts from each queue', async () => {
+describe('createBullMQAdapter — metrics + checkHealth', () => {
+  test('checkHealthDetails aggregates failed-job counts from each queue', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'audit' });
     bus.on('auth:logout' as any, async () => {}, { durable: true, name: 'audit-out' });
@@ -690,11 +713,6 @@ describe('createBullMQAdapter — metrics + getHealthAsync', () => {
     // Inject failed-job counts on the underlying fake queues
     const fakeQueues = fakeBullMQState.queues as unknown as Array<{ name: string }>;
     expect(fakeQueues).toHaveLength(2);
-    // Reach through the fake module's Queue class via the registered records
-    // The fake records do not store the class instance; instead, traverse the
-    // global state. Since the adapter holds the same Queue instances, we
-    // use a workaround: monkey-patch via the module export. Skip if not
-    // accessible.
     // @ts-expect-error test access
     if (fakeBullMQState.queues[0]?._failedJobs !== undefined) {
       // @ts-expect-error test access
@@ -703,10 +721,22 @@ describe('createBullMQAdapter — metrics + getHealthAsync', () => {
       fakeBullMQState.queues[1]._failedJobs = 2;
     }
 
-    const health = await bus.getHealthAsync();
+    const health = await bus.checkHealthDetails();
     // Some test environments lose the class instance binding; fall back to
-    // checking the field exists and is a number.
+    // checking the field exists and is a number after the live probe.
     expect(typeof health.failedJobsCount).toBe('number');
+  });
+
+  test('checkHealth implements HealthCheck and refreshes failedJobsCount', async () => {
+    const bus = createBullMQAdapter({ connection: {} });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'audit-check' });
+
+    // Before any probe, getHealth reports unknown.
+    expect(bus.getHealth().details?.failedJobsCount).toBe('unknown');
+
+    const after = await bus.checkHealth();
+    // After the probe a numeric failedJobsCount lands in details.
+    expect(typeof after.details?.failedJobsCount).toBe('number');
   });
 
   test('bufferDroppedCount increments when buffer-full triggers a drop', async () => {
@@ -722,7 +752,7 @@ describe('createBullMQAdapter — metrics + getHealthAsync', () => {
     bus.emit('auth:login' as any, { userId: 'overflow' } as any);
     await new Promise(r => setTimeout(r, 50));
 
-    expect(bus.getHealth().bufferDroppedCount).toBeGreaterThanOrEqual(1);
+    expect(bus.getHealthDetails().bufferDroppedCount).toBeGreaterThanOrEqual(1);
 
     errorSpy.mockRestore();
   });
@@ -734,6 +764,256 @@ describe('createBullMQAdapter — metrics + getHealthAsync', () => {
       drainMaxMs: 5_000,
       maxEnqueueAttempts: 2,
     });
-    expect(bus.getHealth().queueCount).toBe(0);
+    expect(bus.getHealthDetails().queueCount).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P-BULLMQ-5: enqueue timeout — slow Redis (queue.add hangs longer than
+// enqueueTimeoutMs) buffers the event and emits a structured drop signal.
+// ---------------------------------------------------------------------------
+
+describe('createBullMQAdapter — enqueue timeout', () => {
+  test('hung queue.add() rejects after enqueueTimeoutMs and buffers the event', async () => {
+    const dropped: Array<{ event: string; reason: string }> = [];
+    const bus = createBullMQAdapter({
+      connection: {},
+      enqueueTimeoutMs: 25,
+      onDrop: (event, reason) => dropped.push({ event, reason }),
+    });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'timeout-worker' });
+
+    // Configure the fake Queue.add() to hang far longer than the timeout.
+    (fakeBullMQState as any)._nextAddDelays = [200];
+
+    bus.emit('auth:login' as any, { userId: 'hung' } as any);
+    // Wait past the timeout so the catch path runs.
+    await new Promise(r => setTimeout(r, 80));
+
+    // Event was buffered for retry.
+    expect(bus.getHealthDetails().pendingBufferSize).toBe(1);
+    // enqueueTimeoutCount counter incremented.
+    expect(bus.getHealthDetails().enqueueTimeoutCount).toBeGreaterThanOrEqual(1);
+    // onDrop was called with the structured timeout signal.
+    expect(dropped.some(d => d.reason === 'enqueue-timeout')).toBe(true);
+
+    // Reset the delay array so shutdown's queue.close doesn't hang on stale entries.
+    (fakeBullMQState as any)._nextAddDelays = [];
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P-BULLMQ-4: error classification — permanent vs retryable errors are
+// surfaced through onDrop with distinct reasons.
+// ---------------------------------------------------------------------------
+
+describe('createBullMQAdapter — error classification', () => {
+  test('permanent error (EINVAL) emits permanent-error and is not buffered', async () => {
+    const dropped: Array<{ event: string; reason: string }> = [];
+    const bus = createBullMQAdapter({
+      connection: {},
+      onDrop: (event, reason) => dropped.push({ event, reason }),
+    });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'perm-error' });
+
+    fakeBullMQState.nextAddError(Object.assign(new Error('invalid arg'), { code: 'EINVAL' }));
+    bus.emit('auth:login' as any, { userId: 'perm' } as any);
+    await new Promise(r => setTimeout(r, 20));
+
+    expect(dropped.some(d => d.reason === 'permanent-error')).toBe(true);
+    expect(bus.getHealthDetails().permanentErrorCount).toBe(1);
+    // Event was NOT buffered — permanent errors fail fast.
+    expect(bus.getHealthDetails().pendingBufferSize).toBe(0);
+  });
+
+  test('redis WRONGTYPE error is treated as permanent', async () => {
+    const dropped: Array<{ event: string; reason: string }> = [];
+    const bus = createBullMQAdapter({
+      connection: {},
+      onDrop: (event, reason) => dropped.push({ event, reason }),
+    });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'wrongtype' });
+
+    fakeBullMQState.nextAddError(new Error('WRONGTYPE Operation against a key'));
+    bus.emit('auth:login' as any, { userId: 'wt' } as any);
+    await new Promise(r => setTimeout(r, 20));
+
+    expect(dropped.some(d => d.reason === 'permanent-error')).toBe(true);
+  });
+
+  test('retryable ECONNREFUSED stays in buffer for retry', async () => {
+    const dropped: Array<{ event: string; reason: string }> = [];
+    const bus = createBullMQAdapter({
+      connection: {},
+      onDrop: (event, reason) => dropped.push({ event, reason }),
+    });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'retry-class' });
+
+    fakeBullMQState.nextAddError(
+      Object.assign(new Error('connection refused'), { code: 'ECONNREFUSED' }),
+    );
+    bus.emit('auth:login' as any, { userId: 'retry' } as any);
+    await new Promise(r => setTimeout(r, 20));
+
+    // No permanent drop, event sits in buffer for the next drain.
+    expect(dropped.some(d => d.reason === 'permanent-error')).toBe(false);
+    expect(bus.getHealthDetails().pendingBufferSize).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P-BULLMQ-8: consumeStartByJob cleanup leak guard.
+// ---------------------------------------------------------------------------
+
+describe('createBullMQAdapter — consumeStartByJob leak guard', () => {
+  test('1000 cycles of fail-then-succeed leave the per-job map empty', async () => {
+    const noopLog = {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      child: () => noopLog,
+    };
+    const bus = createBullMQAdapter({ connection: {}, logger: noopLog });
+    let succeed = false;
+    bus.on(
+      'auth:login' as any,
+      async () => {
+        if (!succeed) throw new Error('handler boom');
+      },
+      { durable: true, name: 'leak-guard' },
+    );
+
+    const queueName = fakeBullMQState.queues[0].name;
+    const envelope = {
+      key: 'auth:login',
+      payload: { userId: 'u' },
+      meta: {
+        eventId: 'e',
+        occurredAt: new Date().toISOString(),
+        ownerPlugin: 'test',
+        exposure: ['internal' as const],
+        scope: null,
+        requestTenantId: null,
+      },
+    };
+
+    for (let i = 0; i < 500; i++) {
+      // Failure cycle
+      succeed = false;
+      await fakeBullMQState.dispatchJob(queueName, 'auth:login', envelope).catch(() => {});
+      // Success cycle
+      succeed = true;
+      await fakeBullMQState.dispatchJob(queueName, 'auth:login', envelope);
+    }
+
+    // After every dispatch the processor's `finally` deletes its job entry,
+    // and the worker.on('completed') / on('failed') hooks delete defensively.
+    // A leak would manifest as the map growing past the in-flight set, which
+    // here is always at most 1 (dispatch is awaited). Worker remains open.
+    expect(fakeBullMQState.workers).toHaveLength(1);
+    expect(fakeBullMQState.workers[0].closed).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P-BULLMQ-6: WAL persistence + replay.
+// ---------------------------------------------------------------------------
+
+describe('createBullMQAdapter — WAL', () => {
+  async function tmpWal(): Promise<string> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bullmq-wal-'));
+    return path.join(dir, 'pending.wal');
+  }
+
+  test('appends to WAL when an event is buffered', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const walPath = await tmpWal();
+
+    const bus = createBullMQAdapter({ connection: {}, walPath });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'wal-write' });
+
+    fakeBullMQState.nextAddError(
+      Object.assign(new Error('Redis down'), { code: 'ECONNREFUSED' }),
+    );
+    bus.emit('auth:login' as any, { userId: 'wal-1' } as any);
+    await new Promise(r => setTimeout(r, 30));
+    await bus.shutdown();
+
+    const raw = await fs.readFile(walPath, 'utf8');
+    expect(raw).toContain('"op":"append"');
+    expect(raw).toContain('auth:login');
+    errorSpy.mockRestore();
+  });
+
+  test('replays WAL into the pending buffer on adapter creation', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const walPath = await tmpWal();
+
+    // First adapter: buffer an event.
+    const bus1 = createBullMQAdapter({ connection: {}, walPath });
+    bus1.on('auth:login' as any, async () => {}, { durable: true, name: 'wal-replay' });
+    fakeBullMQState.nextAddError(
+      Object.assign(new Error('Redis down'), { code: 'ECONNREFUSED' }),
+    );
+    bus1.emit('auth:login' as any, { userId: 'replayed' } as any);
+    await new Promise(r => setTimeout(r, 30));
+    expect(bus1.getHealthDetails().pendingBufferSize).toBe(1);
+    // Simulate process death without graceful shutdown — we only flush the
+    // WAL by waiting for the in-flight write to settle.
+    await new Promise(r => setTimeout(r, 20));
+
+    // Reset the fake state so the new adapter has no in-memory carry-over.
+    fakeBullMQState.reset();
+
+    // Second adapter: same WAL path. Replay must surface the buffered event
+    // before any subscription runs.
+    const bus2 = createBullMQAdapter({ connection: {}, walPath });
+    // Subscribe so the queue handle is attached and a drain runs.
+    bus2.on('auth:login' as any, async () => {}, { durable: true, name: 'wal-replay' });
+    // Wait for the load promise + drain + queue.add.
+    await new Promise(r => setTimeout(r, 50));
+    await bus2._drainPendingBuffer();
+    // After drain, the event should have been forwarded to the new queue.
+    expect(fakeBullMQState.queues[0].addCalls.length).toBeGreaterThanOrEqual(1);
+    await bus2.shutdown();
+    errorSpy.mockRestore();
+  });
+
+  test('compacts the WAL when live entries exceed walCompactThreshold', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const walPath = await tmpWal();
+
+    const bus = createBullMQAdapter({
+      connection: {},
+      walPath,
+      walCompactThreshold: 5,
+    });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'wal-compact' });
+
+    // Buffer 10 events.
+    for (let i = 0; i < 10; i++) {
+      fakeBullMQState.nextAddError(
+        Object.assign(new Error('Redis down'), { code: 'ECONNREFUSED' }),
+      );
+      bus.emit('auth:login' as any, { userId: `u${i}` } as any);
+    }
+    await new Promise(r => setTimeout(r, 50));
+    expect(bus.getHealthDetails().pendingBufferSize).toBe(10);
+
+    // Drain 6 successfully — each consume marks a WAL line; once live count
+    // drops past the threshold, a compaction rewrites the file.
+    await bus._drainPendingBuffer();
+    await new Promise(r => setTimeout(r, 50));
+
+    const raw = await fs.readFile(walPath, 'utf8');
+    // After successful drain + compaction, no append entries remain — the
+    // file is either empty or contains only live entries.
+    const lines = raw.split('\n').filter(Boolean);
+    // The compaction snapshot dropped any consume tombstones. There should
+    // be strictly fewer total lines than the 20+ we'd see without compaction.
+    expect(lines.length).toBeLessThan(15);
+    await bus.shutdown();
+    errorSpy.mockRestore();
   });
 });

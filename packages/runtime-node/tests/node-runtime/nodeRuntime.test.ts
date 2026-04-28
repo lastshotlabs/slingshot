@@ -1,10 +1,18 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, it, test } from 'vitest';
 import { nodeRuntime } from '../../src/index';
 
-// Tests for runtime.sqlite (better-sqlite3) run under bun:test.
-// WebSocket upgrade flow tests are exercised via the smoke test server tests.
+// Tests for runtime.sqlite (better-sqlite3) run under vitest (Node.js).
+// better-sqlite3 is a native Node.js addon and is not supported by Bun, so
+// these tests cannot run under bun:test. The runtime-node package's
+// `test:vitest` script invokes vitest against this directory.
+//
+// WebSocket upgrade flow tests are exercised via the smoke test server tests
+// and via the websocket.test.ts file in this directory (which uses bun:test
+// because it does not depend on better-sqlite3).
+
+void it; // re-export for parity with other vitest test files
 
 describe('runtime.sqlite', () => {
   // ---------------------------------------------------------------------------

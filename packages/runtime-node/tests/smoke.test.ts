@@ -6,9 +6,14 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { nodeRuntime } from '../src/index';
 
-// SQLite (better-sqlite3) and WebSocket (upgrade() flow) tests live in
-// tests/node-runtime/nodeRuntime.test.ts and run under vitest (Node.js).
-// This file covers capabilities that work correctly under bun:test.
+// Per-package layout for runtime-node tests:
+// - This file (`tests/smoke.test.ts`) covers everything that works under
+//   `bun:test` — argon2, fs, glob, basic server lifecycle, TLS.
+// - `tests/node-runtime/websocket.test.ts` and `internals.test.ts` exercise
+//   the WebSocket upgrade flow and pure helpers under `bun:test`.
+// - `tests/node-runtime/nodeRuntime.test.ts` covers SQLite (better-sqlite3),
+//   which is unsupported under Bun. It runs under `vitest` via the package's
+//   `test:vitest` script (and the package `test` script runs both).
 
 let tempDir = '';
 

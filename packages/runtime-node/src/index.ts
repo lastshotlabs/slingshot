@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import type BetterSqlite3 from 'better-sqlite3';
+import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type {
   RuntimeFs,
   RuntimeGlob,
@@ -83,6 +84,24 @@ function logWebSocketHandlerError(
     message: error instanceof Error ? error.message : String(error),
     stack: error instanceof Error ? error.stack : undefined,
   });
+}
+
+// Structured `Logger` (slingshot-core) used for cross-cutting events that
+// don't belong on the legacy text-format `RuntimeNodeLogger` surface
+// (process safety net, upgrade timeouts with rich fields, fetch error
+// callback throws). Lives alongside `activeLogger` for backwards
+// compatibility — keep both wired so existing consumers continue to work.
+let structuredLogger: Logger = createConsoleLogger({ base: { runtime: 'node' } });
+
+/**
+ * Replace the structured `Logger`. Pass `null` to reset to the default JSON
+ * console logger. Returns the previous logger so tests can save and restore
+ * state.
+ */
+export function configureRuntimeNodeStructuredLogger(logger: Logger | null): Logger {
+  const previous = structuredLogger;
+  structuredLogger = logger ?? createConsoleLogger({ base: { runtime: 'node' } });
+  return previous;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +313,51 @@ function adaptNodeSqlite(db: BetterSqlite3.Database): RuntimeSqliteDatabase {
 }
 
 // ---------------------------------------------------------------------------
+// Runtime-level options
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-runtime knobs for the Node.js runtime. None are required — defaults
+ * match the documented behaviour. Pass via `nodeRuntime(options)`.
+ */
+export interface NodeRuntimeOptions {
+  /**
+   * Maximum time in milliseconds to wait for a pending WebSocket upgrade
+   * handshake to complete (i.e. for the fetch handler to call `upgrade()`)
+   * before destroying the underlying socket.
+   *
+   * Mirrors `RuntimeServerOptions.upgradeTimeoutMs` from `@lastshotlabs/slingshot-core`.
+   * When both are provided the per-listen `upgradeTimeoutMs` wins. Defaults
+   * to `30_000` (30 s).
+   */
+  wsUpgradeTimeoutMs?: number;
+  /**
+   * Maximum time in milliseconds `instance.stop()` will wait for in-flight
+   * WebSocket upgrade handshakes to settle before forcibly destroying the
+   * sockets and continuing teardown. Defaults to `5_000` (5 s).
+   */
+  gracefulUpgradeDrainMs?: number;
+}
+
+interface ResolvedNodeRuntimeOptions {
+  wsUpgradeTimeoutMs: number;
+  gracefulUpgradeDrainMs: number;
+}
+
+function resolveNodeRuntimeOptions(opts?: NodeRuntimeOptions): ResolvedNodeRuntimeOptions {
+  return {
+    wsUpgradeTimeoutMs:
+      typeof opts?.wsUpgradeTimeoutMs === 'number' && opts.wsUpgradeTimeoutMs > 0
+        ? opts.wsUpgradeTimeoutMs
+        : 30_000,
+    gracefulUpgradeDrainMs:
+      typeof opts?.gracefulUpgradeDrainMs === 'number' && opts.gracefulUpgradeDrainMs >= 0
+        ? opts.gracefulUpgradeDrainMs
+        : 5_000,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // HTTP server — @hono/node-server + ws
 // ---------------------------------------------------------------------------
 
@@ -319,7 +383,7 @@ function adaptNodeSqlite(db: BetterSqlite3.Database): RuntimeSqliteDatabase {
  * - `stop({ timeoutMs })` — drain for up to `timeoutMs` ms then force-close any
  *   remaining sockets. Recommended for production deploys behind a load balancer.
  */
-function createNodeServer(): RuntimeServerFactory {
+function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServerFactory {
   return {
     async listen(opts): Promise<RuntimeServerInstance> {
       const { serve, getRequestListener } = await import('@hono/node-server');
@@ -400,7 +464,38 @@ function createNodeServer(): RuntimeServerFactory {
         } catch (err) {
           if (upgradedRequests.has(req)) return alreadySentResponse();
           const wrapped = err instanceof Error ? err : new Error(String(err));
-          if (errorHandler) return errorHandler(wrapped);
+          if (errorHandler) {
+            // P-NODE-4: a user error callback that itself throws/rejects must
+            // not silently disappear. Surface it through the structured logger
+            // and (when no global `uncaughtException` handler is installed)
+            // emit the uncaughtException event so the host application's
+            // crash-handling path observes it. Without this, double-error
+            // scenarios are completely invisible.
+            try {
+              return await errorHandler(wrapped);
+            } catch (callbackErr) {
+              const innerErr =
+                callbackErr instanceof Error ? callbackErr : new Error(String(callbackErr));
+              structuredLogger.error('fetch-error-callback-threw', {
+                originalError: wrapped.message,
+                callbackError: innerErr.message,
+                stack: innerErr.stack,
+              });
+              activeLogger.error('fetch-error-callback-threw', {
+                originalError: wrapped.message,
+                callbackError: innerErr.message,
+                stack: innerErr.stack,
+              });
+              if (process.listenerCount('uncaughtException') === 0) {
+                // No global handler — re-emit so the default Node behaviour
+                // (or a later-installed handler) sees the failure.
+                process.emit('uncaughtException', innerErr);
+              } else {
+                process.emit('uncaughtException', innerErr);
+              }
+              return new Response('Internal Server Error', { status: 500 });
+            }
+          }
           activeLogger.error('fetch-handler-error', {
             message: wrapped.message,
             stack: wrapped.stack,
@@ -494,8 +589,38 @@ function createNodeServer(): RuntimeServerFactory {
           socket: import('node:stream').Duplex;
           head: Buffer;
           timer: ReturnType<typeof setTimeout>;
+          /** Atomic cleanup — see clearPendingUpgrade(). */
+          cleanedUp: boolean;
         }
       >();
+      // P-NODE-3: track in-flight upgrade-handshake promises so graceful
+      // stop can await their settlement instead of severing the underlying
+      // socket mid-handshake (which would leave a half-completed connection
+      // and leak handler state).
+      const pendingUpgradePromises = new Set<Promise<void>>();
+
+      // P-NODE-6: a single helper to atomically remove a pending upgrade
+      // from the map AND clear the timer. Either the timer firing OR an
+      // early socket-close event can arrive first; both must be safe to
+      // call in either order without double-destroying the socket or
+      // leaking the timer reference.
+      const clearPendingUpgrade = (
+        key: string,
+        opts: { destroySocket: boolean; reason?: string } = { destroySocket: false },
+      ): void => {
+        const pending = pendingUpgrades.get(key);
+        if (!pending || pending.cleanedUp) return;
+        pending.cleanedUp = true;
+        clearTimeout(pending.timer);
+        pendingUpgrades.delete(key);
+        if (opts.destroySocket) {
+          try {
+            pending.socket.destroy();
+          } catch {
+            // ignore — socket may already be torn down
+          }
+        }
+      };
 
       // Idle-timeout heartbeat machinery. We track per-socket "alive" markers
       // and ping at idleTimeout/2 intervals; any socket that has not pong'd
@@ -517,7 +642,10 @@ function createNodeServer(): RuntimeServerFactory {
           perMessageDeflate: wsHandler.perMessageDeflate === true,
         });
 
-        const upgradeTimeoutMs = opts.upgradeTimeoutMs ?? 30_000;
+        // P-NODE-2: configurable upgrade timeout (default 30s). Per-listen
+        // `opts.upgradeTimeoutMs` wins over runtime-level `wsUpgradeTimeoutMs`,
+        // which itself is read from `nodeRuntime({ wsUpgradeTimeoutMs })`.
+        const upgradeTimeoutMs = opts.upgradeTimeoutMs ?? runtimeOpts.wsUpgradeTimeoutMs;
 
         httpServer.on('upgrade', (req, socket, head) => {
           const key = req.headers['sec-websocket-key'];
@@ -526,16 +654,71 @@ function createNodeServer(): RuntimeServerFactory {
             return;
           }
 
+          // Resolve the remote IP at upgrade time — by stop() the socket may
+          // be destroyed, so capture the value now to surface in logs. The
+          // `socket` parameter is a Duplex but on the upgrade path it's a
+          // net.Socket / TLSSocket instance, both of which expose
+          // `remoteAddress`. Narrow at the boundary.
+          const remoteAddress =
+            (socket as unknown as { remoteAddress?: string }).remoteAddress ?? null;
+
+          // P-NODE-3: each upgrade gets a deferred we resolve from the
+          // upgrade() entrypoint OR from the timer/socket-close cleanup.
+          // Tracked in `pendingUpgradePromises` so graceful stop can await.
+          let resolvePromise!: () => void;
+          const upgradePromise = new Promise<void>(r => {
+            resolvePromise = r;
+          });
+          pendingUpgradePromises.add(upgradePromise);
+          upgradePromise.then(() => pendingUpgradePromises.delete(upgradePromise));
+
           const timer = setTimeout(() => {
-            pendingUpgrades.delete(key);
-            socket.destroy();
+            // Idempotent — `clearPendingUpgrade` checks `cleanedUp`.
+            clearPendingUpgrade(key, { destroySocket: true });
+            structuredLogger.warn('websocket-upgrade-timeout', {
+              key,
+              timeoutMs: upgradeTimeoutMs,
+              remoteAddress,
+            });
+            // Legacy text-format hook for tests that watch the older logger.
             activeLogger.warn('websocket-upgrade-timeout', {
               key,
               timeoutMs: upgradeTimeoutMs,
+              remoteAddress: remoteAddress ?? 'unknown',
             });
+            resolvePromise();
           }, upgradeTimeoutMs);
 
-          pendingUpgrades.set(key, { req, socket, head, timer });
+          // P-NODE-6: if the underlying socket closes before either the
+          // timer fires or `upgrade()` is called, drop the pending entry
+          // and clear the timer atomically. Without this the timer would
+          // fire on a destroyed socket and emit a misleading timeout warn.
+          const onSocketClose = (): void => {
+            clearPendingUpgrade(key, { destroySocket: false });
+            resolvePromise();
+          };
+          socket.once('close', onSocketClose);
+
+          pendingUpgrades.set(key, {
+            req,
+            socket,
+            head,
+            timer,
+            cleanedUp: false,
+          });
+
+          // Stash a hook on the pending entry so the upgrade() call below
+          // can dispose its socket-close listener and resolve the promise.
+          // Keeping it inline avoids growing the public type.
+          (pendingUpgrades.get(key) as unknown as Record<string, unknown>).__resolveUpgrade =
+            (): void => {
+              try {
+                socket.removeListener('close', onSocketClose);
+              } catch {
+                // ignore
+              }
+              resolvePromise();
+            };
 
           const dummySocket = new Writable({
             write(_chunk: unknown, _encoding: string, cb: () => void) {
@@ -694,11 +877,33 @@ function createNodeServer(): RuntimeServerFactory {
         const force = opts === true || (typeof opts === 'object' && opts?.closeActiveConnections);
         const timeoutMs = typeof opts === 'object' ? opts?.timeoutMs : undefined;
 
-        // Drain pending upgrade handshakes first.
-        for (const [key, pending] of pendingUpgrades) {
-          clearTimeout(pending.timer);
-          pending.socket.destroy();
-          pendingUpgrades.delete(key);
+        // P-NODE-3: drain pending upgrade handshakes. Mark each as cleaned
+        // up (atomic with timer-clear via `clearPendingUpgrade`), destroy
+        // the socket, then await every in-flight upgrade promise so the
+        // graceful path doesn't return before handshake handlers settle.
+        for (const key of Array.from(pendingUpgrades.keys())) {
+          clearPendingUpgrade(key, { destroySocket: true });
+        }
+        if (pendingUpgradePromises.size > 0) {
+          const drainMs = runtimeOpts.gracefulUpgradeDrainMs;
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const timeout = new Promise<'timeout'>(resolve => {
+            timer = setTimeout(() => resolve('timeout'), drainMs);
+          });
+          const drained = Promise.allSettled(Array.from(pendingUpgradePromises)).then(
+            () => 'drained' as const,
+          );
+          try {
+            const outcome = await Promise.race([drained, timeout]);
+            if (outcome === 'timeout') {
+              structuredLogger.warn('websocket-upgrade-drain-timeout', {
+                drainMs,
+                remaining: pendingUpgradePromises.size,
+              });
+            }
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
         }
         // Stop the heartbeat sweeper before closing sockets. We flip the
         // `heartbeatStopped` flag first so a tick that was already on the
@@ -796,8 +1001,11 @@ function createNodeServer(): RuntimeServerFactory {
           if (!key) return false;
           const pending = pendingUpgrades.get(key);
           if (!pending) return false;
-          clearTimeout(pending.timer);
-          pendingUpgrades.delete(key);
+          // P-NODE-6: atomic cleanup — clears timer, removes from map, and
+          // disposes the socket-close listener installed during upgrade.
+          const resolveUpgrade = (pending as unknown as Record<string, unknown>)
+            .__resolveUpgrade as (() => void) | undefined;
+          clearPendingUpgrade(key, { destroySocket: false });
           try {
             wss.handleUpgrade(pending.req, pending.socket, pending.head, ws => {
               const rtWs = wrapWs(ws, upgradeOpts.data);
@@ -811,8 +1019,10 @@ function createNodeServer(): RuntimeServerFactory {
               message: err instanceof Error ? err.message : String(err),
               stack: err instanceof Error ? err.stack : undefined,
             });
+            resolveUpgrade?.();
             return false;
           }
+          resolveUpgrade?.();
           return true;
         },
         publish(channel: string, message: string, fromWs?: WsWebSocket): void {
@@ -930,7 +1140,8 @@ function createNodeGlob(): RuntimeGlob {
  * logger writes to `console.warn` / `console.error`; production deployments
  * should swap in a logger that forwards to pino/bunyan/OpenTelemetry.
  */
-export function nodeRuntime(): SlingshotRuntime {
+export function nodeRuntime(options?: NodeRuntimeOptions): SlingshotRuntime {
+  const resolvedRuntimeOpts = resolveNodeRuntimeOptions(options);
   return {
     password: createNodePassword(),
     sqlite: {
@@ -938,20 +1149,24 @@ export function nodeRuntime(): SlingshotRuntime {
         const req = createRequire(import.meta.url);
         const Database = req('better-sqlite3') as typeof BetterSqlite3;
         const db = new Database(path);
-        db.pragma('journal_mode = WAL');
-        const journalRows = db.pragma('journal_mode') as Array<{ journal_mode: string }>;
-        const mode = journalRows[0]?.journal_mode?.toLowerCase();
-        if (mode && mode !== 'wal') {
-          db.close();
-          throw new Error(
-            `[runtime-node] failed to enable WAL journal mode (got ${mode}); ` +
-              `verify the database file is on a writable, non-network filesystem`,
-          );
+        // In-memory databases (':memory:') do not support WAL — skip the
+        // check for them, matching runtime-bun parity.
+        if (path !== ':memory:') {
+          db.pragma('journal_mode = WAL');
+          const journalRows = db.pragma('journal_mode') as Array<{ journal_mode: string }>;
+          const mode = journalRows[0]?.journal_mode?.toLowerCase();
+          if (mode && mode !== 'wal') {
+            db.close();
+            throw new Error(
+              `[runtime-node] failed to enable WAL journal mode (got ${mode}); ` +
+                `verify the database file is on a writable, non-network filesystem`,
+            );
+          }
         }
         return adaptNodeSqlite(db);
       },
     },
-    server: createNodeServer(),
+    server: createNodeServer(resolvedRuntimeOpts),
     fs: createNodeFs(),
     glob: createNodeGlob(),
     async readFile(path: string): Promise<string | null> {

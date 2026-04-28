@@ -59,7 +59,14 @@ function packageSuites(): TestCommandSuite[] {
       const testsPath = normalizePath(join('packages', name, 'tests'));
       let testFiles = collectPackageTestFiles(join(packagesDir, name, 'tests'));
       if (name === 'runtime-node') {
-        testFiles = testFiles.filter(file => !file.includes('/tests/node-runtime/'));
+        // tests/node-runtime/nodeRuntime.test.ts exercises better-sqlite3
+        // which is unsupported under Bun. It runs under vitest via the
+        // package's test:vitest script. Other files in that directory
+        // (websocket.test.ts, internals.test.ts) are bun:test-compatible
+        // and run as part of the primary suite.
+        testFiles = testFiles.filter(
+          file => !file.includes('/tests/node-runtime/nodeRuntime.test.ts'),
+        );
       }
       // worker.test.ts and tests/unit/activities-codec.test.ts use top-level
       // mock.module() that leaks into co-process tests; each is emitted as its

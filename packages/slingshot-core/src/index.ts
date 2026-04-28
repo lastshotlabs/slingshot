@@ -727,3 +727,16 @@ export type { SafeFetchOptions } from './http/safeFetch';
 // --- header / log sanitization (CRLF injection guards) ---
 /** CRLF / NUL injection guards for HTTP, email, queue, and log sinks. */
 export { HeaderInjectionError, sanitizeHeaderValue, sanitizeLogValue } from './lib/sanitize';
+
+// --- concurrency primitives (timeouts) ---
+/** Promise and AbortSignal timeout helpers used to bound external I/O. */
+export { TimeoutError, timeoutSignal, withTimeout } from './concurrency/withTimeout';
+
+// --- observability: structured logger ---
+/** Structured logger contract and default console-backed implementation. */
+export { createConsoleLogger, noopLogger } from './observability/logger';
+export type { Logger, LogLevel, LogFields } from './observability/logger';
+
+// --- observability: health checks ---
+/** Per-component health-check contract used by framework-level aggregators. */
+export type { HealthCheck, HealthReport, HealthState } from './observability/health';

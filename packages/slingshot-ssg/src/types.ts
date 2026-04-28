@@ -1,5 +1,7 @@
 // packages/slingshot-ssg/src/types.ts
 
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
 // Re-export the static paths function type from slingshot-ssr so consumers of
 // slingshot-ssg don't need a direct slingshot-ssr import for this type.
 export type { SsgStaticPathsFn } from '@lastshotlabs/slingshot-ssr';
@@ -63,6 +65,30 @@ export interface SsgConfig {
    * Set to 0 to disable.
    */
   readonly renderPageTimeoutMs?: number;
+  /**
+   * Optional structured logger used by the crawler and renderer for
+   * diagnostics (skipped routes, mid-crawl directory removal, per-page
+   * errors). Omit to default to a noop logger.
+   */
+  readonly logger?: Logger;
+}
+
+/**
+ * P-SSG-5: serializable per-page error placeholder included in {@link SsgPageResult}
+ * so the build summary lists each failure with structured fields rather than
+ * just emitting them as `console.error` lines. Consumers (CI dashboards,
+ * automated PR comments) can iterate `result.pages` and route the failures
+ * without scraping stderr.
+ */
+export interface SsgPageError {
+  /** Error.message string from the underlying failure. */
+  readonly message: string;
+  /** Error.name string, e.g. "Error", "TimeoutError". */
+  readonly name: string;
+  /** Optional stack trace; present when the underlying error provided one. */
+  readonly stack?: string;
+  /** The route path the failure was associated with. */
+  readonly route: string;
 }
 
 /**
@@ -80,6 +106,12 @@ export interface SsgPageResult {
    * Other pages continue rendering even when one fails.
    */
   readonly error?: Error;
+  /**
+   * P-SSG-5: structured error placeholder mirroring {@link error} for callers
+   * that need a serializable summary (CI tooling, JSON log sinks). Present
+   * iff `error` is set; the same `route` value as `path`.
+   */
+  readonly errorDetail?: SsgPageError;
 }
 
 /**

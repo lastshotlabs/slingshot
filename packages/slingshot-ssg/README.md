@@ -64,6 +64,20 @@ The main knobs you are likely to tune are:
 - output concurrency
 - client entry selection for injected asset tags
 
+## Exit Codes
+
+`slingshot ssg` emits one of three exit codes so CI can distinguish "everything
+worked" from "some routes are stale" from "nothing rendered":
+
+- **0** — every page succeeded (or there was nothing to render).
+- **2** — partial failure: at least one page failed but at least one page
+  succeeded. The build still produced output; treat as a degraded state.
+- **1** — total failure: every page failed, the build crashed, or no pages
+  rendered successfully.
+
+The same logic is exposed as `resolveExitCode(succeeded, failed)` for
+programmatic callers.
+
 ## Gotchas
 
 - All config paths should be absolute. Relative paths are not the supported contract.

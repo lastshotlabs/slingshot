@@ -62,7 +62,7 @@ export async function renderSsgPage(
     if (err instanceof PathTraversalError) {
       const error = new Error(`[slingshot-ssg] rejected URL path "${urlPath}": ${err.message}`);
       console.warn(error.message);
-      return { path: urlPath, filePath: '', durationMs: Date.now() - start, error };
+      return makeFailedResult(urlPath, '', start, error);
     }
     throw err;
   }
@@ -131,7 +131,7 @@ async function renderSsgPageUnchecked(
     } catch (err) {
       const error = toError(err);
       console.warn(`[slingshot-ssg] renderChain() failed for ${urlPath}:`, error.message);
-      return { path: urlPath, filePath, durationMs: Date.now() - start, error };
+      return makeFailedResult(urlPath, filePath, start, error);
     }
 
     if (response.status !== 200) {
@@ -139,7 +139,7 @@ async function renderSsgPageUnchecked(
         `Renderer returned HTTP ${response.status} for "${urlPath}" — skipping.`,
       );
       console.warn(`[slingshot-ssg] ${error.message}`);
-      return { path: urlPath, filePath, durationMs: Date.now() - start, error };
+      return makeFailedResult(urlPath, filePath, start, error);
     }
 
     const html = await response.text();
@@ -148,7 +148,7 @@ async function renderSsgPageUnchecked(
     } catch (err) {
       const error = toError(err);
       console.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);
-      return { path: urlPath, filePath, durationMs: Date.now() - start, error };
+      return makeFailedResult(urlPath, filePath, start, error);
     }
 
     const durationMs = Date.now() - start;
@@ -166,13 +166,13 @@ async function renderSsgPageUnchecked(
   } catch (err) {
     const error = toError(err);
     console.warn(`[slingshot-ssg] resolve() failed for ${urlPath}:`, error.message);
-    return { path: urlPath, filePath, durationMs: Date.now() - start, error };
+    return makeFailedResult(urlPath, filePath, start, error);
   }
 
   if (!match) {
     const error = new Error(`No route matched "${urlPath}" — skipping.`);
     console.warn(`[slingshot-ssg] ${error.message}`);
-    return { path: urlPath, filePath, durationMs: Date.now() - start, error };
+    return makeFailedResult(urlPath, filePath, start, error);
   }
 
   let response: Response;
@@ -181,7 +181,7 @@ async function renderSsgPageUnchecked(
   } catch (err) {
     const error = toError(err);
     console.warn(`[slingshot-ssg] render() failed for ${urlPath}:`, error.message);
-    return { path: urlPath, filePath, durationMs: Date.now() - start, error };
+    return makeFailedResult(urlPath, filePath, start, error);
   }
 
   // Skip non-OK responses (redirects, 404, etc.)
@@ -190,7 +190,7 @@ async function renderSsgPageUnchecked(
       `Renderer returned HTTP ${response.status} for "${urlPath}" — skipping.`,
     );
     console.warn(`[slingshot-ssg] ${error.message}`);
-    return { path: urlPath, filePath, durationMs: Date.now() - start, error };
+    return makeFailedResult(urlPath, filePath, start, error);
   }
 
   const html = await response.text();
@@ -200,7 +200,7 @@ async function renderSsgPageUnchecked(
   } catch (err) {
     const error = toError(err);
     console.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);
-    return { path: urlPath, filePath, durationMs: Date.now() - start, error };
+    return makeFailedResult(urlPath, filePath, start, error);
   }
 
   const durationMs = Date.now() - start;
@@ -269,7 +269,7 @@ async function withPageTimeout(
         timeout = setTimeout(() => {
           const error = new Error(`SSG render timed out after ${timeoutMs}ms for "${urlPath}"`);
           console.warn(`[slingshot-ssg] ${error.message}`);
-          resolve({ path: urlPath, filePath, durationMs: Date.now() - start, error });
+          resolve(makeFailedResult(urlPath, filePath, start, error));
         }, timeoutMs);
       }),
     ]);
@@ -317,4 +317,29 @@ function resolveConcurrency(value: number | undefined): number {
 /** Coerce an unknown thrown value to an Error. */
 function toError(err: unknown): Error {
   return err instanceof Error ? err : new Error(String(err));
+}
+
+/**
+ * P-SSG-5: build an SsgPageResult for a failed render with both the legacy
+ * `error` field (Error instance) and the new structured `errorDetail`
+ * placeholder so the build summary surfaces structured per-page failures.
+ */
+function makeFailedResult(
+  urlPath: string,
+  filePath: string,
+  start: number,
+  error: Error,
+): SsgPageResult {
+  return {
+    path: urlPath,
+    filePath,
+    durationMs: Date.now() - start,
+    error,
+    errorDetail: {
+      message: error.message,
+      name: error.name,
+      ...(error.stack !== undefined ? { stack: error.stack } : {}),
+      route: urlPath,
+    },
+  };
 }

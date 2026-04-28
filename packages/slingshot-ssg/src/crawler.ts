@@ -1,7 +1,13 @@
 // packages/slingshot-ssg/src/crawler.ts
-import { existsSync, readFileSync } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
+import {
+  type Logger,
+  TimeoutError,
+  noopLogger,
+  withTimeout,
+} from '@lastshotlabs/slingshot-core';
 import type {
   GenerateStaticParams,
   SsrLoadContext,
@@ -38,13 +44,27 @@ import type { SsgConfig, SsgStaticPathsFn } from './types';
  * ```
  */
 export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
-  const routeFiles = await collectRouteFiles(config.serverRoutesDir);
+  const logger: Logger = config.logger ?? noopLogger;
+  const routeFiles = await collectRouteFiles(config.serverRoutesDir, logger);
   const paths: string[] = [];
   const staticPathsTimeoutMs = config.staticPathsTimeoutMs ?? 60_000;
   const maxStaticPathsPerRoute = config.maxStaticPathsPerRoute ?? 10_000;
 
+  // P-SSG-1: read sources asynchronously in concurrency-limited batches so a
+  // 5k+ route tree does not block the event loop. The previous implementation
+  // used readFileSync per file inside a tight loop; with even moderately
+  // large route trees that prevented timeouts and progress hooks from firing.
+  const sources = new Map<string, string>();
+  for (let i = 0; i < routeFiles.length; i += COLLECT_CONCURRENCY) {
+    const batch = routeFiles.slice(i, i + COLLECT_CONCURRENCY);
+    const settled = await Promise.all(batch.map(p => safeReadSourceAsync(p, logger)));
+    for (let j = 0; j < batch.length; j += 1) {
+      if (settled[j] !== '') sources.set(batch[j], settled[j]);
+    }
+  }
+
   for (const filePath of routeFiles) {
-    const source = safeReadSource(filePath);
+    const source = sources.get(filePath);
     if (!source) continue;
 
     const isDynamic = hasDynamicSegments(filePath, config.serverRoutesDir);
@@ -56,11 +76,11 @@ export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
     if (isDynamic) {
       if (!hasStaticPathsFn) {
         // Dynamic route with revalidate:false but no staticPaths/generateStaticParams — warn and skip.
-        console.warn(
-          `[slingshot-ssg] Skipping dynamic route ${filePath}: ` +
-            `revalidate: false detected but no \`staticPaths()\` or \`generateStaticParams()\` export found. ` +
-            `Add one of these exports to enumerate all paths.`,
-        );
+        logger.warn('ssg.dynamic.skip.no_static_paths', {
+          filePath,
+          reason:
+            'revalidate: false detected but no staticPaths()/generateStaticParams() export found',
+        });
         continue;
       }
 
@@ -70,6 +90,7 @@ export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
         config.serverRoutesDir,
         staticPathsTimeoutMs,
         maxStaticPathsPerRoute,
+        logger,
       );
       paths.push(...expandedPaths);
     } else {
@@ -115,21 +136,89 @@ const CONVENTION_BASENAMES = new Set([
  */
 const COLLECT_CONCURRENCY = 32;
 
-async function collectRouteFiles(dir: string): Promise<string[]> {
+/**
+ * P-SSG-3: track per-directory read outcomes so we can distinguish a fully
+ * empty crawl (no routes) from an entire route tree that is unreadable. The
+ * helper records every read attempt and lets the top-level caller decide
+ * whether to fail loudly or continue with partial data.
+ */
+interface CrawlState {
+  readonly logger: Logger;
+  /** Number of directories we attempted to read. */
+  attemptedReads: number;
+  /** Number of directory reads that failed. */
+  failedReads: number;
+}
+
+async function collectRouteFiles(dir: string, logger: Logger): Promise<string[]> {
+  const state: CrawlState = { logger, attemptedReads: 0, failedReads: 0 };
+  const results = await collectRouteFilesInner(dir, state);
+  if (state.attemptedReads > 0 && state.failedReads === state.attemptedReads) {
+    throw new Error(
+      `[slingshot-ssg] All ${state.attemptedReads} directory read(s) failed for routes dir "${dir}". ` +
+        `Verify the path exists and is readable (e.g. has not been removed or had permissions revoked).`,
+    );
+  }
+  return results;
+}
+
+async function collectRouteFilesInner(dir: string, state: CrawlState): Promise<string[]> {
   const results: string[] = [];
   if (!existsSync(dir)) return results;
 
-  const entries = await readdir(dir);
+  state.attemptedReads += 1;
+  let entries: string[];
+  try {
+    entries = await readdir(dir);
+  } catch (err: unknown) {
+    // P-SSG-3: catch ENOENT/EACCES per-dir read; on error log structured
+    // warning and continue with other dirs. The top-level caller throws when
+    // every read fails; otherwise the crawl proceeds with partial results.
+    const code =
+      typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as { code?: unknown }).code)
+        : '';
+    if (code === 'ENOENT' || code === 'EACCES' || code === 'EPERM' || code === 'ENOTDIR') {
+      state.failedReads += 1;
+      state.logger.warn('ssg.crawl.readdir.failed', {
+        dir,
+        code,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return results;
+    }
+    throw err;
+  }
 
   // Process in bounded batches to avoid exhausting file descriptors on large directories.
   for (let i = 0; i < entries.length; i += COLLECT_CONCURRENCY) {
     await Promise.all(
       entries.slice(i, i + COLLECT_CONCURRENCY).map(async entry => {
         const full = join(dir, entry);
-        const fileStat = await stat(full);
+        let fileStat;
+        try {
+          fileStat = await stat(full);
+        } catch (err: unknown) {
+          // Mid-crawl removal: a dirent we just listed may already be gone
+          // (race with `rm`). Treat ENOENT/EACCES on stat() identically to a
+          // failed readdir — log and skip so the rest of the tree completes.
+          const code =
+            typeof err === 'object' && err !== null && 'code' in err
+              ? String((err as { code?: unknown }).code)
+              : '';
+          if (code === 'ENOENT' || code === 'EACCES' || code === 'EPERM') {
+            state.logger.warn('ssg.crawl.stat.failed', {
+              path: full,
+              code,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return;
+          }
+          throw err;
+        }
 
         if (fileStat.isDirectory()) {
-          results.push(...(await collectRouteFiles(full)));
+          results.push(...(await collectRouteFilesInner(full, state)));
         } else if (/\.(ts|tsx|js)$/.test(entry)) {
           const basename = entry.replace(/\.(ts|tsx|js)$/, '');
           if (!CONVENTION_BASENAMES.has(basename)) {
@@ -143,13 +232,23 @@ async function collectRouteFiles(dir: string): Promise<string[]> {
 }
 
 /**
- * Read the source of a route file, returning an empty string on any error.
- * Never throws — a missing or unreadable file just gets skipped.
+ * P-SSG-1: read the source of a route file asynchronously. Returning an empty
+ * string on error keeps the crawler resilient to mid-crawl removals — a
+ * missing or unreadable file just gets skipped.
+ *
+ * Replaces the previous synchronous `readFileSync()` callsite. With large
+ * route trees the sync read blocked the event loop for hundreds of ms,
+ * preventing the staticPaths timeout and other timer-based safety nets from
+ * firing during discovery.
  */
-function safeReadSource(filePath: string): string {
+async function safeReadSourceAsync(filePath: string, logger: Logger): Promise<string> {
   try {
-    return readFileSync(filePath, 'utf8');
-  } catch {
+    return await readFile(filePath, 'utf8');
+  } catch (err: unknown) {
+    logger.warn('ssg.crawl.read_source.failed', {
+      filePath,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return '';
   }
 }
@@ -278,12 +377,16 @@ async function callStaticPaths(
   routesDir: string,
   timeoutMs: number,
   maxParamSets: number,
+  logger: Logger,
 ): Promise<string[]> {
   let mod: Record<string, unknown>;
   try {
     mod = (await import(filePath)) as Record<string, unknown>;
   } catch (err) {
-    console.warn(`[slingshot-ssg] Failed to import ${filePath}:`, err);
+    logger.warn('ssg.static_paths.import.failed', {
+      filePath,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return [];
   }
 
@@ -303,30 +406,32 @@ async function callStaticPaths(
         ? 'generateStaticParams'
         : null;
   if (resolvedFn === null || resolvedFnName === null) {
-    console.warn(
-      `[slingshot-ssg] ${filePath}: neither staticPaths nor generateStaticParams is a function`,
-    );
+    logger.warn('ssg.static_paths.missing_export', { filePath });
     return [];
   }
 
+  // P-SSG-4: bound staticPaths/generateStaticParams via the core withTimeout
+  // helper. A hung generator (infinite loop, unresolved promise) rejects with
+  // TimeoutError, which the catch arm normalises into a labelled
+  // [slingshot-ssg] error so the build surfaces the offending route file.
   let paramSets: StaticParamSet[];
   try {
-    const timeoutSignal = AbortSignal.timeout(timeoutMs);
     const callPromise =
       resolvedFnName === 'generateStaticParams'
         ? (resolvedFn as GenerateStaticParams)(createBuildTimeContext())
         : (resolvedFn as SsgStaticPathsFn)();
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutSignal.addEventListener('abort', () => {
-        reject(
-          new Error(
-            `staticPaths() timed out after ${timeoutMs}ms — check for infinite generators or unresolved promises`,
-          ),
-        );
-      });
-    });
-    paramSets = await Promise.race([callPromise, timeoutPromise]);
+    paramSets = await withTimeout(
+      Promise.resolve(callPromise),
+      timeoutMs,
+      `${resolvedFnName}() in ${filePath}`,
+    );
   } catch (err) {
+    if (err instanceof TimeoutError) {
+      throw new Error(
+        `[slingshot-ssg] ${filePath}: ${resolvedFnName}() failed: ${err.message} — check for infinite generators or unresolved promises`,
+        { cause: err },
+      );
+    }
     throw new Error(`[slingshot-ssg] ${filePath}: ${resolvedFnName}() failed`, { cause: err });
   }
 
@@ -346,7 +451,7 @@ async function callStaticPaths(
   if (!template) return [];
 
   return paramSets
-    .map(params => expandTemplate(template, params))
+    .map(params => expandTemplate(template, params, logger))
     .filter((p): p is string => p !== null);
 }
 
@@ -386,7 +491,11 @@ function filePathToUrlPathTemplate(filePath: string, routesDir: string): string 
  *
  * Returns `null` when any required parameter is missing from `params`.
  */
-function expandTemplate(template: string, params: Record<string, string>): string | null {
+function expandTemplate(
+  template: string,
+  params: Record<string, string>,
+  logger: Logger = noopLogger,
+): string | null {
   let result = template;
   const paramLookup = params as Record<string, string | undefined>;
 
@@ -402,9 +511,7 @@ function expandTemplate(template: string, params: Record<string, string>): strin
   });
 
   if (result.includes('\0')) {
-    console.warn(
-      `[slingshot-ssg] Incomplete params for template "${template}": ` + JSON.stringify(params),
-    );
+    logger.warn('ssg.static_paths.incomplete_params', { template, params });
     return null;
   }
 

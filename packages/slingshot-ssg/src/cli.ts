@@ -354,6 +354,39 @@ export async function loadRenderer(rendererPath: string): Promise<SlingshotSsrRe
   return renderer as SlingshotSsrRenderer;
 }
 
+// ─── Exit code resolution ─────────────────────────────────────────────────────
+
+/**
+ * Tri-state exit codes for `slingshot ssg` (P-SSG-2).
+ *
+ * Replaces the previous binary 0/1 model so CI can distinguish a run where
+ * one route blew up from a run where every route failed (or the build itself
+ * crashed). Concretely:
+ *
+ * - **0** — every page rendered successfully (or there was nothing to do).
+ * - **1** — total failure: the build crashed, every page failed, or the run
+ *   never produced any successful output (`succeeded === 0 && failed > 0`).
+ * - **2** — partial failure: at least one page failed and at least one page
+ *   succeeded. The build proceeded; CI should treat this as a degraded state
+ *   so consumers know which pages are stale.
+ *
+ * @see {@link runCli} which calls this with the aggregate result.
+ */
+export type SsgExitCode = 0 | 1 | 2;
+
+/**
+ * Resolve the exit code for a completed SSG run.
+ *
+ * @param succeeded - Number of pages that rendered without error.
+ * @param failed - Number of pages that recorded an error.
+ * @returns The {@link SsgExitCode} for the run.
+ */
+export function resolveExitCode(succeeded: number, failed: number): SsgExitCode {
+  if (failed === 0) return 0;
+  if (succeeded === 0) return 1; // total failure
+  return 2; // partial failure — some pages succeeded
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 export async function runCli(argv = process.argv.slice(2)): Promise<void> {
@@ -425,14 +458,22 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
       `(${result.durationMs}ms total)`,
   );
 
+  // P-SSG-5: emit structured per-page error details on the result so CI
+  // tooling can iterate without scraping stderr; preserve the human-friendly
+  // console output for terminal users.
   if (result.failed > 0) {
     for (const page of result.pages) {
       if (page.error) {
         console.error(`  ✗ ${page.path}: ${page.error.message}`);
       }
     }
-    process.exit(1);
   }
+
+  // P-SSG-2: tri-state exit code. 0 = full success; 2 = partial failure; 1 =
+  // total failure. CI can branch on the difference between "no successful
+  // output at all" and "some routes are stale" without parsing log output.
+  const exitCode = resolveExitCode(result.succeeded, result.failed);
+  if (exitCode !== 0) process.exit(exitCode);
 }
 
 if (import.meta.main) {

@@ -8,7 +8,7 @@ import {
 
 describe('evictOldest', () => {
   test('removes oldest entries when map exceeds maxEntries', () => {
-    const map = new Map([
+    const map = new Map<string, number>([
       ['a', 1],
       ['b', 2],
       ['c', 3],
@@ -23,7 +23,7 @@ describe('evictOldest', () => {
   });
 
   test('does nothing when map size equals maxEntries', () => {
-    const map = new Map([
+    const map = new Map<string, number>([
       ['a', 1],
       ['b', 2],
     ]);
@@ -40,7 +40,7 @@ describe('evictOldest', () => {
   });
 
   test('removes all but one when maxEntries is 1', () => {
-    const map = new Map([
+    const map = new Map<string, number>([
       ['a', 1],
       ['b', 2],
       ['c', 3],
@@ -73,7 +73,7 @@ describe('createEvictExpired', () => {
   test('removes entries whose expiresAt has passed', () => {
     const evictExpired = createEvictExpired(0); // no throttle
     const now = Date.now();
-    const map = new Map([
+    const map = new Map<string, { value: string; expiresAt?: number }>([
       ['expired1', { value: 'a', expiresAt: now - 1000 }],
       ['expired2', { value: 'b', expiresAt: now - 1 }],
       ['valid', { value: 'c', expiresAt: now + 60_000 }],
@@ -89,7 +89,7 @@ describe('createEvictExpired', () => {
 
   test('does not remove entries without expiresAt', () => {
     const evictExpired = createEvictExpired(0);
-    const map = new Map([
+    const map = new Map<string, { value: string; expiresAt?: number }>([
       ['a', { value: '1' }],
       ['b', { value: '2' }],
     ]);

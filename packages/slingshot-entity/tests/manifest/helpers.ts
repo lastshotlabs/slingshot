@@ -3,6 +3,7 @@ import type {
   AppEnv,
   EntityRegistry,
   OperationConfig,
+  PluginSetupContext,
   ResolvedEntityConfig,
   SlingshotEventBus,
   SlingshotFrameworkConfig,
@@ -12,6 +13,8 @@ import type {
 import {
   RESOLVE_COMPOSITE_FACTORIES,
   RESOLVE_ENTITY_FACTORIES,
+  createEventDefinitionRegistry,
+  createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import type { BareEntityAdapter } from '../../src/routing/buildBareEntityRoutes';
@@ -50,6 +53,17 @@ export function createMockBus(): SlingshotEventBus & {
         if (index !== -1) subscriptions.splice(index, 1);
       },
     ),
+    onEnvelope: mock(
+      (event: string, handler: (payload: Record<string, unknown>) => void | Promise<void>) => {
+        subscriptions.push({ event, handler });
+      },
+    ) as unknown as SlingshotEventBus['onEnvelope'],
+    offEnvelope: mock(
+      (event: string, handler: (payload: Record<string, unknown>) => void | Promise<void>) => {
+        const index = subscriptions.findIndex(s => s.event === event && s.handler === handler);
+        if (index !== -1) subscriptions.splice(index, 1);
+      },
+    ) as unknown as SlingshotEventBus['offEnvelope'],
     subscriptions,
   };
 }
@@ -66,6 +80,12 @@ export function createMockFrameworkConfig(): SlingshotFrameworkConfig & {
       cache: 'memory' as StoreType,
       authStore: 'memory' as StoreType,
       sqlite: undefined,
+    },
+    logging: {
+      enabled: false,
+      verbose: false,
+      authTrace: false,
+      auditWarnings: false,
     },
     security: { cors: '*' },
     signing: null,
@@ -105,6 +125,22 @@ export function createMockApp(order?: string[]): MockApp {
     use: mock(() => {}),
     routes,
   } as unknown as MockApp;
+}
+
+export function createMockSetupContext(
+  app: MockApp,
+  config: ReturnType<typeof createMockFrameworkConfig>,
+  bus: ReturnType<typeof createMockBus>,
+): PluginSetupContext {
+  return {
+    app,
+    config,
+    bus,
+    events: createEventPublisher({
+      definitions: createEventDefinitionRegistry(),
+      bus,
+    }),
+  };
 }
 
 export function createMockInfraWithFactory(

@@ -10,6 +10,7 @@ import type {
   PermissionEvaluator,
   PermissionRegistry,
   PermissionsAdapter,
+  PluginSetupContext,
   RepoFactories,
   ResolvedEntityConfig,
   SlingshotEventBus,
@@ -21,6 +22,8 @@ import {
   PERMISSIONS_STATE_KEY,
   RESOLVE_ENTITY_FACTORIES,
   attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
   publishEntityAdaptersState,
   requireEntityAdapter,
 } from '@lastshotlabs/slingshot-core';
@@ -44,6 +47,19 @@ const noteConfig: ResolvedEntityConfig = {
   },
   _pkField: 'id',
   _storageName: 'notes',
+  _systemFields: {
+    createdBy: 'createdBy',
+    updatedBy: 'updatedBy',
+    ownerField: 'ownerId',
+    tenantField: 'tenantId',
+    version: 'version',
+  },
+  _storageFields: {
+    mongoPkField: '_id',
+    ttlField: '_expires_at',
+    mongoTtlField: '_expiresAt',
+  },
+  _conventions: {},
   routes: {
     create: { auth: 'userAuth' },
     list: {},
@@ -92,6 +108,16 @@ function createMockBus(): SlingshotEventBus & {
       const idx = subscriptions.findIndex(s => s.event === event);
       if (idx !== -1) subscriptions.splice(idx, 1);
     }),
+    onEnvelope: mock(
+      (event: string, handler: (p: Record<string, unknown>) => void | Promise<void>) => {
+        subscriptions.push({ event, handler });
+      },
+    ) as unknown as SlingshotEventBus['onEnvelope'],
+    offEnvelope: mock((event: string) => {
+      const idx = subscriptions.findIndex(s => s.event === event);
+      if (idx !== -1) subscriptions.splice(idx, 1);
+    }) as unknown as SlingshotEventBus['offEnvelope'],
+    shutdown: mock(() => Promise.resolve()),
     emitted,
     subscriptions,
   };
@@ -112,6 +138,12 @@ function createMockFrameworkConfig(): SlingshotFrameworkConfig & {
       cache: 'memory' as StoreType,
       authStore: 'memory' as StoreType,
       sqlite: undefined,
+    },
+    logging: {
+      enabled: false,
+      verbose: false,
+      authTrace: false,
+      auditWarnings: false,
     },
     security: { cors: '*' },
     signing: null,
@@ -168,6 +200,22 @@ function makeEntry(
     config,
     buildAdapter: () => a,
     adapter: a,
+  };
+}
+
+function createSetupContext(
+  app: MockApp,
+  config: ReturnType<typeof createMockFrameworkConfig>,
+  bus: ReturnType<typeof createMockBus>,
+): PluginSetupContext {
+  return {
+    app,
+    config,
+    bus,
+    events: createEventPublisher({
+      definitions: createEventDefinitionRegistry(),
+      bus,
+    }),
   };
 }
 
@@ -230,7 +278,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(noteConfig);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
       // Mount at root when no mountPath is set. The segment (`/notes`) is
       // added inside the router by buildBareEntityRoutes, so the app-level
@@ -247,7 +295,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(configNoRoutes);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
       expect(app.routes.length).toBe(0);
     });
@@ -263,7 +311,7 @@ describe('createEntityPlugin', () => {
         entities: [entry],
       });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
       // Mount at mountPath; the `/notes` segment is added inside the router.
       expect(app.routes[0].path).toBe('/api/v1');
@@ -276,7 +324,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(noteConfig);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
       expect(fw.entityRegistry.registered).toHaveLength(1);
       expect(fw.entityRegistry.registered[0].name).toBe('Note');
@@ -291,7 +339,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(noteConfig);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
       expect(pluginState.get('p')).toMatchObject({
         entityAdapters: {
@@ -321,10 +369,10 @@ describe('createEntityPlugin', () => {
         },
       };
 
-      await provider.setupRoutes!({ app, config: fw, bus });
+      await provider.setupRoutes!(createSetupContext(app, fw, bus));
       await dependent.setupRoutes({ app });
 
-      expect(resolved).toBe(entry.adapter);
+      expect(resolved as BareEntityAdapter | null).toBe(entry.adapter);
     });
 
     it('fails setupRoutes when the same entity name was published with a different adapter instance', async () => {
@@ -342,7 +390,7 @@ describe('createEntityPlugin', () => {
         entities: [makeEntry(noteConfig, createMockAdapter())],
       });
 
-      await expect(plugin.setupRoutes!({ app, config: fw, bus })).rejects.toThrow(
+      await expect(plugin.setupRoutes!(createSetupContext(app, fw, bus))).rejects.toThrow(
         "Entity adapter 'Note' for plugin 'p' was already published",
       );
     });
@@ -387,9 +435,9 @@ describe('createEntityPlugin', () => {
         ],
       });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
-      expect(resolvedCategory).toBe(categoryAdapter);
+      expect(resolvedCategory as BareEntityAdapter | null).toBe(categoryAdapter);
     });
 
     it('fails setupRoutes when an extra route collides with a generated route', async () => {
@@ -413,7 +461,7 @@ describe('createEntityPlugin', () => {
         ],
       });
 
-      await expect(plugin.setupRoutes!({ app, config: fw, bus })).rejects.toThrow(
+      await expect(plugin.setupRoutes!(createSetupContext(app, fw, bus))).rejects.toThrow(
         'Use overrides.get instead',
       );
     });
@@ -429,7 +477,7 @@ describe('createEntityPlugin', () => {
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
       // Verify setupRoutes completes without throwing even when registration throws.
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
     });
 
     it('wires cascade event handlers on bus', async () => {
@@ -451,7 +499,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(configWithCascades);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
       expect(bus.subscriptions.some(s => s.event === 'author:deleted')).toBe(true);
     });
@@ -481,7 +529,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(configWithCascades, adapter);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
       // Trigger the cascade
       const sub = bus.subscriptions.find(s => s.event === 'author:deleted')!;
@@ -521,7 +569,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(configWithCascade, adapter);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
       const sub = bus.subscriptions.find(s => s.event === 'author:suspended')!;
       await sub.handler({ id: 'author-9' });
@@ -538,7 +586,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(noteConfig);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupPost!({ app, config: fw, bus });
+      await plugin.setupPost!(createSetupContext(app, fw, bus));
 
       expect(bus.subscriptions).toHaveLength(0);
     });
@@ -554,7 +602,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(configWithMinimalRoutes);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupPost!({ app, config: fw, bus });
+      await plugin.setupPost!(createSetupContext(app, fw, bus));
 
       expect(bus.subscriptions).toHaveLength(0);
     });
@@ -595,7 +643,7 @@ describe('createEntityPlugin', () => {
         },
       });
 
-      await plugin.setupPost!({ app, config: fw, bus });
+      await plugin.setupPost!(createSetupContext(app, fw, bus));
 
       expect(registered).toHaveLength(1);
       expect(registered[0]).toMatchObject({ resourceType: 'note' });
@@ -615,7 +663,7 @@ describe('createEntityPlugin', () => {
         },
       });
 
-      await plugin.setupPost!({ app, config: fw, bus });
+      await plugin.setupPost!(createSetupContext(app, fw, bus));
 
       expect(callbackFired).toBe(true);
     });
@@ -636,7 +684,7 @@ describe('createEntityPlugin', () => {
       const entry = makeEntry(configWithCascade);
       const plugin = createEntityPlugin({ name: 'p', entities: [entry] });
 
-      await plugin.setupRoutes!({ app, config: fw, bus });
+      await plugin.setupRoutes!(createSetupContext(app, fw, bus));
       expect(bus.subscriptions).toHaveLength(1);
 
       await plugin.teardown!();
@@ -684,7 +732,7 @@ describe('EntityPluginEntryFactories — single-entity path (no entityKey)', () 
     const { config, factories, adapter } = makeFactoriesEntry(noteConfig);
 
     const plugin = createEntityPlugin({ name: 'p', entities: [{ config, factories }] });
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     // Router was mounted — adapter was resolved (create mock was not yet called, but
     // the plugin registered routes which means buildAdapter-equivalent ran without error)
@@ -720,7 +768,7 @@ describe('EntityPluginEntryFactories — single-entity path (no entityKey)', () 
       ],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     expect(captured).toBeDefined();
     expect(typeof captured!.create).toBe('function');
@@ -758,7 +806,7 @@ describe('EntityPluginEntryFactories — single-entity path (no entityKey)', () 
     (app.route as ReturnType<typeof mock>).mockImplementation(() => {
       order.push('route');
     });
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     expect(order[0]).toBe('onAdapter');
   });
@@ -796,7 +844,7 @@ describe('EntityPluginEntryFactories — composite path (entityKey present)', ()
       ],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     expect(capturedAdapter).toBeDefined();
     // The composite revert method was mixed onto the entity adapter
@@ -827,7 +875,9 @@ describe('EntityPluginEntryFactories — composite path (entityKey present)', ()
       ],
     });
 
-    await expect(plugin.setupRoutes!({ app, config: fw, bus })).rejects.toThrow('wrong-key');
+    await expect(plugin.setupRoutes!(createSetupContext(app, fw, bus))).rejects.toThrow(
+      'wrong-key',
+    );
   });
 
   it('op-mixing does NOT run for single-entity factories (no entityKey)', async () => {
@@ -860,7 +910,7 @@ describe('EntityPluginEntryFactories — composite path (entityKey present)', ()
       ],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     // customMethod is present because the resolved object is used directly (it has it)
     expect(typeof (capturedAdapter as Record<string, unknown>)['customMethod']).toBe('function');
@@ -917,7 +967,7 @@ describe('permissions pluginState fallback', () => {
       permissions: perms,
     });
 
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     // The permissions.registry.register should have been called for the entity
     expect(perms.registry.register).toHaveBeenCalled();
@@ -1011,8 +1061,8 @@ describe('autoGrant', () => {
       permissions: perms,
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     // Find the autoGrant subscription
     const sub = bus.subscriptions.find(s => s.event === 'content:document.created');
@@ -1069,8 +1119,8 @@ describe('autoGrant', () => {
     const app = createMockApp();
 
     const plugin = createEntityPlugin({ name: 'p', manifest, permissions: perms });
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     const sub = bus.subscriptions.find(s => s.event === 'test:doc.created');
     expect(sub).toBeDefined();
@@ -1135,8 +1185,8 @@ describe('activityLog', () => {
     const app = createMockApp();
 
     const plugin = createEntityPlugin({ name: 'p', manifest });
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     // Find the activityLog subscription for created
     const sub = bus.subscriptions.find(s => s.event === 'test:document.created');
@@ -1193,8 +1243,8 @@ describe('activityLog', () => {
     const app = createMockApp();
 
     const plugin = createEntityPlugin({ name: 'p', manifest });
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     const sub = bus.subscriptions.find(s => s.event === 'test:doc.created');
     expect(sub).toBeDefined();
@@ -1241,9 +1291,9 @@ describe('activityLog', () => {
     const app = createMockApp();
 
     const plugin = createEntityPlugin({ name: 'p', manifest });
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
-    await expect(plugin.setupPost!({ app, config: fw, bus })).rejects.toThrow(
+    await expect(plugin.setupPost!(createSetupContext(app, fw, bus))).rejects.toThrow(
       'Target entity "MissingEntity" not found in resolved adapters',
     );
   });
@@ -1285,8 +1335,8 @@ describe('activityLog', () => {
     const app = createMockApp();
 
     const plugin = createEntityPlugin({ name: 'p', manifest });
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     const sub = bus.subscriptions.find(s => s.event === 'test:doc.updated');
     expect(sub).toBeDefined();
@@ -1333,8 +1383,8 @@ describe('activityLog', () => {
     const app = createMockApp();
 
     const plugin = createEntityPlugin({ name: 'p', manifest });
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     const sub = bus.subscriptions.find(s => s.event === 'test:doc.deleted');
     expect(sub).toBeDefined();

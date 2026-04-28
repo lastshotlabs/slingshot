@@ -29,7 +29,26 @@ import type { BareEntityAdapter } from '../src/routing/buildBareEntityRoutes';
 
 const userActor = (id: string): Actor => ({ ...ANONYMOUS_ACTOR, id, kind: 'user' });
 
-const threadConfig: ResolvedEntityConfig = {
+function asResolvedConfig(config: Record<string, unknown>): ResolvedEntityConfig {
+  return {
+    _systemFields: {
+      createdBy: 'createdBy',
+      updatedBy: 'updatedBy',
+      ownerField: 'ownerId',
+      tenantField: 'tenantId',
+      version: 'version',
+    },
+    _storageFields: {
+      mongoPkField: '_id',
+      ttlField: '_expires_at',
+      mongoTtlField: '_expiresAt',
+    },
+    _conventions: {},
+    ...config,
+  } as unknown as ResolvedEntityConfig;
+}
+
+const threadConfig = asResolvedConfig({
   name: 'Thread',
   fields: {
     id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
@@ -37,7 +56,7 @@ const threadConfig: ResolvedEntityConfig = {
   },
   _pkField: 'id',
   _storageName: 'threads',
-};
+});
 
 const threadChannels: EntityChannelConfig = {
   channels: {
@@ -95,6 +114,12 @@ function createMockFrameworkConfig(): SlingshotFrameworkConfig & {
       cache: 'memory' as StoreType,
       authStore: 'memory' as StoreType,
       sqlite: undefined,
+    },
+    logging: {
+      enabled: false,
+      verbose: false,
+      authTrace: false,
+      auditWarnings: false,
     },
     security: { cors: '*' },
     signing: null,
@@ -334,7 +359,7 @@ describe('createEntityPlugin channel lifecycle', () => {
     const fw = createMockFrameworkConfig();
     const { app } = createMockApp(wsState);
 
-    const commentConfig: ResolvedEntityConfig = {
+    const commentConfig = asResolvedConfig({
       name: 'Comment',
       fields: {
         id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
@@ -342,7 +367,7 @@ describe('createEntityPlugin channel lifecycle', () => {
       },
       _pkField: 'id',
       _storageName: 'comments',
-    };
+    });
 
     const plugin = createEntityPlugin({
       name: 'test',

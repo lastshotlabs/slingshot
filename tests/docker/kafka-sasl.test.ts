@@ -1,7 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, mock, test } from 'bun:test';
-import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import { createEventEnvelope, createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import {
   createKafkaAdapter,
   createKafkaConnectors,
@@ -73,11 +73,40 @@ function headersToStrings(headers: KafkaMessage['headers']): Record<string, stri
   return result;
 }
 
+function createConnectorEnvelope(event: string, payload: unknown) {
+  return createEventEnvelope({
+    key: event as never,
+    payload: payload as never,
+    ownerPlugin: 'slingshot-kafka-docker-test',
+    exposure: ['connector'],
+    scope: null,
+    source: 'connector',
+    requestTenantId: null,
+  });
+}
+
+function unwrapEventEnvelopePayload<T = unknown>(value: unknown): T {
+  if (
+    value &&
+    typeof value === 'object' &&
+    'payload' in value &&
+    'key' in value &&
+    'meta' in value
+  ) {
+    return (value as { payload: T }).payload;
+  }
+  return value as T;
+}
+
+function parseKafkaPayload<T = unknown>(value: string | null): T {
+  return unwrapEventEnvelopePayload<T>(JSON.parse(value ?? 'null') as unknown);
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function runCleanupWithTimeout(fn: () => Promise<void>, ms = 5_000): Promise<void> {
+async function runCleanupWithTimeout(fn: () => Promise<void>, ms = 10_000): Promise<void> {
   await Promise.race([fn().catch(() => {}), sleep(ms)]);
 }
 
@@ -353,7 +382,7 @@ async function createTempManifest(
 afterEach(async () => {
   const pending = cleanup.splice(0, cleanup.length).reverse();
   await Promise.allSettled(pending.map(fn => runCleanupWithTimeout(fn)));
-});
+}, SASL_TEST_TIMEOUT_MS);
 
 describe('Kafka SASL runtime paths (Docker)', () => {
   test(
@@ -434,7 +463,9 @@ describe('Kafka SASL runtime paths (Docker)', () => {
           'SCRAM adapter publish did not reach Kafka',
         );
 
-        expect(JSON.parse(brokerMessages[0]!.value ?? '{}')).toEqual({
+        expect(
+          parseKafkaPayload<{ userId: string; sessionId: string }>(brokerMessages[0]!.value),
+        ).toEqual({
           userId: 'secure-produce-user',
           sessionId: 'secure-produce-session',
         });
@@ -458,7 +489,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
       try {
         const bus = createInProcessAdapter();
         const topic = uniqueName('external.secure.users');
-        const received: Array<{ userId: string; email?: string }> = [];
+        const received: unknown[] = [];
 
         const connectors = createKafkaConnectors({
           brokers: [KAFKA_SASL_BROKER],
@@ -468,7 +499,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
               topic,
               groupId: uniqueName('secure-sync'),
               handler: payload => {
-                received.push(payload as { userId: string; email?: string });
+                received.push(payload);
               },
             },
           ],
@@ -485,10 +516,13 @@ describe('Kafka SASL runtime paths (Docker)', () => {
         await connectors.start(bus);
         await sleep(500);
 
-        bus.emit('auth:user.created', {
-          userId: 'secure-connector-user',
-          email: 'secure@example.com',
-        });
+        bus.emit(
+          'auth:user.created',
+          createConnectorEnvelope('auth:user.created', {
+            userId: 'secure-connector-user',
+            email: 'secure@example.com',
+          }) as never,
+        );
 
         await waitFor(
           () => received.length === 1,
@@ -496,7 +530,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
           'SCRAM connectors did not bridge the event through Kafka',
         );
 
-        expect(received).toEqual([
+        expect(received.map(unwrapEventEnvelopePayload)).toEqual([
           { userId: 'secure-connector-user', email: 'secure@example.com' },
         ]);
         expect(
@@ -590,7 +624,9 @@ describe('Kafka SASL runtime paths (Docker)', () => {
         'SCRAM-SHA-512 adapter publish did not reach Kafka',
       );
 
-      expect(JSON.parse(brokerMessages[0]!.value ?? '{}')).toEqual({
+      expect(
+        parseKafkaPayload<{ userId: string; sessionId: string }>(brokerMessages[0]!.value),
+      ).toEqual({
         userId: 'scram512-produce-user',
         sessionId: 'scram512-produce-session',
       });
@@ -605,7 +641,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
 
       const bus = createInProcessAdapter();
       const topic = uniqueName('external.plain.users');
-      const received: Array<{ userId: string; email?: string }> = [];
+      const received: unknown[] = [];
 
       const connectors = createKafkaConnectors({
         brokers: [KAFKA_SASL_BROKER],
@@ -615,7 +651,7 @@ describe('Kafka SASL runtime paths (Docker)', () => {
             topic,
             groupId: uniqueName('plain-sync'),
             handler: payload => {
-              received.push(payload as { userId: string; email?: string });
+              received.push(payload);
             },
           },
         ],
@@ -632,10 +668,13 @@ describe('Kafka SASL runtime paths (Docker)', () => {
       await connectors.start(bus);
       await sleep(500);
 
-      bus.emit('auth:user.created', {
-        userId: 'plain-connector-user',
-        email: 'plain@example.com',
-      });
+      bus.emit(
+        'auth:user.created',
+        createConnectorEnvelope('auth:user.created', {
+          userId: 'plain-connector-user',
+          email: 'plain@example.com',
+        }) as never,
+      );
 
       await waitFor(
         () => received.length === 1,
@@ -643,7 +682,9 @@ describe('Kafka SASL runtime paths (Docker)', () => {
         'PLAIN connectors did not bridge the event through Kafka',
       );
 
-      expect(received).toEqual([{ userId: 'plain-connector-user', email: 'plain@example.com' }]);
+      expect(received.map(unwrapEventEnvelopePayload)).toEqual([
+        { userId: 'plain-connector-user', email: 'plain@example.com' },
+      ]);
     },
     SASL_TEST_TIMEOUT_MS,
   );
@@ -784,17 +825,22 @@ describe('Kafka SASL runtime paths (Docker)', () => {
 
         const outboundMessages = await collectSecureMessages(outboundTopic);
 
-        ctx.bus.emit('auth:user.created', {
-          userId: 'manifest-sasl-user',
-          email: 'manifest-sasl@example.com',
-        } as never);
+        ctx.bus.emit(
+          'auth:user.created',
+          createConnectorEnvelope('auth:user.created', {
+            userId: 'manifest-sasl-user',
+            email: 'manifest-sasl@example.com',
+          }) as never,
+        );
 
         await waitFor(
           () => outboundMessages.length === 1,
           15_000,
           'Manifest SASL outbound connector did not publish to Kafka',
         );
-        expect(JSON.parse(outboundMessages[0]!.value ?? '{}')).toEqual({
+        expect(
+          parseKafkaPayload<{ userId: string; email: string }>(outboundMessages[0]!.value),
+        ).toEqual({
           userId: 'manifest-sasl-user',
           email: 'manifest-sasl@example.com',
         });

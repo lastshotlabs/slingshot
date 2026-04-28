@@ -1,4 +1,5 @@
 // packages/slingshot-ssr/src/middleware.ts
+import crypto from 'node:crypto';
 import path from 'node:path';
 import type { MiddlewareHandler } from 'hono';
 import { getContext } from '@lastshotlabs/slingshot-core';
@@ -8,7 +9,11 @@ import { buildDevAssetTags, resolveAssetTags } from './assets';
 import { buildDevErrorOverlay } from './dev/overlay';
 import { isDraftRequest, withDraftContext } from './draft/index';
 import type { IsrCacheAdapter } from './isr/types';
-import { resolveGlobalMiddlewarePath, resolveRouteChain } from './resolver';
+import {
+  isRouteParamTooLargeError,
+  resolveGlobalMiddlewarePath,
+  resolveRouteChain,
+} from './resolver';
 import type {
   IsrSink,
   SsrCacheControl,
@@ -238,10 +243,23 @@ export function buildSsrMiddleware(
 
     let extraResponseHeaders: Record<string, string> = {};
 
+    // Resolver options — caps and limits derived from plugin config.
+    const resolveOptions = {
+      maxRouteParamBytes: config.maxRouteParamBytes,
+    };
+
     // 1. File-based chain resolver — resolves layouts, slots, interception, middleware
     // 2. Renderer's own resolve() — for manifest/config-driven routing (no chain support)
     //    Called when the file resolver has no match. Returns null to fall through to SPA.
-    let chain: SsrRouteChain | null = resolveRouteChain(pathname, config.serverRoutesDir, fromPath);
+    let chain: SsrRouteChain | null;
+    try {
+      chain = resolveRouteChain(pathname, config.serverRoutesDir, fromPath, resolveOptions);
+    } catch (err) {
+      if (isRouteParamTooLargeError(err)) {
+        return c.text('URI Too Long', 414);
+      }
+      throw err;
+    }
 
     // Hydrate query and url on the page match when chain was found
     if (chain) {
@@ -323,11 +341,20 @@ export function buildSsrMiddleware(
 
             if (hasRewriteResult(middlewareResult)) {
               const rewriteUrl = new URL(middlewareResult.rewrite, url.origin);
-              const rewriteChain = resolveRouteChain(
-                rewriteUrl.pathname,
-                config.serverRoutesDir,
-                fromPath,
-              );
+              let rewriteChain: SsrRouteChain | null;
+              try {
+                rewriteChain = resolveRouteChain(
+                  rewriteUrl.pathname,
+                  config.serverRoutesDir,
+                  fromPath,
+                  resolveOptions,
+                );
+              } catch (rewriteErr) {
+                if (isRouteParamTooLargeError(rewriteErr)) {
+                  return c.text('URI Too Long', 414);
+                }
+                throw rewriteErr;
+              }
               if (rewriteChain) {
                 const rewriteQuery: Record<string, string> = {};
                 rewriteUrl.searchParams.forEach((v, k) => {
@@ -402,11 +429,20 @@ export function buildSsrMiddleware(
             // request URL. Using the original `url` here caused loaders to
             // receive the pre-rewrite path even after the chain was swapped.
             const rewriteUrl = new URL(middlewareResult.rewrite, url.origin);
-            const rewriteChain = resolveRouteChain(
-              rewriteUrl.pathname,
-              config.serverRoutesDir,
-              fromPath,
-            );
+            let rewriteChain: SsrRouteChain | null;
+            try {
+              rewriteChain = resolveRouteChain(
+                rewriteUrl.pathname,
+                config.serverRoutesDir,
+                fromPath,
+                resolveOptions,
+              );
+            } catch (rewriteErr) {
+              if (isRouteParamTooLargeError(rewriteErr)) {
+                return c.text('URI Too Long', 414);
+              }
+              throw rewriteErr;
+            }
             if (rewriteChain) {
               const rewriteQuery: Record<string, string> = {};
               rewriteUrl.searchParams.forEach((v, k) => {
@@ -546,8 +582,55 @@ export function buildSsrMiddleware(
     }
     // ── End ISR cache write ────────────────────────────────────────────────
 
+    // ── ETag / 304 Not Modified support ────────────────────────────────────
+    // Compute a strong ETag from the response body for successfully-rendered,
+    // non-draft routes. When the request carries `If-None-Match` matching the
+    // computed ETag, return 304 with empty body and the ETag header.
+    //
+    // Eligibility:
+    // - Response status is 2xx (don't touch error/redirect responses)
+    // - Not a draft request (drafts must always serve fresh content)
+    // - Response has a body to hash
+    //
+    // Skips when the renderer already set its own ETag (renderer wins).
+    const isSuccessfulRender = response.status >= 200 && response.status < 300;
+    const etagEligible = isSuccessfulRender && !draftMode && !response.headers.has('ETag');
+    if (etagEligible && response.body) {
+      // Read the body so we can hash it. Body can only be consumed once,
+      // so we replace the response body with the buffered bytes afterward.
+      const bodyBuffer = await response.arrayBuffer();
+      const etag =
+        '"' +
+        crypto
+          .createHash('sha256')
+          .update(Buffer.from(bodyBuffer))
+          .digest('base64url')
+          .slice(0, 27) +
+        '"';
+
+      const ifNoneMatch = c.req.header('if-none-match');
+      if (ifNoneMatch === etag) {
+        // 304 Not Modified — no body, but include ETag header.
+        const headers304 = new Headers();
+        headers304.set('ETag', etag);
+        return new Response(null, { status: 304, headers: headers304 });
+      }
+
+      const newHeaders = new Headers(response.headers);
+      newHeaders.set('ETag', etag);
+      response = new Response(bodyBuffer, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: newHeaders,
+      });
+    }
+    // ── End ETag / 304 ─────────────────────────────────────────────────────
+
     // Apply cache-control header (do not overwrite if renderer already set one)
-    const cacheControl = resolveCacheControl(config.cacheControl, pathname);
+    // For successfully-rendered, non-draft routes, default to 'private, must-revalidate'
+    // (allows clients/proxies to cache and revalidate via the ETag we just set).
+    // Error and draft paths still fall back to 'no-store'.
+    const cacheControl = resolveCacheControl(config.cacheControl, pathname, etagEligible);
     if (cacheControl && !response.headers.has('Cache-Control')) {
       const newHeaders = new Headers(response.headers);
       newHeaders.set('Cache-Control', cacheControl);
@@ -605,7 +688,19 @@ async function regeneratePage(
 ): Promise<void> {
   signal?.throwIfAborted();
   const pathname = url.pathname;
-  let chain = resolveRouteChain(pathname, config.serverRoutesDir);
+  let chain: SsrRouteChain | null;
+  try {
+    chain = resolveRouteChain(pathname, config.serverRoutesDir, undefined, {
+      maxRouteParamBytes: config.maxRouteParamBytes,
+    });
+  } catch (err) {
+    if (isRouteParamTooLargeError(err)) {
+      // Background regen — log and bail. The original request returned 414.
+      console.error('[slingshot-ssr] ISR regen aborted: route param exceeded cap for', pathname);
+      return;
+    }
+    throw err;
+  }
 
   if (chain) {
     const hydratedPage = { ...chain.page, url, query };
@@ -686,14 +781,22 @@ async function regeneratePage(
 /**
  * Resolve the Cache-Control header value for a given pathname.
  *
- * Route-specific overrides take precedence over the default.
- * Falls back to `'no-store'` when no config is provided.
+ * Route-specific overrides take precedence over the default. When no override
+ * matches and `etagEligible` is true (successfully-rendered, non-draft route),
+ * defaults to `'private, must-revalidate'` so clients can revalidate via the
+ * ETag we set. Otherwise (errors, drafts, no eligible body) falls back to
+ * `'no-store'`.
  *
  * @internal
  */
-function resolveCacheControl(config: SsrCacheControl | undefined, pathname: string): string {
-  if (!config) return 'no-store';
-  const routeOverride = config.routes?.[pathname];
+function resolveCacheControl(
+  config: SsrCacheControl | undefined,
+  pathname: string,
+  etagEligible: boolean,
+): string {
+  const routeOverride = config?.routes?.[pathname];
   if (routeOverride !== undefined) return routeOverride;
-  return config.default ?? 'no-store';
+  const configured = config?.default;
+  if (configured !== undefined) return configured;
+  return etagEligible ? 'private, must-revalidate' : 'no-store';
 }

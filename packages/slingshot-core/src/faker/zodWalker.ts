@@ -85,6 +85,8 @@ interface ZodCheck {
 export interface WalkOptions {
   /** Faker instance — defaults to the global singleton. */
   faker?: Faker;
+  /** Deterministic seed for a top-level walk. */
+  seed?: number;
   /** Override specific field paths. Keys use dot-notation: `"address.city"`. */
   overrides?: Record<string, unknown>;
   /** Maximum depth for recursive schemas (z.lazy). Defaults to 2. */
@@ -393,6 +395,9 @@ function fakeStringForFormat(
  */
 export function walkSchema(schema: ZodSchema, opts: WalkOptions = {}): unknown {
   const f = opts.faker ?? defaultFaker;
+  if (opts.seed !== undefined && opts._depth === undefined) {
+    f.seed(opts.seed);
+  }
   const path = opts._path ?? '';
   const depth = opts._depth ?? 0;
   const maxDepth = opts.maxDepth ?? 2;

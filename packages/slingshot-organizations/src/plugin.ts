@@ -23,7 +23,9 @@ import { organizationsManifest } from './manifest/organizationsManifest';
 import { createOrganizationsManifestRuntime } from './manifest/runtime';
 import { ORGANIZATIONS_ORG_SERVICE_STATE_KEY, type OrganizationsOrgService } from './orgService';
 
-const memberRoleSchema = z.enum(['owner', 'admin', 'member']);
+const memberRoleSchema = z.string().min(1);
+
+const DEFAULT_KNOWN_ROLES = ['owner', 'admin', 'member'] as const;
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
@@ -71,6 +73,14 @@ const organizationsPluginConfigSchema = z.object({
       enabled: z.boolean().default(true),
       invitationTtlSeconds: z.number().int().positive().optional(),
       defaultMemberRole: memberRoleSchema.optional(),
+      knownRoles: z
+        .array(z.string().min(1))
+        .nonempty()
+        .optional()
+        .describe(
+          "Allowed values for member, invite, and group-membership 'role' fields. " +
+            "Roles outside this list are rejected with a 400. Defaults to ['owner', 'admin', 'member'].",
+        ),
       reservedSlugs: z
         .array(z.string())
         .optional()
@@ -81,6 +91,17 @@ const organizationsPluginConfigSchema = z.object({
         'Sliding-window rate limits for invitation create + lookup endpoints.',
       ),
     })
+    .refine(
+      value => {
+        const known: ReadonlyArray<string> = value.knownRoles ?? DEFAULT_KNOWN_ROLES;
+        const defaultRole = value.defaultMemberRole ?? 'member';
+        return known.includes(defaultRole);
+      },
+      {
+        message: 'organizations.defaultMemberRole must be present in organizations.knownRoles',
+        path: ['defaultMemberRole'],
+      },
+    )
     .optional(),
   groups: z
     .object({
@@ -272,6 +293,7 @@ export function createOrganizationsPlugin(
           authRuntime,
           invitationTtlSeconds,
           defaultMemberRole: config.organizations?.defaultMemberRole ?? 'member',
+          knownRoles: config.organizations?.knownRoles ?? [...DEFAULT_KNOWN_ROLES],
           slugSchema: orgSlugSchema,
           onAdaptersCaptured(adapters) {
             orgAdapterRef = adapters.organizations as typeof orgAdapterRef;
@@ -341,9 +363,10 @@ export function createOrganizationsPlugin(
           return { id: created.id };
         },
         async addOrgMember(orgId, userId, roles, invitedBy) {
+          const knownRoles = config.organizations?.knownRoles ?? [...DEFAULT_KNOWN_ROLES];
           const role = roles?.find(
-            (candidate): candidate is 'owner' | 'admin' | 'member' =>
-              candidate === 'owner' || candidate === 'admin' || candidate === 'member',
+            (candidate): candidate is string =>
+              typeof candidate === 'string' && knownRoles.includes(candidate),
           );
           return memberAdapter.create({
             orgId,

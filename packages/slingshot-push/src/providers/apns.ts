@@ -1,4 +1,5 @@
 import { createPrivateKey, createSign } from 'node:crypto';
+import { deriveUuidV4FromKey } from '../lib/idempotency';
 import type { ApnsAuthInput } from '../types/config';
 import type { PushProvider } from './provider';
 
@@ -98,10 +99,12 @@ export function createApnsProvider(config: {
 }): PushProvider {
   return {
     platform: 'ios',
-    async send(subscription, message) {
+    async send(subscription, message, context) {
       if (subscription.platformData.platform !== 'ios') {
         return { ok: false, reason: 'transient', error: 'subscription platform mismatch' };
       }
+      const idempotencyKey = context?.idempotencyKey;
+      const apnsId = idempotencyKey ? deriveUuidV4FromKey(idempotencyKey) : undefined;
 
       const platformData: {
         deviceToken: string;
@@ -109,7 +112,8 @@ export function createApnsProvider(config: {
         environment?: 'sandbox' | 'production';
       } = subscription.platformData;
       const environment = platformData.environment ?? config.defaultEnvironment ?? 'production';
-      const bundleId = platformData.bundleId ?? config.defaultBundleId;
+      // Use `||` (not `??`) so an empty-string platformData.bundleId falls back to defaultBundleId.
+      const bundleId = platformData.bundleId || config.defaultBundleId;
       if (!bundleId) {
         return { ok: false, reason: 'transient', error: 'missing APNS bundle id' };
       }
@@ -133,22 +137,25 @@ export function createApnsProvider(config: {
           };
 
       try {
+        const headers: Record<string, string> = {
+          authorization: `bearer ${config.auth.getToken()}`,
+          'apns-topic': bundleId,
+          'apns-push-type': message.silent ? 'background' : 'alert',
+          'apns-priority': message.silent ? '5' : '10',
+          'content-type': 'application/json',
+        };
+        if (apnsId) headers['apns-id'] = apnsId;
         const response = await fetch(`${origin}/3/device/${platformData.deviceToken}`, {
           method: 'POST',
-          headers: {
-            authorization: `bearer ${config.auth.getToken()}`,
-            'apns-topic': bundleId,
-            'apns-push-type': message.silent ? 'background' : 'alert',
-            'apns-priority': message.silent ? '5' : '10',
-            'content-type': 'application/json',
-          },
+          headers,
           body: JSON.stringify(payload),
         });
 
         if (response.ok) {
           return {
             ok: true,
-            providerMessageId: response.headers.get('apns-id') ?? undefined,
+            providerMessageId: response.headers.get('apns-id') ?? apnsId ?? undefined,
+            providerIdempotencyKey: idempotencyKey,
           };
         }
 

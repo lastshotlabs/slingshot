@@ -361,7 +361,7 @@ describe('Permissions Postgres adapter (docker)', () => {
         ]);
 
         const versions = await readPermissionSchemaVersions(pool);
-        expect(versions).toEqual([1]);
+        expect(versions).toEqual([2]);
         expect(await hasPermissionVersionSingletonIndex(pool)).toBe(true);
 
         const grantId = await adapterA.createGrant(
@@ -394,7 +394,7 @@ describe('Permissions Postgres adapter (docker)', () => {
       try {
         const repairedAdapter = await createPermissionsPostgresAdapter(repairPool);
         const versions = await readPermissionSchemaVersions(pool);
-        expect(versions).toEqual([1]);
+        expect(versions).toEqual([2]);
         expect(await hasPermissionVersionSingletonIndex(pool)).toBe(true);
 
         await repairedAdapter.createGrant(makeGrant({ subjectId: 'repair-user' }));
@@ -411,12 +411,12 @@ describe('Permissions Postgres adapter (docker)', () => {
       await pool.query(
         'CREATE TABLE _permission_schema_version (version INTEGER NOT NULL DEFAULT 0)',
       );
-      await pool.query('INSERT INTO _permission_schema_version (version) VALUES (2)');
+      await pool.query('INSERT INTO _permission_schema_version (version) VALUES (3)');
 
       const futurePool = createTestPool();
       try {
         await expect(createPermissionsPostgresAdapter(futurePool)).rejects.toThrow(
-          'Database schema version 2 is newer than this binary supports (1)',
+          'Database schema version 3 is newer than this binary supports (2)',
         );
       } finally {
         await futurePool.end();

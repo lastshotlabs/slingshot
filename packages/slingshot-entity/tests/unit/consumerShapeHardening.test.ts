@@ -406,8 +406,14 @@ describe('Phase 5: custom auto-default resolver', () => {
 describe('Phase 5: applyDefaults with custom resolver', () => {
   test('applies custom auto-default for non-built-in sentinel', () => {
     const fields = {
-      id: { type: 'string' as const, default: 'ulid', primary: true },
-      name: { type: 'string' as const },
+      id: {
+        type: 'string' as const,
+        default: 'ulid',
+        primary: true,
+        immutable: false,
+        optional: false,
+      },
+      name: { type: 'string' as const, primary: false, immutable: false, optional: false },
     };
     const custom = (kind: string) => (kind === 'ulid' ? 'my-ulid-value' : undefined);
 
@@ -418,7 +424,13 @@ describe('Phase 5: applyDefaults with custom resolver', () => {
 
   test('falls through to literal default when custom returns undefined', () => {
     const fields = {
-      status: { type: 'string' as const, default: 'draft' },
+      status: {
+        type: 'string' as const,
+        default: 'draft',
+        primary: false,
+        immutable: false,
+        optional: false,
+      },
     };
     const custom = () => undefined;
 
@@ -428,8 +440,20 @@ describe('Phase 5: applyDefaults with custom resolver', () => {
 
   test('built-in auto-defaults work without custom resolver', () => {
     const fields = {
-      id: { type: 'string' as const, default: 'uuid' as const, primary: true },
-      createdAt: { type: 'date' as const, default: 'now' as const },
+      id: {
+        type: 'string' as const,
+        default: 'uuid' as const,
+        primary: true,
+        immutable: false,
+        optional: false,
+      },
+      createdAt: {
+        type: 'date' as const,
+        default: 'now' as const,
+        primary: false,
+        immutable: false,
+        optional: false,
+      },
     };
 
     const record = applyDefaults({}, fields);
@@ -441,7 +465,13 @@ describe('Phase 5: applyDefaults with custom resolver', () => {
 describe('Phase 5: applyOnUpdate with custom resolver', () => {
   test('built-in now still works', () => {
     const fields = {
-      updatedAt: { type: 'date' as const, onUpdate: 'now' as const },
+      updatedAt: {
+        type: 'date' as const,
+        onUpdate: 'now' as const,
+        primary: false,
+        immutable: false,
+        optional: false,
+      },
     };
     const result = applyOnUpdate({ name: 'changed' }, fields);
     expect(result.updatedAt).toBeInstanceOf(Date);
@@ -450,21 +480,33 @@ describe('Phase 5: applyOnUpdate with custom resolver', () => {
 
   test('custom onUpdate resolver handles non-built-in sentinel', () => {
     const fields = {
-      version: { type: 'number' as const, onUpdate: 'increment' },
+      version: {
+        type: 'number' as const,
+        onUpdate: 'increment',
+        primary: false,
+        immutable: false,
+        optional: false,
+      },
     };
     const custom = (kind: string) => (kind === 'increment' ? 42 : undefined);
 
-    const result = applyOnUpdate({ name: 'changed' }, fields, custom);
+    const result = applyOnUpdate({ name: 'changed' }, fields as never, custom);
     expect(result.version).toBe(42);
   });
 
   test('custom onUpdate skips field when resolver returns undefined', () => {
     const fields = {
-      version: { type: 'number' as const, onUpdate: 'unknown-strategy' },
+      version: {
+        type: 'number' as const,
+        onUpdate: 'unknown-strategy',
+        primary: false,
+        immutable: false,
+        optional: false,
+      },
     };
     const custom = () => undefined;
 
-    const result = applyOnUpdate({ name: 'changed' }, fields, custom);
+    const result = applyOnUpdate({ name: 'changed' }, fields as never, custom);
     expect(result.version).toBeUndefined();
   });
 });

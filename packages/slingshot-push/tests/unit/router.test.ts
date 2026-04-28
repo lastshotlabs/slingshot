@@ -586,6 +586,9 @@ describe('createPushRouter — retry behavior', () => {
 
     expect(delivered).toBe(1);
     expect(sendCount).toBe(2);
+    expect(repos._deliveries[0]!.status).toBe('failed');
+    expect(repos._deliveries[0]!.failureReason).toBe('repositoryFailure');
+    expect(repos._deliveries[1]!.status).toBe('sent');
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Repository failure during fan-out'),
       expect.any(Error),

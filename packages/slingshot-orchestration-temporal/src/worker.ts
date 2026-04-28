@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { resolve } from 'node:path';
+import type { ClientInterceptors } from '@temporalio/client';
 import type { DataConverter } from '@temporalio/common';
 import { type NativeConnection, Worker, type WorkerInterceptors } from '@temporalio/worker';
 import {
@@ -106,10 +107,27 @@ export async function createTemporalOrchestrationWorkerInternal(
     });
 
     const namespace = options.namespace;
+    // `dataConverter` and `interceptors` are pass-through configuration
+    // surfaces. Plumb them into every Worker we construct so payload codecs
+    // (e.g. PII redaction) and worker interceptors (auth headers, tracing,
+    // workflow modules) are applied symmetrically across the workflow
+    // worker and any per-queue activity workers.
+    //
+    // The same `dataConverter` and (the client-shaped subset of)
+    // `interceptors` are also forwarded into the internal `Client` that
+    // activities use to signal child workflows. Without this plumbing,
+    // activity-emitted signals bypass the codec and leak unredacted PII
+    // to Temporal Web UI and the visibility store.
+    const workerDataConverter = options.dataConverter as DataConverter | undefined;
+    const workerInterceptors = options.interceptors as WorkerInterceptors | undefined;
+    const clientInterceptors = options.interceptors as ClientInterceptors | undefined;
+
     const activities = createTemporalActivities({
       connection: options.connection as NativeConnection,
       namespace,
       eventSink: options.eventSink as OrchestrationEventSink | undefined,
+      ...(workerDataConverter ? { dataConverter: workerDataConverter } : {}),
+      ...(clientInterceptors ? { interceptors: clientInterceptors } : {}),
     });
 
     for (const task of selected.tasks) {
@@ -118,14 +136,6 @@ export async function createTemporalOrchestrationWorkerInternal(
     if (queues.size === 0) {
       queues.add(options.defaultActivityTaskQueue ?? options.workflowTaskQueue);
     }
-
-    // `dataConverter` and `interceptors` are pass-through configuration
-    // surfaces. Plumb them into every Worker we construct so payload codecs
-    // (e.g. PII redaction) and worker interceptors (auth headers, tracing,
-    // workflow modules) are applied symmetrically across the workflow
-    // worker and any per-queue activity workers.
-    const workerDataConverter = options.dataConverter as DataConverter | undefined;
-    const workerInterceptors = options.interceptors as WorkerInterceptors | undefined;
 
     const workflowWorker = await Worker.create({
       connection: options.connection as NativeConnection,

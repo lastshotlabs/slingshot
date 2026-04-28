@@ -16,7 +16,7 @@ interface BullMQMailQueueConfig extends MailQueueConfig {
   queueName?: string;
 }
 
-type MailJobData = { message: MailMessage; sourceEvent?: string };
+type MailJobData = { message: MailMessage; sourceEvent?: string; idempotencyKey?: string };
 
 /**
  * Creates a durable, Redis-backed mail queue powered by [BullMQ](https://docs.bullmq.io).
@@ -62,15 +62,28 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
 
   return {
     name: 'bullmq',
-    async enqueue(message: MailMessage, opts?: { sourceEvent?: string }): Promise<string> {
+    async enqueue(
+      message: MailMessage,
+      opts?: { sourceEvent?: string; idempotencyKey?: string },
+    ): Promise<string> {
       if (!queue) throw new Error('BullMQ mail queue not started — call start() first');
+      const addOpts: {
+        attempts: number;
+        backoff: { type: 'exponential'; delay: number };
+        jobId?: string;
+      } = {
+        attempts: maxAttempts,
+        backoff: { type: 'exponential', delay: retryBaseDelayMs },
+      };
+      if (opts?.idempotencyKey) {
+        // BullMQ deduplicates enqueues globally per queue when jobId is supplied.
+        // A second add() with the same jobId is a no-op and returns the original job.
+        addOpts.jobId = opts.idempotencyKey;
+      }
       const job = await queue.add(
         'send',
-        { message, sourceEvent: opts?.sourceEvent },
-        {
-          attempts: maxAttempts,
-          backoff: { type: 'exponential', delay: retryBaseDelayMs },
-        },
+        { message, sourceEvent: opts?.sourceEvent, idempotencyKey: opts?.idempotencyKey },
+        addOpts,
       );
       if (job.id === undefined) {
         throw new Error('BullMQ mail queue: queued job is missing an id');

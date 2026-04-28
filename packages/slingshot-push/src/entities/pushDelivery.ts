@@ -12,9 +12,10 @@ export const PushDelivery = defineEntity('PushDelivery', {
     platform: field.enum(['web', 'ios', 'android'] as const),
     notificationId: field.string({ optional: true }),
     providerMessageId: field.string({ optional: true }),
+    providerIdempotencyKey: field.string({ optional: true }),
     status: field.enum(['pending', 'sent', 'delivered', 'failed'] as const, { default: 'pending' }),
     failureReason: field.enum(
-      ['invalidToken', 'rateLimited', 'payloadTooLarge', 'transient'] as const,
+      ['invalidToken', 'rateLimited', 'payloadTooLarge', 'transient', 'repositoryFailure'] as const,
       {
         optional: true,
       },

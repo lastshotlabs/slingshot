@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import { createEventEnvelope, createInProcessAdapter } from '@lastshotlabs/slingshot-core';
 import {
   createKafkaAdapter,
   createKafkaConnectors,
@@ -73,6 +73,18 @@ function headersToStrings(headers: KafkaMessage['headers']): Record<string, stri
   }
 
   return result;
+}
+
+function createConnectorEnvelope(event: string, payload: unknown) {
+  return createEventEnvelope({
+    key: event as never,
+    payload: payload as never,
+    ownerPlugin: 'slingshot-kafka-docker-test',
+    exposure: ['connector'],
+    scope: null,
+    source: 'connector',
+    requestTenantId: null,
+  });
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -364,8 +376,16 @@ async function runAdapterRoundTripScenario(
   );
 
   const produced = JSON.parse(brokerMessages[0]!.value ?? '{}');
+  const producedPayload =
+    produced && typeof produced === 'object' && 'payload' in produced ? produced.payload : produced;
   if (produced.userId !== 'tls-produce-user' || produced.sessionId !== 'tls-produce-session') {
-    throw new Error(`Unexpected TLS adapter publish payload: ${JSON.stringify(produced)}`);
+    if (
+      !producedPayload ||
+      producedPayload.userId !== 'tls-produce-user' ||
+      producedPayload.sessionId !== 'tls-produce-session'
+    ) {
+      throw new Error(`Unexpected TLS adapter publish payload: ${JSON.stringify(produced)}`);
+    }
   }
 }
 
@@ -402,10 +422,13 @@ async function runConnectorsBridgeScenario(
   await connectors.start(bus);
   await sleep(500);
 
-  bus.emit('auth:user.created', {
-    userId: 'tls-connector-user',
-    email: 'tls@example.com',
-  });
+  bus.emit(
+    'auth:user.created',
+    createConnectorEnvelope('auth:user.created', {
+      userId: 'tls-connector-user',
+      email: 'tls@example.com',
+    }) as never,
+  );
 
   await waitFor(
     () => received.length === 1,
@@ -494,10 +517,13 @@ async function runManifestBootstrapScenario(): Promise<void> {
   }
 
   const outboundMessages = await collectTlsMessages(outboundTopic);
-  ctx.bus.emit('auth:user.created', {
-    userId: 'manifest-tls-user',
-    email: 'manifest-tls@example.com',
-  } as never);
+  ctx.bus.emit(
+    'auth:user.created',
+    createConnectorEnvelope('auth:user.created', {
+      userId: 'manifest-tls-user',
+      email: 'manifest-tls@example.com',
+    }) as never,
+  );
 
   await waitFor(
     () => outboundMessages.length === 1,
@@ -602,10 +628,13 @@ async function runManifestMtlsScenario(): Promise<void> {
     ssl: TLS_MUTUAL_SSL,
     broker: KAFKA_MTLS_BROKER,
   });
-  ctx.bus.emit('auth:user.created', {
-    userId: 'manifest-mtls-user',
-    email: 'manifest-mtls@example.com',
-  } as never);
+  ctx.bus.emit(
+    'auth:user.created',
+    createConnectorEnvelope('auth:user.created', {
+      userId: 'manifest-mtls-user',
+      email: 'manifest-mtls@example.com',
+    }) as never,
+  );
 
   await waitFor(
     () => outboundMessages.length === 1,

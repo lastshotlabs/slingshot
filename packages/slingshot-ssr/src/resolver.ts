@@ -3,6 +3,70 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import type { SsrParallelSlot, SsrRouteChain, SsrRouteMatch } from './types';
 
+/**
+ * Default maximum byte length of a single decoded route param.
+ *
+ * Per spec — pluggable through `SsrPluginConfig.maxRouteParamBytes`. Requests
+ * whose decoded params exceed this cap are rejected with HTTP 414.
+ */
+export const DEFAULT_MAX_ROUTE_PARAM_BYTES = 2048;
+
+/**
+ * Thrown by route resolution helpers when a decoded route param exceeds the
+ * configured byte cap. The SSR middleware catches this and returns a 414
+ * URI Too Long response without invoking the renderer.
+ */
+export class RouteParamTooLargeError extends Error {
+  /** Type guard tag — `instanceof` works across module boundaries. */
+  readonly name = 'RouteParamTooLargeError';
+  /** The dynamic-segment name that exceeded the cap. */
+  readonly param: string;
+  /** The byte length observed (after URL decoding). */
+  readonly byteLength: number;
+  /** The cap that was exceeded. */
+  readonly limit: number;
+
+  constructor(param: string, byteLength: number, limit: number) {
+    super(`Route param "${param}" decoded to ${byteLength} bytes, exceeding the ${limit}-byte cap`);
+    this.param = param;
+    this.byteLength = byteLength;
+    this.limit = limit;
+  }
+}
+
+/**
+ * Returns true when `err` is a {@link RouteParamTooLargeError}. Uses a name
+ * check so the guard works across module boundaries / duplicate class loads.
+ */
+export function isRouteParamTooLargeError(err: unknown): err is RouteParamTooLargeError {
+  return err instanceof Error && (err as Error).name === 'RouteParamTooLargeError';
+}
+
+/**
+ * Options controlling route resolution.
+ */
+export interface ResolveRouteOptions {
+  /**
+   * Maximum byte length of a single decoded route param value.
+   *
+   * @default DEFAULT_MAX_ROUTE_PARAM_BYTES (2048)
+   */
+  readonly maxRouteParamBytes?: number;
+}
+
+/**
+ * Returns the UTF-8 byte length of `value`, using `Buffer.byteLength` when
+ * available (Node/Bun) and falling back to `TextEncoder` on edge runtimes.
+ *
+ * @internal
+ */
+function utf8ByteLength(value: string): number {
+  if (typeof Buffer !== 'undefined' && typeof Buffer.byteLength === 'function') {
+    return Buffer.byteLength(value, 'utf8');
+  }
+  return new TextEncoder().encode(value).length;
+}
+
 interface RouteEntry {
   /** Regex pattern matching URL pathnames for this route. */
   pattern: RegExp;
@@ -80,9 +144,15 @@ export function invalidateRouteTree(serverRoutesDir: string): void {
  *   The `url` field is a placeholder — the middleware populates the real URL.
  * @internal
  */
-export function resolveRoute(pathname: string, serverRoutesDir: string): SsrRouteMatch | null {
+export function resolveRoute(
+  pathname: string,
+  serverRoutesDir: string,
+  options: ResolveRouteOptions = {},
+): SsrRouteMatch | null {
   const entries = routeTreeCache.get(serverRoutesDir);
   if (!entries) return null;
+
+  const maxBytes = options.maxRouteParamBytes ?? DEFAULT_MAX_ROUTE_PARAM_BYTES;
 
   // Normalize: strip trailing slash except for root
   const normalized = pathname.length > 1 ? pathname.replace(/\/$/, '') : pathname;
@@ -97,6 +167,10 @@ export function resolveRoute(pathname: string, serverRoutesDir: string): SsrRout
       if (value !== undefined) {
         const decoded = safeDecodeParam(value);
         if (decoded === null) return null;
+        // Enforce per-param byte cap — throws so the middleware can catch and
+        // return 414 URI Too Long via the resolver's standard error path.
+        const byteLen = utf8ByteLength(decoded);
+        if (byteLen > maxBytes) throw new RouteParamTooLargeError(name, byteLen, maxBytes);
         params[name] = decoded;
       }
     }
@@ -396,6 +470,7 @@ export function resolveRouteChain(
   pathname: string,
   serverRoutesDir: string,
   fromPath?: string,
+  options: ResolveRouteOptions = {},
 ): SsrRouteChain | null {
   // ── Middleware detection (Phase 29) ────────────────────────────────────────
   // Check for server/middleware.ts adjacent to serverRoutesDir
@@ -407,14 +482,19 @@ export function resolveRouteChain(
   // ── Intercepting route resolution (Phase 27) ───────────────────────────────
   // When fromPath is provided, check for interception directories before the direct match.
   if (fromPath) {
-    const interceptionMatch = resolveInterceptingRoute(pathname, serverRoutesDir, fromPath);
+    const interceptionMatch = resolveInterceptingRoute(
+      pathname,
+      serverRoutesDir,
+      fromPath,
+      options,
+    );
     if (interceptionMatch) {
       return buildChain(interceptionMatch, serverRoutesDir, middlewareFilePath, true);
     }
   }
 
   // ── Direct page resolution ─────────────────────────────────────────────────
-  const pageMatch = resolveRoute(pathname, serverRoutesDir);
+  const pageMatch = resolveRoute(pathname, serverRoutesDir, options);
   if (!pageMatch) return null;
 
   return buildChain(pageMatch, serverRoutesDir, middlewareFilePath, false);
@@ -557,6 +637,7 @@ function resolveInterceptingRoute(
   pathname: string,
   serverRoutesDir: string,
   fromPath: string,
+  options: ResolveRouteOptions = {},
 ): SsrRouteMatch | null {
   // Normalize fromPath
   const normalizedFrom = fromPath.length > 1 ? fromPath.replace(/\/$/, '') : fromPath;
@@ -596,7 +677,7 @@ function resolveInterceptingRoute(
     if (!existsSync(interceptDir)) continue;
     // useSubdirAsRoot=true: interception dirs act as their own route root so that
     // files inside are matched relative to the interception dir, not serverRoutesDir.
-    const match = resolveRouteInDir(pathname, interceptDir, serverRoutesDir, true);
+    const match = resolveRouteInDir(pathname, interceptDir, serverRoutesDir, true, options);
     if (match) return match;
   }
 
@@ -728,12 +809,14 @@ function resolveRouteInDir(
   dir: string,
   serverRoutesDir: string,
   useSubdirAsRoot = false,
+  options: ResolveRouteOptions = {},
 ): SsrRouteMatch | null {
   if (!existsSync(dir)) return null;
 
   // For interception routes, treat the interception directory itself as the route root
   // so that file-to-pattern translation produces paths like /photo/[id] not /gallery/(.)photo/[id]
   const effectiveRoot = useSubdirAsRoot ? dir : serverRoutesDir;
+  const maxBytes = options.maxRouteParamBytes ?? DEFAULT_MAX_ROUTE_PARAM_BYTES;
 
   const files = collectRouteFiles(dir);
   const entries = files
@@ -757,6 +840,8 @@ function resolveRouteInDir(
       if (value !== undefined) {
         const decoded = safeDecodeParam(value);
         if (decoded === null) return null;
+        const byteLen = utf8ByteLength(decoded);
+        if (byteLen > maxBytes) throw new RouteParamTooLargeError(name, byteLen, maxBytes);
         params[name] = decoded;
       }
     }

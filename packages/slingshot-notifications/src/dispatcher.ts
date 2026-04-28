@@ -39,6 +39,7 @@ export function createIntervalDispatcher(
   const defaultPreferences = options.defaultPreferences ?? DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS;
   let timer: ReturnType<typeof setInterval> | null = null;
   let inflightTick: Promise<void> | null = null;
+  let activeTickAbortController: AbortController | null = null;
 
   async function runTick(): Promise<void> {
     if (inflightTick) return;
@@ -70,75 +71,91 @@ export function createIntervalDispatcher(
       }
       if (!inflightTick) return;
       const stopTimeoutMs = options.stopTimeoutMs ?? 10_000;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
         await Promise.race([
           inflightTick,
-          new Promise<void>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`stop() timed out after ${stopTimeoutMs}ms`)),
-              stopTimeoutMs,
-            ),
-          ),
+          new Promise<void>((_, reject) => {
+            timeout = setTimeout(() => {
+              activeTickAbortController?.abort(
+                new Error(`stop() timed out after ${stopTimeoutMs}ms`),
+              );
+              reject(new Error(`stop() timed out after ${stopTimeoutMs}ms`));
+            }, stopTimeoutMs);
+          }),
         ]);
       } catch (err) {
         console.error(
           '[slingshot-notifications] Dispatcher stop(): inflight tick did not settle',
           err,
         );
+      } finally {
+        if (timeout) clearTimeout(timeout);
       }
     },
     async tick() {
       const dispatchedAt = new Date();
-      const rows = await options.notifications.listPendingDispatch({
-        limit: maxPerTick,
-        now: dispatchedAt,
-      });
+      const abortController = new AbortController();
+      activeTickAbortController = abortController;
+      try {
+        const rows = await options.notifications.listPendingDispatch({
+          limit: maxPerTick,
+          now: dispatchedAt,
+          signal: abortController.signal,
+        });
 
-      let dispatchedCount = 0;
+        let dispatchedCount = 0;
 
-      for (const row of rows.slice(0, maxPerTick)) {
-        const preferences = await resolvePreferences(
-          options.preferences,
-          row.userId,
-          row.source,
-          row.type,
-          defaultPreferences,
-        );
-        const payload: NotificationCreatedEventPayload = {
-          notification: row,
-          preferences,
-        };
+        for (const row of rows.slice(0, maxPerTick)) {
+          if (abortController.signal.aborted) break;
+          const preferences = await resolvePreferences(
+            options.preferences,
+            row.userId,
+            row.source,
+            row.type,
+            defaultPreferences,
+          );
+          if (abortController.signal.aborted) break;
+          const payload: NotificationCreatedEventPayload = {
+            notification: row,
+            preferences,
+          };
 
-        await options.notifications.markDispatched({ id: row.id, dispatchedAt });
-        try {
-          options.events.publish('notifications:notification.created', payload, {
-            userId: row.userId,
-            actorId: row.actorId ?? row.userId,
-            source: 'system',
-            // Background dispatcher — no originating HTTP request.
-            requestTenantId: null,
-          });
-          dispatchedCount += 1;
-        } catch (err) {
+          await options.notifications.markDispatched({ id: row.id, dispatchedAt });
           try {
-            await options.notifications.update(row.id, {
-              dispatched: false,
-              dispatchedAt: null,
+            options.events.publish('notifications:notification.created', payload, {
+              userId: row.userId,
+              actorId: row.actorId ?? row.userId,
+              source: 'system',
+              // Background dispatcher — no originating HTTP request.
+              requestTenantId: null,
             });
-          } catch (rollbackErr) {
+            dispatchedCount += 1;
+          } catch (err) {
+            try {
+              await options.notifications.update(row.id, {
+                dispatched: false,
+                dispatchedAt: null,
+              });
+            } catch (rollbackErr) {
+              console.error(
+                `[slingshot-notifications] Failed to roll back dispatched state for notification '${row.id}'`,
+                rollbackErr,
+              );
+            }
             console.error(
-              `[slingshot-notifications] Failed to roll back dispatched state for notification '${row.id}'`,
-              rollbackErr,
+              `[slingshot-notifications] Failed to publish notification '${row.id}' after marking it dispatched`,
+              err,
             );
           }
-          console.error(
-            `[slingshot-notifications] Failed to publish notification '${row.id}' after marking it dispatched`,
-            err,
-          );
+        }
+
+        return dispatchedCount;
+      } finally {
+        if (activeTickAbortController === abortController) {
+          activeTickAbortController = null;
         }
       }
-
-      return dispatchedCount;
     },
   };
 

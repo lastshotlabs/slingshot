@@ -306,7 +306,15 @@ export type { StorageAdapter, UploadResult } from './storageAdapter';
 
 // --- idempotency ---
 /** Idempotency repository contract for write endpoints and action handlers. */
-export type { IdempotencyAdapter } from './idempotency';
+export type { IdempotencyAdapter } from './idempotencyAdapter';
+/** Operation-level idempotency contract for delivery/retry dedupe (mail, push, notifications, orchestration). */
+export type { IdempotencyKey, WithIdempotencyOptions } from './idempotency/index';
+export type { IdempotencyAdapter as OperationIdempotencyAdapter } from './idempotency/index';
+export {
+  createMemoryOperationIdempotencyAdapter,
+  makeIdempotencyKey,
+  withIdempotency,
+} from './idempotency/index';
 
 // --- uploadRegistry ---
 /** Upload-registry persistence contracts for staged or completed file uploads. */
@@ -684,3 +692,13 @@ export {
 } from './content.schemas';
 export { generateFromSchema, generateMany, generateExample } from './faker';
 export type { GenerateOptions } from './faker';
+
+// --- safe fetch (pinned-IP, SSRF-hardened fetch) ---
+/** SSRF-hardened fetch helpers that resolve DNS once, validate the IP, and pin the connection. */
+export {
+  createSafeFetch,
+  SafeFetchBlockedError,
+  SafeFetchDnsError,
+  isPrivateOrLoopbackIp,
+} from './http/safeFetch';
+export type { SafeFetchOptions } from './http/safeFetch';

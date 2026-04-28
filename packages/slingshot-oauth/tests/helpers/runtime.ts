@@ -18,9 +18,12 @@ import {
 } from '@lastshotlabs/slingshot-auth/testing';
 import type {
   AppEnv,
+  EventPublishContext,
   ResolvedStores,
   SlingshotContext,
   SlingshotEventBus,
+  SlingshotEventMap,
+  SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
 import type { OAuthProviders } from '../../../slingshot-auth/src/lib/oauth';
 
@@ -38,9 +41,56 @@ export function makeEventBus(onEmit?: (event: string) => void): SlingshotEventBu
       onEmit?.(event);
     },
     on: () => {},
+    onEnvelope: () => {},
     off: () => {},
+    offEnvelope: () => {},
     shutdown: async () => {},
   } as unknown as SlingshotEventBus;
+}
+
+function makeEvents(getBus: () => SlingshotEventBus): SlingshotEvents {
+  return {
+    definitions: {
+      register() {},
+      get() {
+        return undefined;
+      },
+      has() {
+        return false;
+      },
+      list() {
+        return [];
+      },
+      freeze() {},
+      frozen: false,
+    },
+    register() {},
+    get() {
+      return undefined;
+    },
+    list() {
+      return [];
+    },
+    publish<K extends keyof SlingshotEventMap>(
+      key: K,
+      payload: SlingshotEventMap[K],
+      ctx: EventPublishContext,
+    ) {
+      getBus().emit(key, payload);
+      return {
+        key,
+        payload,
+        meta: {
+          eventId: 'test-event-id',
+          occurredAt: new Date(0).toISOString(),
+          ownerPlugin: 'slingshot-oauth-test',
+          exposure: ['internal'] as const,
+          scope: null,
+          requestTenantId: ctx.requestTenantId,
+        },
+      };
+    },
+  };
 }
 
 export function makeTestRuntime(
@@ -52,11 +102,14 @@ export function makeTestRuntime(
   const rateLimitService = createAuthRateLimitService(rateLimitRepo);
   const passwordRuntime = Bun.password;
   const oauthProviders: OAuthProviders = {};
+  const eventBus = makeEventBus(onEmit);
 
   return {
     adapter,
+    evaluateUserAccess: async () => ({ allow: true }),
     config: createAuthResolvedConfig(configOverrides),
-    eventBus: makeEventBus(onEmit),
+    eventBus,
+    events: makeEvents(() => eventBus),
     password: passwordRuntime,
     getDummyHash: makeDummyHashGetter(passwordRuntime),
     signing: { secret: 'test-signing-secret-32-chars-ok!' },
@@ -70,6 +123,10 @@ export function makeTestRuntime(
       lockoutCheck: async () => ({ allowed: true }),
       recordLoginFailure: async () => ({ stuffingNowBlocked: false }),
       recordLoginSuccess: async () => {},
+    },
+    logger: {
+      log() {},
+      authTrace() {},
     },
     queueFactory: null,
     repos: {

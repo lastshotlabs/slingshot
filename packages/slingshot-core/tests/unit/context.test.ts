@@ -157,6 +157,6 @@ describe('getSlingshotCtx', () => {
       },
     };
     const result = getSlingshotCtx(c as never);
-    expect(result).toBe(fakeCtx);
+    expect(result).toBe(fakeCtx as never);
   });
 });

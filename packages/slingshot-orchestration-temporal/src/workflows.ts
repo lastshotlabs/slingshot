@@ -20,7 +20,7 @@ import type {
   ExecuteSlingshotTaskResult,
   ExecuteWorkflowHookArgs,
 } from './activities';
-import { toRunError } from './errors';
+import { toRunError } from './runError';
 
 const stateQuery = defineQuery<{ progress?: RunProgress; steps?: Record<string, StepRun> }>(
   'slingshot-state',

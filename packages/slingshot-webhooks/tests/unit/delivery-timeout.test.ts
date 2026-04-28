@@ -28,12 +28,12 @@ function asFetch(m: ReturnType<typeof mock>): typeof fetch {
   return m as unknown as typeof fetch;
 }
 
+const PUBLIC_RESOLVE = async () => [{ address: '8.8.8.8', family: 4 as const }];
+
 describe('deliverWebhook timeout', () => {
-  const originalFetch = globalThis.fetch;
   const originalAbortTimeout = AbortSignal.timeout.bind(AbortSignal);
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
     AbortSignal.timeout = originalAbortTimeout;
   });
 
@@ -43,9 +43,12 @@ describe('deliverWebhook timeout', () => {
       capturedMs.push(ms);
       return originalAbortTimeout(ms);
     };
-    globalThis.fetch = asFetch(mock(async () => new Response('ok', { status: 200 })));
+    const fetchImpl = asFetch(mock(async () => new Response('ok', { status: 200 })));
 
-    await deliverWebhook(makeJob());
+    await deliverWebhook(makeJob(), {
+      safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+      fetchImpl,
+    });
 
     expect(capturedMs).toEqual([30_000]);
   });
@@ -56,18 +59,25 @@ describe('deliverWebhook timeout', () => {
       capturedMs.push(ms);
       return originalAbortTimeout(ms);
     };
-    globalThis.fetch = asFetch(mock(async () => new Response('ok', { status: 200 })));
+    const fetchImpl = asFetch(mock(async () => new Response('ok', { status: 200 })));
 
-    await deliverWebhook(makeJob(), 5_000);
+    await deliverWebhook(makeJob(), {
+      timeoutMs: 5_000,
+      safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+      fetchImpl,
+    });
 
     expect(capturedMs).toEqual([5_000]);
   });
 
   it('passes the AbortSignal to fetch', async () => {
     const fetchMock = mock(async () => new Response('ok', { status: 200 }));
-    globalThis.fetch = asFetch(fetchMock);
 
-    await deliverWebhook(makeJob(), 10_000);
+    await deliverWebhook(makeJob(), {
+      timeoutMs: 10_000,
+      safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+      fetchImpl: asFetch(fetchMock),
+    });
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(init.signal).toBeInstanceOf(AbortSignal);

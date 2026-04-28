@@ -22,6 +22,7 @@ describe('eventBus envelope listeners', () => {
         ownerPlugin: 'slingshot-auth',
         exposure: ['user-webhook'],
         scope: { userId: 'user-1' },
+        requestTenantId: null,
       }),
     );
 

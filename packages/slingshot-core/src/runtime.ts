@@ -185,6 +185,37 @@ export interface RuntimeServerOptions {
    * Bun's built-in WebSocket handling manages this timeout internally.
    */
   upgradeTimeoutMs?: number;
+  /**
+   * Maximum allowed size in bytes of the HTTP request line plus headers.
+   *
+   * Requests whose header section exceeds this limit are rejected at parse
+   * time (before the fetch handler runs). Defaults to `16384` (16 KiB) when
+   * omitted, matching Node's default.
+   *
+   * Only honoured by the Node.js runtime (`@lastshotlabs/slingshot-runtime-node`).
+   * Forwarded to `http.createServer({ maxHeaderSize })`.
+   */
+  maxHeaderSize?: number;
+  /**
+   * Maximum time in milliseconds the server will wait for the complete HTTP
+   * request headers from the client before forcibly closing the socket.
+   *
+   * Mitigates slowloris-style attacks where a peer dribbles header bytes to
+   * keep a connection open indefinitely. Defaults to `60_000` (60 s).
+   *
+   * Only honoured by the Node.js runtime (`@lastshotlabs/slingshot-runtime-node`).
+   * Sets `httpServer.headersTimeout`.
+   */
+  headersTimeout?: number;
+  /**
+   * Maximum time in milliseconds the server will wait for the complete HTTP
+   * request (headers and body) from the client before forcibly closing the
+   * socket. Defaults to `300_000` (5 min).
+   *
+   * Only honoured by the Node.js runtime (`@lastshotlabs/slingshot-runtime-node`).
+   * Sets `httpServer.requestTimeout`.
+   */
+  requestTimeout?: number;
 }
 
 /**

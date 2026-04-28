@@ -17,13 +17,33 @@ import type {
   ResolvedEntityConfig,
   WsState,
 } from '@lastshotlabs/slingshot-core';
+import { ANONYMOUS_ACTOR } from '@lastshotlabs/slingshot-core';
 import { buildEntityReceiveHandlers } from '../src/channels/applyChannelConfig';
 import type { WsPublishFn } from '../src/channels/applyChannelConfig';
 import { createEntityPlugin } from '../src/createEntityPlugin';
 import type { EntityPluginEntry } from '../src/createEntityPlugin';
 import type { BareEntityAdapter } from '../src/routing/buildBareEntityRoutes';
 
-const containerConfig: ResolvedEntityConfig = {
+function asResolvedConfig(config: Record<string, unknown>): ResolvedEntityConfig {
+  return {
+    _systemFields: {
+      createdBy: 'createdBy',
+      updatedBy: 'updatedBy',
+      ownerField: 'ownerId',
+      tenantField: 'tenantId',
+      version: 'version',
+    },
+    _storageFields: {
+      mongoPkField: '_id',
+      ttlField: '_expires_at',
+      mongoTtlField: '_expiresAt',
+    },
+    _conventions: {},
+    ...config,
+  } as unknown as ResolvedEntityConfig;
+}
+
+const containerConfig = asResolvedConfig({
   name: 'Container',
   fields: {
     id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
@@ -31,7 +51,7 @@ const containerConfig: ResolvedEntityConfig = {
   },
   _pkField: 'id',
   _storageName: 'containers',
-};
+});
 
 const channelWithReceive: EntityChannelConfig = {
   channels: {
@@ -65,7 +85,8 @@ function makeIncomingContext(
 ): Parameters<ChannelIncomingEventDeclaration['handler']>[2] {
   return {
     socketId: 'sock1',
-    userId: 'user1',
+    actor: { ...ANONYMOUS_ACTOR, id: 'user1', kind: 'user' },
+    requestTenantId: null,
     endpoint,
     publish: () => {},
     subscribe: () => {},
@@ -380,7 +401,7 @@ describe('EntityPlugin.buildReceiveIncoming', () => {
   });
 
   it('merges handlers from multiple entities', () => {
-    const anotherConfig: ResolvedEntityConfig = {
+    const anotherConfig = asResolvedConfig({
       name: 'Thread',
       fields: {
         id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
@@ -388,7 +409,7 @@ describe('EntityPlugin.buildReceiveIncoming', () => {
       },
       _pkField: 'id',
       _storageName: 'threads',
-    };
+    });
 
     const threadChannel: EntityChannelConfig = {
       channels: {

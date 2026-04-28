@@ -9,7 +9,7 @@ export { createRedisIsrCache } from './redis';
 export { createIsrInvalidators, SSR_ISR_INVALIDATORS_STATE_KEY } from './revalidate';
 export type { IsrInvalidators } from './revalidate';
 
-export type { IsrCacheAdapter, IsrCacheEntry, IsrConfig, RedisLike } from './types';
+export type { IsrCacheAdapter, IsrCacheEntry, IsrConfig, RedisLike, RedisMultiLike } from './types';
 
 // ─── Server action revalidation helpers ──────────────────────────────────────
 // Ambient functions for use inside server actions. Must be called within the

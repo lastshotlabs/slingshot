@@ -259,6 +259,12 @@ export interface SearchManager {
    * instance if the application needs to restart.
    */
   teardown(): Promise<void>;
+
+  /**
+   * Read-only counter metrics exposed for observability. Returns a snapshot —
+   * the values are not live references, so callers can safely store and diff.
+   */
+  readonly metrics: SearchManagerMetrics;
 }
 
 // ============================================================================
@@ -280,12 +286,46 @@ interface EntitySearchState {
 // Factory
 // ============================================================================
 
+/**
+ * Reason codes passed to `onTenantIndexEvicted` so callers can distinguish
+ * eviction triggers (currently only LRU capacity, but future capacity policies
+ * could add more).
+ */
+export type TenantIndexEvictionReason = 'lru-capacity';
+
+/**
+ * Callback fired when a tenant index entry is evicted from the in-memory LRU
+ * cache. Useful for emitting metrics, audit logs, or warming alerts.
+ */
+export type TenantIndexEvictedHandler = (event: {
+  readonly tenantId: string;
+  readonly indexName: string;
+  readonly reason: TenantIndexEvictionReason;
+}) => void;
+
+/** Counter metrics exposed by the search manager. */
+export interface SearchManagerMetrics {
+  /** Cumulative number of tenant index entries evicted from the LRU cache. */
+  readonly tenantIndexEvictions: number;
+}
+
 /** Configuration for `createSearchManager()`. */
 export interface SearchManagerConfig {
   /** Plugin-level config including provider declarations and index prefix. */
   readonly pluginConfig: SearchPluginConfig;
   /** Registry of named document transform functions. */
   readonly transformRegistry: SearchTransformRegistry;
+  /**
+   * Maximum number of tenant indexes to track in the in-memory creation cache
+   * before LRU eviction kicks in. Defaults to 10,000.
+   */
+  readonly tenantCacheCapacity?: number;
+  /**
+   * Optional callback invoked whenever a tenant index entry is evicted from
+   * the LRU cache. Useful for telemetry — eviction implies the manager will
+   * re-issue `createOrUpdateIndex` the next time that tenant is touched.
+   */
+  readonly onTenantIndexEvicted?: TenantIndexEvictedHandler;
 }
 
 /**
@@ -338,7 +378,7 @@ export interface SearchManagerConfig {
  * ```
  */
 export function createSearchManager(config: SearchManagerConfig): SearchManager {
-  const { pluginConfig, transformRegistry } = config;
+  const { pluginConfig, transformRegistry, onTenantIndexEvicted } = config;
 
   // Closure-owned state
   const providers = new Map<string, SearchProvider>();
@@ -351,10 +391,31 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
    * Key: `baseIndexName__tenant_{tenantId}`. Capped at MAX_TENANT_INDEXES_CACHE
    * entries with LRU eviction to prevent unbounded growth in high-tenancy deployments.
    */
-  const MAX_TENANT_INDEXES_CACHE = 10_000;
+  const DEFAULT_MAX_TENANT_INDEXES_CACHE = 10_000;
+  const MAX_TENANT_INDEXES_CACHE =
+    typeof config.tenantCacheCapacity === 'number' && config.tenantCacheCapacity > 0
+      ? config.tenantCacheCapacity
+      : DEFAULT_MAX_TENANT_INDEXES_CACHE;
   const createdTenantIndexes = new Map<string, boolean>();
+  let tenantIndexEvictions = 0;
   let initialized = false;
   let providersConnected = false;
+
+  /**
+   * Parse a tenant-scoped index key (`<baseIndex>__tenant_<tenantId>`) into
+   * its components. Returns `undefined` when the key does not match the
+   * expected format — defensive in case future code introduces other key
+   * shapes into the cache.
+   */
+  function parseTenantIndexKey(key: string): { indexName: string; tenantId: string } | undefined {
+    const marker = '__tenant_';
+    const idx = key.indexOf(marker);
+    if (idx === -1) return undefined;
+    return {
+      indexName: key.slice(0, idx),
+      tenantId: key.slice(idx + marker.length),
+    };
+  }
 
   // -------------------------------------------------------------------------
   // Provider resolution
@@ -572,7 +633,36 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
         // LRU eviction: remove the oldest entry when the cache is full.
         if (createdTenantIndexes.size >= MAX_TENANT_INDEXES_CACHE) {
           const oldest = createdTenantIndexes.keys().next().value;
-          if (oldest !== undefined) createdTenantIndexes.delete(oldest);
+          if (oldest !== undefined) {
+            createdTenantIndexes.delete(oldest);
+            tenantIndexEvictions++;
+            const parsed = parseTenantIndexKey(oldest);
+            const evictedIndexName = parsed?.indexName ?? oldest;
+            const evictedTenantId = parsed?.tenantId ?? '';
+            console.log(
+              JSON.stringify({
+                level: 'info',
+                event: 'search.tenant_index.evicted',
+                message: '[slingshot-search] tenant index cache evicted (lru-capacity)',
+                indexName: evictedIndexName,
+                tenantId: evictedTenantId,
+                cacheKey: oldest,
+                reason: 'lru-capacity',
+                capacity: MAX_TENANT_INDEXES_CACHE,
+              }),
+            );
+            if (onTenantIndexEvicted) {
+              try {
+                onTenantIndexEvicted({
+                  tenantId: evictedTenantId,
+                  indexName: evictedIndexName,
+                  reason: 'lru-capacity',
+                });
+              } catch (err) {
+                console.error('[slingshot-search] onTenantIndexEvicted callback threw:', err);
+              }
+            }
+          }
         }
 
         await provider.createOrUpdateIndex(targetIndex, settings);
@@ -938,6 +1028,10 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
       createdTenantIndexes.clear();
       providersConnected = false;
       initialized = false;
+    },
+
+    get metrics(): SearchManagerMetrics {
+      return { tenantIndexEvictions };
     },
   };
 

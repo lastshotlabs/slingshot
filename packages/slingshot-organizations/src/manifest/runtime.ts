@@ -13,7 +13,9 @@ import {
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import type { OrganizationsAuthRuntime } from '../lib/authRuntime';
 
-type MemberRole = 'owner' | 'admin' | 'member';
+type MemberRole = string;
+
+export const DEFAULT_KNOWN_MEMBER_ROLES: ReadonlyArray<string> = ['owner', 'admin', 'member'];
 
 type OrganizationRecord = {
   id: string;
@@ -177,6 +179,56 @@ function parseCursor(input: unknown): string | undefined {
   return typeof input === 'string' && input.length > 0 ? input : undefined;
 }
 
+/**
+ * Page through all records matching `filter` and call `adapter.delete()` for
+ * each. Used by the org-delete cascade.
+ */
+async function deleteAllByFilter(
+  adapter: BareEntityAdapter,
+  filter: Record<string, unknown>,
+): Promise<void> {
+  const PAGE = 200;
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await adapter.list({ filter, limit: PAGE, ...(cursor ? { cursor } : {}) });
+    const items = page.items as ReadonlyArray<{ id?: unknown }>;
+    for (const item of items) {
+      const recordId = typeof item?.id === 'string' ? item.id : undefined;
+      if (!recordId) continue;
+      await adapter.delete(recordId);
+    }
+    const nextCursor = page.nextCursor ?? page.cursor;
+    if (!nextCursor || items.length < PAGE) {
+      return;
+    }
+    cursor = nextCursor;
+  }
+}
+
+/**
+ * Page through all records matching `filter` and return their string IDs.
+ */
+async function collectIds(
+  adapter: BareEntityAdapter,
+  filter: Record<string, unknown>,
+): Promise<string[]> {
+  const PAGE = 200;
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await adapter.list({ filter, limit: PAGE, ...(cursor ? { cursor } : {}) });
+    const items = page.items as ReadonlyArray<{ id?: unknown }>;
+    for (const item of items) {
+      if (typeof item?.id === 'string') ids.push(item.id);
+    }
+    const nextCursor = page.nextCursor ?? page.cursor;
+    if (!nextCursor || items.length < PAGE) {
+      return ids;
+    }
+    cursor = nextCursor;
+  }
+}
+
 async function batchFetchOrganizations(
   adapter: BareEntityAdapter,
   ids: ReadonlyArray<string>,
@@ -201,14 +253,46 @@ export function createOrganizationsManifestRuntime(args: {
   invitationTtlSeconds: number;
   defaultMemberRole: MemberRole;
   /**
+   * Allowed values for `OrganizationMember.role`, `OrganizationInvite.role`, and
+   * `GroupMembership.role`. Roles outside this set are rejected at create time
+   * with a 400 response. Defaults to `['owner', 'admin', 'member']`.
+   */
+  knownRoles?: ReadonlyArray<string>;
+  /**
    * Zod schema used to validate org slugs at HTTP-create time.
    * The same schema is also used by the programmatic `OrganizationsOrgService`.
    */
   slugSchema?: z.ZodType<string>;
   onAdaptersCaptured?: (adapters: Required<AdapterRefs>) => void;
 }): EntityManifestRuntime {
-  const { authRuntime, invitationTtlSeconds, defaultMemberRole, slugSchema, onAdaptersCaptured } =
-    args;
+  const {
+    authRuntime,
+    invitationTtlSeconds,
+    defaultMemberRole,
+    knownRoles,
+    slugSchema,
+    onAdaptersCaptured,
+  } = args;
+  const knownRoleSet = new Set<string>(knownRoles ?? DEFAULT_KNOWN_MEMBER_ROLES);
+  if (knownRoleSet.size === 0) {
+    throw new Error('[slingshot-organizations] knownRoles must contain at least one role');
+  }
+  if (!knownRoleSet.has(defaultMemberRole)) {
+    throw new Error(
+      `[slingshot-organizations] defaultMemberRole '${defaultMemberRole}' is not in knownRoles [${[...knownRoleSet].join(', ')}]`,
+    );
+  }
+
+  function resolveRole(input: unknown): string {
+    const role = typeof input === 'string' && input.length > 0 ? input : defaultMemberRole;
+    if (!knownRoleSet.has(role)) {
+      throw new HTTPException(400, {
+        message: `Invalid role '${role}'. Allowed: [${[...knownRoleSet].join(', ')}]`,
+      });
+    }
+    return role;
+  }
+
   const adapterTransforms = createEntityAdapterTransformRegistry();
   const customHandlers = createEntityHandlerRegistry();
   const hooks = createEntityPluginHookRegistry();
@@ -235,6 +319,130 @@ export function createOrganizationsManifestRuntime(args: {
     });
   }
 
+  // Cascade-delete transform: when an organization is deleted, explicitly delete
+  // all dependent records (memberships, invites, groups, and group memberships
+  // for those groups) without relying on adapter-level FK cascades. Partial
+  // failures surface metadata to the caller via a 207-style HTTPException so
+  // operators can detect mid-flight failures and reconcile.
+  adapterTransforms.register('organizations.organization.deleteCascade', adapter => {
+    const orgAdapter = requireMethod(adapter, 'delete');
+    return {
+      ...adapter,
+      delete: async (id: string, filter?: Record<string, unknown>) => {
+        const ok = await orgAdapter.delete(id, filter);
+        if (!ok) {
+          return false;
+        }
+        const failed: string[] = [];
+
+        const memberAdapter = refs.members;
+        if (memberAdapter) {
+          try {
+            await deleteAllByFilter(memberAdapter, { orgId: id });
+          } catch (err) {
+            failed.push('memberships');
+            console.error(
+              JSON.stringify({
+                level: 'error',
+                event: 'organizations.delete.cascade.memberships_failed',
+                orgId: id,
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }
+        }
+
+        const inviteAdapter = refs.invites;
+        if (inviteAdapter) {
+          try {
+            await deleteAllByFilter(inviteAdapter, { orgId: id });
+          } catch (err) {
+            failed.push('invites');
+            console.error(
+              JSON.stringify({
+                level: 'error',
+                event: 'organizations.delete.cascade.invites_failed',
+                orgId: id,
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }
+        }
+
+        const groupAdapter = refs.groups;
+        const groupMembershipAdapter = refs.groupMemberships;
+        if (groupAdapter) {
+          let groupIds: string[] = [];
+          try {
+            groupIds = await collectIds(groupAdapter, { orgId: id });
+          } catch (err) {
+            failed.push('groups');
+            console.error(
+              JSON.stringify({
+                level: 'error',
+                event: 'organizations.delete.cascade.group_lookup_failed',
+                orgId: id,
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }
+
+          if (groupIds.length > 0 && groupMembershipAdapter) {
+            for (const groupId of groupIds) {
+              try {
+                await deleteAllByFilter(groupMembershipAdapter, { groupId });
+              } catch (err) {
+                if (!failed.includes('groupMemberships')) {
+                  failed.push('groupMemberships');
+                }
+                console.error(
+                  JSON.stringify({
+                    level: 'error',
+                    event: 'organizations.delete.cascade.group_memberships_failed',
+                    orgId: id,
+                    groupId,
+                    error: err instanceof Error ? err.message : String(err),
+                  }),
+                );
+              }
+            }
+          }
+
+          try {
+            await deleteAllByFilter(groupAdapter, { orgId: id });
+          } catch (err) {
+            if (!failed.includes('groups')) {
+              failed.push('groups');
+            }
+            console.error(
+              JSON.stringify({
+                level: 'error',
+                event: 'organizations.delete.cascade.groups_failed',
+                orgId: id,
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }
+        }
+
+        if (failed.length > 0) {
+          const body = JSON.stringify({
+            id,
+            partial: true,
+            failed,
+          });
+          throw new HTTPException(207, {
+            res: new Response(body, {
+              status: 207,
+              headers: { 'content-type': 'application/json' },
+            }),
+          });
+        }
+        return true;
+      },
+    };
+  });
+
   adapterTransforms.register('organizations.member.identity', adapter => {
     const memberAdapter = requireMethod(adapter, 'create');
     return {
@@ -244,10 +452,7 @@ export function createOrganizationsManifestRuntime(args: {
         const nextInput = {
           ...record,
           id: buildScopedMembershipId(record.orgId as string, record.userId as string),
-          role:
-            typeof record.role === 'string' && record.role.length > 0
-              ? record.role
-              : defaultMemberRole,
+          role: resolveRole(record.role),
         };
         return memberAdapter.create(nextInput);
       },
@@ -263,10 +468,7 @@ export function createOrganizationsManifestRuntime(args: {
         return membershipAdapter.create({
           ...record,
           id: buildScopedMembershipId(record.groupId as string, record.userId as string),
-          role:
-            typeof record.role === 'string' && record.role.length > 0
-              ? record.role
-              : defaultMemberRole,
+          role: resolveRole(record.role),
         });
       },
     };
@@ -282,10 +484,7 @@ export function createOrganizationsManifestRuntime(args: {
         const persisted = (await inviteAdapter.create({
           ...record,
           tokenHash: sha256(rawToken),
-          role:
-            typeof record.role === 'string' && record.role.length > 0
-              ? record.role
-              : defaultMemberRole,
+          role: resolveRole(record.role),
           expiresAt:
             typeof record.expiresAt === 'string' && record.expiresAt.length > 0
               ? record.expiresAt

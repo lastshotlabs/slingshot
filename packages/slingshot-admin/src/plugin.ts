@@ -86,6 +86,7 @@ export function createAdminPlugin(rawConfig: AdminPluginConfig): SlingshotPlugin
       bus,
       evaluator: config.permissions.evaluator,
       auditLog: config.auditLog,
+      rateLimitStore: config.rateLimitStore,
     });
     app.route(mountPath, adminRouter);
 

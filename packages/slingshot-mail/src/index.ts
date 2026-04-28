@@ -11,6 +11,9 @@
 // Plugin
 export { createMailPlugin } from './plugin';
 
+// Errors
+export { MailTemplateNotFoundError, validateSubscriptionTemplates } from './lib/subscriptionWiring';
+
 // Types
 export { mailPluginConfigSchema } from './types/config';
 export type { MailPluginConfig, MailSubscription } from './types/config';

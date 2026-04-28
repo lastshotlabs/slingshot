@@ -76,7 +76,7 @@ describe('createRoute', () => {
         200: { description: 'OK' },
       },
     });
-    expect(route.method).toBe('options');
+    expect(route.method as string).toBe('options');
   });
 });
 
@@ -130,6 +130,6 @@ describe('withSecurity', () => {
       responses: { 200: { description: 'OK' } },
     });
     const secured = withSecurity(route, { cookieAuth: [] }, { bearerAuth: [] });
-    expect((secured as { security: unknown[] }).security).toHaveLength(2);
+    expect((secured as unknown as { security: unknown[] }).security).toHaveLength(2);
   });
 });

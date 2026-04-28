@@ -4,6 +4,7 @@ import { getAuthRuntimePeer, getAuthRuntimePeerOrNull } from '../src/authPeer';
 import { getCacheAdapter, getCacheAdapterOrNull } from '../src/cache';
 import { resolveContext } from '../src/context/contextAccess';
 import { attachContext, getContext, getContextOrNull } from '../src/context/contextStore';
+import type { SlingshotContext } from '../src/context/slingshotContext';
 import { createCoreRegistrar } from '../src/coreRegistrar';
 import { getEmailTemplate, getEmailTemplates } from '../src/emailTemplates';
 import { getEmbedsPeer, getEmbedsPeerOrNull } from '../src/embedsPeer';
@@ -45,7 +46,9 @@ function createCacheAdapter(name = 'memory') {
   };
 }
 
-function createContextFixture(overrides: Record<string, unknown> = {}) {
+function createContextFixture(
+  overrides: Record<string, unknown> = {},
+): SlingshotContext & Record<string, unknown> {
   return {
     config: {},
     persistence: {},
@@ -57,7 +60,7 @@ function createContextFixture(overrides: Record<string, unknown> = {}) {
     emailTemplates: new Map(),
     pluginState: new Map(),
     ...overrides,
-  };
+  } as unknown as SlingshotContext & Record<string, unknown>;
 }
 
 describe('slingshot-core context accessors', () => {
@@ -105,8 +108,14 @@ describe('slingshot-core context accessors', () => {
     expect(snapshot.cacheAdapters.get('memory')).toBe(cacheAdapter);
     expect(snapshot.emailTemplates.get('welcome')).toEqual(template);
 
-    snapshot.cacheAdapters.set('redis', createCacheAdapter('redis'));
-    snapshot.emailTemplates.set('other', { subject: 'Other', html: '<p>Other</p>' });
+    (snapshot.cacheAdapters as Map<string, ReturnType<typeof createCacheAdapter>>).set(
+      'redis',
+      createCacheAdapter('redis'),
+    );
+    (snapshot.emailTemplates as Map<string, { subject: string; html: string }>).set('other', {
+      subject: 'Other',
+      html: '<p>Other</p>',
+    });
 
     const nextSnapshot = drain();
     expect(nextSnapshot.cacheAdapters.has('redis')).toBe(false);
@@ -223,7 +232,7 @@ describe('slingshot-core context accessors', () => {
         },
       },
     };
-    const pluginState = new Map([
+    const pluginState = new Map<string, unknown>([
       ['slingshot-auth', { adapter: {} }],
       [
         'slingshot-notifications',
@@ -293,16 +302,18 @@ describe('slingshot-core context accessors', () => {
     expect(getPluginStateOrNull({ pluginState })).toBe(pluginState);
     expect(getAuthRuntimePeer(app)).toEqual({ adapter: {} });
     expect(getAuthRuntimePeerOrNull(app)).toEqual({ adapter: {} });
-    expect(getEmbedsPeer(app)).toBe(pluginState.get('slingshot-embeds'));
-    expect(getEmbedsPeerOrNull(app)).toBe(pluginState.get('slingshot-embeds'));
-    expect(getNotificationsState(app)).toBe(pluginState.get('slingshot-notifications'));
-    expect(getNotificationsStateOrNull(app)).toBe(pluginState.get('slingshot-notifications'));
-    expect(getPermissionsState(app)).toBe(permissionsState);
-    expect(getPermissionsStateOrNull(app)).toBe(permissionsState);
-    expect(getPushFormatterPeer(app)).toBe(pluginState.get('slingshot-push'));
-    expect(getPushFormatterPeerOrNull(app)).toBe(pluginState.get('slingshot-push'));
-    expect(getSearchPluginRuntime(app)).toBe(pluginState.get('slingshot-search'));
-    expect(getSearchPluginRuntimeOrNull(app)).toBe(pluginState.get('slingshot-search'));
+    expect(getEmbedsPeer(app)).toBe(pluginState.get('slingshot-embeds') as never);
+    expect(getEmbedsPeerOrNull(app)).toBe(pluginState.get('slingshot-embeds') as never);
+    expect(getNotificationsState(app)).toBe(pluginState.get('slingshot-notifications') as never);
+    expect(getNotificationsStateOrNull(app)).toBe(
+      pluginState.get('slingshot-notifications') as never,
+    );
+    expect(getPermissionsState(app)).toBe(permissionsState as never);
+    expect(getPermissionsStateOrNull(app)).toBe(permissionsState as never);
+    expect(getPushFormatterPeer(app)).toBe(pluginState.get('slingshot-push') as never);
+    expect(getPushFormatterPeerOrNull(app)).toBe(pluginState.get('slingshot-push') as never);
+    expect(getSearchPluginRuntime(app)).toBe(pluginState.get('slingshot-search') as never);
+    expect(getSearchPluginRuntimeOrNull(app)).toBe(pluginState.get('slingshot-search') as never);
 
     app.get('/plugin-state', c => {
       const requestPluginState = getPluginStateFromRequest(c as never);
@@ -350,17 +361,20 @@ describe('slingshot-core context accessors', () => {
       bearerAuth: createMiddleware(),
     };
     const actorResolver = {
-      async resolveActor() {
+      async resolveActor(_request: Request) {
         return { ...ANONYMOUS_ACTOR, id: 'user-42', kind: 'user' as const };
       },
     };
     const rateLimitAdapter = {
-      async trackAttempt(): Promise<boolean> {
+      async trackAttempt(
+        _key: string,
+        _options: { windowMs: number; max: number },
+      ): Promise<boolean> {
         return true;
       },
     };
     const fingerprintBuilder = {
-      async buildFingerprint(): Promise<string> {
+      async buildFingerprint(_request: Request): Promise<string> {
         return 'f00dbabe1234';
       },
     };

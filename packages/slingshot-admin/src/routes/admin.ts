@@ -20,6 +20,8 @@ import type {
   ManagedUserScope,
   SessionRecord,
 } from '@lastshotlabs/slingshot-core';
+import type { AdminRateLimitStore } from '../lib/rateLimitStore';
+import { createMemoryRateLimitStore } from '../lib/rateLimitStore';
 import { createTypedRouter, registerRoute } from '../lib/typedRoute';
 import type { AdminEnv } from '../types/env';
 
@@ -222,6 +224,12 @@ export interface AdminRouterConfig {
     /** Max destructive requests per principal+route+IP in the window. Default: 30. */
     max?: number;
   };
+  /**
+   * Pluggable counter backing the destructive-mutation rate limiter. Defaults
+   * to an in-process implementation; multi-instance deploys should pass a
+   * shared (e.g. Redis) store so counters are coordinated across replicas.
+   */
+  rateLimitStore?: AdminRateLimitStore;
 }
 
 async function checkPermission(
@@ -247,6 +255,68 @@ async function tryLogAuditEntry(
     await auditLog.logEntry(entry);
   } catch (err) {
     console.error('[slingshot-admin] Failed to write audit log entry', err);
+  }
+}
+
+/**
+ * Sentinel error raised by {@link requireAuditEntry} when the audit provider
+ * fails. Route handlers catch this and return a 503 fail-closed response so
+ * a destructive verb cannot complete without leaving an audit trail.
+ */
+class AuditLogUnavailableError extends Error {
+  readonly cause: unknown;
+  constructor(cause: unknown) {
+    super('audit-log-unavailable');
+    this.name = 'AuditLogUnavailableError';
+    this.cause = cause;
+  }
+}
+
+/**
+ * Fail-closed audit write for destructive verbs (delete, suspend, unsuspend,
+ * role assignment, session revocation, etc.). When the audit provider rejects
+ * we throw {@link AuditLogUnavailableError} so the caller can return 503 to
+ * the client; this prevents destructive mutations from silently completing
+ * without an audit trail when the audit backend is unhealthy.
+ *
+ * Read-only verbs continue using {@link tryLogAuditEntry}.
+ */
+async function requireAuditEntry(
+  auditLog: AuditLogProvider | undefined,
+  entry: Parameters<AuditLogProvider['logEntry']>[0],
+): Promise<void> {
+  if (!auditLog) return;
+  try {
+    await auditLog.logEntry(entry);
+  } catch (err) {
+    console.error('[slingshot-admin] Audit log unavailable for destructive verb — failing closed', {
+      action: entry.action,
+      resource: entry.resource,
+      resourceId: entry.resourceId,
+      status: entry.status,
+      requestId: entry.requestId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw new AuditLogUnavailableError(err);
+  }
+}
+
+/**
+ * Wrap a handler body that issues `requireAuditEntry` calls. If the audit
+ * provider is unavailable we surface a 503 response with a stable error code
+ * so the destructive verb is fail-closed.
+ */
+async function withRequiredAudit<E extends AdminEnv>(
+  c: Context<E>,
+  run: () => Promise<Response>,
+): Promise<Response> {
+  try {
+    return await run();
+  } catch (err) {
+    if (err instanceof AuditLogUnavailableError) {
+      return c.json({ error: 'audit-log-unavailable' }, 503 as ContentfulStatusCode);
+    }
+    throw err;
   }
 }
 
@@ -283,21 +353,29 @@ export function createAdminRouter(config: AdminRouterConfig) {
   const router = createTypedRouter();
   const destructiveWindowMs = config.destructiveRateLimit?.windowMs ?? 60_000;
   const destructiveMax = config.destructiveRateLimit?.max ?? 30;
-  const destructiveBuckets = new Map<string, { resetAt: number; count: number }>();
+  const rateLimitStore: AdminRateLimitStore = config.rateLimitStore ?? createMemoryRateLimitStore();
 
-  function checkDestructiveRateLimit(c: Context<AdminEnv>, action: string): Response | null {
+  async function checkDestructiveRateLimit(
+    c: Context<AdminEnv>,
+    action: string,
+  ): Promise<Response | null> {
     if (destructiveMax <= 0) return null;
     const principal = c.get('adminPrincipal');
-    const now = Date.now();
     const key = `${principal.subject}:${getClientIp(c) ?? 'unknown'}:${action}`;
-    const bucket = destructiveBuckets.get(key);
-    if (!bucket || bucket.resetAt <= now) {
-      destructiveBuckets.set(key, { resetAt: now + destructiveWindowMs, count: 1 });
+    let result;
+    try {
+      result = await rateLimitStore.hit(key, {
+        limit: destructiveMax,
+        windowMs: destructiveWindowMs,
+      });
+    } catch (err) {
+      // Fail-open on store errors so a Redis outage does not freeze admin
+      // operations entirely. We still log so the operator notices.
+      console.error('[slingshot-admin] Rate-limit store error — allowing request', err);
       return null;
     }
-    bucket.count += 1;
-    if (bucket.count <= destructiveMax) return null;
-    const retryAfterSec = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+    if (!result.exceeded) return null;
+    const retryAfterSec = Math.max(1, Math.ceil((result.resetAt - Date.now()) / 1000));
     c.header('Retry-After', String(retryAfterSec));
     return c.json({ error: 'Too many admin mutations' }, 429 as ContentfulStatusCode);
   }
@@ -565,84 +643,85 @@ export function createAdminRouter(config: AdminRouterConfig) {
         },
       },
     }),
-    async (c: Context<AdminEnv>) => {
-      const userId = c.req.param('userId') ?? '';
-      if (!(await checkPermission(c, evaluator, 'suspend', { type: 'admin:user', id: userId }))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.suspend', 'user', userId, 403, { target: userId }),
-        );
-        return errorResponse(c, 'Forbidden', 403);
-      }
-      const rateLimited = checkDestructiveRateLimit(c, 'admin.user.suspend');
-      if (rateLimited) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.suspend', 'user', userId, 429, { target: userId }),
-        );
-        return rateLimited;
-      }
+    async (c: Context<AdminEnv>) =>
+      withRequiredAudit(c, async () => {
+        const userId = c.req.param('userId') ?? '';
+        if (!(await checkPermission(c, evaluator, 'suspend', { type: 'admin:user', id: userId }))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.suspend', 'user', userId, 403, { target: userId }),
+          );
+          return errorResponse(c, 'Forbidden', 403);
+        }
+        const rateLimited = await checkDestructiveRateLimit(c, 'admin.user.suspend');
+        if (rateLimited) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.suspend', 'user', userId, 429, { target: userId }),
+          );
+          return rateLimited;
+        }
 
-      if (!managedUserProvider.suspendUser) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.suspend', 'user', userId, 501, { target: userId }),
-        );
-        return c.json(
-          { error: 'Suspend not supported by the configured managed user provider' },
-          501 as ContentfulStatusCode,
-        );
-      }
+        if (!managedUserProvider.suspendUser) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.suspend', 'user', userId, 501, { target: userId }),
+          );
+          return c.json(
+            { error: 'Suspend not supported by the configured managed user provider' },
+            501 as ContentfulStatusCode,
+          );
+        }
 
-      let reason: string | undefined;
-      try {
-        const body = (await c.req.json().catch(() => ({}))) as z.infer<typeof AdminSuspendBody>;
-        reason = body.reason;
-      } catch {
-        // body is optional
-      }
+        let reason: string | undefined;
+        try {
+          const body = (await c.req.json().catch(() => ({}))) as z.infer<typeof AdminSuspendBody>;
+          reason = body.reason;
+        } catch {
+          // body is optional
+        }
 
-      const principal = c.get('adminPrincipal');
+        const principal = c.get('adminPrincipal');
 
-      if (!(await getScopedUser(c, managedUserProvider, userId))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.suspend', 'user', userId, 404, { target: userId }),
-        );
-        return errorResponse(c, 'User not found', 404);
-      }
-      try {
-        await managedUserProvider.suspendUser({
+        if (!(await getScopedUser(c, managedUserProvider, userId))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.suspend', 'user', userId, 404, { target: userId }),
+          );
+          return errorResponse(c, 'User not found', 404);
+        }
+        try {
+          await managedUserProvider.suspendUser({
+            userId,
+            reason,
+            actorId: principal.subject,
+            tenantId: principal.tenantId,
+          });
+        } catch (err) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.suspend', 'user', userId, 500, {
+              target: userId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          throw err;
+        }
+
+        bus.emit('security.auth.account.suspended', {
           userId,
-          reason,
-          actorId: principal.subject,
-          tenantId: principal.tenantId,
+          meta: {
+            reason,
+            actorId: principal.subject,
+            ip: getClientIp(c),
+            requestId: c.get('requestId'),
+          },
         });
-      } catch (err) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.suspend', 'user', userId, 500, {
-            target: userId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        throw err;
-      }
-
-      bus.emit('security.auth.account.suspended', {
-        userId,
-        meta: {
-          reason,
-          actorId: principal.subject,
-          ip: getClientIp(c),
-          requestId: c.get('requestId'),
-        },
-      });
-      await tryLogAuditEntry(config.auditLog, {
-        ...auditEntry(c, 'admin.user.suspend', 'user', userId, 200, { target: userId }),
-      });
-      return c.json({ message: 'User suspended' }, 200);
-    },
+        await requireAuditEntry(config.auditLog, {
+          ...auditEntry(c, 'admin.user.suspend', 'user', userId, 200, { target: userId }),
+        });
+        return c.json({ message: 'User suspended' }, 200);
+      }),
   );
 
   // -------------------------------------------------------------------------
@@ -682,74 +761,75 @@ export function createAdminRouter(config: AdminRouterConfig) {
         },
       },
     }),
-    async (c: Context<AdminEnv>) => {
-      const userId = c.req.param('userId') ?? '';
-      if (!(await checkPermission(c, evaluator, 'suspend', { type: 'admin:user', id: userId }))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.unsuspend', 'user', userId, 403, { target: userId }),
-        );
-        return errorResponse(c, 'Forbidden', 403);
-      }
-      const rateLimited = checkDestructiveRateLimit(c, 'admin.user.unsuspend');
-      if (rateLimited) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.unsuspend', 'user', userId, 429, { target: userId }),
-        );
-        return rateLimited;
-      }
+    async (c: Context<AdminEnv>) =>
+      withRequiredAudit(c, async () => {
+        const userId = c.req.param('userId') ?? '';
+        if (!(await checkPermission(c, evaluator, 'suspend', { type: 'admin:user', id: userId }))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.unsuspend', 'user', userId, 403, { target: userId }),
+          );
+          return errorResponse(c, 'Forbidden', 403);
+        }
+        const rateLimited = await checkDestructiveRateLimit(c, 'admin.user.unsuspend');
+        if (rateLimited) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.unsuspend', 'user', userId, 429, { target: userId }),
+          );
+          return rateLimited;
+        }
 
-      if (!managedUserProvider.unsuspendUser) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.unsuspend', 'user', userId, 501, { target: userId }),
-        );
-        return c.json(
-          { error: 'Unsuspend not supported by the configured managed user provider' },
-          501 as ContentfulStatusCode,
-        );
-      }
+        if (!managedUserProvider.unsuspendUser) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.unsuspend', 'user', userId, 501, { target: userId }),
+          );
+          return c.json(
+            { error: 'Unsuspend not supported by the configured managed user provider' },
+            501 as ContentfulStatusCode,
+          );
+        }
 
-      const principal = c.get('adminPrincipal');
+        const principal = c.get('adminPrincipal');
 
-      if (!(await getScopedUser(c, managedUserProvider, userId))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.unsuspend', 'user', userId, 404, { target: userId }),
-        );
-        return errorResponse(c, 'User not found', 404);
-      }
-      try {
-        await managedUserProvider.unsuspendUser({
+        if (!(await getScopedUser(c, managedUserProvider, userId))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.unsuspend', 'user', userId, 404, { target: userId }),
+          );
+          return errorResponse(c, 'User not found', 404);
+        }
+        try {
+          await managedUserProvider.unsuspendUser({
+            userId,
+            actorId: principal.subject,
+            tenantId: principal.tenantId,
+          });
+        } catch (err) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.unsuspend', 'user', userId, 500, {
+              target: userId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          throw err;
+        }
+
+        bus.emit('security.auth.account.unsuspended', {
           userId,
-          actorId: principal.subject,
-          tenantId: principal.tenantId,
+          meta: {
+            actorId: principal.subject,
+            ip: getClientIp(c),
+            requestId: c.get('requestId'),
+          },
         });
-      } catch (err) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.unsuspend', 'user', userId, 500, {
-            target: userId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        throw err;
-      }
-
-      bus.emit('security.auth.account.unsuspended', {
-        userId,
-        meta: {
-          actorId: principal.subject,
-          ip: getClientIp(c),
-          requestId: c.get('requestId'),
-        },
-      });
-      await tryLogAuditEntry(config.auditLog, {
-        ...auditEntry(c, 'admin.user.unsuspend', 'user', userId, 200, { target: userId }),
-      });
-      return c.json({ message: 'User unsuspended' }, 200);
-    },
+        await requireAuditEntry(config.auditLog, {
+          ...auditEntry(c, 'admin.user.unsuspend', 'user', userId, 200, { target: userId }),
+        });
+        return c.json({ message: 'User unsuspended' }, 200);
+      }),
   );
 
   // -------------------------------------------------------------------------
@@ -838,83 +918,84 @@ export function createAdminRouter(config: AdminRouterConfig) {
         },
       },
     }),
-    async (c: Context<AdminEnv>) => {
-      const userId = c.req.param('userId') ?? '';
-      if (!(await checkPermission(c, evaluator, 'write', { type: 'admin:role' }))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.role.set', 'user', userId, 403, { target: userId }),
-        );
-        return errorResponse(c, 'Forbidden', 403);
-      }
-      const rateLimited = checkDestructiveRateLimit(c, 'admin.role.set');
-      if (rateLimited) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.role.set', 'user', userId, 429, { target: userId }),
-        );
-        return rateLimited;
-      }
-      let roles: z.infer<typeof AdminSetRolesBody>['roles'];
-      try {
-        ({ roles } = AdminSetRolesBody.parse(await c.req.json()));
-      } catch (err) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.role.set', 'user', userId, 400, {
-            target: userId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        throw err;
-      }
+    async (c: Context<AdminEnv>) =>
+      withRequiredAudit(c, async () => {
+        const userId = c.req.param('userId') ?? '';
+        if (!(await checkPermission(c, evaluator, 'write', { type: 'admin:role' }))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.role.set', 'user', userId, 403, { target: userId }),
+          );
+          return errorResponse(c, 'Forbidden', 403);
+        }
+        const rateLimited = await checkDestructiveRateLimit(c, 'admin.role.set');
+        if (rateLimited) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.role.set', 'user', userId, 429, { target: userId }),
+          );
+          return rateLimited;
+        }
+        let roles: z.infer<typeof AdminSetRolesBody>['roles'];
+        try {
+          ({ roles } = AdminSetRolesBody.parse(await c.req.json()));
+        } catch (err) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.role.set', 'user', userId, 400, {
+              target: userId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          throw err;
+        }
 
-      if (!managedUserProvider.setRoles) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.role.set', 'user', userId, 501, { target: userId }),
-        );
-        return c.json(
-          { error: 'Set roles not supported by the configured managed user provider' },
-          501 as ContentfulStatusCode,
-        );
-      }
+        if (!managedUserProvider.setRoles) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.role.set', 'user', userId, 501, { target: userId }),
+          );
+          return c.json(
+            { error: 'Set roles not supported by the configured managed user provider' },
+            501 as ContentfulStatusCode,
+          );
+        }
 
-      const principal = c.get('adminPrincipal');
-      if (!(await getScopedUser(c, managedUserProvider, userId))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.role.set', 'user', userId, 404, { target: userId }),
-        );
-        return errorResponse(c, 'User not found', 404);
-      }
-      try {
-        await managedUserProvider.setRoles(userId, roles, getManagedUserScope(c));
-      } catch (err) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.role.set', 'user', userId, 500, {
-            target: userId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        throw err;
-      }
+        const principal = c.get('adminPrincipal');
+        if (!(await getScopedUser(c, managedUserProvider, userId))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.role.set', 'user', userId, 404, { target: userId }),
+          );
+          return errorResponse(c, 'User not found', 404);
+        }
+        try {
+          await managedUserProvider.setRoles(userId, roles, getManagedUserScope(c));
+        } catch (err) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.role.set', 'user', userId, 500, {
+              target: userId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          throw err;
+        }
 
-      bus.emit('security.admin.role.changed', {
-        userId,
-        meta: {
-          roles,
-          actorId: principal.subject,
-          ip: getClientIp(c),
-          requestId: c.get('requestId'),
-        },
-      });
-      await tryLogAuditEntry(config.auditLog, {
-        ...auditEntry(c, 'admin.role.set', 'user', userId, 200, { target: userId }),
-      });
-      return c.json({ roles }, 200);
-    },
+        bus.emit('security.admin.role.changed', {
+          userId,
+          meta: {
+            roles,
+            actorId: principal.subject,
+            ip: getClientIp(c),
+            requestId: c.get('requestId'),
+          },
+        });
+        await requireAuditEntry(config.auditLog, {
+          ...auditEntry(c, 'admin.role.set', 'user', userId, 200, { target: userId }),
+        });
+        return c.json({ roles }, 200);
+      }),
   );
 
   // -------------------------------------------------------------------------
@@ -954,68 +1035,69 @@ export function createAdminRouter(config: AdminRouterConfig) {
         },
       },
     }),
-    async (c: Context<AdminEnv>) => {
-      const userId = c.req.param('userId') ?? '';
-      if (!(await checkPermission(c, evaluator, 'delete', { type: 'admin:user', id: userId }))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.delete', 'user', userId, 403, { target: userId }),
-        );
-        return errorResponse(c, 'Forbidden', 403);
-      }
-      const rateLimited = checkDestructiveRateLimit(c, 'admin.user.delete');
-      if (rateLimited) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.delete', 'user', userId, 429, { target: userId }),
-        );
-        return rateLimited;
-      }
+    async (c: Context<AdminEnv>) =>
+      withRequiredAudit(c, async () => {
+        const userId = c.req.param('userId') ?? '';
+        if (!(await checkPermission(c, evaluator, 'delete', { type: 'admin:user', id: userId }))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.delete', 'user', userId, 403, { target: userId }),
+          );
+          return errorResponse(c, 'Forbidden', 403);
+        }
+        const rateLimited = await checkDestructiveRateLimit(c, 'admin.user.delete');
+        if (rateLimited) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.delete', 'user', userId, 429, { target: userId }),
+          );
+          return rateLimited;
+        }
 
-      if (!managedUserProvider.deleteUser) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.delete', 'user', userId, 501, { target: userId }),
-        );
-        return c.json(
-          { error: 'deleteUser not supported by the configured managed user provider' },
-          501 as ContentfulStatusCode,
-        );
-      }
+        if (!managedUserProvider.deleteUser) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.delete', 'user', userId, 501, { target: userId }),
+          );
+          return c.json(
+            { error: 'deleteUser not supported by the configured managed user provider' },
+            501 as ContentfulStatusCode,
+          );
+        }
 
-      const principal = c.get('adminPrincipal');
-      if (!(await getScopedUser(c, managedUserProvider, userId))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.delete', 'user', userId, 404, { target: userId }),
-        );
-        return errorResponse(c, 'User not found', 404);
-      }
-      try {
-        await managedUserProvider.deleteUser(userId, getManagedUserScope(c));
-      } catch (err) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.user.delete', 'user', userId, 500, {
-            target: userId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        throw err;
-      }
-      bus.emit('security.admin.user.deleted', {
-        userId,
-        meta: {
-          actorId: principal.subject,
-          ip: getClientIp(c),
-          requestId: c.get('requestId'),
-        },
-      });
-      await tryLogAuditEntry(config.auditLog, {
-        ...auditEntry(c, 'admin.user.delete', 'user', userId, 200, { target: userId }),
-      });
-      return c.json({ message: 'User deleted' }, 200);
-    },
+        const principal = c.get('adminPrincipal');
+        if (!(await getScopedUser(c, managedUserProvider, userId))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.delete', 'user', userId, 404, { target: userId }),
+          );
+          return errorResponse(c, 'User not found', 404);
+        }
+        try {
+          await managedUserProvider.deleteUser(userId, getManagedUserScope(c));
+        } catch (err) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.user.delete', 'user', userId, 500, {
+              target: userId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          throw err;
+        }
+        bus.emit('security.admin.user.deleted', {
+          userId,
+          meta: {
+            actorId: principal.subject,
+            ip: getClientIp(c),
+            requestId: c.get('requestId'),
+          },
+        });
+        await requireAuditEntry(config.auditLog, {
+          ...auditEntry(c, 'admin.user.delete', 'user', userId, 200, { target: userId }),
+        });
+        return c.json({ message: 'User deleted' }, 200);
+      }),
   );
 
   // -------------------------------------------------------------------------
@@ -1103,59 +1185,60 @@ export function createAdminRouter(config: AdminRouterConfig) {
         },
       },
     }),
-    async (c: Context<AdminEnv>) => {
-      const userId = c.req.param('userId') ?? '';
-      if (!(await checkPermission(c, evaluator, 'revoke', { type: 'admin:session' }))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke_all', 'user', userId, 403, { target: userId }),
-        );
-        return errorResponse(c, 'Forbidden', 403);
-      }
-      const rateLimited = checkDestructiveRateLimit(c, 'admin.session.revoke_all');
-      if (rateLimited) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke_all', 'user', userId, 429, { target: userId }),
-        );
-        return rateLimited;
-      }
+    async (c: Context<AdminEnv>) =>
+      withRequiredAudit(c, async () => {
+        const userId = c.req.param('userId') ?? '';
+        if (!(await checkPermission(c, evaluator, 'revoke', { type: 'admin:session' }))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.session.revoke_all', 'user', userId, 403, { target: userId }),
+          );
+          return errorResponse(c, 'Forbidden', 403);
+        }
+        const rateLimited = await checkDestructiveRateLimit(c, 'admin.session.revoke_all');
+        if (rateLimited) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.session.revoke_all', 'user', userId, 429, { target: userId }),
+          );
+          return rateLimited;
+        }
 
-      if (!managedUserProvider.revokeAllSessions) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke_all', 'user', userId, 501, { target: userId }),
-        );
-        return c.json(
-          { error: 'Revoke all sessions not supported by the configured managed user provider' },
-          501 as ContentfulStatusCode,
-        );
-      }
+        if (!managedUserProvider.revokeAllSessions) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.session.revoke_all', 'user', userId, 501, { target: userId }),
+          );
+          return c.json(
+            { error: 'Revoke all sessions not supported by the configured managed user provider' },
+            501 as ContentfulStatusCode,
+          );
+        }
 
-      if (!(await getScopedUser(c, managedUserProvider, userId))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke_all', 'user', userId, 404, { target: userId }),
-        );
-        return errorResponse(c, 'User not found', 404);
-      }
-      try {
-        await managedUserProvider.revokeAllSessions(userId, getManagedUserScope(c));
-      } catch (err) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke_all', 'user', userId, 500, {
-            target: userId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        throw err;
-      }
-      await tryLogAuditEntry(config.auditLog, {
-        ...auditEntry(c, 'admin.session.revoke_all', 'user', userId, 200, { target: userId }),
-      });
-      return c.json({ message: 'Sessions revoked' }, 200);
-    },
+        if (!(await getScopedUser(c, managedUserProvider, userId))) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.session.revoke_all', 'user', userId, 404, { target: userId }),
+          );
+          return errorResponse(c, 'User not found', 404);
+        }
+        try {
+          await managedUserProvider.revokeAllSessions(userId, getManagedUserScope(c));
+        } catch (err) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.session.revoke_all', 'user', userId, 500, {
+              target: userId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          throw err;
+        }
+        await requireAuditEntry(config.auditLog, {
+          ...auditEntry(c, 'admin.session.revoke_all', 'user', userId, 200, { target: userId }),
+        });
+        return c.json({ message: 'Sessions revoked' }, 200);
+      }),
   );
 
   // -------------------------------------------------------------------------
@@ -1195,72 +1278,73 @@ export function createAdminRouter(config: AdminRouterConfig) {
         },
       },
     }),
-    async (c: Context<AdminEnv>) => {
-      const userId = c.req.param('userId') ?? '';
-      const sessionId = c.req.param('sessionId') ?? '';
-      if (
-        !(await checkPermission(c, evaluator, 'revoke', { type: 'admin:session', id: sessionId }))
-      ) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke', 'session', sessionId, 403, { target: userId }),
-        );
-        return errorResponse(c, 'Forbidden', 403);
-      }
-      const rateLimited = checkDestructiveRateLimit(c, 'admin.session.revoke');
-      if (rateLimited) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke', 'session', sessionId, 429, { target: userId }),
-        );
-        return rateLimited;
-      }
+    async (c: Context<AdminEnv>) =>
+      withRequiredAudit(c, async () => {
+        const userId = c.req.param('userId') ?? '';
+        const sessionId = c.req.param('sessionId') ?? '';
+        if (
+          !(await checkPermission(c, evaluator, 'revoke', { type: 'admin:session', id: sessionId }))
+        ) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.session.revoke', 'session', sessionId, 403, { target: userId }),
+          );
+          return errorResponse(c, 'Forbidden', 403);
+        }
+        const rateLimited = await checkDestructiveRateLimit(c, 'admin.session.revoke');
+        if (rateLimited) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.session.revoke', 'session', sessionId, 429, { target: userId }),
+          );
+          return rateLimited;
+        }
 
-      if (!managedUserProvider.revokeSession) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke', 'session', sessionId, 501, { target: userId }),
-        );
-        return c.json(
-          { error: 'Revoke session not supported by the configured managed user provider' },
-          501 as ContentfulStatusCode,
-        );
-      }
+        if (!managedUserProvider.revokeSession) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.session.revoke', 'session', sessionId, 501, { target: userId }),
+          );
+          return c.json(
+            { error: 'Revoke session not supported by the configured managed user provider' },
+            501 as ContentfulStatusCode,
+          );
+        }
 
-      if (!(await getScopedUser(c, managedUserProvider, userId))) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke', 'session', sessionId, 404, { target: userId }),
-        );
-        return errorResponse(c, 'User not found', 404);
-      }
-      if (managedUserProvider.listSessions) {
-        const sessions = await managedUserProvider.listSessions(userId, getManagedUserScope(c));
-        if (!sessions.some(session => session.sessionId === sessionId)) {
+        if (!(await getScopedUser(c, managedUserProvider, userId))) {
           await tryLogAuditEntry(
             config.auditLog,
             auditEntry(c, 'admin.session.revoke', 'session', sessionId, 404, { target: userId }),
           );
-          return errorResponse(c, 'Session not found', 404);
+          return errorResponse(c, 'User not found', 404);
         }
-      }
-      try {
-        await managedUserProvider.revokeSession(sessionId, getManagedUserScope(c));
-      } catch (err) {
-        await tryLogAuditEntry(
-          config.auditLog,
-          auditEntry(c, 'admin.session.revoke', 'session', sessionId, 500, {
-            target: userId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-        );
-        throw err;
-      }
-      await tryLogAuditEntry(config.auditLog, {
-        ...auditEntry(c, 'admin.session.revoke', 'session', sessionId, 200, { target: userId }),
-      });
-      return c.json({ message: 'Session revoked' }, 200);
-    },
+        if (managedUserProvider.listSessions) {
+          const sessions = await managedUserProvider.listSessions(userId, getManagedUserScope(c));
+          if (!sessions.some(session => session.sessionId === sessionId)) {
+            await tryLogAuditEntry(
+              config.auditLog,
+              auditEntry(c, 'admin.session.revoke', 'session', sessionId, 404, { target: userId }),
+            );
+            return errorResponse(c, 'Session not found', 404);
+          }
+        }
+        try {
+          await managedUserProvider.revokeSession(sessionId, getManagedUserScope(c));
+        } catch (err) {
+          await tryLogAuditEntry(
+            config.auditLog,
+            auditEntry(c, 'admin.session.revoke', 'session', sessionId, 500, {
+              target: userId,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+          throw err;
+        }
+        await requireAuditEntry(config.auditLog, {
+          ...auditEntry(c, 'admin.session.revoke', 'session', sessionId, 200, { target: userId }),
+        });
+        return c.json({ message: 'Session revoked' }, 200);
+      }),
   );
 
   // -------------------------------------------------------------------------

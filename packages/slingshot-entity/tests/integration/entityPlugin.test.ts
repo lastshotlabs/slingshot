@@ -8,6 +8,7 @@ import type { Context, Next } from 'hono';
 import type {
   AppEnv,
   EntityRegistry,
+  PluginSetupContext,
   ResolvedEntityConfig,
   SlingshotContext,
   SlingshotEventBus,
@@ -18,6 +19,8 @@ import type {
 import {
   RESOLVE_COMPOSITE_FACTORIES,
   RESOLVE_ENTITY_FACTORIES,
+  createEventDefinitionRegistry,
+  createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryStoreInfra } from '@lastshotlabs/slingshot-core/testing';
 import { createEntityPlugin } from '../../src/createEntityPlugin';
@@ -98,6 +101,19 @@ const noteEntity: ResolvedEntityConfig = {
   },
   _pkField: 'id',
   _storageName: 'notes',
+  _systemFields: {
+    createdBy: 'createdBy',
+    updatedBy: 'updatedBy',
+    ownerField: 'ownerId',
+    tenantField: 'tenantId',
+    version: 'version',
+  },
+  _storageFields: {
+    mongoPkField: '_id',
+    ttlField: '_expires_at',
+    mongoTtlField: '_expiresAt',
+  },
+  _conventions: {},
   routes: {
     create: { event: 'note:created' },
     list: {},
@@ -113,6 +129,19 @@ const commentEntity: ResolvedEntityConfig = {
   },
   _pkField: 'id',
   _storageName: 'comments',
+  _systemFields: {
+    createdBy: 'createdBy',
+    updatedBy: 'updatedBy',
+    ownerField: 'ownerId',
+    tenantField: 'tenantId',
+    version: 'version',
+  },
+  _storageFields: {
+    mongoPkField: '_id',
+    ttlField: '_expires_at',
+    mongoTtlField: '_expiresAt',
+  },
+  _conventions: {},
   routes: {
     create: {},
     list: {},
@@ -140,6 +169,12 @@ function createFramework() {
       cache: 'memory' as StoreType,
       authStore: 'memory' as StoreType,
       sqlite: undefined,
+    },
+    logging: {
+      enabled: false,
+      verbose: false,
+      authTrace: false,
+      auditWarnings: false,
     },
     security: { cors: '*' },
     signing: null,
@@ -190,8 +225,35 @@ function createBus(): SlingshotEventBus & {
       const idx = subscriptions.findIndex(s => s.event === event && s.handler === handler);
       if (idx !== -1) subscriptions.splice(idx, 1);
     }),
+    onEnvelope: mock(
+      (event: string, handler: (p: Record<string, unknown>) => void | Promise<void>) => {
+        subscriptions.push({ event, handler });
+      },
+    ) as unknown as SlingshotEventBus['onEnvelope'],
+    offEnvelope: mock(
+      (event: string, handler: (p: Record<string, unknown>) => void | Promise<void>) => {
+        const idx = subscriptions.findIndex(s => s.event === event && s.handler === handler);
+        if (idx !== -1) subscriptions.splice(idx, 1);
+      },
+    ) as unknown as SlingshotEventBus['offEnvelope'],
     emitted,
     subscriptions,
+  };
+}
+
+function createSetupContext(
+  app: import('hono').Hono<AppEnv>,
+  config: ReturnType<typeof createFramework>,
+  bus: ReturnType<typeof createBus>,
+): PluginSetupContext {
+  return {
+    app,
+    config,
+    bus,
+    events: createEventPublisher({
+      definitions: createEventDefinitionRegistry(),
+      bus,
+    }),
   };
 }
 
@@ -240,7 +302,9 @@ describe('createEntityPlugin E2E', () => {
       ],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    const setupContext = createSetupContext(app, fw, bus);
+    await plugin.setupMiddleware!(setupContext);
+    await plugin.setupRoutes!(setupContext);
 
     // Both entity routers are mounted at the same app-level path (root '/')
     // because buildBareEntityRoutes adds the entity segment (`/notes`,
@@ -261,7 +325,9 @@ describe('createEntityPlugin E2E', () => {
       ],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    const setupContext = createSetupContext(app, fw, bus);
+    await plugin.setupMiddleware!(setupContext);
+    await plugin.setupRoutes!(setupContext);
 
     // Single entity, mounted at '/'. The router internally prefixes routes
     // with `/notes` via buildBareEntityRoutes.
@@ -299,7 +365,9 @@ describe('createEntityPlugin E2E', () => {
       ],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    const setupContext = createSetupContext(app, fw, bus);
+    await plugin.setupMiddleware!(setupContext);
+    await plugin.setupRoutes!(setupContext);
 
     expect((fw.entityRegistry.list as ReturnType<typeof mock>)()).toHaveLength(1);
   });
@@ -320,7 +388,7 @@ describe('createEntityPlugin E2E', () => {
       ],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     // Fire the cascade event
     const sub = bus.subscriptions.find(s => s.event === 'note:deleted')!;
@@ -343,7 +411,7 @@ describe('createEntityPlugin E2E', () => {
       ],
     });
 
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     expect(bus.subscriptions).toHaveLength(0);
   });
@@ -359,7 +427,7 @@ describe('createEntityPlugin E2E', () => {
       ],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
     expect(bus.subscriptions).toHaveLength(1);
 
     await plugin.teardown!();
@@ -396,7 +464,9 @@ describe('factories entry — single-entity HTTP round-trip', () => {
       entities: [{ config: noteEntity, factories }],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    const setupContext = createSetupContext(app, fw, bus);
+    await plugin.setupMiddleware!(setupContext);
+    await plugin.setupRoutes!(setupContext);
 
     const mounted = (
       routes as Array<{ path: string; router: { fetch(r: Request): Promise<Response> } }>
@@ -448,7 +518,7 @@ describe('factories entry — onAdapter ref capture', () => {
       ],
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     expect(adapterRef).toBeDefined();
     const record = await adapterRef!.create({ text: 'via ref', authorId: 'user-1' });
@@ -537,7 +607,7 @@ describe('createEntityPlugin — manifest intake', () => {
     } as unknown as MockApp;
 
     const plugin = createEntityPlugin({ name: 'notes-plugin', manifest: minimalManifest });
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     expect(routes).toHaveLength(1);
 
@@ -578,8 +648,8 @@ describe('createEntityPlugin — manifest intake', () => {
       },
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     expect(capturedAdapters).toBeDefined();
     expect(capturedAdapters!['Note']).toBeDefined();
@@ -607,7 +677,7 @@ describe('createEntityPlugin — manifest intake', () => {
       routes,
     } as unknown as MockApp;
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
     expect(routes).toHaveLength(1);
   });
 
@@ -666,7 +736,7 @@ describe('createEntityPlugin — manifest intake', () => {
       } as unknown as MultiEntityManifest,
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     const createRes = await app.fetch(
       new Request('http://localhost/notes', {
@@ -755,7 +825,7 @@ describe('createEntityPlugin — manifest intake: multiple entities', () => {
     };
 
     const plugin = createEntityPlugin({ name: 'p', manifest: multiManifest });
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     // Two entities → two route mounts
     expect(routes).toHaveLength(2);
@@ -804,8 +874,8 @@ describe('createEntityPlugin — manifest intake: multiple entities', () => {
       },
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
+    await plugin.setupPost!(createSetupContext(app, fw, bus));
 
     expect(captured).toBeDefined();
     expect(captured!['Note']).toBeDefined();
@@ -870,7 +940,7 @@ describe('createEntityPlugin — manifest intake: composites', () => {
     };
 
     const plugin = createEntityPlugin({ name: 'p', manifest: compositeManifest });
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createSetupContext(app, fw, bus));
 
     // Composite replaces both individual entities → only one route mount (the primary)
     expect(routes).toHaveLength(1);

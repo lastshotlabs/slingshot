@@ -73,7 +73,26 @@ function createMemoryAdapter() {
   };
 }
 
-const testEntityConfig: ResolvedEntityConfig = {
+function asResolvedConfig(config: Record<string, unknown>): ResolvedEntityConfig {
+  return {
+    _systemFields: {
+      createdBy: 'createdBy',
+      updatedBy: 'updatedBy',
+      ownerField: 'ownerId',
+      tenantField: 'tenantId',
+      version: 'version',
+    },
+    _storageFields: {
+      mongoPkField: '_id',
+      ttlField: '_expires_at',
+      mongoTtlField: '_expiresAt',
+    },
+    _conventions: {},
+    ...config,
+  } as unknown as ResolvedEntityConfig;
+}
+
+const testEntityConfig = asResolvedConfig({
   name: 'Note',
   fields: {
     id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
@@ -81,7 +100,7 @@ const testEntityConfig: ResolvedEntityConfig = {
   },
   _pkField: 'id',
   _storageName: 'notes',
-};
+});
 
 type TestAuthRuntime = {
   adapter: {
@@ -159,7 +178,9 @@ function attachSlingshotCtx(
             const actorId = getActorId(c as Context<AppEnv>);
             if (!actorId) return null;
             const rt = options.authRuntime!;
-            const suspensionStatus = await rt.adapter.getSuspended(actorId);
+            const suspensionStatus = rt.adapter.getSuspended
+              ? await rt.adapter.getSuspended(actorId)
+              : null;
             if (suspensionStatus?.suspended) {
               return {
                 error: 'ACCOUNT_SUSPENDED',
@@ -902,7 +923,7 @@ describe('named operation inference — HTTP round-trip', () => {
     );
 
     expect(res.status).toBe(201);
-    expect(sawActorId).toBe('user-1');
+    expect(sawActorId as string | null).toBe('user-1');
   });
 
   it('injects param:actor.id and param:actor.tenantId for named operations (no synthetic param:tenantId)', async () => {

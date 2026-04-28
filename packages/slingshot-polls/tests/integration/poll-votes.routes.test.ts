@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import type { Hono } from 'hono';
 import { createPollsTestApp } from '../../src/testing';
+
+type PollsTestApp = Awaited<ReturnType<typeof createPollsTestApp>>['app'];
 
 const headers = (userId: string) => ({
   'x-user-id': userId,
@@ -8,7 +9,7 @@ const headers = (userId: string) => ({
 });
 
 /** Helper: create a poll and return its id. */
-async function createTestPoll(app: Hono, userId = 'user-1'): Promise<string> {
+async function createTestPoll(app: PollsTestApp, userId = 'user-1'): Promise<string> {
   const res = await app.request('/polls/polls', {
     method: 'POST',
     headers: headers(userId),

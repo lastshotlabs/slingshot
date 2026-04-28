@@ -534,5 +534,23 @@ describe('script entrypoints', () => {
       ),
     ).toBe(0);
     expect(dockerCalls[0].env?.POSTGRES_URL).toBe('postgres://custom');
+
+    const dockerRetryCalls: SpawnCalls = [];
+    let dockerRetryAttempt = 0;
+    const dockerRetrySpawn = ((cmd: string[], options?: { env?: Record<string, string> }) => {
+      dockerRetryCalls.push({ cmd, env: options?.env });
+      return { exited: Promise.resolve(dockerRetryAttempt++ === 0 ? 133 : 0) } as ReturnType<
+        typeof Bun.spawn
+      >;
+    }) as typeof Bun.spawn;
+
+    expect(
+      await dockerModule.runDockerTests(
+        [{ label: 'docker-crash-step', command: ['bun', 'test', 'tests/docker'] }],
+        dockerRetrySpawn,
+        dockerEnv,
+      ),
+    ).toBe(0);
+    expect(dockerRetryCalls).toHaveLength(2);
   });
 });

@@ -14,6 +14,7 @@ describe('eventEnvelope', () => {
       exposure: ['internal'],
       scope: null,
       source: 'system',
+      requestTenantId: null,
     });
 
     expect(Object.isFrozen(envelope)).toBe(true);

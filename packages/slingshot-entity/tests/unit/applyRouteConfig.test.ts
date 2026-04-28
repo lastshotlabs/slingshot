@@ -31,7 +31,26 @@ function createMockRouter() {
 // Minimal mock entity config
 // ---------------------------------------------------------------------------
 
-const baseEntityConfig: ResolvedEntityConfig = {
+function asResolvedConfig(config: Record<string, unknown>): ResolvedEntityConfig {
+  return {
+    _systemFields: {
+      createdBy: 'createdBy',
+      updatedBy: 'updatedBy',
+      ownerField: 'ownerId',
+      tenantField: 'tenantId',
+      version: 'version',
+    },
+    _storageFields: {
+      mongoPkField: '_id',
+      ttlField: '_expires_at',
+      mongoTtlField: '_expiresAt',
+    },
+    _conventions: {},
+    ...config,
+  } as unknown as ResolvedEntityConfig;
+}
+
+const baseEntityConfig = asResolvedConfig({
   name: 'Post',
   fields: {
     id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
@@ -47,7 +66,7 @@ const baseEntityConfig: ResolvedEntityConfig = {
   },
   _pkField: 'id',
   _storageName: 'posts',
-};
+});
 
 // ---------------------------------------------------------------------------
 // Bus mock
@@ -61,6 +80,8 @@ function createMockBus() {
     }) as unknown as SlingshotEventBus['emit'],
     on: mock(() => {}),
     off: mock(() => {}),
+    onEnvelope: mock(() => {}) as unknown as SlingshotEventBus['onEnvelope'],
+    offEnvelope: mock(() => {}) as unknown as SlingshotEventBus['offEnvelope'],
   };
   return { bus, emitted };
 }

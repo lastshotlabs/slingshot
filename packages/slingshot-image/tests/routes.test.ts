@@ -1,6 +1,7 @@
 // packages/slingshot-image/tests/routes.test.ts
 import { describe, expect, it } from 'bun:test';
 import { Hono } from 'hono';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { createMemoryImageCache } from '../src/cache';
 import { buildImageRouter } from '../src/routes';
 
@@ -10,7 +11,7 @@ function buildTestApp(opts?: {
   maxWidth?: number;
   maxHeight?: number;
 }) {
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   const cache = createMemoryImageCache();
   buildImageRouter(
     app,
@@ -62,7 +63,7 @@ describe('GET /_snapshot/image — SSRF protection', () => {
   });
 
   it('serves relative URLs without trusting the incoming Host header', async () => {
-    const app = new Hono();
+    const app = new Hono<AppEnv>();
     const cache = createMemoryImageCache();
 
     app.get('/uploads/test.png', c =>
@@ -131,7 +132,7 @@ describe('GET /_snapshot/image — parameter validation', () => {
 describe('GET /_snapshot/image — cache headers', () => {
   it('sets Cache-Control immutable on successful cached response', async () => {
     // Pre-populate the cache directly
-    const app = new Hono();
+    const app = new Hono<AppEnv>();
     const cache = createMemoryImageCache();
     const key = '/test.jpg:100::original:75';
     await cache.set(key, {

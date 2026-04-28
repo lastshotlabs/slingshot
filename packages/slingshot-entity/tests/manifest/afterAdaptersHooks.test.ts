@@ -11,6 +11,7 @@ import {
   createMockBus,
   createMockFrameworkConfig,
   createMockInfraWithFactory,
+  createMockSetupContext,
 } from './helpers';
 
 describe('manifest afterAdapters hooks', () => {
@@ -66,7 +67,7 @@ describe('manifest afterAdapters hooks', () => {
       manifestRuntime: runtime,
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createMockSetupContext(app, fw, bus));
 
     expect(sawTransformedAdapter).toBe(true);
   });

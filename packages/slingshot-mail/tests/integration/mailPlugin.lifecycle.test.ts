@@ -5,6 +5,7 @@ import type {
   SlingshotEventBus,
   SlingshotFrameworkConfig,
 } from '@lastshotlabs/slingshot-core';
+import { MailTemplateNotFoundError } from '../../src/lib/subscriptionWiring.js';
 import { createMailPlugin } from '../../src/plugin.js';
 import { createMemoryQueue } from '../../src/queues/memory.js';
 import { createRawHtmlRenderer } from '../../src/renderers/rawHtml.js';
@@ -52,7 +53,7 @@ function freshQueue() {
 }
 
 describe('createMailPlugin lifecycle', () => {
-  it('validateTemplatesOnStartup: true + renderer has listTemplates() + missing template → console.warn called', async () => {
+  it('validateTemplatesOnStartup: true + renderer has listTemplates() + missing template → throws MailTemplateNotFoundError', async () => {
     const bus: SlingshotEventBus = createInProcessAdapter();
     const renderer = createRawHtmlRenderer({
       templates: {
@@ -71,13 +72,15 @@ describe('createMailPlugin lifecycle', () => {
       subscriptions: [{ event: 'auth:delivery.password_reset', template: 'missing_template' }],
     });
 
-    await plugin.setupPost!(setupContext(bus));
+    let caught: unknown = null;
+    try {
+      await plugin.setupPost!(setupContext(bus));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(MailTemplateNotFoundError);
+    expect((caught as MailTemplateNotFoundError).templateName).toBe('missing_template');
 
-    const warnMsgs = warnSpy.mock.calls.map(call => (call as string[])[0]);
-    const templateWarnMsg = warnMsgs.find(m => m.includes('missing_template'));
-    expect(templateWarnMsg).toBeDefined();
-
-    await plugin.teardown!();
     await bus.shutdown?.();
   });
 
@@ -234,7 +237,7 @@ describe('createMailPlugin lifecycle', () => {
     await expect(plugin.teardown!()).resolves.toBeUndefined();
   });
 
-  it('template validation warns for each missing template individually (2 missing → 2 warns)', async () => {
+  it('template validation throws on the first missing template (fail-fast)', async () => {
     const bus: SlingshotEventBus = createInProcessAdapter();
     const renderer = createRawHtmlRenderer({
       templates: {
@@ -256,14 +259,15 @@ describe('createMailPlugin lifecycle', () => {
       ],
     });
 
-    await plugin.setupPost!(setupContext(bus));
+    let caught: unknown = null;
+    try {
+      await plugin.setupPost!(setupContext(bus));
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(MailTemplateNotFoundError);
+    expect((caught as MailTemplateNotFoundError).templateName).toBe('missing_one');
 
-    expect(warnSpy).toHaveBeenCalledTimes(2);
-    const warnMsgs = warnSpy.mock.calls.map(call => (call as string[])[0]);
-    expect(warnMsgs.some(m => m.includes('missing_one'))).toBe(true);
-    expect(warnMsgs.some(m => m.includes('missing_two'))).toBe(true);
-
-    await plugin.teardown!();
     await bus.shutdown?.();
   });
 });

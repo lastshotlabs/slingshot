@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import {
   ASSETS_PLUGIN_STATE_KEY,
+  type AppEnv,
   POLLS_PLUGIN_STATE_KEY,
   attachContext,
 } from '@lastshotlabs/slingshot-core';
@@ -11,7 +13,7 @@ import {
 } from '../../src/middleware/peerGuards';
 
 function buildApp(opts: { hasPolls?: boolean; hasAssets?: boolean }) {
-  const app = new Hono() as unknown as Parameters<typeof buildPollRequiredGuard>[0];
+  const app = new Hono<AppEnv>();
   const pluginState = new Map<string, unknown>();
   if (opts.hasPolls) pluginState.set(POLLS_PLUGIN_STATE_KEY, {});
   if (opts.hasAssets) pluginState.set(ASSETS_PLUGIN_STATE_KEY, {});
@@ -27,7 +29,7 @@ function buildApp(opts: { hasPolls?: boolean; hasAssets?: boolean }) {
 
   app.use('*', buildPollRequiredGuard(app));
   app.use('*', buildAttachmentRequiredGuard(app));
-  app.post('/messages', c => c.json({ ok: true }));
+  app.post('/messages', (c: Context<AppEnv>) => c.json({ ok: true }));
   return app;
 }
 

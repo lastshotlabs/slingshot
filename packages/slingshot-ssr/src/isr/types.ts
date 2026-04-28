@@ -140,6 +140,29 @@ export interface IsrConfig {
 }
 
 /**
+ * A chainable transaction builder returned by `redis.multi()`.
+ *
+ * Calls to `set`/`sadd` queue commands inside the transaction and return the
+ * same pipeline for chaining. `exec()` atomically executes the queued commands
+ * and returns an array of results, or `null` if the transaction was aborted.
+ *
+ * Structurally compatible with ioredis `Pipeline`/`Multi` chains.
+ */
+export interface RedisMultiLike {
+  set(key: string, value: string): RedisMultiLike;
+  set(key: string, value: string, expiryMode: 'EX', time: number): RedisMultiLike;
+  sadd(key: string, ...members: string[]): RedisMultiLike;
+  /**
+   * Execute the queued commands atomically.
+   *
+   * Returns an array of `[err, result]` tuples (ioredis style) or simple
+   * results (some clients), or `null` when the transaction was aborted
+   * (e.g. due to a failed WATCH/optimistic-lock condition).
+   */
+  exec(): Promise<unknown[] | null>;
+}
+
+/**
  * Minimal structural interface for a Redis client.
  *
  * Defined structurally so `slingshot-ssr` does not import `ioredis` directly.
@@ -166,4 +189,10 @@ export interface RedisLike {
   smembers(key: string): Promise<string[]>;
   /** Remove one or more members from a Redis Set. */
   srem(key: string, ...members: string[]): Promise<unknown>;
+  /**
+   * Begin a transactional pipeline. Used by the ISR Redis adapter to atomically
+   * write the page entry and update the tag indexes in a single MULTI/EXEC so
+   * that a failed SADD does not leave a SET behind without a tag entry.
+   */
+  multi(): RedisMultiLike;
 }

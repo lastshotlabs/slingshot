@@ -290,7 +290,11 @@ describe('createMailPlugin integration', () => {
 
   it('teardown() does not throw when an unsubscriber throws', async () => {
     const provider = makeMockProvider();
-    const renderer = createRawHtmlRenderer({ templates: {} });
+    const renderer = createRawHtmlRenderer({
+      templates: {
+        welcome: { subject: 'Welcome', html: '<p>welcome</p>' },
+      },
+    });
     const queue = createMemoryQueue();
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
 
@@ -310,11 +314,23 @@ describe('createMailPlugin integration', () => {
 
     await plugin.setupPost!(setupContext(bus));
 
-    // Patch the bus to make off() throw during teardown
-    const originalOff = (bus as unknown as { off: (e: string, h: unknown) => void }).off;
-    (bus as unknown as { off: (e: string, h: unknown) => void }).off = () => {
+    // Patch the bus to make off()/offEnvelope() throw during teardown.
+    // The wiring uses onEnvelope when available (so offEnvelope is called); fall back
+    // to off for legacy buses.
+    const busAny = bus as unknown as {
+      off: (e: string, h: unknown) => void;
+      offEnvelope?: (e: string, h: unknown) => void;
+    };
+    const originalOff = busAny.off;
+    const originalOffEnvelope = busAny.offEnvelope;
+    busAny.off = () => {
       throw new Error('unsubscribe failed');
     };
+    if (busAny.offEnvelope) {
+      busAny.offEnvelope = () => {
+        throw new Error('unsubscribe failed');
+      };
+    }
 
     // teardown() should not propagate the error
     await expect(plugin.teardown!()).resolves.toBeUndefined();
@@ -323,7 +339,8 @@ describe('createMailPlugin integration', () => {
     expect(errorSpy).toHaveBeenCalled();
 
     // Restore
-    (bus as unknown as { off: (e: string, h: unknown) => void }).off = originalOff;
+    busAny.off = originalOff;
+    if (originalOffEnvelope) busAny.offEnvelope = originalOffEnvelope;
     errorSpy.mockRestore();
   });
 });

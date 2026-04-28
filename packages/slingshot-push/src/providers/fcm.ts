@@ -1,5 +1,6 @@
 import { createPrivateKey, createSign } from 'node:crypto';
 import type { FirebaseServiceAccount } from '../types/config';
+import type { PushSendResult } from '../types/models';
 import type { PushProvider } from './provider';
 
 function base64UrlEncode(input: Buffer | string): string {
@@ -106,12 +107,36 @@ export function createFcmProvider(config: {
 
   return {
     platform: 'android',
-    async send(subscription, message) {
+    async send(subscription, message, context) {
       if (subscription.platformData.platform !== 'android') {
         return { ok: false, reason: 'transient', error: 'subscription platform mismatch' };
       }
+      const idempotencyKey = context?.idempotencyKey;
 
-      const accessToken = await tokens.getToken();
+      let accessToken: string;
+      try {
+        accessToken = await tokens.getToken();
+      } catch (err) {
+        // OAuth token acquisition failures are operational/network-level and should
+        // be retried by the router rather than propagated as an unrecoverable error.
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error(
+          JSON.stringify({
+            code: 'fcm-oauth-failure',
+            project: config.serviceAccount.project_id,
+            providerIdempotencyKey: idempotencyKey,
+            error: errorMessage,
+          }),
+        );
+        const result: PushSendResult = {
+          ok: false,
+          reason: 'transient',
+          error: `fcm oauth failure: ${errorMessage}`,
+          retryAfterMs: 30_000,
+          providerIdempotencyKey: idempotencyKey,
+        };
+        return result;
+      }
       const url = `https://fcm.googleapis.com/v1/projects/${config.serviceAccount.project_id}/messages:send`;
       const dataPayload = Object.fromEntries(
         Object.entries({
@@ -166,6 +191,7 @@ export function createFcmProvider(config: {
           return {
             ok: true,
             providerMessageId,
+            providerIdempotencyKey: idempotencyKey,
           };
         }
 

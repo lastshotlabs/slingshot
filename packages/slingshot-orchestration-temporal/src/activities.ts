@@ -1,6 +1,7 @@
 import { Context } from '@temporalio/activity';
 import { Client } from '@temporalio/client';
-import type { ConnectionLike } from '@temporalio/client';
+import type { ClientInterceptors, ConnectionLike } from '@temporalio/client';
+import type { DataConverter } from '@temporalio/common';
 import type {
   OrchestrationEventMap,
   OrchestrationEventSink,
@@ -40,10 +41,28 @@ export function createTemporalActivities(options: {
   connection: ConnectionLike;
   namespace?: string;
   eventSink?: OrchestrationEventSink;
+  /**
+   * Optional Temporal `DataConverter` forwarded to the internal `Client`.
+   * Required for codec symmetry: without it, signals emitted from activities
+   * (e.g. `slingshot-progress`) bypass the payload codec installed on the
+   * server-side `Client` and `Worker`, leaking unredacted PII to Temporal
+   * Web UI and the visibility store. Should match the converter used on the
+   * worker and the server-side `Client`.
+   */
+  dataConverter?: DataConverter;
+  /**
+   * Optional Temporal client interceptors forwarded to the internal `Client`.
+   * Mirrors the interceptors installed on the server-side `Client` so that
+   * cross-cutting concerns (auth headers, tracing, redaction) stay symmetric
+   * for activity-emitted child workflow signals.
+   */
+  interceptors?: ClientInterceptors;
 }) {
   const client = new Client({
     connection: options.connection,
     ...(options.namespace ? { namespace: options.namespace } : {}),
+    ...(options.dataConverter ? { dataConverter: options.dataConverter } : {}),
+    ...(options.interceptors ? { interceptors: options.interceptors } : {}),
   });
 
   return {

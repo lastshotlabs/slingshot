@@ -31,7 +31,7 @@ describe('warnUnknownPluginKeys', () => {
     warnUnknownPluginKeys('test-plugin', { maxRetries: 3, maxRtries: 5 }, schema as never);
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toContain('maxRtries');
+    expect((warnSpy.mock.calls as unknown[][])[0]?.[0]).toContain('maxRtries');
     console.warn = originalWarn;
   });
 
@@ -81,7 +81,7 @@ describe('validatePluginConfig', () => {
   test('returns parsed config on success', () => {
     const schema = z.object({ maxRetries: z.number().default(3) });
     const result = validatePluginConfig('test', {}, schema as never);
-    expect(result.maxRetries).toBe(3);
+    expect((result as { maxRetries: number }).maxRetries).toBe(3);
   });
 
   test('throws on validation failure', () => {

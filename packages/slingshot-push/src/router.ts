@@ -1,7 +1,10 @@
+import { buildProviderIdempotencyKey } from './lib/idempotency';
 import type { PushProvider } from './providers/provider';
 import type {
   PushMessage,
   PushPlatform,
+  PushProviderSendContext,
+  PushSendResult,
   PushSubscriptionRecord,
   PushTopicMembershipRecord,
 } from './types/models';
@@ -39,6 +42,30 @@ type DynamicBus = {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function sendWithProviderTimeout(
+  provider: PushProvider,
+  subscription: PushSubscriptionRecord,
+  message: PushMessage,
+  timeoutMs: number,
+  context: PushProviderSendContext,
+): Promise<PushSendResult> {
+  if (timeoutMs <= 0) return provider.send(subscription, message, context);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      provider.send(subscription, message, context),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`push provider timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 interface PushSubscriptionRepo {
@@ -95,6 +122,7 @@ interface PushDeliveryRepo {
   markSent(params: {
     id: string;
     providerMessageId?: string;
+    providerIdempotencyKey?: string;
   }): Promise<RouterDeliveryRecord | null>;
   markDelivered(params: { id: string; 'actor.id': string }): Promise<RouterDeliveryRecord | null>;
   markFailed(params: { id: string; failureReason: string }): Promise<RouterDeliveryRecord | null>;
@@ -161,10 +189,16 @@ export function createPushRouter(options: {
   bus?: DynamicBus;
   /** Maximum milliseconds for a single provider.send() call before it is treated as transient failure. Default: 30000. */
   providerTimeoutMs?: number;
+  /** Subscriptions per topic-fan-out batch. Default: 1000. */
+  topicFanoutBatchSize?: number;
+  /** Max concurrent in-flight batches before back-pressure kicks in. Default: 10. */
+  topicFanoutMaxPending?: number;
 }): PushRouter {
   const maxAttempts = options.retries?.maxAttempts ?? 3;
   const initialDelayMs = options.retries?.initialDelayMs ?? 1_000;
   const providerTimeoutMs = options.providerTimeoutMs ?? 30_000;
+  const topicFanoutBatchSize = Math.max(1, options.topicFanoutBatchSize ?? 1000);
+  const topicFanoutMaxPending = Math.max(1, options.topicFanoutMaxPending ?? 10);
 
   async function sendToSubscriptions(
     subscriptions: readonly RouterSubscriptionRecord[],
@@ -219,17 +253,16 @@ export function createPushRouter(options: {
           attempts += 1;
           await options.repos.deliveries.incrementAttempts(delivery.id, 1);
 
+          const idempotencyKey = buildProviderIdempotencyKey(delivery.id, attempts);
           let result;
           try {
-            result = await Promise.race([
-              provider.send(toProviderSubscription(subscription, platform), payload),
-              new Promise<never>((_, reject) =>
-                setTimeout(
-                  () => reject(new Error(`push provider timed out after ${providerTimeoutMs}ms`)),
-                  providerTimeoutMs,
-                ),
-              ),
-            ]);
+            result = await sendWithProviderTimeout(
+              provider,
+              toProviderSubscription(subscription, platform),
+              payload,
+              providerTimeoutMs,
+              { idempotencyKey },
+            );
           } catch (err) {
             console.error(
               `[slingshot-push] Provider threw or timed out for platform="${platform}" userId="${subscription.userId}"`,
@@ -245,12 +278,14 @@ export function createPushRouter(options: {
             await options.repos.deliveries.markSent({
               id: delivery.id,
               providerMessageId: result.providerMessageId,
+              providerIdempotencyKey: idempotencyKey,
             });
             options.bus?.emit('push:delivery.sent', {
               deliveryId: delivery.id,
               subscriptionId: subscription.id,
               userId: subscription.userId,
               providerMessageId: result.providerMessageId,
+              providerIdempotencyKey: idempotencyKey,
             });
             deliveredCount += 1;
             sent = true;
@@ -408,20 +443,55 @@ export function createPushRouter(options: {
       );
       if (allMemberships.length > LARGE_TOPIC_WARNING_THRESHOLD) {
         console.warn(
-          `[slingshot-push] Topic '${topicName}' has ${allMemberships.length} members; publishing sequentially may be slow. Consider batched fan-out for large topics.`,
+          `[slingshot-push] Topic '${topicName}' has ${allMemberships.length} members; publishing in batched fan-out (batchSize=${topicFanoutBatchSize}, maxPending=${topicFanoutMaxPending}).`,
         );
       }
-      const subscriptionResults = await Promise.all(
-        allMemberships.map(m => options.repos.subscriptions.getById(m.subscriptionId)),
-      );
-      const subscriptions = subscriptionResults.filter(
-        (s): s is RouterSubscriptionRecord => s !== null,
-      );
 
-      return sendToSubscriptions(subscriptions, message, {
-        tenantId,
-        notificationId: opts.notificationId,
-      });
+      // Chunk memberships into batches; resolve each batch's subscriptions in
+      // parallel, then dispatch to subscribers. Apply back-pressure when the
+      // number of pending batches exceeds `topicFanoutMaxPending` so a single
+      // huge topic cannot overwhelm downstream providers.
+      const totalBatches = Math.ceil(allMemberships.length / topicFanoutBatchSize);
+      const pending: Array<Promise<number>> = [];
+      let totalDelivered = 0;
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+        if (pending.length >= topicFanoutMaxPending) {
+          // Wait for at least one in-flight batch to settle before scheduling more.
+          const settled = await Promise.race(
+            pending.map((p, idx) => p.then(value => ({ value, idx }))),
+          );
+          totalDelivered += settled.value;
+          pending.splice(settled.idx, 1);
+        }
+        const start = batchIndex * topicFanoutBatchSize;
+        const end = Math.min(start + topicFanoutBatchSize, allMemberships.length);
+        const batchMemberships = allMemberships.slice(start, end);
+        const dispatchPromise = (async () => {
+          const subscriptionResults = await Promise.all(
+            batchMemberships.map(m => options.repos.subscriptions.getById(m.subscriptionId)),
+          );
+          const subscriptions = subscriptionResults.filter(
+            (s): s is RouterSubscriptionRecord => s !== null,
+          );
+          console.info(
+            `[slingshot-push] Topic '${topicName}' batch ${batchIndex + 1}/${totalBatches} dispatched (size=${subscriptions.length}).`,
+          );
+          options.bus?.emit('push:topic.batch.dispatched', {
+            topicName,
+            batchIndex,
+            totalBatches,
+            size: subscriptions.length,
+          });
+          return sendToSubscriptions(subscriptions, message, {
+            tenantId,
+            notificationId: opts.notificationId,
+          });
+        })();
+        pending.push(dispatchPromise);
+      }
+      const remaining = await Promise.all(pending);
+      for (const value of remaining) totalDelivered += value;
+      return totalDelivered;
     },
   };
 }

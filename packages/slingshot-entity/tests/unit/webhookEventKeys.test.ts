@@ -7,7 +7,26 @@ import { applyRouteConfig } from '../../src/routing/applyRouteConfig';
 import { buildBareEntityRoutes } from '../../src/routing/buildBareEntityRoutes';
 import type { BareEntityAdapter } from '../../src/routing/buildBareEntityRoutes';
 
-const entityConfig: ResolvedEntityConfig = {
+function asResolvedConfig(config: Record<string, unknown>): ResolvedEntityConfig {
+  return {
+    _systemFields: {
+      createdBy: 'createdBy',
+      updatedBy: 'updatedBy',
+      ownerField: 'ownerId',
+      tenantField: 'tenantId',
+      version: 'version',
+    },
+    _storageFields: {
+      mongoPkField: '_id',
+      ttlField: '_expires_at',
+      mongoTtlField: '_expiresAt',
+    },
+    _conventions: {},
+    ...config,
+  } as unknown as ResolvedEntityConfig;
+}
+
+const entityConfig = asResolvedConfig({
   name: 'Message',
   fields: {
     id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
@@ -15,7 +34,7 @@ const entityConfig: ResolvedEntityConfig = {
   },
   _pkField: 'id',
   _storageName: 'messages',
-};
+});
 
 function makeAdapter(): BareEntityAdapter {
   return {

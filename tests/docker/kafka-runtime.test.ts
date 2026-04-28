@@ -3,7 +3,11 @@ import net from 'node:net';
 import { join } from 'node:path';
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { z } from 'zod';
-import { createEventSchemaRegistry, createInProcessAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  createEventEnvelope,
+  createEventSchemaRegistry,
+  createInProcessAdapter,
+} from '@lastshotlabs/slingshot-core';
 import {
   createKafkaAdapter,
   createKafkaConnectors,
@@ -54,6 +58,32 @@ function headersToStrings(headers: KafkaMessage['headers']): Record<string, stri
   }
 
   return result;
+}
+
+function createConnectorEnvelope(event: string, payload: unknown) {
+  return createEventEnvelope({
+    key: event as never,
+    payload: payload as never,
+    ownerPlugin: 'slingshot-kafka-docker-test',
+    exposure: ['connector'],
+    scope: null,
+    source: 'connector',
+    requestTenantId: null,
+  });
+}
+
+function parseKafkaPayload<T = unknown>(value: string | null): T {
+  const parsed = JSON.parse(value ?? 'null') as unknown;
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    'payload' in parsed &&
+    'key' in parsed &&
+    'meta' in parsed
+  ) {
+    return (parsed as { payload: T }).payload;
+  }
+  return parsed as T;
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -249,135 +279,154 @@ async function createKafkaProxy(): Promise<{
 afterEach(async () => {
   const pending = cleanup.splice(0, cleanup.length).reverse();
   await Promise.allSettled(pending.map(fn => runCleanupWithTimeout(fn)));
-});
+}, KAFKA_TEST_TIMEOUT_MS);
 
 describe('Kafka runtime paths (Docker)', () => {
-  test('Kafka adapter enforces strict publish validation and skips invalid consumed payloads', async () => {
-    const registry = createEventSchemaRegistry();
-    registry.register(
-      'auth:login',
-      z.object({
-        userId: z.string().transform(value => value.toUpperCase()),
-        sessionId: z.string(),
-      }),
-    );
+  test(
+    'Kafka adapter enforces strict publish validation and skips invalid consumed payloads',
+    async () => {
+      const registry = createEventSchemaRegistry();
+      registry.register(
+        'auth:login',
+        z.object({
+          userId: z.string().transform(value => value.toUpperCase()),
+          sessionId: z.string(),
+        }),
+      );
 
-    const bus = createKafkaAdapter({
-      brokers: [KAFKA_BROKER],
-      topicPrefix: uniqueName('slingshot.runtime.validation'),
-      groupPrefix: uniqueName('slingshot.runtime.group'),
-      schemaRegistry: registry,
-      validation: 'strict',
-    });
-    cleanup.push(() => bus.shutdown?.() ?? Promise.resolve());
+      const bus = createKafkaAdapter({
+        brokers: [KAFKA_BROKER],
+        topicPrefix: uniqueName('slingshot.runtime.validation'),
+        groupPrefix: uniqueName('slingshot.runtime.group'),
+        schemaRegistry: registry,
+        validation: 'strict',
+      });
+      cleanup.push(() => bus.shutdown?.() ?? Promise.resolve());
 
-    const introspection = getKafkaAdapterIntrospectionOrNull(bus);
-    if (!introspection) {
-      throw new Error('Kafka adapter introspection missing');
-    }
+      const introspection = getKafkaAdapterIntrospectionOrNull(bus);
+      if (!introspection) {
+        throw new Error('Kafka adapter introspection missing');
+      }
 
-    const topic = introspection.topicNameForEvent('auth:login');
-    const brokerMessages = await collectKafkaMessages(topic);
-    const producer = await createProducer();
+      const topic = introspection.topicNameForEvent('auth:login');
+      const brokerMessages = await collectKafkaMessages(topic);
+      const producer = await createProducer();
 
-    const received: Array<{ userId: string; sessionId: string }> = [];
-    bus.on(
-      'auth:login',
-      payload => {
-        received.push(payload);
-      },
-      { durable: true, name: uniqueName('strict-worker') },
-    );
-
-    await waitFor(
-      () => bus.health().consumers[0]?.connected === true,
-      15_000,
-      'Kafka adapter durable consumer did not connect',
-    );
-
-    expect(() => {
-      bus.emit('auth:login', { userId: 'bad' } as never);
-    }).toThrow('validation failed');
-
-    await sleep(600);
-    expect(received).toHaveLength(0);
-    expect(brokerMessages).toHaveLength(0);
-
-    bus.emit('auth:login', { userId: 'docker-user', sessionId: 'session-1' });
-
-    await waitFor(() => brokerMessages.length === 1, 15_000, 'Kafka publish did not reach broker');
-    await waitFor(
-      () => received.length === 1,
-      15_000,
-      'Kafka adapter did not receive the valid durable message',
-    );
-
-    expect(JSON.parse(brokerMessages[0]!.value ?? '{}')).toEqual({
-      userId: 'DOCKER-USER',
-      sessionId: 'session-1',
-    });
-    expect(received).toEqual([{ userId: 'DOCKER-USER', sessionId: 'session-1' }]);
-
-    await producer.send({
-      topic,
-      messages: [
-        {
-          key: 'invalid',
-          value: Buffer.from(JSON.stringify({ userId: 'raw-user', sessionId: 42 })),
+      const received: Array<{ userId: string; sessionId: string }> = [];
+      bus.on(
+        'auth:login',
+        payload => {
+          received.push(payload);
         },
-        {
-          key: 'valid',
-          value: Buffer.from(JSON.stringify({ userId: 'raw-user', sessionId: 'session-2' })),
-        },
-      ],
-    });
+        { durable: true, name: uniqueName('strict-worker') },
+      );
 
-    await sleep(800);
-    expect(received).toEqual([
-      { userId: 'DOCKER-USER', sessionId: 'session-1' },
-      { userId: 'RAW-USER', sessionId: 'session-2' },
-    ]);
-  });
+      await waitFor(
+        () => bus.health().consumers[0]?.connected === true,
+        15_000,
+        'Kafka adapter durable consumer did not connect',
+      );
 
-  test('Kafka outbound connectors apply shared schema validation before publishing to Kafka', async () => {
-    const registry = createEventSchemaRegistry();
-    registry.register(
-      'auth:user.created',
-      z.object({
-        userId: z.string().transform(value => `user:${value}`),
-      }),
-    );
+      expect(() => {
+        bus.emit('auth:login', { userId: 'bad' } as never);
+      }).toThrow('validation failed');
 
-    const bus = createInProcessAdapter();
-    const topic = uniqueName('external.users.schema');
-    const collector = await collectKafkaMessages(topic);
-    const connectors = createKafkaConnectors({
-      brokers: [KAFKA_BROKER],
-      schemaRegistry: registry,
-      validationMode: 'strict',
-      outbound: [
-        {
-          event: 'auth:user.created',
-          topic,
-          autoCreateTopic: true,
-        },
-      ],
-    });
-    cleanup.push(() => connectors.stop());
+      await sleep(600);
+      expect(received).toHaveLength(0);
+      expect(brokerMessages).toHaveLength(0);
 
-    await connectors.start(bus);
-    await sleep(400);
+      bus.emit('auth:login', { userId: 'docker-user', sessionId: 'session-1' });
 
-    bus.emit('auth:user.created', { userId: 'abc' } as never);
+      await waitFor(
+        () => brokerMessages.length === 1,
+        15_000,
+        'Kafka publish did not reach broker',
+      );
+      await waitFor(
+        () => received.length === 1,
+        15_000,
+        'Kafka adapter did not receive the valid durable message',
+      );
 
-    await waitFor(
-      () => collector.length === 1,
-      15_000,
-      'Outbound connector did not publish the schema-validated message',
-    );
-    expect(JSON.parse(collector[0]!.value ?? '{}')).toEqual({ userId: 'user:abc' });
-    expect(connectors.health().outbound[0]?.messagesProduced).toBe(1);
-  });
+      expect(
+        parseKafkaPayload<{ userId: string; sessionId: string }>(brokerMessages[0]!.value),
+      ).toEqual({
+        userId: 'DOCKER-USER',
+        sessionId: 'session-1',
+      });
+      expect(received).toEqual([{ userId: 'DOCKER-USER', sessionId: 'session-1' }]);
+
+      await producer.send({
+        topic,
+        messages: [
+          {
+            key: 'invalid',
+            value: Buffer.from(JSON.stringify({ userId: 'raw-user', sessionId: 42 })),
+          },
+          {
+            key: 'valid',
+            value: Buffer.from(JSON.stringify({ userId: 'raw-user', sessionId: 'session-2' })),
+          },
+        ],
+      });
+
+      await sleep(800);
+      expect(received).toEqual([
+        { userId: 'DOCKER-USER', sessionId: 'session-1' },
+        { userId: 'RAW-USER', sessionId: 'session-2' },
+      ]);
+    },
+    KAFKA_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    'Kafka outbound connectors apply shared schema validation before publishing to Kafka',
+    async () => {
+      const registry = createEventSchemaRegistry();
+      registry.register(
+        'auth:user.created',
+        z.object({
+          userId: z.string().transform(value => `user:${value}`),
+        }),
+      );
+
+      const bus = createInProcessAdapter();
+      const topic = uniqueName('external.users.schema');
+      const collector = await collectKafkaMessages(topic);
+      const connectors = createKafkaConnectors({
+        brokers: [KAFKA_BROKER],
+        schemaRegistry: registry,
+        validationMode: 'strict',
+        outbound: [
+          {
+            event: 'auth:user.created',
+            topic,
+            autoCreateTopic: true,
+          },
+        ],
+      });
+      cleanup.push(() => connectors.stop());
+
+      await connectors.start(bus);
+      await sleep(400);
+
+      bus.emit(
+        'auth:user.created',
+        createConnectorEnvelope('auth:user.created', { userId: 'abc' }),
+      );
+
+      await waitFor(
+        () => collector.length === 1,
+        15_000,
+        'Outbound connector did not publish the schema-validated message',
+      );
+      expect(parseKafkaPayload<{ userId: string }>(collector[0]!.value)).toEqual({
+        userId: 'user:abc',
+      });
+      expect(connectors.health().outbound[0]?.messagesProduced).toBe(1);
+    },
+    KAFKA_TEST_TIMEOUT_MS,
+  );
 
   test(
     'Kafka inbound connectors send exhausted failures to an auto-created DLQ',
@@ -427,143 +476,155 @@ describe('Kafka runtime paths (Docker)', () => {
       await waitFor(() => dlqMessages.length === 1, 15_000, 'DLQ message was not written to Kafka');
 
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(JSON.parse(dlqMessages[0]!.value ?? '{}')).toEqual({ id: 'invoice-1' });
+      expect(parseKafkaPayload<{ id: string }>(dlqMessages[0]!.value)).toEqual({
+        id: 'invoice-1',
+      });
       expect(dlqMessages[0]!.headers['slingshot.original-topic']).toBe(topic);
       expect(dlqMessages[0]!.headers['slingshot.original-offset']).toBeDefined();
     },
     KAFKA_TEST_TIMEOUT_MS,
   );
 
-  test('Kafka inbound connectors honor maxRetries: 0 and still process once before DLQ', async () => {
-    const topic = uniqueName('incoming.once');
-    const dlqTopic = `${topic}.dlq`;
-    await ensureTopic(topic);
+  test(
+    'Kafka inbound connectors honor maxRetries: 0 and still process once before DLQ',
+    async () => {
+      const topic = uniqueName('incoming.once');
+      const dlqTopic = `${topic}.dlq`;
+      await ensureTopic(topic);
 
-    const handler = mock(async () => {
-      throw new Error('failed once');
-    });
-    const connectors = createKafkaConnectors({
-      brokers: [KAFKA_BROKER],
-      inbound: [
-        {
-          topic,
-          groupId: uniqueName('once-only'),
-          maxRetries: 0,
-          errorStrategy: 'dlq',
-          autoCreateDLQ: true,
-          handler,
-        },
-      ],
-    });
-    cleanup.push(() => connectors.stop());
-
-    await connectors.start(createInProcessAdapter());
-    await waitFor(
-      () => connectors.health().inbound[0]?.status === 'active',
-      15_000,
-      'Inbound connector did not become active',
-    );
-
-    const producer = await createProducer();
-    await producer.send({
-      topic,
-      messages: [{ key: 'once-1', value: Buffer.from(JSON.stringify({ id: 'once-1' })) }],
-    });
-
-    await waitFor(
-      () => connectors.health().inbound[0]?.messagesDLQ === 1,
-      15_000,
-      'maxRetries: 0 message did not reach DLQ',
-    );
-
-    const dlqMessages = await collectKafkaMessages(dlqTopic, { fromBeginning: true });
-    await waitFor(
-      () => dlqMessages.length === 1,
-      15_000,
-      'DLQ message for maxRetries: 0 was not written',
-    );
-
-    expect(handler).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(dlqMessages[0]!.value ?? '{}')).toEqual({ id: 'once-1' });
-  });
-
-  test('Kafka inbound connectors process partitions concurrently when concurrency is raised', async () => {
-    const topic = uniqueName('incoming.concurrent');
-    await ensureTopic(topic, 3);
-
-    let inFlight = 0;
-    let maxInFlight = 0;
-    const started = new Set<string>();
-    let releaseHandlers!: () => void;
-    const releasePromise = new Promise<void>(resolve => {
-      releaseHandlers = resolve;
-    });
-
-    const connectors = createKafkaConnectors({
-      brokers: [KAFKA_BROKER],
-      inbound: [
-        {
-          topic,
-          groupId: uniqueName('concurrency'),
-          concurrency: 3,
-          handler: async payload => {
-            const id = String((payload as { id: string }).id);
-            started.add(id);
-            inFlight += 1;
-            maxInFlight = Math.max(maxInFlight, inFlight);
-            try {
-              await releasePromise;
-            } finally {
-              inFlight -= 1;
-            }
+      const handler = mock(async () => {
+        throw new Error('failed once');
+      });
+      const connectors = createKafkaConnectors({
+        brokers: [KAFKA_BROKER],
+        inbound: [
+          {
+            topic,
+            groupId: uniqueName('once-only'),
+            maxRetries: 0,
+            errorStrategy: 'dlq',
+            autoCreateDLQ: true,
+            handler,
           },
+        ],
+      });
+      cleanup.push(() => connectors.stop());
+
+      await connectors.start(createInProcessAdapter());
+      await waitFor(
+        () => connectors.health().inbound[0]?.status === 'active',
+        15_000,
+        'Inbound connector did not become active',
+      );
+
+      const producer = await createProducer();
+      await producer.send({
+        topic,
+        messages: [{ key: 'once-1', value: Buffer.from(JSON.stringify({ id: 'once-1' })) }],
+      });
+
+      await waitFor(
+        () => connectors.health().inbound[0]?.messagesDLQ === 1,
+        15_000,
+        'maxRetries: 0 message did not reach DLQ',
+      );
+
+      const dlqMessages = await collectKafkaMessages(dlqTopic, { fromBeginning: true });
+      await waitFor(
+        () => dlqMessages.length === 1,
+        15_000,
+        'DLQ message for maxRetries: 0 was not written',
+      );
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(parseKafkaPayload<{ id: string }>(dlqMessages[0]!.value)).toEqual({
+        id: 'once-1',
+      });
+    },
+    KAFKA_TEST_TIMEOUT_MS,
+  );
+
+  test(
+    'Kafka inbound connectors process partitions concurrently when concurrency is raised',
+    async () => {
+      const topic = uniqueName('incoming.concurrent');
+      await ensureTopic(topic, 3);
+
+      let inFlight = 0;
+      let maxInFlight = 0;
+      const started = new Set<string>();
+      let releaseHandlers!: () => void;
+      const releasePromise = new Promise<void>(resolve => {
+        releaseHandlers = resolve;
+      });
+
+      const connectors = createKafkaConnectors({
+        brokers: [KAFKA_BROKER],
+        inbound: [
+          {
+            topic,
+            groupId: uniqueName('concurrency'),
+            concurrency: 3,
+            handler: async payload => {
+              const id = String((payload as { id: string }).id);
+              started.add(id);
+              inFlight += 1;
+              maxInFlight = Math.max(maxInFlight, inFlight);
+              try {
+                await releasePromise;
+              } finally {
+                inFlight -= 1;
+              }
+            },
+          },
+        ],
+      });
+      cleanup.push(() => connectors.stop());
+
+      await connectors.start(createInProcessAdapter());
+      await waitFor(
+        () => connectors.health().inbound[0]?.status === 'active',
+        15_000,
+        'Inbound connector did not become active',
+      );
+
+      const producer = await createProducer();
+      const messages: Message[] = [
+        {
+          partition: 0,
+          key: 'partition-0',
+          value: Buffer.from(JSON.stringify({ id: 'partition-0' })),
         },
-      ],
-    });
-    cleanup.push(() => connectors.stop());
+        {
+          partition: 1,
+          key: 'partition-1',
+          value: Buffer.from(JSON.stringify({ id: 'partition-1' })),
+        },
+        {
+          partition: 2,
+          key: 'partition-2',
+          value: Buffer.from(JSON.stringify({ id: 'partition-2' })),
+        },
+      ];
+      await producer.send({ topic, messages });
 
-    await connectors.start(createInProcessAdapter());
-    await waitFor(
-      () => connectors.health().inbound[0]?.status === 'active',
-      15_000,
-      'Inbound connector did not become active',
-    );
+      await waitFor(
+        () => started.size >= 2 && maxInFlight > 1,
+        15_000,
+        'Inbound connector did not process partitions concurrently',
+      );
+      expect(maxInFlight).toBeGreaterThan(1);
 
-    const producer = await createProducer();
-    const messages: Message[] = [
-      {
-        partition: 0,
-        key: 'partition-0',
-        value: Buffer.from(JSON.stringify({ id: 'partition-0' })),
-      },
-      {
-        partition: 1,
-        key: 'partition-1',
-        value: Buffer.from(JSON.stringify({ id: 'partition-1' })),
-      },
-      {
-        partition: 2,
-        key: 'partition-2',
-        value: Buffer.from(JSON.stringify({ id: 'partition-2' })),
-      },
-    ];
-    await producer.send({ topic, messages });
+      releaseHandlers();
 
-    await waitFor(
-      () => started.size === 3,
-      15_000,
-      'Inbound connector did not start all partition handlers',
-    );
-    expect(maxInFlight).toBeGreaterThan(1);
-
-    releaseHandlers();
-
-    await waitFor(
-      () => connectors.health().inbound[0]?.messagesProcessed === 3,
-      15_000,
-      'Concurrent handlers did not finish processing all messages',
-    );
-  });
+      await waitFor(
+        () => connectors.health().inbound[0]?.messagesProcessed === 3,
+        15_000,
+        'Concurrent handlers did not finish processing all messages',
+      );
+    },
+    KAFKA_TEST_TIMEOUT_MS,
+  );
 
   test(
     'Kafka adapter buffers publishes across a broker disconnect and drains after reconnect',
@@ -616,70 +677,82 @@ describe('Kafka runtime paths (Docker)', () => {
         'Buffered Kafka adapter publish did not reach the broker after reconnect',
       );
 
-      expect(JSON.parse(collector[0]!.value ?? '{}')).toEqual({
-        userId: 'buffered-user',
-        sessionId: 'buffered-session',
-      });
+      expect(parseKafkaPayload<{ userId: string; sessionId: string }>(collector[0]!.value)).toEqual(
+        {
+          userId: 'buffered-user',
+          sessionId: 'buffered-session',
+        },
+      );
     },
     KAFKA_TEST_TIMEOUT_MS,
   );
 
-  test('overlapping Kafka adapter and outbound connector routes warn and publish duplicate messages', async () => {
-    const bus = createKafkaAdapter({
-      brokers: [KAFKA_BROKER],
-      topicPrefix: uniqueName('slingshot.runtime.duplicate'),
-      groupPrefix: uniqueName('slingshot.runtime.group'),
-    });
-    cleanup.push(() => bus.shutdown?.() ?? Promise.resolve());
-
-    const introspection = getKafkaAdapterIntrospectionOrNull(bus);
-    if (!introspection) {
-      throw new Error('Kafka adapter introspection missing');
-    }
-
-    const event = 'auth:login';
-    const topic = introspection.topicNameForEvent(event);
-    await ensureTopic(topic);
-
-    const warned = mock((_message: unknown) => {});
-    const originalWarn = console.warn;
-    console.warn = warned;
-
-    try {
-      bus.on(event, () => {}, { durable: true, name: uniqueName('duplicate-worker') });
-      await waitFor(
-        () => bus.health().consumers[0]?.connected === true,
-        15_000,
-        'Kafka adapter durable consumer did not connect',
-      );
-
-      const collector = await collectKafkaMessages(topic);
-      const connectors = createKafkaConnectors({
+  test(
+    'overlapping Kafka adapter and outbound connector routes warn and publish duplicate messages',
+    async () => {
+      const bus = createKafkaAdapter({
         brokers: [KAFKA_BROKER],
-        outbound: [{ event, topic, autoCreateTopic: true }],
+        topicPrefix: uniqueName('slingshot.runtime.duplicate'),
+        groupPrefix: uniqueName('slingshot.runtime.group'),
       });
-      cleanup.push(() => connectors.stop());
+      cleanup.push(() => bus.shutdown?.() ?? Promise.resolve());
 
-      await connectors.start(bus);
-      await sleep(400);
+      const introspection = getKafkaAdapterIntrospectionOrNull(bus);
+      if (!introspection) {
+        throw new Error('Kafka adapter introspection missing');
+      }
 
-      bus.emit(event, { userId: 'duplicate-user', sessionId: 'duplicate-session' });
+      const event = 'auth:login';
+      const topic = introspection.topicNameForEvent(event);
+      await ensureTopic(topic);
 
-      await waitFor(
-        () => collector.length === 2,
-        15_000,
-        'Expected duplicate publishes were not observed on Kafka',
-      );
+      const warned = mock((_message: unknown) => {});
+      const originalWarn = console.warn;
+      console.warn = warned;
 
-      expect(
-        warned.mock.calls.some(call =>
-          String(call[0]).includes('also produced by the internal Kafka event bus adapter'),
-        ),
-      ).toBe(true);
-    } finally {
-      console.warn = originalWarn;
-    }
-  });
+      try {
+        bus.on(event, () => {}, { durable: true, name: uniqueName('duplicate-worker') });
+        await waitFor(
+          () => bus.health().consumers[0]?.connected === true,
+          15_000,
+          'Kafka adapter durable consumer did not connect',
+        );
+
+        const collector = await collectKafkaMessages(topic);
+        const connectors = createKafkaConnectors({
+          brokers: [KAFKA_BROKER],
+          outbound: [{ event, topic, autoCreateTopic: true }],
+        });
+        cleanup.push(() => connectors.stop());
+
+        await connectors.start(bus);
+        await sleep(400);
+
+        bus.emit(
+          event,
+          createConnectorEnvelope(event, {
+            userId: 'duplicate-user',
+            sessionId: 'duplicate-session',
+          }) as never,
+        );
+
+        await waitFor(
+          () => collector.length === 2,
+          15_000,
+          'Expected duplicate publishes were not observed on Kafka',
+        );
+
+        expect(
+          warned.mock.calls.some(call =>
+            String(call[0]).includes('also produced by the internal Kafka event bus adapter'),
+          ),
+        ).toBe(true);
+      } finally {
+        console.warn = originalWarn;
+      }
+    },
+    KAFKA_TEST_TIMEOUT_MS,
+  );
 
   test(
     'manifest bootstrap wires Kafka event bus and connectors against the live broker',
@@ -772,17 +845,22 @@ describe('Kafka runtime paths (Docker)', () => {
 
       const outboundMessages = await collectKafkaMessages(outboundTopic);
 
-      ctx.bus.emit('auth:user.created', {
-        userId: 'manifest-user',
-        email: 'manifest@example.com',
-      } as never);
+      ctx.bus.emit(
+        'auth:user.created',
+        createConnectorEnvelope('auth:user.created', {
+          userId: 'manifest-user',
+          email: 'manifest@example.com',
+        }) as never,
+      );
 
       await waitFor(
         () => outboundMessages.length === 1,
         15_000,
         'Manifest outbound connector did not publish to Kafka',
       );
-      expect(JSON.parse(outboundMessages[0]!.value ?? '{}')).toEqual({
+      expect(
+        parseKafkaPayload<{ userId: string; email: string }>(outboundMessages[0]!.value),
+      ).toEqual({
         userId: 'manifest-user',
         email: 'manifest@example.com',
       });

@@ -6,6 +6,15 @@
  * unauthorised or forbidden access.
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import {
+  type EventExposure,
+  type EventPublishContext,
+  type EventScope,
+  type SlingshotEvents,
+  type SlingshotPlugin,
+  createEventEnvelope,
+  defineEvent,
+} from '@lastshotlabs/slingshot-core';
 import { createWebhookPlugin } from '@lastshotlabs/slingshot-webhooks';
 import { createWebhookMemoryQueue } from '@lastshotlabs/slingshot-webhooks/testing';
 import type { E2EServerHandle } from '../../src/testing';
@@ -13,6 +22,74 @@ import { authHeader, createMemoryAuthAdapter } from '../setup';
 import { createTestHttpServer } from '../setup-e2e';
 
 const TEST_TENANT_ID = 'tenant-a';
+const WEBHOOK_TEST_EVENTS = ['user.created', 'order.placed', 'webhook:user.created'] as const;
+const WEBHOOK_TEST_EXPOSURE = ['tenant-webhook', 'user-webhook'] as const;
+
+type WebhookTestEventKey = (typeof WEBHOOK_TEST_EVENTS)[number];
+type WebhookTestPayload = {
+  tenantId?: string | null;
+  userId?: string | null;
+  [key: string]: unknown;
+};
+
+function resolveWebhookTestScope(
+  payload: WebhookTestPayload,
+  ctx: EventPublishContext,
+): EventScope {
+  return {
+    tenantId: payload.tenantId ?? ctx.requestTenantId ?? TEST_TENANT_ID,
+    userId: payload.userId ?? null,
+    actorId: ctx.actorId ?? payload.userId ?? null,
+  };
+}
+
+function registerWebhookTestEvent(events: SlingshotEvents, key: WebhookTestEventKey): void {
+  const eventKey = key as never;
+  if (events.get(eventKey)) return;
+  events.register(
+    defineEvent(eventKey, {
+      ownerPlugin: 'slingshot-webhooks-e2e',
+      exposure: WEBHOOK_TEST_EXPOSURE,
+      resolveScope: resolveWebhookTestScope as never,
+    }),
+  );
+}
+
+function createWebhookTestEventsPlugin(): SlingshotPlugin {
+  return {
+    name: 'slingshot-webhooks-e2e-events',
+    setupMiddleware({ events }) {
+      for (const event of WEBHOOK_TEST_EVENTS) {
+        registerWebhookTestEvent(events, event);
+      }
+    },
+  };
+}
+
+function createWebhookTestEnvelope(key: WebhookTestEventKey, payload: WebhookTestPayload) {
+  return createEventEnvelope({
+    key: key as never,
+    payload: payload as never,
+    ownerPlugin: 'slingshot-webhooks-e2e',
+    exposure: ['tenant-webhook'] satisfies readonly EventExposure[],
+    scope: resolveWebhookTestScope(payload, {
+      requestTenantId: TEST_TENANT_ID,
+      actorId: payload.userId ?? null,
+      source: 'system',
+    }),
+    requestTenantId: TEST_TENANT_ID,
+    source: 'system',
+  });
+}
+
+async function emitWebhookTestEvent(
+  handle: E2EServerHandle,
+  key: WebhookTestEventKey,
+  payload: WebhookTestPayload,
+): Promise<void> {
+  handle.bus.emit(key as never, createWebhookTestEnvelope(key, payload) as never);
+  await (handle.bus as typeof handle.bus & { drain?: () => Promise<void> }).drain?.();
+}
 
 function makeWebhookPlugin(
   opts: {
@@ -56,6 +133,20 @@ function withTenant(headers: Record<string, string> = {}): Record<string, string
   return { 'x-tenant-id': TEST_TENANT_ID, ...headers };
 }
 
+function endpointInput(input: Record<string, unknown>): Record<string, unknown> {
+  const { events, ...rest } = input as Record<string, unknown> & { events?: unknown };
+  const subscriptions = Array.isArray(events)
+    ? events.map(pattern => ({ pattern: String(pattern) }))
+    : undefined;
+  return {
+    ownerType: 'tenant',
+    ownerId: TEST_TENANT_ID,
+    tenantId: TEST_TENANT_ID,
+    ...rest,
+    ...(subscriptions ? { subscriptions } : {}),
+  };
+}
+
 async function createAuthedHandle(
   plugin: ReturnType<typeof makeWebhookPlugin>['plugin'],
   role: 'admin' | 'user',
@@ -64,7 +155,7 @@ async function createAuthedHandle(
   const adapter = createMemoryAuthAdapter();
   const handle = await createTestHttpServer(
     {
-      plugins: [plugin],
+      plugins: [createWebhookTestEventsPlugin(), plugin],
       tenancy: {
         resolution: 'header',
         headerName: 'x-tenant-id',
@@ -99,39 +190,47 @@ describe('Webhook plugin — endpoint CRUD', () => {
     const res = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://receiver.example.com/hook',
-        secret: 'my-signing-secret',
-        events: ['user.created'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://receiver.example.com/hook',
+          secret: 'my-signing-secret',
+          events: ['user.created'],
+        }),
+      ),
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as any;
     expect(typeof body.id).toBe('string');
     expect(body.url).toBe('https://receiver.example.com/hook');
-    expect(body.events).toContain('user.created');
+    expect(body.subscriptions.map((subscription: any) => subscription.event)).toContain(
+      'user.created',
+    );
     expect(body.enabled).toBe(true);
-    expect(body.secret).toBe('cret');
+    expect(body.secret).toBe('****');
   });
 
   test('GET /webhooks/endpoints returns list', async () => {
     await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://a.example.com/hook',
-        secret: 'secret-a',
-        events: ['user.created'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://a.example.com/hook',
+          secret: 'secret-a',
+          events: ['user.created'],
+        }),
+      ),
     });
     await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://b.example.com/hook',
-        secret: 'secret-b',
-        events: ['order.placed'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://b.example.com/hook',
+          secret: 'secret-b',
+          events: ['order.placed'],
+        }),
+      ),
     });
 
     const res = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
@@ -147,11 +246,13 @@ describe('Webhook plugin — endpoint CRUD', () => {
     const createRes = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://a.example.com/hook',
-        secret: 'secret-a',
-        events: ['user.*'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://a.example.com/hook',
+          secret: 'secret-a',
+          events: ['user.*'],
+        }),
+      ),
     });
     const { id } = (await createRes.json()) as any;
 
@@ -174,11 +275,13 @@ describe('Webhook plugin — endpoint CRUD', () => {
     const createRes = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://example.com/hook',
-        secret: 'my-secret',
-        events: ['user.created'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://example.com/hook',
+          secret: 'my-secret',
+          events: ['user.created'],
+        }),
+      ),
     });
     const { id } = (await createRes.json()) as any;
 
@@ -201,11 +304,13 @@ describe('Webhook plugin — endpoint CRUD', () => {
     const createRes = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://old.example.com/hook',
-        secret: 'secret',
-        events: ['user.*'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://old.example.com/hook',
+          secret: 'secret',
+          events: ['user.*'],
+        }),
+      ),
     });
     const { id } = (await createRes.json()) as any;
 
@@ -233,11 +338,13 @@ describe('Webhook plugin — endpoint CRUD', () => {
     const createRes = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://delete-me.example.com/hook',
-        secret: 'secret',
-        events: ['user.*'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://delete-me.example.com/hook',
+          secret: 'secret',
+          events: ['user.*'],
+        }),
+      ),
     });
     const { id } = (await createRes.json()) as any;
 
@@ -257,11 +364,13 @@ describe('Webhook plugin — endpoint CRUD', () => {
     const createRes = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://example.com/hook',
-        secret: 'secret',
-        events: ['user.*'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://example.com/hook',
+          secret: 'secret',
+          events: ['user.*'],
+        }),
+      ),
     });
     const { id } = (await createRes.json()) as any;
 
@@ -294,11 +403,13 @@ describe('Webhook plugin — delivery management', () => {
     const res = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://receiver.example.com/hook',
-        secret: 'secret',
-        events: ['user.*'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://receiver.example.com/hook',
+          secret: 'secret',
+          events: ['user.*'],
+        }),
+      ),
     });
     const body = (await res.json()) as any;
     endpointId = body.id;
@@ -452,11 +563,13 @@ describe('Webhook plugin — admin role enforcement', () => {
     const res = await fetch(`${adminHandle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(withTenant()),
-      body: JSON.stringify({
-        url: 'https://example.com/hook',
-        secret: 'secret',
-        events: ['user.*'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://example.com/hook',
+          secret: 'secret',
+          events: ['user.*'],
+        }),
+      ),
     });
     expect(res.status).toBe(401);
   });
@@ -465,11 +578,13 @@ describe('Webhook plugin — admin role enforcement', () => {
     const res = await fetch(`${adminHandle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://example.com/hook',
-        secret: 'secret',
-        events: ['user.created'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://example.com/hook',
+          secret: 'secret',
+          events: ['user.created'],
+        }),
+      ),
     });
     expect(res.status).toBe(201);
   });
@@ -480,7 +595,7 @@ describe('Webhook plugin — event bus wiring', () => {
   let adminHeaders: Record<string, string>;
 
   beforeEach(async () => {
-    const { plugin } = makeWebhookPlugin({ events: ['auth:user.*'] });
+    const { plugin } = makeWebhookPlugin({ events: ['webhook:user.*'] });
     ({ handle, headers: adminHeaders } = await createAuthedHandle(
       plugin,
       'admin',
@@ -494,16 +609,21 @@ describe('Webhook plugin — event bus wiring', () => {
     const createRes = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://receiver.example.com/hook',
-        secret: 'signing-secret',
-        events: ['auth:user.*'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://receiver.example.com/hook',
+          secret: 'signing-secret',
+          events: ['webhook:user.*'],
+        }),
+      ),
     });
     const { id: endpointId } = (await createRes.json()) as any;
 
-    handle.bus.emit('auth:user.created', { userId: 'u-1', email: 'x@example.com' });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await emitWebhookTestEvent(handle, 'webhook:user.created', {
+      tenantId: TEST_TENANT_ID,
+      userId: 'u-1',
+      email: 'x@example.com',
+    });
 
     const deliveriesRes = await fetch(
       `${handle.baseUrl}/webhooks/endpoints/${endpointId}/deliveries`,
@@ -511,23 +631,27 @@ describe('Webhook plugin — event bus wiring', () => {
     );
     const deliveries = (await deliveriesRes.json()) as any;
     expect(deliveries.items.length).toBeGreaterThan(0);
-    expect(deliveries.items[0].event).toBe('auth:user.created');
+    expect(deliveries.items[0].event).toBe('webhook:user.created');
   });
 
   test('bus event NOT matching endpoint pattern does not create a delivery', async () => {
     const createRes = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://receiver.example.com/hook',
-        secret: 'secret',
-        events: ['order.*'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://receiver.example.com/hook',
+          secret: 'secret',
+          events: ['order.*'],
+        }),
+      ),
     });
     const { id: endpointId } = (await createRes.json()) as any;
 
-    handle.bus.emit('user.created', { userId: 'u-1' });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await emitWebhookTestEvent(handle, 'user.created', {
+      tenantId: TEST_TENANT_ID,
+      userId: 'u-1',
+    });
 
     const deliveriesRes = await fetch(
       `${handle.baseUrl}/webhooks/endpoints/${endpointId}/deliveries`,
@@ -541,11 +665,13 @@ describe('Webhook plugin — event bus wiring', () => {
     const createRes = await fetch(`${handle.baseUrl}/webhooks/endpoints`, {
       method: 'POST',
       headers: withJson(adminHeaders),
-      body: JSON.stringify({
-        url: 'https://receiver.example.com/hook',
-        secret: 'secret',
-        events: ['user.*'],
-      }),
+      body: JSON.stringify(
+        endpointInput({
+          url: 'https://receiver.example.com/hook',
+          secret: 'secret',
+          events: ['user.*'],
+        }),
+      ),
     });
     const { id: endpointId } = (await createRes.json()) as any;
 
@@ -555,8 +681,10 @@ describe('Webhook plugin — event bus wiring', () => {
       body: JSON.stringify({ enabled: false }),
     });
 
-    handle.bus.emit('user.created', { userId: 'u-1' });
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await emitWebhookTestEvent(handle, 'user.created', {
+      tenantId: TEST_TENANT_ID,
+      userId: 'u-1',
+    });
 
     const deliveriesRes = await fetch(
       `${handle.baseUrl}/webhooks/endpoints/${endpointId}/deliveries`,

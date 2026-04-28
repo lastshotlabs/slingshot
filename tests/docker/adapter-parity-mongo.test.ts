@@ -17,19 +17,20 @@ import {
 import { adapterParitySuite } from '../shared/adapter-parity';
 
 let adapter: AuthAdapter;
+const MONGO_PARITY_TIMEOUT_MS = 60_000;
 
 beforeAll(async () => {
   await connectTestMongo();
   adapter = createMongoAuthAdapter(getTestAuthConn(), getMongooseModule());
-});
+}, MONGO_PARITY_TIMEOUT_MS);
 
 afterAll(async () => {
   await disconnectTestServices();
-});
+}, MONGO_PARITY_TIMEOUT_MS);
 
 beforeEach(async () => {
   await flushTestServices();
-});
+}, MONGO_PARITY_TIMEOUT_MS);
 
 adapterParitySuite({
   name: 'mongo',

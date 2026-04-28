@@ -46,3 +46,4 @@ export { createPushRouter } from './router';
 export type { PushRouter, PushRouterRepos } from './router';
 export { compilePushFormatters } from './formatter';
 export { createPushDeliveryAdapter } from './deliveryAdapter';
+export { buildProviderIdempotencyKey, deriveUuidV4FromKey } from './lib/idempotency';

@@ -164,10 +164,14 @@ describe('buildRateLimitMiddleware', () => {
       nextCalled = true;
     });
     expect(nextCalled).toBe(false);
-    expect((response as { status: number }).status).toBe(429);
-    expect((response as { body: { error: string } }).body.error).toBe('RATE_LIMITED');
-    expect((response as { body: { scope: string } }).body.scope).toBe('user');
-    expect((response as { body: { op: string } }).body.op).toBe('vote');
+    const rateLimited = response as unknown as {
+      status: number;
+      body: { error: string; scope: string; op: string };
+    };
+    expect(rateLimited.status).toBe(429);
+    expect(rateLimited.body.error).toBe('RATE_LIMITED');
+    expect(rateLimited.body.scope).toBe('user');
+    expect(rateLimited.body.op).toBe('vote');
     expect(getHeaders().get('Retry-After')).toBeDefined();
     expect(getHeaders().get('X-RateLimit-Limit')).toBe('1');
     expect(getHeaders().get('X-RateLimit-Remaining')).toBe('0');
@@ -187,8 +191,12 @@ describe('buildRateLimitMiddleware', () => {
 
     const { c: c2 } = mockContext('user-2', 'tenant-1');
     const response = await mw(c2 as never, async () => {});
-    expect((response as { status: number }).status).toBe(429);
-    expect((response as { body: { scope: string } }).body.scope).toBe('tenant');
+    const rateLimited = response as unknown as {
+      status: number;
+      body: { scope: string };
+    };
+    expect(rateLimited.status).toBe(429);
+    expect(rateLimited.body.scope).toBe('tenant');
   });
 
   it('skips per-user check when no userId in context', async () => {

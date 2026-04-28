@@ -10,7 +10,16 @@ function makeFakePeerState() {
     createBuilder: () => ({
       notify: async () => null,
       notifyMany: async () => [],
-      schedule: async () => ({}),
+      schedule: async () => ({
+        id: 'notification-1',
+        userId: 'user-1',
+        source: 'test',
+        type: 'test',
+        read: false,
+        dispatched: false,
+        priority: 'normal' as const,
+        createdAt: new Date().toISOString(),
+      }),
       cancel: async () => {},
     }),
     registerDeliveryAdapter: () => {},

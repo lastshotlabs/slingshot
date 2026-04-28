@@ -61,10 +61,15 @@ function packageSuites(): TestCommandSuite[] {
       if (name === 'runtime-node') {
         testFiles = testFiles.filter(file => !file.includes('/tests/node-runtime/'));
       }
-      // worker.test.ts uses top-level mock.module() that leaks into co-process tests;
-      // it is emitted as its own suite below so it runs in an isolated bun process.
+      // worker.test.ts and tests/unit/activities-codec.test.ts use top-level
+      // mock.module() that leaks into co-process tests; each is emitted as its
+      // own suite below so they run in isolated bun processes.
       if (name === 'slingshot-orchestration-temporal') {
-        testFiles = testFiles.filter(file => !file.includes('/worker.test.ts'));
+        testFiles = testFiles.filter(
+          file =>
+            !file.includes('/worker.test.ts') &&
+            !file.includes('/tests/unit/activities-codec.test.ts'),
+        );
       }
       const configPath = normalizePath(join('packages', name, 'bunfig.toml'));
       return {
@@ -171,7 +176,21 @@ const temporalWorkerSuite: TestCommandSuite = {
   testFiles: ['packages/slingshot-orchestration-temporal/tests/worker.test.ts'],
 };
 
-export const packageTestSuites = applySuiteFilter([...packageSuites(), temporalWorkerSuite]);
+// activities-codec.test.ts mocks `@temporalio/client` at module scope to
+// observe the internal Client constructor; it must run in its own bun process
+// so the mock cannot leak into adapter.test.ts/errors.test.ts which import
+// `@temporalio/client` directly.
+const temporalActivitiesCodecSuite: TestCommandSuite = {
+  name: 'slingshot-orchestration-temporal (activities-codec isolated)',
+  testsPath: 'packages/slingshot-orchestration-temporal/tests',
+  testFiles: ['packages/slingshot-orchestration-temporal/tests/unit/activities-codec.test.ts'],
+};
+
+export const packageTestSuites = applySuiteFilter([
+  ...packageSuites(),
+  temporalWorkerSuite,
+  temporalActivitiesCodecSuite,
+]);
 
 function packageCoverageSuites(): CoverageSuite[] {
   const packagesDir = join(process.cwd(), 'packages');

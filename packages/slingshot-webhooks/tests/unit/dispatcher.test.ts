@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import { deliverWebhook } from '../../src/lib/dispatcher';
 import { WebhookDeliveryError } from '../../src/types/queue';
 import type { WebhookJob } from '../../src/types/queue';
@@ -31,18 +31,16 @@ function asFetch(m: ReturnType<typeof mock>): typeof fetch {
   return m as unknown as typeof fetch;
 }
 
+const PUBLIC_RESOLVE = async () => [{ address: '8.8.8.8', family: 4 as const }];
+
 describe('deliverWebhook', () => {
-  const originalFetch = globalThis.fetch;
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
   it('sends POST with correct headers on success', async () => {
     const fetchMock = mock(async () => new Response('ok', { status: 200 }));
-    globalThis.fetch = asFetch(fetchMock);
 
-    await deliverWebhook(makeJob());
+    await deliverWebhook(makeJob(), {
+      safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+      fetchImpl: asFetch(fetchMock),
+    });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
@@ -59,9 +57,11 @@ describe('deliverWebhook', () => {
   });
 
   it('throws retryable WebhookDeliveryError on 500', async () => {
-    globalThis.fetch = asFetch(mock(async () => new Response('error', { status: 500 })));
     try {
-      await deliverWebhook(makeJob());
+      await deliverWebhook(makeJob(), {
+        safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+        fetchImpl: asFetch(mock(async () => new Response('error', { status: 500 }))),
+      });
       expect.unreachable('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(WebhookDeliveryError);
@@ -71,9 +71,11 @@ describe('deliverWebhook', () => {
   });
 
   it('throws retryable WebhookDeliveryError on 429', async () => {
-    globalThis.fetch = asFetch(mock(async () => new Response('too many', { status: 429 })));
     try {
-      await deliverWebhook(makeJob());
+      await deliverWebhook(makeJob(), {
+        safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+        fetchImpl: asFetch(mock(async () => new Response('too many', { status: 429 }))),
+      });
       expect.unreachable('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(WebhookDeliveryError);
@@ -83,9 +85,11 @@ describe('deliverWebhook', () => {
   });
 
   it('throws non-retryable WebhookDeliveryError on 400', async () => {
-    globalThis.fetch = asFetch(mock(async () => new Response('bad', { status: 400 })));
     try {
-      await deliverWebhook(makeJob());
+      await deliverWebhook(makeJob(), {
+        safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+        fetchImpl: asFetch(mock(async () => new Response('bad', { status: 400 }))),
+      });
       expect.unreachable('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(WebhookDeliveryError);
@@ -95,9 +99,11 @@ describe('deliverWebhook', () => {
   });
 
   it('throws non-retryable WebhookDeliveryError on 404', async () => {
-    globalThis.fetch = asFetch(mock(async () => new Response('not found', { status: 404 })));
     try {
-      await deliverWebhook(makeJob());
+      await deliverWebhook(makeJob(), {
+        safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+        fetchImpl: asFetch(mock(async () => new Response('not found', { status: 404 }))),
+      });
       expect.unreachable('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(WebhookDeliveryError);
@@ -107,7 +113,11 @@ describe('deliverWebhook', () => {
   });
 
   it('does not throw on 200', async () => {
-    globalThis.fetch = asFetch(mock(async () => new Response('ok', { status: 200 })));
-    await expect(deliverWebhook(makeJob())).resolves.toBeUndefined();
+    await expect(
+      deliverWebhook(makeJob(), {
+        safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+        fetchImpl: asFetch(mock(async () => new Response('ok', { status: 200 }))),
+      }),
+    ).resolves.toBeUndefined();
   });
 });

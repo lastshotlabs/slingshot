@@ -5,9 +5,12 @@ import {
   getContextOrNull,
   isContextObject,
 } from '../../src/context/contextStore';
+import type { SlingshotContext } from '../../src/context/slingshotContext';
 import { createDefaultIdentityResolver } from '../../src/identity';
 
-function createContextFixture(overrides: Record<string, unknown> = {}) {
+function createContextFixture(
+  overrides: Record<string, unknown> = {},
+): SlingshotContext & Record<string, unknown> {
   return {
     config: {},
     persistence: {},
@@ -20,7 +23,7 @@ function createContextFixture(overrides: Record<string, unknown> = {}) {
     emailTemplates: new Map(),
     pluginState: new Map(),
     ...overrides,
-  };
+  } as unknown as SlingshotContext & Record<string, unknown>;
 }
 
 describe('isContextObject', () => {

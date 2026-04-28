@@ -101,6 +101,12 @@ export const kafkaAdapterOptionsSchema = z.object({
    */
   deserializationErrorPolicy: z.enum(['dlq', 'skip']).optional(),
   /**
+   * Maximum number of failed-publish events held in the in-memory reconnect
+   * buffer before new events are dropped with reason `pending-buffer-full`.
+   * Defaults to 1000.
+   */
+  pendingBufferSize: z.number().int().min(1).optional(),
+  /**
    * Optional callback invoked when the adapter drops or skips a message.
    * Use this to emit metrics / alerts without log scraping.
    */
@@ -136,6 +142,7 @@ interface ResolvedKafkaConfig {
   readonly ssl: KafkaAdapterOptions['ssl'];
   readonly validation: NonNullable<KafkaAdapterOptions['validation']>;
   readonly deserializationErrorPolicy: KafkaAdapterDeserErrorPolicy;
+  readonly pendingBufferSize: number;
   readonly onDrop: ((event: KafkaAdapterDropEvent) => void) | undefined;
 }
 
@@ -230,7 +237,7 @@ export interface KafkaAdapterIntrospection {
 }
 
 const ADAPTER_INTROSPECTION_SYMBOL = Symbol.for('slingshot.kafka.adapter.introspection');
-const MAX_PENDING_BUFFER = 1000;
+const DEFAULT_PENDING_BUFFER_SIZE = 1000;
 const MAX_PENDING_ATTEMPTS = 5;
 const DRAIN_INTERVAL_MS = 2_000;
 
@@ -326,6 +333,7 @@ export function createKafkaAdapter(
     ssl: opts.ssl,
     validation: opts.validation ?? DEFAULTS.validation,
     deserializationErrorPolicy: opts.deserializationErrorPolicy ?? 'dlq',
+    pendingBufferSize: opts.pendingBufferSize ?? DEFAULT_PENDING_BUFFER_SIZE,
     onDrop: opts.onDrop,
   });
 
@@ -625,7 +633,6 @@ export function createKafkaAdapter(
           await ensureTopic(topic);
           await consumer.connect();
           connected = true;
-          connectedConsumers.add(entryKey);
           await consumer.subscribe({
             topic,
             fromBeginning: config.startFromBeginning,
@@ -639,12 +646,14 @@ export function createKafkaAdapter(
           const consumerEvents = (consumer as unknown as { events?: Record<string, string> })
             .events;
           const consumerOn = (consumer as unknown as { on?: Function }).on;
+          let hasGroupJoinHook = false;
           if (consumerEvents && typeof consumerOn === 'function') {
             try {
               consumerOn.call(
                 consumer,
                 consumerEvents.REBALANCING,
                 async (rebalanceEvent: unknown) => {
+                  connectedConsumers.delete(entryKey);
                   rebalancingConsumers.add(entryKey);
                   console.info(
                     `[KafkaAdapter] rebalancing event="${eventName}" ` +
@@ -660,7 +669,9 @@ export function createKafkaAdapter(
                   void rebalanceEvent;
                 },
               );
+              hasGroupJoinHook = true;
               consumerOn.call(consumer, consumerEvents.GROUP_JOIN, (joinEvent: unknown) => {
+                connectedConsumers.add(entryKey);
                 rebalancingConsumers.delete(entryKey);
                 const member = (joinEvent as { payload?: { memberId?: string } } | undefined)
                   ?.payload?.memberId;
@@ -692,6 +703,9 @@ export function createKafkaAdapter(
               );
             },
           });
+          if (!hasGroupJoinHook) {
+            connectedConsumers.add(entryKey);
+          }
         } catch (err) {
           connectedConsumers.delete(entryKey);
           durableConsumers.delete(entryKey);
@@ -852,7 +866,20 @@ export function createKafkaAdapter(
     }
 
     try {
-      const decoded = eventSerializer.deserialize(entry.event, message.value);
+      // Heartbeat before deserialize so the broker session stays alive even if
+      // a large/expensive payload would otherwise block the consumer thread.
+      await heartbeat();
+      // Yield to the event loop so the consumer's heartbeat task gets a tick
+      // between batches and we don't starve I/O while decoding.
+      const decoded = await new Promise<unknown>((resolve, reject) => {
+        setImmediate(() => {
+          try {
+            resolve(eventSerializer.deserialize(entry.event, message.value as Buffer));
+          } catch (err) {
+            reject(err);
+          }
+        });
+      });
       decodedEnvelope = isEventEnvelope(decoded, entry.event as never)
         ? (decoded as EventEnvelope)
         : createRawEventEnvelope(
@@ -864,6 +891,9 @@ export function createKafkaAdapter(
               config.validation,
             ) as SlingshotEventMap[Extract<keyof SlingshotEventMap, string>],
           );
+      // Heartbeat after deserialize completes so the handler invocation starts
+      // with a fresh session deadline.
+      await heartbeat();
     } catch (deserializeErr) {
       console.error(
         `[KafkaAdapter] deserialization error on topic "${topic}" partition ${partition} ` +
@@ -1005,7 +1035,7 @@ export function createKafkaAdapter(
             });
             return;
           }
-          if (pendingBuffer.length >= MAX_PENDING_BUFFER) {
+          if (pendingBuffer.length >= config.pendingBufferSize) {
             console.error(
               `[KafkaAdapter] pending buffer full; dropping event "${event}" for topic "${topic}":`,
               err,

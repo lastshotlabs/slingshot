@@ -90,8 +90,8 @@ describe('evaluateFilter', () => {
   test('comparison with Date values', () => {
     const d1 = new Date('2024-01-01');
     const d2 = new Date('2024-06-01');
-    expect(evaluateFilter({ date: d2 }, { date: { $gt: d1 } })).toBe(true);
-    expect(evaluateFilter({ date: d1 }, { date: { $gt: d2 } })).toBe(false);
+    expect(evaluateFilter({ date: d2 }, { date: { $gt: d1 } } as never)).toBe(true);
+    expect(evaluateFilter({ date: d1 }, { date: { $gt: d2 } } as never)).toBe(false);
   });
 
   test('comparison with string values (lexicographic)', () => {

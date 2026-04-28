@@ -281,8 +281,12 @@ describe('createIntervalDispatcher', () => {
     const events = createNotificationsTestEvents(bus);
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
 
-    // A tick that never resolves
-    const listPendingDispatch = mock(() => new Promise<never>(() => {}));
+    let capturedSignal: AbortSignal | undefined;
+    // A tick that never resolves unless the dispatcher aborts it.
+    const listPendingDispatch = mock((params: { signal?: AbortSignal }) => {
+      capturedSignal = params.signal;
+      return new Promise<never>(() => {});
+    });
     (
       adapters.notifications as unknown as { listPendingDispatch: typeof listPendingDispatch }
     ).listPendingDispatch = listPendingDispatch;
@@ -314,6 +318,7 @@ describe('createIntervalDispatcher', () => {
     expect(errorSpy).toHaveBeenCalled();
     const logMsg = errorSpy.mock.calls[0]?.[0] as string;
     expect(logMsg).toContain('did not settle');
+    expect(capturedSignal?.aborted).toBe(true);
 
     setIntervalSpy.mockRestore();
     errorSpy.mockRestore();

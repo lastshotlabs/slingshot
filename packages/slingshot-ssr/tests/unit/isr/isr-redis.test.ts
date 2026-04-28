@@ -11,7 +11,10 @@ function createMockRedis(): RedisLike & {
   const _store = new Map<string, string>();
   const _sets = new Map<string, Set<string>>();
 
-  return {
+  const client: RedisLike & {
+    _store: Map<string, string>;
+    _sets: Map<string, Set<string>>;
+  } = {
     _store,
     _sets,
 
@@ -51,7 +54,40 @@ function createMockRedis(): RedisLike & {
       }
       return removed;
     },
+
+    multi() {
+      type Op =
+        | { kind: 'set'; key: string; value: string }
+        | { kind: 'sadd'; key: string; members: string[] };
+      const ops: Op[] = [];
+      const tx = {
+        set(key: string, value: string) {
+          ops.push({ kind: 'set', key, value });
+          return tx;
+        },
+        sadd(key: string, ...members: string[]) {
+          ops.push({ kind: 'sadd', key, members });
+          return tx;
+        },
+        async exec(): Promise<unknown[] | null> {
+          const results: unknown[] = [];
+          for (const op of ops) {
+            if (op.kind === 'set') {
+              await client.set(op.key, op.value);
+              results.push('OK');
+            } else {
+              await client.sadd(op.key, ...op.members);
+              results.push(op.members.length);
+            }
+          }
+          return results;
+        },
+      };
+      return tx;
+    },
   };
+
+  return client;
 }
 
 function makeEntry(overrides: Partial<IsrCacheEntry> = {}): IsrCacheEntry {

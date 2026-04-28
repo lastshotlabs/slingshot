@@ -13,7 +13,7 @@ export const OrganizationMember = defineEntity('OrganizationMember', {
     id: field.string({ primary: true, default: 'uuid' }),
     orgId: field.string({ immutable: true }),
     userId: field.string({ immutable: true }),
-    role: field.enum(['owner', 'admin', 'member'] as const, { default: 'member' }),
+    role: field.string({ default: 'member' }),
     joinedAt: field.date({ default: 'now', immutable: true }),
     invitedBy: field.string({ optional: true }),
   },

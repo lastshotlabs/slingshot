@@ -1,5 +1,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { Hono } from 'hono';
+import { type SlingshotContext, attachContext } from '@lastshotlabs/slingshot-core';
+import { DRAFT_MODE_COOKIE } from '../../../src/draft/index';
 import { createMemoryIsrCache } from '../../../src/isr/memory';
 import type { IsrCacheAdapter, IsrCacheEntry } from '../../../src/isr/types';
 import { buildSsrMiddleware } from '../../../src/middleware';
@@ -57,13 +59,19 @@ function createIsrAwareRenderer(
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     },
-    renderChain: async (chain: SsrRouteChain, shell) =>
-      new Response(
+    renderChain: async (chain: SsrRouteChain, shell) => {
+      if (shell._isr && opts.revalidate !== undefined) {
+        (shell._isr as IsrSink).revalidate = opts.revalidate;
+        (shell._isr as IsrSink).tags = opts.tags ?? [];
+      }
+
+      return new Response(
         `<html><body>rendered chain:${chain.page.url.pathname}</body></html>${shell.assetTags}`,
         {
           headers: { 'Content-Type': 'text/html; charset=utf-8' },
         },
-      ),
+      );
+    },
   };
 }
 
@@ -75,8 +83,15 @@ function createIsrAwareRenderer(
  *
  * For ISR tests that need `bsCtx`, we attach a fake context to the app.
  */
-function buildIsrTestApp(renderer: SlingshotSsrRenderer, isrAdapter: IsrCacheAdapter) {
+function buildIsrTestApp(
+  renderer: SlingshotSsrRenderer,
+  isrAdapter: IsrCacheAdapter,
+  opts: { withContext?: boolean } = {},
+) {
   const app = new Hono();
+  if (opts.withContext) {
+    attachContext(app, { app, pluginState: new Map() } as unknown as SlingshotContext);
+  }
 
   const middleware = buildSsrMiddleware(
     {
@@ -182,6 +197,53 @@ describe('ISR middleware — stale entry serves immediately and marks as stale',
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('<html><body>stale-content</body></html>');
     expect(res.headers.get('x-isr-cache')).toBe('stale');
+  });
+});
+
+describe('ISR middleware — draft mode bypasses cache', () => {
+  it('does not read the ISR cache for draft requests', async () => {
+    const isrAdapter = createMemoryIsrCache();
+    const getSpy = mock(isrAdapter.get.bind(isrAdapter));
+    isrAdapter.get = getSpy;
+    await isrAdapter.set('/posts', {
+      html: '<html><body>published-cache</body></html>',
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      generatedAt: Date.now(),
+      revalidateAfter: Date.now() + 60_000,
+      tags: ['posts'],
+    });
+
+    const renderer = createIsrAwareRenderer({ revalidate: 60, html: '<html>draft</html>' });
+    const app = buildIsrTestApp(renderer, isrAdapter, { withContext: true });
+
+    const res = await app.request('/posts', {
+      headers: { cookie: `${DRAFT_MODE_COOKIE}=1` },
+    });
+
+    const body = await res.text();
+    expect(res.status).toBe(200);
+    expect(body).toContain('<html><body>rendered chain:/posts</body></html>');
+    expect(res.headers.get('x-isr-cache')).toBeNull();
+    expect(getSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not write draft renders into the ISR cache', async () => {
+    const isrAdapter = createMemoryIsrCache();
+    const setSpy = mock(isrAdapter.set.bind(isrAdapter));
+    isrAdapter.set = setSpy;
+
+    const renderer = createIsrAwareRenderer({ revalidate: 60, html: '<html>draft</html>' });
+    const app = buildIsrTestApp(renderer, isrAdapter, { withContext: true });
+
+    const res = await app.request('/draft-post', {
+      headers: { cookie: `${DRAFT_MODE_COOKIE}=1` },
+    });
+
+    const body = await res.text();
+    expect(res.status).toBe(200);
+    expect(body).toContain('<html><body>rendered chain:/draft-post</body></html>');
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(await isrAdapter.get('/draft-post')).toBeNull();
   });
 });
 

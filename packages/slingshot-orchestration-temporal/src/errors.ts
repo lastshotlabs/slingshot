@@ -4,19 +4,9 @@ import {
   TimeoutFailure,
   WorkflowFailedError,
 } from '@temporalio/client';
-import type { RunError } from '@lastshotlabs/slingshot-orchestration';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
 
-export function toRunError(error: unknown): RunError {
-  if (error instanceof Error) {
-    return {
-      message: error.message,
-      stack: error.stack,
-    };
-  }
-
-  return { message: String(error) };
-}
+export { toRunError } from './runError';
 
 /**
  * Map a Temporal failure to a typed {@link OrchestrationError} so that callers

@@ -20,6 +20,20 @@ function stubAdapter() {
       });
       return 'grant-' + created.length;
     },
+    async createGrants(grantInputs) {
+      const ids: string[] = [];
+      for (const grant of grantInputs) {
+        created.push(grant);
+        const id = `grant-${created.length}`;
+        grants.push({
+          ...grant,
+          id,
+          grantedAt: new Date(),
+        });
+        ids.push(id);
+      }
+      return ids;
+    },
     async revokeGrant(id) {
       const grant = grants.find(candidate => candidate.id === id);
       if (grant) {
@@ -50,6 +64,18 @@ function stubAdapter() {
     },
     async deleteAllGrantsForSubject() {
       /* noop */
+    },
+    async deleteAllGrantsOnResource(resourceType, resourceId, tenantId) {
+      for (let i = grants.length - 1; i >= 0; i -= 1) {
+        const grant = grants[i];
+        if (
+          grant?.resourceType === resourceType &&
+          grant.resourceId === resourceId &&
+          (tenantId === undefined || grant.tenantId === tenantId)
+        ) {
+          grants.splice(i, 1);
+        }
+      }
     },
   };
   return { adapter, created, revoked, grants };

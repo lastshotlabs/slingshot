@@ -7,6 +7,8 @@ function createMockBus(keys: string[] = []): SlingshotEventBus {
     emit: mock(() => {}),
     on: mock(() => {}),
     off: mock(() => {}),
+    onEnvelope: mock(() => {}),
+    offEnvelope: mock(() => {}),
     shutdown: mock(async () => {}),
   };
 }
@@ -136,7 +138,7 @@ describe('RouterAdapter.shutdown()', () => {
 
   test('shutdown works when adapter has no shutdown method', async () => {
     const defaultBus = createMockBus();
-    delete (defaultBus as Record<string, unknown>).shutdown;
+    delete (defaultBus as unknown as Record<string, unknown>).shutdown;
     const router = createRouterAdapter({ default: defaultBus });
 
     // Should not throw even if shutdown is undefined

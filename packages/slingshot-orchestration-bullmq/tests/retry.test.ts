@@ -214,12 +214,13 @@ describe('task queue separation', () => {
     await adapter.runTask(taskA.name, { value: 'a' });
     await adapter.runTask(taskB.name, { value: 'b' });
 
-    // Each task should route to its own named queue
+    // Each task should route to its own named queue. Queue names use '_' as
+    // the separator (BullMQ 5.x rejects ':' in queue names).
     const highPriorityQueue = MockQueue.instances.find(
-      q => q.name === 'queue-sep:high-priority:tasks',
+      q => q.name === 'queue-sep_high-priority_tasks',
     );
     const lowPriorityQueue = MockQueue.instances.find(
-      q => q.name === 'queue-sep:low-priority:tasks',
+      q => q.name === 'queue-sep_low-priority_tasks',
     );
 
     expect(highPriorityQueue).toBeDefined();
@@ -256,7 +257,7 @@ describe('task queue separation', () => {
     adapter.registerTask(task);
     await adapter.runTask(task.name, { value: 'x' });
 
-    const defaultQueue = MockQueue.instances.find(q => q.name === 'default-q:tasks');
+    const defaultQueue = MockQueue.instances.find(q => q.name === 'default-q_tasks');
     expect(defaultQueue).toBeDefined();
     expect(defaultQueue!.jobs).toHaveLength(1);
     expect(defaultQueue!.jobs[0]?.data['taskName']).toBe('no-queue-task');
@@ -308,7 +309,7 @@ describe('idempotency', () => {
     expect(handle1.id).toBe(handle2.id);
 
     // Only one job should have been enqueued despite two runTask calls
-    const taskQueue = MockQueue.instances.find(q => q.name === 'idem-test:tasks');
+    const taskQueue = MockQueue.instances.find(q => q.name === 'idem-test_tasks');
     expect(taskQueue).toBeDefined();
     expect(taskQueue!.jobs).toHaveLength(1);
     // The second call's input ('second') should not have overwritten the first
@@ -348,7 +349,7 @@ describe('idempotency', () => {
     // Different keys → different run ids
     expect(handle1.id).not.toBe(handle2.id);
 
-    const taskQueue = MockQueue.instances.find(q => q.name === 'idem-multi:tasks');
+    const taskQueue = MockQueue.instances.find(q => q.name === 'idem-multi_tasks');
     expect(taskQueue).toBeDefined();
     expect(taskQueue!.jobs).toHaveLength(2);
 

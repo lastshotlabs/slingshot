@@ -66,16 +66,40 @@ export function createRedisIsrCache(redis: RedisLike): IsrCacheAdapter {
     },
 
     async set(path: string, entry: IsrCacheEntry): Promise<void> {
+      // Atomically write the page entry and update each tag index so that a
+      // failed SADD does not leave a SET behind without a corresponding tag
+      // entry. We wrap the SET and all SADDs in a MULTI/EXEC transaction.
+      //
       // Store without TTL — entries must survive past revalidateAfter so that
       // stale-while-revalidate can serve them while background regen runs.
       // Explicit invalidation via invalidatePath() / invalidateTag() manages
-      // entry lifecycle. Setting EX = revalidateAfter - now() would cause a
-      // hard miss on the revalidation boundary instead of serving stale content.
-      await redis.set(pageKey(path), JSON.stringify(entry));
+      // entry lifecycle.
+      const serialized = JSON.stringify(entry);
 
-      // Update the tag index: add this path to each tag's Redis Set.
-      if (entry.tags.length > 0) {
-        await Promise.all(entry.tags.map(tag => redis.sadd(tagKey(tag), path)));
+      const runMulti = async (): Promise<unknown[] | null> => {
+        const tx = redis.multi();
+        tx.set(pageKey(path), serialized);
+        for (const tag of entry.tags) {
+          tx.sadd(tagKey(tag), path);
+        }
+        return tx.exec();
+      };
+
+      let result: unknown[] | null;
+      try {
+        result = await runMulti();
+      } catch (err) {
+        // MULTI/EXEC failed outright — propagate so callers can log/abort.
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+
+      // EXEC returns null when the transaction was aborted (e.g. WATCH conflict).
+      // Retry once before giving up.
+      if (result === null) {
+        result = await runMulti();
+        if (result === null) {
+          throw new Error(`[slingshot-ssr] Redis ISR transaction aborted twice for path "${path}"`);
+        }
       }
     },
 

@@ -34,6 +34,8 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
   const sendTimeoutMs = config?.sendTimeoutMs ?? 30_000;
   const pending: Map<string, MailJob> = new Map();
   const activeJobs = new Set<Promise<void>>();
+  // Maps idempotency key -> original job id so repeated enqueues dedup.
+  const idempotencyIndex: Map<string, string> = new Map();
   let provider: MailProvider | null = null;
   let running = false;
   let idCounter = 0;
@@ -76,8 +78,18 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
 
   return {
     name: 'memory',
-    enqueue(message: MailMessage, opts?: { sourceEvent?: string }): Promise<string> {
+    enqueue(
+      message: MailMessage,
+      opts?: { sourceEvent?: string; idempotencyKey?: string },
+    ): Promise<string> {
       return resolveSync(() => {
+        if (opts?.idempotencyKey) {
+          const existingId = idempotencyIndex.get(opts.idempotencyKey);
+          if (existingId !== undefined) {
+            // Second enqueue with the same key is a no-op — return the original job id.
+            return existingId;
+          }
+        }
         const id = String(++idCounter);
         const job: MailJob = {
           id,
@@ -85,8 +97,12 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
           sourceEvent: opts?.sourceEvent,
           attempts: 0,
           createdAt: new Date(),
+          idempotencyKey: opts?.idempotencyKey,
         };
         pending.set(id, job);
+        if (opts?.idempotencyKey) {
+          idempotencyIndex.set(opts.idempotencyKey, id);
+        }
         if (pending.size > DEFAULT_MAX_ENTRIES) {
           const overflow = pending.size - DEFAULT_MAX_ENTRIES;
           for (let i = 0; i < overflow; i++) {

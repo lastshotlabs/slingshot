@@ -44,6 +44,33 @@ export class ImageInputTooLargeError extends Error {
 }
 
 /**
+ * Error thrown when a source image URL resolves to a private/loopback IP.
+ *
+ * Surfaced when `safeFetch` rejects the resolved IP — protects against the
+ * DNS-rebinding TOCTOU window between origin allowlist validation and the
+ * actual outbound HTTP request.
+ */
+export class ImageSourceBlockedError extends Error {
+  constructor(
+    public ip: string,
+    public reason: string,
+  ) {
+    super(`Image source blocked: resolved IP ${ip} is not allowed (${reason})`);
+    this.name = 'ImageSourceBlockedError';
+  }
+}
+
+/**
+ * Error thrown when DNS resolution for a source image hostname fails.
+ */
+export class ImageSourceDnsError extends Error {
+  constructor(public hostname: string) {
+    super(`Image source DNS resolve failed: ${hostname}`);
+    this.name = 'ImageSourceDnsError';
+  }
+}
+
+/**
  * Result of a successful image transform.
  */
 export interface ImageTransformResult {

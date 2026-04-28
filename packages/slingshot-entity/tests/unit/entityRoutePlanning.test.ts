@@ -9,7 +9,26 @@ import {
   scoreEntityRouteSpecificity,
 } from '../../src/routing';
 
-const noteConfig: ResolvedEntityConfig = {
+function asResolvedConfig(config: Record<string, unknown>): ResolvedEntityConfig {
+  return {
+    _systemFields: {
+      createdBy: 'createdBy',
+      updatedBy: 'updatedBy',
+      ownerField: 'ownerId',
+      tenantField: 'tenantId',
+      version: 'version',
+    },
+    _storageFields: {
+      mongoPkField: '_id',
+      ttlField: '_expires_at',
+      mongoTtlField: '_expiresAt',
+    },
+    _conventions: {},
+    ...config,
+  } as unknown as ResolvedEntityConfig;
+}
+
+const noteConfig = asResolvedConfig({
   name: 'Note',
   fields: {
     id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
@@ -18,7 +37,7 @@ const noteConfig: ResolvedEntityConfig = {
   _pkField: 'id',
   _storageName: 'notes',
   routes: {},
-};
+});
 
 describe('entity route planning', () => {
   it('normalizes dynamic path params to the same effective route shape', () => {

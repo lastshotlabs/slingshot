@@ -1207,4 +1207,15 @@ export interface SsrPluginConfig {
    * ```
    */
   readonly draftModeSecret?: string;
+  /**
+   * Maximum byte length of a single decoded route param value.
+   *
+   * Requests whose dynamic-segment values exceed this cap (after URL decoding)
+   * are rejected with HTTP 414 URI Too Long before any loader runs. Guards
+   * against pathological URLs that would otherwise pass the resolver and reach
+   * loader/database code.
+   *
+   * @default 2048
+   */
+  readonly maxRouteParamBytes?: number;
 }

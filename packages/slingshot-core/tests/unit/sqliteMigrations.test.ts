@@ -5,18 +5,21 @@ import { runSubsystemMigrations } from '../../src/sqliteMigrations';
 
 function createTestDb(): RuntimeSqliteDatabase {
   const raw = new Database(':memory:');
-  return {
+  const db = {
     run(sql: string, ...args: unknown[]) {
-      raw.run(sql, ...(args as [Record<string, unknown>]));
+      (raw.run as (...input: unknown[]) => unknown)(sql, ...args);
     },
     query<T>(sql: string) {
       const stmt = raw.prepare(sql);
       return {
         get(...args: unknown[]) {
-          return stmt.get(...(args as [Record<string, unknown>])) as T | undefined;
+          return (stmt.get as (...input: unknown[]) => unknown)(...args) as T | undefined;
         },
         all(...args: unknown[]) {
-          return stmt.all(...(args as [Record<string, unknown>])) as T[];
+          return (stmt.all as (...input: unknown[]) => unknown)(...args) as T[];
+        },
+        run(...args: unknown[]) {
+          return (stmt.run as (...input: unknown[]) => unknown)(...args) as { changes: number };
         },
       };
     },
@@ -24,13 +27,13 @@ function createTestDb(): RuntimeSqliteDatabase {
       const stmt = raw.prepare(sql);
       return {
         get(...args: unknown[]) {
-          return stmt.get(...(args as [Record<string, unknown>])) as T | null;
+          return (stmt.get as (...input: unknown[]) => unknown)(...args) as T | null;
         },
         all(...args: unknown[]) {
-          return stmt.all(...(args as [Record<string, unknown>])) as T[];
+          return (stmt.all as (...input: unknown[]) => unknown)(...args) as T[];
         },
         run(...args: unknown[]) {
-          return stmt.run(...(args as [Record<string, unknown>])) as { changes: number };
+          return (stmt.run as (...input: unknown[]) => unknown)(...args) as { changes: number };
         },
       };
     },
@@ -42,6 +45,7 @@ function createTestDb(): RuntimeSqliteDatabase {
       raw.close();
     },
   };
+  return db as unknown as RuntimeSqliteDatabase;
 }
 
 describe('runSubsystemMigrations', () => {
@@ -110,21 +114,24 @@ describe('runSubsystemMigrations', () => {
     raw.run('CREATE TABLE items (id TEXT PRIMARY KEY)');
 
     let failVersionWrite = true;
-    const db: RuntimeSqliteDatabase = {
+    const db = {
       run(sql: string, ...args: unknown[]) {
         if (failVersionWrite && sql.includes('INSERT INTO _slingshot_migrations')) {
           throw new Error('version write failed');
         }
-        raw.run(sql, ...(args as [Record<string, unknown>]));
+        (raw.run as (...input: unknown[]) => unknown)(sql, ...args);
       },
       query<T>(sql: string) {
         const stmt = raw.prepare(sql);
         return {
           get(...args: unknown[]) {
-            return stmt.get(...(args as [Record<string, unknown>])) as T | null;
+            return (stmt.get as (...input: unknown[]) => unknown)(...args) as T | null;
           },
           all(...args: unknown[]) {
-            return stmt.all(...(args as [Record<string, unknown>])) as T[];
+            return (stmt.all as (...input: unknown[]) => unknown)(...args) as T[];
+          },
+          run(...args: unknown[]) {
+            return (stmt.run as (...input: unknown[]) => unknown)(...args) as { changes: number };
           },
         };
       },
@@ -132,13 +139,13 @@ describe('runSubsystemMigrations', () => {
         const stmt = raw.prepare(sql);
         return {
           get(...args: unknown[]) {
-            return stmt.get(...(args as [Record<string, unknown>])) as T | null;
+            return (stmt.get as (...input: unknown[]) => unknown)(...args) as T | null;
           },
           all(...args: unknown[]) {
-            return stmt.all(...(args as [Record<string, unknown>])) as T[];
+            return (stmt.all as (...input: unknown[]) => unknown)(...args) as T[];
           },
           run(...args: unknown[]) {
-            return stmt.run(...(args as [Record<string, unknown>])) as { changes: number };
+            return (stmt.run as (...input: unknown[]) => unknown)(...args) as { changes: number };
           },
         };
       },
@@ -149,7 +156,7 @@ describe('runSubsystemMigrations', () => {
       close() {
         raw.close();
       },
-    };
+    } as unknown as RuntimeSqliteDatabase;
 
     expect(() =>
       runSubsystemMigrations(db, 'atomic', [
@@ -195,6 +202,9 @@ describe('runSubsystemMigrations', () => {
           },
           all() {
             return [] as T[];
+          },
+          run() {
+            return { changes: 0 };
           },
         };
       },

@@ -142,15 +142,15 @@ describe('entity policy, guards, and mounting', () => {
     await guard(args as never);
     expect(idempotency.get).toHaveBeenCalledTimes(1);
 
-    const afterHook = (guard as { _afterHook: (args: unknown) => Promise<void> })._afterHook;
+    const afterHook = (guard as unknown as { _afterHook: (args: unknown) => Promise<void> })
+      ._afterHook;
     await afterHook({ ...args, output: { id: 'item-1' } });
 
     expect(idempotency.set).toHaveBeenCalledTimes(1);
-    expect(idempotency.set.mock.calls[0]?.[0]).toContain(
-      'idempotency:items.update:tenant:tenant-1',
-    );
-    expect(idempotency.set.mock.calls[0]?.[2]).toBe(200);
-    expect(idempotency.set.mock.calls[0]?.[3]).toBe(90);
+    const setCalls = idempotency.set.mock.calls as unknown[][];
+    expect(setCalls[0]?.[0]).toContain('idempotency:items.update:tenant:tenant-1');
+    expect(setCalls[0]?.[2]).toBe(200);
+    expect(setCalls[0]?.[3]).toBe(90);
   });
 
   test('toRoute and toRouteHandler build real HTTP surfaces for handlers', async () => {
@@ -170,7 +170,7 @@ describe('entity policy, guards, and mounting', () => {
         await next();
       },
       bearerAuth: async (c: Context<AppEnv>, next: () => Promise<void>) => {
-        c.set('apiKeyId', 'client-1');
+        c.set('apiKeyId' as never, 'client-1' as never);
         await next();
       },
       requireRole: () => async (_c: Context<AppEnv>, next: () => Promise<void>) => {
@@ -194,10 +194,10 @@ describe('entity policy, guards, and mounting', () => {
       }),
       guards: [requireUserAuth()],
       handle: async ({ input, meta }) => ({
-        id: input.id,
+        id: (input as { id: string; note?: string; search?: string }).id,
         actor: meta.actor.id,
-        note: input.note ?? null,
-        search: input.search ?? null,
+        note: (input as { id: string; note?: string; search?: string }).note ?? null,
+        search: (input as { id: string; note?: string; search?: string }).search ?? null,
       }),
     });
 

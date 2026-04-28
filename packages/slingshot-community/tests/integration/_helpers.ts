@@ -89,6 +89,15 @@ function createPermAdapter(): PermissionsAdapter & { grants: PermissionGrant[] }
       grants.push({ ...grant, id, grantedAt: new Date() });
       return id;
     },
+    async createGrants(grantInputs) {
+      const ids: string[] = [];
+      for (const grant of grantInputs) {
+        const id = `g${grants.length + 1}`;
+        grants.push({ ...grant, id, grantedAt: new Date() });
+        ids.push(id);
+      }
+      return ids;
+    },
     async revokeGrant(grantId, revokedBy, tenantScope) {
       const grant = grants.find(c => c.id === grantId);
       if (!grant) return false;
@@ -124,6 +133,18 @@ function createPermAdapter(): PermissionsAdapter & { grants: PermissionGrant[] }
     async deleteAllGrantsForSubject() {
       /* noop */
     },
+    async deleteAllGrantsOnResource(resourceType, resourceId, tenantId) {
+      for (let i = grants.length - 1; i >= 0; i -= 1) {
+        const grant = grants[i];
+        if (
+          grant?.resourceType === resourceType &&
+          grant.resourceId === resourceId &&
+          (tenantId === undefined || grant.tenantId === tenantId)
+        ) {
+          grants.splice(i, 1);
+        }
+      }
+    },
   };
 }
 
@@ -156,6 +177,12 @@ function createFrameworkConfig(): SlingshotFrameworkConfig & {
       cache: 'memory' as StoreType,
       authStore: 'memory' as StoreType,
       sqlite: undefined,
+    },
+    logging: {
+      enabled: false,
+      verbose: false,
+      authTrace: false,
+      auditWarnings: false,
     },
     security: { cors: '*' },
     signing: null,

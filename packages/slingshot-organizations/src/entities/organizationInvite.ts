@@ -13,7 +13,7 @@ export const OrganizationInvite = defineEntity('OrganizationInvite', {
     email: field.string({ optional: true }),
     userId: field.string({ optional: true }),
     tokenHash: field.string({ immutable: true, optional: true }),
-    role: field.enum(['owner', 'admin', 'member'] as const, { default: 'member' }),
+    role: field.string({ default: 'member' }),
     expiresAt: field.date(),
     acceptedAt: field.date({ optional: true }),
     revokedAt: field.date({ optional: true }),

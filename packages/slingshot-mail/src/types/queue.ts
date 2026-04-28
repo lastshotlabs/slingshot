@@ -18,6 +18,12 @@ export interface MailJob {
   attempts: number;
   /** Timestamp when the job was enqueued. */
   createdAt: Date;
+  /**
+   * Optional idempotency key used to deduplicate enqueues. When supplied, the queue
+   * implementation guarantees that subsequent enqueues with the same key resolve to
+   * the original job id without producing a second delivery.
+   */
+  idempotencyKey?: string;
 }
 
 /**
@@ -63,10 +69,15 @@ export interface MailQueue extends QueueLifecycle {
   /**
    * Add a message to the queue for async delivery.
    * @param message - The fully-resolved message to enqueue.
-   * @param opts - Optional metadata attached to the job.
+   * @param opts - Optional metadata attached to the job. When `idempotencyKey` is
+   *   present, repeated enqueues with the same key are deduplicated and return the
+   *   original job id without producing a second delivery.
    * @returns The opaque job ID assigned by the queue.
    */
-  enqueue(message: MailMessage, opts?: { sourceEvent?: string }): Promise<string>;
+  enqueue(
+    message: MailMessage,
+    opts?: { sourceEvent?: string; idempotencyKey?: string },
+  ): Promise<string>;
   /**
    * Start the queue worker and bind it to the given provider.
    * Called once during plugin `setupPost`. Jobs enqueued before `start()` are

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { bestEffort } from '../src/bestEffort';
+import type { AppEnv } from '../src/context';
 import { decodeCursor, encodeCursor } from '../src/cursor';
 import { deepFreeze } from '../src/deepFreeze';
 import { createEntityRegistry } from '../src/entityRegistry';
@@ -134,7 +135,7 @@ describe('slingshot-core utilities', () => {
   });
 
   test('errorResponse returns a stable JSON shape that includes requestId', async () => {
-    const app = new Hono();
+    const app = new Hono<AppEnv>();
     app.get('/boom', c => {
       c.set('requestId' as never, 'req-123' as never);
       return errorResponse(c, 'Nope', 418);
@@ -177,12 +178,12 @@ describe('slingshot-core utilities', () => {
 
     const all = registry.getAll();
     expect(all).toHaveLength(2);
-    expect(all[0]).toBe(post);
+    expect(all[0]).toBe(post as never);
     expect(Object.isFrozen(post)).toBe(true);
 
-    all.pop();
+    (all as unknown as unknown[]).pop();
     expect(registry.getAll()).toHaveLength(2);
-    expect(registry.filter(config => config.name === 'Comment')).toEqual([comment]);
+    expect(registry.filter(config => config.name === 'Comment')).toEqual([comment as never]);
     const duplicateData = { ...post };
     const duplicate: never = duplicateData as never;
     expect(() => registry.register(duplicate)).toThrow(

@@ -1,6 +1,6 @@
 import type { HandlerMeta, TriggerAdapter, TriggerRecord } from '@lastshotlabs/slingshot-core';
 import { decodeHttpBody, firstString, readHeader } from '../correlation';
-import { safeStringify } from './_httpResponse';
+import { encodeHttpBody } from './_httpResponse';
 
 type ApiGatewayV1Event = {
   body?: string | null;
@@ -56,27 +56,38 @@ export const apigwTrigger: TriggerAdapter<ApiGatewayV1Event, Record<string, unkn
   },
   assembleResult(outcomes): Record<string, unknown> {
     const outcome = outcomes[0];
-    const httpMeta = (outcome?.meta.http ?? {}) as { status?: number; body?: unknown };
+    const httpMeta = (outcome?.meta.http ?? {}) as {
+      status?: number;
+      body?: unknown;
+      headers?: Record<string, string>;
+    };
     const statusCode =
       outcome?.result === 'error' ? (httpMeta.status ?? 500) : (httpMeta.status ?? 200);
     const body =
       outcome?.result === 'error'
         ? (httpMeta.body ?? { error: outcome.error?.message ?? 'Internal Server Error' })
         : (outcome?.output ?? httpMeta.body ?? null);
+    const handlerHeaders = httpMeta.headers ?? {};
+    const handlerContentType =
+      handlerHeaders['content-type'] ?? handlerHeaders['Content-Type'] ?? undefined;
     if (body === null) {
       return {
         statusCode,
-        headers: { 'content-type': 'application/json' },
+        headers: { ...handlerHeaders, 'content-type': handlerContentType ?? 'application/json' },
         body: '',
         isBase64Encoded: false,
       };
     }
-    const serialized = safeStringify(body);
+    const encoded = encodeHttpBody(body, { contentType: handlerContentType });
+    const responseContentType =
+      encoded.isBase64Encoded && handlerContentType
+        ? handlerContentType
+        : (handlerContentType ?? 'application/json');
     return {
-      statusCode: serialized.failed ? serialized.statusCode : statusCode,
-      headers: { 'content-type': 'application/json' },
-      body: serialized.body,
-      isBase64Encoded: false,
+      statusCode: encoded.failed ? encoded.statusCode : statusCode,
+      headers: { ...handlerHeaders, 'content-type': responseContentType },
+      body: encoded.body,
+      isBase64Encoded: encoded.isBase64Encoded,
     };
   },
 };

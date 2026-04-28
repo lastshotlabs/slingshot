@@ -257,6 +257,7 @@ describe('createPushRouter', () => {
           subscriptionId: 'sub-1',
           userId: 'user-1',
           providerMessageId: 'provider-1',
+          providerIdempotencyKey: 'delivery-1:1',
         },
       },
     ]);

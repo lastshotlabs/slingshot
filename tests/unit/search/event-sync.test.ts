@@ -97,6 +97,7 @@ function createMockSearchManager(provider: SearchProvider): SearchManager {
     getEntityTenantConfig: mock(() => undefined),
     resolveStorageName: mock(() => null),
     teardown: mock(async () => {}),
+    metrics: { tenantIndexEvictions: 0 },
   };
 }
 

@@ -8,11 +8,35 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import { type BootstrapResult, bootstrap } from './bootstrap';
 import { invokeWithAdapter } from './invocationLoop';
+import { isStreamingSupported, wrapStreamingHandler } from './streaming';
 import { type LambdaTriggerKind, resolveLambdaTrigger } from './triggers';
 
 type LambdaContextLike = {
   awsRequestId?: string;
 };
+
+/**
+ * Lambda-specific runtime options. Extends the shared {@link FunctionsRuntimeConfig}
+ * with Lambda-only knobs that have no analogue on other runtimes (Bun, Node, Edge).
+ */
+export interface LambdaRuntimeOptions extends FunctionsRuntimeConfig {
+  /**
+   * When `true`, wrap each handler returned from `wrap()` in
+   * `awslambda.streamifyResponse(...)` so the Lambda runtime can stream the
+   * response body back to the client.
+   *
+   * Streaming is only available in Lambda execution environments that expose
+   * the `awslambda` global with a `streamifyResponse` function (Function URLs
+   * configured for `RESPONSE_STREAM`, certain managed Node.js runtimes, custom
+   * runtimes that ship the shim, etc.). When the global is missing — unit
+   * tests, non-streaming Lambdas, or custom runtimes without the shim — the
+   * wrapper falls back to a regular request/response handler. The handler
+   * itself is unchanged in either case; only the outer adapter differs.
+   *
+   * Default: `false`.
+   */
+  streamingHandler?: boolean;
+}
 
 /**
  * AWS Lambda runtime that wraps Slingshot handlers with trigger adapters.
@@ -54,10 +78,21 @@ export interface LambdaRuntime extends Omit<FunctionsRuntime, 'wrap'> {
  * export const handler = runtime.wrap(myHandler, 'sqs');
  * ```
  */
-export function createLambdaRuntime(config: FunctionsRuntimeConfig): LambdaRuntime {
+export function createLambdaRuntime(
+  config: FunctionsRuntimeConfig | LambdaRuntimeOptions,
+): LambdaRuntime {
   let cached: BootstrapResult | null = null;
   let coldStart = true;
   let shutdownRegistered = false;
+  const streamingRequested = (config as LambdaRuntimeOptions).streamingHandler === true;
+  // Resolve once at construction time. Logging here makes the deploy-time
+  // fallback visible in CloudWatch even before the first invocation.
+  const streamingActive = streamingRequested && isStreamingSupported();
+  if (streamingRequested && !streamingActive) {
+    console.warn(
+      '[lambda] streamingHandler:true requested but globalThis.awslambda.streamifyResponse is not available — falling back to non-streaming handlers',
+    );
+  }
 
   async function ensureBootstrap(): Promise<BootstrapResult> {
     if (!cached) {
@@ -105,7 +140,7 @@ export function createLambdaRuntime(config: FunctionsRuntimeConfig): LambdaRunti
       // Eager trigger validation — surfaces misconfiguration at module init,
       // not on the first invoke. resolveLambdaTrigger throws on unknown kinds.
       const adapter = resolveLambdaTrigger(trigger);
-      return async (event: unknown, context: LambdaContextLike) => {
+      const baseHandler = async (event: unknown, context: LambdaContextLike) => {
         const runtime = await ensureBootstrap();
         try {
           return await invokeWithAdapter(
@@ -123,6 +158,15 @@ export function createLambdaRuntime(config: FunctionsRuntimeConfig): LambdaRunti
           coldStart = false;
         }
       };
+      // Streaming is only meaningful for HTTP-shaped triggers. For event-source
+      // triggers (sqs/kinesis/etc.) Lambda ignores the streaming wrapper. We
+      // still apply it uniformly when requested so the same `wrap()` call is
+      // a drop-in replacement; the streaming shim is a passthrough for non-HTTP
+      // payloads.
+      if (streamingActive) {
+        return wrapStreamingHandler(baseHandler);
+      }
+      return baseHandler;
     },
     async getContext() {
       return (await ensureBootstrap()).ctx;

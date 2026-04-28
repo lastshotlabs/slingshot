@@ -7,6 +7,7 @@ import type {
   PermissionsAdapter,
 } from '@lastshotlabs/slingshot-core';
 import type { AdminAccessProvider, ManagedUserProvider } from '@lastshotlabs/slingshot-core';
+import type { AdminRateLimitStore } from '../lib/rateLimitStore';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
@@ -98,6 +99,22 @@ export const adminPluginConfigSchema = z.object({
     .describe(
       'Audit-log provider. In manifest mode, accepts "memory" which is resolved to an ' +
         'in-memory AuditLogProvider before the plugin factory. Omit to skip audit logging.',
+    ),
+  /**
+   * Optional pluggable store backing the destructive-mutation rate limiter.
+   *
+   * Defaults to an in-process `Map`-backed implementation, which is fine for
+   * single-instance deploys and tests. Production deploys with multiple
+   * replicas should inject a Redis-backed store via `createRedisRateLimitStore`
+   * so the counter is shared across instances.
+   */
+  rateLimitStore: z
+    .custom<AdminRateLimitStore>(v => v != null && typeof v === 'object', {
+      message: 'Expected an AdminRateLimitStore instance',
+    })
+    .optional()
+    .describe(
+      'Pluggable rate-limit store. Omit to use an in-process default (single-instance only).',
     ),
   /** Required permissions system */
   permissions: z

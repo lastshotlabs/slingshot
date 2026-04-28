@@ -140,10 +140,10 @@ describe('getPermissionsStateOrNull', () => {
     const state = {
       adapter: { createGrant: () => {} },
       registry: { register: () => {} },
-      evaluator: { can: () => {} },
+      evaluator: { can: async () => true },
     };
     const map = new Map([[PERMISSIONS_STATE_KEY, state]]);
-    expect(getPermissionsStateOrNull(map)).toBe(state);
+    expect(getPermissionsStateOrNull(map)).toBe(state as never);
   });
 });
 
@@ -156,10 +156,10 @@ describe('getPermissionsState', () => {
     const state = {
       adapter: { createGrant: () => {} },
       registry: { register: () => {} },
-      evaluator: { can: () => {} },
+      evaluator: { can: async () => true },
     };
     const map = new Map([[PERMISSIONS_STATE_KEY, state]]);
-    expect(getPermissionsState(map)).toBe(state);
+    expect(getPermissionsState(map)).toBe(state as never);
   });
 });
 

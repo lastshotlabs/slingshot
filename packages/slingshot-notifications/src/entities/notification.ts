@@ -179,7 +179,7 @@ export const notificationOperations = defineOperations(Notification, {
   }),
 
   listPendingDispatch: op.custom<
-    (args: { limit: number; now: Date }) => Promise<NotificationRecord[]>
+    (args: { limit: number; now: Date; signal?: AbortSignal }) => Promise<NotificationRecord[]>
   >({
     memory:
       store =>

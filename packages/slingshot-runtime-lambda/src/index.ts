@@ -5,7 +5,7 @@ export { createLambdaRuntime } from './runtime';
 /**
  * Public Lambda runtime types shared by direct AWS entrypoints.
  */
-export type { LambdaRuntime, LambdaTriggerKind } from './runtime';
+export type { LambdaRuntime, LambdaRuntimeOptions, LambdaTriggerKind } from './runtime';
 /**
  * Build Lambda exports directly from the manifest `lambdas` section.
  */

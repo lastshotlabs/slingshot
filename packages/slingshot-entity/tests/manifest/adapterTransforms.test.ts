@@ -14,6 +14,7 @@ import {
   createMockFrameworkConfig,
   createMockInfraWithCompositeFactory,
   createMockInfraWithFactory,
+  createMockSetupContext,
 } from './helpers';
 
 describe('manifest adapter transforms', () => {
@@ -85,8 +86,8 @@ describe('manifest adapter transforms', () => {
       },
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createMockSetupContext(app, fw, bus));
+    await plugin.setupPost!(createMockSetupContext(app, fw, bus));
 
     expect(order).toEqual(['first', 'second']);
     const created = await captured!.create({ text: 'hello' });
@@ -154,8 +155,8 @@ describe('manifest adapter transforms', () => {
       },
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
-    await plugin.setupPost!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createMockSetupContext(app, fw, bus));
+    await plugin.setupPost!(createMockSetupContext(app, fw, bus));
 
     const created = await captured!.create({ title: 'Draft' });
     expect((created as Record<string, unknown>).decorated).toBe(true);

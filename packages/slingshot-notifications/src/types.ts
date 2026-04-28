@@ -53,7 +53,11 @@ export interface NotificationAdapter {
   }): Promise<{ count: number }>;
   hasUnreadByDedupKey(params: { userId: string; dedupKey: string }): Promise<boolean>;
   findByDedupKey(params: { userId: string; dedupKey: string }): Promise<NotificationRecord | null>;
-  listPendingDispatch(params: { limit: number; now: Date }): Promise<NotificationRecord[]>;
+  listPendingDispatch(params: {
+    limit: number;
+    now: Date;
+    signal?: AbortSignal;
+  }): Promise<NotificationRecord[]>;
   markDispatched(params: { id: string; dispatchedAt: Date }): Promise<void>;
 }
 

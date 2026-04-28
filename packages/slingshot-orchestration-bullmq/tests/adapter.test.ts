@@ -351,8 +351,8 @@ describe('bullmq orchestration adapter', () => {
       prefix: 'status-map',
     });
 
-    const taskQueue = MockQueue.instances.find(queue => queue.name === 'status-map:tasks');
-    const workflowQueue = MockQueue.instances.find(queue => queue.name === 'status-map:workflows');
+    const taskQueue = MockQueue.instances.find(queue => queue.name === 'status-map_tasks');
+    const workflowQueue = MockQueue.instances.find(queue => queue.name === 'status-map_workflows');
 
     if (taskQueue) {
       taskQueue.jobs.push(
@@ -530,7 +530,7 @@ describe('bullmq orchestration adapter', () => {
     adapter.registerTask(task);
 
     const handle = await adapter.runTask(task.name, { value: 'active' });
-    const queue = MockQueue.instances.find(instance => instance.name === 'cancelled-failure:tasks');
+    const queue = MockQueue.instances.find(instance => instance.name === 'cancelled-failure_tasks');
     const job = queue?.jobs[0];
     expect(job).toBeDefined();
     if (!job) {
@@ -588,7 +588,7 @@ describe('bullmq orchestration adapter – schedule management', () => {
     expect(handle.cron).toBe('0 * * * *');
     expect(handle.target).toEqual({ type: 'task', name: task.name });
 
-    const taskQueue = MockQueue.instances.find(q => q.name === 'sched-add:tasks');
+    const taskQueue = MockQueue.instances.find(q => q.name === 'sched-add_tasks');
     expect(taskQueue).toBeDefined();
     const scheduler = taskQueue!.schedulers[0];
     expect(scheduler).toBeDefined();
@@ -617,7 +617,7 @@ describe('bullmq orchestration adapter – schedule management', () => {
       run: true,
     });
 
-    const taskQueue = MockQueue.instances.find(q => q.name === 'sched-remove:tasks');
+    const taskQueue = MockQueue.instances.find(q => q.name === 'sched-remove_tasks');
     expect(taskQueue!.schedulers).toHaveLength(1);
 
     await adapter.unschedule(handle.id);
@@ -698,7 +698,7 @@ describe('bullmq orchestration adapter – stalled job logging', () => {
     // Trigger lazy start
     await adapter.start();
 
-    const taskWorker = MockWorker.instances.find(w => w.name === 'stalled-log:tasks');
+    const taskWorker = MockWorker.instances.find(w => w.name === 'stalled-log_tasks');
     expect(taskWorker).toBeDefined();
 
     let consoleErrorSpy: ReturnType<typeof spyOn> | undefined;
@@ -747,7 +747,7 @@ describe('bullmq orchestration adapter – shutdown drain', () => {
     adapter.registerTask(task);
     await adapter.start();
 
-    const taskWorker = MockWorker.instances.find(w => w.name === 'drain-success:tasks');
+    const taskWorker = MockWorker.instances.find(w => w.name === 'drain-success_tasks');
     expect(taskWorker).toBeDefined();
     // Simulate 2 jobs in flight, then 1, then 0
     taskWorker!.activeCounts = [2, 1, 0];
@@ -780,7 +780,7 @@ describe('bullmq orchestration adapter – shutdown drain', () => {
     adapter.registerTask(task);
     await adapter.start();
 
-    const taskWorker = MockWorker.instances.find(w => w.name === 'drain-timeout:tasks');
+    const taskWorker = MockWorker.instances.find(w => w.name === 'drain-timeout_tasks');
     expect(taskWorker).toBeDefined();
     // Always reports a non-zero active count → drain never reaches zero
     taskWorker!.activeCounts = [3];
@@ -889,8 +889,8 @@ describe('bullmq orchestration adapter – job retention defaults', () => {
       prefix: 'retention-default',
     });
 
-    const taskQueue = MockQueue.instances.find(q => q.name === 'retention-default:tasks');
-    const workflowQueue = MockQueue.instances.find(q => q.name === 'retention-default:workflows');
+    const taskQueue = MockQueue.instances.find(q => q.name === 'retention-default_tasks');
+    const workflowQueue = MockQueue.instances.find(q => q.name === 'retention-default_workflows');
     expect(taskQueue?.options).toBeDefined();
     expect(workflowQueue?.options).toBeDefined();
 
@@ -921,7 +921,7 @@ describe('bullmq orchestration adapter – job retention defaults', () => {
       },
     });
 
-    const taskQueue = MockQueue.instances.find(q => q.name === 'retention-custom:tasks');
+    const taskQueue = MockQueue.instances.find(q => q.name === 'retention-custom_tasks');
     expect(taskQueue?.options).toBeDefined();
     const defaultJobOptions = taskQueue!.options!['defaultJobOptions'] as {
       removeOnComplete: { age: number; count: number };

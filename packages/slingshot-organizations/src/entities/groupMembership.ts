@@ -12,7 +12,7 @@ export const GroupMembership = defineEntity('GroupMembership', {
     id: field.string({ primary: true, default: 'uuid' }),
     groupId: field.string({ immutable: true }),
     userId: field.string({ immutable: true }),
-    role: field.enum(['owner', 'admin', 'member'] as const, { default: 'member' }),
+    role: field.string({ default: 'member' }),
     joinedAt: field.date({ default: 'now', immutable: true }),
   },
   indexes: [index(['groupId', 'userId'], { unique: true }), index(['groupId']), index(['userId'])],

@@ -64,8 +64,16 @@ export interface PushDeliveryRecord {
   readonly platform: PushPlatform;
   readonly notificationId?: string | null;
   readonly providerMessageId?: string | null;
+  /** Deterministic key sent to the upstream provider for idempotent retries. */
+  readonly providerIdempotencyKey?: string | null;
   readonly status: 'pending' | 'sent' | 'delivered' | 'failed';
-  readonly failureReason?: 'invalidToken' | 'rateLimited' | 'payloadTooLarge' | 'transient' | null;
+  readonly failureReason?:
+    | 'invalidToken'
+    | 'rateLimited'
+    | 'payloadTooLarge'
+    | 'transient'
+    | 'repositoryFailure'
+    | null;
   readonly attempts: number;
   readonly sentAt?: Date | string | null;
   readonly deliveredAt?: Date | string | null;
@@ -98,4 +106,12 @@ export interface PushSendResult {
   readonly reason?: 'invalidToken' | 'rateLimited' | 'payloadTooLarge' | 'transient';
   readonly error?: string;
   readonly retryAfterMs?: number;
+  /** Deterministic key the provider was tagged with for de-duping retried sends. */
+  readonly providerIdempotencyKey?: string;
+}
+
+/** Per-call provider context (e.g. retry idempotency key). */
+export interface PushProviderSendContext {
+  /** Stable token derived from `(deliveryId, attempt)` to de-duplicate retries. */
+  readonly idempotencyKey?: string;
 }

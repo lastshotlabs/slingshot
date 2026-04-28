@@ -14,6 +14,7 @@ import type {
   ResolvedEntityConfig,
   WsState,
 } from '@lastshotlabs/slingshot-core';
+import { ANONYMOUS_ACTOR } from '@lastshotlabs/slingshot-core';
 import { buildEntityReceiveHandlers } from '@lastshotlabs/slingshot-entity';
 import type { WsPublishFn } from '@lastshotlabs/slingshot-entity';
 import { createCommunityPlugin } from '../src/plugin';
@@ -41,15 +42,34 @@ const baseConfig: CommunityPluginConfig = {
   containerCreation: 'user',
 };
 
+function asResolvedConfig(config: Record<string, unknown>): ResolvedEntityConfig {
+  return {
+    _systemFields: {
+      createdBy: 'createdBy',
+      updatedBy: 'updatedBy',
+      ownerField: 'ownerId',
+      tenantField: 'tenantId',
+      version: 'version',
+    },
+    _storageFields: {
+      mongoPkField: '_id',
+      ttlField: '_expires_at',
+      mongoTtlField: '_expiresAt',
+    },
+    _conventions: {},
+    ...config,
+  } as unknown as ResolvedEntityConfig;
+}
+
 // Minimal container config for receive handler tests
-const containerConfig: ResolvedEntityConfig = {
+const containerConfig = asResolvedConfig({
   name: 'Container',
   fields: {
     id: { type: 'string', primary: true, immutable: true, optional: false, default: 'uuid' },
   },
   _pkField: 'id',
   _storageName: 'containers',
-};
+});
 
 const containerChannel: EntityChannelConfig = {
   channels: {
@@ -143,7 +163,8 @@ describe('community container receive handlers', () => {
       { room: 'containers:abc:live' },
       {
         socketId: 'sender-socket',
-        userId: 'user-1',
+        actor: { ...ANONYMOUS_ACTOR, id: 'user-1', kind: 'user' },
+        requestTenantId: null,
         endpoint: 'community',
         publish() {},
         subscribe() {},
@@ -174,7 +195,8 @@ describe('community container receive handlers', () => {
       { room: 'containers:abc:live', threadId: 'thread-123' },
       {
         socketId: 'sender-socket',
-        userId: 'user-1',
+        actor: { ...ANONYMOUS_ACTOR, id: 'user-1', kind: 'user' },
+        requestTenantId: null,
         endpoint: 'community',
         publish() {},
         subscribe() {},
@@ -205,7 +227,8 @@ describe('community container receive handlers', () => {
       { room: 'containers:abc:live' },
       {
         socketId: 'sender-socket',
-        userId: null,
+        actor: ANONYMOUS_ACTOR,
+        requestTenantId: null,
         endpoint: 'community',
         publish() {},
         subscribe() {},

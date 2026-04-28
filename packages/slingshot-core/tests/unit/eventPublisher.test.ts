@@ -15,7 +15,9 @@ describe('eventPublisher', () => {
       bus: createInProcessAdapter(),
     });
 
-    expect(() => publisher.publish('app:ready', { plugins: [] })).toThrow('not registered');
+    expect(() =>
+      publisher.publish('app:ready', { plugins: [] }, { requestTenantId: null }),
+    ).toThrow('not registered');
   });
 
   test('publishes validated envelopes through the bus', () => {
@@ -34,7 +36,7 @@ describe('eventPublisher', () => {
         }),
         resolveScope(payload, ctx) {
           return {
-            tenantId: payload.tenantId ?? ctx.tenantId ?? null,
+            tenantId: payload.tenantId ?? ctx.requestTenantId ?? null,
             userId: payload.userId,
             actorId: ctx.actorId ?? payload.userId,
           };
@@ -53,7 +55,7 @@ describe('eventPublisher', () => {
     const envelope = publisher.publish(
       'auth:login',
       { userId: 'user-1', sessionId: 'session-1', tenantId: 'tenant-1' },
-      { actorId: 'user-1', source: 'http' },
+      { actorId: 'user-1', source: 'http', requestTenantId: 'tenant-1' },
     );
 
     expect(payloads).toHaveLength(1);
@@ -83,7 +85,13 @@ describe('eventPublisher', () => {
     });
 
     expect(() =>
-      publisher.publish('auth:logout', { userId: 'user-1', sessionId: 'session-1' }),
+      publisher.publish(
+        'auth:logout',
+        { userId: 'user-1', sessionId: 'session-1' },
+        {
+          requestTenantId: null,
+        },
+      ),
     ).toThrow('resolved a null scope');
   });
 

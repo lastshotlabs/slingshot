@@ -30,29 +30,48 @@ const messageEntity = defineEntity('Message', {
   },
 });
 
+function asResolvedConfig(config: Record<string, unknown>): ResolvedEntityConfig {
+  return {
+    _systemFields: {
+      createdBy: 'createdBy',
+      updatedBy: 'updatedBy',
+      ownerField: 'ownerId',
+      tenantField: 'tenantId',
+      version: 'version',
+    },
+    _storageFields: {
+      mongoPkField: '_id',
+      ttlField: '_expires_at',
+      mongoTtlField: '_expiresAt',
+    },
+    _conventions: {},
+    ...config,
+  } as unknown as ResolvedEntityConfig;
+}
+
 // ---------------------------------------------------------------------------
 // Tests: hasRetention()
 // ---------------------------------------------------------------------------
 
 describe('hasRetention', () => {
   it('returns false when no routes config', () => {
-    const config: ResolvedEntityConfig = {
+    const config = asResolvedConfig({
       name: 'T',
       fields: {},
       _pkField: 'id',
       _storageName: 'ts',
-    };
+    });
     expect(hasRetention(config)).toBe(false);
   });
 
   it('returns false when routes exists but no retention', () => {
-    const config: ResolvedEntityConfig = {
+    const config = asResolvedConfig({
       name: 'T',
       fields: {},
       _pkField: 'id',
       _storageName: 'ts',
       routes: { create: {} },
-    };
+    });
     expect(hasRetention(config)).toBe(false);
   });
 
@@ -67,12 +86,12 @@ describe('hasRetention', () => {
 
 describe('generateRetentionJob', () => {
   it('returns empty string when no retention config', () => {
-    const config: ResolvedEntityConfig = {
+    const config = asResolvedConfig({
       name: 'T',
       fields: {},
       _pkField: 'id',
       _storageName: 'ts',
-    };
+    });
     expect(generateRetentionJob(config)).toBe('');
   });
 

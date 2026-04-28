@@ -1003,7 +1003,6 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
             topic: config.topic ?? new RegExp(config.topicPattern!),
             fromBeginning: config.fromBeginning ?? false,
           });
-          runtime.health.status = 'active';
 
           // Wire rebalance lifecycle hooks: on REBALANCING, wait for in-flight
           // handlers and flush pending offsets so the next assignment doesn't
@@ -1011,6 +1010,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
           const consumerEvents = (consumer as unknown as { events?: Record<string, string> })
             .events;
           const consumerOn = (consumer as unknown as { on?: Function }).on;
+          let hasGroupJoinHook = false;
           if (consumerEvents && typeof consumerOn === 'function') {
             try {
               consumerOn.call(consumer, consumerEvents.REBALANCING, async () => {
@@ -1048,8 +1048,10 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
                   }
                 }
               });
+              hasGroupJoinHook = true;
               consumerOn.call(consumer, consumerEvents.GROUP_JOIN, () => {
                 rebalancingConsumers.delete(consumerKey);
+                runtime.health.status = 'active';
                 console.info(
                   `[KafkaConnectors] group join group="${config.groupId}" ` +
                     `topic="${runtime.health.topic}"`,
@@ -1212,6 +1214,9 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
               }
             },
           });
+          if (!hasGroupJoinHook) {
+            runtime.health.status = 'active';
+          }
         }
 
         for (const config of opts.outbound ?? []) {

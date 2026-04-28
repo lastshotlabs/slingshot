@@ -12,7 +12,7 @@ import type { CronRegistryRepository } from '../cronRegistry';
 import type { DataEncryptionKey } from '../crypto';
 import type { SlingshotEventBus } from '../eventBus';
 import type { SlingshotEvents } from '../eventPublisher';
-import type { IdempotencyAdapter } from '../idempotency';
+import type { IdempotencyAdapter } from '../idempotencyAdapter';
 import type { IdentityResolver } from '../identity';
 import type { KafkaConnectorHandle } from '../kafkaConnectors';
 import type { RuntimeSqliteDatabase } from '../runtime';

@@ -12,6 +12,7 @@
  */
 import { describe, expect, it, mock } from 'bun:test';
 import { Hono } from 'hono';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { buildPollVoteGuard } from '../../src/middleware/pollVoteGuard';
 import type { PollAdapter, PollVoteAdapter } from '../../src/types/adapters';
 import { POLL_VOTE_ERRORS } from '../../src/types/public';
@@ -57,7 +58,7 @@ function createTestApp(
     pollVoteAdapter: pollVoteAdapter as PollVoteAdapter,
   });
 
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   // Simulate auth middleware setting actor.
   app.use('*', async (c, next) => {
     c.set(

@@ -140,7 +140,7 @@ describe('createCoreRegistrar', () => {
 
     const first = drain();
     // Mutating the first snapshot's map should not affect future drain() calls
-    first.cacheAdapters.set('redis' as never, asNever({}));
+    (first.cacheAdapters as Map<string, unknown>).set('redis', asNever({}));
 
     const second = drain();
     expect(second.cacheAdapters.has('redis' as never)).toBe(false);

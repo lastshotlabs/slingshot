@@ -6,12 +6,16 @@ function createMockBus() {
   const emitFn = mock((): void => {});
   const onFn = mock((): void => {});
   const offFn = mock((): void => {});
+  const onEnvelopeFn = mock((): void => {});
+  const offEnvelopeFn = mock((): void => {});
   const shutdownFn = mock((): Promise<void> => Promise.resolve());
 
   const bus: SlingshotEventBus = {
     emit: emitFn,
     on: onFn,
     off: offFn,
+    onEnvelope: onEnvelopeFn,
+    offEnvelope: offEnvelopeFn,
     shutdown: shutdownFn,
   };
 
@@ -20,6 +24,8 @@ function createMockBus() {
     emitFn,
     onFn,
     offFn,
+    onEnvelopeFn,
+    offEnvelopeFn,
     shutdownFn,
   };
 }

@@ -93,9 +93,12 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
         method: 'POST',
         headers: adminHeaders(tenantId),
         body: JSON.stringify({
+          ownerType: 'user',
+          ownerId: 'admin-user',
           url: 'https://example.com/hooks/mongo',
           secret: 'super-secret-token',
           subscriptions: [{ event: TEST_EVENT }],
+          bindingKeys: ['tenant'],
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -105,7 +108,7 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
         secret: string;
       };
       expect(created.enabled).toBe(true);
-      expect(created.secret).toBe('oken');
+      expect(created.secret).toBe('****');
 
       const delivery = await runtime.createDelivery({
         endpointId: created.id,
@@ -148,9 +151,12 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
         method: 'POST',
         headers: adminHeaders(tenantId),
         body: JSON.stringify({
+          ownerType: 'user',
+          ownerId: 'admin-user',
           url: 'https://example.com/hooks/matching',
           secret: 'matching-secret',
           subscriptions: [{ pattern: 'auth:*' }],
+          bindingKeys: ['tenant'],
         }),
       });
       const matching = (await matchingResponse.json()) as { id: string; url: string };
@@ -159,9 +165,12 @@ describe('Webhooks MongoDB manifest runtime (docker)', () => {
         method: 'POST',
         headers: adminHeaders(tenantId),
         body: JSON.stringify({
+          ownerType: 'user',
+          ownerId: 'admin-user',
           url: 'https://example.com/hooks/disabled',
           secret: 'disabled-secret',
           subscriptions: [{ event: TEST_EVENT }],
+          bindingKeys: ['tenant'],
         }),
       });
       const disabled = (await disabledResponse.json()) as { id: string };

@@ -175,7 +175,13 @@ describe('createRedisRegistry (docker)', () => {
 
     // Now try to write with the stale etag
     const doc2 = await registry.read();
-    await expect(registry.write(doc2!, staleEtag)).rejects.toThrow('modified by another process');
+    try {
+      await registry.write(doc2!, staleEtag);
+      throw new Error('expected stale etag write to fail');
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toContain('modified by another process');
+    }
   });
 
   // -------------------------------------------------------------------------

@@ -19,6 +19,7 @@ import {
   type RunHandle,
   type ScheduleCapability,
   type ScheduleHandle,
+  type SlingshotLogger,
   type StepRun,
   type WorkflowRun,
   createCachedRunHandle,
@@ -252,6 +253,29 @@ function mapStatuses(filterStatus: RunFilter['status']): JobType[] {
 }
 
 /**
+ * Snapshot of operational metrics emitted by the BullMQ orchestration adapter.
+ *
+ * Counters are monotonically increasing for the lifetime of the adapter instance and
+ * are reset only when {@link createBullMQOrchestrationAdapter} is called again.
+ */
+export interface BullMQOrchestrationAdapterMetrics {
+  /** Number of FIFO evictions from the runId → jobId cache. */
+  runIdCacheEvictions: number;
+  /** Number of full-scan fallbacks that completed without finding the requested runId. */
+  runIdScanMisses: number;
+}
+
+/**
+ * Adapter capability that exposes operational counters for the BullMQ orchestration
+ * adapter. Returned alongside the standard orchestration capabilities so callers can
+ * read counters without crossing module boundaries.
+ */
+export interface BullMQOrchestrationMetricsCapability {
+  /** Return a snapshot of the current adapter metrics. */
+  getMetrics(): BullMQOrchestrationAdapterMetrics;
+}
+
+/**
  * Create the BullMQ-backed orchestration adapter.
  *
  * Use this adapter when the app already runs Redis and wants durable queues, repeatable
@@ -261,13 +285,27 @@ export function createBullMQOrchestrationAdapter(
   rawOptions: BullMQOrchestrationAdapterOptions & {
     eventSink?: OrchestrationEventSink;
     workflowConcurrency?: number;
+    logger?: SlingshotLogger;
   },
-): OrchestrationAdapter & ObservabilityCapability & ScheduleCapability {
-  const { eventSink, workflowConcurrency, ...parsedInput } = rawOptions;
+): OrchestrationAdapter &
+  ObservabilityCapability &
+  ScheduleCapability &
+  BullMQOrchestrationMetricsCapability {
+  const { eventSink, workflowConcurrency, logger, ...parsedInput } = rawOptions;
   const options = bullmqOrchestrationAdapterOptionsSchema.parse(parsedInput);
   const taskRegistry = new Map<string, AnyResolvedTask>();
   const workflowRegistry = new Map<string, AnyResolvedWorkflow>();
+  // BullMQ 5.x throws synchronously from the Queue constructor when the
+  // queue name contains ':'. We use the prefix as the *segment* separator
+  // for cancellation snapshots and Redis sorted-set keys (where ':' is the
+  // idiomatic delimiter) but build the queue *names* themselves with '_'.
+  // Without this any value of `options.prefix` would crash construction.
   const prefix = options.prefix ?? 'orch';
+  const sanitizedPrefix = prefix.replace(/:/g, '_');
+  const taskQueueName = `${sanitizedPrefix}_tasks`;
+  const workflowQueueName = `${sanitizedPrefix}_workflows`;
+  const namedTaskQueueName = (queueLabel: string): string =>
+    `${sanitizedPrefix}_${queueLabel.replace(/:/g, '_')}_tasks`;
 
   // requireTls: when true, connecting without TLS is treated as a configuration
   // error rather than a silent fallback to plaintext. Throws synchronously at
@@ -310,8 +348,8 @@ export function createBullMQOrchestrationAdapter(
 
   const queueOptions: QueueOptions = { connection, defaultJobOptions };
 
-  const defaultTaskQueue = new Queue(`${prefix}:tasks`, queueOptions);
-  const workflowQueue = new Queue(`${prefix}:workflows`, queueOptions);
+  const defaultTaskQueue = new Queue(taskQueueName, queueOptions);
+  const workflowQueue = new Queue(workflowQueueName, queueOptions);
   const namedQueues = new Map<string, Queue>();
   const namedWorkers = new Map<string, Worker>();
   const namedQueueEvents = new Map<string, QueueEvents>();
@@ -319,11 +357,31 @@ export function createBullMQOrchestrationAdapter(
   // Unbounded growth would cause OOM in long-running processes; 10k entries covers
   // the typical lookback window and is evicted FIFO (Map iteration order = insertion order).
   const RUN_ID_CACHE_LIMIT = 10_000;
+  const RUN_ID_SCAN_LIMIT = 500;
   const runIdToJobId = new Map<string, string>();
+  // Adapter-level operational counters surfaced via getMetrics(). Mutated in place so
+  // callers receive a fresh snapshot on each read.
+  const metrics: BullMQOrchestrationAdapterMetrics = {
+    runIdCacheEvictions: 0,
+    runIdScanMisses: 0,
+  };
   function cacheRunId(runId: string, jobId: string): void {
     if (runIdToJobId.size >= RUN_ID_CACHE_LIMIT) {
       const oldest = runIdToJobId.keys().next().value;
-      if (oldest !== undefined) runIdToJobId.delete(oldest);
+      if (oldest !== undefined) {
+        runIdToJobId.delete(oldest);
+        metrics.runIdCacheEvictions += 1;
+        const payload = {
+          event: 'orchestration.bullmq.runIdCacheEvicted',
+          evictedRunId: oldest,
+          cacheSize: runIdToJobId.size,
+        };
+        if (logger) {
+          logger.warn(payload);
+        } else {
+          console.warn('[slingshot-orchestration-bullmq] runId cache eviction', payload);
+        }
+      }
     }
     runIdToJobId.set(runId, jobId);
   }
@@ -353,14 +411,14 @@ export function createBullMQOrchestrationAdapter(
     if (!startPromise) {
       startPromise = (async () => {
         if (!taskQueueEvents) {
-          taskQueueEvents = new QueueEvents(`${prefix}:tasks`, { connection });
+          taskQueueEvents = new QueueEvents(taskQueueName, { connection });
         }
         if (!workflowQueueEvents) {
-          workflowQueueEvents = new QueueEvents(`${prefix}:workflows`, { connection });
+          workflowQueueEvents = new QueueEvents(workflowQueueName, { connection });
         }
         if (!taskWorker) {
           taskWorker = new Worker(
-            `${prefix}:tasks`,
+            taskQueueName,
             createBullMQTaskProcessor({
               taskRegistry,
               eventSink,
@@ -379,7 +437,7 @@ export function createBullMQOrchestrationAdapter(
         }
         if (!workflowWorker) {
           workflowWorker = new Worker(
-            `${prefix}:workflows`,
+            workflowQueueName,
             createBullMQWorkflowProcessor({
               workflowRegistry,
               taskRegistry,
@@ -416,7 +474,7 @@ export function createBullMQOrchestrationAdapter(
         }
         for (const task of taskRegistry.values()) {
           if (!task.queue || namedWorkers.has(task.queue)) continue;
-          const queueName = `${prefix}:${task.queue}:tasks`;
+          const queueName = namedTaskQueueName(task.queue);
           const worker = new Worker(
             queueName,
             createBullMQTaskProcessor({
@@ -456,7 +514,7 @@ export function createBullMQOrchestrationAdapter(
     if (!task.queue) return defaultTaskQueue;
     const existing = namedQueues.get(task.queue);
     if (existing) return existing;
-    const queue = new Queue(`${prefix}:${task.queue}:tasks`, queueOptions);
+    const queue = new Queue(namedTaskQueueName(task.queue), queueOptions);
     namedQueues.set(task.queue, queue);
     return queue;
   }
@@ -740,17 +798,35 @@ export function createBullMQOrchestrationAdapter(
     // Full-scan fallback: cap at 500 most-recent jobs to avoid OOM on large queues.
     // The runIdToJobId cache handles the common case; this path is only hit for
     // jobs started before the cache was populated (e.g. after a process restart).
-    const jobs = await queue.getJobs(lookupStates, 0, 499);
-    return (
+    const jobs = await queue.getJobs(lookupStates, 0, RUN_ID_SCAN_LIMIT - 1);
+    const match =
       jobs.find(job => {
         const jobRunId =
           typeof job.data['runId'] === 'string' ? (job.data['runId'] as string) : undefined;
         return jobRunId === runId;
-      }) ?? null
-    );
+      }) ?? null;
+    if (!match) {
+      metrics.runIdScanMisses += 1;
+      const payload = {
+        event: 'orchestration.bullmq.runIdScanMiss',
+        runId,
+        scannedCount: jobs.length,
+        maxScan: RUN_ID_SCAN_LIMIT,
+      };
+      if (logger) {
+        logger.warn(payload);
+      } else {
+        console.warn('[slingshot-orchestration-bullmq] runId scan miss', payload);
+      }
+    }
+    return match;
   }
 
   return {
+    getMetrics(): BullMQOrchestrationAdapterMetrics {
+      // Return a defensive copy so callers cannot mutate adapter state.
+      return { ...metrics };
+    },
     registerTask(def) {
       taskRegistry.set(def.name, def);
     },
@@ -1123,7 +1199,11 @@ export function createBullMQOrchestrationAdapter(
           schedules.push({
             id: scheduler.key,
             target: {
-              type: queue.name.endsWith(':workflows') ? 'workflow' : 'task',
+              // Queue names use '_' separators (BullMQ 5.x rejects ':' in
+              // queue names). Match the workflow queue by exact name so we
+              // never confuse a named task queue ending in '_workflows' with
+              // the dedicated workflow queue.
+              type: queue.name === workflowQueueName ? 'workflow' : 'task',
               name: scheduler.name,
             },
             cron: scheduler.pattern ?? '',

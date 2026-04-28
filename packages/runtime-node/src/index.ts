@@ -322,7 +322,20 @@ function adaptNodeSqlite(db: BetterSqlite3.Database): RuntimeSqliteDatabase {
 function createNodeServer(): RuntimeServerFactory {
   return {
     async listen(opts): Promise<RuntimeServerInstance> {
-      const { serve } = await import('@hono/node-server');
+      const { serve, getRequestListener } = await import('@hono/node-server');
+
+      // Validate mutually exclusive transport options up-front. `unix` and
+      // `port`/`hostname` bind to fundamentally different transports, so
+      // accepting both produces confusing behaviour where one silently wins.
+      if (opts.unix !== undefined && (opts.port !== undefined || opts.hostname !== undefined)) {
+        throw new Error(
+          '[runtime-node] RuntimeServerOptions.unix is mutually exclusive with port/hostname',
+        );
+      }
+
+      const maxHeaderSize = opts.maxHeaderSize ?? 16_384;
+      const headersTimeoutMs = opts.headersTimeout ?? 60_000;
+      const requestTimeoutMs = opts.requestTimeout ?? 300_000;
 
       let httpServer: import('node:http').Server;
       if (opts.tls) {
@@ -330,16 +343,27 @@ function createNodeServer(): RuntimeServerFactory {
         const tlsServer = https.createServer({
           key: opts.tls.key as string | Buffer | undefined,
           cert: opts.tls.cert as string | Buffer | undefined,
+          maxHeaderSize,
         });
         httpServer = tlsServer as unknown as import('node:http').Server;
       } else {
         const { createServer } = await import('node:http');
-        httpServer = createServer();
+        httpServer = createServer({ maxHeaderSize });
       }
+
+      // Slowloris / slow-request hardening. Both are writeable properties on
+      // http.Server post-construction; setting them before listen() ensures
+      // the very first connection is governed by the configured limits.
+      httpServer.headersTimeout = headersTimeoutMs;
+      httpServer.requestTimeout = requestTimeoutMs;
 
       let port = resolveListenPort(opts.port);
       const maxBody = opts.maxRequestBodySize ?? 128 * 1024 * 1024;
       const errorHandler = opts.error;
+      const upgradedRequests = new WeakSet<Request>();
+
+      const alreadySentResponse = (): Response =>
+        new Response(null, { headers: { 'x-hono-already-sent': 'true' } });
 
       // Track in-flight fetch handlers so graceful drain can wait for them.
       // httpServer.close() waits for sockets to drain, but a slow handler that
@@ -368,8 +392,11 @@ function createNodeServer(): RuntimeServerFactory {
             });
             return new Response('Payload Too Large', { status: 413 });
           }
-          return await opts.fetch(req);
+          const response = await opts.fetch(req);
+          if (upgradedRequests.has(req)) return alreadySentResponse();
+          return response;
         } catch (err) {
+          if (upgradedRequests.has(req)) return alreadySentResponse();
           const wrapped = err instanceof Error ? err : new Error(String(err));
           if (errorHandler) return errorHandler(wrapped);
           activeLogger.error('fetch-handler-error', {
@@ -385,6 +412,26 @@ function createNodeServer(): RuntimeServerFactory {
       await new Promise<void>((resolve, reject) => {
         const onError = (err: Error) => reject(err);
         httpServer.on('error', onError);
+
+        if (opts.unix !== undefined) {
+          // Unix-socket bind: bypass `serve()` (which always calls
+          // `httpServer.listen(port, hostname, ...)`) and wire the request
+          // listener up directly via @hono/node-server's `getRequestListener`.
+          // This keeps Request/Response translation identical to the TCP path.
+          const listener = getRequestListener(fetchHandler);
+          attachNodeRequestListener(
+            httpServer as {
+              on(event: 'request', listener: (...args: unknown[]) => void): unknown;
+            },
+            listener,
+          );
+          httpServer.listen(opts.unix, () => {
+            httpServer.removeListener('error', onError);
+            resolve();
+          });
+          return;
+        }
+
         serve(
           {
             fetch: fetchHandler,
@@ -661,6 +708,13 @@ function createNodeServer(): RuntimeServerFactory {
 
         await new Promise<void>(resolve => {
           let drainTimer: ReturnType<typeof setTimeout> | undefined;
+          let resolved = false;
+          const settle = () => {
+            if (resolved) return;
+            resolved = true;
+            if (drainTimer) clearTimeout(drainTimer);
+            resolve();
+          };
           if (timeoutMs && !force) {
             drainTimer = setTimeout(() => {
               activeLogger.warn('graceful-stop-timeout', {
@@ -668,15 +722,21 @@ function createNodeServer(): RuntimeServerFactory {
                 remainingSockets: activeSockets.size,
               });
               (httpServer as { closeAllConnections?: () => void }).closeAllConnections?.();
+              for (const socket of activeSockets) {
+                socket.destroy();
+              }
+              settle();
             }, timeoutMs);
           }
           if (force) {
             (httpServer as { closeAllConnections?: () => void }).closeAllConnections?.();
+            for (const socket of activeSockets) {
+              socket.destroy();
+            }
           }
 
           httpServer.close(() => {
-            if (drainTimer) clearTimeout(drainTimer);
-            resolve();
+            settle();
           });
         });
       };
@@ -697,12 +757,21 @@ function createNodeServer(): RuntimeServerFactory {
           if (!pending) return false;
           clearTimeout(pending.timer);
           pendingUpgrades.delete(key);
-          wss.handleUpgrade(pending.req, pending.socket, pending.head, ws => {
-            const rtWs = wrapWs(ws, upgradeOpts.data);
-            void Promise.resolve(wsHandler.open(rtWs)).catch((error: unknown) => {
-              logWebSocketHandlerError('open', error);
+          try {
+            wss.handleUpgrade(pending.req, pending.socket, pending.head, ws => {
+              const rtWs = wrapWs(ws, upgradeOpts.data);
+              void Promise.resolve(wsHandler.open(rtWs)).catch((error: unknown) => {
+                logWebSocketHandlerError('open', error);
+              });
             });
-          });
+            upgradedRequests.add(req);
+          } catch (err) {
+            activeLogger.error('websocket-upgrade-failed', {
+              message: err instanceof Error ? err.message : String(err),
+              stack: err instanceof Error ? err.stack : undefined,
+            });
+            return false;
+          }
           return true;
         },
         publish(channel: string, message: string, fromWs?: WsWebSocket): void {

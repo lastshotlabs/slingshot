@@ -19,7 +19,10 @@ export const organizationsManifest: MultiEntityManifest = {
     Organization: entityConfigToManifestEntry(Organization, {
       operations: organizationOperations.operations,
       routePath: 'orgs',
-      adapterTransforms: [{ handler: 'organizations.organization.slugValidation' }],
+      adapterTransforms: [
+        { handler: 'organizations.organization.slugValidation' },
+        { handler: 'organizations.organization.deleteCascade' },
+      ],
       operationOverrides: {
         listMine: {
           kind: 'custom',

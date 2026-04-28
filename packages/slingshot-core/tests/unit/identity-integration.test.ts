@@ -799,7 +799,7 @@ describe('guards with explicit actor', () => {
       },
     } as never);
     expect(trackAttempt).toHaveBeenCalledTimes(1);
-    const key = trackAttempt.mock.calls[0]![0] as string;
+    const key = (trackAttempt.mock.calls as unknown[][])[0]![0] as string;
     expect(key).toContain('key-abc');
     expect(key).toContain('things.list');
   });
@@ -821,7 +821,7 @@ describe('guards with explicit actor', () => {
         ip: '8.8.8.8',
       },
     } as never);
-    const key = trackAttempt.mock.calls[0]![0] as string;
+    const key = (trackAttempt.mock.calls as unknown[][])[0]![0] as string;
     expect(key).toContain('ip:8.8.8.8');
   });
 
@@ -842,7 +842,7 @@ describe('guards with explicit actor', () => {
       },
     } as never);
     expect(idempotency.get).toHaveBeenCalledTimes(1);
-    const key = idempotency.get.mock.calls[0]![0] as string;
+    const key = (idempotency.get.mock.calls as unknown[][])[0]![0] as string;
     expect(key).toContain('user:user-1');
     expect(key).toContain('tenant:tenant-1');
     expect(key).toContain('items.create');
@@ -864,7 +864,7 @@ describe('guards with explicit actor', () => {
         idempotencyKey: 'idem-2',
       },
     } as never);
-    const key = idempotency.get.mock.calls[0]![0] as string;
+    const key = (idempotency.get.mock.calls as unknown[][])[0]![0] as string;
     expect(key).toContain('tenant:tenant-2');
     // Should NOT contain user: since scope is tenant
     expect(key).not.toContain('user:');

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { AUTH_PLUGIN_STATE_KEY } from '../../src/authPeer';
 import { requireBearer, requireUserAuth } from '../../src/guards';
-import { HandlerError, type HandlerMeta } from '../../src/handler';
+import type { HandlerMeta } from '../../src/handler';
 import { ANONYMOUS_ACTOR, type Actor, createDefaultIdentityResolver } from '../../src/identity';
 
 function createContextFixture() {
@@ -139,7 +139,7 @@ describe('requireBearer', () => {
         ctx: createContextFixture() as never,
         meta: createMeta({ actor }),
       } as never),
-    ).rejects.toMatchObject<Partial<HandlerError>>({
+    ).rejects.toMatchObject({
       message: 'Unauthorized',
       status: 401,
     });
@@ -154,7 +154,7 @@ describe('requireBearer', () => {
         ctx: createContextFixture() as never,
         meta: createMeta({ actor: ANONYMOUS_ACTOR }),
       } as never),
-    ).rejects.toMatchObject<Partial<HandlerError>>({
+    ).rejects.toMatchObject({
       message: 'Unauthorized',
       status: 401,
     });
@@ -214,7 +214,7 @@ describe('requireUserAuth', () => {
         handlerName: 'items.list',
         meta: createMeta({ actor: userActor }),
       } as never),
-    ).rejects.toMatchObject<Partial<HandlerError>>({
+    ).rejects.toMatchObject({
       message: 'Account disabled',
       status: 403,
       code: 'account_disabled',

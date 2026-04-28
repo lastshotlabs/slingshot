@@ -55,7 +55,13 @@ export { SsrAssetManifestError } from './assets';
 export { SSR_ISR_INVALIDATORS_STATE_KEY } from './isr/revalidate';
 
 /** Resolve SSR route trees, nested page chains, and page declarations from the file system. */
-export { resolveGlobalMiddlewarePath, resolveRouteChain } from './resolver';
+export {
+  resolveGlobalMiddlewarePath,
+  resolveRouteChain,
+  RouteParamTooLargeError,
+  isRouteParamTooLargeError,
+  DEFAULT_MAX_ROUTE_PARAM_BYTES,
+} from './resolver';
 /** Build page-route lookup tables and resolved page chains for file-based SSR apps. */
 export { buildPageRouteTable, buildPageChain, resolvePageDeclaration } from './pageResolver';
 /** Expand `generateStaticParams` exports into concrete route entries at build time. */

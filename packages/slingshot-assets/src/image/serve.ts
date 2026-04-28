@@ -1,10 +1,22 @@
 import { HTTPException } from 'hono/http-exception';
-import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  createSafeFetch,
+  SafeFetchBlockedError,
+  SafeFetchDnsError,
+  type SafeFetchOptions,
+  type StorageAdapter,
+} from '@lastshotlabs/slingshot-core';
 import type { Asset, ImageConfig } from '../types';
 import { buildCacheKey } from './cache';
 import { transformImageStream } from './transform';
 import type { ImageCacheAdapter, ImageCacheEntry, ImageFormat } from './types';
-import { ImageInputTooLargeError, ImageTransformError, ImageTransformTimeoutError } from './types';
+import {
+  ImageInputTooLargeError,
+  ImageSourceBlockedError,
+  ImageSourceDnsError,
+  ImageTransformError,
+  ImageTransformTimeoutError,
+} from './types';
 
 /**
  * Hard upper bound for image transform dimensions.
@@ -170,29 +182,80 @@ export function validateSourceUrl(
 }
 
 /**
+ * Optional safeFetch overrides for {@link fetchSourceImage} (typically used
+ * in tests to inject a deterministic resolver / IP-allow predicate without
+ * hitting real DNS).
+ */
+export type FetchSourceImageOverrides = Pick<SafeFetchOptions, 'isIpAllowed' | 'resolveHost'> & {
+  /** When provided, this fetch is used directly. Skips safeFetch construction. */
+  fetchImpl?: typeof fetch;
+};
+
+/**
  * Fetch bytes from a validated URL-backed asset source.
  *
- * Relative URLs are resolved against the current host when provided, otherwise
- * `http://localhost:3000`. The fetch is bounded by `maxBytes` and
- * `timeoutMs` to defend against slow-loris and image-bomb attacks.
+ * Absolute URLs are pinned to a single resolved IP via `createSafeFetch`,
+ * which blocks loopback, link-local, private, and multicast IPs by default —
+ * eliminating the DNS-rebinding TOCTOU window between origin-allowlist
+ * validation and the outbound HTTP request.
+ *
+ * Relative URLs are resolved against the current request host (or
+ * `http://localhost:3000` when none is provided) and use plain `fetch`,
+ * since they intentionally target the local server.
+ *
+ * The fetch is bounded by `maxBytes` and `timeoutMs` to defend against
+ * slow-loris and image-bomb attacks.
  *
  * @param sourceUrl - Validated source URL.
  * @param requestHostHeader - Current request host header, when available.
  * @param maxBytes - Hard cap on source bytes.
  * @param timeoutMs - Wall-clock budget for the fetch + read.
+ * @param overrides - Optional safeFetch overrides for testing.
  * @returns Image bytes and resolved content type.
+ * @throws {ImageSourceBlockedError} When the resolved IP is not allowed.
+ * @throws {ImageSourceDnsError} When DNS resolution fails.
  */
 export async function fetchSourceImage(
   sourceUrl: string,
   requestHostHeader: string | undefined,
   maxBytes: number,
   timeoutMs: number,
+  overrides?: FetchSourceImageOverrides,
 ): Promise<{ buffer: ArrayBuffer; contentType: string }> {
-  const fetchUrl = sourceUrl.startsWith('/')
+  const isRelative = sourceUrl.startsWith('/');
+  const fetchUrl = isRelative
     ? `http://${requestHostHeader ?? 'localhost:3000'}${sourceUrl}`
     : sourceUrl;
 
-  const response = await fetch(fetchUrl, { signal: AbortSignal.timeout(timeoutMs) });
+  let fetchImpl: typeof fetch;
+  if (overrides?.fetchImpl) {
+    fetchImpl = overrides.fetchImpl;
+  } else if (isRelative) {
+    // Relative URLs intentionally target the local server — use plain fetch
+    // (which would otherwise be blocked by safeFetch's loopback default).
+    fetchImpl = globalThis.fetch as typeof fetch;
+  } else {
+    const safeFetchOptions: SafeFetchOptions = {
+      headersTimeoutMs: timeoutMs,
+      bodyTimeoutMs: timeoutMs,
+    };
+    if (overrides?.isIpAllowed) safeFetchOptions.isIpAllowed = overrides.isIpAllowed;
+    if (overrides?.resolveHost) safeFetchOptions.resolveHost = overrides.resolveHost;
+    fetchImpl = createSafeFetch(safeFetchOptions);
+  }
+
+  let response: Response;
+  try {
+    response = await fetchImpl(fetchUrl, { signal: AbortSignal.timeout(timeoutMs) });
+  } catch (err) {
+    if (err instanceof SafeFetchBlockedError) {
+      throw new ImageSourceBlockedError(err.ip, err.reason);
+    }
+    if (err instanceof SafeFetchDnsError) {
+      throw new ImageSourceDnsError(err.hostname);
+    }
+    throw err;
+  }
   if (!response.ok) {
     throw new HTTPException(502, {
       message: `Failed to fetch source image: ${response.status} ${response.statusText}`,
@@ -395,6 +458,12 @@ export async function createServeImageResponse(deps: {
     }
     if (error instanceof ImageTransformTimeoutError) {
       throw new HTTPException(504, { message: error.message });
+    }
+    if (error instanceof ImageSourceBlockedError) {
+      throw new HTTPException(400, { message: error.message });
+    }
+    if (error instanceof ImageSourceDnsError) {
+      throw new HTTPException(502, { message: error.message });
     }
     throw error;
   } finally {

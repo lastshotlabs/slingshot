@@ -63,6 +63,8 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
         method: 'POST',
         headers: adminHeaders(tenantId),
         body: JSON.stringify({
+          ownerType: 'user',
+          ownerId: 'admin-user',
           url: 'https://example.com/hooks/postgres',
           secret: 'super-secret-token',
           subscriptions: [{ event: TEST_EVENT }],
@@ -76,7 +78,7 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
         secret: string;
       };
       expect(created.enabled).toBe(true);
-      expect(created.secret).toBe('oken');
+      expect(created.secret).toBe('****');
 
       const delivery = await runtime.createDelivery({
         endpointId: created.id,
@@ -125,6 +127,8 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
         method: 'POST',
         headers: adminHeaders(tenantId),
         body: JSON.stringify({
+          ownerType: 'user',
+          ownerId: 'admin-user',
           url: 'https://example.com/hooks/matching',
           secret: 'matching-secret',
           subscriptions: [{ pattern: 'auth:*' }],
@@ -137,6 +141,8 @@ describe('Webhooks Postgres manifest runtime (docker)', () => {
         method: 'POST',
         headers: adminHeaders(tenantId),
         body: JSON.stringify({
+          ownerType: 'user',
+          ownerId: 'admin-user',
           url: 'https://example.com/hooks/disabled',
           secret: 'disabled-secret',
           subscriptions: [{ event: TEST_EVENT }],

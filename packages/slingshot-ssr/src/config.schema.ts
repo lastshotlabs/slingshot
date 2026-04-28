@@ -196,4 +196,18 @@ export const ssrPluginConfigSchema = z.object({
     .describe(
       'Secret required to enable or disable draft mode endpoints. Omit to disable draft mode endpoints.',
     ),
+  /**
+   * Maximum byte length of a single decoded route param value.
+   *
+   * Requests with route params exceeding this cap are rejected with 414 URI
+   * Too Long. Default: 2048 bytes per param.
+   */
+  maxRouteParamBytes: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum byte length of a single decoded route param. Requests exceeding the cap return 414. Default: 2048.',
+    ),
 });

@@ -135,10 +135,9 @@ describe('OrganizationMember entity', () => {
     expect(OrganizationMember.fields.userId.immutable).toBe(true);
   });
 
-  test('role is an enum with default member', () => {
-    expect(OrganizationMember.fields.role.type).toBe('enum');
+  test('role is a string with default member', () => {
+    expect(OrganizationMember.fields.role.type).toBe('string');
     expect(OrganizationMember.fields.role.default).toBe('member');
-    expect(OrganizationMember.fields.role.enumValues).toEqual(['owner', 'admin', 'member']);
   });
 
   test('joinedAt has now default and is immutable', () => {
@@ -219,10 +218,9 @@ describe('OrganizationInvite entity', () => {
     expect(OrganizationInvite.fields.userId.optional).toBe(true);
   });
 
-  test('role is an enum with default member', () => {
-    expect(OrganizationInvite.fields.role.type).toBe('enum');
+  test('role is a string with default member', () => {
+    expect(OrganizationInvite.fields.role.type).toBe('string');
     expect(OrganizationInvite.fields.role.default).toBe('member');
-    expect(OrganizationInvite.fields.role.enumValues).toEqual(['owner', 'admin', 'member']);
   });
 
   test('expiresAt is a required date field', () => {
@@ -398,10 +396,9 @@ describe('GroupMembership entity', () => {
     expect(GroupMembership.fields.userId.optional).toBe(false);
   });
 
-  test('role is an enum with default member', () => {
-    expect(GroupMembership.fields.role.type).toBe('enum');
+  test('role is a string with default member', () => {
+    expect(GroupMembership.fields.role.type).toBe('string');
     expect(GroupMembership.fields.role.default).toBe('member');
-    expect(GroupMembership.fields.role.enumValues).toEqual(['owner', 'admin', 'member']);
   });
 
   test('joinedAt has now default and is immutable', () => {

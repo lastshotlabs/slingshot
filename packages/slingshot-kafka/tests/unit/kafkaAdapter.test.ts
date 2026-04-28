@@ -535,6 +535,9 @@ describe('kafkaAdapter', () => {
 
       bus.on('auth:login', () => {}, { durable: true, name: 'health-worker' });
       await flushAsyncWork();
+      await fakeKafkaState.consumers[0]?.emitEvent?.('consumer.group_join', {
+        payload: { memberId: 'health-member' },
+      });
 
       const after = bus.health();
       expect(after.consumers).toHaveLength(1);

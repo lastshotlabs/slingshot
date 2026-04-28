@@ -1,7 +1,11 @@
 /**
  * BullMQ adapter surface for Slingshot orchestration.
  */
-export { createBullMQOrchestrationAdapter } from './adapter';
+export {
+  createBullMQOrchestrationAdapter,
+  type BullMQOrchestrationAdapterMetrics,
+  type BullMQOrchestrationMetricsCapability,
+} from './adapter';
 /**
  * Map BullMQ run states into portable Slingshot orchestration statuses.
  */

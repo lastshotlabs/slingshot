@@ -39,7 +39,7 @@ export function createWebPushProvider(config: {
 }): PushProvider {
   return {
     platform: 'web',
-    async send(subscription, message) {
+    async send(subscription, message, context) {
       if (message.silent) {
         return {
           ok: false,
@@ -52,6 +52,10 @@ export function createWebPushProvider(config: {
         return { ok: false, reason: 'transient', error: 'subscription platform mismatch' };
       }
 
+      const idempotencyKey = context?.idempotencyKey;
+      const headers: Record<string, string> = {};
+      if (idempotencyKey) headers['X-Idempotency-Key'] = idempotencyKey;
+
       try {
         await webpush.sendNotification(
           {
@@ -61,15 +65,17 @@ export function createWebPushProvider(config: {
           JSON.stringify(message),
           {
             vapidDetails: config.vapid,
+            headers,
           },
         );
-        return { ok: true };
+        return { ok: true, providerIdempotencyKey: idempotencyKey };
       } catch (error) {
         const statusCode = (error as { statusCode?: number }).statusCode;
         return {
           ok: false,
           reason: classify(statusCode),
           error: error instanceof Error ? error.message : 'web push send failed',
+          providerIdempotencyKey: idempotencyKey,
         };
       }
     },

@@ -13,6 +13,12 @@ import type { MailJob } from './queue';
  * @template K - The event key from `SlingshotEventMap`.
  */
 export interface MailSubscription<K extends keyof SlingshotEventMap = keyof SlingshotEventMap> {
+  /**
+   * Stable identifier for this subscription. Used to derive idempotency keys so retries
+   * of the same event don't double-send. When omitted, the plugin derives a stable id
+   * from `${event}:${template}`.
+   */
+  id?: string;
   /** Bus event key to subscribe to. */
   event: K;
   /** Template name passed to the renderer's `render()` method. */

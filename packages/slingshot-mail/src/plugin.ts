@@ -4,7 +4,7 @@ import type {
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import { validateAdapterShape, validatePluginConfig } from '@lastshotlabs/slingshot-core';
-import { wireSubscriptions } from './lib/subscriptionWiring';
+import { validateSubscriptionTemplates, wireSubscriptions } from './lib/subscriptionWiring';
 import { createMemoryQueue } from './queues/memory';
 import type { MailPluginConfig } from './types/config';
 import { mailPluginConfigSchema } from './types/config';
@@ -86,16 +86,11 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
       // 2. Start queue (throws immediately if backend is unavailable)
       await queue.start(config.provider);
 
-      // 3. Validate templates on startup if enabled (default: true when renderer supports it)
-      if (config.validateTemplatesOnStartup !== false && config.renderer.listTemplates) {
-        const availableTemplates = await config.renderer.listTemplates();
-        for (const sub of config.subscriptions ?? []) {
-          if (!availableTemplates.includes(sub.template)) {
-            console.warn(
-              `[slingshot-mail] Template "${sub.template}" not found for subscription on event "${sub.event}"`,
-            );
-          }
-        }
+      // 3. Validate templates on startup if enabled (default: true when renderer supports it).
+      // Throws MailTemplateNotFoundError so callers fail fast instead of discovering missing
+      // templates only when the corresponding event fires at runtime.
+      if (config.validateTemplatesOnStartup !== false) {
+        await validateSubscriptionTemplates(config);
       }
 
       // 4. Optional provider health check

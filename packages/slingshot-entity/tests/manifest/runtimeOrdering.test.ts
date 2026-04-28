@@ -11,6 +11,7 @@ import {
   createMockBus,
   createMockFrameworkConfig,
   createMockInfraWithFactory,
+  createMockSetupContext,
 } from './helpers';
 
 describe('manifest runtime ordering', () => {
@@ -59,7 +60,7 @@ describe('manifest runtime ordering', () => {
       manifestRuntime: runtime,
     });
 
-    await plugin.setupRoutes!({ app, config: fw, bus });
+    await plugin.setupRoutes!(createMockSetupContext(app, fw, bus));
 
     expect(events).toEqual(['transform', 'hook', 'route']);
   });

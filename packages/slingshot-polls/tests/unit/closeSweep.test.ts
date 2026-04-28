@@ -59,7 +59,7 @@ describe('closeSweep', () => {
     await new Promise(r => setTimeout(r, 120));
 
     expect(updateFn).toHaveBeenCalled();
-    const [id, data] = updateFn.mock.calls[0] as [string, Record<string, unknown>];
+    const [id, data] = updateFn.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(id).toBe('poll-1');
     expect(data.closed).toBe(true);
     expect(data.closedBy).toBeNull();

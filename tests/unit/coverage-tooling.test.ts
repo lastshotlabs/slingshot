@@ -198,6 +198,85 @@ describe('coverage tooling', () => {
     });
   });
 
+  test('normalizes Bun LCOV source paths before matching owned files', async () => {
+    const { filterLcovContentToOwnedFiles, parseLcov } = await import(
+      `../../scripts/coverage-lcov.ts?normalize=${Date.now()}`
+    );
+    const absoluteWorkspaceSuitePath = join(process.cwd(), 'scripts/workspace-test-suites.ts');
+
+    const mergedContent = [
+      'TN:',
+      'SF:../../scripts/workspace-test-suites.ts',
+      'FN:1,coverageSuites',
+      'FNDA:1,coverageSuites',
+      'DA:1,1',
+      'LF:1',
+      'LH:1',
+      'end_of_record',
+      'TN:',
+      `SF:${absoluteWorkspaceSuitePath}`,
+      'FN:2,packageTestSuites',
+      'FNDA:1,packageTestSuites',
+      'DA:2,1',
+      'LF:1',
+      'LH:1',
+      'end_of_record',
+      'TN:',
+      'SF:../packages/slingshot-core/src/entityPolicy.ts',
+      'FN:1,getOrCreateEntityPolicyRegistry',
+      'FNDA:1,getOrCreateEntityPolicyRegistry',
+      'DA:1,1',
+      'LF:1',
+      'LH:1',
+      'end_of_record',
+      'TN:',
+      'SF:../outside-project/src/index.ts',
+      'DA:1,1',
+      'LF:1',
+      'LH:1',
+      'end_of_record',
+      '',
+    ].join('\n');
+
+    const filteredContent = await filterLcovContentToOwnedFiles(mergedContent, {
+      name: 'normalizer',
+      testsPath: 'tests',
+      coverageDir: tempDir,
+      command: [],
+      ownedGlobs: [
+        'scripts/workspace-test-suites.ts',
+        'packages/slingshot-core/src/entityPolicy.ts',
+      ],
+      ignoredGlobs: [],
+    });
+
+    expect(filteredContent).toContain('SF:../../scripts/workspace-test-suites.ts');
+    expect(filteredContent).toContain(`SF:${absoluteWorkspaceSuitePath}`);
+    expect(filteredContent).toContain('SF:../packages/slingshot-core/src/entityPolicy.ts');
+    expect(filteredContent).not.toContain('outside-project');
+
+    const artifactPath = join(tempDir, 'normalized.info');
+    await writeFile(artifactPath, filteredContent, 'utf8');
+
+    const report = parseLcov(artifactPath);
+    expect(report.files.get('scripts/workspace-test-suites.ts')).toEqual({
+      linesFound: 2,
+      linesHit: 2,
+      functionsFound: 2,
+      functionsHit: 2,
+      branchesFound: 0,
+      branchesHit: 0,
+    });
+    expect(report.files.get('packages/slingshot-core/src/entityPolicy.ts')).toEqual({
+      linesFound: 1,
+      linesHit: 1,
+      functionsFound: 1,
+      functionsHit: 1,
+      branchesFound: 0,
+      branchesHit: 0,
+    });
+  });
+
   test('detects files that do and do not need runtime coverage', async () => {
     const { fileNeedsRuntimeCoverage } = await import(
       `../../scripts/coverage-lcov.ts?runtime=${Date.now()}`

@@ -556,6 +556,43 @@ describe('createPushRouter — retry behavior', () => {
     errorSpy.mockRestore();
   });
 
+  test('continues fan-out when marking one delivery fails', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const repos = createFakeRepos();
+    let sendCount = 0;
+    const provider = createMockProvider(async () => {
+      sendCount += 1;
+      return { ok: true };
+    });
+    repos._subscriptions.push(
+      makeSubscription({ id: 'sub-fail', userId: 'user-1', deviceId: 'device-fail' }),
+      makeSubscription({ id: 'sub-ok', userId: 'user-1', deviceId: 'device-ok' }),
+    );
+
+    let markSentCalls = 0;
+    const originalMarkSent = repos.deliveries.markSent;
+    repos.deliveries.markSent = async params => {
+      markSentCalls += 1;
+      if (markSentCalls === 1) throw new Error('delivery repo down');
+      return originalMarkSent(params);
+    };
+
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 1, initialDelayMs: 0 },
+    });
+    const delivered = await router.sendToUser('user-1', { title: 'Hello' });
+
+    expect(delivered).toBe(1);
+    expect(sendCount).toBe(2);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Repository failure during fan-out'),
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
+  });
+
   test('respects retryAfterMs hint from provider instead of default backoff', async () => {
     const repos = createFakeRepos();
     let callCount = 0;

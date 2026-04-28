@@ -48,9 +48,15 @@ export interface SsgConfig {
   readonly clientEntry?: string;
   /**
    * Maximum milliseconds that `staticPaths()` / `generateStaticParams()` may run
-   * before being treated as timed out and skipped. Default: 60000.
+   * before the build fails. Default: 60000.
    */
   readonly staticPathsTimeoutMs?: number;
+  /**
+   * Maximum number of route parameter sets a single dynamic route may return.
+   * Protects builds from unbounded `staticPaths()` / `generateStaticParams()`
+   * output. Default: 10000.
+   */
+  readonly maxStaticPathsPerRoute?: number;
 }
 
 /**

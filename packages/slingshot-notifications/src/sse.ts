@@ -45,6 +45,11 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
 
     const stream = new ReadableStream<string>({
       start(controller) {
+        if (c.req.raw.signal.aborted) {
+          cleanup();
+          controller.close();
+          return;
+        }
         writeSseChunk(controller, 'retry: 5000');
         writeSseChunk(controller, ': connected');
 

@@ -51,6 +51,11 @@ export interface SendResult {
   raw?: object | null;
 }
 
+export interface MailSendOptions {
+  /** Aborted when the queue-level send timeout expires. Providers should pass it to fetch/SDK calls. */
+  signal?: AbortSignal;
+}
+
 /**
  * Thrown by `MailProvider.send()` when delivery fails.
  *
@@ -106,7 +111,7 @@ export interface MailProvider {
    * @returns A `SendResult` describing the outcome.
    * @throws {MailSendError} On delivery failure. Set `retryable: false` for permanent failures.
    */
-  send(message: MailMessage): Promise<SendResult>;
+  send(message: MailMessage, options?: MailSendOptions): Promise<SendResult>;
   /**
    * Optional startup connectivity check. Called once during plugin activation.
    * Should throw if the provider cannot be reached or credentials are invalid.

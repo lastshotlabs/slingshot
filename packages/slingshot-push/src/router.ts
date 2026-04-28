@@ -180,13 +180,28 @@ export function createPushRouter(options: {
       const provider = options.providers[platform];
       if (!provider) continue;
 
-      const delivery = await options.repos.deliveries.create({
-        tenantId: opts.tenantId,
-        userId: subscription.userId,
-        subscriptionId: subscription.id,
-        platform,
-        notificationId: opts.notificationId,
-      });
+      let delivery: RouterDeliveryRecord | null = null;
+      try {
+        delivery = await options.repos.deliveries.create({
+          tenantId: opts.tenantId,
+          userId: subscription.userId,
+          subscriptionId: subscription.id,
+          platform,
+          notificationId: opts.notificationId,
+        });
+      } catch (err) {
+        console.error(
+          `[slingshot-push] Failed to create delivery for subscription="${subscription.id}"`,
+          err,
+        );
+        options.bus?.emit('push:delivery.failed', {
+          subscriptionId: subscription.id,
+          userId: subscription.userId,
+          reason: 'deliveryCreateFailed',
+          error: err instanceof Error ? err.message : String(err),
+        });
+        continue;
+      }
 
       const payload: PushMessage = {
         ...message,
@@ -199,117 +214,150 @@ export function createPushRouter(options: {
       let attempts = 0;
       let sent = false;
 
-      while (attempts < maxAttempts) {
-        attempts += 1;
-        await options.repos.deliveries.incrementAttempts(delivery.id, 1);
+      try {
+        while (attempts < maxAttempts) {
+          attempts += 1;
+          await options.repos.deliveries.incrementAttempts(delivery.id, 1);
 
-        let result;
-        try {
-          result = await Promise.race([
-            provider.send(toProviderSubscription(subscription, platform), payload),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () => reject(new Error(`push provider timed out after ${providerTimeoutMs}ms`)),
-                providerTimeoutMs,
+          let result;
+          try {
+            result = await Promise.race([
+              provider.send(toProviderSubscription(subscription, platform), payload),
+              new Promise<never>((_, reject) =>
+                setTimeout(
+                  () => reject(new Error(`push provider timed out after ${providerTimeoutMs}ms`)),
+                  providerTimeoutMs,
+                ),
               ),
-            ),
-          ]);
-        } catch (err) {
+            ]);
+          } catch (err) {
+            console.error(
+              `[slingshot-push] Provider threw or timed out for platform="${platform}" userId="${subscription.userId}"`,
+              err,
+            );
+            result = {
+              ok: false,
+              reason: 'transient' as const,
+              error: err instanceof Error ? err.message : 'push provider threw or timed out',
+            };
+          }
+          if (result.ok) {
+            await options.repos.deliveries.markSent({
+              id: delivery.id,
+              providerMessageId: result.providerMessageId,
+            });
+            options.bus?.emit('push:delivery.sent', {
+              deliveryId: delivery.id,
+              subscriptionId: subscription.id,
+              userId: subscription.userId,
+              providerMessageId: result.providerMessageId,
+            });
+            deliveredCount += 1;
+            sent = true;
+            break;
+          }
+
+          if (result.reason === 'invalidToken') {
+            await options.repos.deliveries.markFailed({
+              id: delivery.id,
+              failureReason: 'invalidToken',
+            });
+            await options.repos.subscriptions.delete(subscription.id);
+            await options.repos.topicMemberships.removeBySubscription({
+              subscriptionId: subscription.id,
+            });
+            options.bus?.emit('push:delivery.failed', {
+              deliveryId: delivery.id,
+              subscriptionId: subscription.id,
+              userId: subscription.userId,
+              reason: 'invalidToken',
+            });
+            options.bus?.emit('push:subscription.invalidated', {
+              subscriptionId: subscription.id,
+              userId: subscription.userId,
+              platform,
+              reason: result.error ?? 'invalidToken',
+            });
+            sent = true;
+            break;
+          }
+
+          if (result.reason === 'payloadTooLarge') {
+            await options.repos.deliveries.markFailed({
+              id: delivery.id,
+              failureReason: 'payloadTooLarge',
+            });
+            options.bus?.emit('push:delivery.failed', {
+              deliveryId: delivery.id,
+              subscriptionId: subscription.id,
+              userId: subscription.userId,
+              reason: 'payloadTooLarge',
+            });
+            options.bus?.emit('push:message.payload_too_large', {
+              platform,
+              bytes: JSON.stringify(payload).length,
+            });
+            sent = true;
+            break;
+          }
+
+          if (attempts >= maxAttempts) {
+            await options.repos.deliveries.markFailed({
+              id: delivery.id,
+              failureReason: result.reason ?? 'transient',
+            });
+            options.bus?.emit('push:delivery.failed', {
+              deliveryId: delivery.id,
+              subscriptionId: subscription.id,
+              userId: subscription.userId,
+              reason: result.reason ?? 'transient',
+            });
+            sent = true;
+            break;
+          }
+
+          const delay =
+            result.retryAfterMs ?? initialDelayMs * Math.pow(2, Math.max(0, attempts - 1));
+          await sleep(delay);
+        }
+      } catch (err) {
+        console.error(
+          `[slingshot-push] Repository failure during fan-out for delivery="${delivery.id}"`,
+          err,
+        );
+        try {
+          await options.repos.deliveries.markFailed({
+            id: delivery.id,
+            failureReason: 'repositoryFailure',
+          });
+        } catch (markErr) {
           console.error(
-            `[slingshot-push] Provider threw or timed out for platform="${platform}" userId="${subscription.userId}"`,
-            err,
+            `[slingshot-push] Failed to mark delivery="${delivery.id}" failed after repository error`,
+            markErr,
           );
-          result = {
-            ok: false,
-            reason: 'transient' as const,
-            error: err instanceof Error ? err.message : 'push provider threw or timed out',
-          };
         }
-        if (result.ok) {
-          await options.repos.deliveries.markSent({
-            id: delivery.id,
-            providerMessageId: result.providerMessageId,
-          });
-          options.bus?.emit('push:delivery.sent', {
-            deliveryId: delivery.id,
-            subscriptionId: subscription.id,
-            userId: subscription.userId,
-            providerMessageId: result.providerMessageId,
-          });
-          deliveredCount += 1;
-          sent = true;
-          break;
-        }
-
-        if (result.reason === 'invalidToken') {
-          await options.repos.deliveries.markFailed({
-            id: delivery.id,
-            failureReason: 'invalidToken',
-          });
-          await options.repos.subscriptions.delete(subscription.id);
-          await options.repos.topicMemberships.removeBySubscription({
-            subscriptionId: subscription.id,
-          });
-          options.bus?.emit('push:delivery.failed', {
-            deliveryId: delivery.id,
-            subscriptionId: subscription.id,
-            userId: subscription.userId,
-            reason: 'invalidToken',
-          });
-          options.bus?.emit('push:subscription.invalidated', {
-            subscriptionId: subscription.id,
-            userId: subscription.userId,
-            platform,
-            reason: result.error ?? 'invalidToken',
-          });
-          sent = true;
-          break;
-        }
-
-        if (result.reason === 'payloadTooLarge') {
-          await options.repos.deliveries.markFailed({
-            id: delivery.id,
-            failureReason: 'payloadTooLarge',
-          });
-          options.bus?.emit('push:delivery.failed', {
-            deliveryId: delivery.id,
-            subscriptionId: subscription.id,
-            userId: subscription.userId,
-            reason: 'payloadTooLarge',
-          });
-          options.bus?.emit('push:message.payload_too_large', {
-            platform,
-            bytes: JSON.stringify(payload).length,
-          });
-          sent = true;
-          break;
-        }
-
-        if (attempts >= maxAttempts) {
-          await options.repos.deliveries.markFailed({
-            id: delivery.id,
-            failureReason: result.reason ?? 'transient',
-          });
-          options.bus?.emit('push:delivery.failed', {
-            deliveryId: delivery.id,
-            subscriptionId: subscription.id,
-            userId: subscription.userId,
-            reason: result.reason ?? 'transient',
-          });
-          sent = true;
-          break;
-        }
-
-        const delay =
-          result.retryAfterMs ?? initialDelayMs * Math.pow(2, Math.max(0, attempts - 1));
-        await sleep(delay);
+        options.bus?.emit('push:delivery.failed', {
+          deliveryId: delivery.id,
+          subscriptionId: subscription.id,
+          userId: subscription.userId,
+          reason: 'repositoryFailure',
+          error: err instanceof Error ? err.message : String(err),
+        });
+        continue;
       }
 
       if (!sent) {
-        await options.repos.deliveries.markFailed({
-          id: delivery.id,
-          failureReason: 'transient',
-        });
+        try {
+          await options.repos.deliveries.markFailed({
+            id: delivery.id,
+            failureReason: 'transient',
+          });
+        } catch (err) {
+          console.error(
+            `[slingshot-push] Failed to mark delivery="${delivery.id}" failed`,
+            err,
+          );
+        }
         options.bus?.emit('push:delivery.failed', {
           deliveryId: delivery.id,
           subscriptionId: subscription.id,

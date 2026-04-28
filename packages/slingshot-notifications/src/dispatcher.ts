@@ -64,9 +64,10 @@ export function createIntervalDispatcher(
       }, intervalMs);
     },
     async stop() {
-      if (!timer) return;
-      clearInterval(timer);
-      timer = null;
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
       if (!inflightTick) return;
       const stopTimeoutMs = options.stopTimeoutMs ?? 10_000;
       try {

@@ -366,4 +366,81 @@ describe('runtime-bun smoke', () => {
       Object.assign(Bun, { serve: originalServe });
     }
   });
+
+  test('websocket facade implements subscribe/unsubscribe and forwards Bun websocket knobs', async () => {
+    const originalServe = Bun.serve;
+    const calls: string[] = [];
+    let captured: {
+      websocket?: {
+        idleTimeout?: number;
+        perMessageDeflate?: boolean;
+        publishToSelf?: boolean;
+        open?: (ws: unknown) => unknown;
+        message?: (ws: unknown, msg: string) => unknown;
+        close?: (ws: unknown, code: number, reason: string) => unknown;
+      };
+    } = {};
+
+    Object.assign(Bun, {
+      serve(opts: typeof captured) {
+        captured = opts;
+        return {
+          port: 1234,
+          stop() {
+            return undefined;
+          },
+          publish() {
+            return undefined;
+          },
+          upgrade() {
+            return true;
+          },
+        };
+      },
+    });
+
+    try {
+      const runtime = bunRuntime();
+      runtime.server.listen({
+        port: 0,
+        fetch: () => new Response('ok'),
+        websocket: {
+          idleTimeout: 12,
+          perMessageDeflate: true,
+          publishToSelf: true,
+          open(ws) {
+            ws.subscribe('room:1');
+            ws.unsubscribe('room:1');
+          },
+          message(ws) {
+            ws.send('ack');
+          },
+          close(ws) {
+            ws.ping();
+          },
+        },
+      });
+
+      expect(captured.websocket?.idleTimeout).toBe(12);
+      expect(captured.websocket?.perMessageDeflate).toBe(true);
+      expect(captured.websocket?.publishToSelf).toBe(true);
+
+      const rawWs = {
+        data: { userId: 'u1' },
+        send: (msg: string) => calls.push(`send:${msg}`),
+        close: () => calls.push('close'),
+        ping: () => calls.push('ping'),
+        subscribe: (channel: string) => calls.push(`sub:${channel}`),
+        unsubscribe: (channel: string) => calls.push(`unsub:${channel}`),
+      };
+
+      await Promise.resolve(captured.websocket?.open?.(rawWs));
+      await Promise.resolve(captured.websocket?.message?.(rawWs, 'hello'));
+      await Promise.resolve(captured.websocket?.close?.(rawWs, 1000, 'done'));
+
+      expect(calls).toEqual(['sub:room:1', 'unsub:room:1', 'send:ack', 'ping']);
+    } finally {
+      Object.assign(Bun, { serve: originalServe });
+    }
+  });
 });

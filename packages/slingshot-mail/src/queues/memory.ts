@@ -3,6 +3,7 @@ import { TemplateNotFoundError } from '@lastshotlabs/slingshot-core';
 import type { MailMessage, MailProvider } from '../types/provider';
 import { MailSendError } from '../types/provider';
 import type { MailJob, MailQueue, MailQueueConfig } from '../types/queue';
+import { sendWithTimeout } from './sendWithTimeout';
 
 /**
  * Creates an in-process, non-durable mail queue for development and testing.
@@ -30,6 +31,7 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
   const maxAttempts = config?.maxAttempts ?? 3;
   const onDeadLetter = config?.onDeadLetter ?? null;
   const drainTimeoutMs = config?.drainTimeoutMs ?? 30_000;
+  const sendTimeoutMs = config?.sendTimeoutMs ?? 30_000;
   const pending: Map<string, MailJob> = new Map();
   const activeJobs = new Set<Promise<void>>();
   let provider: MailProvider | null = null;
@@ -46,7 +48,7 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
         if (!activeProvider) {
           throw new Error('Memory mail queue not started â€” call start() first');
         }
-        const result = await activeProvider.send(job.message);
+        const result = await sendWithTimeout(activeProvider, job.message, sendTimeoutMs);
         if (result.status === 'rejected') {
           onDeadLetter?.(job, new MailSendError('Provider rejected message', false));
           pending.delete(job.id);

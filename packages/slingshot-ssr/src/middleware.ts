@@ -185,20 +185,29 @@ export function buildSsrMiddleware(
           // A 30-second timeout guards against hung renderers blocking worker resources.
           try {
             const staleBsCtx = getContext(app);
-            const isrTimeout = AbortSignal.timeout(config.isr?.backgroundRegenTimeoutMs ?? 30_000);
-            Promise.race([
-              regeneratePage(cacheKey, url, query, config, assetTags, staleBsCtx, isrAdapter),
-              new Promise<never>((_, reject) => {
-                isrTimeout.addEventListener('abort', () => {
-                  reject(
-                    new Error(
-                      `[slingshot-ssr] ISR background regen timed out after ${config.isr?.backgroundRegenTimeoutMs ?? 30_000}ms`,
-                    ),
-                  );
-                });
-              }),
-            ]).catch((err: unknown) => {
-              console.error('[slingshot-ssr] ISR background regen failed for', cacheKey, err);
+            const timeoutMs = config.isr?.backgroundRegenTimeoutMs ?? 30_000;
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), timeoutMs);
+            regeneratePage(
+              cacheKey,
+              url,
+              query,
+              config,
+              assetTags,
+              staleBsCtx,
+              isrAdapter,
+              controller.signal,
+            )
+              .catch((err: unknown) => {
+                console.error('[slingshot-ssr] ISR background regen failed for', cacheKey, err);
+              })
+              .finally(() => clearTimeout(timeout));
+            controller.signal.addEventListener('abort', () => {
+              console.error(
+                '[slingshot-ssr] ISR background regen timed out for',
+                cacheKey,
+                `after ${timeoutMs}ms`,
+              );
             });
           } catch {
             // No Slingshot context attached — serve stale content but skip background regeneration.
@@ -592,7 +601,9 @@ async function regeneratePage(
   assetTags: string,
   bsCtx: ReturnType<typeof getContext>,
   isrAdapter: IsrCacheAdapter,
+  signal?: AbortSignal,
 ): Promise<void> {
+  signal?.throwIfAborted();
   const pathname = url.pathname;
   let chain = resolveRouteChain(pathname, config.serverRoutesDir);
 
@@ -609,6 +620,7 @@ async function regeneratePage(
   if (!chain) {
     try {
       const rendererMatch = await config.renderer.resolve(url, bsCtx);
+      signal?.throwIfAborted();
       if (rendererMatch) {
         const hydratedMatch = { ...rendererMatch, url, query };
         chain = Object.freeze({
@@ -626,6 +638,7 @@ async function regeneratePage(
   }
 
   if (!chain) return;
+  signal?.throwIfAborted();
 
   const isrSink: IsrSink = {};
   const shell: SsrShell = {
@@ -642,6 +655,7 @@ async function regeneratePage(
     // background regeneration are captured (they are silently discarded since there
     // is no response stream to attach them to in a background regen).
     response = await withAfterContext(() => config.renderer.renderChain(chain, shell, bsCtx));
+    signal?.throwIfAborted();
   } catch (err) {
     console.error('[slingshot-ssr] ISR regen render error for', pathname, err);
     return;
@@ -650,12 +664,14 @@ async function regeneratePage(
   if (typeof isrSink.revalidate !== 'number' || isrSink.revalidate <= 0 || isrSink.noStore) return;
 
   const html = await response.text();
+  signal?.throwIfAborted();
   const headers: Record<string, string> = {};
   response.headers.forEach((value, key) => {
     headers[key] = value;
   });
 
   const now = Date.now();
+  signal?.throwIfAborted();
   await isrAdapter.set(cacheKey, {
     html,
     // Persist the original render status so cache hits replay the correct code.

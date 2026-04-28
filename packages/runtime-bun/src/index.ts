@@ -78,6 +78,59 @@ function logRuntimeError(scope: 'fetch' | 'websocket', phase: string, error: unk
   });
 }
 
+type BunRuntimeWebSocket = RuntimeWebSocket & {
+  readonly data: unknown;
+  send(data: string | Buffer): unknown;
+  close(code?: number, reason?: string): unknown;
+  ping?(): unknown;
+  subscribe?(channel: string): unknown;
+  unsubscribe?(channel: string): unknown;
+};
+
+const bunWsHandles = new WeakMap<object, RuntimeWebSocket>();
+
+function requireBunWsMethod(
+  ws: BunRuntimeWebSocket,
+  method: 'ping' | 'subscribe' | 'unsubscribe',
+): (...args: [string?]) => unknown {
+  const fn = ws[method];
+  if (typeof fn !== 'function') {
+    throw new Error(`[runtime-bun] Bun ServerWebSocket is missing ${method}()`);
+  }
+  return fn.bind(ws) as (...args: [string?]) => unknown;
+}
+
+function toRuntimeWebSocket(ws: BunRuntimeWebSocket): RuntimeWebSocket {
+  const existing = bunWsHandles.get(ws as object);
+  if (existing) return existing;
+  const rtWs: RuntimeWebSocket = {
+    get data() {
+      return ws.data;
+    },
+    send(data: string | Buffer): void {
+      try {
+        ws.send(data);
+      } catch (err) {
+        logRuntimeError('websocket', 'send', err);
+      }
+    },
+    close(code?: number, reason?: string): void {
+      ws.close(code, reason);
+    },
+    ping(): void {
+      requireBunWsMethod(ws, 'ping')();
+    },
+    subscribe(channel: string): void {
+      requireBunWsMethod(ws, 'subscribe')(channel);
+    },
+    unsubscribe(channel: string): void {
+      requireBunWsMethod(ws, 'unsubscribe')(channel);
+    },
+  };
+  bunWsHandles.set(ws as object, rtWs);
+  return rtWs;
+}
+
 // ---------------------------------------------------------------------------
 // Process-level safety net (parity with runtime-node)
 // ---------------------------------------------------------------------------
@@ -135,21 +188,21 @@ function wrapWebSocketHandler(handler: RuntimeWebSocketHandler): RuntimeWebSocke
     ...handler,
     async open(ws: RuntimeWebSocket): Promise<void> {
       try {
-        await handler.open(ws);
+        await handler.open(toRuntimeWebSocket(ws as BunRuntimeWebSocket));
       } catch (err) {
         logRuntimeError('websocket', 'open', err);
       }
     },
     async message(ws: RuntimeWebSocket, message: string | Buffer): Promise<void> {
       try {
-        await handler.message(ws, message);
+        await handler.message(toRuntimeWebSocket(ws as BunRuntimeWebSocket), message);
       } catch (err) {
         logRuntimeError('websocket', 'message', err);
       }
     },
     async close(ws: RuntimeWebSocket, code: number, reason: string): Promise<void> {
       try {
-        await handler.close(ws, code, reason);
+        await handler.close(toRuntimeWebSocket(ws as BunRuntimeWebSocket), code, reason);
       } catch (err) {
         logRuntimeError('websocket', 'close', err);
       }
@@ -157,7 +210,7 @@ function wrapWebSocketHandler(handler: RuntimeWebSocketHandler): RuntimeWebSocke
     pong: handler.pong
       ? (ws: RuntimeWebSocket) => {
           try {
-            handler.pong?.(ws);
+            handler.pong?.(toRuntimeWebSocket(ws as BunRuntimeWebSocket));
           } catch (err) {
             logRuntimeError('websocket', 'pong', err);
           }
@@ -298,7 +351,11 @@ export function bunRuntime(): SlingshotRuntime {
             return server.upgrade(req, o);
           },
           publish(channel: string, msg: string): void {
-            server.publish(channel, msg);
+            try {
+              server.publish(channel, msg);
+            } catch (err) {
+              logRuntimeError('websocket', 'publish', err);
+            }
           },
         };
       },

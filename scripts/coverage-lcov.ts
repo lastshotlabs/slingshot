@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { isAbsolute, relative } from 'node:path';
 import fg from 'fast-glob';
 import ts from 'typescript';
 import { type CoverageSuite } from './workspace-test-suites';
@@ -26,7 +27,17 @@ interface CoverageAccumulator {
 const runtimeCoverageCache = new Map<string, boolean>();
 
 function normalizePath(value: string): string {
-  return value.replace(/\\/g, '/').replace(/^\.\//, '');
+  let normalized = value.replace(/\\/g, '/').replace(/^\.\//, '');
+  if (isAbsolute(normalized)) {
+    const relativePath = relative(process.cwd(), normalized).replace(/\\/g, '/');
+    if (!relativePath.startsWith('../') && relativePath !== '..') {
+      normalized = relativePath;
+    }
+  }
+  while (normalized.startsWith('../')) {
+    normalized = normalized.slice(3);
+  }
+  return normalized;
 }
 
 export async function discoverOwnedFiles(suite: CoverageSuite): Promise<string[]> {

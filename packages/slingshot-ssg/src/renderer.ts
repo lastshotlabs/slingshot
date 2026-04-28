@@ -1,11 +1,26 @@
 // packages/slingshot-ssg/src/renderer.ts
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { SlingshotSsrRenderer, SsrShell } from '@lastshotlabs/slingshot-ssr';
 import { resolveRouteChain } from '@lastshotlabs/slingshot-ssr';
 import type { SsgConfig, SsgPageResult, SsgResult } from './types';
 
 // ─── Public API ───────────────────────────────────────────────────────────────
+
+function writeFileAtomicSync(filePath: string, contents: string): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const tmpPath = join(
+    dirname(filePath),
+    `.${filePath.split('/').pop() ?? 'index.html'}.${process.pid}.${Date.now()}.tmp`,
+  );
+  try {
+    writeFileSync(tmpPath, contents, 'utf8');
+    renameSync(tmpPath, filePath);
+  } catch (err) {
+    rmSync(tmpPath, { force: true });
+    throw err;
+  }
+}
 
 /**
  * Render a single URL path to a static HTML file.
@@ -92,8 +107,7 @@ export async function renderSsgPage(
 
     const html = await response.text();
     try {
-      mkdirSync(dirname(filePath), { recursive: true });
-      writeFileSync(filePath, html, 'utf8');
+      writeFileAtomicSync(filePath, html);
     } catch (err) {
       const error = toError(err);
       console.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);
@@ -145,8 +159,7 @@ export async function renderSsgPage(
   const html = await response.text();
 
   try {
-    mkdirSync(dirname(filePath), { recursive: true });
-    writeFileSync(filePath, html, 'utf8');
+    writeFileAtomicSync(filePath, html);
   } catch (err) {
     const error = toError(err);
     console.warn(`[slingshot-ssg] Failed to write ${filePath}:`, error.message);

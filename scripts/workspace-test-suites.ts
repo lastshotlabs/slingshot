@@ -61,6 +61,11 @@ function packageSuites(): TestCommandSuite[] {
       if (name === 'runtime-node') {
         testFiles = testFiles.filter(file => !file.includes('/tests/node-runtime/'));
       }
+      // worker.test.ts uses top-level mock.module() that leaks into co-process tests;
+      // it is emitted as its own suite below so it runs in an isolated bun process.
+      if (name === 'slingshot-orchestration-temporal') {
+        testFiles = testFiles.filter(file => !file.includes('/worker.test.ts'));
+      }
       const configPath = normalizePath(join('packages', name, 'bunfig.toml'));
       return {
         name,
@@ -157,7 +162,21 @@ export const rootCoverageSuite: CoverageSuite = {
   ignoredGlobs: rootCoverageIgnoredGlobs,
 };
 
-export const packageTestSuites = applySuiteFilter(packageSuites());
+// Temporal worker.test.ts runs alone because its top-level mock.module() calls
+// replace module exports globally and contaminate subsequent test files in the
+// same Bun process. Running it as its own suite gives it an isolated process.
+const temporalWorkerSuite: TestCommandSuite = {
+  name: 'slingshot-orchestration-temporal (worker isolated)',
+  testsPath: 'packages/slingshot-orchestration-temporal/tests',
+  testFiles: [
+    'packages/slingshot-orchestration-temporal/tests/worker.test.ts',
+  ],
+};
+
+export const packageTestSuites = applySuiteFilter([
+  ...packageSuites(),
+  temporalWorkerSuite,
+]);
 
 function packageCoverageSuites(): CoverageSuite[] {
   const packagesDir = join(process.cwd(), 'packages');

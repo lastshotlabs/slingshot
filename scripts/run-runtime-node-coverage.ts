@@ -27,8 +27,8 @@ async function runCommand(
 
 export async function runRuntimeNodeCoverage(
   spawnFn: typeof Bun.spawn = Bun.spawn,
+  coverageDir = 'coverage/runtime-node',
 ): Promise<number> {
-  const coverageDir = 'coverage/runtime-node';
   const vitestCoverageDir = join(coverageDir, '.runs', 'vitest');
   const artifacts: string[] = [];
   let exitCode = 0;

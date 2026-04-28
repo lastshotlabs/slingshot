@@ -1,4 +1,10 @@
-import type { MailAddress, MailMessage, MailProvider, SendResult } from '../types/provider';
+import type {
+  MailAddress,
+  MailMessage,
+  MailProvider,
+  MailSendOptions,
+  SendResult,
+} from '../types/provider';
 import { MailSendError } from '../types/provider';
 
 interface PostmarkConfig {
@@ -43,7 +49,7 @@ export function createPostmarkProvider(config: PostmarkConfig): MailProvider {
 
   return {
     name: 'postmark',
-    async send(message: MailMessage): Promise<SendResult> {
+    async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
       const to = Array.isArray(message.to)
         ? message.to.map(formatAddress).join(', ')
         : formatAddress(message.to);
@@ -68,6 +74,7 @@ export function createPostmarkProvider(config: PostmarkConfig): MailProvider {
           Accept: 'application/json',
         },
         body: JSON.stringify(body),
+        signal: options?.signal,
       });
 
       if (!res.ok) {

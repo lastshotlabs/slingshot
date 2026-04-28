@@ -21,6 +21,10 @@ export interface RunSuiteResult {
   output: string;
 }
 
+export interface RunCoverageOptions {
+  coverageRoot?: string;
+}
+
 const defaultIO: CoverageRunIO = {
   log: console.log,
   stdout: process.stdout,
@@ -155,8 +159,10 @@ export async function runCoverage(
   suites = coverageSuites,
   spawnFn: typeof Bun.spawn = Bun.spawn,
   io: CoverageRunIO = defaultIO,
+  options: RunCoverageOptions = {},
 ): Promise<number> {
-  rmSync('coverage', { recursive: true, force: true });
+  const coverageRoot = options.coverageRoot ?? 'coverage';
+  rmSync(coverageRoot, { recursive: true, force: true });
   const stagedArtifacts = new Map<string, string>();
   const rawArtifacts: string[] = [];
   const failures: CoverageFailure[] = [];
@@ -172,7 +178,7 @@ export async function runCoverage(
     }
   }
 
-  rmSync('coverage', { recursive: true, force: true });
+  rmSync(coverageRoot, { recursive: true, force: true });
 
   const mergedArtifact = rawArtifacts.filter(content => content.length > 0).join('\n');
 

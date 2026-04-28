@@ -289,7 +289,7 @@ export async function load() { return { data: {}, revalidate: false } }
     expect(paths).toContain('/articles/hello');
   });
 
-  it('times out staticPaths() that hangs when staticPathsTimeoutMs is short', async () => {
+  it('fails the build when staticPaths() times out', async () => {
     writeRoute(
       'slow/[id].ts',
       `
@@ -302,10 +302,24 @@ export async function load() { return { data: {}, revalidate: false } }
 `,
     );
 
-    // With 1ms timeout the crawl should skip this route and return empty
-    const paths = await collectSsgRoutes(makeConfig({ staticPathsTimeoutMs: 1 }));
-    expect(paths).not.toContain('/slow/1');
-    // Other routes are unaffected
-    expect(Array.isArray(paths)).toBe(true);
+    await expect(collectSsgRoutes(makeConfig({ staticPathsTimeoutMs: 1 }))).rejects.toThrow(
+      /staticPaths\(\) failed/,
+    );
+  });
+
+  it('fails the build when staticPaths() returns too many params', async () => {
+    writeRoute(
+      'many/[id].ts',
+      `
+export async function staticPaths() {
+  return [{ id: '1' }, { id: '2' }];
+}
+export async function load() { return { data: {}, revalidate: false } }
+`,
+    );
+
+    await expect(collectSsgRoutes(makeConfig({ maxStaticPathsPerRoute: 1 }))).rejects.toThrow(
+      /maxStaticPathsPerRoute is 1/,
+    );
   });
 });

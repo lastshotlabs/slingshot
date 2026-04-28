@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-const PATCH_MARKER =
-  'slingshot-local-patch(kafkajs-timeoutnegativewarning): remove when upstream KafkaJS ships a stable fix for issue #1751 / PR #1768';
+export const KAFKAJS_TIMEOUT_PATCH_MARKER =
+  'slingshot-local-patch(kafkajs-timeoutnegativewarning)';
 
 const OLD_SNIPPET = `  scheduleCheckPendingRequests() {
     // If we're throttled: Schedule checkPendingRequests when the throttle
@@ -24,7 +24,7 @@ const OLD_SNIPPET = `  scheduleCheckPendingRequests() {
 }`;
 
 const NEW_SNIPPET = `  scheduleCheckPendingRequests() {
-    // slingshot-local-patch(kafkajs-timeoutnegativewarning): remove when upstream KafkaJS
+    // ${KAFKAJS_TIMEOUT_PATCH_MARKER}: remove when upstream KafkaJS
     // ships a stable fix for issue #1751 / PR #1768. Bun and modern Node warn when
     // setTimeout receives a negative delay; if there are no pending requests and throttling
     // has already expired, there is nothing useful to schedule.
@@ -43,7 +43,18 @@ const NEW_SNIPPET = `  scheduleCheckPendingRequests() {
   }
 }`;
 
-function collectKafkaJsRequestQueueFiles(rootDir: string): string[] {
+interface PatchLogger {
+  log(message: string): void;
+  warn(message: string): void;
+}
+
+export interface LocalPatchResult {
+  patchedCount: number;
+  alreadyPatchedCount: number;
+  skippedCount: number;
+}
+
+export function collectKafkaJsRequestQueueFiles(rootDir: string): string[] {
   const files: string[] = [];
 
   const bunDir = join(rootDir, 'node_modules', '.bun');
@@ -82,9 +93,11 @@ function collectKafkaJsRequestQueueFiles(rootDir: string): string[] {
   return [...new Set(files)];
 }
 
-function patchKafkaJsRequestQueue(filePath: string): 'patched' | 'already-patched' | 'skipped' {
+export function patchKafkaJsRequestQueue(
+  filePath: string,
+): 'patched' | 'already-patched' | 'skipped' {
   const source = readFileSync(filePath, 'utf8');
-  if (source.includes(PATCH_MARKER)) {
+  if (source.includes(KAFKAJS_TIMEOUT_PATCH_MARKER)) {
     return 'already-patched';
   }
   if (!source.includes(OLD_SNIPPET)) {
@@ -95,31 +108,51 @@ function patchKafkaJsRequestQueue(filePath: string): 'patched' | 'already-patche
   return 'patched';
 }
 
-const rootDir = resolve(import.meta.dir, '..');
-const kafkaJsFiles = collectKafkaJsRequestQueueFiles(rootDir);
+export function applyLocalPatches(
+  rootDir = resolve(import.meta.dir, '..'),
+  logger: PatchLogger = console,
+): LocalPatchResult {
+  const kafkaJsFiles = collectKafkaJsRequestQueueFiles(rootDir);
 
-if (kafkaJsFiles.length === 0) {
-  console.log('[postinstall] No local KafkaJS installation found; skipping local patches.');
-  process.exit(0);
-}
-
-let patchedCount = 0;
-let alreadyPatchedCount = 0;
-
-for (const filePath of kafkaJsFiles) {
-  const result = patchKafkaJsRequestQueue(filePath);
-  if (result === 'patched') {
-    patchedCount += 1;
-    console.log(`[postinstall] Patched KafkaJS request queue timeout handling: ${filePath}`);
-  } else if (result === 'already-patched') {
-    alreadyPatchedCount += 1;
-  } else {
-    console.warn(
-      `[postinstall] KafkaJS patch target did not match expected source; leaving file unchanged: ${filePath}`,
-    );
+  if (kafkaJsFiles.length === 0) {
+    logger.log('[postinstall] No local KafkaJS installation found; skipping local patches.');
+    return {
+      patchedCount: 0,
+      alreadyPatchedCount: 0,
+      skippedCount: 0,
+    };
   }
+
+  let patchedCount = 0;
+  let alreadyPatchedCount = 0;
+  let skippedCount = 0;
+
+  for (const filePath of kafkaJsFiles) {
+    const result = patchKafkaJsRequestQueue(filePath);
+    if (result === 'patched') {
+      patchedCount += 1;
+      logger.log(`[postinstall] Patched KafkaJS request queue timeout handling: ${filePath}`);
+    } else if (result === 'already-patched') {
+      alreadyPatchedCount += 1;
+    } else {
+      skippedCount += 1;
+      logger.warn(
+        `[postinstall] KafkaJS patch target did not match expected source; leaving file unchanged: ${filePath}`,
+      );
+    }
+  }
+
+  if (alreadyPatchedCount > 0 && patchedCount === 0) {
+    logger.log('[postinstall] KafkaJS local patch already applied.');
+  }
+
+  return {
+    patchedCount,
+    alreadyPatchedCount,
+    skippedCount,
+  };
 }
 
-if (alreadyPatchedCount > 0 && patchedCount === 0) {
-  console.log('[postinstall] KafkaJS local patch already applied.');
+if (import.meta.main) {
+  applyLocalPatches();
 }

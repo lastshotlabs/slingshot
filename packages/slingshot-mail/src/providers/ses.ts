@@ -4,7 +4,13 @@ import type {
   SendEmailCommandInput,
   SendEmailCommandOutput,
 } from '@aws-sdk/client-sesv2';
-import type { MailAddress, MailMessage, MailProvider, SendResult } from '../types/provider';
+import type {
+  MailAddress,
+  MailMessage,
+  MailProvider,
+  MailSendOptions,
+  SendResult,
+} from '../types/provider';
 import { MailSendError } from '../types/provider';
 
 interface SesConfig {
@@ -67,7 +73,7 @@ export function createSesProvider(config: SesConfig): MailProvider {
 
   return {
     name: 'ses',
-    async send(message: MailMessage): Promise<SendResult> {
+    async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
       const { client, SendEmailCommand: SESCommand } = await getSes();
 
       const toAddresses = Array.isArray(message.to)
@@ -103,7 +109,9 @@ export function createSesProvider(config: SesConfig): MailProvider {
       };
 
       try {
-        const result: SendEmailCommandOutput = await client.send(new SESCommand(input));
+        const result: SendEmailCommandOutput = await client.send(new SESCommand(input), {
+          abortSignal: options?.signal,
+        });
         return { status: 'sent', messageId: result.MessageId, raw: result };
       } catch (err) {
         const e = err as { $metadata?: { httpStatusCode?: number }; message?: string };

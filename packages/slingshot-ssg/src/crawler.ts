@@ -41,6 +41,7 @@ export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
   const routeFiles = await collectRouteFiles(config.serverRoutesDir);
   const paths: string[] = [];
   const staticPathsTimeoutMs = config.staticPathsTimeoutMs ?? 60_000;
+  const maxStaticPathsPerRoute = config.maxStaticPathsPerRoute ?? 10_000;
 
   for (const filePath of routeFiles) {
     const source = safeReadSource(filePath);
@@ -68,6 +69,7 @@ export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
         filePath,
         config.serverRoutesDir,
         staticPathsTimeoutMs,
+        maxStaticPathsPerRoute,
       );
       paths.push(...expandedPaths);
     } else {
@@ -275,6 +277,7 @@ async function callStaticPaths(
   filePath: string,
   routesDir: string,
   timeoutMs: number,
+  maxParamSets: number,
 ): Promise<string[]> {
   let mod: Record<string, unknown>;
   try {
@@ -324,8 +327,19 @@ async function callStaticPaths(
     });
     paramSets = await Promise.race([callPromise, timeoutPromise]);
   } catch (err) {
-    console.warn(`[slingshot-ssg] ${filePath}: ${resolvedFnName}() threw:`, err);
-    return [];
+    throw new Error(`[slingshot-ssg] ${filePath}: ${resolvedFnName}() failed`, { cause: err });
+  }
+
+  if (!Array.isArray(paramSets)) {
+    throw new Error(
+      `[slingshot-ssg] ${filePath}: ${resolvedFnName}() must return an array of parameter objects`,
+    );
+  }
+  if (paramSets.length > maxParamSets) {
+    throw new Error(
+      `[slingshot-ssg] ${filePath}: ${resolvedFnName}() returned ${paramSets.length} parameter sets; ` +
+        `maxStaticPathsPerRoute is ${maxParamSets}`,
+    );
   }
 
   const template = filePathToUrlPathTemplate(filePath, routesDir);

@@ -309,6 +309,19 @@ describe('createBullMQMailQueue', () => {
 
       expect(thrown.name).toBe('UnrecoverableError');
     });
+
+    it('hung provider send times out as retryable MailSendError', async () => {
+      const provider = makeProvider(async () => new Promise<never>(() => {}));
+      const q = createBullMQMailQueue({ redis: { host: 'localhost' }, sendTimeoutMs: 10 });
+      await q.start(provider);
+
+      const msg = { to: 'u@example.com', subject: 'S', html: '<p>S</p>' };
+      const thrown = await capturedProcessor!({ data: { message: msg } }).catch(e => e);
+
+      expect(thrown).toBeInstanceOf(MailSendError);
+      expect(thrown.retryable).toBe(true);
+      expect(thrown.message).toContain('timed out');
+    });
   });
 
   describe('Worker failed handler', () => {

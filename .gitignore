@@ -43,3 +43,4 @@ packages/*/tsconfig.build.tsbuildinfo
 
 # Stray SQLite test artifacts
 file:test-*
+.test-cleanup*

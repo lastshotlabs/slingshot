@@ -222,6 +222,17 @@ describe('createApnsProvider — HTTP error classification', () => {
     if (!result.ok) expect(result.reason).toBe('rateLimited');
   });
 
+  test('429 Retry-After seconds is exposed as retryAfterMs', async () => {
+    fetchSpy.mockResolvedValue(makeFetchResponse(429, 'slow down', { 'retry-after': '3' }));
+    const provider = createApnsProvider({ auth: fakeAuth });
+    const result = await provider.send(iosSub(), { title: 'Hello' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('rateLimited');
+      expect(result.retryAfterMs).toBe(3000);
+    }
+  });
+
   test('500 → transient', async () => {
     mockStatus(500);
     const provider = createApnsProvider({ auth: fakeAuth });

@@ -1,4 +1,10 @@
-import type { MailAddress, MailMessage, MailProvider, SendResult } from '../types/provider';
+import type {
+  MailAddress,
+  MailMessage,
+  MailProvider,
+  MailSendOptions,
+  SendResult,
+} from '../types/provider';
 import { MailSendError } from '../types/provider';
 
 interface ResendConfig {
@@ -49,7 +55,7 @@ export function createResendProvider(config: ResendConfig): MailProvider {
 
   return {
     name: 'resend',
-    async send(message: MailMessage): Promise<SendResult> {
+    async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
       const body: ResendBody = {
         to: formatAddresses(message.to),
         subject: message.subject,
@@ -70,6 +76,7 @@ export function createResendProvider(config: ResendConfig): MailProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal: options?.signal,
       });
 
       if (!res.ok) {

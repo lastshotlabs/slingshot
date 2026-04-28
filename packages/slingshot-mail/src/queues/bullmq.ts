@@ -9,6 +9,7 @@ import type { Redis } from 'ioredis';
 import type { MailMessage, MailProvider } from '../types/provider';
 import { MailSendError } from '../types/provider';
 import type { MailJob, MailQueue, MailQueueConfig } from '../types/queue';
+import { sendWithTimeout } from './sendWithTimeout';
 
 interface BullMQMailQueueConfig extends MailQueueConfig {
   redis: { host: string; port?: number; password?: string } | string;
@@ -50,6 +51,7 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
   const queueName = config.queueName ?? 'slingshot-mail';
   const maxAttempts = config.maxAttempts ?? 3;
   const retryBaseDelayMs = config.retryBaseDelayMs ?? 1000;
+  const sendTimeoutMs = config.sendTimeoutMs ?? 30_000;
   let queue: BullQueue | null = null;
   let worker: BullWorker | null = null;
   let connection: Redis | null = null;
@@ -125,7 +127,7 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
           const { message } = job.data;
           let result;
           try {
-            result = await provider.send(message);
+            result = await sendWithTimeout(provider, message, sendTimeoutMs);
           } catch (err) {
             if (err instanceof MailSendError && !err.retryable) {
               // Use BullMQ's UnrecoverableError to prevent retries, and preserve the

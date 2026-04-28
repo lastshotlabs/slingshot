@@ -6,6 +6,7 @@ import { collectRootCoverageTestFiles, partitionRootTestFiles } from './root-tes
 export async function runRootCoverage(
   files?: string[],
   spawnFn: typeof Bun.spawn = Bun.spawn,
+  coverageDir = 'coverage/root',
 ): Promise<number> {
   const resolvedFiles = files ?? (await collectRootCoverageTestFiles());
   if (resolvedFiles.length === 0) {
@@ -18,12 +19,12 @@ export async function runRootCoverage(
   let runCounter = 0;
   let exitCode = 0;
 
-  rmSync('coverage/root', { recursive: true, force: true });
-  mkdirSync('coverage/root', { recursive: true });
+  rmSync(coverageDir, { recursive: true, force: true });
+  mkdirSync(coverageDir, { recursive: true });
 
   function nextRunCoverageDir(kind: string): string {
     runCounter += 1;
-    return join('coverage/root', '.runs', `${String(runCounter).padStart(3, '0')}-${kind}`);
+    return join(coverageDir, '.runs', `${String(runCounter).padStart(3, '0')}-${kind}`);
   }
 
   for (let index = 0; index < bulk.length; index += chunkSize) {
@@ -97,7 +98,7 @@ export async function runRootCoverage(
     }
   }
 
-  mergeLcovArtifacts(artifacts, 'coverage/root/lcov.info');
+  mergeLcovArtifacts(artifacts, join(coverageDir, 'lcov.info'));
   return exitCode;
 }
 

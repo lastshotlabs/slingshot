@@ -38,6 +38,11 @@ export interface MailQueueConfig {
    */
   drainTimeoutMs?: number;
   /**
+   * Maximum milliseconds a single provider.send() call may run before the job is
+   * treated as retryable timeout. Default: 30000. Set to 0 to disable.
+   */
+  sendTimeoutMs?: number;
+  /**
    * Called when a job exceeds `maxAttempts` or encounters a permanent failure.
    * Use this for alerting, logging, or persisting failed deliveries.
    */

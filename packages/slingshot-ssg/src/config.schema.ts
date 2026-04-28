@@ -52,7 +52,15 @@ export const ssgConfigSchema = z.object({
     .positive()
     .optional()
     .describe(
-      'Maximum milliseconds for staticPaths() / generateStaticParams() to run before timing out. Default: 60000.',
+      'Maximum milliseconds for staticPaths() / generateStaticParams() to run before the build fails. Default: 60000.',
+    ),
+  maxStaticPathsPerRoute: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum number of parameter sets a single dynamic route may return. Omit to use the default (10000).',
     ),
 });
 

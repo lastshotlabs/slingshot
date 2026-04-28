@@ -7,6 +7,15 @@ function base64UrlEncode(input: Buffer | string): string {
   return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
+function parseRetryAfterMs(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.trunc(seconds * 1000);
+  const dateMs = Date.parse(value);
+  if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+  return undefined;
+}
+
 /**
  * JWT-based APNS auth token provider.
  *
@@ -150,9 +159,19 @@ export function createApnsProvider(config: {
           return { ok: false, reason: 'payloadTooLarge', error: await response.text() };
         }
         if (response.status === 429) {
-          return { ok: false, reason: 'rateLimited', error: await response.text() };
+          return {
+            ok: false,
+            reason: 'rateLimited',
+            error: await response.text(),
+            retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')),
+          };
         }
-        return { ok: false, reason: 'transient', error: await response.text() };
+        return {
+          ok: false,
+          reason: 'transient',
+          error: await response.text(),
+          retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')),
+        };
       } catch (error) {
         return {
           ok: false,

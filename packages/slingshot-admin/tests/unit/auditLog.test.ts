@@ -6,7 +6,10 @@ import { createMemoryManagedUserProvider } from '../../src/providers/memoryAcces
 import { createAdminRouter } from '../../src/routes/admin';
 import type { AdminEnv } from '../../src/types/env';
 
-function buildApp(auditLog?: AuditLogProvider) {
+function buildApp(
+  auditLog?: AuditLogProvider,
+  overrides: Partial<Parameters<typeof createAdminRouter>[0]> = {},
+) {
   const managedUserProvider = createMemoryManagedUserProvider();
   const app = new Hono<AdminEnv>();
 
@@ -22,6 +25,7 @@ function buildApp(auditLog?: AuditLogProvider) {
       bus: createInProcessAdapter(),
       evaluator: { can: async () => true },
       auditLog,
+      ...overrides,
     }),
   );
 
@@ -97,5 +101,61 @@ describe('tryLogAuditEntry — audit failures do not propagate to HTTP callers',
     });
 
     expect(res.status).toBe(200);
+  });
+
+  test('failed sensitive operation writes an audit entry', async () => {
+    const auditLog: AuditLogProvider = {
+      logEntry: mock(async () => {}),
+      getLogs: mock(async () => ({ items: [], nextCursor: undefined })),
+    };
+    const { app } = buildApp(auditLog);
+
+    const res = await app.request('/users/missing/suspend', { method: 'POST' });
+
+    expect(res.status).toBe(404);
+    expect(auditLog.logEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin.user.suspend',
+        resourceId: 'missing',
+        status: 404,
+      }),
+    );
+  });
+
+  test('destructive admin endpoints are rate limited', async () => {
+    const auditLog: AuditLogProvider = {
+      logEntry: mock(async () => {}),
+      getLogs: mock(async () => ({ items: [], nextCursor: undefined })),
+    };
+    const { app, managedUserProvider } = buildApp(auditLog, {
+      destructiveRateLimit: { max: 1, windowMs: 60_000 },
+    });
+    managedUserProvider.seedUser(BASE_USER);
+
+    const first = await app.request('/users/u-1/suspend', { method: 'POST' });
+    const second = await app.request('/users/u-1/suspend', { method: 'POST' });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(429);
+    expect(second.headers.get('Retry-After')).toBeTruthy();
+    expect(auditLog.logEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin.user.suspend',
+        status: 429,
+      }),
+    );
+  });
+
+  test('GET /audit-log user filter is tenant scoped before querying audit backend', async () => {
+    const auditLog: AuditLogProvider = {
+      logEntry: mock(async () => {}),
+      getLogs: mock(async () => ({ items: [], nextCursor: undefined })),
+    };
+    const { app } = buildApp(auditLog);
+
+    const res = await app.request('/audit-log?userId=outside-tenant');
+
+    expect(res.status).toBe(404);
+    expect(auditLog.getLogs).not.toHaveBeenCalled();
   });
 });

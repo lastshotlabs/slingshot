@@ -74,4 +74,22 @@ describe('root entrypoints', () => {
 
     expect(typeof cliUtils.resolvePlatformConfig).toBe('function');
   });
+
+  test('orchestration worker command exposes Temporal manifest worker wiring', async () => {
+    const WorkerCommand = (await import('../../src/cli/commands/orchestration/worker.ts')).default;
+    const temporalWorkerFactory = await import(
+      '../../src/lib/createTemporalOrchestrationWorkerFromManifest.ts'
+    );
+
+    expect(typeof temporalWorkerFactory.createTemporalOrchestrationWorkerFromManifest).toBe(
+      'function',
+    );
+    expect(WorkerCommand.description).toContain('Temporal-backed Slingshot orchestration worker');
+    expect(Object.keys(WorkerCommand.flags).sort()).toEqual([
+      'build-id',
+      'dry-run',
+      'handlers',
+      'manifest',
+    ]);
+  });
 });

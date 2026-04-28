@@ -231,4 +231,27 @@ describe('createMemoryQueue', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('drain() timed out'));
     await queue.stop();
   });
+
+  it('times out hung provider sends and dead-letters after max attempts', async () => {
+    const deadLetterCallback = mock(() => {});
+    const provider: MailProvider = {
+      name: 'mock',
+      send: mock(async () => new Promise<never>(() => {})),
+    };
+
+    const queue = createMemoryQueue({
+      maxAttempts: 1,
+      sendTimeoutMs: 10,
+      drainTimeoutMs: 100,
+      onDeadLetter: deadLetterCallback,
+    });
+    await queue.start(provider);
+    await queue.enqueue(makeMessage());
+    await queue.drain!();
+
+    expect(deadLetterCallback).toHaveBeenCalledTimes(1);
+    const [, err] = deadLetterCallback.mock.calls[0] as unknown as [unknown, Error];
+    expect(err.message).toContain('timed out');
+    await queue.stop();
+  });
 });

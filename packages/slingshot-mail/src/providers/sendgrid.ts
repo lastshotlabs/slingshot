@@ -1,4 +1,10 @@
-import type { MailAddress, MailMessage, MailProvider, SendResult } from '../types/provider';
+import type {
+  MailAddress,
+  MailMessage,
+  MailProvider,
+  MailSendOptions,
+  SendResult,
+} from '../types/provider';
 import { MailSendError } from '../types/provider';
 
 interface SendgridConfig {
@@ -45,7 +51,7 @@ export function createSendgridProvider(config: SendgridConfig): MailProvider {
 
   return {
     name: 'sendgrid',
-    async send(message: MailMessage): Promise<SendResult> {
+    async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
       const toAddresses = Array.isArray(message.to)
         ? message.to.map(toSgAddress)
         : [toSgAddress(message.to)];
@@ -69,6 +75,7 @@ export function createSendgridProvider(config: SendgridConfig): MailProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal: options?.signal,
       });
 
       if (!res.ok) {

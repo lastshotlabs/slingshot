@@ -10,6 +10,9 @@ import { z } from 'zod';
 import type {
   EventBusSerializationOptions,
   EventEnvelope,
+  HealthReport,
+  HealthState,
+  Logger,
   MetricsEmitter,
   SlingshotEventBus,
   SlingshotEventMap,
@@ -17,12 +20,15 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   JSON_SERIALIZER,
+  TimeoutError,
+  createConsoleLogger,
   createNoopMetricsEmitter,
   createRawEventEnvelope,
   isEventEnvelope,
   sanitizeHeaderValue,
   validateEventPayload,
   validatePluginConfig,
+  withTimeout,
 } from '@lastshotlabs/slingshot-core';
 import {
   COMPRESSION_CODEC,
@@ -43,7 +49,19 @@ export type KafkaAdapterDropReason =
   | 'pending-attempts-exhausted'
   | 'deserialize-failed'
   | 'null-message-value'
-  | 'shutdown-with-pending';
+  | 'shutdown-with-pending'
+  /** producer.send() exceeded `producerTimeoutMs` and was buffered for retry. */
+  | 'producer-timeout'
+  /**
+   * DLQ produce for an exhausted handler message failed and `onDlqFailure`
+   * is set to `'redeliver'` — the offset is left uncommitted so the broker
+   * redelivers the original message.
+   */
+  | 'dlq-production-failed'
+  /** custom deserializer exceeded `deserializeTimeoutMs`. */
+  | 'deserialize-timeout'
+  /** Handler exceeded `handlerTimeoutMs` during a rebalance quiesce. */
+  | 'handler-timeout';
 
 /**
  * Telemetry signal emitted when the adapter drops or skips a message.
@@ -118,6 +136,49 @@ export const kafkaAdapterOptionsSchema = z.object({
       (event: KafkaAdapterDropEvent) => void
     >(value => typeof value === 'function', 'onDrop must be a function')
     .optional(),
+  /**
+   * Maximum milliseconds to wait for `producer.send()` before rejecting.
+   * A hung broker would otherwise block emit() forever and overflow the
+   * pending buffer to OOM. Default: 30_000 (30 seconds).
+   */
+  producerTimeoutMs: z.number().int().positive().optional(),
+  /**
+   * Maximum milliseconds to wait for `producer.connect()` /
+   * `admin.connect()` before rejecting. Guards against DNS hangs at
+   * adapter init. Default: 30_000.
+   */
+  connectTimeoutMs: z.number().int().positive().optional(),
+  /**
+   * Maximum milliseconds a custom deserializer may take per message before
+   * the consumer treats the message as undecodable and routes it to the
+   * deserialization DLQ (or skips, per `deserializationErrorPolicy`).
+   * Default: 5_000.
+   */
+  deserializeTimeoutMs: z.number().int().positive().optional(),
+  /**
+   * Maximum milliseconds a single in-flight handler may take to settle
+   * during a rebalance. Handlers exceeding this limit are abandoned (the
+   * tracker is released) so GROUP_JOIN can proceed; the original promise
+   * continues running but its outcome no longer blocks the rebalance.
+   * Default: 60_000.
+   */
+  handlerTimeoutMs: z.number().int().positive().optional(),
+  /**
+   * Behavior when a downstream DLQ produce fails for an exhausted handler
+   * message. `redeliver` (default) leaves the offset uncommitted so the
+   * broker redelivers the message after restart. `commit-and-log` keeps
+   * the legacy behavior — log the failure and commit, accepting the lost
+   * message in exchange for forward progress.
+   */
+  onDlqFailure: z.enum(['redeliver', 'commit-and-log']).optional(),
+  /**
+   * How to derive a stable message id when an inbound message lacks the
+   * `slingshot.message-id` header. `fingerprint` (default) hashes the
+   * message body with SHA-256. `random` keeps the legacy `randomUUID()`
+   * behavior with a warning. `reject` throws — useful for callers that
+   * require strict provenance.
+   */
+  onIdMissing: z.enum(['fingerprint', 'random', 'reject']).optional(),
 });
 
 /**
@@ -147,6 +208,12 @@ interface ResolvedKafkaConfig {
   readonly deserializationErrorPolicy: KafkaAdapterDeserErrorPolicy;
   readonly pendingBufferSize: number;
   readonly onDrop: ((event: KafkaAdapterDropEvent) => void) | undefined;
+  readonly producerTimeoutMs: number;
+  readonly connectTimeoutMs: number;
+  readonly deserializeTimeoutMs: number;
+  readonly handlerTimeoutMs: number;
+  readonly onDlqFailure: 'redeliver' | 'commit-and-log';
+  readonly onIdMissing: 'fingerprint' | 'random' | 'reject';
 }
 
 const DEFAULTS = {
@@ -163,6 +230,12 @@ const DEFAULTS = {
   heartbeatInterval: 3_000,
   startFromBeginning: false,
   validation: 'off' as const,
+  producerTimeoutMs: 30_000,
+  connectTimeoutMs: 30_000,
+  deserializeTimeoutMs: 5_000,
+  handlerTimeoutMs: 60_000,
+  onDlqFailure: 'redeliver' as const,
+  onIdMissing: 'fingerprint' as const,
 } as const;
 
 interface PendingProduce {
@@ -180,6 +253,16 @@ interface DurableConsumerEntry {
   topic: string;
   event: string;
   name: string;
+  /**
+   * Resolves when consumer.connect() + consumer.subscribe() both settle. The
+   * adapter uses this in shutdown to ensure pending setup never overlaps a
+   * teardown, and tests can await it to assert subscribe outcomes.
+   */
+  setupPromise: Promise<void>;
+  /** Final state of `setupPromise` — surfaced through health(). */
+  setupState: 'pending' | 'subscribed' | 'failed';
+  /** Reason for the failed state, if any. */
+  setupError?: unknown;
 }
 
 export interface KafkaAdapterHealthConsumer {
@@ -356,16 +439,33 @@ export function createKafkaAdapter(
        * without log scraping. Defaults to a no-op emitter.
        */
       metrics?: MetricsEmitter;
+      /**
+       * Optional structured logger. Defaults to a console-backed JSON
+       * logger when omitted. All warn/error paths route through the logger
+       * so no structured information is lost to console formatting.
+       */
+      logger?: Logger;
     },
 ): SlingshotEventBus & {
   readonly __slingshotKafkaAdapter?: KafkaAdapterIntrospection;
   health(): KafkaAdapterHealth;
-  getHealth(): KafkaAdapterHealthSnapshot;
+  /** {@link HealthCheck.getHealth} — synchronous, last-cached state. */
+  getHealth(): HealthReport;
+  /** Structured snapshot kept for callers that need raw counters. */
+  getHealthSnapshot(): KafkaAdapterHealthSnapshot;
   _drainPendingBuffer(): Promise<void>;
   shutdown(): Promise<void>;
 } {
-  const { serializer, schemaRegistry, metrics: metricsOpt, ...adapterOpts } = rawOpts;
+  const {
+    serializer,
+    schemaRegistry,
+    metrics: metricsOpt,
+    logger: rawLogger,
+    ...adapterOpts
+  } = rawOpts;
   const metrics: MetricsEmitter = metricsOpt ?? createNoopMetricsEmitter();
+  const logger: Logger =
+    rawLogger ?? createConsoleLogger({ base: { component: 'slingshot-kafka' } });
   const opts = validatePluginConfig('slingshot-kafka', adapterOpts, kafkaAdapterOptionsSchema);
   const config: ResolvedKafkaConfig = Object.freeze({
     brokers: [...opts.brokers],
@@ -389,7 +489,17 @@ export function createKafkaAdapter(
     deserializationErrorPolicy: opts.deserializationErrorPolicy ?? 'dlq',
     pendingBufferSize: opts.pendingBufferSize ?? DEFAULT_PENDING_BUFFER_SIZE,
     onDrop: opts.onDrop,
+    producerTimeoutMs: opts.producerTimeoutMs ?? DEFAULTS.producerTimeoutMs,
+    connectTimeoutMs: opts.connectTimeoutMs ?? DEFAULTS.connectTimeoutMs,
+    deserializeTimeoutMs: opts.deserializeTimeoutMs ?? DEFAULTS.deserializeTimeoutMs,
+    handlerTimeoutMs: opts.handlerTimeoutMs ?? DEFAULTS.handlerTimeoutMs,
+    onDlqFailure: opts.onDlqFailure ?? DEFAULTS.onDlqFailure,
+    onIdMissing: opts.onIdMissing ?? DEFAULTS.onIdMissing,
   });
+
+  function errToString(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+  }
 
   function notifyDrop(event: KafkaAdapterDropEvent): void {
     dropCounts[event.reason] = (dropCounts[event.reason] ?? 0) + 1;
@@ -400,7 +510,7 @@ export function createKafkaAdapter(
     try {
       config.onDrop(event);
     } catch (err) {
-      console.error('[KafkaAdapter] onDrop callback threw:', err);
+      logger.error('onDrop callback threw', { err: errToString(err) });
     }
   }
 
@@ -462,6 +572,10 @@ export function createKafkaAdapter(
     'deserialize-failed': 0,
     'null-message-value': 0,
     'shutdown-with-pending': 0,
+    'producer-timeout': 0,
+    'dlq-production-failed': 0,
+    'deserialize-timeout': 0,
+    'handler-timeout': 0,
   };
   let totalDrops = 0;
   let lastDropAt: number | null = null;
@@ -495,7 +609,12 @@ export function createKafkaAdapter(
     if (producer) return producer;
     const nextProducer = kafka.producer({ idempotent: true, maxInFlightRequests: 5 });
     try {
-      await nextProducer.connect();
+      // Bound producer.connect() so DNS hangs cannot stall init forever.
+      await withTimeout(
+        nextProducer.connect(),
+        config.connectTimeoutMs,
+        'kafka.producer.connect',
+      );
       producer = nextProducer;
       producerConnected = true;
       metrics.gauge('kafka.producer.connected', 1);
@@ -512,7 +631,13 @@ export function createKafkaAdapter(
     if (admin) return admin;
     const nextAdmin = kafka.admin();
     try {
-      await nextAdmin.connect();
+      // Same connect bound as the producer — admin DNS hangs would
+      // otherwise block ensureTopic at adapter init.
+      await withTimeout(
+        nextAdmin.connect(),
+        config.connectTimeoutMs,
+        'kafka.admin.connect',
+      );
       admin = nextAdmin;
       adminConnected = true;
       return nextAdmin;
@@ -561,30 +686,38 @@ export function createKafkaAdapter(
         const drainStart = performance.now();
         try {
           await ensureTopic(item.topic);
-          await ensuredProducer.send({
-            topic: item.topic,
-            compression: config.compression ? COMPRESSION_CODEC[config.compression] : undefined,
-            messages: [
-              {
-                key: item.key ?? undefined,
-                value: Buffer.from(item.serialized),
-                headers: item.headers,
-              },
-            ],
-          });
+          await withTimeout(
+            ensuredProducer.send({
+              topic: item.topic,
+              compression: config.compression ? COMPRESSION_CODEC[config.compression] : undefined,
+              messages: [
+                {
+                  key: item.key ?? undefined,
+                  value: Buffer.from(item.serialized),
+                  headers: item.headers,
+                },
+              ],
+            }),
+            config.producerTimeoutMs,
+            `kafka.producer.send[${item.topic}]`,
+          );
           metrics.counter('kafka.publish.count', 1, { topic: item.topic, result: 'success' });
           metrics.timing('kafka.publish.duration', performance.now() - drainStart, {
             topic: item.topic,
           });
         } catch (err) {
           metrics.counter('kafka.publish.count', 1, { topic: item.topic, result: 'failure' });
+          if (err instanceof TimeoutError) {
+            metrics.counter('kafka.producer.timeout', 1, { topic: item.topic });
+          }
           const next = { ...item, attempts: item.attempts + 1 };
           if (next.attempts >= MAX_PENDING_ATTEMPTS) {
-            console.error(
-              `[KafkaAdapter] dropping event "${item.event}" for topic "${item.topic}" ` +
-                `after ${MAX_PENDING_ATTEMPTS} attempts:`,
-              err,
-            );
+            logger.error('dropping event after pending-attempts exhausted', {
+              event: item.event,
+              topic: item.topic,
+              attempts: MAX_PENDING_ATTEMPTS,
+              err: errToString(err),
+            });
             notifyDrop({
               reason: 'pending-attempts-exhausted',
               event: item.event,
@@ -597,7 +730,9 @@ export function createKafkaAdapter(
         }
       }
     } catch (err) {
-      console.error('[KafkaAdapter] unable to reconnect while draining buffered events:', err);
+      logger.error('unable to reconnect while draining buffered events', {
+        err: errToString(err),
+      });
       pendingBuffer.unshift(...entries);
       metrics.gauge('kafka.pending.size', pendingBuffer.length);
       return;
@@ -677,30 +812,44 @@ export function createKafkaAdapter(
         allowAutoTopicCreation: config.autoCreateTopics,
       });
 
-      durableConsumers.set(entryKey, {
+      const entry: DurableConsumerEntry = {
         consumer,
         groupId,
         topic,
         event: event as string,
         name: opts.name,
-      });
-      if (!durableListeners.has(event as string)) {
-        durableListeners.set(event as string, new Set());
-      }
-      durableListeners
-        .get(event as string)
-        ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
+        setupPromise: Promise.resolve(),
+        setupState: 'pending',
+      };
+      durableConsumers.set(entryKey, entry);
 
-      void (async () => {
+      // P-KAFKA-6 + P-KAFKA-2: do NOT register the listener — and do NOT
+      // mark the consumer connected — until consumer.connect() and
+      // consumer.subscribe() both resolve. If subscribe rejects, the
+      // listener never receives messages and the entry is rolled back.
+      const setupPromise = (async () => {
         let connected = false;
         try {
           await ensureTopic(topic);
-          await consumer.connect();
+          await withTimeout(
+            consumer.connect(),
+            config.connectTimeoutMs,
+            `kafka.consumer.connect[${groupId}]`,
+          );
           connected = true;
           await consumer.subscribe({
             topic,
             fromBeginning: config.startFromBeginning,
           });
+
+          // Subscribe succeeded — only now register the listener so the
+          // bus does not believe we're consuming events that we are not.
+          if (!durableListeners.has(event as string)) {
+            durableListeners.set(event as string, new Set());
+          }
+          durableListeners
+            .get(event as string)
+            ?.add(listener as (envelope: EventEnvelope) => void | Promise<void>);
 
           // Wire rebalance lifecycle hooks BEFORE run() so we don't miss the
           // first GROUP_JOIN. On REBALANCING: pause new processing and flush
@@ -724,18 +873,41 @@ export function createKafkaAdapter(
                 consumer,
                 consumerEvents.REBALANCING,
                 async (rebalanceEvent: unknown) => {
-                  connectedConsumers.delete(entryKey);
+                  // Note: do not delete the consumer from connectedConsumers
+                  // here — the GROUP_JOIN that arrives on the very next
+                  // round-trip would race the SET maintained by P-KAFKA-2.
+                  // The consumer is connected throughout a rebalance.
                   rebalancingConsumers.add(entryKey);
-                  metrics.gauge('kafka.consumer.connected', 0, { topic, groupId });
-                  console.info(
-                    `[KafkaAdapter] rebalancing event="${eventName}" ` +
-                      `group="${groupId}" topic="${topic}"`,
-                  );
-                  // Wait for in-flight handlers to finish; we'll commit their
-                  // offsets next so the next assignment doesn't replay them.
+                  logger.info('rebalancing', {
+                    event: eventName,
+                    group: groupId,
+                    topic,
+                  });
+                  // P-KAFKA-13: wait for in-flight handlers to finish, but
+                  // bound each by `handlerTimeoutMs` so a hung handler
+                  // cannot block GROUP_JOIN forever (which would trigger
+                  // the broker session-timeout loop).
                   const inflight = inFlightHandlers.get(entryKey);
                   if (inflight && inflight.size > 0) {
-                    await Promise.allSettled([...inflight]);
+                    const bounded = Array.from(inflight).map(p =>
+                      withTimeout(p, config.handlerTimeoutMs, 'kafka.handler.rebalance').catch(
+                        err => {
+                          if (err instanceof TimeoutError) {
+                            notifyDrop({
+                              reason: 'handler-timeout',
+                              event: eventName,
+                              topic,
+                            });
+                            logger.warn('handler exceeded handlerTimeoutMs during rebalance', {
+                              event: eventName,
+                              group: groupId,
+                              timeoutMs: config.handlerTimeoutMs,
+                            });
+                          }
+                        },
+                      ),
+                    );
+                    await Promise.allSettled(bounded);
                   }
                   await flushPendingCommits(entryKey);
                   void rebalanceEvent;
@@ -743,22 +915,25 @@ export function createKafkaAdapter(
               );
               hasGroupJoinHook = true;
               consumerOn.call(consumer, consumerEvents.GROUP_JOIN, (joinEvent: unknown) => {
+                // Idempotent set membership — multiple GROUP_JOIN events
+                // (after a rebalance) keep the set in the connected state.
                 connectedConsumers.add(entryKey);
                 rebalancingConsumers.delete(entryKey);
                 metrics.gauge('kafka.consumer.connected', 1, { topic, groupId });
                 const member = (joinEvent as { payload?: { memberId?: string } } | undefined)
                   ?.payload?.memberId;
-                console.info(
-                  `[KafkaAdapter] group join event="${eventName}" ` +
-                    `group="${groupId}" memberId="${member ?? 'unknown'}"`,
-                );
+                logger.info('group join', {
+                  event: eventName,
+                  group: groupId,
+                  memberId: member ?? 'unknown',
+                });
               });
             } catch (instErr) {
               // Instrumentation hooks are best-effort; log and continue.
-              console.warn(
-                `[KafkaAdapter] failed to register rebalance listeners for "${groupId}":`,
-                instErr,
-              );
+              logger.warn('failed to register rebalance listeners', {
+                group: groupId,
+                err: errToString(instErr),
+              });
             }
           }
 
@@ -766,21 +941,27 @@ export function createKafkaAdapter(
             autoCommit: false,
             partitionsConsumedConcurrently: 1,
             eachMessage: async payload => {
-              const entry = durableConsumers.get(entryKey);
-              if (!entry) return;
+              const e = durableConsumers.get(entryKey);
+              if (!e) return;
               await processDurableMessage(
                 entryKey,
-                entry,
+                e,
                 listener as (envelope: EventEnvelope) => void | Promise<void>,
                 payload,
               );
             },
           });
+          // P-KAFKA-2: only mark connected when both connect + subscribe +
+          // run succeed (or after the first GROUP_JOIN, which is wired
+          // above).
           if (!hasGroupJoinHook) {
             connectedConsumers.add(entryKey);
             metrics.gauge('kafka.consumer.connected', 1, { topic, groupId });
           }
+          entry.setupState = 'subscribed';
         } catch (err) {
+          entry.setupState = 'failed';
+          entry.setupError = err;
           connectedConsumers.delete(entryKey);
           durableConsumers.delete(entryKey);
           durableListeners
@@ -790,18 +971,25 @@ export function createKafkaAdapter(
             try {
               await consumer.disconnect();
             } catch (disconnectErr) {
-              console.error(
-                `[KafkaAdapter] error disconnecting failed consumer "${groupId}":`,
-                disconnectErr,
-              );
+              logger.error('error disconnecting failed consumer', {
+                group: groupId,
+                err: errToString(disconnectErr),
+              });
             }
           }
-          console.error(
-            `[KafkaAdapter] durable consumer setup failed for event "${event}" group "${groupId}":`,
-            err,
-          );
+          logger.error('durable consumer setup failed', {
+            event: event as string,
+            group: groupId,
+            err: errToString(err),
+          });
+          throw err;
         }
       })();
+      // Track the setup promise so shutdown() and tests can observe it.
+      // The catch keeps the unhandled-rejection trap quiet — callers that
+      // need the error inspect entry.setupState / entry.setupError or
+      // await the promise themselves.
+      entry.setupPromise = setupPromise.catch(() => undefined);
       return;
     }
 
@@ -829,12 +1017,27 @@ export function createKafkaAdapter(
         pendingCommitOffsets.get(entryKey)?.delete(`${topic}|${partition}`);
       }
     } catch (err) {
-      // Commit failure means at-least-once redelivery on restart — log and continue.
-      console.error(
-        `[KafkaAdapter] failed to commit offset for topic "${topic}" partition ${partition} ` +
-          `offset ${message.offset}:`,
-        err,
-      );
+      // P-KAFKA-9: do NOT silently swallow. Log, pause the partition so the
+      // broker stops redelivering until the operator (or rebalance) clears
+      // the condition, and re-throw so the caller's `eachMessage` chain
+      // surfaces the failure to kafkajs (which will trigger a CRASH event
+      // and reconnect cycle if the failure persists). Pause is best-effort
+      // — kafkajs's pause() requires the active assignment.
+      logger.error('failed to commit offset', {
+        topic,
+        partition,
+        offset: message.offset,
+        err: errToString(err),
+      });
+      try {
+        const pause = (consumer as { pause?: (args: unknown[]) => void }).pause;
+        if (typeof pause === 'function') {
+          pause.call(consumer, [{ topic, partitions: [partition] }]);
+        }
+      } catch {
+        // Best-effort — pause() may not be available pre-assignment.
+      }
+      throw err;
     }
   }
 
@@ -884,26 +1087,30 @@ export function createKafkaAdapter(
     // topic suffix. `x-slingshot-dlq-reason` is the canonical filter header.
     const errorType: 'deserialize' | 'handler' = suffix === 'deser-dlq' ? 'deserialize' : 'handler';
     metrics.counter('kafka.dlq.count', 1, { topic, errorType });
-    await ensuredProducer.send({
-      topic: dlqTopic,
-      messages: [
-        {
-          key: message.key?.toString(),
-          value: message.value ? Buffer.from(message.value) : null,
-          headers: {
-            'slingshot.event': message.headers?.['slingshot.event']?.toString() ?? topic,
-            'slingshot.timestamp': Date.now().toString(),
-            'slingshot.original-topic': topic,
-            'slingshot.original-partition': String(partition),
-            'slingshot.original-offset': message.offset,
-            'slingshot.error': error instanceof Error ? error.message : String(error),
-            'slingshot.error-type': errorType,
-            'slingshot.dlq-reason': suffix,
-            'x-slingshot-dlq-reason': errorType,
+    await withTimeout(
+      ensuredProducer.send({
+        topic: dlqTopic,
+        messages: [
+          {
+            key: message.key?.toString(),
+            value: message.value ? Buffer.from(message.value) : null,
+            headers: {
+              'slingshot.event': message.headers?.['slingshot.event']?.toString() ?? topic,
+              'slingshot.timestamp': Date.now().toString(),
+              'slingshot.original-topic': topic,
+              'slingshot.original-partition': String(partition),
+              'slingshot.original-offset': message.offset,
+              'slingshot.error': error instanceof Error ? error.message : String(error),
+              'slingshot.error-type': errorType,
+              'slingshot.dlq-reason': suffix,
+              'x-slingshot-dlq-reason': errorType,
+            },
           },
-        },
-      ],
-    });
+        ],
+      }),
+      config.producerTimeoutMs,
+      `kafka.dlq.send[${dlqTopic}]`,
+    );
   }
 
   async function processDurableMessage(
@@ -959,7 +1166,14 @@ export function createKafkaAdapter(
       // decode -> validate -> next-heartbeat, with no interleaved scheduling
       // surprises depending on the runtime's setImmediate semantics.
       await new Promise<void>(resolve => setImmediate(resolve));
-      const decoded = eventSerializer.deserialize(entry.event, message.value as Buffer);
+      // P-KAFKA-14: bound the user serializer/deserializer with
+      // `deserializeTimeoutMs` so a stalled custom decoder cannot starve
+      // the consumer's heartbeat loop.
+      const decoded = await withTimeout(
+        Promise.resolve().then(() => eventSerializer.deserialize(entry.event, message.value as Buffer)),
+        config.deserializeTimeoutMs,
+        `kafka.deserialize[${entry.event}]`,
+      );
       decodedEnvelope = isEventEnvelope(decoded, entry.event as never)
         ? (decoded as EventEnvelope)
         : createRawEventEnvelope(
@@ -975,13 +1189,15 @@ export function createKafkaAdapter(
       // with a fresh session deadline.
       await heartbeat();
     } catch (deserializeErr) {
-      console.error(
-        `[KafkaAdapter] deserialization error on topic "${topic}" partition ${partition} ` +
-          `offset ${message.offset}:`,
-        deserializeErr,
-      );
+      const isTimeout = deserializeErr instanceof TimeoutError;
+      logger.error(isTimeout ? 'deserialize timed out' : 'deserialization error', {
+        topic,
+        partition,
+        offset: message.offset,
+        err: errToString(deserializeErr),
+      });
       notifyDrop({
-        reason: 'deserialize-failed',
+        reason: isTimeout ? 'deserialize-timeout' : 'deserialize-failed',
         event: entry.event,
         topic,
         partition,
@@ -995,10 +1211,10 @@ export function createKafkaAdapter(
         try {
           await sendToDlq(topic, partition, message, deserializeErr, 'deser-dlq');
         } catch (dlqErr) {
-          console.error(
-            '[KafkaAdapter] failed to publish undecodable message to deser-dlq:',
-            dlqErr,
-          );
+          logger.error('failed to publish undecodable message to deser-dlq', {
+            topic,
+            err: errToString(dlqErr),
+          });
         }
       }
       await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
@@ -1007,24 +1223,59 @@ export function createKafkaAdapter(
     }
 
     try {
+      let handlerSucceeded = false;
       for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
         try {
           await Promise.resolve(listener(decodedEnvelope));
-          await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
-          metrics.timing('kafka.consume.duration', performance.now() - consumeStart, { topic });
-          return;
+          handlerSucceeded = true;
+          break;
         } catch (err) {
           if (attempt >= config.maxRetries) {
+            // P-KAFKA-8: if the DLQ produce fails, the message is the only
+            // record of a poisoned event. With `onDlqFailure: 'redeliver'`
+            // (default) we DO NOT commit the offset — the broker will
+            // redeliver after restart, and the operator sees the
+            // `dlq-production-failed` drop event. With `'commit-and-log'`
+            // we accept the lost message in exchange for forward progress
+            // (legacy behaviour).
+            let dlqDelivered = false;
             try {
               await sendToDlq(topic, partition, message, err);
+              dlqDelivered = true;
             } catch (dlqErr) {
-              console.error('[KafkaAdapter] failed to publish exhausted message to DLQ:', dlqErr);
+              logger.error('failed to publish exhausted message to DLQ', {
+                topic,
+                err: errToString(dlqErr),
+              });
+              notifyDrop({
+                reason: 'dlq-production-failed',
+                event: entry.event,
+                topic,
+                partition,
+                offset: message.offset,
+                error: dlqErr,
+              });
             }
-            await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
+            if (dlqDelivered || config.onDlqFailure === 'commit-and-log') {
+              await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
+            } else {
+              // Skip the commit — broker redelivers on the next round.
+              logger.warn('DLQ produce failed; leaving offset uncommitted for redelivery', {
+                topic,
+                partition,
+                offset: message.offset,
+              });
+            }
             return;
           }
           await waitWithHeartbeat(heartbeat, backoffMs(attempt));
         }
+      }
+      if (handlerSucceeded) {
+        // Commit the offset OUTSIDE the retry try/catch so a commit failure
+        // surfaces (P-KAFKA-9) instead of being treated as a handler error.
+        await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
+        metrics.timing('kafka.consume.duration', performance.now() - consumeStart, { topic });
       }
     } finally {
       finish();
@@ -1034,7 +1285,8 @@ export function createKafkaAdapter(
   const bus: SlingshotEventBus & {
     readonly __slingshotKafkaAdapter?: KafkaAdapterIntrospection;
     health(): KafkaAdapterHealth;
-    getHealth(): KafkaAdapterHealthSnapshot;
+    getHealth(): HealthReport;
+    getHealthSnapshot(): KafkaAdapterHealthSnapshot;
     _drainPendingBuffer(): Promise<void>;
     shutdown(): Promise<void>;
   } = {
@@ -1094,26 +1346,38 @@ export function createKafkaAdapter(
           serialized = eventSerializer.serialize(event as string, envelope);
           await ensureTopic(topic);
           const ensuredProducer = await ensureProducer();
-          await ensuredProducer.send({
-            topic,
-            compression: config.compression ? COMPRESSION_CODEC[config.compression] : undefined,
-            messages: [
-              {
-                key: key ?? undefined,
-                value: Buffer.from(serialized),
-                headers,
-              },
-            ],
-          });
+          // P-KAFKA-7: bound the produce call. A hung broker would
+          // otherwise block this IIFE forever, fill the pending buffer to
+          // OOM, and never surface a signal.
+          await withTimeout(
+            ensuredProducer.send({
+              topic,
+              compression: config.compression ? COMPRESSION_CODEC[config.compression] : undefined,
+              messages: [
+                {
+                  key: key ?? undefined,
+                  value: Buffer.from(serialized),
+                  headers,
+                },
+              ],
+            }),
+            config.producerTimeoutMs,
+            `kafka.producer.send[${topic}]`,
+          );
           metrics.counter('kafka.publish.count', 1, { topic, result: 'success' });
           metrics.timing('kafka.publish.duration', performance.now() - publishStart, { topic });
         } catch (err) {
           metrics.counter('kafka.publish.count', 1, { topic, result: 'failure' });
+          const isTimeout = err instanceof TimeoutError;
+          if (isTimeout) {
+            metrics.counter('kafka.producer.timeout', 1, { topic });
+          }
           if (!serialized) {
-            console.error(
-              `[KafkaAdapter] failed to serialize event "${event}" for topic "${topic}":`,
-              err,
-            );
+            logger.error('failed to serialize event', {
+              event: event as string,
+              topic,
+              err: errToString(err),
+            });
             notifyDrop({
               reason: 'serialize-failed',
               event: event as string,
@@ -1123,10 +1387,11 @@ export function createKafkaAdapter(
             return;
           }
           if (pendingBuffer.length >= config.pendingBufferSize) {
-            console.error(
-              `[KafkaAdapter] pending buffer full; dropping event "${event}" for topic "${topic}":`,
-              err,
-            );
+            logger.error('pending buffer full; dropping event', {
+              event: event as string,
+              topic,
+              err: errToString(err),
+            });
             notifyDrop({
               reason: 'pending-buffer-full',
               event: event as string,
@@ -1134,6 +1399,22 @@ export function createKafkaAdapter(
               error: err,
             });
             return;
+          }
+          if (isTimeout) {
+            // Surface the timeout as a drop signal so operators can alert
+            // on producer-timeout independently of the eventual buffer
+            // overflow. The event itself is still buffered for retry.
+            notifyDrop({
+              reason: 'producer-timeout',
+              event: event as string,
+              topic,
+              error: err,
+            });
+            logger.warn('producer.send timed out; buffering for retry', {
+              event: event as string,
+              topic,
+              timeoutMs: config.producerTimeoutMs,
+            });
           }
           pendingBuffer.push({
             topic,
@@ -1228,17 +1509,27 @@ export function createKafkaAdapter(
       rebalancingConsumers.clear();
       for (const entry of consumers) {
         metrics.gauge('kafka.consumer.connected', 0, { topic: entry.topic, groupId: entry.groupId });
+        // Wait for the entry's setup chain so we don't race a still-in-
+        // flight subscribe with disconnect (P-KAFKA-6).
+        try {
+          await entry.setupPromise;
+        } catch {
+          // setup already failed; nothing to wait for.
+        }
         try {
           await entry.consumer.disconnect();
         } catch (err) {
-          console.error(`[KafkaAdapter] error disconnecting consumer "${entry.groupId}":`, err);
+          logger.error('error disconnecting consumer', {
+            group: entry.groupId,
+            err: errToString(err),
+          });
         }
       }
 
       if (pendingBuffer.length > 0) {
-        console.warn(
-          `[KafkaAdapter] shutdown: discarding ${pendingBuffer.length} buffered message(s).`,
-        );
+        logger.warn('shutdown: discarding buffered messages', {
+          count: pendingBuffer.length,
+        });
         for (const item of pendingBuffer) {
           notifyDrop({
             reason: 'shutdown-with-pending',
@@ -1253,7 +1544,7 @@ export function createKafkaAdapter(
         try {
           await producer.disconnect();
         } catch (err) {
-          console.error('[KafkaAdapter] error disconnecting producer:', err);
+          logger.error('error disconnecting producer', { err: errToString(err) });
         }
         producer = null;
         producerConnected = false;
@@ -1264,7 +1555,7 @@ export function createKafkaAdapter(
         try {
           await admin.disconnect();
         } catch (err) {
-          console.error('[KafkaAdapter] error disconnecting admin client:', err);
+          logger.error('error disconnecting admin client', { err: errToString(err) });
         }
         admin = null;
         adminConnected = false;
@@ -1295,7 +1586,7 @@ export function createKafkaAdapter(
       };
     },
 
-    getHealth(): KafkaAdapterHealthSnapshot {
+    getHealthSnapshot(): KafkaAdapterHealthSnapshot {
       const details = this.health();
       let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
       if (details.isShutdown) {
@@ -1313,6 +1604,33 @@ export function createKafkaAdapter(
         status = 'degraded';
       }
       return { status, details };
+    },
+
+    /**
+     * `HealthCheck.getHealth()` — returns a `HealthReport` aggregable by
+     * the framework's health endpoint. The structured snapshot remains
+     * available via `getHealthSnapshot()`.
+     */
+    getHealth(): HealthReport {
+      const snapshot = this.getHealthSnapshot();
+      const state: HealthState = snapshot.status;
+      return {
+        component: 'slingshot-kafka',
+        state,
+        ...(state === 'healthy'
+          ? {}
+          : { message: `kafka adapter ${state} (see details for counts)` }),
+        details: {
+          producerConnected: snapshot.details.producerConnected,
+          adminConnected: snapshot.details.adminConnected,
+          isShutdown: snapshot.details.isShutdown,
+          pendingBufferSize: snapshot.details.pendingBufferSize,
+          consumers: snapshot.details.consumers.length,
+          consumersConnected: snapshot.details.consumers.filter(c => c.connected).length,
+          totalDrops: snapshot.details.droppedMessages.totalDrops,
+          lastDropReason: snapshot.details.droppedMessages.lastDropReason,
+        },
+      };
     },
 
     _drainPendingBuffer: drainPendingBuffer,

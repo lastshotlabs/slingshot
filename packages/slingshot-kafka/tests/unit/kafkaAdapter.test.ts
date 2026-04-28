@@ -350,10 +350,10 @@ describe('kafkaAdapter', () => {
       });
 
       expect(listener).not.toHaveBeenCalled();
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('deserialization error'),
-        expect.any(Error),
-      );
+      // Logger emits a single JSON line per record — check the substring
+      // appears anywhere in the captured output.
+      const captured = errorSpy.mock.calls.map(c => String(c[0])).join(' ');
+      expect(captured).toContain('deserialization error');
     } finally {
       errorSpy.mockRestore();
       infoSpy.mockRestore();
@@ -428,17 +428,15 @@ describe('kafkaAdapter', () => {
         heartbeat: async () => {},
       });
 
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('failed to publish exhausted message to DLQ'),
-        expect.anything(),
-      );
+      const captured = errorSpy.mock.calls.map(c => String(c[0])).join(' ');
+      expect(captured).toContain('failed to publish exhausted message to DLQ');
     } finally {
       errorSpy.mockRestore();
       infoSpy.mockRestore();
     }
   });
 
-  test('logs a warning when commitOffsets fails and continues processing subsequent messages', async () => {
+  test('re-throws and pauses partition when commitOffsets fails (P-KAFKA-9)', async () => {
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
     const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
     const listener = mock(async () => {});
@@ -455,26 +453,31 @@ describe('kafkaAdapter', () => {
         sessionId: 's-commit-fail',
       });
       const consumer = fakeKafkaState.consumers[0];
-      await consumer?.eachMessage?.({
-        topic: 'slingshot.events.auth.login',
-        partition: 0,
-        message: {
-          offset: '10',
-          key: null,
-          headers: {},
-          value: Buffer.from(JSON.stringify(envelope)),
-        },
-        heartbeat: async () => {},
-      });
+      // P-KAFKA-9: commit failure now re-throws so kafkajs's consumer.run
+      // surfaces the error and pauses the partition for redelivery.
+      await expect(
+        consumer?.eachMessage?.({
+          topic: 'slingshot.events.auth.login',
+          partition: 0,
+          message: {
+            offset: '10',
+            key: null,
+            headers: {},
+            value: Buffer.from(JSON.stringify(envelope)),
+          },
+          heartbeat: async () => {},
+        }),
+      ).rejects.toThrow('broker unavailable');
 
-      // Listener still ran despite commit failure
+      // Listener still ran despite the eventual commit failure.
       expect(listener).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('failed to commit offset'),
-        expect.anything(),
-      );
+      // Partition was paused so the broker stops redelivering until the
+      // operator (or rebalance) clears the condition.
+      expect(consumer?.pauseCalls?.length ?? 0).toBeGreaterThanOrEqual(1);
+      const captured = errorSpy.mock.calls.map(c => String(c[0])).join(' ');
+      expect(captured).toContain('failed to commit offset');
 
-      // Second message succeeds end-to-end (no lingering error state)
+      // Second message succeeds end-to-end after the commit error clears.
       const consumer2 = fakeKafkaState.consumers[0];
       await consumer2?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
@@ -566,9 +569,8 @@ describe('kafkaAdapter', () => {
       await bus.shutdown?.();
 
       expect(bus.health().pendingBufferSize).toBe(0);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('discarding 1 buffered message'),
-      );
+      const warned = warnSpy.mock.calls.map(c => String(c[0])).join(' ');
+      expect(warned).toContain('discarding buffered messages');
     } finally {
       warnSpy.mockRestore();
       infoSpy.mockRestore();
@@ -622,8 +624,10 @@ describe('kafkaAdapter', () => {
       expect(inHandler).toBe(true);
       await consumer.emitEvent?.('consumer.rebalancing');
       // After rebalance the handler should have completed and we should have
-      // observed at least one commitOffsets call carrying offset 100.
-      await handlerPromise;
+      // observed at least one commitOffsets call carrying offset 100. The
+      // first commit attempt throws (P-KAFKA-9 surfaces it), so handlerPromise
+      // rejects — swallow that since the test asserts on side effects.
+      await handlerPromise?.catch(() => {});
 
       const flushed = consumer.commitOffsetCallArgs.flat().some(call => call.offset === '100');
       expect(flushed).toBe(true);

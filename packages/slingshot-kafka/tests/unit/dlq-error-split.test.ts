@@ -392,9 +392,11 @@ describe('kafkaAdapter DLQ semantic split', () => {
 
       await handlerStarted;
       // Trigger REBALANCING mid-flight; the hook must wait for the handler
-      // and flush the pending commit (next offset = 78).
+      // and flush the pending commit (next offset = 78). The inline commit
+      // throws under P-KAFKA-9 so the inflight promise rejects — swallow
+      // that to keep the test focused on the rebalance flush.
       await consumer.emitEvent?.('consumer.rebalancing');
-      await inflight;
+      await inflight?.catch(() => {});
 
       const offsets = consumer.commitOffsetCallArgs.flat();
       expect(offsets.some(o => o.offset === '78' && o.partition === 4)).toBe(true);

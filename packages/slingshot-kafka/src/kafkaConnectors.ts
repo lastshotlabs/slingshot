@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { type Admin, type Consumer, Kafka, type KafkaMessage, type Producer } from 'kafkajs';
 import { type ZodType, z } from 'zod';
 import type {
@@ -255,6 +255,18 @@ export const kafkaConnectorsSchema = z.object({
     .optional(),
   /** Override the default inbound dedup TTL (1h). Set to 0 to disable dedup. */
   dedupTtlMs: z.number().int().min(0).optional(),
+  /**
+   * Strategy when an outbound envelope lacks a configured `messageId`
+   * extractor / field AND `envelope.meta.eventId` is empty.
+   *
+   * - `'fingerprint'` (default): SHA-256 of the serialized payload, hex
+   *   prefixed with `sha256:`. Stable across retries, dedupable.
+   * - `'random'`: legacy `randomUUID()`. Logs a warning so operators see
+   *   that dedup is effectively off for that event.
+   * - `'reject'`: throws — useful when callers require strict provenance
+   *   and would rather fail produce than emit a non-deduplicable id.
+   */
+  onIdMissing: z.enum(['fingerprint', 'random', 'reject']).optional(),
 });
 
 /**
@@ -370,6 +382,8 @@ function resolveMessageId(
   config: OutboundConnectorConfig,
   envelope: OutboundEnvelope,
   payload: unknown,
+  serializedBody: Uint8Array | undefined,
+  onIdMissing: 'fingerprint' | 'random' | 'reject',
 ): string {
   if (typeof config.messageId === 'function') {
     const resolved = config.messageId(envelope);
@@ -380,7 +394,28 @@ function resolveMessageId(
       return String(value);
     }
   }
-  return envelope.meta.eventId || randomUUID();
+  if (envelope.meta.eventId) return envelope.meta.eventId;
+  // P-KAFKA-10: fallback strategy. Random UUIDs are never dedup'd by the
+  // consumer-side store because every produce produces a fresh id, so the
+  // default switches to a stable SHA-256 fingerprint of the payload bytes.
+  if (onIdMissing === 'reject') {
+    throw new Error(
+      `[KafkaConnectors] outbound event "${envelope.key}" has no messageId, no eventId, and onIdMissing='reject'.`,
+    );
+  }
+  if (onIdMissing === 'random') {
+    console.warn(
+      `[KafkaConnectors] outbound event "${envelope.key}" falling back to randomUUID() — consumer-side dedup is effectively disabled for this message. Configure messageId or set onIdMissing='fingerprint'.`,
+    );
+    return randomUUID();
+  }
+  // 'fingerprint' (default).
+  if (serializedBody && serializedBody.byteLength > 0) {
+    return `sha256:${createHash('sha256').update(serializedBody).digest('hex')}`;
+  }
+  // No serialized bytes available (e.g. transform produced null) — fall
+  // back to UUID rather than fingerprinting an empty string.
+  return randomUUID();
 }
 
 function createOutboundEnvelope(envelope: OutboundEnvelope, payload: unknown): OutboundEnvelope {
@@ -575,8 +610,20 @@ export function createKafkaConnectors(
 
   let producer: Producer | null = null;
   let admin: Admin | null = null;
-  let started = false;
-  let stopped = false;
+  /**
+   * P-KAFKA-15: explicit lifecycle state machine.
+   *
+   * Transitions:
+   *   idle      -> starting -> running -> stopping -> stopped
+   *   starting  -> stopped (on start() rejection)
+   *
+   * `start()` rejects unless state is `idle` or `stopped` so a second
+   * `start()` before `stop()` cannot leave duplicate listeners. `stop()`
+   * rejects unless state is `running` so callers see a clear error rather
+   * than silently no-op'ing on a never-started instance.
+   */
+  type ConnectorState = 'idle' | 'starting' | 'running' | 'stopping' | 'stopped';
+  let state: ConnectorState = 'idle';
   let boundBus: SlingshotEventBus | null = null;
   let drainTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -869,9 +916,15 @@ export function createKafkaConnectors(
 
       const outboundEnvelope = createOutboundEnvelope(envelope, transformed);
       const serializer = resolveSerializer(config.serializer, opts.serializer);
-      const messageId = resolveMessageId(config, envelope, transformed);
       const key = resolvePartitionKey(config, envelope, transformed);
       const serialized = serializer.serialize(config.event, outboundEnvelope);
+      const messageId = resolveMessageId(
+        config,
+        envelope,
+        transformed,
+        serialized,
+        opts.onIdMissing ?? 'fingerprint',
+      );
 
       let messageHeaders = buildOutboundHeaders(
         outboundEnvelope,
@@ -983,9 +1036,16 @@ export function createKafkaConnectors(
   }
 
   async function stopConnector(): Promise<void> {
-    if (stopped) return;
-    stopped = true;
-    started = false;
+    // P-KAFKA-15: only valid from `running`. From `stopped`/`stopping` we
+    // no-op (idempotent stop). From `idle`/`starting` we throw so the
+    // caller sees a real signal rather than racing teardown with start.
+    if (state === 'stopped' || state === 'stopping') return;
+    if (state !== 'running') {
+      throw new Error(
+        `[KafkaConnectors] stop() called in state "${state}"; only valid from "running".`,
+      );
+    }
+    state = 'stopping';
 
     if (drainTimer) {
       clearInterval(drainTimer);
@@ -1022,10 +1082,11 @@ export function createKafkaConnectors(
       await admin.disconnect().catch(() => {});
       admin = null;
     }
+    state = 'stopped';
   }
 
   async function cleanupAfterStartFailure(): Promise<void> {
-    started = false;
+    state = 'stopped';
 
     if (drainTimer) {
       clearInterval(drainTimer);
@@ -1069,12 +1130,21 @@ export function createKafkaConnectors(
     name: 'slingshot-kafka-connectors',
 
     async start(bus: SlingshotEventBus): Promise<void> {
-      if (started) {
-        throw new Error('[KafkaConnectors] start() called more than once.');
+      // P-KAFKA-15: only valid from `idle`/`stopped`. `starting`/`running`
+      // means a previous start is still in flight or already won — without
+      // this guard a second start() leaves duplicate listeners attached to
+      // the bus and duplicate consumers attached to broker.
+      if (state === 'starting' || state === 'running') {
+        throw new Error(
+          `[KafkaConnectors] start() called in state "${state}"; finish or stop the previous run first.`,
+        );
       }
-      if (stopped) {
-        throw new Error('[KafkaConnectors] start() called after stop().');
+      if (state === 'stopping') {
+        throw new Error(
+          `[KafkaConnectors] start() called while a previous stop() is still in progress.`,
+        );
       }
+      state = 'starting';
 
       enforceDuplicatePublishPolicy(bus);
       boundBus = bus;
@@ -1494,7 +1564,7 @@ export function createKafkaConnectors(
           }, opts.drainIntervalMs ?? 2_000);
         }
 
-        started = true;
+        state = 'running';
       } catch (err) {
         await cleanupAfterStartFailure();
         throw err;
@@ -1512,7 +1582,7 @@ export function createKafkaConnectors(
         lastDropAt,
       };
       return {
-        started,
+        started: state === 'running',
         inbound: inboundRuntimes.map(runtime => ({ ...runtime.health })),
         outbound: outboundRuntimes.map(runtime => ({ ...runtime.health })),
         pendingBufferSize: pendingBuffer.length,

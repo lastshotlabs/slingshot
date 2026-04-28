@@ -116,10 +116,83 @@ This package assumes the provider owns:
 - Manifest secret resolution does not currently ingest PEM blobs for Kafka TLS. Use manifest or programmatic `ssl` objects for advanced TLS and mTLS.
 - This workspace applies a temporary local KafkaJS patch during install to avoid `TimeoutNegativeWarning` under Bun. Remove that patch when upstream KafkaJS ships the fix we are pinned waiting for.
 
+## Production Timeouts
+
+Every external Kafka call goes through a bounded `withTimeout` wrapper from
+`@lastshotlabs/slingshot-core` so no single hung broker can stall the
+adapter forever.
+
+| Option | Default | Bound |
+|---|---|---|
+| `producerTimeoutMs` | 30_000 | `producer.send()` (durable emits and DLQ produces) |
+| `connectTimeoutMs` | 30_000 | `producer.connect()`, `admin.connect()`, `consumer.connect()` |
+| `deserializeTimeoutMs` | 5_000 | custom `serializer.deserialize()` per message |
+| `handlerTimeoutMs` | 60_000 | per in-flight handler during a rebalance quiesce |
+
+Timeouts surface through `onDrop` with structured reasons:
+`producer-timeout`, `deserialize-timeout`, `handler-timeout`. Producer
+timeouts buffer the event for retry; deserialize and handler timeouts
+abandon the work so the consumer can keep heartbeating.
+
+## DLQ Failure Semantics
+
+When a handler exhausts retries, the adapter forwards the original
+message to `${topic}.dlq`. If the DLQ produce fails, two policies are
+available:
+
+- `onDlqFailure: 'redeliver'` (default) — do NOT commit the offset. The
+  broker redelivers the message after restart; operators see the
+  `dlq-production-failed` drop signal and can investigate before
+  redrive.
+- `onDlqFailure: 'commit-and-log'` — legacy behaviour. Commit anyway,
+  accepting the lost message in exchange for forward progress.
+
+## Outbound Message Identifiers
+
+When an outbound `OutboundConnectorConfig.messageId` extractor is unset
+and `envelope.meta.eventId` is empty, the connector uses one of three
+fallback strategies (`KafkaConnectorsConfig.onIdMissing`):
+
+- `'fingerprint'` (default) — `sha256:` of the serialized payload bytes.
+  Stable across retries, dedupable across replicas.
+- `'random'` — `randomUUID()`. Logs a warning so operators see that
+  consumer-side dedup is effectively off for that event.
+- `'reject'` — throw. Useful when callers require strict provenance and
+  would rather fail produce than emit a non-deduplicable id.
+
+## Health
+
+`createKafkaAdapter()` implements the `HealthCheck` contract from
+`@lastshotlabs/slingshot-core`:
+
+- `getHealth()` returns a `HealthReport` with a coarse `state`
+  (`'healthy' | 'degraded' | 'unhealthy'`) and aggregated counters in
+  `details`. Suitable for framework-level health aggregation.
+- `getHealthSnapshot()` returns the structured `KafkaAdapterHealthSnapshot`
+  for callers that need the raw consumer/buffer/drop counters.
+
+## Integration Tests
+
+Set `KAFKA_BROKERS` to enable the live-broker suite at
+`tests/integration/kafka.test.ts`:
+
+```sh
+KAFKA_BROKERS=localhost:9092 bun test packages/slingshot-kafka/tests/integration
+```
+
+Optional environment:
+
+- `KAFKA_SSL=true` enables TLS with the platform trust store.
+- `KAFKA_SASL_USER` / `KAFKA_SASL_PASS` enables SASL/PLAIN.
+
+When unset, the suite is silently skipped — the default `bun test` run
+uses a fake kafkajs module and stays fast.
+
 ## Key Files
 
 - `packages/slingshot-kafka/src/kafkaAdapter.ts`
 - `packages/slingshot-kafka/src/kafkaConnectors.ts`
 - `src/lib/createServerFromManifest.ts`
+- `tests/integration/kafka.test.ts`
 - `tests/docker/kafka-sasl.test.ts`
 - `tests/docker/kafka-tls.test.ts`

@@ -51,6 +51,12 @@ export interface FakeKafkaState {
   consumerRunErrors: unknown[];
   /** Errors to throw from the next consumer.commitOffsets() call(s). */
   commitOffsetErrors: unknown[];
+  /** Artificial delays (ms) for the next producer.send() call(s). */
+  producerSendDelays: number[];
+  /** Sticky default delay (ms) applied to every producer.send() call. */
+  producerSendStickyDelayMs: number;
+  /** Artificial delays (ms) for the next producer.connect() call(s). */
+  producerConnectDelays: number[];
 }
 
 export const fakeKafkaState: FakeKafkaState = {
@@ -71,6 +77,9 @@ export const fakeKafkaState: FakeKafkaState = {
   consumerSubscribeErrors: [],
   consumerRunErrors: [],
   commitOffsetErrors: [],
+  producerSendDelays: [],
+  producerSendStickyDelayMs: 0,
+  producerConnectDelays: [],
 };
 
 export function resetFakeKafkaState(): void {
@@ -91,6 +100,9 @@ export function resetFakeKafkaState(): void {
   fakeKafkaState.consumerSubscribeErrors.length = 0;
   fakeKafkaState.consumerRunErrors.length = 0;
   fakeKafkaState.commitOffsetErrors.length = 0;
+  fakeKafkaState.producerSendDelays.length = 0;
+  fakeKafkaState.producerSendStickyDelayMs = 0;
+  fakeKafkaState.producerConnectDelays.length = 0;
 }
 
 export function flushAsyncWork(ms = 0): Promise<void> {
@@ -106,6 +118,10 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
     producer() {
       return {
         connect: async () => {
+          const delay = state.producerConnectDelays.shift();
+          if (typeof delay === 'number' && delay > 0) {
+            await new Promise(r => setTimeout(r, delay));
+          }
           const nextError = state.producerConnectErrors.shift();
           if (nextError) {
             throw nextError;
@@ -117,6 +133,13 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
         },
         send: async (payload: FakeProducerSendPayload) => {
           state.producerSendAttempts.push(payload);
+          const oneShotDelay = state.producerSendDelays.shift();
+          const delay = typeof oneShotDelay === 'number'
+            ? oneShotDelay
+            : state.producerSendStickyDelayMs;
+          if (delay > 0) {
+            await new Promise(r => setTimeout(r, delay));
+          }
           const nextError = state.producerSendErrors.shift();
           if (nextError) {
             throw nextError;

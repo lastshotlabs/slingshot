@@ -94,6 +94,9 @@ class MockWorker {
   // microtask; the adapter's init function then awaits enough time for
   // concurrent callers to coalesce.
   static constructorGate: Promise<void> | null = null;
+  // Test hook: when set, the constructor throws this error. Used to
+  // simulate a worker init failure so the state machine can be exercised.
+  static failOnConstruction: Error | null = null;
   // Track every constructor call. We assert this is exactly one when two
   // concurrent ensureStarted() calls race.
   static constructorCallCount = 0;
@@ -105,6 +108,9 @@ class MockWorker {
     this.name = name;
     MockWorker.constructorCallCount += 1;
     MockWorker.instances.push(this);
+    if (MockWorker.failOnConstruction) {
+      throw MockWorker.failOnConstruction;
+    }
   }
   on() {}
   emit() {}
@@ -144,6 +150,7 @@ function resetMocks(): void {
   MockWorker.instances = [];
   MockWorker.constructorGate = null;
   MockWorker.constructorCallCount = 0;
+  MockWorker.failOnConstruction = null;
   mockRedis.reset();
 }
 
@@ -282,6 +289,68 @@ describe('bullmq adapter start re-entrancy', () => {
     for (const worker of MockWorker.instances) {
       expect(worker.closed).toBe(true);
     }
+  });
+
+  test('failed init retains the same error across concurrent and sequential callers until reset() (P-OBULLMQ-5)', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'reentrancy-failed-state',
+    });
+
+    // Force the first init to throw. After failure the state machine should
+    // lock to 'failed' and replay the same error to every subsequent caller
+    // until reset() is invoked.
+    const initFailure = new Error('worker boom');
+    (
+      MockWorker as unknown as { failOnConstruction: Error | null }
+    ).failOnConstruction = initFailure;
+
+    let firstError: unknown;
+    try {
+      await adapter.start();
+    } catch (err) {
+      firstError = err;
+    }
+    expect((firstError as Error).message).toBe('worker boom');
+
+    // Second concurrent caller (sequenced for assertion clarity) sees the
+    // same retained error even though the underlying failure condition has
+    // been removed — the state machine must NOT silently re-enter 'starting'.
+    (
+      MockWorker as unknown as { failOnConstruction: Error | null }
+    ).failOnConstruction = null;
+
+    let secondError: unknown;
+    try {
+      await adapter.start();
+    } catch (err) {
+      secondError = err;
+    }
+    expect(secondError).toBeDefined();
+    expect((secondError as Error).message).toBe('worker boom');
+
+    // reset() unlocks the state machine; the next start() retries init.
+    (
+      adapter as unknown as { reset(): void }
+    ).reset();
+    await adapter.start();
+    await adapter.shutdown();
+  });
+
+  test('reset() throws when state is not failed', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'reentrancy-reset-guard',
+    });
+
+    expect(() => (adapter as unknown as { reset(): void }).reset()).toThrow(
+      /reset\(\) is only valid when start state is 'failed'/,
+    );
+
+    await adapter.start();
+    expect(() => (adapter as unknown as { reset(): void }).reset()).toThrow();
+
+    await adapter.shutdown();
   });
 
   test('sequential start → shutdown → new adapter start works (constructor isolation)', async () => {

@@ -7,9 +7,12 @@ import {
   type QueueOptions,
   Worker,
 } from 'bullmq';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+import { noopLogger, withTimeout } from '@lastshotlabs/slingshot-core';
 import {
   type AnyResolvedTask,
   type AnyResolvedWorkflow,
+  type CancelOutcome,
   type ObservabilityCapability,
   type OrchestrationAdapter,
   OrchestrationError,
@@ -44,6 +47,53 @@ const DEFAULT_REMOVE_ON_COMPLETE_AGE_SECONDS = 3_600;
 const DEFAULT_REMOVE_ON_COMPLETE_COUNT = 1_000;
 const DEFAULT_REMOVE_ON_FAIL_AGE_SECONDS = 86_400;
 const DRAIN_POLL_INTERVAL_MS = 100;
+
+/**
+ * Allowlist of OS- and Redis-level errors we treat as transient (retryable).
+ * Anything else is permanent and should fail-fast — retrying a logic bug or a
+ * configuration error wastes worker capacity and obscures the real failure.
+ */
+const TRANSIENT_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EPIPE',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+]);
+
+const TRANSIENT_REDIS_NAMES = new Set(['ConnectionError', 'ReplyError', 'TimeoutError']);
+
+/**
+ * Outcome of error classification used to decide retry vs. fail-fast.
+ * `permanent: true` means the error must surface to the caller without retry.
+ */
+export interface ErrorClassification {
+  retryable: boolean;
+  permanent: boolean;
+  code?: string;
+}
+
+export function classifyOrchestrationError(err: unknown): ErrorClassification {
+  if (err === null || err === undefined) {
+    return { retryable: false, permanent: true };
+  }
+  if (err instanceof Error) {
+    const code = (err as Error & { code?: string }).code;
+    if (typeof code === 'string' && TRANSIENT_ERROR_CODES.has(code)) {
+      return { retryable: true, permanent: false, code };
+    }
+    if (TRANSIENT_REDIS_NAMES.has(err.name)) {
+      return { retryable: true, permanent: false, code };
+    }
+    // ioredis-style 'ReadyError' / cluster reconfiguration errors
+    if (/READONLY|MOVED|LOADING|MASTERDOWN|CLUSTERDOWN|TRYAGAIN/.test(err.message)) {
+      return { retryable: true, permanent: false, code };
+    }
+    return { retryable: false, permanent: true, code };
+  }
+  return { retryable: false, permanent: true };
+}
 
 const CANCELLATION_ERROR_MESSAGE = 'Run cancelled';
 const ADAPTER_DISPOSED_MESSAGE =
@@ -136,7 +186,10 @@ function serializeRunSnapshot(run: Run | WorkflowRun): SerializedRunSnapshot {
   };
 }
 
-function deserializeRunSnapshot(value: string): Run | WorkflowRun | null {
+function deserializeRunSnapshot(
+  value: string,
+  reportError?: (err: unknown) => void,
+): Run | WorkflowRun | null {
   try {
     const parsed = JSON.parse(value) as SerializedRunSnapshot;
     const base: Run = {
@@ -166,7 +219,11 @@ function deserializeRunSnapshot(value: string): Run | WorkflowRun | null {
     }
     return base;
   } catch (err) {
-    console.error('[slingshot-orchestration-bullmq] Failed to deserialize run snapshot:', err);
+    if (reportError) {
+      reportError(err);
+    } else {
+      console.error('[slingshot-orchestration-bullmq] Failed to deserialize run snapshot:', err);
+    }
     return null;
   }
 }
@@ -306,13 +363,21 @@ export function createBullMQOrchestrationAdapter(
     eventSink?: OrchestrationEventSink;
     workflowConcurrency?: number;
     logger?: SlingshotLogger;
+    /**
+     * Structured Logger used for prod-track diagnostics (snapshot malformation,
+     * cancellation outcomes, retry classification). Falls back to `noopLogger`
+     * when omitted so unit tests stay quiet by default.
+     */
+    structuredLogger?: Logger;
   },
 ): OrchestrationAdapter &
   ObservabilityCapability &
   ScheduleCapability &
   BullMQOrchestrationMetricsCapability {
-  const { eventSink, workflowConcurrency, logger, ...parsedInput } = rawOptions;
+  const { eventSink, workflowConcurrency, logger, structuredLogger: rawStructuredLogger, ...parsedInput } =
+    rawOptions;
   const options = bullmqOrchestrationAdapterOptionsSchema.parse(parsedInput);
+  const structuredLogger: Logger = rawStructuredLogger ?? noopLogger;
   const taskRegistry = new Map<string, AnyResolvedTask>();
   const workflowRegistry = new Map<string, AnyResolvedWorkflow>();
   // BullMQ 5.x throws synchronously from the Queue constructor when the
@@ -411,11 +476,27 @@ export function createBullMQOrchestrationAdapter(
   let workflowQueueEvents: QueueEvents | null = null;
   let taskWorker: Worker | null = null;
   let workflowWorker: Worker | null = null;
-  let started = false;
-  // Memoized in-flight init promise. Concurrent ensureStarted() callers all
-  // await the SAME promise so initialization is serialized and only runs once.
-  // Cleared in .finally() — see ensureStarted() body.
+  /**
+   * Lazy-start state machine.
+   *
+   * Transitions:
+   * - idle -> starting (first ensureStarted() call)
+   * - starting -> started (init succeeds)
+   * - starting -> failed (init throws; concurrent waiters and subsequent
+   *   ensureStarted() calls all observe the same retained error until reset())
+   * - failed -> starting (only via reset())
+   *
+   * The retained error is critical: without it, a second concurrent caller
+   * arriving after `startPromise` rejects would see `state === 'idle'` (or
+   * mistakenly enter starting again against half-initialized resources).
+   * Holding `failed + startError` until explicit reset() prevents that race.
+   */
+  type StartState = 'idle' | 'starting' | 'started' | 'failed';
+  let startState: StartState = 'idle';
   let startPromise: Promise<void> | null = null;
+  let startError: Error | null = null;
+  // started flag retained for legacy in-process code paths that compared booleans.
+  let started = false;
   // disposed is set by shutdown() and is permanent for the lifetime of the
   // instance. A disposed adapter cannot be re-started (the underlying queues
   // and workers have been closed); callers must construct a fresh adapter.
@@ -436,11 +517,24 @@ export function createBullMQOrchestrationAdapter(
       throw new OrchestrationAdapterDisposedError();
     }
     // Fast path: already initialized.
-    if (started) return;
+    if (startState === 'started') return;
+    // Failed path: keep returning the retained error until reset() is called.
+    // This prevents a second concurrent caller from spawning a parallel init
+    // against a half-cleaned state.
+    if (startState === 'failed') {
+      throw (
+        startError ??
+        new OrchestrationError(
+          'ADAPTER_ERROR',
+          'BullMQ orchestration adapter is in failed state. Call reset() to retry initialization.',
+        )
+      );
+    }
     // Concurrent-call guard: re-use the in-flight init promise so two callers
     // racing through this function do not both proceed past the started check
     // and double-construct workers/queues.
-    if (startPromise) return startPromise;
+    if (startState === 'starting' && startPromise) return startPromise;
+    startState = 'starting';
     startPromise = (async () => {
       if (!taskQueueEvents) {
         taskQueueEvents = new QueueEvents(taskQueueName, { connection });
@@ -533,12 +627,39 @@ export function createBullMQOrchestrationAdapter(
         }
       }
       started = true;
-    })().finally(() => {
-      // Always clear the memo. On success, started=true is the new fast-path.
-      // On failure, clearing lets a subsequent call retry from scratch.
-      startPromise = null;
-    });
+    })().then(
+      () => {
+        startState = 'started';
+        startError = null;
+        startPromise = null;
+      },
+      err => {
+        // Retain the error and the failed state. Subsequent ensureStarted()
+        // calls return the same rejection until the caller invokes reset().
+        startError = err instanceof Error ? err : new Error(String(err));
+        startState = 'failed';
+        startPromise = null;
+        throw err;
+      },
+    );
     return startPromise;
+  }
+
+  /**
+   * Reset the lazy-start state machine after a failed initialization. Only
+   * legal when `startState === 'failed'`. After reset() the next
+   * `ensureStarted()` will attempt initialization from scratch.
+   */
+  function resetStartState(): void {
+    if (startState !== 'failed') {
+      throw new OrchestrationError(
+        'INVALID_CONFIG',
+        `reset() is only valid when start state is 'failed' (current: ${startState}).`,
+      );
+    }
+    startState = 'idle';
+    startError = null;
+    startPromise = null;
   }
 
   function getQueueForTaskName(taskName: string): Queue {
@@ -581,18 +702,76 @@ export function createBullMQOrchestrationAdapter(
     return (await defaultTaskQueue.client) as CancellationSnapshotStoreClient;
   }
 
+  async function quarantineMalformedSnapshot(
+    client: CancellationSnapshotStoreClient,
+    runId: string,
+    payload: string,
+    parseError: unknown,
+  ): Promise<void> {
+    const malformedKey = `${getCancelledRunKey(runId)}:malformed`;
+    try {
+      await client.set(malformedKey, payload);
+    } catch (err) {
+      structuredLogger.error('orchestration.bullmq.snapshotQuarantineFailed', {
+        runId,
+        error: err instanceof Error ? { message: err.message, stack: err.stack } : { message: String(err) },
+      });
+    }
+    structuredLogger.error('orchestration.bullmq.snapshotMalformed', {
+      runId,
+      malformedKey,
+      error:
+        parseError instanceof Error
+          ? { message: parseError.message, stack: parseError.stack }
+          : { message: String(parseError) },
+    });
+    if (eventSink) {
+      try {
+        const result = eventSink.emit('orchestration.bullmq.snapshotMalformed', {
+          runId,
+          malformedKey,
+          error:
+            parseError instanceof Error
+              ? { message: parseError.message }
+              : { message: String(parseError) },
+        } as never);
+        if (result && typeof (result as Promise<void>).catch === 'function') {
+          (result as Promise<void>).catch(emitErr => {
+            structuredLogger.error('orchestration.bullmq.snapshotMalformed.emitError', {
+              error:
+                emitErr instanceof Error
+                  ? { message: emitErr.message, stack: emitErr.stack }
+                  : { message: String(emitErr) },
+            });
+          });
+        }
+      } catch (emitErr) {
+        structuredLogger.error('orchestration.bullmq.snapshotMalformed.emitError', {
+          error:
+            emitErr instanceof Error
+              ? { message: emitErr.message, stack: emitErr.stack }
+              : { message: String(emitErr) },
+        });
+      }
+    }
+  }
+
   async function getPersistedCancelledSnapshot(runId: string): Promise<(Run | WorkflowRun) | null> {
     const client = await getCancellationSnapshotStore();
     const payload = await client.get(getCancelledRunKey(runId));
     if (!payload) {
       return null;
     }
-    const snapshot = deserializeRunSnapshot(payload);
+    let parseError: unknown = null;
+    const snapshot = deserializeRunSnapshot(payload, err => {
+      parseError = err;
+    });
     if (snapshot) {
       return snapshot;
     }
-    await client.del(getCancelledRunKey(runId));
-    await client.zrem(cancelledRunsIndexKey, runId);
+    // Do NOT delete the snapshot. Move it aside under :malformed for forensics
+    // and surface a structured event so operators can act before data is lost.
+    await quarantineMalformedSnapshot(client, runId, payload, parseError);
     return null;
   }
 
@@ -605,17 +784,25 @@ export function createBullMQOrchestrationAdapter(
 
     const payloads = await client.mget(...runIds.map(runId => getCancelledRunKey(runId)));
     const snapshots: Array<Run | WorkflowRun> = [];
+    // Truly stale ids — index entries with no payload at all. These are safe
+    // to drop because there is nothing to forensically recover.
     const staleRunIds: string[] = [];
     for (const [index, payload] of payloads.entries()) {
       const runId = runIds[index];
-      if (!runId || !payload) {
-        if (runId) {
-          staleRunIds.push(runId);
-        }
+      if (!runId) continue;
+      if (!payload) {
+        staleRunIds.push(runId);
         continue;
       }
-      const snapshot = deserializeRunSnapshot(payload);
+      let parseError: unknown = null;
+      const snapshot = deserializeRunSnapshot(payload, err => {
+        parseError = err;
+      });
       if (!snapshot) {
+        // Do NOT delete a malformed payload. Quarantine it so an operator can
+        // recover the run state if needed; remove it from the live index so
+        // it stops surfacing as a cancelled run on every list call.
+        await quarantineMalformedSnapshot(client, runId, payload, parseError);
         staleRunIds.push(runId);
         continue;
       }
@@ -624,6 +811,8 @@ export function createBullMQOrchestrationAdapter(
 
     if (staleRunIds.length > 0) {
       await client.zrem(cancelledRunsIndexKey, ...staleRunIds);
+      // Remove only the live keys for entries we already moved to :malformed
+      // (or that had no payload). The :malformed copy survives.
       await client.del(...staleRunIds.map(runId => getCancelledRunKey(runId)));
     }
 
@@ -778,11 +967,12 @@ export function createBullMQOrchestrationAdapter(
   async function cancelBullMQJob(
     job: Job<Record<string, unknown>>,
     type: 'task' | 'workflow',
-  ): Promise<void> {
+    queue: Queue,
+  ): Promise<CancelOutcome> {
     const runId = getRunId(job);
     const state = await job.getState();
     if (state === 'completed' || state === 'failed') {
-      return;
+      return { cancelStatus: 'confirmed' };
     }
 
     if (
@@ -800,7 +990,35 @@ export function createBullMQOrchestrationAdapter(
         throw error;
       }
       cancelledRunSignals.set(runId, snapshot.error?.message ?? CANCELLATION_ERROR_MESSAGE);
-      return;
+
+      // Verify the remove() actually deleted the job. BullMQ's remove() can
+      // succeed without throwing while the underlying Redis op was a no-op
+      // (e.g. lock contention). Poll Job.fromId once with a short timeout —
+      // if the job is still present we return best-effort so the caller can
+      // surface the ambiguity instead of falsely claiming success.
+      try {
+        const existing = await withTimeout(
+          Job.fromId(queue, String(job.id ?? runId)),
+          1_000,
+          'job.fromId after remove',
+        );
+        if (existing) {
+          return {
+            cancelStatus: 'best-effort',
+            message: 'job.remove() returned but the job is still visible in Redis',
+          };
+        }
+        return { cancelStatus: 'confirmed' };
+      } catch (verifyErr) {
+        // Verification timeout/error — be conservative.
+        return {
+          cancelStatus: 'best-effort',
+          message:
+            verifyErr instanceof Error
+              ? `verification failed: ${verifyErr.message}`
+              : 'verification failed',
+        };
+      }
     }
 
     if (state === 'active') {
@@ -865,6 +1083,15 @@ export function createBullMQOrchestrationAdapter(
     getMetrics(): BullMQOrchestrationAdapterMetrics {
       // Return a defensive copy so callers cannot mutate adapter state.
       return { ...metrics };
+    },
+    /**
+     * Reset the lazy-start state machine after an initialization failure.
+     * Throws if the adapter is not in `failed` state. Use this to retry
+     * `start()`/`ensureStarted()` after fixing the underlying cause (e.g.
+     * Redis becoming reachable again).
+     */
+    reset() {
+      resetStartState();
     },
     registerTask(def) {
       taskRegistry.set(def.name, def);
@@ -979,23 +1206,34 @@ export function createBullMQOrchestrationAdapter(
       if (!record) {
         const persistedSnapshot = await getPersistedCancelledSnapshot(runId);
         if (persistedSnapshot) {
-          return;
+          return { cancelStatus: 'confirmed' };
         }
         throw new OrchestrationError('RUN_NOT_FOUND', `Run '${runId}' not found`);
       }
 
-      await cancelBullMQJob(record.job, record.type);
+      const outcome = await cancelBullMQJob(record.job, record.type, record.queue);
 
       const childIds = Array.isArray(record.job.data['_childJobIds'])
         ? (record.job.data['_childJobIds'] as string[])
         : [];
+      let degraded = outcome.cancelStatus === 'best-effort';
       for (const childId of childIds) {
         for (const queue of [defaultTaskQueue, ...namedQueues.values()]) {
           const childJob = await Job.fromId(queue, childId);
           if (!childJob) continue;
-          await cancelBullMQJob(childJob, 'task');
+          const childOutcome = await cancelBullMQJob(childJob, 'task', queue);
+          if (childOutcome.cancelStatus === 'best-effort') {
+            degraded = true;
+          }
         }
       }
+      return degraded
+        ? {
+            cancelStatus: 'best-effort',
+            message:
+              outcome.message ?? 'one or more child jobs could not be confirmed cancelled',
+          }
+        : { cancelStatus: 'confirmed' };
     },
     async start() {
       await ensureStarted();

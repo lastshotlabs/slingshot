@@ -369,96 +369,102 @@ describe('run snapshot serialization roundtrip', () => {
 // Deserialization failure paths — returns null + logs, never throws
 // ---------------------------------------------------------------------------
 
-describe('run snapshot deserialization failure handling', () => {
-  let consoleErrorSpy: ReturnType<typeof spyOn>;
-
+describe('run snapshot deserialization failure handling (P-OBULLMQ-2)', () => {
   beforeEach(() => {
     MockQueue.instances = [];
     MockQueueEvents.instances = [];
     MockWorker.instances = [];
     mockRedis.reset();
-    consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
   });
 
-  afterEach(() => {
-    consoleErrorSpy.mockRestore();
-  });
+  function makeAdapterWithCapture(prefix: string) {
+    const logs: Array<{ msg: string; fields?: Record<string, unknown> }> = [];
+    const events: Array<{ name: string; payload: unknown }> = [];
+    const make = (base: Record<string, unknown> | undefined): import('@lastshotlabs/slingshot-core').Logger => ({
+      debug() {},
+      info() {},
+      warn() {},
+      error(msg, fields) {
+        logs.push({ msg, fields: { ...(base ?? {}), ...(fields ?? {}) } });
+      },
+      child(fields) {
+        return make({ ...(base ?? {}), ...fields });
+      },
+    });
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix,
+      structuredLogger: make(undefined),
+      eventSink: {
+        emit(name, payload) {
+          events.push({ name, payload });
+        },
+      },
+    });
+    return { adapter, logs, events };
+  }
 
-  test('invalid JSON string returns null and logs console.error', async () => {
+  test('invalid JSON quarantines the snapshot and emits orchestration.bullmq.snapshotMalformed', async () => {
     const prefix = 'deser-invalid-json';
     const runId = 'run-bad-json';
 
     await mockRedis.set(cancelledKey(prefix, runId), '{not valid json!!!');
     await mockRedis.zadd(cancelledIndex(prefix), Date.now(), runId);
 
-    const adapter = makeAdapter(prefix);
+    const { adapter, logs, events } = makeAdapterWithCapture(prefix);
     const run = await adapter.getRun(runId);
 
     expect(run).toBeNull();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[slingshot-orchestration-bullmq] Failed to deserialize run snapshot:',
-      expect.anything(),
-    );
+    const malformedLog = logs.find(l => l.msg === 'orchestration.bullmq.snapshotMalformed');
+    expect(malformedLog).toBeDefined();
+    expect(malformedLog?.fields).toMatchObject({ runId });
+
+    const malformedEvent = events.find(e => e.name === 'orchestration.bullmq.snapshotMalformed');
+    expect(malformedEvent).toBeDefined();
+
+    // The malformed copy is preserved under :malformed for forensics; the live
+    // key is left intact (only listRuns sweeps the index).
+    const preserved = await mockRedis.get(`${cancelledKey(prefix, runId)}:malformed`);
+    expect(preserved).toBe('{not valid json!!!');
 
     await adapter.shutdown();
   });
 
-  test('truncated JSON (ends mid-object) returns null and logs console.error', async () => {
+  test('truncated JSON quarantines and surfaces a malformed event', async () => {
     const prefix = 'deser-truncated';
     const runId = 'run-truncated';
 
-    // A truncated but non-empty string causes JSON.parse to throw a SyntaxError,
-    // which is the primary trigger for the catch branch in deserializeRunSnapshot.
     await mockRedis.set(cancelledKey(prefix, runId), '{"id":"run-truncated","createdAt":"2024');
     await mockRedis.zadd(cancelledIndex(prefix), Date.now(), runId);
 
-    const adapter = makeAdapter(prefix);
+    const { adapter, logs } = makeAdapterWithCapture(prefix);
     const run = await adapter.getRun(runId);
 
     expect(run).toBeNull();
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[slingshot-orchestration-bullmq] Failed to deserialize run snapshot:',
-      expect.anything(),
-    );
+    expect(logs.some(l => l.msg === 'orchestration.bullmq.snapshotMalformed')).toBe(true);
+
+    const preserved = await mockRedis.get(`${cancelledKey(prefix, runId)}:malformed`);
+    expect(preserved).toBe('{"id":"run-truncated","createdAt":"2024');
 
     await adapter.shutdown();
   });
 
-  test('corrupted snapshot is cleaned up from the Redis index after failed deserialization', async () => {
-    const prefix = 'deser-cleanup';
-    const runId = 'run-cleanup';
-
-    await mockRedis.set(cancelledKey(prefix, runId), 'totally invalid');
-    await mockRedis.zadd(cancelledIndex(prefix), Date.now(), runId);
-
-    const adapter = makeAdapter(prefix);
-    await adapter.getRun(runId);
-
-    const remainingIndex = await mockRedis.zrange(cancelledIndex(prefix), 0, -1);
-    expect(remainingIndex).not.toContain(runId);
-
-    const remainingValue = await mockRedis.get(cancelledKey(prefix, runId));
-    expect(remainingValue).toBeNull();
-
-    await adapter.shutdown();
-  });
-
-  test('null Redis payload for a known run id returns null without invoking deserializer', async () => {
+  test('null Redis payload returns null without raising malformed events', async () => {
     const prefix = 'deser-null-payload';
     const runId = 'run-null-payload';
 
     await mockRedis.zadd(cancelledIndex(prefix), Date.now(), runId);
 
-    const adapter = makeAdapter(prefix);
+    const { adapter, logs } = makeAdapterWithCapture(prefix);
     const run = await adapter.getRun(runId);
 
     expect(run).toBeNull();
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(logs.some(l => l.msg === 'orchestration.bullmq.snapshotMalformed')).toBe(false);
 
     await adapter.shutdown();
   });
 
-  test('listRuns silently drops all corrupted snapshot entries and returns only valid ones', async () => {
+  test('listRuns drops corrupted entries from the index but preserves :malformed copies', async () => {
     const prefix = 'deser-list-mixed';
     const goodRunId = 'run-good';
     const badRunId = 'run-bad';
@@ -480,16 +486,15 @@ describe('run snapshot deserialization failure handling', () => {
     await mockRedis.set(cancelledKey(prefix, badRunId), '{"broken":');
     await mockRedis.zadd(cancelledIndex(prefix), ts, badRunId);
 
-    const adapter = makeAdapter(prefix);
+    const { adapter, logs } = makeAdapterWithCapture(prefix);
     const result = await adapter.listRuns({ status: 'cancelled' });
 
     expect(result.total).toBe(1);
     expect(result.runs[0]?.id).toBe(goodRunId);
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[slingshot-orchestration-bullmq] Failed to deserialize run snapshot:',
-      expect.anything(),
-    );
+    expect(logs.some(l => l.msg === 'orchestration.bullmq.snapshotMalformed')).toBe(true);
+    const preserved = await mockRedis.get(`${cancelledKey(prefix, badRunId)}:malformed`);
+    expect(preserved).toBe('{"broken":');
 
     await adapter.shutdown();
   });

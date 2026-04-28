@@ -323,7 +323,7 @@ describe('bullmq orchestration adapter', () => {
     expect(MockWorker.instances.length).toBeGreaterThan(workersBefore);
   });
 
-  test('retries startup after a worker constructor failure', async () => {
+  test('retains failure state until reset() then retries startup (P-OBULLMQ-5)', async () => {
     const adapter = createBullMQOrchestrationAdapter({
       connection: { host: '127.0.0.1', port: 6379 },
       prefix: 'retry-startup',
@@ -341,6 +341,15 @@ describe('bullmq orchestration adapter', () => {
     MockWorker.failOnConstruction = new Error('worker failed');
     await expect(adapter.runTask(task.name, { value: 'ok' })).rejects.toThrow('worker failed');
 
+    // Failed state is retained: a subsequent call returns the same error,
+    // even after MockWorker.failOnConstruction has been cleared.
+    MockWorker.failOnConstruction = null;
+    await expect(adapter.runTask(task.name, { value: 'ok' })).rejects.toThrow('worker failed');
+
+    // reset() is required to allow another initialization attempt.
+    (
+      adapter as unknown as { reset(): void }
+    ).reset();
     const handle = await adapter.runTask(task.name, { value: 'ok' });
     await expect(handle.result()).resolves.toEqual({ value: 'ok' });
   });
@@ -416,6 +425,43 @@ describe('bullmq orchestration adapter', () => {
     ).toBe(true);
   });
 
+  test('cancelRun returns best-effort outcome when job.remove leaves the job present (P-OBULLMQ-1)', async () => {
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix: 'cancel-best-effort',
+    });
+    const task = defineTask({
+      name: 'cancel-best-effort-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+    adapter.registerTask(task);
+
+    const handle = await adapter.runTask(task.name, { value: 'pending' });
+
+    // Patch MockJob.remove on the live instance so the call resolves but the
+    // job is NOT removed from the queue. This mirrors the production race
+    // where job.remove() returns without throwing while the underlying Redis
+    // op was a no-op (lock contention, partial delete, etc.).
+    const taskQueue = MockQueue.instances.find(queue => queue.name === 'cancel-best-effort_tasks');
+    expect(taskQueue).toBeDefined();
+    const job = taskQueue!.jobs[0];
+    expect(job).toBeDefined();
+    job!.remove = async () => {
+      // Intentionally a no-op so the verification poll sees the job still present.
+    };
+
+    const outcome = await adapter.cancelRun(handle.id);
+    expect(outcome).toBeDefined();
+    expect((outcome as { cancelStatus: string }).cancelStatus).toBe('best-effort');
+    expect((outcome as { message?: string }).message).toMatch(/still visible/);
+
+    await adapter.shutdown();
+  });
+
   test('cancelled runs remain visible and reject their result handle', async () => {
     const adapter = createBullMQOrchestrationAdapter({
       connection: { host: '127.0.0.1', port: 6379 },
@@ -481,37 +527,45 @@ describe('bullmq orchestration adapter', () => {
     await restartedAdapter.shutdown();
   });
 
-  test('logs console.error when a stored run snapshot contains invalid JSON', async () => {
-    let consoleErrorSpy: ReturnType<typeof spyOn> | undefined;
+  test('quarantines a stored run snapshot with invalid JSON (P-OBULLMQ-2)', async () => {
+    const corruptRunId = 'corrupt-run-id';
+    const prefix = 'corrupt-snapshot';
+    await mockRedis.set(`${prefix}:cancelled:run:${corruptRunId}`, '{not valid json');
+    await mockRedis.zadd(`${prefix}:cancelled:runs`, Date.now(), corruptRunId);
 
-    try {
-      consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const logs: Array<{ msg: string }> = [];
+    const events: Array<{ name: string }> = [];
+    const adapter = createBullMQOrchestrationAdapter({
+      connection: { host: '127.0.0.1', port: 6379 },
+      prefix,
+      structuredLogger: {
+        debug() {},
+        info() {},
+        warn() {},
+        error(msg) {
+          logs.push({ msg });
+        },
+        child() {
+          return this as never;
+        },
+      },
+      eventSink: {
+        emit(name) {
+          events.push({ name });
+        },
+      },
+    });
 
-      // Manually write corrupt JSON into the redis mock so the adapter reads it back
-      // when listing cancelled runs via listPersistedCancelledSnapshots.
-      const corruptRunId = 'corrupt-run-id';
-      const prefix = 'corrupt-snapshot';
-      await mockRedis.set(`${prefix}:cancelled:run:${corruptRunId}`, '{not valid json');
-      await mockRedis.zadd(`${prefix}:cancelled:runs`, Date.now(), corruptRunId);
+    const result = await adapter.listRuns({ status: 'cancelled' });
+    expect(result.total).toBe(0);
+    expect(logs.some(l => l.msg === 'orchestration.bullmq.snapshotMalformed')).toBe(true);
+    expect(events.some(e => e.name === 'orchestration.bullmq.snapshotMalformed')).toBe(true);
 
-      const adapter = createBullMQOrchestrationAdapter({
-        connection: { host: '127.0.0.1', port: 6379 },
-        prefix,
-      });
+    // Snapshot is preserved under :malformed for forensics.
+    const preserved = await mockRedis.get(`${prefix}:cancelled:run:${corruptRunId}:malformed`);
+    expect(preserved).toBe('{not valid json');
 
-      const result = await adapter.listRuns({ status: 'cancelled' });
-      // The corrupt entry should be silently dropped from results
-      expect(result.total).toBe(0);
-
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        '[slingshot-orchestration-bullmq] Failed to deserialize run snapshot:',
-        expect.anything(),
-      );
-
-      await adapter.shutdown();
-    } finally {
-      consoleErrorSpy?.mockRestore();
-    }
+    await adapter.shutdown();
   });
 
   test('does not report cancelled when active cancellation fails', async () => {

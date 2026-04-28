@@ -37,6 +37,7 @@ export { createIdempotencyScope } from './idempotency';
 export type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
+  CancelOutcome,
   CoreOrchestrationAdapter,
   ObservabilityCapability,
   OrchestrationAdapter,

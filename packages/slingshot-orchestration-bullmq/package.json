@@ -29,6 +29,7 @@
     "lint": "eslint src/ --cache"
   },
   "dependencies": {
+    "@lastshotlabs/slingshot-core": "workspace:*",
     "@lastshotlabs/slingshot-orchestration": "workspace:*"
   },
   "peerDependencies": {

@@ -352,13 +352,25 @@ export interface RunFilter {
 /**
  * Required orchestration adapter contract implemented by all providers.
  */
+/**
+ * Outcome returned by `cancelRun()` describing whether cancellation was confirmed
+ * by the underlying adapter. `confirmed` means the run was deleted/finalized.
+ * `best-effort` means the cancel was issued but post-cancel verification could
+ * not confirm the run is gone — the caller should treat the run as still
+ * potentially executing until they observe a terminal state.
+ */
+export interface CancelOutcome {
+  cancelStatus: 'confirmed' | 'best-effort';
+  message?: string;
+}
+
 export interface CoreOrchestrationAdapter {
   registerTask(def: AnyResolvedTask): void;
   registerWorkflow(def: AnyResolvedWorkflow): void;
   runTask(name: string, input: unknown, opts?: RunOptions): Promise<RunHandle>;
   runWorkflow(name: string, input: unknown, opts?: RunOptions): Promise<RunHandle>;
   getRun(runId: string): Promise<Run | WorkflowRun | null>;
-  cancelRun(runId: string): Promise<void>;
+  cancelRun(runId: string): Promise<CancelOutcome | void>;
   start(): Promise<void>;
   shutdown(): Promise<void>;
 }
@@ -521,7 +533,7 @@ export interface OrchestrationRuntime {
   runWorkflow(name: string, input: unknown, opts?: RunOptions): Promise<RunHandle>;
 
   getRun(runId: string): Promise<Run | WorkflowRun | null>;
-  cancelRun(runId: string): Promise<void>;
+  cancelRun(runId: string): Promise<CancelOutcome | void>;
   supports(capability: OrchestrationCapability): boolean;
   signal(runId: string, name: string, payload?: unknown): Promise<void>;
   schedule(

@@ -6,7 +6,24 @@ import type {
   TaskContext,
 } from '@lastshotlabs/slingshot-orchestration';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
+import { classifyOrchestrationError } from './adapter';
 import { readTaskRuntimeConfig, resolveTaskRuntimeConfig } from './taskRuntime';
+
+/**
+ * Local stand-in for BullMQ's `UnrecoverableError`. BullMQ's runtime checks
+ * `err.name === 'UnrecoverableError'` to short-circuit retry, so a class with
+ * that name is treated identically without taking a hard import dependency on
+ * a symbol that bullmq's CJS bundle does not always re-export.
+ */
+class PermanentTaskError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.name = 'UnrecoverableError';
+    if (options?.cause !== undefined) {
+      (this as Error & { cause?: unknown }).cause = options.cause;
+    }
+  }
+}
 
 function toRunError(error: unknown): RunError {
   if (error instanceof Error) {
@@ -114,13 +131,25 @@ export function createBullMQTaskProcessor(options: {
       return parsedOutput;
     } catch (error) {
       const runError = toRunError(error);
+      const classification = classifyOrchestrationError(error);
       void options.eventSink?.emit('orchestration.task.failed', {
         runId,
         task: taskName,
         error: runError,
         tenantId:
           typeof job.data['tenantId'] === 'string' ? (job.data['tenantId'] as string) : undefined,
-      });
+        permanent: classification.permanent,
+      } as never);
+      // Permanent (non-retryable) errors must short-circuit BullMQ's retry
+      // policy. BullMQ inspects `err.name === 'UnrecoverableError'` to skip
+      // remaining attempts; we wrap with a class that carries that name so
+      // the worker fails fast without a hard runtime dep on the bullmq export.
+      const isAlreadyPermanent =
+        error instanceof Error && error.name === 'UnrecoverableError';
+      if (classification.permanent && !isAlreadyPermanent) {
+        const cause = error instanceof Error ? error : new Error(String(error));
+        throw new PermanentTaskError(cause.message, { cause });
+      }
       throw error;
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle);

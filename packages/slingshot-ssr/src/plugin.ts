@@ -150,32 +150,26 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
         return;
       }
 
-      const dynamicBus = bus as unknown as {
-        on(
-          event: string,
-          listener: (payload: Record<string, unknown>) => void | Promise<void>,
-        ): void;
-        off(
-          event: string,
-          listener: (payload: Record<string, unknown>) => void | Promise<void>,
-        ): void;
-      };
-
+      // Entity CRUD events use dynamic string keys (e.g. `entity:users.created`).
+      // SlingshotEventBus.on(string, ...) accepts `(payload: unknown)` listeners
+      // directly; we narrow inside the handler.
       for (const entityConfig of collectReferencedEntities(config.pages, entityConfigMap)) {
         for (const eventName of [
           `entity:${entityConfig._storageName}.created`,
           `entity:${entityConfig._storageName}.updated`,
           `entity:${entityConfig._storageName}.deleted`,
         ]) {
-          const listener = async (payload: Record<string, unknown>): Promise<void> => {
+          const listener = async (payload: unknown): Promise<void> => {
             await isrInvalidators?.revalidateTag(`entity:${entityConfig.name}`);
 
-            const entityPayload = payload['entity'];
-            const payloadRecord =
+            const payloadRecord: Record<string, unknown> =
+              payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+            const entityPayload = payloadRecord['entity'];
+            const sourceRecord =
               entityPayload && typeof entityPayload === 'object'
                 ? (entityPayload as Record<string, unknown>)
-                : payload;
-            const recordId = payloadRecord[entityConfig._pkField];
+                : payloadRecord;
+            const recordId = sourceRecord[entityConfig._pkField];
             if (recordId !== undefined && recordId !== null) {
               const entityRecordId = toTagValue(recordId);
               if (entityRecordId !== null) {
@@ -186,8 +180,8 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
             }
           };
 
-          dynamicBus.on(eventName, listener);
-          unsubscribers.push(() => dynamicBus.off(eventName, listener));
+          bus.on(eventName, listener);
+          unsubscribers.push(() => bus.off(eventName, listener));
         }
       }
     },

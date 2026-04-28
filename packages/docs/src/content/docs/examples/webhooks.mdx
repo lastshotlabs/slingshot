@@ -1,0 +1,32 @@
+---
+title: Webhooks
+description: Outbound event delivery with signed webhook requests and endpoint governance
+---
+
+Source-backed example app: `examples/webhooks/`
+
+Use this example when product events need to fan out to customer-owned webhook
+endpoints. It wires `slingshot-webhooks` into an app, registers a toy order
+event, and publishes that event from a route so the webhook dispatcher can
+deliver signed HTTP requests.
+
+## What this demonstrates
+
+- `createWebhookPlugin()` with subscribed events
+- event registration with tenant webhook exposure
+- a source plugin publishing a typed event
+- per-endpoint delivery timeout support
+- HMAC signature verification on the receiver
+- a manifest-first plugin configuration equivalent
+
+## Source Files
+
+- `examples/webhooks/src/index.ts`
+- `examples/webhooks/app.manifest.json`
+
+## Production Notes
+
+The example sets `allowPlaintextSecrets: true` only so it can run with the
+in-memory adapter. Production deployments should set `secretEncryptionKey` or
+provide a custom encryptor, and should back delivery with a durable queue such
+as BullMQ.

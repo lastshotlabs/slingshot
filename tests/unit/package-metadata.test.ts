@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 
@@ -107,9 +107,7 @@ describe('package metadata', () => {
     expect(scripts.prepublishOnly).toBe('bun run hardening:full');
     expect(scripts.release).toStartWith('bun run hardening:full &&');
     expect(scripts['hardening:full']).toContain('bun run test:coverage:check');
-    expect(scripts['test:docker']).toContain(
-      'code=$?; bun run test:docker:down; exit $code',
-    );
+    expect(scripts['test:docker']).toContain('code=$?; bun run test:docker:down; exit $code');
     expect(scripts['test:e2e']).toContain('code=$?; bun run test:docker:down; exit $code');
     expect(scripts['test:coverage:full']).toContain(
       'code=$?; bun run test:docker:down; exit $code',

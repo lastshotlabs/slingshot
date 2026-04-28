@@ -52,6 +52,19 @@ The `serviceAccount` value can also be a JSON string or a `file://` path read at
   service worker confirming the notification was shown); it moves the record to `delivered` from
   the client side. Both paths are now wired.
 
+### All-providers-fail contract
+
+`router.sendToUser`, `sendToUsers`, and `publishTopic` never throw when every provider
+returns a failure result — total failure is reported in the return value, not via an exception.
+Each call resolves to `{ delivered, attempted, allFailed }`: `delivered` is the number of
+successful sends, `attempted` is the number of subscriptions whose platform had a configured
+provider, and `allFailed` is `true` iff `attempted > 0 && delivered === 0`. Callers that need
+to branch on total failure should check `result.allFailed` directly rather than inspecting
+`push:delivery.failed` bus events. A user with no subscriptions, or one whose subs all map to
+unconfigured platforms, returns `{ delivered: 0, attempted: 0, allFailed: false }` — that is
+not a failure, just nothing to deliver. Per-subscription failures continue to surface via
+`push:delivery.failed` bus events for observability.
+
 ## Gotchas
 
 - `enabledPlatforms` controls which providers are wired and which entities are active. Listing a

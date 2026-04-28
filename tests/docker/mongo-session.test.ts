@@ -1,6 +1,7 @@
 import { DEFAULT_AUTH_CONFIG } from '@auth/config/authConfig';
 import type { AuthResolvedConfig } from '@auth/config/authConfig';
 import {
+  atomicCreateSession,
   createMongoSessionRepository,
   createSession,
   deleteSession,
@@ -92,6 +93,19 @@ describe('Mongo session store', () => {
     await evictOldestSession(repo, 'user-evict');
     expect(await getSession(repo, 'oldest')).toBeNull();
     expect(await getSession(repo, 'newest')).toBe('t2');
+  });
+
+  it('atomicCreateSession falls back on standalone Mongo and enforces maxSessions', async () => {
+    await atomicCreateSession(repo, 'user-atomic', 't1', 'atomic-1', 2);
+    await new Promise(r => setTimeout(r, 20));
+    await atomicCreateSession(repo, 'user-atomic', 't2', 'atomic-2', 2);
+    await new Promise(r => setTimeout(r, 20));
+    await atomicCreateSession(repo, 'user-atomic', 't3', 'atomic-3', 2);
+
+    expect(await getSession(repo, 'atomic-1')).toBeNull();
+    expect(await getSession(repo, 'atomic-2')).toBe('t2');
+    expect(await getSession(repo, 'atomic-3')).toBe('t3');
+    expect(await getActiveSessionCount(repo, 'user-atomic')).toBe(2);
   });
 
   it('updates lastActiveAt', async () => {

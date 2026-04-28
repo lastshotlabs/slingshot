@@ -1,3 +1,6 @@
+import { createMailCircuitBreaker } from '../lib/circuitBreaker';
+import type { MailCircuitBreakerOptions } from '../lib/circuitBreaker';
+import { extractRetryAfterHeader, parseRetryAfterMs } from '../lib/retryAfter';
 import type {
   MailAddress,
   MailMessage,
@@ -10,6 +13,8 @@ import { MailSendError } from '../types/provider';
 interface SendgridConfig {
   apiKey: string;
   baseUrl?: string;
+  /** Override or disable the consecutive-failure circuit breaker. */
+  circuitBreaker?: Pick<MailCircuitBreakerOptions, 'threshold' | 'cooldownMs' | 'now'>;
 }
 
 type SgAddress = { email: string; name?: string };
@@ -48,49 +53,57 @@ function toSgAddress(addr: MailAddress): SgAddress {
  */
 export function createSendgridProvider(config: SendgridConfig): MailProvider {
   const baseUrl = config.baseUrl ?? 'https://api.sendgrid.com';
+  const breaker = createMailCircuitBreaker({
+    providerName: 'sendgrid',
+    ...(config.circuitBreaker ?? {}),
+  });
 
   return {
     name: 'sendgrid',
     async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
-      const toAddresses = Array.isArray(message.to)
-        ? message.to.map(toSgAddress)
-        : [toSgAddress(message.to)];
+      return breaker.guard(async () => {
+        const toAddresses = Array.isArray(message.to)
+          ? message.to.map(toSgAddress)
+          : [toSgAddress(message.to)];
 
-      const body: SendGridBody = {
-        personalizations: [{ to: toAddresses }],
-        subject: message.subject,
-        content: [
-          { type: 'text/html', value: message.html },
-          ...(message.text ? [{ type: 'text/plain', value: message.text }] : []),
-        ],
-        ...(message.from ? { from: toSgAddress(message.from) } : {}),
-        ...(message.replyTo ? { reply_to: toSgAddress(message.replyTo) } : {}),
-        ...(message.headers ? { headers: message.headers } : {}),
-      };
+        const body: SendGridBody = {
+          personalizations: [{ to: toAddresses }],
+          subject: message.subject,
+          content: [
+            { type: 'text/html', value: message.html },
+            ...(message.text ? [{ type: 'text/plain', value: message.text }] : []),
+          ],
+          ...(message.from ? { from: toSgAddress(message.from) } : {}),
+          ...(message.replyTo ? { reply_to: toSgAddress(message.replyTo) } : {}),
+          ...(message.headers ? { headers: message.headers } : {}),
+        };
 
-      const res = await fetch(`${baseUrl}/v3/mail/send`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: options?.signal,
+        const res = await fetch(`${baseUrl}/v3/mail/send`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal: options?.signal,
+        });
+
+        if (!res.ok) {
+          const retryable = res.status === 429 || res.status >= 500;
+          const text = await res.text().catch(() => '');
+          const retryAfterMs = parseRetryAfterMs(extractRetryAfterHeader(res.headers));
+          throw new MailSendError(
+            `SendGrid error ${res.status}: ${text}`,
+            retryable,
+            res.status,
+            text,
+            retryAfterMs,
+          );
+        }
+
+        const messageId = res.headers.get('x-message-id') ?? undefined;
+        return { status: 'sent', messageId, raw: null };
       });
-
-      if (!res.ok) {
-        const retryable = res.status === 429 || res.status >= 500;
-        const text = await res.text().catch(() => '');
-        throw new MailSendError(
-          `SendGrid error ${res.status}: ${text}`,
-          retryable,
-          res.status,
-          text,
-        );
-      }
-
-      const messageId = res.headers.get('x-message-id') ?? undefined;
-      return { status: 'sent', messageId, raw: null };
     },
   };
 }

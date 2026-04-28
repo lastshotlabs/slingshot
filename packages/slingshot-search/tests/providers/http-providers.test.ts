@@ -29,7 +29,7 @@ const searchQuery = {
   filter: { field: 'status', op: '=', value: 'published' } as const,
   sort: [{ field: 'createdAt', direction: 'desc' as const }],
   facets: ['category'],
-  highlight: true,
+  highlight: { fields: ['title'] },
   page: 1,
   hitsPerPage: 10,
 };

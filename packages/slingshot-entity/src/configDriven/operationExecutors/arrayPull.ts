@@ -9,6 +9,7 @@
 import type { ArrayPullOpConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { toSnakeCase } from '../fieldUtils';
 import type { MemoryEntry, MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
+import { serializeOnStore } from './memoryMutex';
 import { withOptionalPostgresTransaction } from './postgresTransaction';
 
 // ---------------------------------------------------------------------------
@@ -22,17 +23,18 @@ export function arrayPullMemory(
   isAlive: (entry: MemoryEntry) => boolean,
   isVisible: (record: Record<string, unknown>) => boolean,
 ): (id: unknown, value: unknown) => Promise<Record<string, unknown>> {
-  return (id, value) => {
-    const entry = store.get(String(id));
-    if (!entry || !isAlive(entry) || !isVisible(entry.record)) {
-      throw new Error(`[${config.name}] Not found`);
-    }
-    const current = Array.isArray(entry.record[op.field])
-      ? (entry.record[op.field] as unknown[]).filter(v => v !== value)
-      : [];
-    entry.record[op.field] = current;
-    return Promise.resolve({ ...entry.record });
-  };
+  return (id, value) =>
+    serializeOnStore(store, () => {
+      const entry = store.get(String(id));
+      if (!entry || !isAlive(entry) || !isVisible(entry.record)) {
+        return Promise.reject(new Error(`[${config.name}] Not found`));
+      }
+      const current = Array.isArray(entry.record[op.field])
+        ? (entry.record[op.field] as unknown[]).filter(v => v !== value)
+        : [];
+      entry.record[op.field] = current;
+      return Promise.resolve({ ...entry.record });
+    });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,31 @@
+---
+title: Organizations
+description: Multi-tenant organization, invitation, membership, and group management setup
+---
+
+Source-backed example app: `examples/organizations/`
+
+Use this example when an app needs tenant-owned workspaces with membership
+roles and invitation flows. It layers `slingshot-organizations` on top of auth
+and keeps all storage in memory so the example can boot without infrastructure.
+
+## What this demonstrates
+
+- `createOrganizationsPlugin()` with organization routes enabled
+- custom membership role vocabulary through `knownRoles`
+- default member role configuration
+- app-specific reserved slugs
+- group management route configuration
+- a manifest-first equivalent for config-driven deployments
+
+## Source Files
+
+- `examples/organizations/src/index.ts`
+- `examples/organizations/app.manifest.json`
+
+## Production Notes
+
+Keep `reservedSlugs` aligned with your public routes before launch. Slug
+collisions are intentionally rejected with typed conflicts so user-created
+organizations cannot shadow reserved app paths such as `admin`, `api`, or
+`billing`.

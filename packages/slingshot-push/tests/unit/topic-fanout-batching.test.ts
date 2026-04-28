@@ -168,8 +168,8 @@ describe('Topic fan-out batching', () => {
       topicFanoutBatchSize: 1000,
     });
 
-    const count = await router.publishTopic('t', { title: 'Hi' });
-    expect(count).toBe(N);
+    const result = await router.publishTopic('t', { title: 'Hi' });
+    expect(result.delivered).toBe(N);
 
     // Exactly 5 batch info logs.
     const batchLogs = infoSpy.mock.calls.filter(

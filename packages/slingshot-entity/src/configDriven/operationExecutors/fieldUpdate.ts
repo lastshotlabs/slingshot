@@ -16,7 +16,8 @@
  * no record satisfies the match conditions.
  *
  * **Atomicity:**
- * - Memory: in-place mutation — single-threaded, effectively atomic.
+ * - Memory: serialized per-store via `serializeOnStore` — concurrent updates on
+ *   the same table run FIFO; the match-then-mutate cycle is uninterrupted.
  * - SQLite: `UPDATE ... WHERE` followed by `SELECT` (two statements, not wrapped in
  *   an explicit transaction).
  * - Postgres: `UPDATE ... WHERE ... RETURNING *` — single atomic statement.
@@ -27,6 +28,7 @@
 import type { FieldUpdateOpConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { toSnakeCase } from '../fieldUtils';
 import type { MemoryEntry, MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
+import { serializeOnStore } from './memoryMutex';
 
 function resolveParams(
   match: Record<string, string>,
@@ -78,18 +80,19 @@ export function fieldUpdateMemory(
   params: Record<string, unknown>,
   input: Record<string, unknown>,
 ) => Promise<Record<string, unknown>> {
-  return (params, input) => {
-    const resolved = resolveParams(op.match, params);
-    for (const entry of store.values()) {
-      if (!isAlive(entry) || !isVisible(entry.record)) continue;
-      if (!recordMatches(entry.record, resolved)) continue;
-      for (const f of op.set) {
-        if (input[f] !== undefined) entry.record[f] = input[f];
+  return (params, input) =>
+    serializeOnStore(store, () => {
+      const resolved = resolveParams(op.match, params);
+      for (const entry of store.values()) {
+        if (!isAlive(entry) || !isVisible(entry.record)) continue;
+        if (!recordMatches(entry.record, resolved)) continue;
+        for (const f of op.set) {
+          if (input[f] !== undefined) entry.record[f] = input[f];
+        }
+        return Promise.resolve({ ...entry.record });
       }
-      return Promise.resolve({ ...entry.record });
-    }
-    return Promise.reject(new Error(`[${config.name}] Record not found`));
-  };
+      return Promise.reject(new Error(`[${config.name}] Record not found`));
+    });
 }
 
 // ---------------------------------------------------------------------------

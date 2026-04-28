@@ -10,6 +10,30 @@ import type {
 import { SUPER_ADMIN_ROLE } from '@lastshotlabs/slingshot-core';
 
 /**
+ * Health snapshot describing the evaluator's recent error and timeout activity.
+ * Returned from `EvaluatorWithHealth.getHealth()`.
+ *
+ * All fields are cumulative counters since evaluator creation; consumers track
+ * deltas to compute rates if needed.
+ */
+export interface EvaluatorHealth {
+  /** Total `PermissionQueryTimeoutError` rejections observed since creation. */
+  readonly queryTimeoutCount: number;
+  /** Total group-expansion failures observed since creation. */
+  readonly groupExpansionErrorCount: number;
+  /** Wall-clock timestamp (ms) of the most recent timeout, or `null`. */
+  readonly lastQueryTimeoutAt: number | null;
+  /** Wall-clock timestamp (ms) of the most recent group-expansion error, or `null`. */
+  readonly lastGroupExpansionErrorAt: number | null;
+}
+
+/** Evaluator augmented with a `getHealth()` snapshot accessor. */
+export interface EvaluatorWithHealth extends PermissionEvaluator {
+  /** Cheap, non-blocking observability snapshot. Safe to call from a health endpoint. */
+  getHealth(): EvaluatorHealth;
+}
+
+/**
  * Minimal logger interface used by the evaluator for structured warn/error output.
  *
  * Defaults to `console`. Inject a custom logger (e.g. pino, bunyan, slog) to capture
@@ -222,13 +246,20 @@ function withQueryTimeout<T>(
  * );
  * ```
  */
-export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEvaluator {
+export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWithHealth {
   const { registry, adapter, groupResolver } = config;
   const maxGroups = config.maxGroups ?? 50;
   const { queryTimeoutMs } = config;
   const logger: EvaluatorLogger = config.logger ?? console;
   const warnSampleRate = config.warnSampleRate ?? 1;
   const { onGroupExpansionError } = config;
+
+  // Health-only counters. Updated from existing operation paths so calling
+  // getHealth() never performs I/O or blocks.
+  let queryTimeoutCount = 0;
+  let groupExpansionErrorCount = 0;
+  let lastQueryTimeoutAt: number | null = null;
+  let lastGroupExpansionErrorAt: number | null = null;
 
   if (maxGroups <= 0) {
     throw new Error('[slingshot-permissions] maxGroups must be a positive number');
@@ -260,6 +291,12 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
       adapter: `${adapterName}.${operation}`,
       scope,
       subjectId: subject.subjectId,
+    }).catch((err: unknown) => {
+      if (err instanceof PermissionQueryTimeoutError) {
+        queryTimeoutCount += 1;
+        lastQueryTimeoutAt = Date.now();
+      }
+      throw err;
     });
   }
 
@@ -328,6 +365,8 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
           }
         }
         if (failures.length > 0) {
+          groupExpansionErrorCount += failures.length;
+          lastGroupExpansionErrorAt = Date.now();
           // Group-expansion failures are NOT sampled — operators always need to see them.
           // We still proceed with whatever grants we did collect (deny-wins still applies
           // to the partial set). The first failure's reason is included in the message
@@ -429,6 +468,14 @@ export function createPermissionEvaluator(config: EvaluatorConfig): PermissionEv
       }
 
       return false;
+    },
+    getHealth(): EvaluatorHealth {
+      return {
+        queryTimeoutCount,
+        groupExpansionErrorCount,
+        lastQueryTimeoutAt,
+        lastGroupExpansionErrorAt,
+      };
     },
   };
 }

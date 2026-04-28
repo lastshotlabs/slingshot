@@ -82,6 +82,63 @@ The most important configuration choices are:
 - whether presigned URLs are enabled
 - whether image transforms are enabled and cached
 
+## Credential rotation
+
+The S3 adapter accepts either a static credentials object or an
+`AwsCredentialProvider` — an async function the AWS SDK calls each time it
+needs fresh credentials. Use the provider form for any long-running service:
+the SDK caches the result until `expiration` passes, then calls back into your
+function so STS, Vault, or instance-metadata rotation is honored without a
+restart.
+
+If you omit `credentials` entirely the SDK uses its default credential chain
+(env, profile, EC2/ECS metadata, STS web identity), which already refreshes
+itself. Pass a `AwsCredentialProvider` only when you load credentials from a
+backend the default chain doesn't cover.
+
+```typescript
+import { createAssetsPlugin, s3Storage } from '@lastshotlabs/slingshot-assets';
+import type { AwsCredentialProvider } from '@lastshotlabs/slingshot-assets';
+
+// The SDK calls this whenever cached creds are within `expiration` of expiring,
+// so set `expiration` to the upstream credential expiry, not your local polling
+// interval. This example uses an internal credential broker; STS, Vault, and
+// AWS Secrets Manager work the same way.
+const rotatingCredentialProvider: AwsCredentialProvider = async () => {
+  const response = await fetch(process.env.ASSETS_CREDENTIAL_ENDPOINT!, {
+    headers: { authorization: `Bearer ${process.env.ASSETS_CREDENTIAL_TOKEN!}` },
+  });
+  if (!response.ok) {
+    throw new Error('asset credential endpoint failed');
+  }
+  const creds = (await response.json()) as {
+    accessKeyId: string;
+    secretAccessKey: string;
+    sessionToken?: string;
+    expiresAt: string;
+  };
+  return {
+    accessKeyId: creds.accessKeyId,
+    secretAccessKey: creds.secretAccessKey,
+    sessionToken: creds.sessionToken,
+    expiration: new Date(creds.expiresAt),
+  };
+};
+
+createAssetsPlugin({
+  storage: s3Storage({
+    bucket: 'my-app-assets',
+    region: 'us-east-1',
+    credentials: rotatingCredentialProvider,
+  }),
+});
+```
+
+Vault, AWS Secrets Manager, or any other store works the same way — fetch the
+current secret inside the provider and return an object with an accurate
+`expiration`. Do not roll your own `setInterval` rotation loop; the SDK
+already invalidates the cached value when the returned `expiration` is near.
+
 ## Gotchas
 
 - The package expects permissions state to exist and throws during startup if `slingshot-permissions`

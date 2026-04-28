@@ -125,4 +125,26 @@ export interface ImageCacheAdapter {
    * @param entry - Transformed image payload to store.
    */
   set(key: string, entry: ImageCacheEntry): Promise<void>;
+
+  /**
+   * Optional health snapshot of the cache. Implementations may expose entry
+   * count and eviction counters for observability.
+   */
+  getHealth?(): ImageCacheHealth;
+}
+
+/**
+ * Point-in-time observability snapshot for an image cache adapter.
+ */
+export interface ImageCacheHealth {
+  /** Current number of cached entries. */
+  readonly size: number;
+  /** Cumulative number of LRU evictions performed since the cache was created. */
+  readonly evictionCount: number;
+  /**
+   * Cumulative number of TTL-based evictions performed since the cache was
+   * created (entries dropped on access because they had expired). Omitted for
+   * adapters that do not implement TTL eviction.
+   */
+  readonly ttlEvictionCount?: number;
 }

@@ -315,10 +315,10 @@ describe('script entrypoints', () => {
     expect(
       await runOrchestrationCoverageModule.runOrchestrationCoverage(
         createSpawnStub(cmd => {
-          if (cmd.includes('vitest')) return;
           const orchestrationCoverageDir = join(tempDir, 'orchestration-coverage');
-          const coverageDir =
-            cmd[cmd.indexOf('--coverage-dir') + 1] ?? join(orchestrationCoverageDir, 'bun');
+          const coverageDir = cmd.includes('vitest')
+            ? (cmd[cmd.indexOf('--coverage.reportsDirectory') + 1] ?? orchestrationCoverageDir)
+            : (cmd[cmd.indexOf('--coverage-dir') + 1] ?? join(orchestrationCoverageDir, 'bun'));
           mkdirSync(coverageDir, { recursive: true });
           writeFileSync(
             join(coverageDir, 'lcov.info'),

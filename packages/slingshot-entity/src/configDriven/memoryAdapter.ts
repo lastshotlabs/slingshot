@@ -22,6 +22,7 @@ import {
 import { resolveListFilter } from './listFilter';
 import { buildMemoryOperations } from './memoryOperationWiring';
 import type { MemoryEntry } from './operationExecutors/dbInterfaces';
+import { serializeOnStore } from './operationExecutors/memoryMutex';
 
 /**
  * Create an in-memory EntityAdapter for the given entity config.
@@ -153,33 +154,35 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
 
   return {
     create(input) {
-      evictOldest(store, maxEntries);
-      if (ttlMs) evictExpired(store);
+      return serializeOnStore(store, () => {
+        evictOldest(store, maxEntries);
+        if (ttlMs) evictExpired(store);
 
-      const record = applyDefaults(
-        input as Record<string, unknown>,
-        config.fields,
-        customAutoDefault,
-      );
-      const pk = record[pkField] as string | number;
-
-      const violated = findUniqueViolation(record);
-      if (violated) {
-        return Promise.reject(
-          new HttpError(
-            409,
-            `Unique constraint violated on fields: ${violated.join(', ')}`,
-            'UNIQUE_VIOLATION',
-          ),
+        const record = applyDefaults(
+          input as Record<string, unknown>,
+          config.fields,
+          customAutoDefault,
         );
-      }
+        const pk = record[pkField] as string | number;
 
-      store.set(pk, {
-        record,
-        expiresAt: ttlMs ? Date.now() + ttlMs : undefined,
+        const violated = findUniqueViolation(record);
+        if (violated) {
+          return Promise.reject(
+            new HttpError(
+              409,
+              `Unique constraint violated on fields: ${violated.join(', ')}`,
+              'UNIQUE_VIOLATION',
+            ),
+          );
+        }
+
+        store.set(pk, {
+          record,
+          expiresAt: ttlMs ? Date.now() + ttlMs : undefined,
+        });
+
+        return Promise.resolve({ ...record } as unknown as Entity);
       });
-
-      return Promise.resolve({ ...record } as unknown as Entity);
     },
 
     getById(id, filter) {
@@ -194,68 +197,72 @@ export function createMemoryEntityAdapter<Entity, CreateInput, UpdateInput>(
     },
 
     update(id, input, filter) {
-      const entry = store.get(id);
-      if (!entry || !isAlive(entry)) {
-        if (entry) store.delete(id);
-        return Promise.resolve(null);
-      }
-      if (!recordVisible(entry.record)) {
-        return Promise.resolve(null);
-      }
-      if (filter && !matchesFilter(entry.record, filter)) {
-        return Promise.resolve(null);
-      }
+      return serializeOnStore(store, () => {
+        const entry = store.get(id);
+        if (!entry || !isAlive(entry)) {
+          if (entry) store.delete(id);
+          return Promise.resolve(null);
+        }
+        if (!recordVisible(entry.record)) {
+          return Promise.resolve(null);
+        }
+        if (filter && !matchesFilter(entry.record, filter)) {
+          return Promise.resolve(null);
+        }
 
-      const updatePayload = applyOnUpdate(
-        input as Record<string, unknown>,
-        config.fields,
-        customOnUpdate,
-      );
-      // Check unique constraints against the merged record before applying
-      const merged = { ...entry.record, ...updatePayload };
-      const violated = findUniqueViolation(merged, id);
-      if (violated) {
-        return Promise.reject(
-          new HttpError(
-            409,
-            `Unique constraint violated on fields: ${violated.join(', ')}`,
-            'UNIQUE_VIOLATION',
-          ),
+        const updatePayload = applyOnUpdate(
+          input as Record<string, unknown>,
+          config.fields,
+          customOnUpdate,
         );
-      }
+        // Check unique constraints against the merged record before applying
+        const merged = { ...entry.record, ...updatePayload };
+        const violated = findUniqueViolation(merged, id);
+        if (violated) {
+          return Promise.reject(
+            new HttpError(
+              409,
+              `Unique constraint violated on fields: ${violated.join(', ')}`,
+              'UNIQUE_VIOLATION',
+            ),
+          );
+        }
 
-      Object.assign(entry.record, updatePayload);
+        Object.assign(entry.record, updatePayload);
 
-      // Refresh TTL on update
-      if (ttlMs) entry.expiresAt = Date.now() + ttlMs;
+        // Refresh TTL on update
+        if (ttlMs) entry.expiresAt = Date.now() + ttlMs;
 
-      return Promise.resolve({ ...entry.record } as unknown as Entity);
+        return Promise.resolve({ ...entry.record } as unknown as Entity);
+      });
     },
 
     delete(id, filter) {
-      const entry = store.get(id);
-      if (!entry || !isAlive(entry)) {
-        if (entry) store.delete(id);
-        return Promise.resolve(false);
-      }
-      if (!recordVisible(entry.record)) {
-        return Promise.resolve(false);
-      }
-      if (filter && !matchesFilter(entry.record, filter)) {
-        return Promise.resolve(false);
-      }
+      return serializeOnStore(store, () => {
+        const entry = store.get(id);
+        if (!entry || !isAlive(entry)) {
+          if (entry) store.delete(id);
+          return Promise.resolve(false);
+        }
+        if (!recordVisible(entry.record)) {
+          return Promise.resolve(false);
+        }
+        if (filter && !matchesFilter(entry.record, filter)) {
+          return Promise.resolve(false);
+        }
 
-      if (config.softDelete) {
-        // Soft delete: set the status field
-        entry.record[config.softDelete.field] =
-          'value' in config.softDelete ? config.softDelete.value : new Date().toISOString();
-        // Apply onUpdate fields (e.g. updatedAt)
-        const onUpdateFields = applyOnUpdate({}, config.fields, customOnUpdate);
-        Object.assign(entry.record, onUpdateFields);
-      } else {
-        store.delete(id);
-      }
-      return Promise.resolve(true);
+        if (config.softDelete) {
+          // Soft delete: set the status field
+          entry.record[config.softDelete.field] =
+            'value' in config.softDelete ? config.softDelete.value : new Date().toISOString();
+          // Apply onUpdate fields (e.g. updatedAt)
+          const onUpdateFields = applyOnUpdate({}, config.fields, customOnUpdate);
+          Object.assign(entry.record, onUpdateFields);
+        } else {
+          store.delete(id);
+        }
+        return Promise.resolve(true);
+      });
     },
 
     list(opts) {

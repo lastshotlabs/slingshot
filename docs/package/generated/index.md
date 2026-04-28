@@ -73,7 +73,7 @@ bun add @lastshotlabs/slingshot
 - `test:docs`: `bun test packages/docs/tests`
 - `test:e2e`: `bun run test:docker:up && bun test --config bunfig.e2e.toml tests/e2e/; code=$?; bun run test:docker:down; exit $code`
 - `test:e2e:ci`: `bun test --config bunfig.e2e.toml tests/e2e/`
-- `test:e2e:mongo`: `TEST_BACKEND=mongo bun run test:e2e:ci`
+- `test:e2e:mongo`: `MONGO_URL=mongodb://localhost:27018/slingshot_test TEST_BACKEND=mongo bun run test:e2e:ci`
 - `test:e2e:postgres`: `TEST_BACKEND=postgres bun run test:e2e:ci`
 - `test:e2e:sqlite`: `TEST_BACKEND=sqlite bun run test:e2e:ci`
 - `test:isolated`: `bun test tests/isolated/config-lock.test.ts tests/isolated/memoryCache.test.ts tests/isolated/zodToMongoose.test.ts && bun test tests/isolated/optional-deps.test.ts && bun test tests/isolated/jwt-signing-singleton.test.ts && bun test tests/isolated/csrf-signing-singleton.test.ts && bun test tests/isolated/auth0Access.test.ts && bun test tests/isolated/queue.test.ts && bun test tests/isolated/jobs-router.test.ts && bun test tests/isolated/queued-deletion.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts && bun test tests/isolated/webhooks-bullmq.test.ts && bun test tests/isolated/webhooks-bullmq-ioredis.test.ts && bun test tests/isolated/webhooks-bullmq-missing-bullmq.test.ts && bun test tests/isolated/webhooks-bullmq-missing-ioredis.test.ts && bun test tests/isolated/passkey-e2e.test.ts && bun test tests/isolated/ssr-windows-path-resolution.test.ts && bun test tests/isolated/temporal-activities-hook-errors.test.ts`

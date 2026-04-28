@@ -4,8 +4,8 @@
  * - Uses providers/ + queues/ + renderers/ instead of adapters/, because mail
  *   delivery involves three orthogonal concerns (transport, buffering, templating)
  *   that don't collapse cleanly into a single adapter interface.
- * - No testing.ts: smoke/integration tests live under tests/smoke/ and
- *   tests/integration/, organised by source type rather than a shared test helper.
+ * - Test factories live in `./testing` (see `src/testing.ts`); smoke/integration
+ *   tests under `tests/smoke/` and `tests/integration/` organise by source type.
  */
 
 // Plugin
@@ -13,6 +13,12 @@ export { createMailPlugin } from './plugin';
 
 // Errors
 export { MailTemplateNotFoundError, validateSubscriptionTemplates } from './lib/subscriptionWiring';
+export { MailCircuitOpenError } from './lib/circuitBreaker';
+export type {
+  MailCircuitBreaker,
+  MailCircuitBreakerHealth,
+  MailCircuitBreakerOptions,
+} from './lib/circuitBreaker';
 
 // Types
 export { mailPluginConfigSchema } from './types/config';

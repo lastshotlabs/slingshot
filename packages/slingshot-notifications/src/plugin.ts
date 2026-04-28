@@ -33,15 +33,14 @@ import type { NotificationsPluginConfig } from './types/config';
 import { notificationsPluginConfigSchema } from './types/config';
 
 type AdapterResult = BareEntityAdapter;
-type DynamicBus = {
-  on(event: string, handler: (payload: unknown) => void | Promise<void>): void;
-  off(event: string, handler: (payload: unknown) => void | Promise<void>): void;
-};
 type ActorParam = { 'actor.id': string };
 type GeneratedNotificationAdapter = NotificationAdapter & {
   listByUser(params: ActorParam): ReturnType<NotificationAdapter['listByUser']>;
   listUnread(params: ActorParam): ReturnType<NotificationAdapter['listUnread']>;
-  markRead(params: { id: string } & ActorParam): ReturnType<NotificationAdapter['markRead']>;
+  markRead(
+    params: { id: string } & ActorParam,
+    input: { read: boolean; readAt: Date },
+  ): ReturnType<NotificationAdapter['markRead']>;
   markAllRead(params: ActorParam): ReturnType<NotificationAdapter['markAllRead']>;
   unreadCount(params: ActorParam): ReturnType<NotificationAdapter['unreadCount']>;
   unreadCountBySource(
@@ -68,7 +67,11 @@ function wrapNotificationAdapter(adapter: NotificationAdapter): NotificationAdap
     ...adapter,
     listByUser: params => generated.listByUser(toActorParam(params)),
     listUnread: params => generated.listUnread(toActorParam(params)),
-    markRead: params => generated.markRead({ id: params.id, ...toActorParam(params) }),
+    markRead: params =>
+      generated.markRead(
+        { id: params.id, ...toActorParam(params) },
+        { read: true, readAt: new Date() },
+      ),
     markAllRead: params => generated.markAllRead(toActorParam(params)),
     unreadCount: params => generated.unreadCount(toActorParam(params)),
     unreadCountBySource: params =>
@@ -120,6 +123,13 @@ export function createNotificationsPlugin(
       config: Notification,
       operations: notificationOperations.operations,
       buildAdapter: (storeType: StoreType, infra: StoreInfra): AdapterResult => {
+        // The generated entity adapter exposes both the BareEntityAdapter CRUD
+        // surface and the named-operation methods declared in
+        // notificationOperations. Its inferred type is
+        // BareEntityAdapter | Record<string, unknown>, which does not
+        // structurally overlap with NotificationAdapter — go through `unknown`
+        // to bridge the boundary. wrapNotificationAdapter() then enforces the
+        // actor-param contract at every call site.
         const adapter = resolveRepo(notificationFactories, storeType, infra);
         notificationsAdapter = adapter as unknown as NotificationAdapter;
         return adapter as unknown as AdapterResult;
@@ -129,6 +139,8 @@ export function createNotificationsPlugin(
       config: NotificationPreference,
       operations: notificationPreferenceOperations.operations,
       buildAdapter: (storeType: StoreType, infra: StoreInfra): AdapterResult => {
+        // Same boundary as Notification above: bridge generated entity adapter
+        // shape to the typed NotificationPreferenceAdapter contract.
         const adapter = resolveRepo(notificationPreferenceFactories, storeType, infra);
         preferencesAdapter = adapter as unknown as NotificationPreferenceAdapter;
         return adapter as unknown as AdapterResult;
@@ -187,6 +199,19 @@ export function createNotificationsPlugin(
       const notifications = wrapNotificationAdapter(notificationsAdapter);
       const preferences = wrapPreferenceAdapter(preferencesAdapter);
 
+      // Trigger the entity adapter's lazy ensureTable() before any custom op
+      // (e.g. dedupOrCreate) runs. The entity wiring layer does not pass the
+      // ensureTable hook into custom-op factories, so without this pre-warm a
+      // first-call dedupOrCreate would hit "no such table" on a fresh DB.
+      try {
+        await notifications.list({ limit: 1 });
+      } catch (err) {
+        console.error(
+          '[slingshot-notifications] Failed to pre-warm notifications storage; first dedupOrCreate may fail',
+          err,
+        );
+      }
+
       const rateLimitBackend = resolveRateLimitBackend(config.rateLimit.backend);
       const dispatcher = config.dispatcher.enabled
         ? createIntervalDispatcher({
@@ -206,6 +231,15 @@ export function createNotificationsPlugin(
             tick() {
               return Promise.resolve(0);
             },
+            getHealth() {
+              return {
+                pendingCount: null,
+                pendingCountIsLowerBound: false,
+                lastTickAt: null,
+                lastDispatchedCount: null,
+                pendingAlarmActive: false,
+              };
+            },
           };
 
       const createdListener = async (payload: unknown) => {
@@ -224,7 +258,7 @@ export function createNotificationsPlugin(
         }
       };
 
-      (bus as unknown as DynamicBus).on('notifications:notification.created', createdListener);
+      bus.on('notifications:notification.created', createdListener);
 
       const state: NotificationsPluginState = deepFreeze({
         config,
@@ -254,7 +288,7 @@ export function createNotificationsPlugin(
       dispatcher.start();
 
       teardown = async () => {
-        (bus as unknown as DynamicBus).off('notifications:notification.created', createdListener);
+        bus.off('notifications:notification.created', createdListener);
         await dispatcher.stop();
         deliveryAdapters.clear();
         await rateLimitBackend.close?.();

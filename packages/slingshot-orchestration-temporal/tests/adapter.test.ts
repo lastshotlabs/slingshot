@@ -1013,6 +1013,66 @@ describe('shutdown', () => {
     }
   });
 
+  test('shutdown while a progress poll is mid-flight does not write through after dispose', async () => {
+    // Simulates the "connection drops mid-poll" scenario described in the
+    // timer-lifecycle audit: a query() call is in flight when shutdown() is
+    // invoked. We assert that the user-supplied callback never fires after
+    // shutdown — the disposed flag plus the post-await disposal re-check in
+    // poll() should bail before invoking the callback.
+    const fakeConnection = new FakeConnection();
+    const fakeClient = new FakeClient(fakeConnection);
+    const adapter = buildAdapter(fakeClient, fakeConnection, true);
+
+    const runId = 'run_shutdown_inflight_01';
+    let releaseQuery: (() => void) | undefined;
+    const queryGate = new Promise<void>(resolve => {
+      releaseQuery = resolve;
+    });
+    let queryCalls = 0;
+    let progressCallbackCalls = 0;
+
+    fakeClient.workflow.handles.set(runId, {
+      workflowId: runId,
+      async describe() {
+        return { status: { name: 'RUNNING' }, startTime: new Date() };
+      },
+      async result() {
+        return undefined;
+      },
+      async cancel() {},
+      async signal() {},
+      async query<T>() {
+        queryCalls += 1;
+        if (queryCalls === 1) {
+          // Block the first query so shutdown happens while it is in flight.
+          await queryGate;
+        }
+        return { progress: { percent: 50 } } as unknown as T;
+      },
+    });
+
+    adapter.onProgress!(runId, () => {
+      progressCallbackCalls += 1;
+    });
+
+    // Yield so the synchronous `poll()` kicks off and lands inside the
+    // gated query.
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    // Shutdown while the first query is blocked. The disposer flips
+    // `disposed = true` and clears the interval; when the gate releases,
+    // the in-flight tick must detect the flag and bail before invoking
+    // the user callback.
+    const shutdownPromise = adapter.shutdown();
+    releaseQuery?.();
+    await shutdownPromise;
+
+    // Give any late tick time to run through (it must be a no-op).
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    expect(progressCallbackCalls).toBe(0);
+  });
+
   test('disposes active onProgress polling intervals during shutdown', async () => {
     const fakeConnection = new FakeConnection();
     const fakeClient = new FakeClient(fakeConnection);

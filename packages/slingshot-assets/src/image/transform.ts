@@ -22,10 +22,11 @@ async function loadSharp(): Promise<SharpConstructor | null> {
   if (sharpFn !== undefined) return sharpFn;
   try {
     const mod = await import('sharp');
-    const fn =
-      (mod as unknown as { default?: SharpConstructor }).default ??
-      (mod as unknown as SharpConstructor);
-    sharpFn = fn;
+    // Interop shim: sharp publishes both an ESM default export and a CJS
+    // module.exports = sharp shape; the runtime payload depends on the loader.
+    type SharpModule = { default?: SharpConstructor } & SharpConstructor;
+    const interop = mod as unknown as SharpModule;
+    sharpFn = interop.default ?? interop;
   } catch {
     console.warn(
       '[slingshot-assets] sharp is not installed. Images will be served without optimization. ' +

@@ -107,8 +107,11 @@ export function parseArgs(argv: string[]): {
  * @internal
  */
 export function warnIfConcurrencyExceedsFdHeadroom(concurrency: number): void {
-  const getrlimit = (process as unknown as { getrlimit?: () => { nofile?: number } | undefined })
-    .getrlimit;
+  // Bun exposes process.getrlimit(); Node does not (or gates it behind
+  // --experimental-permission). Feature-detect at the runtime boundary so
+  // we degrade gracefully on Node without leaking a hard dependency.
+  type ProcessWithGetrlimit = { getrlimit?: () => { nofile?: number } | undefined };
+  const getrlimit = (process as unknown as ProcessWithGetrlimit).getrlimit;
   if (typeof getrlimit !== 'function') return;
   const limit = getrlimit();
   const nofile = limit?.nofile;

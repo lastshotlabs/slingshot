@@ -1,0 +1,46 @@
+{
+  "manifestVersion": 1,
+  "port": 3000,
+  "security": {
+    "signing": { "secret": "${secret:JWT_SECRET}" }
+  },
+  "plugins": [
+    {
+      "plugin": "slingshot-auth",
+      "config": {
+        "auth": { "roles": ["user", "admin"], "defaultRole": "user" },
+        "db": { "auth": "memory", "sessions": "memory", "oauthState": "memory" }
+      }
+    },
+    {
+      "plugin": "slingshot-orchestration",
+      "config": {
+        "adapter": {
+          "type": "bullmq",
+          "config": {
+            "connection": {
+              "host": "${env:REDIS_HOST}",
+              "port": 6379,
+              "tls": { "rejectUnauthorized": true }
+            },
+            "prefix": "demo-orch",
+            "concurrency": 8,
+            "requireTls": true,
+            "shutdownDrainTimeoutMs": 30000,
+            "jobRetention": {
+              "removeOnCompleteAge": 3600,
+              "removeOnCompleteCount": 1000,
+              "removeOnFailAge": 86400
+            }
+          }
+        },
+        "tasks": ["sendEmail"],
+        "workflows": ["onboardCustomerWorkflow"],
+        "routes": true,
+        "routePrefix": "/orchestration",
+        "routeMiddleware": [{ "$ref": "requireOpsKey" }],
+        "resolveRequestContext": { "$ref": "resolveOpsRequestContext" }
+      }
+    }
+  ]
+}

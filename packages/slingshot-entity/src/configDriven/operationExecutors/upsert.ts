@@ -21,7 +21,10 @@
  * `{ entity: Record<string, unknown>, created: boolean }` rather than the plain record.
  *
  * **Atomicity:**
- * - Memory: sequential scan + in-place mutation — not concurrent-safe.
+ * - Memory: serialized per-store via `serializeOnStore` — concurrent upserts on
+ *   the same table run FIFO, so a find-or-insert sequence cannot interleave with
+ *   another caller's read between the scan and the write. Single-call semantics
+ *   (return shape, error behaviour) are unchanged.
  * - SQLite: `INSERT ... ON CONFLICT DO UPDATE SET` — atomic.
  * - Postgres: `INSERT ... ON CONFLICT DO UPDATE SET ... RETURNING *` — atomic.
  * - Mongo: `updateOne(query, { $set, $setOnInsert }, { upsert: true })` — atomic.
@@ -30,6 +33,7 @@
 import type { ResolvedEntityConfig, UpsertOpConfig } from '@lastshotlabs/slingshot-core';
 import { applyDefaults, toSnakeCase } from '../fieldUtils';
 import type { MemoryEntry, MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
+import { serializeOnStore } from './memoryMutex';
 
 function resolveOnCreate(
   op: UpsertOpConfig,
@@ -78,25 +82,26 @@ export function upsertMemory(
   ttlMs: number | undefined,
 ): (input: Record<string, unknown>) => Promise<Record<string, unknown>> {
   const returnsCreated = typeof op.returns === 'object' && op.returns.created;
-  return input => {
-    for (const entry of store.values()) {
-      if (!isAlive(entry) || !isVisible(entry.record)) continue;
-      if (op.match.every(f => entry.record[f] === input[f])) {
-        for (const f of op.set) {
-          if (input[f] !== undefined) entry.record[f] = input[f];
+  return input =>
+    serializeOnStore(store, () => {
+      for (const entry of store.values()) {
+        if (!isAlive(entry) || !isVisible(entry.record)) continue;
+        if (op.match.every(f => entry.record[f] === input[f])) {
+          for (const f of op.set) {
+            if (input[f] !== undefined) entry.record[f] = input[f];
+          }
+          return Promise.resolve(
+            returnsCreated ? { entity: { ...entry.record }, created: false } : { ...entry.record },
+          );
         }
-        return Promise.resolve(
-          returnsCreated ? { entity: { ...entry.record }, created: false } : { ...entry.record },
-        );
       }
-    }
-    const record = resolveOnCreate(op, config, input);
-    const pk = record[pkField] as string | number;
-    store.set(pk, { record, expiresAt: ttlMs ? Date.now() + ttlMs : undefined });
-    return Promise.resolve(
-      returnsCreated ? { entity: { ...record }, created: true } : { ...record },
-    );
-  };
+      const record = resolveOnCreate(op, config, input);
+      const pk = record[pkField] as string | number;
+      store.set(pk, { record, expiresAt: ttlMs ? Date.now() + ttlMs : undefined });
+      return Promise.resolve(
+        returnsCreated ? { entity: { ...record }, created: true } : { ...record },
+      );
+    });
 }
 
 // ---------------------------------------------------------------------------

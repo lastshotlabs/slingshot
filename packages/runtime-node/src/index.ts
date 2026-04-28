@@ -345,6 +345,8 @@ function createNodeServer(): RuntimeServerFactory {
           cert: opts.tls.cert as string | Buffer | undefined,
           maxHeaderSize,
         });
+        // https.Server extends http.Server at runtime, but the @types/node
+        // class hierarchy does not declare the inheritance, so widen here.
         httpServer = tlsServer as unknown as import('node:http').Server;
       } else {
         const { createServer } = await import('node:http');
@@ -464,10 +466,12 @@ function createNodeServer(): RuntimeServerFactory {
         socket.once('close', () => activeSockets.delete(socket));
       });
       httpServer.on('secureConnection', socket => {
-        activeSockets.add(socket as unknown as import('node:net').Socket);
-        socket.once('close', () =>
-          activeSockets.delete(socket as unknown as import('node:net').Socket),
-        );
+        // TLSSocket extends net.Socket at runtime; the @types/node hierarchy
+        // does not let TS infer the structural relationship from this listener
+        // overload, so we narrow at the boundary.
+        const netSocket = socket as unknown as import('node:net').Socket;
+        activeSockets.add(netSocket);
+        socket.once('close', () => activeSockets.delete(netSocket));
       });
 
       // -- WebSocket support via `ws` --
@@ -495,9 +499,14 @@ function createNodeServer(): RuntimeServerFactory {
 
       // Idle-timeout heartbeat machinery. We track per-socket "alive" markers
       // and ping at idleTimeout/2 intervals; any socket that has not pong'd
-      // since the last sweep is closed with code 1001.
+      // since the last sweep is closed with code 1001. The timer is created
+      // exactly once per `listen()` call (not per-upgrade) and is cleared in
+      // `stop()`. We also flip `heartbeatStopped` to guard the interval
+      // callback against late firings — Node may dispatch a queued tick after
+      // `clearInterval` if the server is stopping while a tick is in flight.
       const aliveSockets = new WeakSet<WsWebSocket>();
       let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+      let heartbeatStopped = false;
 
       if (wsHandler) {
         const { Writable } = await import('node:stream');
@@ -535,6 +544,9 @@ function createNodeServer(): RuntimeServerFactory {
           });
 
           const res = new ServerResponse(req);
+          // assignSocket() requires a net.Socket but ServerResponse only
+          // writes to it — a Writable stub is functionally equivalent for
+          // the upgrade path where the real socket is owned by the WS upgrade.
           res.assignSocket(dummySocket as unknown as import('node:net').Socket);
           httpServer.emit('request', req, res);
         });
@@ -543,6 +555,12 @@ function createNodeServer(): RuntimeServerFactory {
         if (idleTimeoutSec && idleTimeoutSec > 0) {
           const intervalMs = Math.max(1000, Math.floor((idleTimeoutSec * 1000) / 2));
           heartbeatTimer = setInterval(() => {
+            // Late-firing guard. Node may dispatch a queued tick after
+            // `clearInterval` if the server is stopping while the tick is
+            // already on the macrotask queue. A no-op return prevents the
+            // sweep from racing with socket teardown that's already
+            // happening in `stop()`.
+            if (heartbeatStopped) return;
             for (const ws of allSockets) {
               if (!aliveSockets.has(ws)) {
                 // terminate() over close() — close() waits up to 30s for the
@@ -630,7 +648,15 @@ function createNodeServer(): RuntimeServerFactory {
             }
           }
         });
-        ws.on('close', (code, reason) => {
+        // Tracks whether the per-socket cleanup has run already. Both `close`
+        // and `error` can fire on the same socket (and `error` is sometimes
+        // emitted without a subsequent `close`). Without this guard the close
+        // handler would run twice — emitting two close events to the user
+        // handler and double-decrementing channel counters.
+        let cleanedUp = false;
+        const cleanupSocket = (code: number | undefined, reason: unknown): void => {
+          if (cleanedUp) return;
+          cleanedUp = true;
           // Always clean up channel membership — not only those the user
           // explicitly unsubscribed from. Without this every disconnected client
           // would leak into the channel map (the original report's leak).
@@ -641,11 +667,22 @@ function createNodeServer(): RuntimeServerFactory {
           }
           allSockets.delete(ws);
           subscribedChannels.clear();
-          void Promise.resolve(handler.close(rtWs, code, stringifyWsPayload(reason))).catch(
-            (error: unknown) => {
-              logWebSocketHandlerError('close', error);
-            },
-          );
+          void Promise.resolve(
+            handler.close(rtWs, code ?? 1006, stringifyWsPayload(reason ?? '')),
+          ).catch((error: unknown) => {
+            logWebSocketHandlerError('close', error);
+          });
+        };
+
+        ws.on('close', (code, reason) => {
+          cleanupSocket(code, reason);
+        });
+        // `error` may fire without a corresponding `close` (e.g. abrupt
+        // socket-level errors). Run the same cleanup so the socket is removed
+        // from `allSockets` and the heartbeat sweeper does not keep pinging a
+        // dead WebSocket on subsequent ticks.
+        ws.on('error', () => {
+          cleanupSocket(1006, '');
         });
 
         return rtWs;
@@ -663,7 +700,11 @@ function createNodeServer(): RuntimeServerFactory {
           pending.socket.destroy();
           pendingUpgrades.delete(key);
         }
-        // Stop the heartbeat sweeper before closing sockets.
+        // Stop the heartbeat sweeper before closing sockets. We flip the
+        // `heartbeatStopped` flag first so a tick that was already on the
+        // macrotask queue when `clearInterval` was called returns immediately
+        // without sweeping the (now being torn down) socket set.
+        heartbeatStopped = true;
         if (heartbeatTimer) {
           clearInterval(heartbeatTimer);
           heartbeatTimer = undefined;

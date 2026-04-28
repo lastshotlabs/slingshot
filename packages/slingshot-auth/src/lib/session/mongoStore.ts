@@ -52,7 +52,41 @@ export function createMongoSessionRepository(
   conn: import('mongoose').Connection,
   mg: typeof import('mongoose'),
 ): SessionRepository {
+  type MongoClientSession = Awaited<ReturnType<typeof conn.startSession>>;
+
   let sessionModel: import('mongoose').Model<SessionDoc> | null = null;
+  let standaloneFallbackQueue = Promise.resolve();
+
+  function isTransactionUnsupportedError(error: unknown): boolean {
+    const err = error as {
+      code?: unknown;
+      codeName?: unknown;
+      message?: unknown;
+      errorResponse?: { code?: unknown; codeName?: unknown; errmsg?: unknown };
+    };
+    const message = String(err.message ?? err.errorResponse?.errmsg ?? '');
+    return (
+      err.code === 20 ||
+      err.errorResponse?.code === 20 ||
+      err.codeName === 'IllegalOperation' ||
+      err.errorResponse?.codeName === 'IllegalOperation' ||
+      message.includes('Transaction numbers are only allowed on a replica set member or mongos')
+    );
+  }
+
+  async function runStandaloneFallback(fn: () => Promise<void>): Promise<void> {
+    const previous = standaloneFallbackQueue;
+    let release!: () => void;
+    standaloneFallbackQueue = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      await fn();
+    } finally {
+      release();
+    }
+  }
 
   function getSessionModel(cfg?: AuthResolvedConfig): import('mongoose').Model<SessionDoc> {
     if (sessionModel) return sessionModel;
@@ -128,59 +162,67 @@ export function createMongoSessionRepository(
 
     async atomicCreateSession(userId, token, sessionId, maxSessions, metadata?, cfg?) {
       const c = cfg ?? DEFAULT_AUTH_CONFIG;
+      const createLimitedSession = async (session?: MongoClientSession): Promise<void> => {
+        const Session = getSessionModel(c);
+        const now = new Date();
+        const sessionOptions = session ? { session } : undefined;
+        let activeCount = await Session.countDocuments(
+          { userId, token: { $ne: null }, expiresAt: { $gt: now } },
+          sessionOptions,
+        );
+
+        while (activeCount >= maxSessions) {
+          const oldest = await Session.findOne(
+            { userId, token: { $ne: null }, expiresAt: { $gt: now } },
+            'sessionId',
+            { ...(sessionOptions ?? {}), sort: { createdAt: 1 } },
+          ).lean();
+          if (!oldest) break;
+          if (c.persistSessionMetadata) {
+            await Session.updateOne(
+              { sessionId: oldest.sessionId },
+              {
+                $set: {
+                  token: null,
+                  refreshToken: null,
+                  prevRefreshToken: null,
+                  prevTokenExpiresAt: null,
+                },
+              },
+              sessionOptions,
+            );
+          } else {
+            await Session.deleteOne({ sessionId: oldest.sessionId }, sessionOptions);
+          }
+          activeCount--;
+        }
+
+        const expiresAt = new Date(Date.now() + getSessionTtlMs(c));
+        await Session.create(
+          [
+            {
+              sessionId,
+              userId,
+              token,
+              createdAt: now,
+              lastActiveAt: now,
+              expiresAt,
+              ipAddress: metadata?.ipAddress,
+              userAgent: metadata?.userAgent,
+            },
+          ],
+          sessionOptions,
+        );
+      };
+
       const session = await conn.startSession();
       try {
         await session.withTransaction(async () => {
-          const Session = getSessionModel(c);
-          const now = new Date();
-          let activeCount = await Session.countDocuments(
-            { userId, token: { $ne: null }, expiresAt: { $gt: now } },
-            { session },
-          );
-
-          while (activeCount >= maxSessions) {
-            const oldest = await Session.findOne(
-              { userId, token: { $ne: null }, expiresAt: { $gt: now } },
-              'sessionId',
-              { session, sort: { createdAt: 1 } },
-            ).lean();
-            if (!oldest) break;
-            if (c.persistSessionMetadata) {
-              await Session.updateOne(
-                { sessionId: oldest.sessionId },
-                {
-                  $set: {
-                    token: null,
-                    refreshToken: null,
-                    prevRefreshToken: null,
-                    prevTokenExpiresAt: null,
-                  },
-                },
-                { session },
-              );
-            } else {
-              await Session.deleteOne({ sessionId: oldest.sessionId }, { session });
-            }
-            activeCount--;
-          }
-
-          const expiresAt = new Date(Date.now() + getSessionTtlMs(c));
-          await Session.create(
-            [
-              {
-                sessionId,
-                userId,
-                token,
-                createdAt: now,
-                lastActiveAt: now,
-                expiresAt,
-                ipAddress: metadata?.ipAddress,
-                userAgent: metadata?.userAgent,
-              },
-            ],
-            { session },
-          );
+          await createLimitedSession(session);
         });
+      } catch (error) {
+        if (!isTransactionUnsupportedError(error)) throw error;
+        await runStandaloneFallback(() => createLimitedSession());
       } finally {
         await session.endSession();
       }

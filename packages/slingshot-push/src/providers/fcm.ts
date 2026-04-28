@@ -151,6 +151,7 @@ export function createFcmProvider(config: {
     config.tokenFailureCircuitThreshold ?? DEFAULT_FCM_TOKEN_FAILURE_CIRCUIT,
   );
   let consecutiveTokenFailures = 0;
+  let lastFailureAt: number | null = null;
 
   const stringifyPayload = (value: unknown): string => {
     if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
@@ -174,6 +175,7 @@ export function createFcmProvider(config: {
         consecutiveTokenFailures = 0;
       } catch (err) {
         consecutiveTokenFailures += 1;
+        lastFailureAt = Date.now();
         const errorMessage = err instanceof Error ? err.message : String(err);
         const statusCode = err instanceof FcmTokenError ? err.statusCode : undefined;
         // 401/403 from the OAuth token endpoint indicates invalid credentials.
@@ -301,6 +303,15 @@ export function createFcmProvider(config: {
           error: error instanceof Error ? error.message : 'fcm request failed',
         };
       }
+    },
+    getHealth() {
+      const open = consecutiveTokenFailures >= circuitThreshold;
+      return {
+        consecutiveFailures: consecutiveTokenFailures,
+        circuitState: open ? ('open' as const) : ('closed' as const),
+        circuitThreshold,
+        lastFailureAt,
+      };
     },
   };
 }

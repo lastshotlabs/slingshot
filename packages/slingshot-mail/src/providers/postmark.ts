@@ -1,3 +1,6 @@
+import { createMailCircuitBreaker } from '../lib/circuitBreaker';
+import type { MailCircuitBreakerOptions } from '../lib/circuitBreaker';
+import { extractRetryAfterHeader, parseRetryAfterMs } from '../lib/retryAfter';
 import type {
   MailAddress,
   MailMessage,
@@ -10,6 +13,8 @@ import { MailSendError } from '../types/provider';
 interface PostmarkConfig {
   serverToken: string;
   baseUrl?: string;
+  /** Override or disable the consecutive-failure circuit breaker. */
+  circuitBreaker?: Pick<MailCircuitBreakerOptions, 'threshold' | 'cooldownMs' | 'now'>;
 }
 
 interface PostmarkBody {
@@ -46,50 +51,60 @@ function formatAddress(addr: MailAddress): string {
  */
 export function createPostmarkProvider(config: PostmarkConfig): MailProvider {
   const baseUrl = config.baseUrl ?? 'https://api.postmarkapp.com';
+  const breaker = createMailCircuitBreaker({
+    providerName: 'postmark',
+    ...(config.circuitBreaker ?? {}),
+  });
 
   return {
     name: 'postmark',
     async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
-      const to = Array.isArray(message.to)
-        ? message.to.map(formatAddress).join(', ')
-        : formatAddress(message.to);
+      return breaker.guard(async () => {
+        const to = Array.isArray(message.to)
+          ? message.to.map(formatAddress).join(', ')
+          : formatAddress(message.to);
 
-      const body: PostmarkBody = {
-        To: to,
-        Subject: message.subject,
-        HtmlBody: message.html,
-        ...(message.from ? { From: formatAddress(message.from) } : {}),
-        ...(message.text ? { TextBody: message.text } : {}),
-        ...(message.replyTo ? { ReplyTo: formatAddress(message.replyTo) } : {}),
-        ...(message.headers
-          ? { Headers: Object.entries(message.headers).map(([Name, Value]) => ({ Name, Value })) }
-          : {}),
-      };
+        const body: PostmarkBody = {
+          To: to,
+          Subject: message.subject,
+          HtmlBody: message.html,
+          ...(message.from ? { From: formatAddress(message.from) } : {}),
+          ...(message.text ? { TextBody: message.text } : {}),
+          ...(message.replyTo ? { ReplyTo: formatAddress(message.replyTo) } : {}),
+          ...(message.headers
+            ? {
+                Headers: Object.entries(message.headers).map(([Name, Value]) => ({ Name, Value })),
+              }
+            : {}),
+        };
 
-      const res = await fetch(`${baseUrl}/email`, {
-        method: 'POST',
-        headers: {
-          'X-Postmark-Server-Token': config.serverToken,
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: options?.signal,
+        const res = await fetch(`${baseUrl}/email`, {
+          method: 'POST',
+          headers: {
+            'X-Postmark-Server-Token': config.serverToken,
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal: options?.signal,
+        });
+
+        if (!res.ok) {
+          const retryable = res.status === 429 || res.status >= 500;
+          const text = await res.text().catch(() => '');
+          const retryAfterMs = parseRetryAfterMs(extractRetryAfterHeader(res.headers));
+          throw new MailSendError(
+            `Postmark error ${res.status}: ${text}`,
+            retryable,
+            res.status,
+            text,
+            retryAfterMs,
+          );
+        }
+
+        const data = (await res.json()) as { MessageID?: string };
+        return { status: 'sent', messageId: data.MessageID, raw: data };
       });
-
-      if (!res.ok) {
-        const retryable = res.status === 429 || res.status >= 500;
-        const text = await res.text().catch(() => '');
-        throw new MailSendError(
-          `Postmark error ${res.status}: ${text}`,
-          retryable,
-          res.status,
-          text,
-        );
-      }
-
-      const data = (await res.json()) as { MessageID?: string };
-      return { status: 'sent', messageId: data.MessageID, raw: data };
     },
   };
 }

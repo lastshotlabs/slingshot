@@ -773,11 +773,18 @@ export function createBullMQOrchestrationAdapter(
 
     if (state === 'active') {
       try {
-        await (
-          job as unknown as {
-            moveToFailed(err: Error, token: string, fetchNext?: boolean): Promise<void>;
-          }
-        ).moveToFailed(new Error(CANCELLATION_ERROR_MESSAGE), '0', false);
+        // BullMQ's public Job.moveToFailed signature varies between minor
+        // releases (some take a token, some take an opts object). We assert
+        // the shape we rely on at this peer-API boundary so the call site
+        // stays version-tolerant; the runtime always returns a Promise<void>.
+        type MoveToFailed = {
+          moveToFailed(err: Error, token: string, fetchNext?: boolean): Promise<void>;
+        };
+        await (job as unknown as MoveToFailed).moveToFailed(
+          new Error(CANCELLATION_ERROR_MESSAGE),
+          '0',
+          false,
+        );
       } catch (error) {
         throw new OrchestrationError(
           'ADAPTER_ERROR',
@@ -988,8 +995,9 @@ export function createBullMQOrchestrationAdapter(
         // The poll interval is short relative to typical job durations, so the
         // overhead is negligible compared to the job work itself.
         // Some test harnesses do not implement getActiveCount — treat absence as zero.
-        const getActiveCount = (worker as unknown as { getActiveCount?: () => Promise<number> })
-          .getActiveCount;
+        // The cast is a feature-detect; real BullMQ Workers always expose it.
+        type WorkerWithActiveCount = { getActiveCount?: () => Promise<number> };
+        const getActiveCount = (worker as unknown as WorkerWithActiveCount).getActiveCount;
         if (typeof getActiveCount === 'function') {
           while (Date.now() < deadline) {
             try {

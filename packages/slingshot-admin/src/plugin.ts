@@ -10,6 +10,35 @@ import { adminPluginConfigSchema } from './types/config';
 import type { AdminEnv } from './types/env';
 
 /**
+ * Aggregated health snapshot for `slingshot-admin`.
+ *
+ * `slingshot-admin` does not own a database or cache — this snapshot reflects
+ * the configuration of injected providers without performing any I/O. A
+ * higher-level health endpoint should aggregate the audit-log and rate-limit
+ * providers' own health snapshots when those exist.
+ *
+ * `status` is derived from the underlying signals:
+ *   - `'unhealthy'` when no audit-log provider is configured (admin actions
+ *     would not be recorded).
+ *   - `'degraded'` when no rate-limit store is configured (the in-process
+ *     default is single-instance only).
+ *   - `'healthy'` when both providers are configured.
+ */
+export interface AdminPluginHealth {
+  readonly status: 'healthy' | 'degraded' | 'unhealthy';
+  readonly details: {
+    /** `true` when an `AuditLogProvider` was passed to `createAdminPlugin`. */
+    readonly auditLogConfigured: boolean;
+    /** `true` when a custom `AdminRateLimitStore` was passed (otherwise the in-process default is used). */
+    readonly rateLimitStoreConfigured: boolean;
+    /** `true` when a `MailRenderer` was passed. */
+    readonly mailRendererConfigured: boolean;
+    /** Mount path for admin routes (echoes the resolved config). */
+    readonly mountPath: string;
+  };
+}
+
+/**
  * Creates the Slingshot admin plugin, which mounts user-management, permissions,
  * and (optionally) mail-preview routes under a configurable path.
  *
@@ -40,7 +69,9 @@ import type { AdminEnv } from './types/env';
  * });
  * ```
  */
-export function createAdminPlugin(rawConfig: AdminPluginConfig): SlingshotPlugin {
+export function createAdminPlugin(
+  rawConfig: AdminPluginConfig,
+): SlingshotPlugin & { getHealth(): AdminPluginHealth } {
   const config = validatePluginConfig('slingshot-admin', rawConfig, adminPluginConfigSchema);
 
   // Validate adapter method shapes — Zod's z.custom() only checks non-null object;
@@ -73,8 +104,11 @@ export function createAdminPlugin(rawConfig: AdminPluginConfig): SlingshotPlugin
     // Double-cast required: Hono<AppEnv> and Hono<AdminEnv> do not overlap in TS's
     // structural check because the context `set` method is contravariant. Safe because
     // AdminEnv only adds variables; AppEnv variables remain fully accessible.
-    (app as unknown as Hono<AdminEnv>).use(`${mountPath}/*`, async (c: Context<AdminEnv>, next) => {
-      // verifyRequest only reads HTTP headers — cast is safe at this opaque boundary.
+    const adminApp = app as unknown as Hono<AdminEnv>;
+    adminApp.use(`${mountPath}/*`, async (c: Context<AdminEnv>, next) => {
+      // verifyRequest only reads HTTP headers — the contravariant context type
+      // narrows AppEnv to AdminEnv at this provider boundary; cast is safe since
+      // verifyRequest only consumes header data.
       const principal = await accessProvider.verifyRequest(c as unknown as Context<AppEnv>);
       if (!principal) return c.json({ error: 'Unauthorized' }, 401);
       c.set('adminPrincipal', principal);
@@ -108,9 +142,33 @@ export function createAdminPlugin(rawConfig: AdminPluginConfig): SlingshotPlugin
     return Promise.resolve();
   }
 
+  const auditLogConfigured = config.auditLog != null;
+  const rateLimitStoreConfigured = config.rateLimitStore != null;
+  const mailRendererConfigured = config.mailRenderer != null;
+  const resolvedMountPath = config.mountPath ?? '/admin';
+
+  function getHealth(): AdminPluginHealth {
+    let status: AdminPluginHealth['status'] = 'healthy';
+    if (!auditLogConfigured) {
+      status = 'unhealthy';
+    } else if (!rateLimitStoreConfigured) {
+      status = 'degraded';
+    }
+    return {
+      status,
+      details: {
+        auditLogConfigured,
+        rateLimitStoreConfigured,
+        mailRendererConfigured,
+        mountPath: resolvedMountPath,
+      },
+    };
+  }
+
   return {
     name: 'slingshot-admin',
     dependencies: [],
     setupRoutes: doSetup,
+    getHealth,
   };
 }

@@ -26,6 +26,7 @@ import type { BatchOpConfig, ResolvedEntityConfig } from '@lastshotlabs/slingsho
 import { toSnakeCase } from '../fieldUtils';
 import { evaluateFilter } from '../filterEvaluator';
 import type { MemoryEntry, MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
+import { serializeOnStore } from './memoryMutex';
 
 function resolveSetValue(v: string | number | boolean, params: Record<string, unknown>): unknown {
   if (v === 'now') return new Date();
@@ -55,30 +56,31 @@ export function batchMemory(
   isAlive: (entry: MemoryEntry) => boolean,
   isVisible: (record: Record<string, unknown>) => boolean,
 ): (params: Record<string, unknown>) => Promise<number> {
-  return params => {
-    let count = 0;
-    if (op.action === 'delete') {
-      for (const [pk, entry] of store) {
-        if (!isAlive(entry) || !isVisible(entry.record)) continue;
-        if (evaluateFilter(entry.record, op.filter, params)) {
-          store.delete(pk);
+  return params =>
+    serializeOnStore(store, () => {
+      let count = 0;
+      if (op.action === 'delete') {
+        for (const [pk, entry] of store) {
+          if (!isAlive(entry) || !isVisible(entry.record)) continue;
+          if (evaluateFilter(entry.record, op.filter, params)) {
+            store.delete(pk);
+            count++;
+          }
+        }
+      } else {
+        for (const entry of store.values()) {
+          if (!isAlive(entry) || !isVisible(entry.record)) continue;
+          if (!evaluateFilter(entry.record, op.filter, params)) continue;
+          if (op.set) {
+            for (const [f, v] of Object.entries(op.set)) {
+              entry.record[f] = resolveSetValue(v, params);
+            }
+          }
           count++;
         }
       }
-    } else {
-      for (const entry of store.values()) {
-        if (!isAlive(entry) || !isVisible(entry.record)) continue;
-        if (!evaluateFilter(entry.record, op.filter, params)) continue;
-        if (op.set) {
-          for (const [f, v] of Object.entries(op.set)) {
-            entry.record[f] = resolveSetValue(v, params);
-          }
-        }
-        count++;
-      }
-    }
-    return Promise.resolve(count);
-  };
+      return Promise.resolve(count);
+    });
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { z } from 'zod';
 import type {
   PluginSetupContext,
   SlingshotEventBus,
@@ -25,6 +26,20 @@ import type { InboundProvider } from './types/inbound';
 import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
+
+/**
+ * Path-param validator for webhook endpoint IDs.
+ *
+ * Endpoint IDs are persisted entity ids (UUIDs by default) — we keep the
+ * character set conservative but accept any non-UUID value within bounds so
+ * adapters that mint custom ids continue to work; oversized or empty inputs
+ * are rejected before they reach the adapter layer.
+ */
+const endpointIdParamSchema = z
+  .string()
+  .min(1, 'endpoint id is required')
+  .max(128, 'endpoint id must be at most 128 characters')
+  .regex(/^[A-Za-z0-9_-]+$/, 'endpoint id contains invalid characters');
 
 /**
  * Runs a Hono middleware and returns its response if it blocked (did not call
@@ -318,7 +333,17 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
           if (!adapter) {
             return c.json({ error: 'Webhook runtime is not ready' }, 500);
           }
-          const endpointId = c.req.param('id');
+          const endpointIdResult = endpointIdParamSchema.safeParse(c.req.param('id'));
+          if (!endpointIdResult.success) {
+            return c.json(
+              {
+                error: 'INVALID_PARAM',
+                message: endpointIdResult.error.issues[0]?.message ?? 'invalid endpoint id',
+              },
+              400,
+            );
+          }
+          const endpointId = endpointIdResult.data;
           try {
             const result = await resolveTestDelivery(adapter, queue, config, endpointId);
             return c.json(result, 200);

@@ -19,7 +19,8 @@
  * the transition did not proceed.
  *
  * **Atomicity:**
- * - Memory: in-place mutation — single-threaded, effectively atomic.
+ * - Memory: serialized per-store via `serializeOnStore` — concurrent transitions
+ *   on the same table run FIFO, so the find-and-mutate cycle cannot interleave.
  * - SQLite: single `UPDATE ... WHERE ... AND {field} = {from}` — atomic. Returns
  *   `null` via `changes === 0` check.
  * - Postgres: `UPDATE ... WHERE ... AND {field} = {from} RETURNING *` — atomic.
@@ -31,6 +32,7 @@
 import type { ResolvedEntityConfig, TransitionOpConfig } from '@lastshotlabs/slingshot-core';
 import { toSnakeCase } from '../fieldUtils';
 import type { MemoryEntry, MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
+import { serializeOnStore } from './memoryMutex';
 
 function fromValues(op: TransitionOpConfig): readonly (string | number | boolean)[] {
   if (Array.isArray(op.from)) {
@@ -94,24 +96,25 @@ export function transitionMemory(
   isAlive: (entry: MemoryEntry) => boolean,
   isVisible: (record: Record<string, unknown>) => boolean,
 ): (params: Record<string, unknown>) => Promise<Record<string, unknown> | null> {
-  return params => {
-    const resolved = resolveParams(op.match, params);
-    for (const entry of store.values()) {
-      if (!isAlive(entry) || !isVisible(entry.record)) continue;
-      let matches = true;
-      for (const [field, target] of Object.entries(resolved)) {
-        if (entry.record[field] !== target) {
-          matches = false;
-          break;
+  return params =>
+    serializeOnStore(store, () => {
+      const resolved = resolveParams(op.match, params);
+      for (const entry of store.values()) {
+        if (!isAlive(entry) || !isVisible(entry.record)) continue;
+        let matches = true;
+        for (const [field, target] of Object.entries(resolved)) {
+          if (entry.record[field] !== target) {
+            matches = false;
+            break;
+          }
         }
+        if (!matches) continue;
+        if (!matchesFrom(op, entry.record[op.field])) return Promise.resolve(null);
+        resolveSetFields(op, entry.record, params);
+        return Promise.resolve({ ...entry.record });
       }
-      if (!matches) continue;
-      if (!matchesFrom(op, entry.record[op.field])) return Promise.resolve(null);
-      resolveSetFields(op, entry.record, params);
-      return Promise.resolve({ ...entry.record });
-    }
-    return Promise.resolve(null);
-  };
+      return Promise.resolve(null);
+    });
 }
 
 // ---------------------------------------------------------------------------

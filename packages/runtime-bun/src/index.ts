@@ -12,6 +12,21 @@ import type {
 
 /** Bun's default request body limit when none is supplied (128 MiB). */
 const BUN_DEFAULT_MAX_BODY = 128 * 1024 * 1024;
+const WEBSOCKET_SHUTDOWN_CODE = 1001;
+const WEBSOCKET_SHUTDOWN_REASON = 'Server shutting down';
+/**
+ * Default per-socket close-handler timeout (5 s). After this, force-close any
+ * sockets whose close handler has not fired and proceed with the server stop.
+ */
+const DEFAULT_WS_CLOSE_TIMEOUT_MS = 5_000;
+/**
+ * Grace window we give Bun's `stop(true)` after a server-side `ws.close()`.
+ *
+ * Empirically the OS port is released within ~10 ms even though the promise
+ * itself never resolves under Bun 1.3.11. We wait long enough that the port
+ * has been released by the time our own `stop()` resolves.
+ */
+const BUN_STOP_GRACE_MS = 50;
 
 // ---------------------------------------------------------------------------
 // Logger — structured, redirectable, parity with runtime-node
@@ -87,6 +102,60 @@ type BunRuntimeWebSocket = RuntimeWebSocket & {
   unsubscribe?(channel: string): unknown;
 };
 
+/**
+ * Configuration for the Bun runtime.
+ */
+export interface BunRuntimeOptions {
+  /**
+   * Maximum time in milliseconds to wait for each tracked WebSocket's `close`
+   * handler to fire after a graceful drain has issued `ws.close(1001, ...)`.
+   *
+   * The drain issues a 1001 close to every active socket, then awaits the
+   * per-socket close handlers. If any socket's close handler has not fired
+   * within this window, the runtime falls through to `Bun.serve.stop(true)`
+   * to force the underlying server to release sockets and the listening port.
+   *
+   * Defaults to {@link DEFAULT_WS_CLOSE_TIMEOUT_MS} (5 s).
+   */
+  wsCloseTimeoutMs?: number;
+  /**
+   * If `true` (default), after `wsCloseTimeoutMs` elapses without all close
+   * handlers firing, the runtime calls `Bun.serve.stop(true)` to force-shut
+   * remaining sockets. Set to `false` to instead resolve the stop promise
+   * without forcing — useful for tests that want to verify timeout behavior
+   * without triggering Bun's force-close path.
+   */
+  forceCloseAfterTimeout?: boolean;
+}
+
+interface ResolvedBunRuntimeOptions {
+  wsCloseTimeoutMs: number;
+  forceCloseAfterTimeout: boolean;
+}
+
+function resolveOptions(opts?: BunRuntimeOptions): ResolvedBunRuntimeOptions {
+  return {
+    wsCloseTimeoutMs:
+      typeof opts?.wsCloseTimeoutMs === 'number' && opts.wsCloseTimeoutMs >= 0
+        ? opts.wsCloseTimeoutMs
+        : DEFAULT_WS_CLOSE_TIMEOUT_MS,
+    forceCloseAfterTimeout: opts?.forceCloseAfterTimeout ?? true,
+  };
+}
+
+interface Deferred {
+  promise: Promise<void>;
+  resolve: () => void;
+}
+
+function createDeferred(): Deferred {
+  let resolve!: () => void;
+  const promise = new Promise<void>(r => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+
 const bunWsHandles = new WeakMap<object, RuntimeWebSocket>();
 
 function requireBunWsMethod(
@@ -129,6 +198,34 @@ function toRuntimeWebSocket(ws: BunRuntimeWebSocket): RuntimeWebSocket {
   };
   bunWsHandles.set(ws as object, rtWs);
   return rtWs;
+}
+
+/**
+ * Await all per-socket close-handler deferreds (one per tracked socket). If
+ * the timeout elapses first, the returned promise resolves with `false` so
+ * the caller can decide whether to force-close. Resolves with `true` when
+ * every tracked socket's close handler has fired before the timeout.
+ *
+ * Snapshots the deferreds at call time — sockets that connect after drain
+ * begins are not awaited (graceful drain stops accepting new connections
+ * before this is invoked).
+ */
+async function awaitWebSocketCloseHandlers(
+  activeSockets: Map<BunRuntimeWebSocket, Deferred>,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (activeSockets.size === 0) return true;
+  const pending = Array.from(activeSockets.values()).map(d => d.promise);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<false>(resolve => {
+    timer = setTimeout(() => resolve(false), timeoutMs);
+  });
+  const allDone = Promise.all(pending).then(() => true as const);
+  try {
+    return await Promise.race([allDone, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -185,13 +282,13 @@ function wrapFetch(
  */
 function wrapWebSocketHandler(
   handler: RuntimeWebSocketHandler,
-  activeSockets?: Set<BunRuntimeWebSocket>,
+  activeSockets?: Map<BunRuntimeWebSocket, Deferred>,
 ): RuntimeWebSocketHandler {
   return {
     ...handler,
     async open(ws: RuntimeWebSocket): Promise<void> {
       const raw = ws as BunRuntimeWebSocket;
-      activeSockets?.add(raw);
+      activeSockets?.set(raw, createDeferred());
       try {
         await handler.open(toRuntimeWebSocket(raw));
       } catch (err) {
@@ -207,11 +304,16 @@ function wrapWebSocketHandler(
     },
     async close(ws: RuntimeWebSocket, code: number, reason: string): Promise<void> {
       const raw = ws as BunRuntimeWebSocket;
-      activeSockets?.delete(raw);
+      const deferred = activeSockets?.get(raw);
       try {
         await handler.close(toRuntimeWebSocket(raw), code, reason);
       } catch (err) {
         logRuntimeError('websocket', 'close', err);
+      } finally {
+        // Resolve the per-socket drain deferred AFTER user-code close handler
+        // finishes so awaiting drain code observes the user's side effects.
+        deferred?.resolve();
+        activeSockets?.delete(raw);
       }
     },
     pong: handler.pong
@@ -282,7 +384,8 @@ function wrapWebSocketHandler(
  * });
  * ```
  */
-export function bunRuntime(): SlingshotRuntime {
+export function bunRuntime(options?: BunRuntimeOptions): SlingshotRuntime {
+  const resolved = resolveOptions(options);
   return {
     password: {
       async hash(plain: string): Promise<string> {
@@ -320,7 +423,7 @@ export function bunRuntime(): SlingshotRuntime {
     server: {
       listen(opts): RuntimeServerInstance {
         const fetchHandler = wrapFetch(opts.fetch, opts.error);
-        const activeWebSockets = new Set<BunRuntimeWebSocket>();
+        const activeWebSockets = new Map<BunRuntimeWebSocket, Deferred>();
         const websocketHandler = opts.websocket
           ? wrapWebSocketHandler(opts.websocket, activeWebSockets)
           : undefined;
@@ -355,16 +458,77 @@ export function bunRuntime(): SlingshotRuntime {
             return server.port ?? opts.port ?? 3000;
           },
           async stop(close?: boolean): Promise<void> {
-            for (const ws of [...activeWebSockets]) {
+            // Graceful (non-forced) stop. Hand off to Bun.serve.stop(false):
+            // its returned promise resolves once in-flight HTTP handlers
+            // complete (and, with active sockets, blocks until they close
+            // on their own — graceful means we honor the caller's intent).
+            if (!close) {
+              await Promise.resolve(server.stop(false));
+              return;
+            }
+
+            // Forced stop with no active websockets: defer to Bun directly.
+            if (activeWebSockets.size === 0) {
+              await Promise.resolve(server.stop(true));
+              return;
+            }
+
+            // Forced stop WITH active websockets — explicit drain:
+            //   1. Issue ws.close(1001, 'Server shutting down') on each
+            //      tracked socket.
+            //   2. Await every per-socket close handler firing (bounded by
+            //      wsCloseTimeoutMs). This is what guarantees the 1001
+            //      close frame flushes before we force-stop the server, and
+            //      is the fix for both the indefinite stop() hang and the
+            //      1001 -> 1006 clobbering under `bun test`.
+            //   3. Kick off server.stop(true) to release the listening port
+            //      and any non-WS connections. Note: under Bun 1.3.11 this
+            //      promise NEVER resolves once a server-side ws.close() has
+            //      been issued, even after every close handler has fired
+            //      and the client confirmed the close. We therefore race
+            //      Bun's stop(true) against a small grace window and resolve
+            //      our own stop() promise either way — by then the OS port
+            //      is released (verified empirically in ~10 ms) and any
+            //      caller polling for it will see a connection refused.
+
+            // Step 1: snapshot the active sockets and issue a 1001 close
+            // frame on each. Snapshot first so close handlers that mutate
+            // the map (delete on close) don't disturb iteration.
+            const snapshot = Array.from(activeWebSockets.entries());
+            for (const [ws] of snapshot) {
               try {
-                ws.close(1001, 'Server shutting down');
+                ws.close(WEBSOCKET_SHUTDOWN_CODE, WEBSOCKET_SHUTDOWN_REASON);
               } catch (err) {
-                logRuntimeError('websocket', 'close-during-stop', err);
-              } finally {
+                // Failed to issue the close frame — resolve the deferred
+                // so drain doesn't wait on a socket that will never report,
+                // and remove from the active map.
+                const deferred = activeWebSockets.get(ws);
+                deferred?.resolve();
                 activeWebSockets.delete(ws);
+                logRuntimeError('websocket', 'shutdown-close', err);
               }
             }
-            await server.stop(close);
+
+            // Step 2: await every per-socket close handler firing, bounded
+            // by wsCloseTimeoutMs.
+            const allClosed = await awaitWebSocketCloseHandlers(
+              activeWebSockets,
+              resolved.wsCloseTimeoutMs,
+            );
+
+            // Step 3: kick off Bun's stop(true) so the listener releases.
+            // Race against a small grace window — Bun 1.3.11's stop(true)
+            // promise hangs indefinitely after server-side ws.close() so we
+            // don't await it indefinitely. forceCloseAfterTimeout=false
+            // skips even initiating the force-stop (used by tests that want
+            // to verify the timeout path without triggering force).
+            if (allClosed || resolved.forceCloseAfterTimeout) {
+              const stopP = Promise.resolve(server.stop(true)).catch((err: unknown) => {
+                logRuntimeError('websocket', 'shutdown-stop-force', err);
+              });
+              await Promise.race([stopP, new Promise<void>(r => setTimeout(r, BUN_STOP_GRACE_MS))]);
+            }
+            activeWebSockets.clear();
           },
           upgrade(req: Request, o: { data: unknown }): boolean {
             return server.upgrade(req, o);

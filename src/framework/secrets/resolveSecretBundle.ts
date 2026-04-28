@@ -73,7 +73,7 @@ export type SecretStoreConfig = EnvSecretStoreConfig | SsmSecretStoreConfig | Fi
  * Which keys are required depends on your `db` config:
  * - Always: `JWT_SECRET`, `SLINGSHOT_DATA_ENCRYPTION_KEY`
  * - `db.redis !== false` (default): `REDIS_HOST` required; `REDIS_USER`, `REDIS_PASSWORD` optional
- * - `db.mongo === 'single'` (default): `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_HOST`, `MONGO_DB`
+ * - `db.mongo === 'single'` (default): `MONGO_URL`, or `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_HOST`, `MONGO_DB`
  * - `db.mongo === 'separate'`: above + `MONGO_AUTH_USER`, `MONGO_AUTH_PASSWORD`, `MONGO_AUTH_HOST`, `MONGO_AUTH_DB`
  *
  * You can also add any app-specific keys here — they'll be available via the secret provider at runtime.
@@ -101,6 +101,8 @@ export interface FrameworkSecretsLiteral {
   KAFKA_SASL_MECHANISM?: string;
   /** Whether default Kafka TLS is enabled. Optional. */
   KAFKA_SSL?: string;
+  /** Full MongoDB connection URL. Can replace the individual single-mode MongoDB fields. */
+  MONGO_URL?: string;
   /** MongoDB username. Required when `db.mongo !== false` (default). */
   MONGO_USER?: string;
   /** MongoDB password. Required when `db.mongo !== false` (default). */

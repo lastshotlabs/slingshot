@@ -19,12 +19,17 @@ import type {
   CaptchaConfig,
   CoreRegistrarSnapshot,
   KafkaConnectorHandle,
+  MetricsEmitter,
   SlingshotContext,
   SlingshotEventBus,
   SlingshotEvents,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
-import { createDefaultIdentityResolver, deepFreeze } from '@lastshotlabs/slingshot-core';
+import {
+  createDefaultIdentityResolver,
+  createNoopMetricsEmitter,
+  deepFreeze,
+} from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
@@ -208,6 +213,13 @@ export interface BuildContextParams {
   captcha: CaptchaConfig | null | undefined;
   upload: UploadConfig | undefined;
   metricsState: MetricsState;
+  /**
+   * Optional unified metrics emitter. Defaults to a no-op when omitted, so
+   * plugins can emit unconditionally. Hosts that want to forward signals to
+   * Prometheus/OTel/etc. wrap their backend in a `MetricsEmitter` and pass it
+   * here.
+   */
+  metricsEmitter?: MetricsEmitter;
   plugins: readonly SlingshotPlugin[];
   bus: SlingshotEventBus;
   events: SlingshotEvents;
@@ -319,12 +331,14 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
     captcha,
     upload,
     metricsState,
+    metricsEmitter,
     plugins,
     bus,
     events,
     kafkaConnectors,
     secretBundle,
   } = params;
+  const resolvedMetricsEmitter: MetricsEmitter = metricsEmitter ?? createNoopMetricsEmitter();
 
   const { sessions, oauthState, cache, authStore, sqlite } = infra.resolvedStores;
   const wsEndpointDraft =
@@ -425,6 +439,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
         }
       : null,
     metrics: metricsState,
+    metricsEmitter: resolvedMetricsEmitter,
     secrets: secretBundle.provider,
     resolvedSecrets: Object.freeze({ ...secretBundle.merged }),
     async clear() {

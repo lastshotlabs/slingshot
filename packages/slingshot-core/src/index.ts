@@ -693,6 +693,18 @@ export {
 export { generateFromSchema, generateMany, generateExample } from './faker';
 export type { GenerateOptions } from './faker';
 
+// --- metrics (unified emitter contract) ---
+/** Pluggable metrics emitter contract used by prod-track packages. */
+export type {
+  MetricsEmitter,
+  InProcessMetricsEmitter,
+  MetricsSnapshot,
+  CounterSnapshotEntry,
+  GaugeSnapshotEntry,
+  TimingSnapshotEntry,
+} from './metrics';
+export { createNoopMetricsEmitter, createInProcessMetricsEmitter } from './metrics';
+
 // --- safe fetch (pinned-IP, SSRF-hardened fetch) ---
 /** SSRF-hardened fetch helpers that resolve DNS once, validate the IP, and pin the connection. */
 export {

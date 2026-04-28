@@ -1068,9 +1068,16 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
           // Wire rebalance lifecycle hooks: on REBALANCING, wait for in-flight
           // handlers and flush pending offsets so the next assignment doesn't
           // replay finished messages. On GROUP_JOIN, clear the rebalance flag.
-          const consumerEvents = (consumer as unknown as { events?: Record<string, string> })
-            .events;
-          const consumerOn = (consumer as unknown as { on?: Function }).on;
+          // kafkajs's Consumer type omits the `events` map and `on` from its
+          // public types in some versions; feature-detect the shape we use.
+          type ConsumerWithEvents = {
+            events?: Record<string, string>;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- kafkajs's `on` is a heavily overloaded signature; we feature-detect existence and call dynamically.
+            on?: (event: string, listener: (...args: any[]) => void) => void;
+          };
+          const consumerWithEvents = consumer as unknown as ConsumerWithEvents;
+          const consumerEvents = consumerWithEvents.events;
+          const consumerOn = consumerWithEvents.on;
           let hasGroupJoinHook = false;
           if (consumerEvents && typeof consumerOn === 'function') {
             try {

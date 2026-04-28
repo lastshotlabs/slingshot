@@ -22,13 +22,6 @@ export interface CoverageSuite extends TestCommandSuite {
   thresholds?: CoverageThresholds;
 }
 
-const coverageReporterArgs = [
-  '--coverage-reporter',
-  'text',
-  '--coverage-reporter',
-  'lcov',
-] as const;
-
 function normalizePath(value: string): string {
   return value.replace(/\\/g, '/');
 }

@@ -257,9 +257,11 @@ describe('createPushRouter — sendToUser', () => {
       repos,
       retries: { maxAttempts: 1 },
     });
-    const count = await router.sendToUser('user-1', { title: 'Hello' });
+    const result = await router.sendToUser('user-1', { title: 'Hello' });
 
-    expect(count).toBe(2);
+    expect(result.delivered).toBe(2);
+    expect(result.attempted).toBe(2);
+    expect(result.allFailed).toBe(false);
     expect(sendCalls).toHaveLength(2);
   });
 
@@ -506,10 +508,11 @@ describe('createPushRouter — retry behavior', () => {
       repos,
       retries: { maxAttempts: 3, initialDelayMs: 0 },
     });
-    const count = await router.sendToUser('user-1', { title: 'Hello' });
+    const result = await router.sendToUser('user-1', { title: 'Hello' });
 
     expect(callCount).toBe(2);
-    expect(count).toBe(1);
+    expect(result.delivered).toBe(1);
+    expect(result.allFailed).toBe(false);
     expect(repos._deliveries[0]!.status).toBe('sent');
   });
 
@@ -582,9 +585,9 @@ describe('createPushRouter — retry behavior', () => {
       repos,
       retries: { maxAttempts: 1, initialDelayMs: 0 },
     });
-    const delivered = await router.sendToUser('user-1', { title: 'Hello' });
+    const result = await router.sendToUser('user-1', { title: 'Hello' });
 
-    expect(delivered).toBe(1);
+    expect(result.delivered).toBe(1);
     expect(sendCount).toBe(2);
     expect(repos._deliveries[0]!.status).toBe('failed');
     expect(repos._deliveries[0]!.failureReason).toBe('repositoryFailure');
@@ -621,9 +624,9 @@ describe('createPushRouter — retry behavior', () => {
       retries: { maxAttempts: 2, initialDelayMs: 100_000 },
     });
     const start = Date.now();
-    const count = await router.sendToUser('user-1', { title: 'Hello' });
+    const result = await router.sendToUser('user-1', { title: 'Hello' });
 
-    expect(count).toBe(1);
+    expect(result.delivered).toBe(1);
     expect(callCount).toBe(2);
     // retryAfterMs: 10 was used, not initialDelayMs: 100_000
     expect(Date.now() - start).toBeLessThan(5_000);
@@ -721,9 +724,11 @@ describe('createPushRouter — retry behavior', () => {
       retries: { maxAttempts: 5, initialDelayMs: 0 }, // permanent should short-circuit retries
       bus,
     });
-    const count = await router.sendToUser('user-1', { title: 'Hello' });
+    const result = await router.sendToUser('user-1', { title: 'Hello' });
 
-    expect(count).toBe(0);
+    expect(result.delivered).toBe(0);
+    expect(result.attempted).toBe(1);
+    expect(result.allFailed).toBe(true);
     // Only one provider call — no retries on permanent.
     expect(callCount).toBe(1);
     // Delivery is marked failed with reason "permanent".
@@ -761,9 +766,10 @@ describe('createPushRouter — sendToUsers', () => {
       repos,
       retries: { maxAttempts: 1 },
     });
-    const count = await router.sendToUsers(['user-1', 'user-2'], { title: 'Broadcast' });
+    const result = await router.sendToUsers(['user-1', 'user-2'], { title: 'Broadcast' });
 
-    expect(count).toBe(2);
+    expect(result.delivered).toBe(2);
+    expect(result.allFailed).toBe(false);
   });
 
   test('works when sendToUsers is destructured from the router', async () => {
@@ -782,8 +788,8 @@ describe('createPushRouter — sendToUsers', () => {
       retries: { maxAttempts: 1 },
     });
 
-    const count = await sendToUsers(['user-1', 'user-2'], { title: 'Broadcast' });
-    expect(count).toBe(2);
+    const result = await sendToUsers(['user-1', 'user-2'], { title: 'Broadcast' });
+    expect(result.delivered).toBe(2);
   });
 
   test('deduplicates user IDs', async () => {
@@ -855,9 +861,10 @@ describe('createPushRouter — publishTopic', () => {
       repos,
       retries: { maxAttempts: 1 },
     });
-    const count = await router.publishTopic('general', { title: 'Announcement' });
+    const result = await router.publishTopic('general', { title: 'Announcement' });
 
-    expect(count).toBe(2);
+    expect(result.delivered).toBe(2);
+    expect(result.allFailed).toBe(false);
     expect(sentIds).toContain('sub-a');
     expect(sentIds).toContain('sub-b');
   });
@@ -870,8 +877,11 @@ describe('createPushRouter — publishTopic', () => {
       repos,
       retries: { maxAttempts: 1 },
     });
-    const count = await router.publishTopic('nonexistent', { title: 'x' });
-    expect(count).toBe(0);
+    const result = await router.publishTopic('nonexistent', { title: 'x' });
+    expect(result.delivered).toBe(0);
+    expect(result.attempted).toBe(0);
+    // Missing topic is not "all failed" — there was nothing to attempt.
+    expect(result.allFailed).toBe(false);
   });
 
   test('delivers to all members and warns when topic fan-out is large', async () => {
@@ -906,9 +916,9 @@ describe('createPushRouter — publishTopic', () => {
       retries: { maxAttempts: 1 },
     });
 
-    const count = await router.publishTopic('broadcast', { title: 'Hello' });
+    const result = await router.publishTopic('broadcast', { title: 'Hello' });
 
-    expect(count).toBe(CAP + 5);
+    expect(result.delivered).toBe(CAP + 5);
     expect(sentIds).toHaveLength(CAP + 5);
     const capWarning = warnSpy.mock.calls.find(c => String(c[0]).includes('10005'));
     expect(capWarning).toBeDefined();
@@ -978,10 +988,12 @@ describe('createPushRouter — provider timeout', () => {
     });
 
     // Should not hang; router should resolve after timeout
-    const count = await router.sendToUser('user-timeout', { title: 'Ping' });
+    const result = await router.sendToUser('user-timeout', { title: 'Ping' });
 
-    // Delivery was attempted but failed (transient), so count is 0
-    expect(count).toBe(0);
+    // Delivery was attempted but failed (transient), so delivered is 0 and allFailed is true
+    expect(result.delivered).toBe(0);
+    expect(result.attempted).toBe(1);
+    expect(result.allFailed).toBe(true);
 
     // Delivery record should be marked failed
     const delivery = repos._deliveries.find(d => d.subscriptionId === 'timeout-sub');
@@ -1002,7 +1014,7 @@ describe('createPushRouter — provider timeout', () => {
       providerTimeoutMs: 5_000,
     });
 
-    const count = await router.sendToUser('user-fast', { title: 'Fast' });
-    expect(count).toBe(1);
+    const result = await router.sendToUser('user-fast', { title: 'Fast' });
+    expect(result.delivered).toBe(1);
   });
 });

@@ -225,6 +225,23 @@ export interface KafkaAdapterHealth {
 }
 
 /**
+ * Structured health snapshot for the Kafka adapter, designed for higher-level
+ * health-endpoint aggregation.
+ *
+ * `status` is derived from the underlying signals:
+ *   - `'unhealthy'` when the adapter has been shut down or the producer is
+ *     disconnected with pending events buffered.
+ *   - `'degraded'` when the producer is disconnected with no buffer pressure,
+ *     the admin client is disconnected, or any registered consumer is
+ *     disconnected.
+ *   - `'healthy'` otherwise.
+ */
+export interface KafkaAdapterHealthSnapshot {
+  readonly status: 'healthy' | 'degraded' | 'unhealthy';
+  readonly details: KafkaAdapterHealth;
+}
+
+/**
  * Introspection handle attached to Kafka-backed event buses.
  */
 export interface KafkaAdapterIntrospection {
@@ -291,7 +308,11 @@ async function waitWithHeartbeat(heartbeat: () => Promise<void>, delayMs: number
 export function getKafkaAdapterIntrospectionOrNull(
   bus: SlingshotEventBus,
 ): KafkaAdapterIntrospection | null {
-  const value = (bus as unknown as Record<PropertyKey, unknown>)[ADAPTER_INTROSPECTION_SYMBOL];
+  // The bus exposes an opaque symbol-keyed introspection slot stamped by
+  // createKafkaAdapter(); SlingshotEventBus does not declare symbol indexers,
+  // so we widen at the read boundary and validate the discriminant below.
+  const introspectable = bus as unknown as Record<PropertyKey, unknown>;
+  const value = introspectable[ADAPTER_INTROSPECTION_SYMBOL];
   if (!value || typeof value !== 'object') return null;
   if ((value as KafkaAdapterIntrospection).kind !== 'slingshot-kafka-adapter') return null;
   return value as KafkaAdapterIntrospection;
@@ -309,7 +330,9 @@ export function createKafkaAdapter(
 ): SlingshotEventBus & {
   readonly __slingshotKafkaAdapter?: KafkaAdapterIntrospection;
   health(): KafkaAdapterHealth;
+  getHealth(): KafkaAdapterHealthSnapshot;
   _drainPendingBuffer(): Promise<void>;
+  shutdown(): Promise<void>;
 } {
   const { serializer, schemaRegistry, ...adapterOpts } = rawOpts;
   const opts = validatePluginConfig('slingshot-kafka', adapterOpts, kafkaAdapterOptionsSchema);
@@ -643,9 +666,16 @@ export function createKafkaAdapter(
           // any pending offsets so the next assignment doesn't double-process.
           // On GROUP_JOIN: resume by clearing the rebalance flag.
           const eventName = event as string;
-          const consumerEvents = (consumer as unknown as { events?: Record<string, string> })
-            .events;
-          const consumerOn = (consumer as unknown as { on?: Function }).on;
+          // kafkajs's Consumer type omits the `events` map and `on` from its
+          // public types in some versions; feature-detect the shape we use.
+          type ConsumerWithEvents = {
+            events?: Record<string, string>;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- kafkajs's `on` is a heavily overloaded signature; we feature-detect existence and call dynamically.
+            on?: (event: string, listener: (...args: any[]) => void) => void;
+          };
+          const consumerWithEvents = consumer as unknown as ConsumerWithEvents;
+          const consumerEvents = consumerWithEvents.events;
+          const consumerOn = consumerWithEvents.on;
           let hasGroupJoinHook = false;
           if (consumerEvents && typeof consumerOn === 'function') {
             try {
@@ -959,7 +989,9 @@ export function createKafkaAdapter(
   const bus: SlingshotEventBus & {
     readonly __slingshotKafkaAdapter?: KafkaAdapterIntrospection;
     health(): KafkaAdapterHealth;
+    getHealth(): KafkaAdapterHealthSnapshot;
     _drainPendingBuffer(): Promise<void>;
+    shutdown(): Promise<void>;
   } = {
     emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
       if (isShutdown) {
@@ -1209,6 +1241,26 @@ export function createKafkaAdapter(
           lastDropReason,
         },
       };
+    },
+
+    getHealth(): KafkaAdapterHealthSnapshot {
+      const details = this.health();
+      let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+      if (details.isShutdown) {
+        // Shutdown is terminal — always unhealthy.
+        status = 'unhealthy';
+      } else if (details.pendingBufferSize > 0 && !details.producerConnected) {
+        // Buffered events with no producer to drain them — operators need to
+        // act before the buffer overflows.
+        status = 'unhealthy';
+      } else if (details.consumers.some(c => !c.connected)) {
+        // A registered durable consumer dropped its connection — degraded.
+        // Producer/admin connections are lazy and stay disconnected on a
+        // freshly-created adapter, so we do NOT treat their absence as
+        // degraded on its own.
+        status = 'degraded';
+      }
+      return { status, details };
     },
 
     _drainPendingBuffer: drainPendingBuffer,

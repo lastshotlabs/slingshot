@@ -502,6 +502,107 @@ describe('runtime-node WebSocket', () => {
   // 9. pong handler fires when client responds to server ping
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // 10. Heartbeat timer cleanup — no callbacks after server stop
+  // -------------------------------------------------------------------------
+
+  test('heartbeat sweeper does not fire after server stop and immediate WS close', async () => {
+    const runtime = nodeRuntime();
+    let inst: RuntimeServerInstance;
+    let pingsReceived = 0;
+
+    server = await runtime.server.listen({
+      port: 0,
+      websocket: {
+        // Aggressive heartbeat — 1 s minimum interval per runtime, mapped from
+        // idleTimeout/2. We use idleTimeout=2 so the first sweep fires at t=1s.
+        idleTimeout: 2,
+        open(ws) {
+          ws.send('ready');
+        },
+        message() {},
+        close() {},
+      },
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          inst.upgrade(req, { data: null });
+          return ALREADY_SENT;
+        }
+        return new Response('ok');
+      },
+    });
+    inst = server;
+
+    const { ws: client } = await createBufferedClient(`ws://127.0.0.1:${server.port}/`);
+    // Track server-driven pings — if the heartbeat sweeper fires after stop,
+    // these increments would happen even though the socket is closed.
+    client.on('ping', () => {
+      pingsReceived += 1;
+    });
+
+    // Close the WS immediately and stop the server before any heartbeat sweep
+    // had a chance to fire (interval=1s, we wait <50ms below).
+    await closeWs(client);
+
+    const stoppedAt = Date.now();
+    await server.stop(true);
+    server = null;
+
+    // Wait past the heartbeat interval — if the late-firing guard didn't work,
+    // the sweep would observe the (now-empty) `allSockets` and at worst
+    // attempt to sweep stale entries. We assert no exceptions are thrown and
+    // no pings are received past stop.
+    await new Promise<void>(r => setTimeout(r, 1500 - (Date.now() - stoppedAt)));
+
+    expect(pingsReceived).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // 11. Per-socket cleanup runs once even when both `close` and `error` fire
+  // -------------------------------------------------------------------------
+
+  test('per-socket cleanup is idempotent across close+error events', async () => {
+    const runtime = nodeRuntime();
+    let inst: RuntimeServerInstance;
+    let closeCalls = 0;
+
+    server = await runtime.server.listen({
+      port: 0,
+      websocket: {
+        open(ws) {
+          ws.send('ready');
+        },
+        message() {},
+        close() {
+          closeCalls += 1;
+        },
+      },
+      fetch(req) {
+        if (req.headers.get('upgrade') === 'websocket') {
+          inst.upgrade(req, { data: null });
+          return ALREADY_SENT;
+        }
+        return new Response('ok');
+      },
+    });
+    inst = server;
+
+    const { ws: client, nextMessage } = await createBufferedClient(
+      `ws://127.0.0.1:${server.port}/`,
+    );
+    expect(await nextMessage()).toBe('ready');
+
+    // Force an abrupt close so `error` may fire alongside `close`. We use
+    // `terminate()` which drops the socket immediately and triggers the
+    // server-side close event with code 1006.
+    client.terminate();
+    await new Promise<void>(r => setTimeout(r, 100));
+
+    // Even if both `close` and `error` fired on the server-side ws instance,
+    // the user's close handler must run exactly once.
+    expect(closeCalls).toBe(1);
+  });
+
   test('pong handler fires when client responds to server ping', async () => {
     const runtime = nodeRuntime();
     let inst: RuntimeServerInstance;

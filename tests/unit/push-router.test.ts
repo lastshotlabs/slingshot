@@ -142,9 +142,10 @@ describe('createPushRouter', () => {
       },
     });
 
-    const delivered = await router.sendToUser('user-1', { title: 'Deploy ready' });
+    const result = await router.sendToUser('user-1', { title: 'Deploy ready' });
 
-    expect(delivered).toBe(0);
+    expect(result.delivered).toBe(0);
+    expect(result.allFailed).toBe(true);
     expect(deletedSubscriptionIds).toEqual(['sub-1']);
     expect(removedMembershipIds).toEqual(['sub-1']);
     expect(emitted.map(entry => entry.event)).toEqual([
@@ -246,9 +247,10 @@ describe('createPushRouter', () => {
       },
     });
 
-    const delivered = await router.sendToUser('user-1', { title: 'Deploy ready' });
+    const result = await router.sendToUser('user-1', { title: 'Deploy ready' });
 
-    expect(delivered).toBe(1);
+    expect(result.delivered).toBe(1);
+    expect(result.allFailed).toBe(false);
     expect(emitted).toEqual([
       {
         event: 'push:delivery.sent',
@@ -271,13 +273,13 @@ describe('createPushDeliveryAdapter', () => {
       router: {
         async sendToUser(userId, message, opts) {
           captured.push({ userId, message, notificationId: opts?.notificationId });
-          return 1;
+          return { delivered: 1, attempted: 1, allFailed: false };
         },
         async sendToUsers() {
-          return 0;
+          return { delivered: 0, attempted: 0, allFailed: false };
         },
         async publishTopic() {
-          return 0;
+          return { delivered: 0, attempted: 0, allFailed: false };
         },
       },
       formatters: compilePushFormatters({

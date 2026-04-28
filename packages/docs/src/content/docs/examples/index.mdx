@@ -22,6 +22,9 @@ Redis with a one-line change. See [Production Databases](/slingshot/examples/pro
 | A CMS, blog, or publishing platform               | [Content Platform](/slingshot/examples/content-platform/)               |
 | An entity-driven domain (inventory, tickets, CRM) | [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       |
 | A platform with background jobs or pipelines      | [Orchestration](/slingshot/examples/orchestration/)                     |
+| Durable workflow workers on Redis                 | [Orchestration with BullMQ](/slingshot/examples/orchestration-bullmq/)  |
+| Tenant workspaces and membership                  | [Organizations](/slingshot/examples/organizations/)                     |
+| Customer webhook delivery                         | [Webhooks](/slingshot/examples/webhooks/)                               |
 | A marketplace or e-commerce backend               | [SaaS Foundations](/slingshot/examples/saas-foundations/) + entities    |
 | An internal tool or admin dashboard               | [Auth Setup](/slingshot/examples/with-auth/) + custom routes            |
 | A game backend or realtime app                    | [Game Engine](/slingshot/examples/game-engine/)                         |
@@ -67,6 +70,21 @@ Redis with a one-line change. See [Production Databases](/slingshot/examples/pro
     title="Orchestration"
     href="/slingshot/examples/orchestration/"
     description="Background tasks, workflows, protected routes, and runtime job management."
+  />
+  <LinkCard
+    title="Orchestration with BullMQ"
+    href="/slingshot/examples/orchestration-bullmq/"
+    description="Durable Redis-backed workflow execution for production workers."
+  />
+  <LinkCard
+    title="Organizations"
+    href="/slingshot/examples/organizations/"
+    description="Organization workspaces, membership roles, invitations, and groups."
+  />
+  <LinkCard
+    title="Webhooks"
+    href="/slingshot/examples/webhooks/"
+    description="Signed outbound event delivery with endpoint governance."
   />
   <LinkCard
     title="Game Engine"
@@ -116,6 +134,9 @@ Redis with a one-line change. See [Production Databases](/slingshot/examples/pro
 | [Content Platform](/slingshot/examples/content-platform/)               | x    | x        | x      |          |             | x      |      |
 | [Config-Driven Domain](/slingshot/examples/config-driven-domain/)       | x    | x        |        |          |             |        |      |
 | [Orchestration](/slingshot/examples/orchestration/)                     | x    |          |        |          |             |        | x    |
+| [Orchestration with BullMQ](/slingshot/examples/orchestration-bullmq/)  | x    |          |        |          |             |        | x    |
+| [Organizations](/slingshot/examples/organizations/)                     | x    | x        | x      |          | x           |        |      |
+| [Webhooks](/slingshot/examples/webhooks/)                               | x    |          | x      |          |             |        |      |
 | [Game Engine](/slingshot/examples/game-engine/)                         |      | x        | x      | x        |             |        |      |
 
 ## Recommended progression

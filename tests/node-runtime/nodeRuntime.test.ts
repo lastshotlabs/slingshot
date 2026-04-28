@@ -1714,6 +1714,8 @@ describe('contract enforcement', () => {
   it('clears channel membership on abnormal close (no leak)', async () => {
     const runtime = nodeRuntime();
     let inst!: import('@lastshotlabs/slingshot-core').RuntimeServerInstance;
+    const firstServerClose = deferred();
+    let closeCount = 0;
     const server = await runtime.server.listen({
       port: 0,
       websocket: {
@@ -1722,7 +1724,10 @@ describe('contract enforcement', () => {
           ws.send('subscribed');
         },
         message() {},
-        close() {},
+        close() {
+          closeCount += 1;
+          if (closeCount === 1) firstServerClose.resolve();
+        },
       },
       fetch(req) {
         if (req.headers.get('upgrade') === 'websocket') {
@@ -1739,7 +1744,12 @@ describe('contract enforcement', () => {
       ws.on('open', () => opened.resolve());
       await opened.promise;
       ws.terminate();
-      await new Promise(r => setTimeout(r, 100));
+      await Promise.race([
+        firstServerClose.promise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('server did not observe abnormal close')), 2_000),
+        ),
+      ]);
       // No throw — channel was cleaned up despite abnormal close.
       server.publish!('room', 'echo');
       // Reconnect and verify pub/sub still works.
@@ -1748,7 +1758,15 @@ describe('contract enforcement', () => {
       // Register message listener BEFORE open so the 'subscribed' frame is not
       // missed if it arrives before the open event handler runs.
       ws2.on('message', d => got.resolve(d.toString()));
-      const first = await got.promise;
+      const first = await Promise.race([
+        got.promise,
+        new Promise<string>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('second websocket did not receive subscription ack')),
+            2_000,
+          ),
+        ),
+      ]);
       expect(first).toBe('subscribed');
       ws2.close();
     } finally {

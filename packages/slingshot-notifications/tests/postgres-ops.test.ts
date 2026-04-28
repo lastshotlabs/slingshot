@@ -49,6 +49,19 @@ class FakeNotificationsPostgresPool {
       return Promise.resolve({ rows });
     }
 
+    if (
+      sql ===
+      'SELECT COUNT(*)::int AS count FROM "Notification" WHERE dispatched = false AND ("deliverAt" IS NULL OR "deliverAt" <= $1)'
+    ) {
+      const now = params[0] instanceof Date ? params[0] : new Date(String(params[0]));
+      const count = this.notifications.filter(
+        row =>
+          !row.dispatched &&
+          (row.deliverAt == null || new Date(row.deliverAt as Date | string) <= now),
+      ).length;
+      return Promise.resolve({ rows: [{ count }] });
+    }
+
     if (sql === 'UPDATE "Notification" SET dispatched = true, "dispatchedAt" = $1 WHERE id = $2') {
       const dispatchedAt = params[0] instanceof Date ? params[0] : new Date(String(params[0]));
       const id = String(params[1]);
@@ -215,6 +228,131 @@ describe('slingshot-notifications postgres handlers', () => {
     expect(rows.map(row => row.id)).toEqual(['n-earliest', 'n-late']);
     expect(pool.queries).toContain(
       'SELECT * FROM "Notification" WHERE dispatched = false AND "deliverAt" IS NOT NULL AND "deliverAt" <= $1 ORDER BY "deliverAt" ASC LIMIT $2',
+    );
+  });
+
+  test('countPendingDispatch postgres handler returns exact count of due, undispatched rows', async () => {
+    const pool = new FakeNotificationsPostgresPool(
+      [],
+      [
+        {
+          id: 'n-due-1',
+          userId: 'user-1',
+          tenantId: null,
+          source: 'chat',
+          type: 'chat:mention',
+          actorId: null,
+          targetType: null,
+          targetId: null,
+          dedupKey: null,
+          data: undefined,
+          read: false,
+          readAt: null,
+          deliverAt: new Date('2026-04-18T09:00:00.000Z'),
+          dispatched: false,
+          dispatchedAt: null,
+          scopeId: null,
+          priority: 'normal',
+          createdAt: new Date('2026-04-18T08:55:00.000Z'),
+        },
+        {
+          id: 'n-due-2',
+          userId: 'user-1',
+          tenantId: null,
+          source: 'chat',
+          type: 'chat:mention',
+          actorId: null,
+          targetType: null,
+          targetId: null,
+          dedupKey: null,
+          data: undefined,
+          read: false,
+          readAt: null,
+          deliverAt: new Date('2026-04-18T09:05:00.000Z'),
+          dispatched: false,
+          dispatchedAt: null,
+          scopeId: null,
+          priority: 'normal',
+          createdAt: new Date('2026-04-18T08:56:00.000Z'),
+        },
+        {
+          id: 'n-immediate',
+          userId: 'user-2',
+          tenantId: null,
+          source: 'chat',
+          type: 'chat:mention',
+          actorId: null,
+          targetType: null,
+          targetId: null,
+          dedupKey: null,
+          data: undefined,
+          read: false,
+          readAt: null,
+          // deliverAt: null — counts as immediately due.
+          deliverAt: null,
+          dispatched: false,
+          dispatchedAt: null,
+          scopeId: null,
+          priority: 'normal',
+          createdAt: new Date('2026-04-18T09:00:00.000Z'),
+        },
+        {
+          id: 'n-future',
+          userId: 'user-1',
+          tenantId: null,
+          source: 'chat',
+          type: 'chat:mention',
+          actorId: null,
+          targetType: null,
+          targetId: null,
+          dedupKey: null,
+          data: undefined,
+          read: false,
+          readAt: null,
+          deliverAt: new Date('2026-04-18T10:30:00.000Z'),
+          dispatched: false,
+          dispatchedAt: null,
+          scopeId: null,
+          priority: 'normal',
+          createdAt: new Date('2026-04-18T10:00:00.000Z'),
+        },
+        {
+          id: 'n-already-dispatched',
+          userId: 'user-1',
+          tenantId: null,
+          source: 'chat',
+          type: 'chat:mention',
+          actorId: null,
+          targetType: null,
+          targetId: null,
+          dedupKey: null,
+          data: undefined,
+          read: false,
+          readAt: null,
+          deliverAt: new Date('2026-04-18T09:00:00.000Z'),
+          dispatched: true,
+          dispatchedAt: new Date('2026-04-18T09:01:00.000Z'),
+          scopeId: null,
+          priority: 'normal',
+          createdAt: new Date('2026-04-18T08:55:00.000Z'),
+        },
+      ],
+    );
+
+    const factory = requirePostgresFactory(
+      notificationOperations.operations.countPendingDispatch,
+      'countPendingDispatch',
+    );
+    const countPendingDispatch = factory(pool);
+    const count = await countPendingDispatch({
+      now: new Date('2026-04-18T09:10:00.000Z'),
+    });
+
+    // Three rows are pending: n-due-1, n-due-2, n-immediate (null deliverAt).
+    // n-future and n-already-dispatched are excluded.
+    expect(count).toBe(3);
+    expect(pool.queries).toContain(
+      'SELECT COUNT(*)::int AS count FROM "Notification" WHERE dispatched = false AND ("deliverAt" IS NULL OR "deliverAt" <= $1)',
     );
   });
 

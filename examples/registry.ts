@@ -90,4 +90,40 @@ export const exampleRegistry: ExampleDefinition[] = [
     docsPath: 'packages/docs/src/content/docs/examples/orchestration.mdx',
     checks: [{ kind: 'code-app', entrypoint: 'examples/orchestration/src/index.ts' }],
   },
+  {
+    name: 'orchestration-bullmq',
+    directory: 'examples/orchestration-bullmq',
+    docsPath: 'packages/docs/src/content/docs/examples/orchestration-bullmq.mdx',
+    checks: [
+      {
+        kind: 'module-exports',
+        entrypoint: 'examples/orchestration-bullmq/src/index.ts',
+        exports: ['buildAppConfig', 'requireOpsKey', 'resolveOpsRequestContext'],
+      },
+      {
+        kind: 'manifest',
+        manifestPath: 'examples/orchestration-bullmq/app.manifest.json',
+        handlerModule: 'examples/orchestration-bullmq/src/index.ts',
+        handlerExports: ['requireOpsKey', 'resolveOpsRequestContext'],
+      },
+    ],
+  },
+  {
+    name: 'organizations',
+    directory: 'examples/organizations',
+    docsPath: 'packages/docs/src/content/docs/examples/organizations.mdx',
+    checks: [
+      { kind: 'code-app', entrypoint: 'examples/organizations/src/index.ts' },
+      { kind: 'manifest', manifestPath: 'examples/organizations/app.manifest.json' },
+    ],
+  },
+  {
+    name: 'webhooks',
+    directory: 'examples/webhooks',
+    docsPath: 'packages/docs/src/content/docs/examples/webhooks.mdx',
+    checks: [
+      { kind: 'code-app', entrypoint: 'examples/webhooks/src/index.ts' },
+      { kind: 'manifest', manifestPath: 'examples/webhooks/app.manifest.json' },
+    ],
+  },
 ];

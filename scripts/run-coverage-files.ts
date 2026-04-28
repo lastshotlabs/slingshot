@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeLcovArtifacts, waitForCoverageArtifacts } from './coverage-lcov';
+import { mergeLcovContents, waitForCoverageArtifacts } from './coverage-lcov';
 import { fileRequiresIsolatedProcess } from './root-test-files';
 
 export interface ParsedArgs {
@@ -60,8 +60,6 @@ async function runCoverage(
       'test',
       '--coverage',
       '--coverage-reporter',
-      'text',
-      '--coverage-reporter',
       'lcov',
       '--coverage-dir',
       coverageDir,
@@ -92,7 +90,7 @@ export async function runCoverageFiles(
   const chunkSize = 40;
   const bulk = files.filter(file => !fileRequiresIsolatedProcess(file));
   const isolated = files.filter(file => fileRequiresIsolatedProcess(file));
-  const artifacts: string[] = [];
+  const artifactContents: string[] = [];
   let runCounter = 0;
   let exitCode = 0;
 
@@ -116,7 +114,18 @@ export async function runCoverageFiles(
         configPath,
         spawnFn,
       );
-      artifacts.push(join(runDir, 'lcov.info'));
+      const artifact = join(runDir, 'lcov.info');
+      const missingArtifacts = await waitForCoverageArtifacts([artifact]);
+      if (missingArtifacts.length > 0) {
+        console.error(
+          `[coverage] Missing LCOV artifact(s) for ${label}: ${missingArtifacts.join(', ')}`,
+        );
+        if (exitCode === 0) {
+          exitCode = 1;
+        }
+      } else {
+        artifactContents.push(readFileSync(artifact, 'utf8'));
+      }
       if (code !== 0 && exitCode === 0) {
         exitCode = code;
       }
@@ -127,24 +136,25 @@ export async function runCoverageFiles(
     const baseName = file.replace(/[\\/]/g, '-').replace(/[^A-Za-z0-9._-]/g, '_');
     const runDir = nextRunCoverageDir(`isolated-${baseName}`);
     const code = await runCoverage(`${label}:isolated`, runDir, [file], configPath, spawnFn);
-    artifacts.push(join(runDir, 'lcov.info'));
+    const artifact = join(runDir, 'lcov.info');
+    const missingArtifacts = await waitForCoverageArtifacts([artifact]);
+    if (missingArtifacts.length > 0) {
+      console.error(
+        `[coverage] Missing LCOV artifact(s) for ${label}: ${missingArtifacts.join(', ')}`,
+      );
+      if (exitCode === 0) {
+        exitCode = 1;
+      }
+    } else {
+      artifactContents.push(readFileSync(artifact, 'utf8'));
+    }
     if (code !== 0 && exitCode === 0) {
       exitCode = code;
     }
   }
 
-  const missingArtifacts = await waitForCoverageArtifacts(artifacts);
-  if (missingArtifacts.length > 0) {
-    console.error(
-      `[coverage] Missing LCOV artifact(s) for ${label}: ${missingArtifacts.join(', ')}`,
-    );
-    if (exitCode === 0) {
-      exitCode = 1;
-    }
-  }
-
   try {
-    mergeLcovArtifacts(artifacts, join(coverageDir, 'lcov.info'));
+    mergeLcovContents(artifactContents, join(coverageDir, 'lcov.info'));
     return exitCode;
   } finally {
     rmSync(runsDir, { recursive: true, force: true });

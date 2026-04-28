@@ -75,20 +75,26 @@ export interface MailSendOptions {
  * ```
  */
 export class MailSendError extends Error {
+  /** Milliseconds the caller should wait before retrying, parsed from a `Retry-After` header. */
+  public readonly retryAfterMs?: number;
+
   /**
    * @param message - Human-readable error message.
    * @param retryable - Whether the queue should retry this job.
    * @param statusCode - HTTP status code from the provider, if available.
    * @param providerError - Raw error from the provider SDK, if available.
+   * @param retryAfterMs - Hint from the provider's `Retry-After` header, in milliseconds.
    */
   constructor(
     message: string,
     public readonly retryable: boolean,
     public readonly statusCode?: number,
     public readonly providerError?: Error | string,
+    retryAfterMs?: number,
   ) {
     super(message);
     this.name = 'MailSendError';
+    if (retryAfterMs !== undefined) this.retryAfterMs = retryAfterMs;
   }
 }
 

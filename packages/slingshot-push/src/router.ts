@@ -137,23 +137,42 @@ export interface PushRouterRepos {
   readonly deliveries: PushDeliveryRepo;
 }
 
+/**
+ * Result of a router fan-out call.
+ *
+ * The router does not throw when every provider fails — see README "All-providers-fail
+ * contract". Callers can detect total failure via `allFailed` without inspecting the bus.
+ *
+ * - `delivered` — number of subscriptions successfully sent (provider returned `ok: true`).
+ * - `attempted` — number of subscriptions for which delivery was attempted (i.e. had a
+ *   matching provider configured for the platform). Subscriptions skipped because no
+ *   provider is wired for their platform are not counted.
+ * - `allFailed` — `true` iff `attempted > 0 && delivered === 0`. `false` when at least one
+ *   subscription was delivered or when no subscription was even attempted.
+ */
+export interface PushSendResultSummary {
+  readonly delivered: number;
+  readonly attempted: number;
+  readonly allFailed: boolean;
+}
+
 /** Router API used for user fan-out and topic publishes. */
 export interface PushRouter {
   sendToUser(
     userId: string,
     message: PushMessage,
     opts?: { tenantId?: string; notificationId?: string },
-  ): Promise<number>;
+  ): Promise<PushSendResultSummary>;
   sendToUsers(
     userIds: readonly string[],
     message: PushMessage,
     opts?: { tenantId?: string; notificationId?: string },
-  ): Promise<number>;
+  ): Promise<PushSendResultSummary>;
   publishTopic(
     topicName: string,
     message: PushMessage,
     opts?: { tenantId?: string; notificationId?: string },
-  ): Promise<number>;
+  ): Promise<PushSendResultSummary>;
 }
 
 function asItems<T>(result: { items: T[] } | T[]): T[] {
@@ -207,8 +226,9 @@ export function createPushRouter(options: {
     subscriptions: readonly RouterSubscriptionRecord[],
     message: PushMessage,
     opts: { tenantId: string; notificationId?: string },
-  ): Promise<number> {
+  ): Promise<{ delivered: number; attempted: number }> {
     let deliveredCount = 0;
+    let attemptedCount = 0;
 
     for (const subscription of subscriptions) {
       const platform = toPushPlatform(subscription.platform);
@@ -216,6 +236,8 @@ export function createPushRouter(options: {
 
       const provider = options.providers[platform];
       if (!provider) continue;
+
+      attemptedCount += 1;
 
       let delivery: RouterDeliveryRecord;
       try {
@@ -428,14 +450,22 @@ export function createPushRouter(options: {
       }
     }
 
-    return deliveredCount;
+    return { delivered: deliveredCount, attempted: attemptedCount };
+  }
+
+  function summarize(result: { delivered: number; attempted: number }): PushSendResultSummary {
+    return {
+      delivered: result.delivered,
+      attempted: result.attempted,
+      allFailed: result.attempted > 0 && result.delivered === 0,
+    };
   }
 
   async function sendToUser(
     userId: string,
     message: PushMessage,
     opts: { tenantId?: string; notificationId?: string } = {},
-  ): Promise<number> {
+  ): Promise<{ delivered: number; attempted: number }> {
     const tenantId = opts.tenantId ?? '';
     const subscriptions = asItems(
       await options.repos.subscriptions.listByUserId({ userId, tenantId }),
@@ -448,23 +478,26 @@ export function createPushRouter(options: {
 
   return {
     async sendToUser(userId, message, opts = {}) {
-      return sendToUser(userId, message, opts);
+      return summarize(await sendToUser(userId, message, opts));
     },
     async sendToUsers(userIds, message, opts = {}) {
       const tenantId = opts.tenantId ?? '';
-      let count = 0;
+      let delivered = 0;
+      let attempted = 0;
       for (const userId of [...new Set(userIds)]) {
-        count += await sendToUser(userId, message, {
+        const r = await sendToUser(userId, message, {
           tenantId,
           notificationId: opts.notificationId,
         });
+        delivered += r.delivered;
+        attempted += r.attempted;
       }
-      return count;
+      return summarize({ delivered, attempted });
     },
     async publishTopic(topicName, message, opts = {}) {
       const tenantId = opts.tenantId ?? '';
       const topic = await options.repos.topics.findByName({ tenantId, name: topicName });
-      if (!topic) return 0;
+      if (!topic) return summarize({ delivered: 0, attempted: 0 });
 
       const LARGE_TOPIC_WARNING_THRESHOLD = 10_000;
       const allMemberships = asItems(
@@ -481,15 +514,17 @@ export function createPushRouter(options: {
       // number of pending batches exceeds `topicFanoutMaxPending` so a single
       // huge topic cannot overwhelm downstream providers.
       const totalBatches = Math.ceil(allMemberships.length / topicFanoutBatchSize);
-      const pending: Array<Promise<number>> = [];
+      const pending: Array<Promise<{ delivered: number; attempted: number }>> = [];
       let totalDelivered = 0;
+      let totalAttempted = 0;
       for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
         if (pending.length >= topicFanoutMaxPending) {
           // Wait for at least one in-flight batch to settle before scheduling more.
           const settled = await Promise.race(
             pending.map((p, idx) => p.then(value => ({ value, idx }))),
           );
-          totalDelivered += settled.value;
+          totalDelivered += settled.value.delivered;
+          totalAttempted += settled.value.attempted;
           pending.splice(settled.idx, 1);
         }
         const start = batchIndex * topicFanoutBatchSize;
@@ -519,8 +554,11 @@ export function createPushRouter(options: {
         pending.push(dispatchPromise);
       }
       const remaining = await Promise.all(pending);
-      for (const value of remaining) totalDelivered += value;
-      return totalDelivered;
+      for (const value of remaining) {
+        totalDelivered += value.delivered;
+        totalAttempted += value.attempted;
+      }
+      return summarize({ delivered: totalDelivered, attempted: totalAttempted });
     },
   };
 }

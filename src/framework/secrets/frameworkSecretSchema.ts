@@ -29,6 +29,7 @@ export const frameworkSecretSchema = {
   kafkaSsl: { path: 'KAFKA_SSL', required: false },
 
   // Mongo (primary / single mode)
+  mongoUrl: { path: 'MONGO_URL', required: false },
   mongoUser: { path: 'MONGO_USER', required: false },
   mongoPassword: { path: 'MONGO_PASSWORD', required: false },
   mongoHost: { path: 'MONGO_HOST', required: false },

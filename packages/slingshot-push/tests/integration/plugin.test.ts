@@ -692,12 +692,12 @@ describe('createPushPlugin — provider fan-out resilience', () => {
       },
     });
 
-    const delivered = await harness.pluginState.router.sendToUser('user-1', {
+    const result = await harness.pluginState.router.sendToUser('user-1', {
       title: 'Fan-out',
     });
 
     expect(send).toHaveBeenCalledTimes(2);
-    expect(delivered).toBe(1);
+    expect(result.delivered).toBe(1);
   });
 });
 
@@ -835,5 +835,85 @@ describe('createPushPlugin — manifest-first boot', () => {
         mountPath: 'push',
       }),
     ).toThrow(/mountPath must start with '\//i);
+  });
+});
+
+describe('createPushPlugin — path-param validation', () => {
+  let harness: PushHarness;
+
+  beforeEach(async () => {
+    harness = await createPushHarness();
+  });
+
+  test('rejects topic subscribe with oversized topicName (10KB)', async () => {
+    const oversized = 'a'.repeat(10_000);
+    const res = await json(harness.app, 'POST', `/push/topics/${oversized}/subscribe`, {
+      body: { deviceId: 'device-x' },
+    });
+    expect(res.status).toBe(400);
+    expect((res.body as { error: string }).error).toBe('INVALID_PARAM');
+  });
+
+  test('rejects topic subscribe with invalid character in topicName', async () => {
+    // '%2F' decodes to '/', but Hono routing can't match — test a clearly
+    // invalid character that Hono will pass through.
+    const res = await json(harness.app, 'POST', '/push/topics/bad$name/subscribe', {
+      body: { deviceId: 'device-x' },
+    });
+    expect(res.status).toBe(400);
+    expect((res.body as { error: string }).error).toBe('INVALID_PARAM');
+  });
+
+  test('rejects topic unsubscribe with oversized topicName', async () => {
+    const oversized = 'b'.repeat(2000);
+    const res = await json(harness.app, 'POST', `/push/topics/${oversized}/unsubscribe`, {
+      body: { deviceId: 'device-x' },
+    });
+    expect(res.status).toBe(400);
+    expect((res.body as { error: string }).error).toBe('INVALID_PARAM');
+  });
+
+  test('accepts a valid topic subscribe (well-formed topicName)', async () => {
+    // Create the prerequisite subscription so the route can succeed past
+    // validation.
+    const subRes = await json(harness.app, 'POST', '/push/subscriptions', {
+      body: {
+        userId: 'user-1',
+        deviceId: 'device-valid',
+        platform: 'web',
+        platformData: {
+          platform: 'web',
+          endpoint: 'https://push.example.com/valid',
+          keys: { p256dh: 'k', auth: 'a' },
+        },
+      },
+    });
+    expect(subRes.status).toBe(201);
+
+    const res = await json(harness.app, 'POST', '/push/topics/news.daily/subscribe', {
+      body: { deviceId: 'device-valid' },
+    });
+    expect(res.status).toBe(200);
+    expect((res.body as { ok: boolean }).ok).toBe(true);
+  });
+
+  test('rejects ack with oversized deliveryId', async () => {
+    const oversized = 'c'.repeat(500);
+    const res = await json(harness.app, 'POST', `/push/ack/${oversized}`);
+    expect(res.status).toBe(400);
+    expect((res.body as { error: string }).error).toBe('INVALID_PARAM');
+  });
+
+  test('rejects ack with invalid characters in deliveryId', async () => {
+    const res = await json(harness.app, 'POST', '/push/ack/bad$delivery');
+    expect(res.status).toBe(400);
+    expect((res.body as { error: string }).error).toBe('INVALID_PARAM');
+  });
+
+  test('accepts a valid (but unknown) deliveryId and returns 404', async () => {
+    // Verifies validation passes for a well-formed id; adapter returns null,
+    // route maps to 404.
+    const res = await json(harness.app, 'POST', '/push/ack/abc-123_def');
+    expect(res.status).toBe(404);
   });
 });

@@ -47,6 +47,17 @@ export interface ImageConfig {
   readonly transformTimeoutMs?: number;
   /** Optional cache adapter used for transformed image responses. */
   readonly cache?: unknown;
+  /**
+   * Maximum entries before LRU eviction for the built-in in-memory image
+   * cache. Default 500. Ignored when a custom `cache` adapter is supplied.
+   */
+  readonly cacheMaxEntries?: number;
+  /**
+   * Per-entry TTL in ms for the built-in in-memory image cache. Default
+   * 3 600 000 (1 hour). Set to `0` to disable TTL eviction. Ignored when a
+   * custom `cache` adapter is supplied.
+   */
+  readonly cacheTtlMs?: number;
 }
 
 /**
@@ -209,4 +220,51 @@ export interface AssetsPluginState {
   readonly storage: StorageAdapter;
   /** Frozen plugin configuration. */
   readonly config: Readonly<AssetsPluginConfig>;
+}
+
+/**
+ * Domain-specific details for the assets plugin health snapshot.
+ */
+export interface AssetsHealthDetails {
+  /** Storage adapter kind in use (`'s3'`, `'local'`, `'memory'`, or `'custom'` for runtime instances). */
+  readonly storageAdapter: 's3' | 'local' | 'memory' | 'custom';
+  /** Whether the storage configuration is present and parseable. */
+  readonly storageConfigured: boolean;
+  /**
+   * S3 circuit breaker snapshot — present only when the resolved adapter is
+   * an S3 storage adapter that exposes `getCircuitBreakerHealth()`.
+   */
+  readonly storageCircuitBreaker?: {
+    readonly state: 'closed' | 'open' | 'half-open';
+    readonly consecutiveFailures: number;
+    readonly openedAt: number | undefined;
+    readonly nextProbeAt: number | undefined;
+  };
+  /** Image cache snapshot — present only when image transforms are enabled. */
+  readonly imageCache?: {
+    /** Current cached entry count. */
+    readonly size: number;
+    /** Cumulative LRU evictions since cache creation. */
+    readonly evictionCount: number;
+    /**
+     * Cumulative TTL-based evictions since cache creation. Omitted for caches
+     * that do not implement TTL eviction.
+     */
+    readonly ttlEvictionCount?: number;
+  };
+}
+
+/**
+ * Aggregated health snapshot for the assets plugin.
+ *
+ * Returned by the `getHealth()` method attached to the plugin instance.
+ * `status` is derived from the underlying signals:
+ *   - `'unhealthy'` when the storage circuit breaker is `open` or storage is
+ *     misconfigured.
+ *   - `'degraded'` when the storage circuit breaker is `half-open`.
+ *   - `'healthy'` otherwise.
+ */
+export interface AssetsHealth {
+  readonly status: 'healthy' | 'degraded' | 'unhealthy';
+  readonly details: AssetsHealthDetails;
 }

@@ -22,10 +22,10 @@ redpanda:
       address: redpanda-tls
       port: 9092
     - name: external
-      address: localhost
+      address: 127.0.0.1
       port: 39094
     - name: external-mtls
-      address: localhost
+      address: 127.0.0.1
       port: 49095
   kafka_api_tls:
     - name: external

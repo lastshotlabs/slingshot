@@ -21,18 +21,6 @@ import type { SearchTransformRegistry } from './transformRegistry';
 import type { SearchPluginConfig } from './types/config';
 import type { SearchProvider } from './types/provider';
 
-/**
- * Narrow bus type for dynamic entity event keys (e.g. `entity:users.created`).
- * The core SlingshotEventBus only accepts typed event map keys; entity CRUD events
- * are dynamic strings built at runtime from storage names. This cast target keeps
- * the type escape localized to eventSync rather than widening the global interface.
- */
-interface DynamicEventBus {
-  emit(event: string, payload: unknown): void;
-  on(event: string, listener: (payload: unknown) => void | Promise<void>): void;
-  off(event: string, listener: (payload: unknown) => void | Promise<void>): void;
-}
-
 // ============================================================================
 // Types
 // ============================================================================
@@ -76,6 +64,17 @@ export interface EventSyncManagerConfig {
    * are caught and logged — the dead-letter promotion is not aborted.
    */
   readonly onFlushDeadLetter?: (entry: FlushDeadLetterEntry) => void;
+
+  /**
+   * Maximum number of dead-letter entries to retain in memory. When the count
+   * exceeds this threshold the OLDEST entry (by FIFO insertion order) is
+   * evicted to make room for the new one and `evictedFromDeadLetter` is
+   * incremented on the health snapshot. Default: `10_000`.
+   *
+   * The dead-letter map is bounded so a flapping downstream cannot consume
+   * unbounded memory. Persistent DLQ retention belongs to `onFlushDeadLetter`.
+   */
+  readonly maxDeadLetterEntries?: number;
 }
 
 /** Public interface for an event-bus sync manager instance. */
@@ -176,6 +175,12 @@ export interface EventSyncHealth {
   readonly deadLetterCount: number;
   /** Whether a flush is currently in progress. */
   readonly flushing: boolean;
+  /**
+   * Cumulative count of dead-letter entries evicted because the in-memory map
+   * exceeded `maxDeadLetterEntries`. Monotonic — never decreases over the
+   * lifetime of the manager.
+   */
+  readonly evictedFromDeadLetter: number;
 }
 
 /** A single dead-lettered op kept in memory after exhausting `maxFlushAttempts`. */
@@ -271,6 +276,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     flushThreshold = 100,
     maxFlushAttempts = 10,
     onFlushDeadLetter,
+    maxDeadLetterEntries = 10_000,
   } = config;
 
   // Closure-owned state
@@ -282,6 +288,12 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
   // `maxFlushAttempts`. Kept in memory so operators can inspect via getHealth /
   // getDeadLetters; persistent DLQ storage is an `onFlushDeadLetter` concern.
   const deadLetters = new Map<string, Map<string, FlushDeadLetterEntry>>();
+  // FIFO insertion-order tracker for dead-letter eviction. Each push records
+  // the (indexName, documentId) of the most recently inserted entry so we can
+  // drop the oldest entry in O(1) when the bounded limit is exceeded.
+  const deadLetterInsertionOrder: Array<{ indexName: string; documentId: string }> = [];
+  let deadLetterCount = 0;
+  let evictedFromDeadLetter = 0;
   let flushTimer: ReturnType<typeof setInterval> | undefined;
   let flushing = false;
   let flushRequested = false;
@@ -295,8 +307,9 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
   }
 
   // Entity CRUD events use dynamic string keys (e.g., 'entity:users.created').
-  // Cast to DynamicEventBus for dynamic subscriptions; typed bus for known events.
-  const dynamicBus = bus as unknown as DynamicEventBus;
+  // SlingshotEventBus's `on(string, ...)` overload accepts these directly —
+  // no cast needed. Alias kept for readability at call sites.
+  const dynamicBus = bus;
 
   // -------------------------------------------------------------------------
   // Pending queue management
@@ -305,6 +318,10 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
   function ensureFlushTimer(): void {
     if (flushTimer || tornDown) return;
     flushTimer = setInterval(() => {
+      // Guard against late firings — clearInterval is best-effort but the
+      // interval can race with a teardown that ran between scheduling and
+      // dispatch. Any flush after teardown is a no-op.
+      if (tornDown) return;
       flushPending().catch((err: unknown) => {
         console.error('[slingshot-search:event-sync] Flush error:', err);
       });
@@ -346,7 +363,11 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
   }
 
   async function flushPending(): Promise<void> {
-    // Guard against concurrent flushes
+    // Guard against concurrent flushes. We do NOT short-circuit on `tornDown`
+    // here because `teardown()` deliberately calls `flushPending()` once after
+    // setting the flag to drain remaining operations. Mid-flight ticks should
+    // however bail out at every async hop below so they don't continue past
+    // a late-arriving teardown.
     if (flushing) return;
     flushing = true;
     flushRequested = false;
@@ -385,7 +406,16 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
         if (toDelete.length > 0) {
           try {
             await state.provider.deleteDocuments(indexName, toDelete);
+            // Re-check teardown after the await — a teardown may have raced
+            // with the in-flight provider call. We must not push restored
+            // entries or emit further events after the manager is shut down.
+            if (tornDown) return;
           } catch (err) {
+            // Re-check teardown before mutating state in the catch path too —
+            // if the provider rejected late and teardown ran in the meantime,
+            // restoring entries would resurrect state the caller has already
+            // dropped via clear().
+            if (tornDown) return;
             console.error(
               `[slingshot-search:event-sync] Failed to delete ${toDelete.length} documents from '${indexName}':`,
               err,
@@ -417,11 +447,19 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
           }
         }
 
+        // If teardown happened between the deletions and the indexes, abort
+        // before issuing more provider work.
+        if (tornDown) return;
+
         // Process indexes
         if (toIndex.length > 0) {
           try {
             await state.provider.indexDocuments(indexName, toIndex, state.pkField);
+            // Same teardown re-check as the delete branch — a successful
+            // provider call after teardown still must not emit follow-up state.
+            if (tornDown) return;
           } catch (err) {
+            if (tornDown) return;
             console.error(
               `[slingshot-search:event-sync] Failed to index ${toIndex.length} documents to '${indexName}':`,
               err,
@@ -542,7 +580,31 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
       perIndex = new Map();
       deadLetters.set(indexName, perIndex);
     }
+    const replacingExisting = perIndex.has(documentId);
     perIndex.set(documentId, entry);
+    if (!replacingExisting) {
+      // Track FIFO insertion order so we can evict the oldest entry below.
+      // Replacements update the entry in place without changing FIFO position
+      // to keep the invariant simple — repeated DLQ promotion of the same
+      // (indexName, documentId) pair will not artificially move it forward.
+      deadLetterInsertionOrder.push({ indexName, documentId });
+      deadLetterCount += 1;
+    }
+
+    // Enforce the bounded map. Multiple entries may be pruned in one shot if
+    // a stale `deadLetterInsertionOrder` head no longer corresponds to a live
+    // entry (for example, an entry was overwritten and then recorded again
+    // under a fresh insertion). The loop is bounded by `deadLetterCount`.
+    while (deadLetterCount > maxDeadLetterEntries && deadLetterInsertionOrder.length > 0) {
+      const oldest = deadLetterInsertionOrder.shift();
+      if (!oldest) break;
+      const oldestPerIndex = deadLetters.get(oldest.indexName);
+      if (!oldestPerIndex) continue;
+      if (!oldestPerIndex.delete(oldest.documentId)) continue;
+      if (oldestPerIndex.size === 0) deadLetters.delete(oldest.indexName);
+      deadLetterCount -= 1;
+      evictedFromDeadLetter += 1;
+    }
 
     emitSyncDead(indexName, entityName, documentId, operation, err, attempts);
 
@@ -666,17 +728,41 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     },
 
     async teardown() {
-      tornDown = true;
-      flushRequested = false;
-
-      // Clear the flush timer
+      // Stop the flush timer so no new ticks can be scheduled.
       if (flushTimer) {
         clearInterval(flushTimer);
         flushTimer = undefined;
       }
+      flushRequested = false;
 
-      // Flush remaining pending operations
-      await flushPending();
+      // If a tick was already in flight when teardown was called we need to
+      // stop it from writing back to provider state after the teardown
+      // returns. We can't await `flushing` directly because doing so would
+      // require a settle promise. Instead we set `tornDown` BEFORE the drain
+      // so the in-flight flush exits at the next async hop, then run a
+      // dedicated teardown drain that bypasses the flag.
+      tornDown = true;
+
+      // Wait for any in-flight tick to drop the `flushing` lock — at most
+      // one async hop is required because the in-flight flush will bail at
+      // its next teardown re-check. Bounded by a small fixed number of
+      // microtask yields to avoid spinning if the in-flight flush is wedged
+      // on a non-cooperative provider await.
+      for (let i = 0; i < 10 && flushing; i++) {
+        await Promise.resolve();
+      }
+
+      // Drain any operations that landed in `pending` between subscribe and
+      // teardown (or were restored by an aborted in-flight flush). We
+      // temporarily clear `tornDown` for the drain pass so the body of
+      // `flushPending` can run end-to-end.
+      tornDown = false;
+      try {
+        await flushPending();
+      } catch (err) {
+        console.error('[slingshot-search:event-sync] Teardown flush error:', err);
+      }
+      tornDown = true;
 
       // Unsubscribe all event listeners
       for (const unsub of unsubscribers) unsub();
@@ -687,14 +773,14 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
       indexStates.clear();
       subscribedConfigEntities.clear();
       deadLetters.clear();
+      deadLetterInsertionOrder.length = 0;
+      deadLetterCount = 0;
     },
 
     getHealth(): EventSyncHealth {
       let pendingCount = 0;
       for (const indexMap of pending.values()) pendingCount += indexMap.size;
-      let deadLetterCount = 0;
-      for (const indexMap of deadLetters.values()) deadLetterCount += indexMap.size;
-      return { pendingCount, deadLetterCount, flushing };
+      return { pendingCount, deadLetterCount, flushing, evictedFromDeadLetter };
     },
 
     getDeadLetters(): ReadonlyArray<FlushDeadLetterEntry> {

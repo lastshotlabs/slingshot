@@ -22,16 +22,32 @@ function requireMongoose(): MongooseModule {
   }
 }
 
-function buildUri(user: string, password: string, host: string, db: string): string {
+function buildCredentialUri(user: string, password: string, host: string, db: string): string {
   const [hostPart, queryPart] = host.split('?');
   return `mongodb+srv://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${hostPart.replace(/\/$/, '')}/${db}${queryPart ? `?${queryPart}` : ''}`;
+}
+
+function buildUri(creds: MongoCredentials): string {
+  if ('url' in creds) return creds.url;
+  return buildCredentialUri(creds.user, creds.password, creds.host, creds.db);
+}
+
+function describeTarget(creds: MongoCredentials): string {
+  if ('url' in creds) return 'configured MongoDB URL';
+  return `${creds.host} as ${creds.user}`;
 }
 
 // ---------------------------------------------------------------------------
 // Credentials — required, resolved by SecretRepository before connection
 // ---------------------------------------------------------------------------
 
-export interface MongoCredentials {
+export type MongoCredentials = MongoUrlCredentials | MongoCredentialParts;
+
+export interface MongoUrlCredentials {
+  url: string;
+}
+
+export interface MongoCredentialParts {
   user: string;
   password: string;
   host: string;
@@ -58,9 +74,9 @@ export const connectAuthMongo = async (
 ): Promise<{ authConn: Connection; mongoose: MongooseModule }> => {
   const mg = requireMongoose();
   const authConn = mg.createConnection();
-  const uri = buildUri(creds.user, creds.password, creds.host, creds.db);
+  const uri = buildUri(creds);
   await authConn.openUri(uri);
-  log(`[mongo] auth connected to ${creds.host} as ${creds.user}`);
+  log(`[mongo] auth connected to ${describeTarget(creds)}`);
   return { authConn, mongoose: mg };
 };
 
@@ -74,9 +90,9 @@ export const connectAppMongo = async (
 ): Promise<{ appConn: Connection; mongoose: MongooseModule }> => {
   const mg = requireMongoose();
   const appConn = mg.createConnection();
-  const uri = buildUri(creds.user, creds.password, creds.host, creds.db);
+  const uri = buildUri(creds);
   await appConn.openUri(uri);
-  log(`[mongo] app connected to ${creds.host} as ${creds.user}`);
+  log(`[mongo] app connected to ${describeTarget(creds)}`);
   return { appConn, mongoose: mg };
 };
 
@@ -90,9 +106,9 @@ export const connectMongo = async (creds: MongoCredentials): Promise<MongoConnec
   const mg = requireMongoose();
   const authConn = mg.createConnection();
   const appConn = mg.createConnection();
-  const uri = buildUri(creds.user, creds.password, creds.host, creds.db);
+  const uri = buildUri(creds);
   await Promise.all([authConn.openUri(uri), appConn.openUri(uri)]);
-  log(`[mongo] connected to ${creds.host} as ${creds.user}`);
+  log(`[mongo] connected to ${describeTarget(creds)}`);
   return { authConn, appConn, mongoose: mg };
 };
 

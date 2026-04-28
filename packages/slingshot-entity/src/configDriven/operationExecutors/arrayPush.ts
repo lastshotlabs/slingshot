@@ -12,6 +12,7 @@
 import type { ArrayPushOpConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { toSnakeCase } from '../fieldUtils';
 import type { MemoryEntry, MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
+import { serializeOnStore } from './memoryMutex';
 import { withOptionalPostgresTransaction } from './postgresTransaction';
 
 // ---------------------------------------------------------------------------
@@ -26,20 +27,21 @@ export function arrayPushMemory(
   isVisible: (record: Record<string, unknown>) => boolean,
 ): (id: unknown, value: unknown) => Promise<Record<string, unknown>> {
   const dedupe = op.dedupe !== false;
-  return (id, value) => {
-    const entry = store.get(String(id));
-    if (!entry || !isAlive(entry) || !isVisible(entry.record)) {
-      throw new Error(`[${config.name}] Not found`);
-    }
-    const current = Array.isArray(entry.record[op.field])
-      ? (entry.record[op.field] as unknown[])
-      : [];
-    if (dedupe && current.includes(value)) {
+  return (id, value) =>
+    serializeOnStore(store, () => {
+      const entry = store.get(String(id));
+      if (!entry || !isAlive(entry) || !isVisible(entry.record)) {
+        return Promise.reject(new Error(`[${config.name}] Not found`));
+      }
+      const current = Array.isArray(entry.record[op.field])
+        ? (entry.record[op.field] as unknown[])
+        : [];
+      if (dedupe && current.includes(value)) {
+        return Promise.resolve({ ...entry.record });
+      }
+      entry.record[op.field] = [...current, value];
       return Promise.resolve({ ...entry.record });
-    }
-    entry.record[op.field] = [...current, value];
-    return Promise.resolve({ ...entry.record });
-  };
+    });
 }
 
 // ---------------------------------------------------------------------------

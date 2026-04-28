@@ -14,6 +14,8 @@ export { ASSETS_PLUGIN_STATE_KEY } from './types';
 export type {
   Asset,
   AssetAdapter,
+  AssetsHealth,
+  AssetsHealthDetails,
   AssetsPluginConfig,
   AssetsPluginState,
   CreateAssetInput,
@@ -29,6 +31,8 @@ export type {
 export {
   s3Storage,
   S3CircuitOpenError,
+  type AwsCredentialProvider,
+  type AwsStaticCredentials,
   type S3CircuitBreakerHealth,
   type S3StorageAdapter,
   type S3StorageConfig,

@@ -134,8 +134,20 @@ export type BullMQAdapterOptions = z.infer<typeof bullmqAdapterOptionsSchema>;
 
 /**
  * Health snapshot for the BullMQ event bus adapter.
+ *
+ * `status` is a coarse roll-up derived from the underlying signals:
+ *   - `'unhealthy'` when buffered events have been dropped (`bufferDroppedCount > 0`)
+ *     or the pending buffer has grown past 100 entries.
+ *   - `'degraded'` when there is any pending-buffer pressure (`pendingBufferSize > 0`)
+ *     or any worker has paused (`workerPausedCount > 0`) or any validation drops
+ *     have been observed.
+ *   - `'healthy'` otherwise.
+ *
+ * Treat `status` as advisory — the raw fields are the source of truth.
  */
 export interface BullMQAdapterHealth {
+  /** Coarse health roll-up suitable for a higher-level health endpoint. */
+  status: 'healthy' | 'degraded' | 'unhealthy';
   /** Number of durable queues currently registered. */
   queueCount: number;
   /** Number of durable workers currently running. */
@@ -165,6 +177,34 @@ export interface BullMQAdapterHealth {
    * when a `worker.error` event fires (treated as a transient pause signal).
    */
   workerPausedCount: number;
+}
+
+/**
+ * Threshold above which a non-empty pending buffer is considered backlogged
+ * and the adapter rolls up to `'unhealthy'` instead of `'degraded'`.
+ */
+const PENDING_BUFFER_UNHEALTHY_THRESHOLD = 100;
+
+function rollUpBullMQStatus(input: {
+  pendingBufferSize: number;
+  bufferDroppedCount: number;
+  workerPausedCount: number;
+  validationDroppedCount: number;
+}): 'healthy' | 'degraded' | 'unhealthy' {
+  if (
+    input.bufferDroppedCount > 0 ||
+    input.pendingBufferSize > PENDING_BUFFER_UNHEALTHY_THRESHOLD
+  ) {
+    return 'unhealthy';
+  }
+  if (
+    input.pendingBufferSize > 0 ||
+    input.workerPausedCount > 0 ||
+    input.validationDroppedCount > 0
+  ) {
+    return 'degraded';
+  }
+  return 'healthy';
 }
 
 /**
@@ -947,6 +987,12 @@ export function createBullMQAdapter(
 
     getHealth(): BullMQAdapterHealth {
       return {
+        status: rollUpBullMQStatus({
+          pendingBufferSize: pendingBuffer.length,
+          bufferDroppedCount,
+          workerPausedCount,
+          validationDroppedCount,
+        }),
         queueCount: queues.length,
         workerCount: workers.length,
         pendingBufferSize: pendingBuffer.length,
@@ -989,6 +1035,12 @@ export function createBullMQAdapter(
       }
       failedJobsCount = total;
       return {
+        status: rollUpBullMQStatus({
+          pendingBufferSize: pendingBuffer.length,
+          bufferDroppedCount,
+          workerPausedCount,
+          validationDroppedCount,
+        }),
         queueCount: queues.length,
         workerCount: workers.length,
         pendingBufferSize: pendingBuffer.length,

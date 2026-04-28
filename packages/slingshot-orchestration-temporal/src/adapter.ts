@@ -98,7 +98,10 @@ function extractFailureDetails(error: unknown): TemporalFailureDetails | undefin
 }
 
 function getMemo(description: { memo?: Record<string, unknown> }): TemporalMemo {
-  const memo = (description.memo ?? {}) as unknown as Partial<TemporalMemo>;
+  // Memo values are user-supplied at workflow start and shaped by Slingshot
+  // into TemporalMemo. The runtime payload is opaque, so each field is
+  // re-validated inline below before being read.
+  const memo = (description.memo ?? {}) as Partial<TemporalMemo>;
   return {
     kind: memo.kind === 'workflow' ? 'workflow' : 'task',
     name: memo.name ?? 'unknown',
@@ -579,7 +582,8 @@ export function createTemporalOrchestrationAdapter(
       // dedicated `close()` method — its only releasable resource is the
       // connection it wraps. If a future SDK adds one, we duck-type the
       // call here so the adapter releases everything the SDK owns.
-      const maybeClient = client as unknown as { close?: () => Promise<void> | void };
+      type ClientWithClose = { close?: () => Promise<void> | void };
+      const maybeClient = client as unknown as ClientWithClose;
       if (typeof maybeClient.close === 'function') {
         try {
           await maybeClient.close();

@@ -87,6 +87,15 @@ export interface NotificationAdapter {
     signal?: AbortSignal;
   }): Promise<NotificationRecord[]>;
   markDispatched(params: { id: string; dispatchedAt: Date }): Promise<void>;
+  /**
+   * Optional: return the total count of dispatchable rows (scheduled and not
+   * yet dispatched) at `now`. Used by the dispatcher's health snapshot so
+   * operators can detect runaway pending state when publish rate exceeds the
+   * per-tick processing budget. Implementations without efficient counting
+   * may omit this method; the dispatcher will fall back to a saturation
+   * heuristic based on the per-tick listing.
+   */
+  countPendingDispatch?(params: { now: Date; signal?: AbortSignal }): Promise<number>;
 }
 
 export interface NotificationPreferenceAdapter {

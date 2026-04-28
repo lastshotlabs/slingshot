@@ -232,6 +232,14 @@ export async function slingshotWorkflowImpl(
     }
     bufferedSignals.push(payload);
   });
+  // The stateQuery contract surfaces `progress` and `steps` to external
+  // queriers; we additionally include `bufferedSignals` for in-workflow
+  // diagnostics. Widening the query schema would be a public-API change, so
+  // we cast the extra field through `unknown` at this internal boundary.
+  type WorkflowStateSnapshot = {
+    progress?: RunProgress;
+    steps?: Record<string, StepRun>;
+  };
   setHandler(
     stateQuery,
     () =>
@@ -239,7 +247,7 @@ export async function slingshotWorkflowImpl(
         progress,
         steps,
         bufferedSignals,
-      }) as unknown as { progress?: RunProgress; steps?: Record<string, StepRun> },
+      }) as unknown as WorkflowStateSnapshot,
   );
 
   await eventActivity({

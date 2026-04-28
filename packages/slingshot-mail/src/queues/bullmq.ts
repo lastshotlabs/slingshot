@@ -132,6 +132,9 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
         );
       }
 
+      // BullMQ's ConnectionOptions union accepts an ioredis instance at
+      // runtime, but the type declaration only enumerates plain options
+      // objects. Bridging via `unknown` is the documented interop pattern.
       const conn = connection as unknown as BullConnectionOptions;
       queue = new QueueCtor(queueName, { connection: conn });
       worker = new WorkerCtor(

@@ -201,44 +201,55 @@ export function parseLcov(path: string): CoverageReport {
 
   return {
     files: new Map(
-      [...files.entries()].map(([sourceFile, accumulator]) => [
-        sourceFile,
-        {
-          linesFound:
-            accumulator.lines.size > 0 ? accumulator.lines.size : accumulator.fallback.linesFound,
-          linesHit:
-            accumulator.lines.size > 0
-              ? [...accumulator.lines.values()].filter(hits => hits > 0).length
-              : accumulator.fallback.linesHit,
-          functionsFound:
-            accumulator.functions.size > 0
-              ? accumulator.functions.size
-              : accumulator.fallback.functionsFound,
-          functionsHit:
-            accumulator.functions.size > 0
-              ? [...accumulator.functions.values()].filter(Boolean).length
-              : accumulator.fallback.functionsHit,
-          branchesFound:
-            accumulator.branches.size > 0
-              ? accumulator.branches.size
-              : accumulator.fallback.branchesFound,
-          branchesHit:
-            accumulator.branches.size > 0
-              ? [...accumulator.branches.values()].filter(Boolean).length
-              : accumulator.fallback.branchesHit,
-        },
-      ]),
+      [...files.entries()].map(([sourceFile, accumulator]) => {
+        const detailedFunctionsFound = accumulator.functions.size;
+        const detailedFunctionsHit = [...accumulator.functions.values()].filter(Boolean).length;
+        const useFunctionFallback =
+          accumulator.fallback.functionsFound > 0 &&
+          accumulator.fallback.functionsHit > detailedFunctionsHit;
+
+        return [
+          sourceFile,
+          {
+            linesFound:
+              accumulator.lines.size > 0 ? accumulator.lines.size : accumulator.fallback.linesFound,
+            linesHit:
+              accumulator.lines.size > 0
+                ? [...accumulator.lines.values()].filter(hits => hits > 0).length
+                : accumulator.fallback.linesHit,
+            functionsFound: useFunctionFallback
+              ? accumulator.fallback.functionsFound
+              : detailedFunctionsFound || accumulator.fallback.functionsFound,
+            functionsHit: useFunctionFallback
+              ? accumulator.fallback.functionsHit
+              : detailedFunctionsHit || accumulator.fallback.functionsHit,
+            branchesFound:
+              accumulator.branches.size > 0
+                ? accumulator.branches.size
+                : accumulator.fallback.branchesFound,
+            branchesHit:
+              accumulator.branches.size > 0
+                ? [...accumulator.branches.values()].filter(Boolean).length
+                : accumulator.fallback.branchesHit,
+          },
+        ] as const;
+      }),
     ),
   };
 }
 
 export function mergeLcovArtifacts(paths: string[], outputPath: string): void {
-  const merged = paths
-    .filter(path => existsSync(path))
-    .map(path => readFileSync(path, 'utf8').trim())
+  mergeLcovContents(
+    paths.filter(path => existsSync(path)).map(path => readFileSync(path, 'utf8')),
+    outputPath,
+  );
+}
+
+export function mergeLcovContents(contents: string[], outputPath: string): void {
+  const merged = contents
+    .map(content => content.trim())
     .filter(content => content.length > 0)
     .join('\n');
-
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, merged.length > 0 ? `${merged}\n` : '', 'utf8');
 }

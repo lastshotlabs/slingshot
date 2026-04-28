@@ -15,6 +15,8 @@
  */
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import type { RuntimeSqliteDatabase, StoreInfra } from '@lastshotlabs/slingshot-core';
+import { notificationFactories } from '../src/entities/factories';
 import { notificationOperations } from '../src/entities/notification';
 import { createNotificationsTestAdapters } from '../src/testing';
 import type { NotificationAdapter, NotificationRecord } from '../src/types';
@@ -154,7 +156,7 @@ describe('NotificationAdapter.dedupOrCreate — sqlite backend concurrency', () 
 
   function listAllNotifications(filter: { userId: string }): NotificationRecord[] {
     const rows = db
-      .query('SELECT * FROM Notification WHERE userId = ?')
+      .query('SELECT * FROM notifications WHERE user_id = ?')
       .all(filter.userId) as Record<string, unknown>[];
     return rows.map(row => {
       const rawData =
@@ -163,14 +165,14 @@ describe('NotificationAdapter.dedupOrCreate — sqlite backend concurrency', () 
           : ((row['data'] as Record<string, unknown> | null) ?? undefined);
       return {
         id: String(row['id']),
-        userId: String(row['userId']),
+        userId: String(row['user_id']),
         tenantId: null,
         source: String(row['source']),
         type: String(row['type']),
         actorId: null,
-        targetType: typeof row['targetType'] === 'string' ? row['targetType'] : null,
-        targetId: typeof row['targetId'] === 'string' ? row['targetId'] : null,
-        dedupKey: typeof row['dedupKey'] === 'string' ? row['dedupKey'] : null,
+        targetType: typeof row['target_type'] === 'string' ? row['target_type'] : null,
+        targetId: typeof row['target_id'] === 'string' ? row['target_id'] : null,
+        dedupKey: typeof row['dedup_key'] === 'string' ? row['dedup_key'] : null,
         data: rawData,
         read: row['read'] === 1 || row['read'] === true,
         readAt: null,
@@ -186,20 +188,19 @@ describe('NotificationAdapter.dedupOrCreate — sqlite backend concurrency', () 
 
   beforeEach(() => {
     db = new Database(':memory:');
-    // Schema mirrors the columns the dedupOrCreate sqlite handler reads and
-    // writes (see src/entities/notification.ts). This intentionally uses the
-    // camelCase column names the handler expects rather than the snake_case
-    // names produced by the auto-generated entity table — the goal here is
-    // to exercise the dedupOrCreate concurrency algorithm in isolation.
+    // Schema mirrors the snake_case columns the auto-generated entity table
+    // would create (see `defineEntity` storage-name derivation: `Notification`
+    // → `notifications` and `toSnakeCase` field-name conversion). The
+    // dedupOrCreate sqlite handler reads/writes against this exact shape.
     db.run(`
-      CREATE TABLE Notification (
+      CREATE TABLE notifications (
         id TEXT PRIMARY KEY NOT NULL,
-        userId TEXT NOT NULL,
-        dedupKey TEXT,
+        user_id TEXT NOT NULL,
+        dedup_key TEXT,
         source TEXT NOT NULL,
         type TEXT NOT NULL,
-        targetType TEXT,
-        targetId TEXT,
+        target_type TEXT,
+        target_id TEXT,
         data TEXT,
         read INTEGER NOT NULL DEFAULT 0,
         dispatched INTEGER NOT NULL DEFAULT 0,
@@ -292,5 +293,204 @@ describe('NotificationAdapter.dedupOrCreate — sqlite backend concurrency', () 
       expect(row).toBeDefined();
       expect(readCount(row!)).toBe(perKey);
     }
+  });
+});
+
+/**
+ * Regression coverage for the entity-factory wiring path. The earlier sqlite
+ * concurrency tests exercise the algorithm directly against a hand-rolled
+ * schema; this suite drives `dedupOrCreate` through the real
+ * `notificationFactories.sqlite(infra)` path so the columns we read/write
+ * have to match the auto-generated table that the entity adapter creates.
+ *
+ * If the dedupOrCreate handler regresses to camelCase column names (or to
+ * using a transaction/prepare API that the entity adapter does not expose),
+ * this test fails immediately.
+ */
+function adaptForRuntimeSqlite(db: Database): RuntimeSqliteDatabase {
+  // Cast bun:sqlite's typed API to a structural shim — this test file does
+  // not need to honour the full SQLQueryBindings narrowing.
+  type LooseStmt<T> = {
+    get(...args: unknown[]): T | null;
+    all(...args: unknown[]): T[];
+    run(...args: unknown[]): { changes: number };
+  };
+  const looseDb = db as unknown as {
+    run(sql: string, ...params: unknown[]): void;
+    query<T>(sql: string): LooseStmt<T>;
+    prepare<T>(sql: string): LooseStmt<T>;
+    transaction<T>(fn: () => T): () => T;
+    close(): void;
+  };
+  return {
+    run(sql, ...params) {
+      looseDb.run(sql, ...params);
+    },
+    query<T>(sql: string) {
+      const stmt = looseDb.query<T>(sql);
+      return {
+        get: (...args) => stmt.get(...args) ?? null,
+        all: (...args) => stmt.all(...args),
+        run: (...args) => {
+          stmt.run(...args);
+        },
+      };
+    },
+    prepare<T>(sql: string) {
+      const stmt = looseDb.prepare<T>(sql);
+      return {
+        get: (...args) => stmt.get(...args) ?? null,
+        all: (...args) => stmt.all(...args),
+        run: (...args) => {
+          const result = stmt.run(...args);
+          return { changes: result.changes };
+        },
+      };
+    },
+    transaction<T>(fn: () => T) {
+      return looseDb.transaction(fn);
+    },
+    close() {
+      looseDb.close();
+    },
+  };
+}
+
+function createMemorySqliteInfra(): { infra: StoreInfra; raw: Database } {
+  const raw = new Database(':memory:');
+  const runtimeDb = adaptForRuntimeSqlite(raw);
+  const infra: StoreInfra = {
+    appName: 'slingshot-notifications-test',
+    getRedis: () => {
+      throw new Error('redis not configured');
+    },
+    getMongo: () => {
+      throw new Error('mongo not configured');
+    },
+    getSqliteDb: () => runtimeDb,
+    getPostgres: () => {
+      throw new Error('postgres not configured');
+    },
+  };
+  return { infra, raw };
+}
+
+describe('NotificationAdapter.dedupOrCreate — entity-factory sqlite wiring', () => {
+  let infra: StoreInfra;
+  let raw: Database;
+  let adapter: ReturnType<typeof notificationFactories.sqlite>;
+
+  beforeEach(async () => {
+    const env = createMemorySqliteInfra();
+    infra = env.infra;
+    raw = env.raw;
+    adapter = notificationFactories.sqlite(infra);
+    // The entity adapter creates its table lazily on the first CRUD call.
+    // Custom ops (like dedupOrCreate) bypass that lazy hook because the
+    // entity wiring layer does not pass `ensureTable` into custom factories
+    // — see `buildSqliteOperations` in slingshot-entity. Trigger it here so
+    // these tests exercise the dedupOrCreate handler against the real
+    // auto-generated schema.
+    await adapter.list({ limit: 1 });
+  });
+
+  afterEach(() => {
+    raw.close();
+  });
+
+  test('uses snake_case columns from the auto-generated entity schema', async () => {
+    const userId = 'user-factory-1';
+    const dedupKey = 'factory:thread-7';
+
+    // First call seeds the row (and triggers the adapter's lazy ensureTable).
+    const first = await adapter.dedupOrCreate({
+      userId,
+      dedupKey,
+      create: {
+        userId,
+        dedupKey,
+        source: 'community',
+        type: 'community:mention',
+        targetType: 'community:thread',
+        targetId: 'thread-7',
+        priority: 'normal',
+        read: false,
+        dispatched: false,
+        data: { idx: 0 },
+        createdAt: new Date(),
+      },
+    });
+
+    expect(first.created).toBe(true);
+
+    // The auto-generated table is `notifications` with snake_case columns.
+    // If the dedup handler regresses to camelCase columns, this query fails.
+    const rows = raw
+      .query('SELECT user_id, dedup_key FROM notifications WHERE user_id = ?')
+      .all(userId) as Array<{ user_id: string; dedup_key: string | null }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.user_id).toBe(userId);
+    expect(rows[0]!.dedup_key).toBe(dedupKey);
+  });
+
+  test('collapses N concurrent calls through the entity adapter into one row', async () => {
+    const userId = 'user-factory-2';
+    const dedupKey = 'factory:thread-9';
+
+    // Seed first (sequentially) so the lazy ensureTable + index creation runs
+    // before the concurrent burst, then race the rest of the increments.
+    await adapter.dedupOrCreate({
+      userId,
+      dedupKey,
+      create: {
+        userId,
+        dedupKey,
+        source: 'community',
+        type: 'community:mention',
+        targetType: 'community:thread',
+        targetId: 'thread-9',
+        priority: 'normal',
+        read: false,
+        dispatched: false,
+        data: { idx: 0 },
+        createdAt: new Date(),
+      },
+    });
+
+    const remaining = CONCURRENCY - 1;
+    const calls = Array.from({ length: remaining }, (_, i) =>
+      adapter.dedupOrCreate({
+        userId,
+        dedupKey,
+        create: {
+          userId,
+          dedupKey,
+          source: 'community',
+          type: 'community:mention',
+          targetType: 'community:thread',
+          targetId: 'thread-9',
+          priority: 'normal',
+          read: false,
+          dispatched: false,
+          data: { idx: i + 1 },
+          createdAt: new Date(),
+        },
+      }),
+    );
+    const results = await Promise.all(calls);
+
+    // Every concurrent caller after the first must observe `created: false`.
+    expect(results.every(r => !r.created)).toBe(true);
+
+    const stored = raw
+      .query('SELECT id, data FROM notifications WHERE user_id = ?')
+      .all(userId) as Array<{ id: string; data: string | null }>;
+    expect(stored).toHaveLength(1);
+
+    const persistedData =
+      typeof stored[0]!.data === 'string'
+        ? (JSON.parse(stored[0]!.data) as { count?: number })
+        : (stored[0]!.data as { count?: number } | null);
+    expect(persistedData?.count).toBe(CONCURRENCY);
   });
 });

@@ -111,6 +111,7 @@ function toPreferenceRecord(row: Record<string, unknown>): NotificationPreferenc
 
 function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): NotificationAdapter {
   const listPendingDispatch = getAsyncMethod(adapter as object, 'listPendingDispatch');
+  const countPendingDispatch = getAsyncMethod(adapter as object, 'countPendingDispatch');
   const markDispatched = getAsyncMethod(adapter as object, 'markDispatched');
   const markAllRead = getAsyncMethod(adapter as object, 'markAllRead');
   const markRead = getAsyncMethod(adapter as object, 'markRead');
@@ -162,10 +163,10 @@ function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): Noti
       };
     },
     async markRead(params) {
-      const row = (await markRead({ id: params.id, ...toActorParam(params) })) as Record<
-        string,
-        unknown
-      > | null;
+      const row = (await markRead(
+        { id: params.id, ...toActorParam(params) },
+        { read: true, readAt: new Date() },
+      )) as Record<string, unknown> | null;
       return row ? toNotificationRecord(row) : null;
     },
     async markAllRead(params) {
@@ -216,6 +217,10 @@ function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): Noti
       return rows
         .filter((row): row is Record<string, unknown> => row != null && typeof row === 'object')
         .map(row => toNotificationRecord(row));
+    },
+    async countPendingDispatch(params) {
+      const value = (await countPendingDispatch(params)) as unknown;
+      return typeof value === 'number' && Number.isFinite(value) ? value : 0;
     },
     async markDispatched(params) {
       await markDispatched(params);

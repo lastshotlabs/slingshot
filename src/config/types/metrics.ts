@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, MetricsEmitter } from '@lastshotlabs/slingshot-core';
 
 export interface MetricsConfig {
   /** Enable the /metrics endpoint. Default: false (must be explicitly enabled). */
@@ -23,4 +23,15 @@ export interface MetricsConfig {
    * Without this, createApp throws in production when auth is "none".
    */
   unsafePublic?: boolean;
+  /**
+   * Pluggable unified `MetricsEmitter` exposed on `ctx.metricsEmitter`.
+   *
+   * @remarks
+   * Distinct from the Prometheus-style `/metrics` endpoint above — this is the
+   * thin counter/gauge/timing contract that prod-track plugins call from hot
+   * paths. When omitted, the framework attaches a no-op emitter so plugins can
+   * call it unconditionally. To export to Prometheus or OTel, pass a
+   * `MetricsEmitter` that wraps the corresponding client.
+   */
+  emitter?: MetricsEmitter;
 }

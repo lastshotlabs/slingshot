@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { bunRuntime } from '../src/index';
+import { bunRuntime, configureRuntimeBunLogger, installProcessSafetyNet } from '../src/index';
 
 let tempDir = '';
 
@@ -249,6 +249,38 @@ describe('runtime-bun smoke', () => {
     expect(await runtime.password.verify('password', 'not-a-real-hash')).toBe(false);
   });
 
+  test('structured logger can be replaced, reset, and receives process safety events', () => {
+    const originalWarn = console.warn;
+    const warnings: string[] = [];
+    const errors: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+
+    const previous = configureRuntimeBunLogger({
+      warn() {},
+      error(event, fields) {
+        errors.push({ event, fields });
+      },
+    });
+
+    try {
+      previous.warn('logger-reset-smoke', { ok: true });
+      expect(warnings.some(line => line.includes('logger-reset-smoke'))).toBe(true);
+
+      installProcessSafetyNet();
+      installProcessSafetyNet();
+      process.emit('unhandledRejection', new Error('unhandled-smoke'), Promise.resolve());
+      process.emit('uncaughtException', new Error('uncaught-smoke'));
+
+      expect(errors.some(entry => entry.event === 'unhandled-rejection')).toBe(true);
+      expect(errors.some(entry => entry.event === 'uncaught-exception')).toBe(true);
+    } finally {
+      console.warn = originalWarn;
+      configureRuntimeBunLogger(null);
+    }
+  });
+
   test('maxRequestBodySize default is 128 MiB and override is forwarded', () => {
     const originalServe = Bun.serve;
     const calls: Array<Record<string, unknown>> = [];
@@ -284,6 +316,8 @@ describe('runtime-bun smoke', () => {
     let captured: {
       open?: (ws: unknown) => unknown;
       message?: (ws: unknown, m: string) => unknown;
+      close?: (ws: unknown, code: number, reason: string) => unknown;
+      pong?: (ws: unknown) => unknown;
     } = {};
     Object.assign(Bun, {
       serve(opts: { websocket?: typeof captured }) {
@@ -308,14 +342,23 @@ describe('runtime-bun smoke', () => {
           message() {
             throw new Error('msg-boom');
           },
-          close() {},
+          close(ws) {
+            ws.ping();
+          },
+          pong() {
+            throw new Error('pong-boom');
+          },
         },
       });
       // Both should be wrapped to swallow + log
       await Promise.resolve(captured.open?.({}));
       await Promise.resolve(captured.message?.({}, 'hello'));
+      await Promise.resolve(captured.close?.({}, 1000, 'done'));
+      captured.pong?.({});
       expect(errs.some(e => e.includes('open-boom'))).toBe(true);
       expect(errs.some(e => e.includes('msg-boom'))).toBe(true);
+      expect(errs.some(e => e.includes('missing ping'))).toBe(true);
+      expect(errs.some(e => e.includes('pong-boom'))).toBe(true);
     } finally {
       console.error = originalErr;
       Object.assign(Bun, { serve: originalServe });
@@ -411,6 +454,7 @@ describe('runtime-bun smoke', () => {
           open(ws) {
             ws.subscribe('room:1');
             ws.unsubscribe('room:1');
+            ws.close(4000, 'closing');
           },
           message(ws) {
             ws.send('ack');
@@ -428,7 +472,7 @@ describe('runtime-bun smoke', () => {
       const rawWs = {
         data: { userId: 'u1' },
         send: (msg: string) => calls.push(`send:${msg}`),
-        close: () => calls.push('close'),
+        close: (code?: number, reason?: string) => calls.push(`close:${code}:${reason}`),
         ping: () => calls.push('ping'),
         subscribe: (channel: string) => calls.push(`sub:${channel}`),
         unsubscribe: (channel: string) => calls.push(`unsub:${channel}`),
@@ -438,18 +482,25 @@ describe('runtime-bun smoke', () => {
       await Promise.resolve(captured.websocket?.message?.(rawWs, 'hello'));
       await Promise.resolve(captured.websocket?.close?.(rawWs, 1000, 'done'));
 
-      expect(calls).toEqual(['sub:room:1', 'unsub:room:1', 'send:ack', 'ping']);
+      expect(calls).toEqual([
+        'sub:room:1',
+        'unsub:room:1',
+        'close:4000:closing',
+        'send:ack',
+        'ping',
+      ]);
     } finally {
       Object.assign(Bun, { serve: originalServe });
     }
   });
 
-  test('stop closes active websocket connections before stopping Bun server', async () => {
+  test('stop(true) delegates forced websocket drains to Bun server stop', async () => {
     const originalServe = Bun.serve;
     const calls: string[] = [];
     let captured: {
       websocket?: {
         open?: (ws: unknown) => unknown;
+        close?: (ws: unknown, code: number, reason: string) => unknown;
       };
     } = {};
 
@@ -458,8 +509,8 @@ describe('runtime-bun smoke', () => {
         captured = opts;
         return {
           port: 1234,
-          stop() {
-            calls.push('server-stop');
+          stop(close?: boolean) {
+            calls.push(`server-stop:${String(close)}`);
             return undefined;
           },
           publish() {
@@ -486,17 +537,96 @@ describe('runtime-bun smoke', () => {
       const rawWs = {
         data: {},
         send() {},
-        close: (code?: number, reason?: string) => calls.push(`ws-close:${code}:${reason}`),
+        close: (code?: number, reason?: string) => {
+          calls.push(`ws-close:${code}:${reason}`);
+          return captured.websocket?.close?.(rawWs, code ?? 1005, reason ?? '');
+        },
         ping() {},
         subscribe() {},
         unsubscribe() {},
       };
 
       await Promise.resolve(captured.websocket?.open?.(rawWs));
-      await server.stop();
+      await server.stop(true);
 
-      expect(calls).toEqual(['ws-close:1001:Server shutting down', 'server-stop']);
+      expect(calls).toEqual(['ws-close:1001:Server shutting down', 'server-stop:true']);
     } finally {
+      Object.assign(Bun, { serve: originalServe });
+    }
+  });
+
+  test('stop(true) logs websocket close and forced stop failures during drain', async () => {
+    const originalServe = Bun.serve;
+    const calls: string[] = [];
+    const errors: Array<{ phase?: unknown; message?: unknown }> = [];
+    let captured: {
+      websocket?: {
+        open?: (ws: unknown) => unknown;
+      };
+    } = {};
+
+    Object.assign(Bun, {
+      serve(opts: typeof captured) {
+        captured = opts;
+        return {
+          port: 1234,
+          stop(close?: boolean) {
+            calls.push(`server-stop:${String(close)}`);
+            if (close) return Promise.reject(new Error('stop-boom'));
+            return undefined;
+          },
+          publish() {
+            return undefined;
+          },
+          upgrade() {
+            return true;
+          },
+        };
+      },
+    });
+
+    const previous = configureRuntimeBunLogger({
+      warn() {},
+      error(_event, fields) {
+        errors.push({ phase: fields?.phase, message: fields?.message });
+      },
+    });
+
+    try {
+      const runtime = bunRuntime({ wsCloseTimeoutMs: 0 });
+      const server = runtime.server.listen({
+        port: 0,
+        fetch: () => new Response('ok'),
+        websocket: {
+          open() {},
+          message() {},
+          close() {},
+        },
+      });
+      const rawWs = {
+        data: {},
+        send() {},
+        close() {
+          calls.push('ws-close-throws');
+          throw new Error('close-boom');
+        },
+        ping() {},
+        subscribe() {},
+        unsubscribe() {},
+      };
+
+      await Promise.resolve(captured.websocket?.open?.(rawWs));
+      await server.stop(true);
+
+      expect(calls).toEqual(['ws-close-throws', 'server-stop:true']);
+      expect(errors).toEqual(
+        expect.arrayContaining([
+          { phase: 'shutdown-close', message: 'close-boom' },
+          { phase: 'shutdown-stop-force', message: 'stop-boom' },
+        ]),
+      );
+    } finally {
+      configureRuntimeBunLogger(previous);
       Object.assign(Bun, { serve: originalServe });
     }
   });

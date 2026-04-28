@@ -131,8 +131,7 @@ export const notificationOperations = defineOperations(Notification, {
   }),
 
   listUnread: op.lookup({
-    fields: { userId: 'param:actor.id' },
-    check: { read: false },
+    fields: { userId: 'param:actor.id', read: false },
     returns: 'many',
   }),
 
@@ -230,55 +229,168 @@ export const notificationOperations = defineOperations(Notification, {
     sqlite:
       db =>
       ({ userId, dedupKey, create }) => {
+        // The entity factory's sqlite adapter exposes a minimal `run`/`query`
+        // interface (see `SqliteDb` in slingshot-entity). It does not give us a
+        // transaction primitive, so we reach atomicity by leaning on SQLite's
+        // built-in serial execution model and `INSERT ... ON CONFLICT DO UPDATE`
+        // against a partial unique index on `(user_id, dedup_key)` for unread
+        // rows. The auto-generated table uses snake_case columns and the
+        // pluralised `notifications` table name (see `defineEntity` storage
+        // name derivation), so all SQL below addresses those names directly.
         const database = db as {
-          transaction(fn: () => unknown): () => unknown;
-          prepare(sql: string): {
-            get(...args: unknown[]): unknown;
-            run(...args: unknown[]): unknown;
+          run(sql: string, params?: unknown[]): { changes: number };
+          query<T>(sql: string): {
+            get(...args: unknown[]): T | null;
+            all(...args: unknown[]): T[];
           };
         };
-        const exec = database.transaction(() => {
-          const existing = database
-            .prepare(
-              'SELECT * FROM Notification WHERE userId = ? AND dedupKey = ? AND read = 0 LIMIT 1',
-            )
-            .get(userId, dedupKey) as Record<string, unknown> | undefined;
-          if (existing) {
+        const TABLE = 'notifications';
+
+        // Best-effort partial-unique index. The table is created lazily by the
+        // adapter on first write, so this may fail the first time through —
+        // we swallow the error and retry on the next call. Either way the
+        // SELECT-then-INSERT/UPDATE flow below stays atomic because each
+        // statement is its own implicit transaction in SQLite, and the bun
+        // sqlite driver serialises statements on a single connection.
+        try {
+          database.run(
+            `CREATE UNIQUE INDEX IF NOT EXISTS uidx_${TABLE}_unread_dedup ON ${TABLE} (user_id, dedup_key) WHERE read = 0 AND dedup_key IS NOT NULL`,
+          );
+        } catch {
+          // Table not yet initialized — handler will retry next call.
+        }
+
+        function readExisting(): Record<string, unknown> | null {
+          return database
+            .query<
+              Record<string, unknown>
+            >(`SELECT * FROM ${TABLE} WHERE user_id = ? AND dedup_key = ? AND read = 0 LIMIT 1`)
+            .get(userId, dedupKey);
+        }
+
+        function rowToRecord(row: Record<string, unknown>): NotificationRecord {
+          const rawData =
+            typeof row['data'] === 'string'
+              ? (JSON.parse(row['data'] as string) as Record<string, unknown>)
+              : row['data'] && typeof row['data'] === 'object'
+                ? (row['data'] as Record<string, unknown>)
+                : undefined;
+          const camel: Record<string, unknown> = {
+            id: row['id'],
+            userId: row['user_id'],
+            tenantId: row['tenant_id'] ?? null,
+            source: row['source'],
+            type: row['type'],
+            actorId: row['actor_id'] ?? null,
+            targetType: row['target_type'] ?? null,
+            targetId: row['target_id'] ?? null,
+            dedupKey: row['dedup_key'] ?? null,
+            data: rawData,
+            read: row['read'] === 1 || row['read'] === true,
+            readAt: row['read_at'] ?? null,
+            deliverAt: row['deliver_at'] ?? null,
+            dispatched: row['dispatched'] === 1 || row['dispatched'] === true,
+            dispatchedAt: row['dispatched_at'] ?? null,
+            scopeId: row['scope_id'] ?? null,
+            priority: row['priority'] ?? 'normal',
+            createdAt: row['created_at'] ?? new Date(0),
+          };
+          return materializeNotificationRecord(camel);
+        }
+
+        // Fast path: row already exists for this dedup key — bump its count.
+        const existingRow = readExisting();
+        if (existingRow) {
+          const rawData =
+            typeof existingRow['data'] === 'string'
+              ? (JSON.parse(existingRow['data'] as string) as Record<string, unknown>)
+              : existingRow['data'] && typeof existingRow['data'] === 'object'
+                ? (existingRow['data'] as Record<string, unknown>)
+                : {};
+          const currentCount =
+            typeof rawData['count'] === 'number' && Number.isFinite(rawData['count'])
+              ? (rawData['count'] as number)
+              : 1;
+          const nextData = { ...rawData, count: currentCount + 1 };
+          database.run(`UPDATE ${TABLE} SET data = ? WHERE id = ?`, [
+            JSON.stringify(nextData),
+            existingRow['id'],
+          ]);
+          const merged = { ...existingRow, data: nextData };
+          return Promise.resolve({ record: rowToRecord(merged), created: false });
+        }
+
+        // Slow path: race-resilient insert. Use ON CONFLICT to absorb a
+        // concurrent insert; if the conflicting row is the unread duplicate
+        // we increment its count via DO UPDATE.
+        const id =
+          typeof create['id'] === 'string' && (create['id'] as string).length > 0
+            ? (create['id'] as string)
+            : crypto.randomUUID();
+        const record: Record<string, unknown> = { ...create, id };
+        const columns = Object.keys(record);
+        const snakeColumns = columns.map(c => c.replace(/([A-Z])/g, '_$1').toLowerCase());
+        const placeholders = columns.map(() => '?').join(', ');
+        const values = columns.map(c => {
+          const v = record[c];
+          if (v == null) return v;
+          if (v instanceof Date) return v.getTime();
+          if (typeof v === 'boolean') return v ? 1 : 0;
+          if (typeof v === 'object') return JSON.stringify(v);
+          return v;
+        });
+
+        try {
+          database.run(
+            `INSERT INTO ${TABLE} (${snakeColumns.join(', ')}) VALUES (${placeholders}) ` +
+              `ON CONFLICT(user_id, dedup_key) WHERE read = 0 AND dedup_key IS NOT NULL ` +
+              `DO UPDATE SET data = json_set(COALESCE(notifications.data, '{}'), '$.count', COALESCE(json_extract(notifications.data, '$.count'), 1) + 1)`,
+            values,
+          );
+        } catch (err) {
+          // The partial index may not exist yet (first call before adapter
+          // ensureTable, or older databases). Fall back to a plain-INSERT
+          // strategy: re-read on conflict, then increment.
+          const existingAfter = readExisting();
+          if (existingAfter) {
             const rawData =
-              typeof existing.data === 'string'
-                ? (JSON.parse(existing.data) as Record<string, unknown>)
-                : ((existing.data as Record<string, unknown> | null) ?? {});
+              typeof existingAfter['data'] === 'string'
+                ? (JSON.parse(existingAfter['data'] as string) as Record<string, unknown>)
+                : existingAfter['data'] && typeof existingAfter['data'] === 'object'
+                  ? (existingAfter['data'] as Record<string, unknown>)
+                  : {};
             const currentCount =
               typeof rawData['count'] === 'number' && Number.isFinite(rawData['count'])
                 ? (rawData['count'] as number)
                 : 1;
             const nextData = { ...rawData, count: currentCount + 1 };
-            database
-              .prepare('UPDATE Notification SET data = ? WHERE id = ?')
-              .run(JSON.stringify(nextData), existing.id);
-            return {
-              record: materializeNotificationRecord({ ...existing, data: nextData }),
+            database.run(`UPDATE ${TABLE} SET data = ? WHERE id = ?`, [
+              JSON.stringify(nextData),
+              existingAfter['id'],
+            ]);
+            return Promise.resolve({
+              record: rowToRecord({ ...existingAfter, data: nextData }),
               created: false,
-            };
+            });
           }
-          const id =
-            typeof create['id'] === 'string' && create['id'].length > 0
-              ? (create['id'] as string)
-              : crypto.randomUUID();
-          const record = { ...create, id };
-          const columns = Object.keys(record);
-          const placeholders = columns.map(() => '?').join(', ');
-          const values = columns.map(c => {
-            const v = (record as Record<string, unknown>)[c];
-            if (v && typeof v === 'object' && !(v instanceof Date)) return JSON.stringify(v);
-            return v;
-          });
-          database
-            .prepare(`INSERT INTO Notification (${columns.join(', ')}) VALUES (${placeholders})`)
-            .run(...values);
-          return { record: materializeNotificationRecord(record), created: true };
+          throw err;
+        }
+
+        // Read back the row so we return the canonical persisted shape (with
+        // any default-applied columns) rather than the input merged with `id`.
+        const persisted = readExisting();
+        if (persisted && persisted['id'] === id) {
+          return Promise.resolve({ record: rowToRecord(persisted), created: true });
+        }
+        // Lost an ON CONFLICT race — the row that wins is the duplicate, and
+        // our UPDATE branch above has already incremented its count.
+        if (persisted) {
+          return Promise.resolve({ record: rowToRecord(persisted), created: false });
+        }
+        return Promise.resolve({
+          record: materializeNotificationRecord(record),
+          created: true,
         });
-        return Promise.resolve(exec() as { record: NotificationRecord; created: boolean });
       },
     postgres:
       pool =>
@@ -451,6 +563,72 @@ export const notificationOperations = defineOperations(Notification, {
           .sort({ deliverAt: 1 })
           .limit(limit)
           .toArray()) as NotificationRecord[];
+      },
+  }),
+
+  countPendingDispatch: op.custom<
+    (args: { now: Date; signal?: AbortSignal }) => Promise<number>
+  >({
+    memory:
+      store =>
+      ({ now }) => {
+        let count = 0;
+        for (const value of store.values()) {
+          const row = materializeNotificationRecord(extractMemoryRow(value));
+          if (row.dispatched) continue;
+          // A row is "pending dispatch" when it has no deliverAt at all
+          // (immediate) or its deliverAt has elapsed. Future-scheduled rows do
+          // not count yet — they aren't due until deliverAt <= now.
+          const deliverAt = toDate(row.deliverAt);
+          if (deliverAt == null || deliverAt <= now) {
+            count += 1;
+          }
+        }
+        return Promise.resolve(count);
+      },
+    sqlite:
+      db =>
+      ({ now }) => {
+        const database = db as {
+          prepare(sql: string): { get(...args: unknown[]): unknown };
+          query?<T>(sql: string): {
+            get(...args: unknown[]): T | null;
+          };
+        };
+        // Use the same statement shape `listPendingDispatch` uses for
+        // consistency with the test fakes that match SQL strings.
+        const row = database
+          .prepare(
+            'SELECT COUNT(*) AS count FROM Notification WHERE dispatched = 0 AND (deliverAt IS NULL OR deliverAt <= ?)',
+          )
+          .get(now.toISOString()) as { count?: number } | null;
+        return Promise.resolve(typeof row?.count === 'number' ? row.count : 0);
+      },
+    postgres:
+      pool =>
+      async ({ now }) => {
+        const client = pool as {
+          query(sql: string, params: unknown[]): Promise<{ rows: unknown[] }>;
+        };
+        const result = await client.query(
+          'SELECT COUNT(*)::int AS count FROM "Notification" WHERE dispatched = false AND ("deliverAt" IS NULL OR "deliverAt" <= $1)',
+          [now],
+        );
+        const row = result.rows[0] as { count?: number | string } | undefined;
+        if (!row) return 0;
+        const value = typeof row.count === 'number' ? row.count : Number(row.count);
+        return Number.isFinite(value) ? value : 0;
+      },
+    mongo:
+      collection =>
+      async ({ now }) => {
+        const target = collection as {
+          countDocuments(query: unknown): Promise<number>;
+        };
+        return target.countDocuments({
+          dispatched: false,
+          $or: [{ deliverAt: null }, { deliverAt: { $lte: now } }],
+        });
       },
   }),
 

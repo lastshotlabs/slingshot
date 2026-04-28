@@ -16,6 +16,7 @@
 import type { ArraySetOpConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { toSnakeCase } from '../fieldUtils';
 import type { MemoryEntry, MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
+import { serializeOnStore } from './memoryMutex';
 
 function ensureArray(value: unknown, entityName: string): unknown[] {
   if (!Array.isArray(value)) {
@@ -62,12 +63,14 @@ export function arraySetMemory(
     } catch (error) {
       return Promise.reject(error instanceof Error ? error : new Error(String(error)));
     }
-    const entry = store.get(String(id));
-    if (!entry || !isAlive(entry) || !isVisible(entry.record)) {
-      return Promise.reject(new Error(`[${config.name}] Not found`));
-    }
-    entry.record[op.field] = applyDedupe(incoming, dedupe);
-    return Promise.resolve({ ...entry.record });
+    return serializeOnStore(store, () => {
+      const entry = store.get(String(id));
+      if (!entry || !isAlive(entry) || !isVisible(entry.record)) {
+        return Promise.reject(new Error(`[${config.name}] Not found`));
+      }
+      entry.record[op.field] = applyDedupe(incoming, dedupe);
+      return Promise.resolve({ ...entry.record });
+    });
   };
 }
 

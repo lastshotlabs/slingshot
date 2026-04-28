@@ -11,8 +11,8 @@ import { createServerFromManifest } from '../../src/lib/createServerFromManifest
 import { createManifestHandlerRegistry } from '../../src/lib/manifestHandlerRegistry';
 import { getServerContext } from '../../src/server';
 
-const KAFKA_TLS_BROKER = 'localhost:39094';
-const KAFKA_MTLS_BROKER = 'localhost:49095';
+const KAFKA_TLS_BROKER = '127.0.0.1:39094';
+const KAFKA_MTLS_BROKER = '127.0.0.1:49095';
 const TLS_CA_PATH = resolve(process.cwd(), 'tests/fixtures/redpanda-tls/ca.crt');
 const TLS_BROKER_CERT_PATH = resolve(process.cwd(), 'tests/fixtures/redpanda-tls/broker.crt');
 const TLS_CLIENT_CERT_PATH = resolve(process.cwd(), 'tests/fixtures/redpanda-tls/client.crt');

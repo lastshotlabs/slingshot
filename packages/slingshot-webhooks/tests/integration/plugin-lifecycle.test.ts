@@ -191,3 +191,49 @@ describe('webhook plugin delivery lifecycle', () => {
     }
   });
 });
+
+describe('webhook plugin path-param validation', () => {
+  it('rejects /endpoints/:id/test with an oversized id (10KB)', async () => {
+    const { app, teardown } = await createWebhooksTestApp({ events: ['auth:*'] });
+    try {
+      const oversized = 'a'.repeat(10_000);
+      const response = await app.request(`/webhooks/endpoints/${oversized}/test`, {
+        method: 'POST',
+        headers: adminHeaders(),
+      });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error: string };
+      expect(body.error).toBe('INVALID_PARAM');
+    } finally {
+      await teardown();
+    }
+  });
+
+  it('rejects /endpoints/:id/test with an invalid character', async () => {
+    const { app, teardown } = await createWebhooksTestApp({ events: ['auth:*'] });
+    try {
+      const response = await app.request('/webhooks/endpoints/bad$id/test', {
+        method: 'POST',
+        headers: adminHeaders(),
+      });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error: string };
+      expect(body.error).toBe('INVALID_PARAM');
+    } finally {
+      await teardown();
+    }
+  });
+
+  it('passes validation for a well-formed (but unknown) endpoint id and returns 404', async () => {
+    const { app, teardown } = await createWebhooksTestApp({ events: ['auth:*'] });
+    try {
+      const response = await app.request('/webhooks/endpoints/missing-endpoint-id/test', {
+        method: 'POST',
+        headers: adminHeaders(),
+      });
+      expect(response.status).toBe(404);
+    } finally {
+      await teardown();
+    }
+  });
+});

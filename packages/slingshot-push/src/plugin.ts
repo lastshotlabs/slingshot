@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { MiddlewareHandler } from 'hono';
+import { z } from 'zod';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
@@ -18,7 +19,7 @@ import { pushManifest } from './manifest/pushManifest';
 import { createPushManifestRuntime } from './manifest/runtime';
 import { ApnsTokenAuth, createApnsProvider } from './providers/apns';
 import { createFcmProvider } from './providers/fcm';
-import type { PushProvider } from './providers/provider';
+import type { PushProvider, PushProviderHealth } from './providers/provider';
 import { createWebPushProvider } from './providers/web';
 import { type PushRouterRepos, createPushRouter } from './router';
 import { PUSH_PLUGIN_STATE_KEY, type PushPluginState } from './state';
@@ -27,6 +28,55 @@ import {
   type PushPluginConfig,
   pushPluginConfigSchema,
 } from './types/config';
+
+/**
+ * Aggregated health snapshot for `slingshot-push`. Returned by the
+ * `getHealth()` method attached to the plugin instance.
+ *
+ * `status` is derived from the underlying signals:
+ *   - `'unhealthy'` when any provider's circuit breaker is `open`.
+ *   - `'degraded'` when any provider's circuit breaker is `half-open` or any
+ *     provider has accumulated `consecutiveFailures > 0`.
+ *   - `'healthy'` otherwise.
+ */
+export interface PushPluginHealth {
+  readonly status: 'healthy' | 'degraded' | 'unhealthy';
+  readonly details: {
+    /**
+     * Per-platform provider health snapshots. Missing platforms are not
+     * enabled. Built-in providers (web / APNS / FCM) all implement
+     * `getHealth()`, so when a platform is enabled and its provider has been
+     * resolved (post `setupPost`) the value is always a snapshot — never
+     * `null`. The `| null` branch remains for forward-compatibility with
+     * custom providers that omit `getHealth()`.
+     */
+    readonly providers: Readonly<
+      Partial<Record<'web' | 'ios' | 'android', PushProviderHealth | null>>
+    >;
+  };
+}
+
+/**
+ * Path-param validators for the push HTTP surface.
+ *
+ * Topic names are user-visible identifiers — we accept letters, digits, and a
+ * small set of separators (`-`, `_`, `:`, `.`) within a 1..256-char window.
+ * Delivery IDs are persisted entity ids (UUIDs by default) — we keep the
+ * character set conservative but accept any non-UUID value within bounds so
+ * adapters that mint custom ids continue to work; oversized or empty inputs
+ * are rejected before they reach the adapter layer.
+ */
+const topicNameParamSchema = z
+  .string()
+  .min(1, 'topicName is required')
+  .max(256, 'topicName must be at most 256 characters')
+  .regex(/^[A-Za-z0-9._:-]+$/, 'topicName contains invalid characters');
+
+const deliveryIdParamSchema = z
+  .string()
+  .min(1, 'deliveryId is required')
+  .max(128, 'deliveryId must be at most 128 characters')
+  .regex(/^[A-Za-z0-9_-]+$/, 'deliveryId contains invalid characters');
 
 function parseServiceAccount(value: FirebaseServiceAccount | string): FirebaseServiceAccount {
   if (typeof value !== 'string') return value;
@@ -71,7 +121,9 @@ function parseServiceAccount(value: FirebaseServiceAccount | string): FirebaseSe
  * });
  * ```
  */
-export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
+export function createPushPlugin(
+  rawConfig: PushPluginConfig,
+): SlingshotPlugin & { getHealth(): PushPluginHealth } {
   const config = deepFreeze(
     validatePluginConfig('slingshot-push', rawConfig, pushPluginConfigSchema),
   );
@@ -82,6 +134,7 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
   let topicsRef: PushRouterRepos['topics'] | undefined;
   let membershipsRef: PushRouterRepos['topicMemberships'] | undefined;
   let deliveriesRef: PushRouterRepos['deliveries'] | undefined;
+  let providersRef: Partial<Record<'web' | 'ios' | 'android', PushProvider>> = {};
   const manifestRuntime = createPushManifestRuntime(adapters => {
     subscriptionsRef = adapters.subscriptions;
     topicsRef = adapters.topics;
@@ -89,11 +142,32 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
     deliveriesRef = adapters.deliveries;
   });
 
+  function getHealth(): PushPluginHealth {
+    const providers: Partial<Record<'web' | 'ios' | 'android', PushProviderHealth | null>> = {};
+    let worst: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+    for (const platform of ['web', 'ios', 'android'] as const) {
+      const provider = providersRef[platform];
+      if (!provider) continue;
+      const snapshot = provider.getHealth?.() ?? null;
+      providers[platform] = snapshot;
+      if (!snapshot) continue;
+      if (snapshot.circuitState === 'open') {
+        worst = 'unhealthy';
+      } else if (worst !== 'unhealthy') {
+        if (snapshot.circuitState === 'half-open' || snapshot.consecutiveFailures > 0) {
+          worst = 'degraded';
+        }
+      }
+    }
+    return { status: worst, details: { providers } };
+  }
+
   return {
     name: PUSH_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth'],
     publicPaths: enabledPlatforms.has('web') ? [`${config.mountPath}/vapid-public-key`] : [],
     csrfExemptPaths: [`${config.mountPath}/*`],
+    getHealth,
 
     async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       innerPlugin = createEntityPlugin({
@@ -143,7 +217,17 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
         const body = (await c.req.json().catch(() => null)) as { deviceId?: string } | null;
         if (!body?.deviceId) return c.json({ error: 'deviceId is required' }, 400);
 
-        const topicName = c.req.param('topicName');
+        const topicNameResult = topicNameParamSchema.safeParse(c.req.param('topicName'));
+        if (!topicNameResult.success) {
+          return c.json(
+            {
+              error: 'INVALID_PARAM',
+              message: topicNameResult.error.issues[0]?.message ?? 'invalid topicName',
+            },
+            400,
+          );
+        }
+        const topicName = topicNameResult.data;
         const topic = await topicsRef.ensureByName({
           tenantId,
           name: topicName,
@@ -173,9 +257,19 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
         const body = (await c.req.json().catch(() => null)) as { deviceId?: string } | null;
         if (!body?.deviceId) return c.json({ error: 'deviceId is required' }, 400);
 
+        const topicNameResult = topicNameParamSchema.safeParse(c.req.param('topicName'));
+        if (!topicNameResult.success) {
+          return c.json(
+            {
+              error: 'INVALID_PARAM',
+              message: topicNameResult.error.issues[0]?.message ?? 'invalid topicName',
+            },
+            400,
+          );
+        }
         const topic = await topicsRef.findByName({
           tenantId,
-          name: c.req.param('topicName'),
+          name: topicNameResult.data,
         });
         if (!topic) return c.json({ ok: true }, 200);
 
@@ -198,7 +292,17 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
         if (!userId || !deliveriesRef) {
           return c.json({ error: 'Unauthorized' }, 401);
         }
-        const deliveryId = c.req.param('deliveryId');
+        const deliveryIdResult = deliveryIdParamSchema.safeParse(c.req.param('deliveryId'));
+        if (!deliveryIdResult.success) {
+          return c.json(
+            {
+              error: 'INVALID_PARAM',
+              message: deliveryIdResult.error.issues[0]?.message ?? 'invalid deliveryId',
+            },
+            400,
+          );
+        }
+        const deliveryId = deliveryIdResult.data;
         const delivery = await deliveriesRef.markDelivered({ id: deliveryId, 'actor.id': userId });
         if (!delivery) return c.json({ error: 'Not found' }, 404);
 
@@ -256,6 +360,9 @@ export function createPushPlugin(rawConfig: PushPluginConfig): SlingshotPlugin {
           serviceAccount: parseServiceAccount(config.android.serviceAccount),
         });
       }
+      // Capture the resolved providers so the plugin's getHealth() method can
+      // surface per-provider circuit-breaker / failure-count snapshots.
+      providersRef = providers;
 
       const router = createPushRouter({
         providers,

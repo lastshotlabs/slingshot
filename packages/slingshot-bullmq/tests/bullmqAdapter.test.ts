@@ -409,6 +409,7 @@ describe('createBullMQAdapter — getHealth()', () => {
   test('returns zeroed counts before any subscriptions', () => {
     const bus = createBullMQAdapter({ connection: {} });
     expect(bus.getHealth()).toEqual({
+      status: 'healthy',
       queueCount: 0,
       workerCount: 0,
       pendingBufferSize: 0,
@@ -439,6 +440,23 @@ describe('createBullMQAdapter — getHealth()', () => {
     await new Promise(r => setTimeout(r, 10));
 
     expect(bus.getHealth().pendingBufferSize).toBe(1);
+
+    errorSpy.mockRestore();
+  });
+
+  test('status rolls up to "degraded" when the pending buffer is non-empty', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const bus = createBullMQAdapter({ connection: {} });
+    bus.on('auth:login' as any, async () => {}, { durable: true, name: 'health-degraded' });
+
+    fakeBullMQState.nextAddError(new Error('Redis down'));
+    bus.emit('auth:login' as any, { userId: 'u1' } as any);
+    await new Promise(r => setTimeout(r, 10));
+
+    const health = bus.getHealth();
+    expect(health.status).toBe('degraded');
+    expect(health.pendingBufferSize).toBe(1);
 
     errorSpy.mockRestore();
   });

@@ -10,6 +10,7 @@ export type {
   KafkaAdapterDropEvent,
   KafkaAdapterDropReason,
   KafkaAdapterHealth,
+  KafkaAdapterHealthSnapshot,
   KafkaAdapterIntrospection,
   KafkaAdapterOptions,
 } from './kafkaAdapter';

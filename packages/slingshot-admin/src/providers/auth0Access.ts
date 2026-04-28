@@ -48,9 +48,12 @@ interface Auth0JwtPayload {
  * @example
  * ```ts
  * import { createAuth0AccessProvider } from '@lastshotlabs/slingshot-admin';
+ * import type { Auth0Deps } from '@lastshotlabs/slingshot-admin';
  *
+ * // In tests only: jose's JWKS function is opaque, so a no-op stub is acceptable.
  * const stubDeps: Auth0Deps = {
- *   createRemoteJWKSet: (_url) => (() => Promise.resolve({} as any)) as any,
+ *   createRemoteJWKSet: () =>
+ *     (() => Promise.resolve({} as never)) as ReturnType<typeof createRemoteJWKSet>,
  *   jwtVerify: async (_token, _keys, _opts) => ({
  *     payload: { sub: 'test-user', aud: 'https://api.example.com' },
  *     protectedHeader: { alg: 'RS256' },

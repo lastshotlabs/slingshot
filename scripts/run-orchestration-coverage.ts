@@ -32,6 +32,7 @@ export async function runOrchestrationCoverage(
 ): Promise<number> {
   const runsDir = mkdtempSync(join(tmpdir(), 'slingshot-orchestration-coverage-'));
   const bunCoverageDir = join(runsDir, 'bun');
+  const vitestCoverageDir = join(runsDir, 'vitest');
   const artifacts = [join(bunCoverageDir, 'lcov.info')];
   let exitCode = 0;
 
@@ -64,9 +65,29 @@ export async function runOrchestrationCoverage(
   if (nodeTests.length > 0) {
     const code = await runCommand(
       'slingshot-orchestration:vitest-sqlite',
-      [process.execPath, 'x', 'vitest', 'run', '--config', 'vitest.config.ts', ...nodeTests],
+      [
+        process.execPath,
+        'x',
+        'vitest',
+        'run',
+        '--config',
+        'vitest.config.ts',
+        '--coverage.enabled',
+        '--coverage.provider',
+        'v8',
+        '--coverage.reporter',
+        'text',
+        '--coverage.reporter',
+        'lcov',
+        '--coverage.reportsDirectory',
+        vitestCoverageDir,
+        '--coverage.include',
+        'packages/slingshot-orchestration/src/**/*.ts',
+        ...nodeTests,
+      ],
       spawnFn,
     );
+    artifacts.push(join(vitestCoverageDir, 'lcov.info'));
     if (code !== 0 && exitCode === 0) {
       exitCode = code;
     }

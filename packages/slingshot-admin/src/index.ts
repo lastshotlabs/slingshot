@@ -6,6 +6,7 @@
  * full canonical structure at that time.
  */
 export { createAdminPlugin } from './plugin';
+export type { AdminPluginHealth } from './plugin';
 export { adminPluginConfigSchema } from './types/config';
 export type { AdminPluginConfig } from './types/config';
 export type { AdminEnv, AdminVariables } from './types/env';

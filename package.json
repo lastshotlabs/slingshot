@@ -91,7 +91,7 @@
     "test:e2e": "bun run test:docker:up && bun test --config bunfig.e2e.toml tests/e2e/; code=$?; bun run test:docker:down; exit $code",
     "test:e2e:ci": "bun test --config bunfig.e2e.toml tests/e2e/",
     "test:e2e:sqlite": "TEST_BACKEND=sqlite bun run test:e2e:ci",
-    "test:e2e:mongo": "TEST_BACKEND=mongo bun run test:e2e:ci",
+    "test:e2e:mongo": "MONGO_URL=mongodb://localhost:27018/slingshot_test TEST_BACKEND=mongo bun run test:e2e:ci",
     "test:e2e:postgres": "TEST_BACKEND=postgres bun run test:e2e:ci",
     "test:node": "vitest run --config vitest.config.ts",
     "test:all": "bun run test && bun run test:docker && bun run test:e2e",

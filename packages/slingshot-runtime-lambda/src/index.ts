@@ -10,3 +10,7 @@ export type { LambdaRuntime, LambdaRuntimeOptions, LambdaTriggerKind } from './r
  * Build Lambda exports directly from the manifest `lambdas` section.
  */
 export { createFunctionsFromManifest } from './manifest';
+/**
+ * Typed error raised when a manifest-driven handler cannot be resolved.
+ */
+export { HandlerResolutionError } from './errors';

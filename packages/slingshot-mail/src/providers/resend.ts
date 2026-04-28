@@ -1,3 +1,6 @@
+import { createMailCircuitBreaker } from '../lib/circuitBreaker';
+import type { MailCircuitBreakerOptions } from '../lib/circuitBreaker';
+import { extractRetryAfterHeader, parseRetryAfterMs } from '../lib/retryAfter';
 import type {
   MailAddress,
   MailMessage,
@@ -10,6 +13,8 @@ import { MailSendError } from '../types/provider';
 interface ResendConfig {
   apiKey: string;
   baseUrl?: string;
+  /** Override or disable the consecutive-failure circuit breaker. */
+  circuitBreaker?: Pick<MailCircuitBreakerOptions, 'threshold' | 'cooldownMs' | 'now'>;
 }
 
 interface ResendBody {
@@ -52,41 +57,54 @@ function formatAddresses(addr: MailAddress | MailAddress[]): string | string[] {
  */
 export function createResendProvider(config: ResendConfig): MailProvider {
   const baseUrl = config.baseUrl ?? 'https://api.resend.com';
+  const breaker = createMailCircuitBreaker({
+    providerName: 'resend',
+    ...(config.circuitBreaker ?? {}),
+  });
 
   return {
     name: 'resend',
     async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
-      const body: ResendBody = {
-        to: formatAddresses(message.to),
-        subject: message.subject,
-        html: message.html,
-        ...(message.from ? { from: formatAddress(message.from) } : {}),
-        ...(message.text ? { text: message.text } : {}),
-        ...(message.replyTo ? { reply_to: formatAddress(message.replyTo) } : {}),
-        ...(message.headers ? { headers: message.headers } : {}),
-        ...(message.tags
-          ? { tags: Object.entries(message.tags).map(([name, value]) => ({ name, value })) }
-          : {}),
-      };
+      return breaker.guard(async () => {
+        const body: ResendBody = {
+          to: formatAddresses(message.to),
+          subject: message.subject,
+          html: message.html,
+          ...(message.from ? { from: formatAddress(message.from) } : {}),
+          ...(message.text ? { text: message.text } : {}),
+          ...(message.replyTo ? { reply_to: formatAddress(message.replyTo) } : {}),
+          ...(message.headers ? { headers: message.headers } : {}),
+          ...(message.tags
+            ? { tags: Object.entries(message.tags).map(([name, value]) => ({ name, value })) }
+            : {}),
+        };
 
-      const res = await fetch(`${baseUrl}/emails`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: options?.signal,
+        const res = await fetch(`${baseUrl}/emails`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${config.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+          signal: options?.signal,
+        });
+
+        if (!res.ok) {
+          const retryable = res.status === 429 || res.status >= 500;
+          const text = await res.text().catch(() => '');
+          const retryAfterMs = parseRetryAfterMs(extractRetryAfterHeader(res.headers));
+          throw new MailSendError(
+            `Resend error ${res.status}: ${text}`,
+            retryable,
+            res.status,
+            text,
+            retryAfterMs,
+          );
+        }
+
+        const data = (await res.json()) as { id?: string };
+        return { status: 'sent', messageId: data.id, raw: data };
       });
-
-      if (!res.ok) {
-        const retryable = res.status === 429 || res.status >= 500;
-        const text = await res.text().catch(() => '');
-        throw new MailSendError(`Resend error ${res.status}: ${text}`, retryable, res.status, text);
-      }
-
-      const data = (await res.json()) as { id?: string };
-      return { status: 'sent', messageId: data.id, raw: data };
     },
   };
 }

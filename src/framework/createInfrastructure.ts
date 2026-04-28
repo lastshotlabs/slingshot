@@ -357,21 +357,28 @@ export async function createInfrastructure(
   try {
     if (mongo === 'single') {
       const {
+        mongoUrl: url,
         mongoUser: user,
         mongoPassword: password,
         mongoHost: host,
         mongoDb: dbName,
       } = secrets;
-      if (!user || !password || !host || !dbName) {
+      if (url) {
+        const result = await connectMongo({ url });
+        authConn = result.authConn;
+        appConn = result.appConn;
+        mongooseModule = result.mongoose;
+      } else if (!user || !password || !host || !dbName) {
         throw new Error(
           '[slingshot] MongoDB is enabled (db.mongo="single") but required secrets are missing. ' +
-            'Provide MONGO_USER, MONGO_PASSWORD, MONGO_HOST, and MONGO_DB.',
+            'Provide MONGO_URL, or MONGO_USER, MONGO_PASSWORD, MONGO_HOST, and MONGO_DB.',
         );
+      } else {
+        const result = await connectMongo({ user, password, host, db: dbName });
+        authConn = result.authConn;
+        appConn = result.appConn;
+        mongooseModule = result.mongoose;
       }
-      const result = await connectMongo({ user, password, host, db: dbName });
-      authConn = result.authConn;
-      appConn = result.appConn;
-      mongooseModule = result.mongoose;
     } else if (mongo === 'separate') {
       const {
         mongoUser: user,

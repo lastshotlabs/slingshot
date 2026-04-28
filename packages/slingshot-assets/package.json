@@ -38,10 +38,16 @@
     "@lastshotlabs/slingshot-entity": "workspace:*",
     "@lastshotlabs/slingshot-permissions": "workspace:*"
   },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1014.0",
+    "@aws-sdk/s3-request-presigner": "^3.1014.0"
+  },
   "optionalDependencies": {
     "sharp": ">=0.33"
   },
   "peerDependencies": {
+    "@aws-sdk/client-s3": ">=3.0",
+    "@aws-sdk/s3-request-presigner": ">=3.0",
     "hono": ">=4.12.12 <5",
     "zod": ">=4.0 <5"
   },

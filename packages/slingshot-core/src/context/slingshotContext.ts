@@ -15,6 +15,7 @@ import type { SlingshotEvents } from '../eventPublisher';
 import type { IdempotencyAdapter } from '../idempotencyAdapter';
 import type { IdentityResolver } from '../identity';
 import type { KafkaConnectorHandle } from '../kafkaConnectors';
+import type { MetricsEmitter } from '../metrics';
 import type { RuntimeSqliteDatabase } from '../runtime';
 import type { SecretRepository } from '../secrets';
 import type { SigningConfig } from '../signing';
@@ -707,6 +708,18 @@ export interface SlingshotContext {
 
   /** Metrics runtime state for the application instance. */
   readonly metrics: MetricsState;
+
+  /**
+   * Unified metrics emitter for plugin-emitted counters, gauges, and timings.
+   *
+   * @remarks
+   * Defaults to a no-op emitter when the host application has not configured
+   * a backend, so plugins can call `ctx.metricsEmitter.counter(...)` without
+   * a feature check. Distinct from `ctx.metrics` (the framework's
+   * Prometheus-style request-level registry) — `metricsEmitter` is the
+   * pluggable contract that prod-track packages call from hot paths.
+   */
+  readonly metricsEmitter: MetricsEmitter;
 
   /**
    * Secret repository for resolving credentials at runtime.

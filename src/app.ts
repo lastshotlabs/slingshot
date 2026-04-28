@@ -577,6 +577,7 @@ async function assembleApp<T extends object>(
       captcha: securityConfig.captcha,
       upload: config.upload,
       metricsState,
+      metricsEmitter: config.metrics?.emitter,
       plugins: bootstrap.sortedPlugins,
       bus,
       events,

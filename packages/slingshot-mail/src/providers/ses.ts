@@ -4,6 +4,9 @@ import type {
   SendEmailCommandInput,
   SendEmailCommandOutput,
 } from '@aws-sdk/client-sesv2';
+import { createMailCircuitBreaker } from '../lib/circuitBreaker';
+import type { MailCircuitBreakerOptions } from '../lib/circuitBreaker';
+import { extractRetryAfterHeader, parseRetryAfterMs } from '../lib/retryAfter';
 import type {
   MailAddress,
   MailMessage,
@@ -16,6 +19,8 @@ import { MailSendError } from '../types/provider';
 interface SesConfig {
   region: string;
   credentials?: { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
+  /** Override or disable the consecutive-failure circuit breaker. */
+  circuitBreaker?: Pick<MailCircuitBreakerOptions, 'threshold' | 'cooldownMs' | 'now'>;
 }
 
 type SesHandle = {
@@ -53,6 +58,10 @@ function formatAddress(addr: MailAddress): string {
  */
 export function createSesProvider(config: SesConfig): MailProvider {
   let _ses: SesHandle | null = null;
+  const breaker = createMailCircuitBreaker({
+    providerName: 'ses',
+    ...(config.circuitBreaker ?? {}),
+  });
 
   async function getSes(): Promise<SesHandle> {
     if (_ses) return _ses;
@@ -74,56 +83,64 @@ export function createSesProvider(config: SesConfig): MailProvider {
   return {
     name: 'ses',
     async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
-      const { client, SendEmailCommand: SESCommand } = await getSes();
+      return breaker.guard(async () => {
+        const { client, SendEmailCommand: SESCommand } = await getSes();
 
-      const toAddresses = Array.isArray(message.to)
-        ? message.to.map(formatAddress)
-        : [formatAddress(message.to)];
+        const toAddresses = Array.isArray(message.to)
+          ? message.to.map(formatAddress)
+          : [formatAddress(message.to)];
 
-      const input: SendEmailCommandInput = {
-        ...(message.from ? { FromEmailAddress: formatAddress(message.from) } : {}),
-        Destination: { ToAddresses: toAddresses },
-        Content: {
-          Simple: {
-            Subject: { Data: message.subject },
-            Body: {
-              Html: { Data: message.html },
-              ...(message.text ? { Text: { Data: message.text } } : {}),
+        const input: SendEmailCommandInput = {
+          ...(message.from ? { FromEmailAddress: formatAddress(message.from) } : {}),
+          Destination: { ToAddresses: toAddresses },
+          Content: {
+            Simple: {
+              Subject: { Data: message.subject },
+              Body: {
+                Html: { Data: message.html },
+                ...(message.text ? { Text: { Data: message.text } } : {}),
+              },
+              ...(message.headers
+                ? {
+                    Headers: Object.entries(message.headers).map(([Name, Value]) => ({
+                      Name,
+                      Value,
+                    })),
+                  }
+                : {}),
             },
-            ...(message.headers
-              ? {
-                  Headers: Object.entries(message.headers).map(([Name, Value]) => ({
-                    Name,
-                    Value,
-                  })),
-                }
-              : {}),
           },
-        },
-        ...(message.replyTo ? { ReplyToAddresses: [formatAddress(message.replyTo)] } : {}),
-        ...(message.tags
-          ? {
-              EmailTags: Object.entries(message.tags).map(([Name, Value]) => ({ Name, Value })),
-            }
-          : {}),
-      };
+          ...(message.replyTo ? { ReplyToAddresses: [formatAddress(message.replyTo)] } : {}),
+          ...(message.tags
+            ? {
+                EmailTags: Object.entries(message.tags).map(([Name, Value]) => ({ Name, Value })),
+              }
+            : {}),
+        };
 
-      try {
-        const result: SendEmailCommandOutput = await client.send(new SESCommand(input), {
-          abortSignal: options?.signal,
-        });
-        return { status: 'sent', messageId: result.MessageId, raw: result };
-      } catch (err) {
-        const e = err as { $metadata?: { httpStatusCode?: number }; message?: string };
-        const statusCode = e.$metadata?.httpStatusCode;
-        const retryable = !statusCode || statusCode === 429 || statusCode >= 500;
-        throw new MailSendError(
-          `SES error: ${e.message ?? String(err)}`,
-          retryable,
-          statusCode,
-          err instanceof Error ? err : new Error(String(err)),
-        );
-      }
+        try {
+          const result: SendEmailCommandOutput = await client.send(new SESCommand(input), {
+            abortSignal: options?.signal,
+          });
+          return { status: 'sent', messageId: result.MessageId, raw: result };
+        } catch (err) {
+          const e = err as {
+            $metadata?: { httpStatusCode?: number };
+            $response?: { headers?: unknown };
+            message?: string;
+          };
+          const statusCode = e.$metadata?.httpStatusCode;
+          const retryable = !statusCode || statusCode === 429 || statusCode >= 500;
+          const retryAfterMs = parseRetryAfterMs(extractRetryAfterHeader(e.$response?.headers));
+          throw new MailSendError(
+            `SES error: ${e.message ?? String(err)}`,
+            retryable,
+            statusCode,
+            err instanceof Error ? err : new Error(String(err)),
+            retryAfterMs,
+          );
+        }
+      });
     },
   };
 }

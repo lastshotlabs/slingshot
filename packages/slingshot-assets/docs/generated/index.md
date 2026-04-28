@@ -40,6 +40,8 @@ bun add @lastshotlabs/slingshot-assets
 
 ## Peer Dependencies
 
+- `@aws-sdk/client-s3`: `>=3.0`
+- `@aws-sdk/s3-request-presigner`: `>=3.0`
 - `hono`: `>=4.12.12 <5`
 - `zod`: `>=4.0 <5`
 

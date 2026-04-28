@@ -75,6 +75,8 @@ function instrumentPool(
   pool: Pool,
   recordQuery: (durationMs: number, failed: boolean) => void,
 ): void {
+  // pg.Pool.query is heavily overloaded so it does not assign to our minimal
+  // `(...args: unknown[]) => Promise<unknown>` shape; widen at the boundary.
   wrapQueryableQueries(pool as unknown as Queryable, recordQuery);
 
   if (typeof pool.connect !== 'function') return;
@@ -89,6 +91,7 @@ function instrumentPool(
     }
     const instrumented = client as InstrumentedClient;
     if (!instrumented.__slingshotInstrumented) {
+      // Same overload-mismatch reason as pool.query above.
       wrapQueryableQueries(client as unknown as Queryable, recordQuery);
       instrumented.__slingshotInstrumented = true;
     }

@@ -2,11 +2,6 @@ import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
 import { createRouter, getActorId } from '@lastshotlabs/slingshot-core';
 import type { NotificationCreatedEventPayload } from './types';
 
-type DynamicBus = {
-  on(event: string, handler: (payload: unknown) => void): void;
-  off(event: string, handler: (payload: unknown) => void): void;
-};
-
 function writeSseChunk(controller: ReadableStreamDefaultController<string>, data: string): void {
   controller.enqueue(`${data}\n\n`);
 }
@@ -20,7 +15,6 @@ function writeSseChunk(controller: ReadableStreamDefaultController<string>, data
  */
 export function createNotificationSseRoute(bus: SlingshotEventBus, path: string) {
   const router = createRouter();
-  const dynamicBus = bus as unknown as DynamicBus;
 
   router.get(path, c => {
     const userId = getActorId(c);
@@ -36,10 +30,10 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
       if (cleanupCalled) return;
       cleanupCalled = true;
       if (createdHandler) {
-        dynamicBus.off('notifications:notification.created', createdHandler);
+        bus.off('notifications:notification.created', createdHandler);
       }
       if (updatedHandler) {
-        dynamicBus.off('notifications:notification.updated', updatedHandler);
+        bus.off('notifications:notification.updated', updatedHandler);
       }
     };
 
@@ -67,8 +61,8 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
           writeSseChunk(controller, `data: ${JSON.stringify(payload)}`);
         };
 
-        dynamicBus.on('notifications:notification.created', createdHandler);
-        dynamicBus.on('notifications:notification.updated', updatedHandler);
+        bus.on('notifications:notification.created', createdHandler);
+        bus.on('notifications:notification.updated', updatedHandler);
 
         const closeAndCleanup = () => {
           cleanup();
@@ -82,11 +76,14 @@ export function createNotificationSseRoute(bus: SlingshotEventBus, path: string)
         c.req.raw.signal.addEventListener('abort', closeAndCleanup, { once: true });
 
         // Also clean up if the underlying Node.js stream errors (e.g. client
-        // disconnects before the abort signal fires).
-        (controller as unknown as { on?: (event: string, fn: () => void) => void }).on?.(
-          'error',
-          closeAndCleanup,
-        );
+        // disconnects before the abort signal fires). Web Streams'
+        // ReadableStreamDefaultController has no `on()`; this duck-types the
+        // Node-stream extension some runtimes expose so we can attach error
+        // listeners without breaking standards-conformant runtimes.
+        const nodeStyleController = controller as unknown as {
+          on?: (event: string, fn: () => void) => void;
+        };
+        nodeStyleController.on?.('error', closeAndCleanup);
       },
       cancel() {
         // Ensure bus listeners are removed when the consumer cancels the stream.

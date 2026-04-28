@@ -41,9 +41,10 @@ export {
   pushTopicMembershipFactories,
   pushDeliveryFactories,
 } from './entities/factories';
-export type { PushProvider } from './providers/provider';
+export type { PushProvider, PushProviderHealth } from './providers/provider';
+export type { PushPluginHealth } from './plugin';
 export { createPushRouter } from './router';
-export type { PushRouter, PushRouterRepos } from './router';
+export type { PushRouter, PushRouterRepos, PushSendResultSummary } from './router';
 export { compilePushFormatters } from './formatter';
 export { createPushDeliveryAdapter } from './deliveryAdapter';
 export { buildProviderIdempotencyKey, deriveUuidV4FromKey } from './lib/idempotency';

@@ -55,9 +55,12 @@ function makeFormatters(message: PushMessage = STUB_MESSAGE): CompiledPushFormat
 
 describe('createPushDeliveryAdapter', () => {
   test('skips delivery when pushEnabled is false', async () => {
-    const sendToUser = mock(async () => ({ sent: 0 }));
+    const sendToUser = mock(async () => ({ delivered: 0, attempted: 0, allFailed: false }));
     const adapter = createPushDeliveryAdapter({
-      router: { sendToUser, sendToUsers: mock(async () => ({ sent: 0 })) } as never,
+      router: {
+        sendToUser,
+        sendToUsers: mock(async () => ({ delivered: 0, attempted: 0, allFailed: false })),
+      } as never,
       formatters: makeFormatters(),
     });
 
@@ -67,9 +70,12 @@ describe('createPushDeliveryAdapter', () => {
   });
 
   test('skips delivery when notification source is in skipSources', async () => {
-    const sendToUser = mock(async () => ({ sent: 0 }));
+    const sendToUser = mock(async () => ({ delivered: 0, attempted: 0, allFailed: false }));
     const adapter = createPushDeliveryAdapter({
-      router: { sendToUser, sendToUsers: mock(async () => ({ sent: 0 })) } as never,
+      router: {
+        sendToUser,
+        sendToUsers: mock(async () => ({ delivered: 0, attempted: 0, allFailed: false })),
+      } as never,
       formatters: makeFormatters(),
       skipSources: ['blocked-source'],
     });
@@ -80,9 +86,12 @@ describe('createPushDeliveryAdapter', () => {
   });
 
   test('delivers to user when pushEnabled and source not skipped', async () => {
-    const sendToUser = mock(async () => ({ sent: 1 }));
+    const sendToUser = mock(async () => ({ delivered: 1, attempted: 1, allFailed: false }));
     const adapter = createPushDeliveryAdapter({
-      router: { sendToUser, sendToUsers: mock(async () => ({ sent: 0 })) } as never,
+      router: {
+        sendToUser,
+        sendToUsers: mock(async () => ({ delivered: 0, attempted: 0, allFailed: false })),
+      } as never,
       formatters: makeFormatters(),
     });
 
@@ -109,8 +118,8 @@ describe('createPushDeliveryAdapter', () => {
 
     const adapter = createPushDeliveryAdapter({
       router: {
-        sendToUser: mock(async () => ({ sent: 1 })),
-        sendToUsers: mock(async () => ({ sent: 0 })),
+        sendToUser: mock(async () => ({ delivered: 1, attempted: 1, allFailed: false })),
+        sendToUsers: mock(async () => ({ delivered: 0, attempted: 0, allFailed: false })),
       } as never,
       formatters,
       defaults: { defaultUrl: '/fallback', icon: '/icon.png' },
@@ -129,8 +138,8 @@ describe('createPushDeliveryAdapter', () => {
 
     const adapter = createPushDeliveryAdapter({
       router: {
-        sendToUser: mock(async () => ({ sent: 1 })),
-        sendToUsers: mock(async () => ({ sent: 0 })),
+        sendToUser: mock(async () => ({ delivered: 1, attempted: 1, allFailed: false })),
+        sendToUsers: mock(async () => ({ delivered: 0, attempted: 0, allFailed: false })),
       } as never,
       formatters,
       defaults: { defaultUrl: '/home', icon: '/icon.png' },
@@ -143,9 +152,12 @@ describe('createPushDeliveryAdapter', () => {
   });
 
   test('uses empty string tenantId when notification.tenantId is null', async () => {
-    const sendToUser = mock(async () => ({ sent: 1 }));
+    const sendToUser = mock(async () => ({ delivered: 1, attempted: 1, allFailed: false }));
     const adapter = createPushDeliveryAdapter({
-      router: { sendToUser, sendToUsers: mock(async () => ({ sent: 0 })) } as never,
+      router: {
+        sendToUser,
+        sendToUsers: mock(async () => ({ delivered: 0, attempted: 0, allFailed: false })),
+      } as never,
       formatters: makeFormatters(),
     });
 

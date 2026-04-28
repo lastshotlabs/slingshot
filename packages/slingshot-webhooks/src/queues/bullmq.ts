@@ -109,8 +109,11 @@ async function loadBullMQModule(): Promise<{
 
   try {
     const bullmq = await import('bullmq');
-    namespace = ((bullmq as unknown as { default?: typeof bullmq }).default ??
-      bullmq) as typeof namespace;
+    // Interop shim: when the bullmq module is loaded as CJS via Node's ESM
+    // bridge, the named exports live on `.default`. The cast names that
+    // exact runtime shape so the optional `.default` field is well-typed.
+    const interop = bullmq as unknown as typeof bullmq & { default?: typeof bullmq };
+    namespace = interop.default ?? bullmq;
   } catch {
     throw new Error('BullMQ webhook queue requires bullmq to be installed. Run: bun add bullmq');
   }
@@ -217,6 +220,9 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
       let startedWorker: BullWorker | null = null;
 
       try {
+        // BullMQ's ConnectionOptions union accepts an ioredis instance at
+        // runtime, but the type declaration only enumerates plain options
+        // objects. Bridging via `unknown` is the documented interop pattern.
         const conn = startedConnection as unknown as BullConnectionOptions;
         startedQueue = new QueueCtor(queueName, { connection: conn });
         startedWorker = new WorkerCtor(

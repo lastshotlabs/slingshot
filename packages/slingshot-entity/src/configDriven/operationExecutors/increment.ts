@@ -13,6 +13,7 @@
 import type { IncrementOpConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { toSnakeCase } from '../fieldUtils';
 import type { MemoryEntry, MongoModel, PgPool, RedisClient, SqliteDb } from './dbInterfaces';
+import { serializeOnStore } from './memoryMutex';
 
 // ---------------------------------------------------------------------------
 // Memory
@@ -41,16 +42,17 @@ export function incrementMemory(
   isAlive: (entry: MemoryEntry) => boolean,
   isVisible: (record: Record<string, unknown>) => boolean,
 ): (id: unknown, by?: number) => Promise<Record<string, unknown>> {
-  return (id, by) => {
-    const effectiveBy = by ?? op.by ?? 1;
-    const entry = store.get(String(id));
-    if (!entry || !isAlive(entry) || !isVisible(entry.record)) {
-      throw new Error(`[${config.name}] Not found`);
-    }
-    const current = entry.record[op.field];
-    entry.record[op.field] = (typeof current === 'number' ? current : 0) + effectiveBy;
-    return Promise.resolve({ ...entry.record });
-  };
+  return (id, by) =>
+    serializeOnStore(store, () => {
+      const effectiveBy = by ?? op.by ?? 1;
+      const entry = store.get(String(id));
+      if (!entry || !isAlive(entry) || !isVisible(entry.record)) {
+        return Promise.reject(new Error(`[${config.name}] Not found`));
+      }
+      const current = entry.record[op.field];
+      entry.record[op.field] = (typeof current === 'number' ? current : 0) + effectiveBy;
+      return Promise.resolve({ ...entry.record });
+    });
 }
 
 // ---------------------------------------------------------------------------

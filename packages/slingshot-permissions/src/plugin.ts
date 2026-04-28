@@ -14,8 +14,36 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import type { PermissionsState } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from './factories';
-import { createPermissionEvaluator } from './lib/evaluator';
+import {
+  type EvaluatorHealth,
+  type EvaluatorWithHealth,
+  createPermissionEvaluator,
+} from './lib/evaluator';
 import { createPermissionRegistry } from './lib/registry';
+
+/**
+ * Aggregated health snapshot for `slingshot-permissions`. Returned by the
+ * `getHealth()` method on the plugin instance.
+ *
+ * `status` is derived from the underlying signals:
+ *   - `'unhealthy'` when no permissions adapter has been resolved yet (the
+ *     plugin hasn't completed `setupMiddleware`, or another plugin pre-seeded
+ *     state without an adapter).
+ *   - `'degraded'` when the evaluator has observed any query timeouts or
+ *     group-expansion errors since startup.
+ *   - `'healthy'` otherwise.
+ */
+export interface PermissionsHealth {
+  readonly status: 'healthy' | 'degraded' | 'unhealthy';
+  readonly details: {
+    /** `true` when a `PermissionsAdapter` has been resolved into plugin state. */
+    readonly adapterAvailable: boolean;
+    /** Adapter implementation name (best-effort). `null` when unavailable. */
+    readonly adapterName: string | null;
+    /** Per-evaluator counters surfaced from the most recently created evaluator. */
+    readonly evaluator: EvaluatorHealth | null;
+  };
+}
 
 export interface PermissionsPluginConfig {
   /**
@@ -103,14 +131,54 @@ export interface PermissionsPluginConfig {
  * });
  * ```
  */
-export function createPermissionsPlugin(config?: PermissionsPluginConfig): SlingshotPlugin {
+export function createPermissionsPlugin(
+  config?: PermissionsPluginConfig,
+): SlingshotPlugin & { getHealth(): PermissionsHealth } {
+  // Captured from setupMiddleware so getHealth() can return a non-trivial
+  // snapshot without re-resolving the adapter.
+  let evaluatorRef: EvaluatorWithHealth | undefined;
+  let adapterNameRef: string | null = null;
+  let adapterAvailable = false;
+
   return {
     name: 'slingshot-permissions',
+
+    getHealth(): PermissionsHealth {
+      const evaluatorHealth = evaluatorRef?.getHealth() ?? null;
+      let status: PermissionsHealth['status'] = 'healthy';
+      if (!adapterAvailable) {
+        status = 'unhealthy';
+      } else if (
+        evaluatorHealth &&
+        (evaluatorHealth.queryTimeoutCount > 0 || evaluatorHealth.groupExpansionErrorCount > 0)
+      ) {
+        status = 'degraded';
+      }
+      return {
+        status,
+        details: {
+          adapterAvailable,
+          adapterName: adapterNameRef,
+          evaluator: evaluatorHealth,
+        },
+      };
+    },
 
     async setupMiddleware({ app, config: frameworkConfig }: PluginSetupContext) {
       const pluginState = getPluginState(app);
       // Idempotent — if another plugin already seeded permissions state, skip.
-      if (pluginState.has(PERMISSIONS_STATE_KEY)) return;
+      if (pluginState.has(PERMISSIONS_STATE_KEY)) {
+        // Reflect the externally-seeded state so getHealth() doesn't lie.
+        const existing = pluginState.get(PERMISSIONS_STATE_KEY) as PermissionsState | undefined;
+        if (existing?.adapter) {
+          adapterAvailable = true;
+          adapterNameRef =
+            (existing.adapter as { name?: string }).name ??
+            existing.adapter.constructor?.name ??
+            null;
+        }
+        return;
+      }
 
       const storeType: StoreType = config?.adapter ?? frameworkConfig.resolvedStores.authStore;
       const infra = frameworkConfig.storeInfra;
@@ -133,6 +201,10 @@ export function createPermissionsPlugin(config?: PermissionsPluginConfig): Sling
         groupResolver,
         maxGroups: config?.maxGroups,
       });
+
+      evaluatorRef = evaluator;
+      adapterAvailable = true;
+      adapterNameRef = (adapter as { name?: string }).name ?? adapter.constructor?.name ?? null;
 
       pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));
     },

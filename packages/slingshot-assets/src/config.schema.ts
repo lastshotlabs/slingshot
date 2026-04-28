@@ -85,6 +85,27 @@ const imageConfigSchema = z.object({
     .describe(
       'Runtime cache implementation for transformed image responses. Omit to disable plugin-managed image caching.',
     ),
+  cacheMaxEntries: z
+    .number()
+    .int()
+    .min(1)
+    .max(100_000)
+    .optional()
+    .describe(
+      'Maximum number of cached transformed-image entries before LRU eviction in the built-in ' +
+        'in-memory image cache. Default 500. Ignored when a custom cache adapter is supplied.',
+    ),
+  cacheTtlMs: z
+    .number()
+    .int()
+    .min(0)
+    .max(7 * 24 * 60 * 60_000)
+    .optional()
+    .describe(
+      'Time-to-live in ms for entries in the built-in in-memory image cache. Entries past this ' +
+        'age are evicted on access. Default 3 600 000 (1 hour). Set to 0 to disable TTL eviction. ' +
+        'Ignored when a custom cache adapter is supplied.',
+    ),
 });
 
 /**

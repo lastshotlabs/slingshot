@@ -530,7 +530,18 @@ export function applyRouteConfig(
       const capturedEvents = events;
       router.use('*', async (c, next) => {
         await next();
-        if (c.res.status < 200 || c.res.status >= 300) return;
+        // Reading c.res lazily creates a Response. When the chain didn't actually
+        // finalize one (e.g. the request fell through to a route registered
+        // elsewhere in the app), accessing .status crashes with RangeError on
+        // status 0. Bail out before that happens.
+        if (!c.finalized) return;
+        let status: number;
+        try {
+          status = c.res.status;
+        } catch {
+          return;
+        }
+        if (status < 200 || status >= 300) return;
 
         const routeKey = c.get('__routeKey' as never) as string | undefined;
         const opName = c.get('__opName' as never) as string | undefined;

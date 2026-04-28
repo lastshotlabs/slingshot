@@ -90,6 +90,15 @@ describe('connectAuthMongo', () => {
     // Password with colon should be encoded
     expect(uri).toContain('my%3Apass');
   });
+
+  test('accepts a full MongoDB URL for local and prebuilt connection strings', async () => {
+    resetMocks();
+    await connectAuthMongo({
+      url: 'mongodb://localhost:27018/slingshot_test',
+    });
+    const uri = (mockAuthConn.openUri.mock.calls as unknown as Array<[string]>)[0]?.[0] ?? '';
+    expect(uri).toBe('mongodb://localhost:27018/slingshot_test');
+  });
 });
 
 describe('connectAppMongo', () => {

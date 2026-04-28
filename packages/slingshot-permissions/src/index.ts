@@ -19,7 +19,12 @@ export { validateGrant, SUPER_ADMIN_ROLE } from '@lastshotlabs/slingshot-core';
 export { createAuthGroupResolver } from './lib/authGroupResolver';
 export { createPermissionRegistry } from './lib/registry';
 export { createPermissionEvaluator, PermissionQueryTimeoutError } from './lib/evaluator';
-export type { EvaluatorLogger, GroupExpansionFailure } from './lib/evaluator';
+export type {
+  EvaluatorHealth,
+  EvaluatorLogger,
+  EvaluatorWithHealth,
+  GroupExpansionFailure,
+} from './lib/evaluator';
 export { createSqlitePermissionsAdapter } from './adapters/sqlite';
 export type { PermissionsSqliteAdapter } from './adapters/sqlite';
 export { createPermissionsPostgresAdapter } from './adapters/postgres';

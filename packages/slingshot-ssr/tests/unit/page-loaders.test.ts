@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock, test } from 'bun:test';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import type { ResolvedPageDeclaration } from '../../src/pageDeclarations';
 import { PageNotFoundError, resolvePageLoader } from '../../src/pageLoaders';
@@ -286,5 +286,321 @@ describe('resolvePageLoader — entity-detail', () => {
     await expect(
       resolvePageLoader(decl, { id: '999' }, {}, adapters, new Map([['post', makeEntityConfig()]])),
     ).rejects.toBeInstanceOf(PageNotFoundError);
+  });
+});
+
+describe('resolvePageLoader — entity pages with filters, forms, dashboards, and metadata', () => {
+  function makeEntityConfig(
+    name = 'post',
+    fields: Record<string, unknown> = {
+      id: { type: 'string', optional: false, primary: true, immutable: true },
+      slug: { type: 'string', optional: false, primary: false, immutable: true },
+      title: { type: 'string', optional: false, primary: false, immutable: false },
+      status: {
+        type: 'string',
+        optional: false,
+        primary: false,
+        immutable: false,
+        enumValues: ['draft', 'published'],
+      },
+      views: { type: 'number', optional: false, primary: false, immutable: false },
+      createdAt: { type: 'string', optional: false, primary: false, immutable: false },
+    },
+  ): ResolvedEntityConfig {
+    return {
+      name,
+      namespace: name === 'post' ? 'content' : undefined,
+      _pkField: 'id',
+      fields,
+      softDelete: name === 'post' ? { field: 'deletedAt' } : undefined,
+    } as unknown as ResolvedEntityConfig;
+  }
+
+  const records = [
+    {
+      id: '1',
+      slug: 'alpha',
+      title: 'Alpha',
+      status: 'draft',
+      views: 5,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: '2',
+      slug: 'beta',
+      title: 'Beta',
+      status: 'published',
+      views: 20,
+      createdAt: '2026-01-03T00:00:00.000Z',
+    },
+    {
+      id: '3',
+      slug: 'gamma',
+      title: 'Gamma',
+      status: 'published',
+      views: 30,
+      createdAt: '2026-01-02T00:00:00.000Z',
+    },
+  ];
+
+  function makePagedAdapter(items = records) {
+    return {
+      getById: mock(async (id: string) => items.find(item => item.id === id) ?? null),
+      bySlug: mock(async (params: Readonly<Record<string, string>>) =>
+        items.find(item => item.slug === params.slug),
+      ),
+      list: mock(async ({ cursor }: { cursor?: string }) =>
+        cursor
+          ? { items: items.slice(2), hasMore: false }
+          : { items: items.slice(0, 2), hasMore: true, nextCursor: 'next' },
+      ),
+    };
+  }
+
+  const entityConfigs = new Map([
+    ['post', makeEntityConfig('post')],
+    [
+      'comment',
+      makeEntityConfig('comment', {
+        id: { type: 'string', optional: false, primary: true, immutable: true },
+        body: { type: 'string', optional: false, primary: false, immutable: false },
+      }),
+    ],
+  ]);
+
+  test('loads searchable, filtered, sorted, paginated entity lists with tags and metadata', async () => {
+    const declaration = {
+      key: 'posts',
+      declaration: {
+        type: 'entity-list',
+        path: '/posts',
+        title: 'Posts',
+        entity: 'post',
+        fields: ['title', 'status', 'views'],
+        searchable: true,
+        filters: [{ field: 'views', operator: 'gt' }],
+        defaultSort: { field: 'views', order: 'asc' },
+        pageSize: 1,
+      },
+      entityConfig: makeEntityConfig('post'),
+      pattern: /^\/posts$/,
+      paramNames: [],
+    } as unknown as ResolvedPageDeclaration;
+
+    const result = await resolvePageLoader(
+      declaration,
+      {},
+      { q: 'a', filter_views: '10', page: '2' },
+      { post: makePagedAdapter() },
+      entityConfigs,
+      { shell: 'sidebar', items: [{ label: 'Posts', path: '/posts' }] },
+    );
+
+    if (result.data.type !== 'list') throw new Error('unexpected type');
+    expect(result.data.total).toBe(2);
+    expect(result.data.items).toEqual([
+      {
+        id: '3',
+        slug: 'gamma',
+        title: 'Gamma',
+        status: 'published',
+        views: 30,
+        createdAt: '2026-01-02T00:00:00.000Z',
+      },
+    ]);
+    expect(result.tags).toEqual(['entity:post']);
+    expect(result.navigation?.shell).toBe('sidebar');
+    expect(result.entityMeta.post?.namespace).toBe('content');
+    expect(result.entityMeta.post?.fields.status.enumValues).toEqual(['draft', 'published']);
+    expect(result.entityMeta.post?.softDelete).toEqual({ field: 'deletedAt' });
+  });
+
+  test('supports all entity-list filter operators', async () => {
+    const cases: Array<{
+      operator: 'contains' | 'lt' | 'gte' | 'lte' | 'in' | 'eq';
+      field: string;
+      value: string;
+      expectedIds: string[];
+    }> = [
+      { operator: 'contains', field: 'title', value: 'mm', expectedIds: ['3'] },
+      { operator: 'lt', field: 'views', value: '20', expectedIds: ['1'] },
+      { operator: 'gte', field: 'views', value: '20', expectedIds: ['2', '3'] },
+      { operator: 'lte', field: 'views', value: '20', expectedIds: ['1', '2'] },
+      { operator: 'in', field: 'status', value: 'draft,published', expectedIds: ['1', '2', '3'] },
+      { operator: 'eq', field: 'status', value: 'published', expectedIds: ['2', '3'] },
+    ];
+
+    for (const entry of cases) {
+      const declaration = {
+        key: `posts-${entry.operator}`,
+        declaration: {
+          type: 'entity-list',
+          path: '/posts',
+          title: 'Posts',
+          entity: 'post',
+          fields: ['title', 'status', 'views'],
+          filters: [{ field: entry.field, operator: entry.operator }],
+          defaultSort: { field: 'id', order: 'asc' },
+        },
+        entityConfig: makeEntityConfig('post'),
+        pattern: /^\/posts$/,
+        paramNames: [],
+      } as unknown as ResolvedPageDeclaration;
+
+      const result = await resolvePageLoader(
+        declaration,
+        {},
+        { [`filter_${entry.field}`]: entry.value },
+        { post: makePagedAdapter() },
+        entityConfigs,
+      );
+
+      if (result.data.type !== 'list') throw new Error('unexpected type');
+      expect(result.data.items.map(item => item.id)).toEqual(entry.expectedIds);
+    }
+  });
+
+  test('loads detail pages through custom lookups with template titles and related metadata', async () => {
+    const declaration = {
+      key: 'post-detail',
+      declaration: {
+        type: 'entity-detail',
+        path: '/posts/[slug]',
+        title: { template: '{title} has {views} views' },
+        entity: 'post',
+        lookup: 'bySlug',
+        related: [{ entity: 'comment' }],
+        tags: ['post:{slug}'],
+      },
+      entityConfig: makeEntityConfig('post'),
+      pattern: /^\/posts\/([^/]+)$/,
+      paramNames: ['slug'],
+    } as unknown as ResolvedPageDeclaration;
+
+    const result = await resolvePageLoader(
+      declaration,
+      { slug: 'beta' },
+      {},
+      { post: makePagedAdapter() },
+      entityConfigs,
+    );
+
+    if (result.data.type !== 'detail') throw new Error('unexpected type');
+    expect(result.data.item.title).toBe('Beta');
+    expect(result.meta.title).toBe('Beta has 20 views');
+    expect(result.tags).toEqual(['post:beta']);
+    expect(Object.keys(result.entityMeta).sort()).toEqual(['comment', 'post']);
+  });
+
+  test('loads create and edit form pages with defaults and entity record tags', async () => {
+    const createDeclaration = {
+      key: 'post-new',
+      declaration: {
+        type: 'entity-form',
+        path: '/posts/new',
+        title: 'New Post',
+        entity: 'post',
+        operation: 'create',
+        fieldConfig: {
+          status: { defaultValue: 'draft' },
+          views: { defaultValue: 0 },
+          title: {},
+        },
+        revalidate: 30,
+      },
+      entityConfig: makeEntityConfig('post'),
+      pattern: /^\/posts\/new$/,
+      paramNames: [],
+    } as unknown as ResolvedPageDeclaration;
+    const editDeclaration = {
+      key: 'post-edit',
+      declaration: {
+        type: 'entity-form',
+        path: '/posts/[id]/edit',
+        title: { field: 'title' },
+        entity: 'post',
+        operation: 'edit',
+      },
+      entityConfig: makeEntityConfig('post'),
+      pattern: /^\/posts\/([^/]+)\/edit$/,
+      paramNames: ['id'],
+    } as unknown as ResolvedPageDeclaration;
+
+    const createResult = await resolvePageLoader(
+      createDeclaration,
+      {},
+      {},
+      { post: makePagedAdapter() },
+      entityConfigs,
+    );
+    if (createResult.data.type !== 'form-create') throw new Error('unexpected type');
+    expect(createResult.data.defaults).toEqual({ status: 'draft', views: 0 });
+    expect(createResult.revalidate).toBe(30);
+
+    const editResult = await resolvePageLoader(
+      editDeclaration,
+      { id: '1' },
+      {},
+      { post: makePagedAdapter() },
+      entityConfigs,
+    );
+    if (editResult.data.type !== 'form-edit') throw new Error('unexpected type');
+    expect(editResult.data.item.title).toBe('Alpha');
+    expect(editResult.meta.title).toBe('Alpha');
+    expect(editResult.tags).toEqual(['entity:post', 'entity:post:1']);
+  });
+
+  test('loads dashboard stats, activity, charts, and inferred tags', async () => {
+    const declaration = {
+      key: 'dashboard',
+      declaration: {
+        type: 'entity-dashboard',
+        path: '/dashboard',
+        title: 'Dashboard',
+        stats: [
+          {
+            label: 'Published',
+            entity: 'post',
+            aggregate: 'count',
+            filter: { status: 'published' },
+          },
+          { label: 'Total views', entity: 'post', aggregate: 'sum', field: 'views' },
+          { label: 'Average views', entity: 'post', aggregate: 'avg', field: 'views' },
+          { label: 'Minimum views', entity: 'post', aggregate: 'min', field: 'views' },
+          { label: 'Maximum views', entity: 'post', aggregate: 'max', field: 'views' },
+        ],
+        activity: {
+          entity: 'post',
+          fields: ['title', 'createdAt'],
+          limit: 2,
+        },
+        chart: {
+          entity: 'post',
+          categoryField: 'status',
+          valueField: 'views',
+          aggregate: 'avg',
+        },
+      },
+      entityConfig: null,
+      pattern: /^\/dashboard$/,
+      paramNames: [],
+    } as unknown as ResolvedPageDeclaration;
+
+    const result = await resolvePageLoader(
+      declaration,
+      {},
+      {},
+      { post: makePagedAdapter() },
+      entityConfigs,
+    );
+
+    if (result.data.type !== 'dashboard') throw new Error('unexpected type');
+    expect(result.data.stats.map(stat => stat.value)).toEqual([2, 55, 55 / 3, 5, 30]);
+    expect(result.data.activity?.map(item => item.title)).toEqual(['Beta', 'Gamma']);
+    expect(result.data.chart).toEqual([
+      { category: 'draft', value: 5 },
+      { category: 'published', value: 25 },
+    ]);
+    expect(result.tags).toEqual(['entity:post']);
   });
 });

@@ -2,6 +2,7 @@ import type {
   PermissionsState,
   PluginSetupContext,
   SlingshotPlugin,
+  StorageAdapter,
 } from '@lastshotlabs/slingshot-core';
 import {
   getPermissionsStateOrNull,
@@ -11,6 +12,7 @@ import {
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { resolveStorageAdapter } from './adapters/index';
+import type { S3CircuitBreakerHealth, S3StorageAdapter } from './adapters/s3';
 import { assetsPluginConfigSchema } from './config.schema';
 import { createMemoryImageCache } from './image/cache';
 import { resolveImageConfig } from './image/serve';
@@ -20,8 +22,11 @@ import { createAssetsManifestRuntime } from './manifest/runtime';
 import {
   ASSETS_PLUGIN_STATE_KEY,
   type AssetAdapter,
+  type AssetsHealth,
+  type AssetsHealthDetails,
   type AssetsPluginConfig,
   type AssetsPluginState,
+  type StorageAdapterRef,
 } from './types';
 
 function isImageCacheAdapter(value: unknown): value is ImageCacheAdapter {
@@ -30,6 +35,23 @@ function isImageCacheAdapter(value: unknown): value is ImageCacheAdapter {
     typeof Reflect.get(value, 'get') === 'function' &&
     typeof Reflect.get(value, 'set') === 'function'
   );
+}
+
+function isS3StorageAdapter(value: StorageAdapter): value is S3StorageAdapter {
+  return typeof (value as Partial<S3StorageAdapter>).getCircuitBreakerHealth === 'function';
+}
+
+function isStorageAdapterRef(
+  value: StorageAdapter | StorageAdapterRef,
+): value is StorageAdapterRef {
+  return typeof (value as Partial<StorageAdapter>).put !== 'function';
+}
+
+function describeStorageKind(
+  ref: StorageAdapter | StorageAdapterRef,
+): AssetsHealthDetails['storageAdapter'] {
+  if (isStorageAdapterRef(ref)) return ref.adapter;
+  return 'custom';
 }
 
 /**
@@ -42,7 +64,9 @@ function isImageCacheAdapter(value: unknown): value is ImageCacheAdapter {
  * @param rawConfig - Assets plugin configuration.
  * @returns A Slingshot plugin instance for app registration.
  */
-export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlugin {
+export function createAssetsPlugin(
+  rawConfig: AssetsPluginConfig,
+): SlingshotPlugin & { getHealth(): AssetsHealth } {
   const config = Object.freeze(
     validatePluginConfig(ASSETS_PLUGIN_STATE_KEY, rawConfig, assetsPluginConfigSchema),
   );
@@ -68,7 +92,14 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
                   'This cache is not shared across processes.',
               );
             }
-            return createMemoryImageCache();
+            const cacheOpts: { maxEntries?: number; ttlMs?: number } = {};
+            if (config.image?.cacheMaxEntries !== undefined) {
+              cacheOpts.maxEntries = config.image.cacheMaxEntries;
+            }
+            if (config.image?.cacheTtlMs !== undefined) {
+              cacheOpts.ttlMs = config.image.cacheTtlMs;
+            }
+            return createMemoryImageCache(cacheOpts);
           })()
       : null;
 
@@ -106,9 +137,56 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
     },
   });
 
+  const storageKind = describeStorageKind(config.storage);
+  const storageConfigured = config.storage != null;
+
+  function readCircuitBreakerHealth(): S3CircuitBreakerHealth | undefined {
+    if (!isS3StorageAdapter(storage)) return undefined;
+    return storage.getCircuitBreakerHealth();
+  }
+
+  function getHealth(): AssetsHealth {
+    const breaker = readCircuitBreakerHealth();
+    const cacheHealth = imageCache?.getHealth?.();
+
+    const details: AssetsHealthDetails = {
+      storageAdapter: storageKind,
+      storageConfigured,
+      ...(breaker
+        ? {
+            storageCircuitBreaker: {
+              state: breaker.state,
+              consecutiveFailures: breaker.consecutiveFailures,
+              openedAt: breaker.openedAt,
+              nextProbeAt: breaker.nextProbeAt,
+            },
+          }
+        : {}),
+      ...(cacheHealth
+        ? {
+            imageCache: {
+              size: cacheHealth.size,
+              evictionCount: cacheHealth.evictionCount,
+              ...(cacheHealth.ttlEvictionCount !== undefined
+                ? { ttlEvictionCount: cacheHealth.ttlEvictionCount }
+                : {}),
+            },
+          }
+        : {}),
+    };
+
+    let status: AssetsHealth['status'] = 'healthy';
+    if (!storageConfigured) status = 'unhealthy';
+    if (breaker?.state === 'half-open') status = 'degraded';
+    if (breaker?.state === 'open') status = 'unhealthy';
+
+    return { status, details };
+  }
+
   return {
     name: ASSETS_PLUGIN_STATE_KEY,
     dependencies: ['slingshot-auth', 'slingshot-permissions'],
+    getHealth,
 
     async setupMiddleware({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       const permissions: PermissionsState =

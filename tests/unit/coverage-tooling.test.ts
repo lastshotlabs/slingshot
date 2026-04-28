@@ -74,7 +74,9 @@ describe('coverage tooling', () => {
   });
 
   test('applies production readiness coverage thresholds to release packages', async () => {
-    const suitesModule = await import(`../../scripts/workspace-test-suites.ts?thresholds=${Date.now()}`);
+    const suitesModule = await import(
+      `../../scripts/workspace-test-suites.ts?thresholds=${Date.now()}`
+    );
     const thresholdsByName = new Map(
       suitesModule.coverageSuites.map((suite: { name: string; thresholds?: unknown }) => [
         suite.name,
@@ -208,6 +210,52 @@ describe('coverage tooling', () => {
     const merged = await readFile(mergedPath, 'utf8');
     expect(merged).toContain('SF:src/a.ts');
     expect(merged).toContain('SF:src/b.ts');
+  });
+
+  test('keeps Bun function summary hits when duplicate detailed records are zero-hit', async () => {
+    const artifactPath = join(tempDir, 'duplicate-functions.info');
+    await writeFile(
+      artifactPath,
+      [
+        'TN:',
+        'SF:src/runtime.ts',
+        'FNF:3',
+        'FNH:2',
+        'DA:1,1',
+        'LF:1',
+        'LH:1',
+        'end_of_record',
+        'TN:',
+        'SF:src/runtime.ts',
+        'FN:1,first',
+        'FN:2,second',
+        'FN:3,third',
+        'FNDA:0,first',
+        'FNDA:0,second',
+        'FNDA:0,third',
+        'FNF:3',
+        'FNH:0',
+        'DA:2,1',
+        'LF:1',
+        'LH:1',
+        'end_of_record',
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const { parseLcov } = await import(
+      `../../scripts/coverage-lcov.ts?function-summary=${Date.now()}`
+    );
+    const report = parseLcov(artifactPath);
+    expect(report.files.get('src/runtime.ts')).toEqual({
+      linesFound: 2,
+      linesHit: 2,
+      functionsFound: 3,
+      functionsHit: 2,
+      branchesFound: 0,
+      branchesHit: 0,
+    });
   });
 
   test('derives per-suite artifacts from merged repo coverage so cross-suite hits still count', async () => {

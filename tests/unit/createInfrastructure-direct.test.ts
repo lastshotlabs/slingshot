@@ -161,6 +161,7 @@ function baseOptions(runtime = createRuntime()) {
       kafkaSaslPass: undefined,
       kafkaSaslMech: undefined,
       kafkaSsl: undefined,
+      mongoUrl: undefined,
       mongoUser: undefined,
       mongoPassword: undefined,
       mongoHost: undefined,
@@ -390,6 +391,31 @@ describe('createInfrastructure direct', () => {
     expect(infra.frameworkConfig.storeInfra.getMongo()).toEqual({
       conn: single.appConn,
       mg: mongooseModule,
+    });
+  });
+
+  test('connects single mongo mode using a full MongoDB URL', async () => {
+    const single = makeSingleMongoResult();
+    connectMongoMock.mockResolvedValueOnce(single);
+    const createInfrastructure = await loadCreateInfrastructure();
+
+    await createInfrastructure({
+      ...baseOptions(),
+      db: {
+        mongo: 'single',
+        redis: false,
+        sessions: 'memory',
+        cache: 'memory',
+        auth: 'mongo',
+      },
+      secrets: {
+        ...baseOptions().secrets,
+        mongoUrl: 'mongodb://localhost:27018/slingshot_test',
+      },
+    });
+
+    expect(connectMongoMock).toHaveBeenCalledWith({
+      url: 'mongodb://localhost:27018/slingshot_test',
     });
   });
 

@@ -24,7 +24,8 @@ process.env.REDIS_HOST = 'localhost:6380';
 delete process.env.REDIS_USER;
 delete process.env.REDIS_PASSWORD;
 
-// Mongo env vars — not used directly (we connect with plain URI), but set for completeness
+// Mongo env vars — Docker Mongo has no auth, so e2e mongo mode uses the full URL.
+process.env.MONGO_URL = 'mongodb://localhost:27018/slingshot_test';
 process.env.MONGO_HOST = 'localhost:27018';
 process.env.MONGO_DB = 'slingshot_test';
 

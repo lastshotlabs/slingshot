@@ -22,7 +22,12 @@ export type {
 } from './types';
 export type { NotificationBuilder } from './builder';
 export { createNotificationBuilder } from './builder';
-export type { DispatcherAdapter } from './dispatcher';
+export type {
+  CreateIntervalDispatcherOptions,
+  DispatcherAdapter,
+  DispatcherBreakerOptions,
+  DispatcherRetryOptions,
+} from './dispatcher';
 export { createIntervalDispatcher } from './dispatcher';
 export { NotificationDataTooLargeError, freezeNotificationData } from './data';
 export { resolvePreferences, resolveEffectivePriority, isWithinQuietHours } from './preferences';

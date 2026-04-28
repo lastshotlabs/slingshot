@@ -324,6 +324,86 @@ describe('createIntervalDispatcher', () => {
     errorSpy.mockRestore();
   });
 
+  test('does not publish work after stop() is called mid-tick (provider settles after stop)', async () => {
+    // Reproduces the audit's "fire-after-stop" race: a tick is in flight
+    // (its provider promise is pending) when stop() is called. The provider
+    // promise then settles successfully. The dispatcher must NOT publish
+    // any new events or roll back work it never tried — `stopped` must
+    // short-circuit at the next async hop.
+    const adapters = createNotificationsTestAdapters();
+    const bus = new InProcessAdapter();
+    const events = createNotificationsTestEvents(bus);
+
+    // Pre-create a row so listPendingDispatch can return it.
+    const builder = adapters.createBuilder('community');
+    const notification = await builder.schedule({
+      userId: 'user-late',
+      type: 'community:mention',
+      targetType: 'community:thread',
+      targetId: 'thread-late',
+      deliverAt: new Date(Date.now() - 1_000),
+    });
+
+    // Track every publish so we can assert nothing fires post-stop.
+    const publishedIds: string[] = [];
+    (
+      bus as unknown as {
+        on(event: string, handler: (payload: unknown) => void): void;
+      }
+    ).on('notifications:notification.created', payload => {
+      const row = (payload as { notification: { id: string } }).notification;
+      publishedIds.push(row.id);
+    });
+
+    let releaseList: (() => void) | undefined;
+    const listGate = new Promise<void>(resolve => {
+      releaseList = resolve;
+    });
+    const originalList = adapters.notifications.listPendingDispatch.bind(adapters.notifications);
+    (
+      adapters.notifications as unknown as {
+        listPendingDispatch: typeof adapters.notifications.listPendingDispatch;
+      }
+    ).listPendingDispatch = (async params => {
+      // Block here so stop() can flip `stopped` while the tick is mid-flight.
+      await listGate;
+      return originalList(params);
+    }) as typeof adapters.notifications.listPendingDispatch;
+
+    const dispatcher = createIntervalDispatcher({
+      notifications: adapters.notifications,
+      preferences: adapters.preferences,
+      bus,
+      events,
+      intervalMs: 60_000,
+      maxPerTick: 10,
+      stopTimeoutMs: 1_000,
+    });
+
+    // Kick off the tick directly so we don't depend on the interval timer.
+    const tickPromise = dispatcher.tick();
+
+    // Yield once so the tick lands inside the gated listPendingDispatch.
+    await Promise.resolve();
+
+    // Stop the dispatcher while the tick is still mid-flight.
+    const stopPromise = dispatcher.stop();
+
+    // Now release the listPendingDispatch promise so the tick body resumes.
+    // The post-await `if (stopped) return 0;` should skip the publish loop.
+    releaseList?.();
+
+    await tickPromise;
+    await stopPromise;
+    await bus.drain();
+
+    expect(publishedIds).toHaveLength(0);
+
+    // Sanity: the row was never marked dispatched in the post-stop path.
+    const persisted = await adapters.notifications.getById(notification.id);
+    expect(persisted?.dispatched).toBe(false);
+  });
+
   test('does not re-enter while a dispatcher tick is already running', async () => {
     const adapters = createNotificationsTestAdapters();
     const bus = new InProcessAdapter();

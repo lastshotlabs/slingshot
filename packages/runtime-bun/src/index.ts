@@ -1,4 +1,5 @@
 import { Database } from 'bun:sqlite';
+import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type {
   RuntimeServerInstance,
   RuntimeSqliteDatabase,
@@ -19,6 +20,14 @@ const WEBSOCKET_SHUTDOWN_REASON = 'Server shutting down';
  * sockets whose close handler has not fired and proceed with the server stop.
  */
 const DEFAULT_WS_CLOSE_TIMEOUT_MS = 5_000;
+/**
+ * Default per-socket close-handler timeout (30 s) for the *graceful* drain
+ * path. Longer than the forced-stop timeout because graceful drains have no
+ * fall-through to force-close — the runtime simply waits for the configured
+ * window, then resolves and lets clients linger if their close handler hasn't
+ * fired (the listening port is already released by Bun.serve.stop(false)).
+ */
+const DEFAULT_WS_GRACEFUL_CLOSE_TIMEOUT_MS = 30_000;
 /**
  * Grace window we give Bun's `stop(true)` after a server-side `ws.close()`.
  *
@@ -93,6 +102,23 @@ function logRuntimeError(scope: 'fetch' | 'websocket', phase: string, error: unk
   });
 }
 
+// Structured-Logger handle (from @lastshotlabs/slingshot-core). Used for
+// process-safety-net events (`unhandled-rejection`, `uncaught-exception`)
+// where consumers expect a JSON-line shape rather than the legacy
+// `[runtime-bun] event key=value` text emitted by the local RuntimeBunLogger.
+let structuredLogger: Logger = createConsoleLogger({ base: { runtime: 'bun' } });
+
+/**
+ * Replace the structured `Logger` used for process-safety-net events. Pass
+ * `null` to reset to the default JSON console logger. Returns the previous
+ * logger so tests can save and restore state.
+ */
+export function configureRuntimeBunStructuredLogger(logger: Logger | null): Logger {
+  const previous = structuredLogger;
+  structuredLogger = logger ?? createConsoleLogger({ base: { runtime: 'bun' } });
+  return previous;
+}
+
 type BunRuntimeWebSocket = RuntimeWebSocket & {
   readonly data: unknown;
   send(data: string | Buffer): unknown;
@@ -108,7 +134,7 @@ type BunRuntimeWebSocket = RuntimeWebSocket & {
 export interface BunRuntimeOptions {
   /**
    * Maximum time in milliseconds to wait for each tracked WebSocket's `close`
-   * handler to fire after a graceful drain has issued `ws.close(1001, ...)`.
+   * handler to fire after a *forced* drain has issued `ws.close(1001, ...)`.
    *
    * The drain issues a 1001 close to every active socket, then awaits the
    * per-socket close handlers. If any socket's close handler has not fired
@@ -119,6 +145,18 @@ export interface BunRuntimeOptions {
    */
   wsCloseTimeoutMs?: number;
   /**
+   * Maximum time in milliseconds to wait for each tracked WebSocket's `close`
+   * handler to fire on a *graceful* (`stop()` without `true`) shutdown.
+   *
+   * On graceful stop the runtime broadcasts a 1001 close to every active
+   * socket, then waits up to this window for all close handlers to fire. The
+   * port is released by `Bun.serve.stop(false)` independently of this timer —
+   * the timeout only bounds the wait, it does not force-kill anything.
+   *
+   * Defaults to {@link DEFAULT_WS_GRACEFUL_CLOSE_TIMEOUT_MS} (30 s).
+   */
+  gracefulCloseTimeoutMs?: number;
+  /**
    * If `true` (default), after `wsCloseTimeoutMs` elapses without all close
    * handlers firing, the runtime calls `Bun.serve.stop(true)` to force-shut
    * remaining sockets. Set to `false` to instead resolve the stop promise
@@ -126,11 +164,23 @@ export interface BunRuntimeOptions {
    * without triggering Bun's force-close path.
    */
   forceCloseAfterTimeout?: boolean;
+  /**
+   * If `true` (default), `bunRuntime()` registers process-level handlers for
+   * `unhandledRejection` and `uncaughtException` via
+   * {@link installProcessSafetyNet} on construction. Set to `false` to opt
+   * out (the calling app is responsible for installing equivalent handlers).
+   *
+   * Idempotent — multiple `bunRuntime({ installProcessSafetyNet: true })`
+   * calls in the same process register the handlers exactly once.
+   */
+  installProcessSafetyNet?: boolean;
 }
 
 interface ResolvedBunRuntimeOptions {
   wsCloseTimeoutMs: number;
+  gracefulCloseTimeoutMs: number;
   forceCloseAfterTimeout: boolean;
+  installProcessSafetyNet: boolean;
 }
 
 function resolveOptions(opts?: BunRuntimeOptions): ResolvedBunRuntimeOptions {
@@ -139,7 +189,12 @@ function resolveOptions(opts?: BunRuntimeOptions): ResolvedBunRuntimeOptions {
       typeof opts?.wsCloseTimeoutMs === 'number' && opts.wsCloseTimeoutMs >= 0
         ? opts.wsCloseTimeoutMs
         : DEFAULT_WS_CLOSE_TIMEOUT_MS,
+    gracefulCloseTimeoutMs:
+      typeof opts?.gracefulCloseTimeoutMs === 'number' && opts.gracefulCloseTimeoutMs >= 0
+        ? opts.gracefulCloseTimeoutMs
+        : DEFAULT_WS_GRACEFUL_CLOSE_TIMEOUT_MS,
     forceCloseAfterTimeout: opts?.forceCloseAfterTimeout ?? true,
+    installProcessSafetyNet: opts?.installProcessSafetyNet ?? true,
   };
 }
 
@@ -236,21 +291,37 @@ let processHandlersInstalled = false;
 
 /**
  * Install once-per-process handlers for `unhandledRejection` and
- * `uncaughtException`. Both are forwarded to the structured logger so they
- * surface alongside other runtime events. Idempotent.
+ * `uncaughtException`. Both are forwarded to the new structured `Logger` (and
+ * also surfaced via the legacy `RuntimeBunLogger` for tests that watch the
+ * older text-format hook). Idempotent.
+ *
+ * `bunRuntime()` calls this automatically by default — pass
+ * `installProcessSafetyNet: false` to opt out.
  */
 export function installProcessSafetyNet(): void {
   if (processHandlersInstalled) return;
   processHandlersInstalled = true;
   process.on('unhandledRejection', (reason: unknown) => {
-    activeLogger.error('unhandled-rejection', {
+    const fields = {
       message: reason instanceof Error ? reason.message : String(reason),
       stack: reason instanceof Error ? reason.stack : undefined,
-    });
+    };
+    structuredLogger.error('unhandled-rejection', fields);
+    activeLogger.error('unhandled-rejection', fields);
   });
   process.on('uncaughtException', (err: Error) => {
-    activeLogger.error('uncaught-exception', { message: err.message, stack: err.stack });
+    const fields = { message: err.message, stack: err.stack };
+    structuredLogger.error('uncaught-exception', fields);
+    activeLogger.error('uncaught-exception', fields);
   });
+}
+
+// Test-only escape hatch — re-arm `installProcessSafetyNet` so a later test
+// can verify the install path again. Not part of the public surface.
+export function _resetProcessSafetyNetForTest(): void {
+  processHandlersInstalled = false;
+  process.removeAllListeners('unhandledRejection');
+  process.removeAllListeners('uncaughtException');
 }
 
 /**
@@ -386,6 +457,9 @@ function wrapWebSocketHandler(
  */
 export function bunRuntime(options?: BunRuntimeOptions): SlingshotRuntime {
   const resolved = resolveOptions(options);
+  if (resolved.installProcessSafetyNet) {
+    installProcessSafetyNet();
+  }
   return {
     password: {
       async hash(plain: string): Promise<string> {
@@ -455,15 +529,55 @@ export function bunRuntime(options?: BunRuntimeOptions): SlingshotRuntime {
         const server = Bun.serve(serveOpts);
         return {
           get port(): number {
-            return server.port ?? opts.port ?? 3000;
+            // Prefer the actually bound port. With port=0 (ephemeral) this is
+            // the OS-assigned port — falling back to opts.port=0 would lie.
+            // Only fall back to opts.port when Bun did not surface a port AND
+            // the caller explicitly asked for a non-zero port. Last-resort
+            // 3000 fallback matches Node runtime parity.
+            if (typeof server.port === 'number') return server.port;
+            if (typeof opts.port === 'number' && opts.port !== 0) return opts.port;
+            return 3000;
           },
           async stop(close?: boolean): Promise<void> {
-            // Graceful (non-forced) stop. Hand off to Bun.serve.stop(false):
-            // its returned promise resolves once in-flight HTTP handlers
-            // complete (and, with active sockets, blocks until they close
-            // on their own — graceful means we honor the caller's intent).
+            // Graceful (non-forced) stop. We:
+            //   1. Broadcast a 1001 close frame to every tracked WebSocket so
+            //      clients learn the server is going away (otherwise they
+            //      would only learn on idle-timeout, minutes later).
+            //   2. Hand off to `Bun.serve.stop(false)` so the listening port
+            //      releases and in-flight HTTP requests can finish.
+            //   3. Wait up to `gracefulCloseTimeoutMs` for every per-socket
+            //      close handler to fire. If the window elapses we resolve
+            //      anyway — graceful means honour the caller's intent without
+            //      force-killing anything.
             if (!close) {
-              await Promise.resolve(server.stop(false));
+              if (activeWebSockets.size > 0) {
+                const snapshot = Array.from(activeWebSockets.entries());
+                for (const [ws] of snapshot) {
+                  try {
+                    ws.close(WEBSOCKET_SHUTDOWN_CODE, WEBSOCKET_SHUTDOWN_REASON);
+                  } catch (err) {
+                    const deferred = activeWebSockets.get(ws);
+                    deferred?.resolve();
+                    activeWebSockets.delete(ws);
+                    logRuntimeError('websocket', 'graceful-shutdown-close', err);
+                  }
+                }
+              }
+              const stopP = Promise.resolve(server.stop(false));
+              if (activeWebSockets.size > 0) {
+                const allClosed = await awaitWebSocketCloseHandlers(
+                  activeWebSockets,
+                  resolved.gracefulCloseTimeoutMs,
+                );
+                if (!allClosed) {
+                  structuredLogger.warn('websocket-graceful-close-timeout', {
+                    timeoutMs: resolved.gracefulCloseTimeoutMs,
+                    pending: activeWebSockets.size,
+                  });
+                }
+                activeWebSockets.clear();
+              }
+              await stopP;
               return;
             }
 

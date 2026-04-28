@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { bunRuntime, configureRuntimeBunLogger, installProcessSafetyNet } from '../src/index';
+import {
+  _resetProcessSafetyNetForTest,
+  bunRuntime,
+  configureRuntimeBunLogger,
+  configureRuntimeBunStructuredLogger,
+  installProcessSafetyNet,
+} from '../src/index';
 
 let tempDir = '';
 
@@ -627,6 +633,233 @@ describe('runtime-bun smoke', () => {
       );
     } finally {
       configureRuntimeBunLogger(previous);
+      Object.assign(Bun, { serve: originalServe });
+    }
+  });
+
+  // P-BUN-2 — ephemeral port fix.
+  test('port=0 returns the OS-assigned port from server.port, not 3000', async () => {
+    const runtime = bunRuntime();
+    const server = runtime.server.listen({
+      port: 0,
+      fetch: () => new Response('ok'),
+    });
+    try {
+      const bound = server.port;
+      expect(bound).toBeGreaterThan(0);
+      expect(bound).not.toBe(3000);
+      // Confirm we can actually reach the server on the reported port.
+      const res = await fetch(`http://127.0.0.1:${bound}/`);
+      expect(await res.text()).toBe('ok');
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test('port fallback uses opts.port only when non-zero and Bun does not surface a port', () => {
+    const originalServe = Bun.serve;
+    Object.assign(Bun, {
+      serve() {
+        return {
+          // Bun returns no port (e.g. unix-socket bind path).
+          port: undefined,
+          stop: () => undefined,
+          publish: () => undefined,
+          upgrade: () => true,
+        };
+      },
+    });
+    try {
+      const runtime = bunRuntime();
+      // opts.port=0 should NOT be returned — falls back to 3000.
+      const a = runtime.server.listen({ port: 0, fetch: () => new Response('ok') });
+      expect(a.port).toBe(3000);
+      // opts.port=4321 should be returned.
+      const b = runtime.server.listen({ port: 4321, fetch: () => new Response('ok') });
+      expect(b.port).toBe(4321);
+    } finally {
+      Object.assign(Bun, { serve: originalServe });
+    }
+  });
+
+  // P-BUN-4 — process safety net is on by default.
+  test('bunRuntime() installs process safety net by default and routes to structured logger', () => {
+    _resetProcessSafetyNetForTest();
+    const errors: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+    const previousStructured = configureRuntimeBunStructuredLogger({
+      debug() {},
+      info() {},
+      warn() {},
+      error(event, fields) {
+        errors.push({ event, fields });
+      },
+      child() {
+        return previousStructured;
+      },
+    });
+    try {
+      // Default options — should install handlers.
+      bunRuntime();
+      // Idempotent — second call must not register a second listener.
+      bunRuntime();
+      process.emit('unhandledRejection', new Error('default-on-rej'), Promise.resolve());
+      process.emit('uncaughtException', new Error('default-on-exc'));
+      expect(errors.some(e => e.event === 'unhandled-rejection')).toBe(true);
+      expect(errors.some(e => e.event === 'uncaught-exception')).toBe(true);
+    } finally {
+      configureRuntimeBunStructuredLogger(previousStructured);
+      _resetProcessSafetyNetForTest();
+    }
+  });
+
+  test('bunRuntime({ installProcessSafetyNet: false }) does not register handlers', () => {
+    _resetProcessSafetyNetForTest();
+    const before = process.listenerCount('unhandledRejection');
+    bunRuntime({ installProcessSafetyNet: false });
+    const after = process.listenerCount('unhandledRejection');
+    expect(after).toBe(before);
+    _resetProcessSafetyNetForTest();
+  });
+
+  // P-BUN-5 — graceful close timeout.
+  test('graceful stop broadcasts 1001 close to active websockets and waits for handlers', async () => {
+    const originalServe = Bun.serve;
+    const calls: string[] = [];
+    let captured: {
+      websocket?: {
+        open?: (ws: unknown) => unknown;
+        close?: (ws: unknown, code: number, reason: string) => unknown;
+      };
+    } = {};
+    Object.assign(Bun, {
+      serve(opts: typeof captured) {
+        captured = opts;
+        return {
+          port: 7777,
+          stop(close?: boolean) {
+            calls.push(`server-stop:${String(close)}`);
+            return undefined;
+          },
+          publish: () => undefined,
+          upgrade: () => true,
+        };
+      },
+    });
+
+    try {
+      const runtime = bunRuntime({ installProcessSafetyNet: false, gracefulCloseTimeoutMs: 1000 });
+      const server = runtime.server.listen({
+        port: 0,
+        fetch: () => new Response('ok'),
+        websocket: {
+          open() {},
+          message() {},
+          close() {},
+        },
+      });
+
+      const rawWs = {
+        data: {},
+        send() {},
+        close: (code?: number, reason?: string) => {
+          calls.push(`ws-close:${code}:${reason}`);
+          // Simulate the runtime's close handler firing immediately.
+          return captured.websocket?.close?.(rawWs, code ?? 1005, reason ?? '');
+        },
+        ping() {},
+        subscribe() {},
+        unsubscribe() {},
+      };
+
+      await Promise.resolve(captured.websocket?.open?.(rawWs));
+      // Graceful stop — close=false.
+      await server.stop();
+
+      expect(calls).toEqual(['ws-close:1001:Server shutting down', 'server-stop:false']);
+    } finally {
+      Object.assign(Bun, { serve: originalServe });
+    }
+  });
+
+  test('graceful stop with active socket whose close handler never fires resolves within gracefulCloseTimeoutMs', async () => {
+    const originalServe = Bun.serve;
+    let captured: {
+      websocket?: {
+        open?: (ws: unknown) => unknown;
+        message?: (ws: unknown, msg: string) => unknown;
+        close?: (ws: unknown, code: number, reason: string) => unknown;
+      };
+    } = {};
+    Object.assign(Bun, {
+      serve(opts: typeof captured) {
+        captured = opts;
+        return {
+          port: 7779,
+          stop(_close?: boolean) {
+            return undefined;
+          },
+          publish: () => undefined,
+          upgrade: () => true,
+        };
+      },
+    });
+
+    const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+    const previousStructured = configureRuntimeBunStructuredLogger({
+      debug() {},
+      info() {},
+      warn(event, fields) {
+        events.push({ event, fields });
+      },
+      error() {},
+      child(): typeof previousStructured {
+        return previousStructured;
+      },
+    });
+
+    try {
+      const runtime = bunRuntime({
+        installProcessSafetyNet: false,
+        gracefulCloseTimeoutMs: 50,
+      });
+      const server = runtime.server.listen({
+        port: 0,
+        fetch: () => new Response('ok'),
+        websocket: {
+          open() {},
+          message() {},
+          // User close handler never gets triggered because the mocked Bun
+          // socket's `close()` doesn't dispatch into Bun's lifecycle.
+          close() {},
+        },
+      });
+
+      // Create a raw socket whose close() is a silent no-op — Bun would
+      // normally fire the close-handler in response to this, but our mock
+      // doesn't. The wrapped open() registers the deferred in activeWebSockets,
+      // so graceful stop will be forced to wait the full timeout.
+      const rawWs = {
+        data: {},
+        send() {},
+        close() {
+          /* never fires server-side close */
+        },
+        ping() {},
+        subscribe() {},
+        unsubscribe() {},
+      };
+
+      await Promise.resolve(captured.websocket?.open?.(rawWs));
+
+      const start = Date.now();
+      await server.stop();
+      const elapsed = Date.now() - start;
+      // Timeout is 50ms; allow generous slack but well under 2s default.
+      expect(elapsed).toBeGreaterThanOrEqual(40);
+      expect(elapsed).toBeLessThan(2_000);
+      expect(events.some(e => e.event === 'websocket-graceful-close-timeout')).toBe(true);
+    } finally {
+      configureRuntimeBunStructuredLogger(previousStructured);
       Object.assign(Bun, { serve: originalServe });
     }
   });

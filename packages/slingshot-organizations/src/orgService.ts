@@ -2,6 +2,15 @@ import type { PluginStateCarrier, PluginStateMap } from '@lastshotlabs/slingshot
 import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 
 export type OrganizationsOrgService = {
+  /**
+   * Look up an organization by slug, optionally scoped to a tenant.
+   *
+   * In multi-tenant deployments two tenants may legitimately reuse the same
+   * slug, so callers must pass the resolved `tenantId` to disambiguate.
+   * Omitting `tenantId` matches a global (untenanted) organization only.
+   *
+   * @returns The org's `id` when a unique match is found, otherwise `null`.
+   */
   getOrgBySlug(slug: string, tenantId?: string): Promise<{ id: string } | null>;
   createOrg(data: {
     name: string;

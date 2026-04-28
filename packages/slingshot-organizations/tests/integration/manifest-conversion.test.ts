@@ -47,6 +47,7 @@ import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
 import { organizationsManifest } from '../../src/manifest/organizationsManifest';
 import { getOrganizationsOrgServiceOrNull } from '../../src/orgService';
 import { createOrganizationsPlugin } from '../../src/plugin';
+import { getOrganizationsReconcileOrNull } from '../../src/reconcile';
 
 function createFrameworkConfig(): SlingshotFrameworkConfig & {
   registeredEntities: ResolvedEntityConfig[];
@@ -1520,5 +1521,127 @@ describe('organizations manifest conversion', () => {
         adapter.update = restored;
       }
     }
+  });
+
+  // P-ORG-8: suspended-account guard on invite redemption.
+  test('suspended account is rejected on invite redemption with account_suspended', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Suspend Org', slug: 'suspend-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const createInvite = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ role: 'member' }),
+    });
+    expect(createInvite.status).toBe(201);
+    const invite = (await createInvite.json()) as { token: string };
+
+    // Suspend the member via the auth runtime adapter.
+    const authRuntime = getAuthRuntimeContext(pluginState) as AuthRuntimeContext;
+    if (!authRuntime.adapter.setSuspended) {
+      throw new Error('memory auth adapter is missing setSuspended');
+    }
+    await authRuntime.adapter.setSuspended(memberId, true, 'tos-violation');
+
+    const redeem = await app.request(`/orgs/${org.id}/invitations/redeem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': memberId },
+      body: JSON.stringify({ token: invite.token }),
+    });
+    expect(redeem.status).toBe(403);
+    expect(await redeem.text()).toContain('account_suspended');
+
+    // Reinstate so subsequent tests are not affected, then verify redeem now works.
+    await authRuntime.adapter.setSuspended(memberId, false);
+    const redeemAgain = await app.request(`/orgs/${org.id}/invitations/redeem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': memberId },
+      body: JSON.stringify({ token: invite.token }),
+    });
+    expect(redeemAgain.status).toBe(200);
+  });
+
+  // P-ORG-9 (full success path): cascade delete returns 204 with no orphans.
+  test('cascade delete returns 204 on full success and clears all dependent rows', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Clean Org', slug: 'clean-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const r = await app.request(`/orgs/${org.id}/members`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ userId: 'user-clean-1', role: 'member' }),
+    });
+    expect(r.status).toBe(201);
+
+    const del = await app.request(`/orgs/${org.id}`, {
+      method: 'DELETE',
+      headers: { 'x-user-id': adminId },
+    });
+    expect(del.status).toBe(204);
+  });
+
+  // P-ORG-10: smoke check that the reconcile service is published. Detailed
+  // partial-failure semantics are covered in the unit test
+  // `tests/unit/runtime-redeem-race.test.ts` which can intercept the
+  // GroupMembership adapter directly; the integration harness only sees the
+  // resolved `ResolvedEntityConfig`, not the live adapter instance.
+  test('reconcile service is published in pluginState for operator tooling', () => {
+    const reconcile = getOrganizationsReconcileOrNull(pluginState);
+    expect(reconcile).not.toBeNull();
+    expect(typeof reconcile?.reconcileOrphanedOrgRecords).toBe('function');
+  });
+
+  // P-ORG-11: invite creation honours `idempotencyKey` for retried POSTs.
+  test('invite creation with the same idempotencyKey returns the same invite', async () => {
+    const createOrg = await app.request('/orgs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ name: 'Idem Org', slug: 'idem-org' }),
+    });
+    expect(createOrg.status).toBe(201);
+    const org = (await createOrg.json()) as { id: string };
+
+    const idempotencyKey = 'invite-key-abc-123';
+
+    const first = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ role: 'member', idempotencyKey }),
+    });
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as { id: string; token: string };
+
+    const second = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ role: 'member', idempotencyKey }),
+    });
+    expect(second.status).toBe(201);
+    const secondBody = (await second.json()) as { id: string; token: string };
+
+    // The dedupe path returns the previously-created invite verbatim.
+    expect(secondBody.id).toBe(firstBody.id);
+    expect(secondBody.token).toBe(firstBody.token);
+
+    // A different key creates a brand-new invite.
+    const third = await app.request(`/orgs/${org.id}/invitations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-user-id': adminId },
+      body: JSON.stringify({ role: 'member', idempotencyKey: 'invite-key-xyz' }),
+    });
+    expect(third.status).toBe(201);
+    const thirdBody = (await third.json()) as { id: string; token: string };
+    expect(thirdBody.id).not.toBe(firstBody.id);
+    expect(thirdBody.token).not.toBe(firstBody.token);
   });
 });

@@ -7,6 +7,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   deepFreeze,
+  getActorId,
   getPluginState,
   getPluginStateOrNull,
   getRouteAuthOrNull,
@@ -20,8 +21,9 @@ import {
 } from './lib/rateLimit';
 import { DEFAULT_RESERVED_ORG_SLUGS, createOrgSlugSchema } from './lib/slugValidation';
 import { organizationsManifest } from './manifest/organizationsManifest';
-import { createOrganizationsManifestRuntime } from './manifest/runtime';
+import { type OrganizationsRuntime, createOrganizationsManifestRuntime } from './manifest/runtime';
 import { ORGANIZATIONS_ORG_SERVICE_STATE_KEY, type OrganizationsOrgService } from './orgService';
+import { ORGANIZATIONS_RECONCILE_STATE_KEY, type OrganizationsReconcileService } from './reconcile';
 
 const memberRoleSchema = z.string().min(1);
 
@@ -158,12 +160,6 @@ function composeAuthenticatedGuard(
   };
 }
 
-function getActorId(c: Parameters<MiddlewareHandler>[0]): string | null {
-  const actor = c.get('actor' as never) as { id?: unknown } | undefined;
-  if (!actor || typeof actor.id !== 'string' || actor.id.length === 0) return null;
-  return actor.id;
-}
-
 function getClientIp(c: Parameters<MiddlewareHandler>[0]): string {
   const fwd = c.req.header('x-forwarded-for');
   if (typeof fwd === 'string' && fwd.length > 0) {
@@ -246,6 +242,7 @@ export function createOrganizationsPlugin(
   const inviteLookupWindow = config.organizations?.inviteRateLimit?.lookup?.windowMs ?? 60_000;
 
   let innerPlugin: ReturnType<typeof createEntityPlugin> | undefined;
+  let orgsRuntime: OrganizationsRuntime | undefined;
   let orgAdapterRef:
     | {
         create(input: Record<string, unknown>): Promise<{ id: string }>;
@@ -285,21 +282,22 @@ export function createOrganizationsPlugin(
         );
       }
       const invitationTtlSeconds = config.organizations?.invitationTtlSeconds ?? 7 * 24 * 60 * 60;
+      orgsRuntime = createOrganizationsManifestRuntime({
+        authRuntime,
+        invitationTtlSeconds,
+        defaultMemberRole: config.organizations?.defaultMemberRole ?? 'member',
+        knownRoles: config.organizations?.knownRoles ?? [...DEFAULT_KNOWN_ROLES],
+        slugSchema: orgSlugSchema,
+        onAdaptersCaptured(adapters) {
+          orgAdapterRef = adapters.organizations as typeof orgAdapterRef;
+          memberAdapterRef = adapters.members as typeof memberAdapterRef;
+        },
+      });
       innerPlugin = createEntityPlugin({
         name: 'slingshot-organizations',
         mountPath,
         manifest,
-        manifestRuntime: createOrganizationsManifestRuntime({
-          authRuntime,
-          invitationTtlSeconds,
-          defaultMemberRole: config.organizations?.defaultMemberRole ?? 'member',
-          knownRoles: config.organizations?.knownRoles ?? [...DEFAULT_KNOWN_ROLES],
-          slugSchema: orgSlugSchema,
-          onAdaptersCaptured(adapters) {
-            orgAdapterRef = adapters.organizations as typeof orgAdapterRef;
-            memberAdapterRef = adapters.members as typeof memberAdapterRef;
-          },
-        }),
+        manifestRuntime: orgsRuntime,
         middleware: {
           inviteCreateDefaults: async (c, next) => {
             const setContextValue = c.set as (key: string, value: string) => void;
@@ -378,6 +376,17 @@ export function createOrganizationsPlugin(
       };
 
       getPluginState(ctx.app).set(ORGANIZATIONS_ORG_SERVICE_STATE_KEY, orgService);
+
+      // Publish the reconcile service so operator tooling (CLI, admin route)
+      // can call `reconcileOrphanedOrgRecords(orgId)` to clean up after a
+      // partial cascade-delete on non-atomic adapters.
+      if (orgsRuntime) {
+        const runtime = orgsRuntime;
+        const reconcileService: OrganizationsReconcileService = {
+          reconcileOrphanedOrgRecords: orgId => runtime.reconcileOrphanedOrgRecords(orgId),
+        };
+        getPluginState(ctx.app).set(ORGANIZATIONS_RECONCILE_STATE_KEY, reconcileService);
+      }
     },
 
     async seed({ app, manifestSeed, seedState }: PluginSeedContext) {

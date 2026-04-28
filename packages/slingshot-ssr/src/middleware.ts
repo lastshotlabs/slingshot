@@ -27,6 +27,24 @@ import type {
 /** URL prefixes always excluded from SSR — cannot be overridden by config. */
 const ALWAYS_EXCLUDE = ['/api/', '/_slingshot/'];
 
+/**
+ * Module-scope flag so the dev-mode hydration mismatch nudge is emitted at
+ * most once per process, regardless of how many SSR plugins (or test apps)
+ * initialize the middleware. Reset only in tests via the exported helper.
+ */
+let hydrationWarningEmitted = false;
+
+/**
+ * Reset the dev-mode hydration warning latch so it fires again on the next
+ * `buildSsrMiddleware()` call. Tests use this to assert the nudge behavior
+ * deterministically; production code should never call it.
+ *
+ * @internal
+ */
+export function resetHydrationWarningForTesting(): void {
+  hydrationWarningEmitted = false;
+}
+
 function hasRedirectResult(
   result: SsrMiddlewareResult,
 ): result is Extract<SsrMiddlewareResult, { readonly redirect: string }> {
@@ -119,6 +137,23 @@ export function buildSsrMiddleware(
     : manifest
       ? resolveAssetTags(manifest, entryPoint)
       : '';
+
+  // Dev-only nudge: hydration mismatches surface in the browser console (React
+  // logs them on first mount). The middleware can't detect them server-side
+  // since hydration runs on the client. Emit a one-time hint at startup so
+  // developers know to watch for them. Suppressed when explicitly silenced.
+  // Throttled to once per process to avoid log spam when multiple SSR plugins
+  // (or test apps) initialize in the same process.
+  const hydrationHandling = config.hydrationMismatchHandling ?? 'warn-dev';
+  if (isDevMode && hydrationHandling === 'warn-dev' && !hydrationWarningEmitted) {
+    hydrationWarningEmitted = true;
+    console.warn(
+      '[slingshot-ssr] Dev mode: React hydration mismatches surface in the browser console. ' +
+        'Common causes: Date.now()/Math.random() in render, locale-dependent formatting, or ' +
+        'browser-only APIs without isomorphic guards. ' +
+        "Set hydrationMismatchHandling: 'silent' to suppress this notice.",
+    );
+  }
 
   // isrAdapter is injected by the plugin (shared with the action router).
   // Do not create a second instance here — that would break invalidation.
@@ -629,8 +664,22 @@ export function buildSsrMiddleware(
     // Apply cache-control header (do not overwrite if renderer already set one)
     // For successfully-rendered, non-draft routes, default to 'private, must-revalidate'
     // (allows clients/proxies to cache and revalidate via the ETag we just set).
+    // For ISR routes (loader returned a positive `revalidate`), use a public
+    // s-maxage / stale-while-revalidate directive so CDNs participate in SWR.
     // Error and draft paths still fall back to 'no-store'.
-    const cacheControl = resolveCacheControl(config.cacheControl, pathname, etagEligible);
+    const isrRevalidateSeconds =
+      typeof isrSink.revalidate === 'number' &&
+      isrSink.revalidate > 0 &&
+      !isrSink.noStore &&
+      !draftMode
+        ? isrSink.revalidate
+        : null;
+    const cacheControl = resolveCacheControl(
+      config.cacheControl,
+      pathname,
+      etagEligible,
+      isrRevalidateSeconds,
+    );
     if (cacheControl && !response.headers.has('Cache-Control')) {
       const newHeaders = new Headers(response.headers);
       newHeaders.set('Cache-Control', cacheControl);
@@ -781,11 +830,18 @@ async function regeneratePage(
 /**
  * Resolve the Cache-Control header value for a given pathname.
  *
- * Route-specific overrides take precedence over the default. When no override
- * matches and `etagEligible` is true (successfully-rendered, non-draft route),
- * defaults to `'private, must-revalidate'` so clients can revalidate via the
- * ETag we set. Otherwise (errors, drafts, no eligible body) falls back to
- * `'no-store'`.
+ * Precedence:
+ * 1. Route-specific override from `config.routes[pathname]` (always wins)
+ * 2. Configured default from `config.default`
+ * 3. ISR revalidate hint — when the loader returned a positive `revalidate`,
+ *    emit `public, s-maxage=<revalidate>, stale-while-revalidate=<window>`
+ *    so shared caches (CDNs, reverse proxies) participate in SWR. The SWR
+ *    window defaults to `revalidate` (matching the cache key's freshness
+ *    horizon) so clients keep serving the stale entry while the origin
+ *    regenerates.
+ * 4. `'private, must-revalidate'` for successfully-rendered, non-draft
+ *    routes (clients revalidate via the ETag we set)
+ * 5. `'no-store'` for errors, drafts, or responses with no eligible body
  *
  * @internal
  */
@@ -793,10 +849,17 @@ function resolveCacheControl(
   config: SsrCacheControl | undefined,
   pathname: string,
   etagEligible: boolean,
+  isrRevalidateSeconds: number | null,
 ): string {
   const routeOverride = config?.routes?.[pathname];
   if (routeOverride !== undefined) return routeOverride;
   const configured = config?.default;
   if (configured !== undefined) return configured;
+  if (isrRevalidateSeconds !== null && isrRevalidateSeconds > 0) {
+    // SWR window: same as freshness window — gives clients/CDNs a known-bounded
+    // grace period to serve stale while the origin regenerates the entry.
+    const swrSeconds = isrRevalidateSeconds;
+    return `public, s-maxage=${isrRevalidateSeconds}, stale-while-revalidate=${swrSeconds}`;
+  }
   return etagEligible ? 'private, must-revalidate' : 'no-store';
 }

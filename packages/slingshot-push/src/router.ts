@@ -185,7 +185,7 @@ function toProviderSubscription(
 export function createPushRouter(options: {
   providers: Readonly<Partial<Record<PushPlatform, PushProvider>>>;
   repos: PushRouterRepos;
-  retries?: { maxAttempts?: number; initialDelayMs?: number };
+  retries?: { maxAttempts?: number; initialDelayMs?: number; maxDelayMs?: number };
   bus?: DynamicBus;
   /** Maximum milliseconds for a single provider.send() call before it is treated as transient failure. Default: 30000. */
   providerTimeoutMs?: number;
@@ -196,6 +196,9 @@ export function createPushRouter(options: {
 }): PushRouter {
   const maxAttempts = options.retries?.maxAttempts ?? 3;
   const initialDelayMs = options.retries?.initialDelayMs ?? 1_000;
+  // Upper bound on a single retry-wait, to clamp absurd `Retry-After` hints
+  // (e.g. a server returning hours) and prevent worker starvation.
+  const maxRetryDelayMs = options.retries?.maxDelayMs ?? 5 * 60_000;
   const providerTimeoutMs = options.providerTimeoutMs ?? 30_000;
   const topicFanoutBatchSize = Math.max(1, options.topicFanoutBatchSize ?? 1000);
   const topicFanoutMaxPending = Math.max(1, options.topicFanoutMaxPending ?? 10);
@@ -336,6 +339,25 @@ export function createPushRouter(options: {
             break;
           }
 
+          if (result.reason === 'permanent') {
+            // Permanent provider failure (e.g. invalid OAuth credentials).
+            // Stop retrying immediately but leave the subscription intact —
+            // the failure is provider-config-level, not subscription-level.
+            await options.repos.deliveries.markFailed({
+              id: delivery.id,
+              failureReason: 'permanent',
+            });
+            options.bus?.emit('push:delivery.failed', {
+              deliveryId: delivery.id,
+              subscriptionId: subscription.id,
+              userId: subscription.userId,
+              reason: 'permanent',
+              error: result.error,
+            });
+            sent = true;
+            break;
+          }
+
           if (attempts >= maxAttempts) {
             await options.repos.deliveries.markFailed({
               id: delivery.id,
@@ -351,8 +373,15 @@ export function createPushRouter(options: {
             break;
           }
 
-          const delay =
-            result.retryAfterMs ?? initialDelayMs * Math.pow(2, Math.max(0, attempts - 1));
+          const exponentialDelay = initialDelayMs * Math.pow(2, Math.max(0, attempts - 1));
+          // Honor the provider's Retry-After hint when present and finite;
+          // otherwise fall back to exponential backoff. Clamp to a sane upper
+          // bound so a misbehaving upstream cannot pin a worker for hours.
+          const requestedDelay =
+            typeof result.retryAfterMs === 'number' && Number.isFinite(result.retryAfterMs)
+              ? Math.max(0, result.retryAfterMs)
+              : exponentialDelay;
+          const delay = Math.min(requestedDelay, maxRetryDelayMs);
           await sleep(delay);
         }
       } catch (err) {

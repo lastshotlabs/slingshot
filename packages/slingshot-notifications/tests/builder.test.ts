@@ -81,6 +81,35 @@ describe('createNotificationBuilder', () => {
     expect(notifications.items[0]?.data?.count).toBe(2);
   });
 
+  test('parallel notify() calls with the same dedupKey collapse to a single record', async () => {
+    const adapters = createNotificationsTestAdapters();
+    const builder = adapters.createBuilder('community');
+
+    const PARALLEL = 25;
+    const results = await Promise.all(
+      Array.from({ length: PARALLEL }, (_, idx) =>
+        builder.notify({
+          userId: 'user-race',
+          type: 'community:reply',
+          targetType: 'community:reply',
+          targetId: `reply-${idx}`,
+          dedupKey: 'community:reply:thread-race:user-race',
+          data: { count: 1 },
+        }),
+      ),
+    );
+
+    // All results must point at the same notification id (atomic collapse).
+    const ids = new Set(results.map(record => record?.id));
+    expect(ids.size).toBe(1);
+
+    const notifications = await adapters.notifications.listByUser({ userId: 'user-race' });
+    expect(notifications.items).toHaveLength(1);
+    // The single surviving record's count should equal PARALLEL — N-1 increments
+    // applied to the initial count of 1.
+    expect(notifications.items[0]?.data?.count).toBe(PARALLEL);
+  });
+
   test('urgent notifications bypass rate limiting and dedup collapse', async () => {
     const adapters = createNotificationsTestAdapters();
     const bus = new InProcessAdapter();

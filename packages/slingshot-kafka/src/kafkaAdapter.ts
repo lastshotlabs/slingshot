@@ -805,6 +805,10 @@ export function createKafkaAdapter(
     const ensuredProducer = await ensureProducer();
     const dlqTopic = `${topic}.${suffix}`;
     await ensureTopic(dlqTopic);
+    // Split error type so downstream consumers can filter corrupt-message
+    // (deserialize) from logic-bug (handler) failures without parsing the
+    // topic suffix. `x-slingshot-dlq-reason` is the canonical filter header.
+    const errorType: 'deserialize' | 'handler' = suffix === 'deser-dlq' ? 'deserialize' : 'handler';
     await ensuredProducer.send({
       topic: dlqTopic,
       messages: [
@@ -818,7 +822,9 @@ export function createKafkaAdapter(
             'slingshot.original-partition': String(partition),
             'slingshot.original-offset': message.offset,
             'slingshot.error': error instanceof Error ? error.message : String(error),
+            'slingshot.error-type': errorType,
             'slingshot.dlq-reason': suffix,
+            'x-slingshot-dlq-reason': errorType,
           },
         },
       ],

@@ -389,6 +389,67 @@ describe('createKvIsrCache()', () => {
     });
   });
 
+  describe('concurrency limiter coverage', () => {
+    it('counts the page-write op against the concurrency budget alongside tag updates', async () => {
+      // Regression: previously the page kv.put ran outside the concurrency
+      // limiter, so a page with N tags issued N+1 simultaneous subrequests.
+      // Cloudflare caps free-tier requests at 50 subrequests; the page op
+      // must share the budget with the tag fan-out.
+      let inFlight = 0;
+      let observedMax = 0;
+      let totalOps = 0;
+      const store = new Map<string, string>();
+      const tracingKv: KvNamespace = {
+        async get(key: string) {
+          // Count gets too — they are subrequests.
+          inFlight++;
+          if (inFlight > observedMax) observedMax = inFlight;
+          totalOps++;
+          await Promise.resolve();
+          inFlight--;
+          return store.get(key) ?? null;
+        },
+        async put(key: string, value: string) {
+          inFlight++;
+          if (inFlight > observedMax) observedMax = inFlight;
+          totalOps++;
+          // Yield twice so concurrent puts overlap if the limiter is broken.
+          await Promise.resolve();
+          await Promise.resolve();
+          store.set(key, value);
+          inFlight--;
+        },
+        async delete(key: string) {
+          inFlight++;
+          if (inFlight > observedMax) observedMax = inFlight;
+          totalOps++;
+          await Promise.resolve();
+          store.delete(key);
+          inFlight--;
+        },
+        async list() {
+          return { keys: [] };
+        },
+      };
+
+      const tags = Array.from({ length: 60 }, (_, i) => `tag-${i}`);
+      const limited = createKvIsrCache(tracingKv, { maxConcurrency: 5 });
+      await limited.set('/many-tags', makeEntry('/many-tags', tags));
+
+      // Page write + 60 tag-index updates (each = 1 get + 1 put). Plus the
+      // initial existing-page get inside set().
+      // 1 (initial get) + 1 (page put) + 60 * 2 (tag get + put) = 122 ops.
+      expect(totalOps).toBe(122);
+      // Confirm the page+tag fan-out respected the cap. Allow some slack for
+      // the initial existing-page get which is intentionally outside the
+      // limiter (a single up-front read), so the in-flight ceiling for the
+      // fan-out itself must be <= maxConcurrency.
+      expect(observedMax).toBeLessThanOrEqual(5);
+      // And the page itself was actually written via the limited fan-out.
+      expect(store.has('isr:page:/many-tags')).toBe(true);
+    });
+  });
+
   describe('configureRuntimeEdgeLogger', () => {
     it('routes errors through the configured logger and restores on reset', async () => {
       const captured: Array<{ event: string; fields?: Record<string, unknown> }> = [];

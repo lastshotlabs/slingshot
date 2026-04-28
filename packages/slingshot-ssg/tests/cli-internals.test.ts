@@ -2,7 +2,12 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import { loadRenderer, parseArgs, resolveAssetTagsHtml } from '../src/cli';
+import {
+  loadRenderer,
+  parseArgs,
+  resolveAssetTagsHtml,
+  warnIfConcurrencyExceedsFdHeadroom,
+} from '../src/cli';
 
 const tempDirs: string[] = [];
 
@@ -57,6 +62,17 @@ describe('slingshot-ssg cli internals', () => {
     });
   });
 
+  test('parseArgs rejects malformed concurrency values and clamps very large values', () => {
+    expect(() => parseArgs(['--concurrency', '2abc'])).toThrow(
+      '--concurrency must be a positive integer',
+    );
+    expect(() => parseArgs(['--concurrency', '1.5'])).toThrow(
+      '--concurrency must be a positive integer',
+    );
+    expect(parseArgs(['--concurrency', '999999']).concurrency).toBe(256);
+    expect(parseArgs(['--concurrency', '0']).concurrency).toBe(1);
+  });
+
   test('resolveAssetTagsHtml auto-detects the client entry and warns when the manifest is missing', async () => {
     const tempDir = await makeTempDir();
     const manifestPath = join(tempDir, 'manifest.json');
@@ -80,6 +96,57 @@ describe('slingshot-ssg cli internals', () => {
     const tags = await resolveAssetTagsHtml(manifestPath, undefined);
     expect(tags).toContain('<link rel="stylesheet" href="/assets/app.css">');
     expect(tags).toContain('<script type="module" src="/assets/app.js"></script>');
+  });
+
+  test('parseArgs clamps negative --concurrency to 1 and accepts mid-range values', () => {
+    // Negative is clamped to the lower bound (1)
+    expect(parseArgs(['--concurrency', '-5']).concurrency).toBe(1);
+
+    // Valid mid-range values pass through unchanged
+    expect(parseArgs(['--concurrency', '8']).concurrency).toBe(8);
+    expect(parseArgs(['--concurrency', '256']).concurrency).toBe(256);
+
+    // Non-numeric strings throw with an explicit message naming the flag
+    expect(() => parseArgs(['--concurrency', 'banana'])).toThrow(/--concurrency/);
+    expect(() => parseArgs(['--concurrency', 'banana'])).toThrow(/positive integer/);
+  });
+
+  test('warnIfConcurrencyExceedsFdHeadroom warns when concurrency exceeds the FD heuristic', () => {
+    const proc = process as unknown as {
+      getrlimit?: () => { nofile: number };
+    };
+    const original = proc.getrlimit;
+    proc.getrlimit = () => ({ nofile: 1024 });
+    const warn = spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      // (1024 - 256) / 4 = 192. concurrency 200 should trip the warning.
+      warnIfConcurrencyExceedsFdHeadroom(200);
+      expect(warn).toHaveBeenCalled();
+      const [first] = warn.mock.calls[0] ?? [];
+      expect(String(first)).toContain('FD ulimit');
+
+      warn.mockClear();
+      // 100 < 192 — no warning expected.
+      warnIfConcurrencyExceedsFdHeadroom(100);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      proc.getrlimit = original;
+    }
+  });
+
+  test('warnIfConcurrencyExceedsFdHeadroom no-ops when getrlimit is unavailable', () => {
+    const proc = process as unknown as { getrlimit?: () => { nofile: number } };
+    const original = proc.getrlimit;
+    delete proc.getrlimit;
+    const warn = spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      warnIfConcurrencyExceedsFdHeadroom(10_000);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      if (original !== undefined) proc.getrlimit = original;
+    }
   });
 
   test('loadRenderer rejects missing and invalid renderer modules', async () => {

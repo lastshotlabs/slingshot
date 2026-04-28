@@ -53,6 +53,34 @@ export interface NotificationAdapter {
   }): Promise<{ count: number }>;
   hasUnreadByDedupKey(params: { userId: string; dedupKey: string }): Promise<boolean>;
   findByDedupKey(params: { userId: string; dedupKey: string }): Promise<NotificationRecord | null>;
+  /**
+   * Atomic dedup-or-create.
+   *
+   * If an UNREAD notification already exists for `(userId, dedupKey)`, atomically
+   * increments its `data.count` field by 1 and returns the updated record with
+   * `created: false`. Otherwise inserts a new notification using the supplied
+   * `create` input and returns it with `created: true`.
+   *
+   * **Atomicity contract** — this operation MUST be safe to call concurrently
+   * with the same `(userId, dedupKey)` from multiple callers without producing
+   * duplicate notifications. Implementations should use database-level upsert
+   * primitives (`INSERT ... ON CONFLICT DO NOTHING`, transactional CAS, etc.)
+   * rather than non-atomic find-then-update sequences.
+   *
+   * Implementations without dedup support (for example, ephemeral test
+   * adapters) MAY fall back to a non-atomic implementation, but production
+   * adapters MUST honor the atomicity contract.
+   *
+   * @param params.userId - Owner of the notification.
+   * @param params.dedupKey - Stable dedup key.
+   * @param params.create - Full create input used when no existing record matches.
+   * @returns The resulting record together with whether a new row was inserted.
+   */
+  dedupOrCreate(params: {
+    userId: string;
+    dedupKey: string;
+    create: Record<string, unknown>;
+  }): Promise<{ record: NotificationRecord; created: boolean }>;
   listPendingDispatch(params: {
     limit: number;
     now: Date;

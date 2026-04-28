@@ -628,6 +628,114 @@ describe('createPushRouter — retry behavior', () => {
     // retryAfterMs: 10 was used, not initialDelayMs: 100_000
     expect(Date.now() - start).toBeLessThan(5_000);
   });
+
+  test('waits approximately the provider-supplied retryAfterMs between attempts', async () => {
+    const repos = createFakeRepos();
+    let callCount = 0;
+    const callTimestamps: number[] = [];
+    const provider = createMockProvider(async () => {
+      callCount += 1;
+      callTimestamps.push(Date.now());
+      if (callCount === 1) {
+        return {
+          ok: false as const,
+          reason: 'rateLimited' as const,
+          retryAfterMs: 200, // measurable but fast enough for unit test
+          error: 'slow down',
+        };
+      }
+      return { ok: true };
+    });
+
+    repos._subscriptions.push(makeSubscription());
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      // Exponential would be 50ms — much smaller than retryAfterMs 200ms,
+      // so observing >= ~180ms confirms the router used the provider hint.
+      retries: { maxAttempts: 2, initialDelayMs: 50 },
+    });
+    await router.sendToUser('user-1', { title: 'Hello' });
+
+    expect(callCount).toBe(2);
+    const gap = callTimestamps[1]! - callTimestamps[0]!;
+    expect(gap).toBeGreaterThanOrEqual(150);
+    expect(gap).toBeLessThan(2_000);
+  });
+
+  test('clamps retryAfterMs to retries.maxDelayMs', async () => {
+    const repos = createFakeRepos();
+    let callCount = 0;
+    const callTimestamps: number[] = [];
+    const provider = createMockProvider(async () => {
+      callCount += 1;
+      callTimestamps.push(Date.now());
+      if (callCount === 1) {
+        return {
+          ok: false as const,
+          reason: 'rateLimited' as const,
+          retryAfterMs: 60_000, // provider asks for 60s
+          error: 'slow down',
+        };
+      }
+      return { ok: true };
+    });
+
+    repos._subscriptions.push(makeSubscription());
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 2, initialDelayMs: 1, maxDelayMs: 50 }, // clamp to 50ms
+    });
+    const start = Date.now();
+    await router.sendToUser('user-1', { title: 'Hello' });
+
+    expect(callCount).toBe(2);
+    // Because the 60_000ms hint was clamped to 50ms, total wall time is tiny.
+    expect(Date.now() - start).toBeLessThan(2_000);
+  });
+
+  test('"permanent" reason marks failed without retrying and keeps subscription', async () => {
+    const repos = createFakeRepos();
+    const emitted: Array<{ event: string; payload: unknown }> = [];
+    const bus = {
+      emit: (event: string, payload: unknown) => {
+        emitted.push({ event, payload });
+      },
+    };
+    let callCount = 0;
+    const provider = createMockProvider(async () => {
+      callCount += 1;
+      return {
+        ok: false as const,
+        reason: 'permanent' as const,
+        error: 'invalid service-account credentials',
+      };
+    });
+
+    const sub = makeSubscription({ id: 'sub-perm' });
+    repos._subscriptions.push(sub);
+    const router = createPushRouter({
+      providers: { web: provider },
+      repos,
+      retries: { maxAttempts: 5, initialDelayMs: 0 }, // permanent should short-circuit retries
+      bus,
+    });
+    const count = await router.sendToUser('user-1', { title: 'Hello' });
+
+    expect(count).toBe(0);
+    // Only one provider call — no retries on permanent.
+    expect(callCount).toBe(1);
+    // Delivery is marked failed with reason "permanent".
+    expect(repos._deliveries[0]!.status).toBe('failed');
+    expect(repos._deliveries[0]!.failureReason).toBe('permanent');
+    // Subscription is NOT deleted — permanent is a provider-config issue, not subscription rot.
+    expect(repos._subscriptions).toHaveLength(1);
+    // Emits push:delivery.failed with reason permanent (and the error).
+    const failedEvent = emitted.find(e => e.event === 'push:delivery.failed');
+    expect(failedEvent).toBeDefined();
+    expect((failedEvent?.payload as { reason: string }).reason).toBe('permanent');
+  });
 });
 
 describe('createPushRouter — sendToUsers', () => {

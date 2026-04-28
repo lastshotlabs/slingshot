@@ -15,7 +15,14 @@ export const PushDelivery = defineEntity('PushDelivery', {
     providerIdempotencyKey: field.string({ optional: true }),
     status: field.enum(['pending', 'sent', 'delivered', 'failed'] as const, { default: 'pending' }),
     failureReason: field.enum(
-      ['invalidToken', 'rateLimited', 'payloadTooLarge', 'transient', 'repositoryFailure'] as const,
+      [
+        'invalidToken',
+        'rateLimited',
+        'payloadTooLarge',
+        'transient',
+        'permanent',
+        'repositoryFailure',
+      ] as const,
       {
         optional: true,
       },

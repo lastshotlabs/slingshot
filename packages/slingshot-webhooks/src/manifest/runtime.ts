@@ -35,6 +35,7 @@ import type {
   WebhookSubscriptionExposure,
 } from '../types/models';
 import type { WebhookJob } from '../types/queue';
+import { WebhookSecretDecryptError } from '../types/queue';
 
 type EndpointRecord = {
   id: string;
@@ -728,15 +729,28 @@ function buildRuntimeAdapter(
 ): WebhookRuntimeAdapter {
   let definitionsRef: EventDefinitionRegistry | undefined;
 
-  async function decryptOrPassthrough(stored: string, endpointId: string): Promise<string> {
+  /**
+   * Decrypt a stored webhook endpoint secret. Fails closed: if the cipher
+   * cannot recover the plaintext we throw {@link WebhookSecretDecryptError}
+   * rather than silently returning the ciphertext (which would either sign
+   * deliveries with garbage or leak the encrypted blob to receivers).
+   *
+   * The error message intentionally never contains the cipher value. The error
+   * is logged with structured fields (endpoint id + a short error class name)
+   * so operators can identify the broken row without learning anything about
+   * the secret material.
+   */
+  async function decryptSecret(stored: string, endpointId: string): Promise<string> {
     try {
       return await cipher.decrypt(stored);
     } catch (err) {
-      logger.error('failed to decrypt webhook secret; using stored value', {
+      logger.error('failed to decrypt webhook secret; skipping endpoint', {
         endpointId,
-        err: err instanceof Error ? err.message : String(err),
+        // Avoid err.message — cipher implementations sometimes embed the
+        // ciphertext into their error messages and we do not want to leak it.
+        errName: err instanceof Error ? err.name : 'unknown',
       });
-      return stored;
+      throw new WebhookSecretDecryptError(endpointId, err);
     }
   }
 
@@ -762,7 +776,7 @@ function buildRuntimeAdapter(
         ownerId: record.ownerId ?? record.tenantId ?? '',
         tenantId: record.tenantId ?? null,
         url: record.url,
-        secret: await decryptOrPassthrough(record.secret, record.id),
+        secret: await decryptSecret(record.secret, record.id),
         subscriptions: normalizeStoredSubscriptions(record.subscriptions),
         enabled: record.enabled,
         createdAt: record.createdAt,
@@ -777,7 +791,11 @@ function buildRuntimeAdapter(
 
       while (true) {
         const page = await endpoints.listRaw({ filter: { enabled: true }, limit: 500, cursor });
-        const decrypted = await Promise.all(
+        // Decrypt per-record rather than via Promise.all so a single broken
+        // row does not abort the entire batch. Endpoints whose secret cannot
+        // be decrypted are skipped and the failure is already logged inside
+        // decryptSecret(); the dispatcher can still deliver to the rest.
+        const settled = await Promise.allSettled(
           page.items
             .filter(record => record.enabled)
             .map(async record => ({
@@ -786,14 +804,24 @@ function buildRuntimeAdapter(
               ownerId: record.ownerId ?? record.tenantId ?? '',
               tenantId: record.tenantId ?? null,
               url: record.url,
-              secret: await decryptOrPassthrough(record.secret, record.id),
+              secret: await decryptSecret(record.secret, record.id),
               subscriptions: normalizeStoredSubscriptions(record.subscriptions),
               enabled: record.enabled,
               createdAt: record.createdAt,
               updatedAt: record.updatedAt,
             })),
         );
-        items.push(...decrypted);
+        for (const result of settled) {
+          if (result.status === 'fulfilled') {
+            items.push(result.value);
+            continue;
+          }
+          if (result.reason instanceof WebhookSecretDecryptError) {
+            // Already logged in decryptSecret; skip this endpoint.
+            continue;
+          }
+          throw result.reason;
+        }
 
         if (!(page.hasMore ?? false)) {
           return items;

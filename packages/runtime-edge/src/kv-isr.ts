@@ -465,21 +465,24 @@ export function createKvIsrCache(
       const newTagSet = new Set(newTags);
       const oldTagSet = new Set(oldTags);
 
-      await withTimeout('put', kv.put(pageKey(path), JSON.stringify(entry)), timeoutMs);
-
       const removedTags = [...oldTagSet].filter(t => !newTagSet.has(t));
       const addedTags = [...newTagSet].filter(t => !oldTagSet.has(t));
 
-      // Batch tag-index writes under a concurrency cap. With 100+ tags an
-      // unbounded Promise.all would burn through Cloudflare's 50-subrequest
-      // budget in a single invocation.
-      await runWithConcurrency(
-        [
-          ...removedTags.map(tag => () => removeFromTagIndex(kv, tag, path, timeoutMs)),
-          ...addedTags.map(tag => () => updateTagIndex(kv, tag, path, timeoutMs)),
-        ],
-        concurrency,
-      );
+      // Account for the page-write subrequest in the concurrency budget. The
+      // page write and tag-index fan-out share Cloudflare's 50 subrequest cap;
+      // running the page put outside the limiter would let large tag counts
+      // burst past the ceiling. We reserve one slot for the page op by capping
+      // the tag fan-out concurrency at `concurrency - 1` (min 1).
+      const pageOp = (): Promise<void> =>
+        withTimeout('put', kv.put(pageKey(path), JSON.stringify(entry)), timeoutMs);
+      const tagOps = [
+        ...removedTags.map(tag => () => removeFromTagIndex(kv, tag, path, timeoutMs)),
+        ...addedTags.map(tag => () => updateTagIndex(kv, tag, path, timeoutMs)),
+      ];
+      // Batch the page write together with tag-index writes under the same
+      // concurrency cap. With 100+ tags an unbounded Promise.all would burn
+      // through Cloudflare's 50-subrequest budget in a single invocation.
+      await runWithConcurrency([pageOp, ...tagOps], concurrency);
     },
 
     /**

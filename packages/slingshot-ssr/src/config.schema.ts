@@ -210,4 +210,10 @@ export const ssrPluginConfigSchema = z.object({
     .describe(
       'Maximum byte length of a single decoded route param. Requests exceeding the cap return 414. Default: 2048.',
     ),
+  hydrationMismatchHandling: z
+    .enum(['warn-dev', 'silent'])
+    .optional()
+    .describe(
+      "Hydration mismatch reporting strategy. 'warn-dev' emits a console.warn in dev mode reminding developers to watch the browser console; 'silent' disables the nudge. Default: 'warn-dev'.",
+    ),
 });

@@ -117,6 +117,7 @@ function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): Noti
   const unreadCount = getAsyncMethod(adapter as object, 'unreadCount');
   const unreadCountBySource = getAsyncMethod(adapter as object, 'unreadCountBySource');
   const unreadCountByScope = getAsyncMethod(adapter as object, 'unreadCountByScope');
+  const dedupOrCreate = getAsyncMethod(adapter as object, 'dedupOrCreate');
 
   return {
     async create(input) {
@@ -196,6 +197,19 @@ function wrapNotificationAdapter(adapter: MemoryNotificationEntityAdapter): Noti
     async findByDedupKey(params) {
       const row = (await adapter.findByDedupKey(params)) as Record<string, unknown> | null;
       return row ? toNotificationRecord(row) : null;
+    },
+    async dedupOrCreate(params) {
+      const result = (await dedupOrCreate(params)) as {
+        record: Record<string, unknown>;
+        created: boolean;
+      } | null;
+      if (!result) {
+        throw new Error('[slingshot-notifications] dedupOrCreate returned no result');
+      }
+      return {
+        record: toNotificationRecord(result.record),
+        created: result.created,
+      };
     },
     async listPendingDispatch(params) {
       const rows = (await listPendingDispatch(params)) as unknown[];

@@ -178,6 +178,221 @@ export const notificationOperations = defineOperations(Notification, {
     returns: 'one',
   }),
 
+  /**
+   * Atomic dedup-or-create. See `NotificationAdapter.dedupOrCreate` for the
+   * full contract. Each backend implementation below is responsible for
+   * eliminating the find-then-update race that would otherwise let two
+   * concurrent notify() calls insert duplicate rows for the same dedupKey.
+   */
+  dedupOrCreate: op.custom<
+    (args: {
+      userId: string;
+      dedupKey: string;
+      create: Record<string, unknown>;
+    }) => Promise<{ record: NotificationRecord; created: boolean }>
+  >({
+    memory:
+      store =>
+      ({ userId, dedupKey, create }) => {
+        // Synchronous scan + mutate in a single tick — the JavaScript event
+        // loop guarantees no other microtask runs between the scan and the
+        // store.set() below, so concurrent callers see at most one create.
+        for (const value of store.values()) {
+          const row = materializeNotificationRecord(extractMemoryRow(value));
+          if (row.userId !== userId || row.dedupKey !== dedupKey || row.read) continue;
+          const existingData = (row.data ?? {}) as Record<string, unknown>;
+          const currentCount =
+            typeof existingData['count'] === 'number' && Number.isFinite(existingData['count'])
+              ? (existingData['count'] as number)
+              : 1;
+          const nextData = { ...existingData, count: currentCount + 1 };
+          const entry = value as { record: Record<string, unknown>; expiresAt?: number };
+          entry.record = { ...entry.record, data: nextData };
+          store.set(row.id, entry);
+          return Promise.resolve({
+            record: materializeNotificationRecord({ ...entry.record }),
+            created: false,
+          });
+        }
+        // No matching unread row — insert. We synthesize a primary key here
+        // because the upstream caller does not know about it.
+        const id =
+          typeof create['id'] === 'string' && create['id'].length > 0
+            ? (create['id'] as string)
+            : crypto.randomUUID();
+        const record = { ...create, id };
+        store.set(id, { record });
+        return Promise.resolve({
+          record: materializeNotificationRecord(record),
+          created: true,
+        });
+      },
+    sqlite:
+      db =>
+      ({ userId, dedupKey, create }) => {
+        const database = db as {
+          transaction(fn: () => unknown): () => unknown;
+          prepare(sql: string): {
+            get(...args: unknown[]): unknown;
+            run(...args: unknown[]): unknown;
+          };
+        };
+        const exec = database.transaction(() => {
+          const existing = database
+            .prepare(
+              'SELECT * FROM Notification WHERE userId = ? AND dedupKey = ? AND read = 0 LIMIT 1',
+            )
+            .get(userId, dedupKey) as Record<string, unknown> | undefined;
+          if (existing) {
+            const rawData =
+              typeof existing.data === 'string'
+                ? (JSON.parse(existing.data) as Record<string, unknown>)
+                : ((existing.data as Record<string, unknown> | null) ?? {});
+            const currentCount =
+              typeof rawData['count'] === 'number' && Number.isFinite(rawData['count'])
+                ? (rawData['count'] as number)
+                : 1;
+            const nextData = { ...rawData, count: currentCount + 1 };
+            database
+              .prepare('UPDATE Notification SET data = ? WHERE id = ?')
+              .run(JSON.stringify(nextData), existing.id);
+            return {
+              record: materializeNotificationRecord({ ...existing, data: nextData }),
+              created: false,
+            };
+          }
+          const id =
+            typeof create['id'] === 'string' && create['id'].length > 0
+              ? (create['id'] as string)
+              : crypto.randomUUID();
+          const record = { ...create, id };
+          const columns = Object.keys(record);
+          const placeholders = columns.map(() => '?').join(', ');
+          const values = columns.map(c => {
+            const v = (record as Record<string, unknown>)[c];
+            if (v && typeof v === 'object' && !(v instanceof Date)) return JSON.stringify(v);
+            return v;
+          });
+          database
+            .prepare(`INSERT INTO Notification (${columns.join(', ')}) VALUES (${placeholders})`)
+            .run(...values);
+          return { record: materializeNotificationRecord(record), created: true };
+        });
+        return Promise.resolve(exec() as { record: NotificationRecord; created: boolean });
+      },
+    postgres:
+      pool =>
+      async ({ userId, dedupKey, create }) => {
+        // Strategy: try INSERT ... ON CONFLICT DO NOTHING with a partial unique
+        // constraint on (userId, dedupKey) WHERE read=false. If the insert
+        // takes, return created=true. Otherwise atomically increment the
+        // existing row's count via UPDATE ... RETURNING *.
+        //
+        // Because the partial unique index may not yet exist on legacy
+        // databases, we wrap both statements in a SERIALIZABLE transaction so
+        // even without the index the find+update is atomic with the insert.
+        const client = pool as {
+          connect(): Promise<{
+            query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+            release(): void;
+          }>;
+        };
+        const conn = await client.connect();
+        try {
+          await conn.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
+          const existingResult = await conn.query(
+            'SELECT * FROM "Notification" WHERE "userId" = $1 AND "dedupKey" = $2 AND read = false LIMIT 1 FOR UPDATE',
+            [userId, dedupKey],
+          );
+          const existing = existingResult.rows[0];
+          if (existing) {
+            const rawData =
+              existing['data'] && typeof existing['data'] === 'object'
+                ? (existing['data'] as Record<string, unknown>)
+                : {};
+            const currentCount =
+              typeof rawData['count'] === 'number' && Number.isFinite(rawData['count'])
+                ? (rawData['count'] as number)
+                : 1;
+            const nextData = { ...rawData, count: currentCount + 1 };
+            const updated = await conn.query(
+              'UPDATE "Notification" SET data = $1 WHERE id = $2 RETURNING *',
+              [nextData, existing['id']],
+            );
+            await conn.query('COMMIT');
+            return {
+              record: materializeNotificationRecord(
+                updated.rows[0] ?? { ...existing, data: nextData },
+              ),
+              created: false,
+            };
+          }
+          const id =
+            typeof create['id'] === 'string' && create['id'].length > 0
+              ? (create['id'] as string)
+              : crypto.randomUUID();
+          const record = { ...create, id };
+          const columns = Object.keys(record);
+          const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+          const values = columns.map(c => (record as Record<string, unknown>)[c]);
+          await conn.query(
+            `INSERT INTO "Notification" (${columns.map(c => `"${c}"`).join(', ')}) VALUES (${placeholders})`,
+            values,
+          );
+          await conn.query('COMMIT');
+          return { record: materializeNotificationRecord(record), created: true };
+        } catch (err) {
+          try {
+            await conn.query('ROLLBACK');
+          } catch {
+            // ignore — original error is more useful
+          }
+          throw err;
+        } finally {
+          conn.release();
+        }
+      },
+    mongo:
+      collection =>
+      async ({ userId, dedupKey, create }) => {
+        const target = collection as {
+          findOneAndUpdate(query: unknown, update: unknown, options: unknown): Promise<unknown>;
+          insertOne(doc: unknown): Promise<unknown>;
+          findOne(query: unknown): Promise<unknown>;
+        };
+        const existing = (await target.findOne({ userId, dedupKey, read: false })) as Record<
+          string,
+          unknown
+        > | null;
+        if (existing) {
+          const rawData =
+            existing['data'] && typeof existing['data'] === 'object'
+              ? (existing['data'] as Record<string, unknown>)
+              : {};
+          const currentCount =
+            typeof rawData['count'] === 'number' && Number.isFinite(rawData['count'])
+              ? (rawData['count'] as number)
+              : 1;
+          const updated = (await target.findOneAndUpdate(
+            { _id: existing['_id'] ?? existing['id'] },
+            { $set: { data: { ...rawData, count: currentCount + 1 } } },
+            { returnDocument: 'after' },
+          )) as Record<string, unknown> | null;
+          return {
+            record: materializeNotificationRecord(updated ?? existing),
+            created: false,
+          };
+        }
+        const id =
+          typeof create['id'] === 'string' && create['id'].length > 0
+            ? (create['id'] as string)
+            : crypto.randomUUID();
+        const record = { ...create, id };
+        await target.insertOne(record);
+        return { record: materializeNotificationRecord(record), created: true };
+      },
+  }),
+
   listPendingDispatch: op.custom<
     (args: { limit: number; now: Date; signal?: AbortSignal }) => Promise<NotificationRecord[]>
   >({

@@ -1218,4 +1218,25 @@ export interface SsrPluginConfig {
    * @default 2048
    */
   readonly maxRouteParamBytes?: number;
+  /**
+   * Strategy for client-side hydration mismatch reporting.
+   *
+   * Hydration mismatches occur when the SSR-produced HTML differs from the
+   * tree the client renders on first mount — usually caused by non-deterministic
+   * data sources (e.g. `Date.now()`, `Math.random()`, locale-dependent format).
+   * `slingshot-ssr` cannot detect these server-side; React reports them in
+   * the browser console.
+   *
+   * - `'warn-dev'` — (default) emit a `console.warn` from the SSR middleware
+   *   in development mode noting that hydration mismatch warnings should
+   *   appear in the browser console. Production renders are unaffected.
+   * - `'silent'`   — opt out of all framework-side warnings. The application
+   *   is responsible for detecting and reporting mismatches.
+   *
+   * Either way, mismatches surface in the browser via React's built-in
+   * warnings — this flag only affects the framework's nudge.
+   *
+   * @default 'warn-dev'
+   */
+  readonly hydrationMismatchHandling?: 'warn-dev' | 'silent';
 }

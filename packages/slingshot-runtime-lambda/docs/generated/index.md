@@ -29,6 +29,7 @@ bun add @lastshotlabs/slingshot-runtime-lambda
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
+- `test`: `bun test`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

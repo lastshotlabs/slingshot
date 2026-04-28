@@ -635,17 +635,26 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
     }
   }
 
+  /**
+   * Phases an inbound message can fail at, propagated to DLQ headers and the
+   * payload envelope so downstream consumers can distinguish corrupt messages
+   * (deserialize / validate failures — never retried) from handler logic bugs.
+   */
+  type InboundErrorType = 'deserialize' | 'validate' | 'handler';
+
   async function produceToDlq(
     config: InboundConnectorConfig,
     metadata: InboundMessageMetadata,
     rawMessage: KafkaMessage,
     error: unknown,
+    errorType: InboundErrorType,
   ): Promise<void> {
     const dlqTopic = config.dlqTopic ?? `${metadata.topic}.dlq`;
     const ensuredProducer = await ensureProducer();
     if (config.autoCreateDLQ) {
       await ensureTopics([{ topic: dlqTopic }]);
     }
+    const errorMessage = error instanceof Error ? error.message : String(error);
     await ensuredProducer.send({
       topic: dlqTopic,
       messages: [
@@ -656,12 +665,64 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
             'slingshot.original-topic': metadata.topic,
             'slingshot.original-partition': String(metadata.partition),
             'slingshot.original-offset': metadata.offset,
-            'slingshot.error': error instanceof Error ? error.message : String(error),
+            'slingshot.error': errorMessage,
+            'slingshot.error-type': errorType,
+            'x-slingshot-dlq-reason': errorType,
           },
         },
       ],
     });
     hooks?.onInboundDLQ?.(metadata.topic, dlqTopic, metadata);
+  }
+
+  /**
+   * Try to publish a message to the DLQ and only commit the offset on success.
+   *
+   * If the DLQ produce fails we deliberately do NOT commit — the broker will
+   * redeliver the message on the next poll, which is the only way an operator
+   * can recover from a persistent DLQ outage. To avoid an infinite loop on a
+   * permanently broken DLQ the caller's `errorStrategy === 'skip'` already
+   * commits without going through this function.
+   */
+  async function dlqAndCommitOrSkip(
+    config: InboundConnectorConfig,
+    runtime: InboundRuntime,
+    metadata: InboundMessageMetadata,
+    rawMessage: KafkaMessage,
+    error: unknown,
+    errorType: 'deserialize' | 'validate' | 'handler',
+    topic: string,
+    partition: number,
+    trackedCommit: (tt: string, p: number, m: KafkaMessage) => Promise<void>,
+  ): Promise<void> {
+    const strategy = config.errorStrategy ?? 'dlq';
+    if (strategy !== 'dlq') {
+      // 'skip' commits unconditionally; 'pause' is handled by the caller.
+      await trackedCommit(topic, partition, rawMessage);
+      return;
+    }
+    try {
+      await produceToDlq(config, metadata, rawMessage, error, errorType);
+      runtime.health.messagesDLQ += 1;
+      await trackedCommit(topic, partition, rawMessage);
+    } catch (dlqErr) {
+      // Do NOT commit. Broker will redeliver and we'll retry the DLQ produce
+      // on the next poll. If the DLQ outage is persistent the consumer will
+      // continue to redeliver; operators should observe via health() and
+      // the `onInboundError` hook, then either fix the DLQ or temporarily
+      // switch to errorStrategy: 'skip'.
+      console.error(
+        '[KafkaConnectors] failed to publish to DLQ; leaving offset uncommitted for redelivery',
+        {
+          topic,
+          groupId: config.groupId,
+          partition,
+          offset: rawMessage.offset,
+          errorType,
+          dlqError: dlqErr instanceof Error ? dlqErr.message : String(dlqErr),
+        },
+      );
+    }
   }
 
   async function drainPendingBuffer(): Promise<void> {
@@ -1132,17 +1193,86 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
                   }
                 }
 
-                try {
-                  const serializer = resolveSerializer(config.serializer, opts.serializer);
-                  let payload = serializer.deserialize(topic, message.value);
-                  if (config.transform) {
-                    payload = await Promise.resolve(config.transform(payload, metadata));
-                    if (payload == null) {
-                      await trackedCommit(topic, partition, message);
-                      return;
-                    }
-                  }
+                // Per-phase tracking so we only commit the offset when we have
+                // either fully processed the message OR successfully forwarded
+                // it to the DLQ. If the DLQ produce fails we leave the offset
+                // uncommitted so the broker can redeliver.
+                let payload: unknown;
+                const serializer = resolveSerializer(config.serializer, opts.serializer);
 
+                // Phase 1: deserialize (corrupt-message — never retry, DLQ immediately)
+                try {
+                  payload = serializer.deserialize(topic, message.value);
+                } catch (deserErr) {
+                  console.warn('[KafkaConnectors] deserialization failed; routing to DLQ', {
+                    topic,
+                    groupId: config.groupId,
+                    partition,
+                    offset: message.offset,
+                    errorType: 'deserialize',
+                    error: deserErr instanceof Error ? deserErr.message : String(deserErr),
+                  });
+                  hooks?.onInboundError?.(topic, config.groupId, deserErr);
+                  runtime.health.status = 'error';
+                  runtime.health.error =
+                    deserErr instanceof Error ? deserErr.message : String(deserErr);
+                  await dlqAndCommitOrSkip(
+                    config,
+                    runtime,
+                    metadata,
+                    message,
+                    deserErr,
+                    'deserialize',
+                    topic,
+                    partition,
+                    trackedCommit,
+                  );
+                  return;
+                }
+
+                if (config.transform) {
+                  try {
+                    payload = await Promise.resolve(config.transform(payload, metadata));
+                  } catch (transformErr) {
+                    // Transform errors are treated like validation failures:
+                    // the message is structurally undeliverable to the handler.
+                    console.warn('[KafkaConnectors] transform failed; routing to DLQ', {
+                      topic,
+                      groupId: config.groupId,
+                      partition,
+                      offset: message.offset,
+                      errorType: 'validate',
+                      error:
+                        transformErr instanceof Error ? transformErr.message : String(transformErr),
+                    });
+                    hooks?.onInboundError?.(topic, config.groupId, transformErr);
+                    runtime.health.status = 'error';
+                    runtime.health.error =
+                      transformErr instanceof Error ? transformErr.message : String(transformErr);
+                    await dlqAndCommitOrSkip(
+                      config,
+                      runtime,
+                      metadata,
+                      message,
+                      transformErr,
+                      'validate',
+                      topic,
+                      partition,
+                      trackedCommit,
+                    );
+                    return;
+                  }
+                  if (payload == null) {
+                    await trackedCommit(topic, partition, message);
+                    return;
+                  }
+                }
+
+                // Phase 2: validate (also corrupt-message — never retry, DLQ immediately).
+                // Wrapped with a heartbeat call before/after so a slow Zod
+                // schema cannot cause the broker session to time out.
+                try {
+                  await heartbeat();
                   payload = validatePayload(
                     config.topic ?? topic,
                     payload,
@@ -1150,64 +1280,102 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
                     config.schema,
                     opts.schemaRegistry,
                   );
+                  await heartbeat();
+                } catch (validateErr) {
+                  console.warn('[KafkaConnectors] validation failed; routing to DLQ', {
+                    topic,
+                    groupId: config.groupId,
+                    partition,
+                    offset: message.offset,
+                    errorType: 'validate',
+                    error: validateErr instanceof Error ? validateErr.message : String(validateErr),
+                  });
+                  hooks?.onInboundError?.(topic, config.groupId, validateErr);
+                  runtime.health.status = 'error';
+                  runtime.health.error =
+                    validateErr instanceof Error ? validateErr.message : String(validateErr);
+                  await dlqAndCommitOrSkip(
+                    config,
+                    runtime,
+                    metadata,
+                    message,
+                    validateErr,
+                    'validate',
+                    topic,
+                    partition,
+                    trackedCommit,
+                  );
+                  return;
+                }
 
-                  const maxAttempts = Math.max(1, config.maxRetries ?? 3);
-                  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                    try {
-                      const startedAt = Date.now();
-                      await Promise.resolve(config.handler(payload, metadata));
-                      runtime.health.messagesProcessed += 1;
-                      hooks?.onInboundSuccess?.(
-                        topic,
-                        config.groupId,
-                        Date.now() - startedAt,
-                        metadata,
-                      );
-                      // Mark as processed for dedup AFTER success so retries
-                      // are not skipped on a transient handler failure.
-                      if (dedupEnabled && messageId) {
-                        try {
-                          await dedupStore.set(messageId, dedupTtlMs);
-                        } catch (dedupErr) {
-                          console.warn(
-                            '[KafkaConnectors] dedupStore.set() threw; continuing:',
-                            dedupErr,
-                          );
-                        }
+                // Phase 3: handler — retry up to maxAttempts before DLQ.
+                const maxAttempts = Math.max(1, config.maxRetries ?? 3);
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                  try {
+                    const startedAt = Date.now();
+                    await Promise.resolve(config.handler(payload, metadata));
+                    runtime.health.messagesProcessed += 1;
+                    hooks?.onInboundSuccess?.(
+                      topic,
+                      config.groupId,
+                      Date.now() - startedAt,
+                      metadata,
+                    );
+                    // Mark as processed for dedup AFTER success so retries
+                    // are not skipped on a transient handler failure.
+                    if (dedupEnabled && messageId) {
+                      try {
+                        await dedupStore.set(messageId, dedupTtlMs);
+                      } catch (dedupErr) {
+                        console.warn(
+                          '[KafkaConnectors] dedupStore.set() threw; continuing:',
+                          dedupErr,
+                        );
                       }
-                      await trackedCommit(topic, partition, message);
-                      return;
-                    } catch (err) {
-                      if (attempt >= maxAttempts) {
-                        runtime.health.status =
-                          config.errorStrategy === 'pause' ? 'paused' : 'error';
-                        runtime.health.error = err instanceof Error ? err.message : String(err);
-                        hooks?.onInboundError?.(topic, config.groupId, err);
-                        const strategy = config.errorStrategy ?? 'dlq';
-                        if (strategy === 'pause') {
-                          pause();
-                          return;
-                        }
-                        if (strategy === 'dlq') {
-                          try {
-                            await produceToDlq(config, metadata, message, err);
-                            runtime.health.messagesDLQ += 1;
-                          } catch (dlqErr) {
-                            console.error(
-                              '[KafkaConnectors] failed to publish inbound DLQ message:',
-                              dlqErr,
-                            );
-                          }
-                        }
-                        await trackedCommit(topic, partition, message);
+                    }
+                    await trackedCommit(topic, partition, message);
+                    return;
+                  } catch (err) {
+                    if (attempt >= maxAttempts) {
+                      console.warn('[KafkaConnectors] handler exhausted retries', {
+                        topic,
+                        groupId: config.groupId,
+                        partition,
+                        offset: message.offset,
+                        errorType: 'handler',
+                        attempts: attempt,
+                        error: err instanceof Error ? err.message : String(err),
+                      });
+                      runtime.health.status = config.errorStrategy === 'pause' ? 'paused' : 'error';
+                      runtime.health.error = err instanceof Error ? err.message : String(err);
+                      hooks?.onInboundError?.(topic, config.groupId, err);
+                      const strategy = config.errorStrategy ?? 'dlq';
+                      if (strategy === 'pause') {
+                        pause();
+                        // Do NOT commit — we want redelivery once the consumer
+                        // is resumed by the operator.
                         return;
                       }
-                      await waitWithHeartbeat(heartbeat, backoffMs(attempt));
+                      if (strategy === 'dlq') {
+                        await dlqAndCommitOrSkip(
+                          config,
+                          runtime,
+                          metadata,
+                          message,
+                          err,
+                          'handler',
+                          topic,
+                          partition,
+                          trackedCommit,
+                        );
+                        return;
+                      }
+                      // strategy === 'skip': commit and move on.
+                      await trackedCommit(topic, partition, message);
+                      return;
                     }
+                    await waitWithHeartbeat(heartbeat, backoffMs(attempt));
                   }
-                } catch (err) {
-                  hooks?.onInboundError?.(topic, config.groupId, err);
-                  await trackedCommit(topic, partition, message);
                 }
               } finally {
                 finish();

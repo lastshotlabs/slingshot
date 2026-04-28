@@ -57,6 +57,110 @@ describe('edgeRuntime()', () => {
       });
       await expect(runtime.readFile('/any/path')).rejects.toThrow('store-unavailable');
     });
+
+    it('rejects buffered string results that exceed maxFileBytes', async () => {
+      const runtime = edgeRuntime({
+        maxFileBytes: 1024,
+        fileStore: async () => 'x'.repeat(2048),
+      });
+      await expect(runtime.readFile('/big')).rejects.toThrow(/exceeds maxFileBytes=1024/);
+    });
+
+    it('rejects a streamed result with declared size before reading the body', async () => {
+      let cancelled = false;
+      let bytesPulled = 0;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const chunk = new Uint8Array(1024);
+          bytesPulled += chunk.byteLength;
+          controller.enqueue(chunk);
+          controller.close();
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      const runtime = edgeRuntime({
+        // 5 MB declared, 4 MiB cap (the scenario from the audit).
+        maxFileBytes: 4 * 1024 * 1024,
+        fileStore: async () => ({ size: 5 * 1024 * 1024, stream }),
+      });
+      await expect(runtime.readFile('/declared-too-big')).rejects.toThrow(/exceeds maxFileBytes=/);
+      // The runtime never reads the body — only the declared size matters.
+      // Even if the stream's start/pull was invoked by the runtime, the
+      // bytes are not accumulated through the reader. Cancellation is
+      // observable so downstream platforms can free resources.
+      expect(cancelled).toBe(true);
+      // No reader ever consumed bytes — at most one synchronous pull from
+      // the stream's internal queue, but never accumulated.
+      expect(bytesPulled).toBeLessThanOrEqual(1024);
+    });
+
+    it('aborts a stream with no declared size once accumulated bytes exceed the cap', async () => {
+      // Cap at 1 KB, send 4 KB in 1 KB chunks. The reader should cancel after
+      // the second chunk.
+      const cap = 1024;
+      let chunksDelivered = 0;
+      let cancelled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (chunksDelivered >= 4) {
+            controller.close();
+            return;
+          }
+          chunksDelivered++;
+          controller.enqueue(new Uint8Array(1024));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
+      const runtime = edgeRuntime({
+        maxFileBytes: cap,
+        fileStore: async () => ({ stream }),
+      });
+      await expect(runtime.readFile('/streamed-too-big')).rejects.toThrow(
+        /exceeds maxFileBytes=1024/,
+      );
+      expect(cancelled).toBe(true);
+      // We rejected before pulling the whole body. Some streams may
+      // pre-queue an extra chunk, so allow a little slack — the key
+      // assertion is that we did NOT pull all 4.
+      expect(chunksDelivered).toBeLessThan(4);
+    });
+
+    it('returns the decoded text for a streamed result within the cap', async () => {
+      const text = 'hello-stream';
+      const bytes = new TextEncoder().encode(text);
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      });
+      const runtime = edgeRuntime({
+        maxFileBytes: 1024,
+        fileStore: async () => ({ size: bytes.byteLength, stream }),
+      });
+      expect(await runtime.readFile('/ok-stream')).toBe(text);
+    });
+
+    it('honours maxFileBytes=0 as "no cap" for streamed results', async () => {
+      const bytes = new Uint8Array(8 * 1024);
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      });
+      const runtime = edgeRuntime({
+        maxFileBytes: 0,
+        fileStore: async () => ({ size: bytes.byteLength, stream }),
+      });
+      const result = await runtime.readFile('/uncapped');
+      expect(result).not.toBeNull();
+      expect((result as string).length).toBe(8 * 1024);
+    });
   });
 
   describe('password hashing (Web Crypto)', () => {

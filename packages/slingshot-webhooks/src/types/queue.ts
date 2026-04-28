@@ -112,3 +112,35 @@ export class WebhookDeliveryError extends Error {
     this.statusCode = statusCode;
   }
 }
+
+/**
+ * Thrown when the secret cipher fails to decrypt a stored webhook endpoint
+ * secret. Falling back to the ciphertext (or any plaintext) would either
+ * permanently sign deliveries with the wrong key or, worse, leak the encrypted
+ * blob to the receiver — so the runtime fails closed and the caller is
+ * expected to skip the affected endpoint.
+ *
+ * The error message intentionally never embeds the cipher value so it is safe
+ * to log.
+ */
+export class WebhookSecretDecryptError extends Error {
+  /** Endpoint ID whose secret failed to decrypt. */
+  readonly endpointId: string;
+  /**
+   * @param endpointId - The endpoint whose stored secret could not be decrypted.
+   * @param cause - Optional underlying decryption failure (NOT serialized into
+   *   the message — the caller is responsible for ensuring nothing downstream
+   *   stringifies a cause that still contains the raw ciphertext).
+   */
+  constructor(endpointId: string, cause?: unknown) {
+    super(`failed to decrypt webhook endpoint secret for endpoint ${endpointId}`);
+    this.name = 'WebhookSecretDecryptError';
+    this.endpointId = endpointId;
+    if (cause !== undefined) {
+      // Attach as a property rather than interpolating into the message so the
+      // ciphertext (often present in cipher error messages) does not propagate
+      // through .message / toString().
+      (this as { cause?: unknown }).cause = cause;
+    }
+  }
+}

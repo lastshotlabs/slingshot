@@ -28,6 +28,39 @@ import type { SsgConfig } from './types';
 
 // ─── Argument parsing ─────────────────────────────────────────────────────────
 
+/**
+ * Upper bound on the `--concurrency` flag.
+ *
+ * Picked to leave headroom under typical FD ulimits — most Linux/macOS systems
+ * default to 1024 file descriptors per process and SSG renders may open
+ * multiple files per route (route module + asset reads + output stream).
+ * Keeping concurrency well below the ulimit prevents EMFILE during large
+ * crawls. Override in custom forks if you have raised your ulimit.
+ */
+const MAX_CONCURRENCY = 256;
+
+/**
+ * Parse and validate a positive integer CLI argument.
+ *
+ * Rejects `NaN`, non-finite, and non-integer values with an explicit error
+ * naming the flag. Optionally clamps the parsed value into `[min, max]` so
+ * callers cannot supply pathological values (negative, zero, or absurdly
+ * large) that would crash or hang the renderer.
+ *
+ * @param raw - The raw string from the CLI (already extracted from argv).
+ * @param flag - The flag name (without leading `--`) for error messages.
+ * @param min - Inclusive lower bound after parse.
+ * @param max - Inclusive upper bound after parse.
+ * @internal
+ */
+function parsePositiveIntArg(raw: string, flag: string, min: number, max: number): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    throw new Error(`[slingshot-ssg] --${flag} must be a positive integer, got "${raw}"`);
+  }
+  return Math.max(min, Math.min(parsed, max));
+}
+
 export function parseArgs(argv: string[]): {
   routesDir: string;
   assetsManifest: string;
@@ -53,15 +86,53 @@ export function parseArgs(argv: string[]): {
     }
   }
 
+  const concurrency = args['concurrency']
+    ? parsePositiveIntArg(args['concurrency'], 'concurrency', 1, MAX_CONCURRENCY)
+    : 4;
+
   return {
     routesDir: args['routes-dir'] ?? 'server/routes',
     assetsManifest: args['assets-manifest'] ?? 'dist/client/.vite/manifest.json',
     outDir: args['out'] ?? 'dist/static',
-    concurrency: args['concurrency'] ? parseInt(args['concurrency'], 10) : 4,
+    concurrency,
     rendererPath: args['renderer'] ?? 'dist/server/entry-server.js',
     clientEntry: args['client-entry'],
     rscManifestPath: args['rsc-manifest'],
   };
+}
+
+/**
+ * Emit a startup warning when the configured concurrency is close to the
+ * process file-descriptor limit.
+ *
+ * Each in-flight render may open several FDs (route module imports, asset
+ * reads, output stream). When concurrency approaches `nofile - reserve`,
+ * a large crawl risks EMFILE. The warning is informational only — we still
+ * proceed with the requested concurrency.
+ *
+ * Uses `process.getrlimit?.()` when available (Bun/Deno); on Node.js this
+ * API is gated behind `--experimental-permission` and may be undefined,
+ * in which case the warning is skipped.
+ *
+ * @internal
+ */
+export function warnIfConcurrencyExceedsFdHeadroom(concurrency: number): void {
+  const getrlimit = (process as unknown as { getrlimit?: () => { nofile?: number } | undefined })
+    .getrlimit;
+  if (typeof getrlimit !== 'function') return;
+  const limit = getrlimit();
+  const nofile = limit?.nofile;
+  if (typeof nofile !== 'number' || nofile <= 0) return;
+  // Reserve 256 FDs for stdio, dependencies, and other handles.
+  // Allow a quarter of the remaining headroom for parallel renders.
+  const safeMax = Math.max(1, Math.floor((nofile - 256) / 4));
+  if (concurrency > safeMax) {
+    console.warn(
+      `[slingshot-ssg] concurrency=${concurrency} is high relative to FD ulimit (${nofile}). ` +
+        `Recommended max ~${safeMax}. Large crawls may hit EMFILE — consider lowering ` +
+        `--concurrency or raising the file-descriptor limit (\`ulimit -n\`).`,
+    );
+  }
 }
 
 // ─── Asset tag resolution ─────────────────────────────────────────────────────
@@ -196,6 +267,7 @@ export async function loadRenderer(rendererPath: string): Promise<SlingshotSsrRe
 
 export async function runCli(argv = process.argv.slice(2)): Promise<void> {
   const opts = parseArgs(argv);
+  warnIfConcurrencyExceedsFdHeadroom(opts.concurrency);
 
   const cwd = process.cwd();
   const config: SsgConfig = Object.freeze({

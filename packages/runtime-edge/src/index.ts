@@ -2,19 +2,59 @@
 import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
 
 /**
+ * Streaming descriptor returned by `fileStore`.
+ *
+ * Allows `readFile()` to enforce `maxFileBytes` without buffering the entire
+ * payload first. If `size` is supplied (e.g. from a HEAD response or stat),
+ * the runtime rejects oversized files before reading any bytes. Otherwise it
+ * pulls chunks from `stream` and aborts as soon as the running byte count
+ * exceeds the cap.
+ */
+export interface FileStoreStream {
+  /**
+   * Declared payload size in bytes. When present and greater than
+   * `maxFileBytes`, `readFile()` rejects without reading the body.
+   */
+  size?: number;
+  /**
+   * The file body as a Web Streams ReadableStream of Uint8Array chunks.
+   * `readFile()` will cancel the stream once it decides the result is
+   * too large.
+   */
+  stream: ReadableStream<Uint8Array>;
+}
+
+/**
+ * Result returned by a `fileStore` lookup.
+ *
+ * - `string`: a fully buffered UTF-8 payload. Suitable for small bundled
+ *   assets where the size is known to be safe.
+ * - `FileStoreStream`: a streaming descriptor with optional declared size.
+ *   Required for any source that may return large files; the runtime will
+ *   honour `maxFileBytes` before fully buffering.
+ * - `null`: file not found.
+ */
+export type FileStoreResult = string | FileStoreStream | null;
+
+/**
  * Options for `edgeRuntime()`.
  */
 export interface EdgeRuntimeOptions {
   /**
    * Function to read a bundled file by path.
    *
-   * On Cloudflare Workers, reads from KV or `__STATIC_CONTENT__`.
+   * On Cloudflare Workers, reads from KV, R2, or `env.ASSETS.fetch()`.
    * Return `null` if the file is not found.
+   *
+   * Prefer returning a {@link FileStoreStream} for any source that may
+   * produce large files — the runtime will enforce `maxFileBytes` before
+   * fully buffering. A plain `string` return is convenient for small
+   * already-loaded assets but offers no protection against oversized reads.
    *
    * When omitted, `readFile()` always returns `null` — suitable for apps that
    * inline their asset manifest at build time and never need filesystem reads.
    */
-  fileStore?: (path: string) => Promise<string | null>;
+  fileStore?: (path: string) => Promise<FileStoreResult>;
 
   /**
    * Custom password hashing implementation for edge runtimes.
@@ -314,25 +354,79 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
      *
      * Throws if the result exceeds `maxFileBytes` (default 4 MiB). Edge isolates
      * have ~128 MB of heap shared with app code; an oversized buffered read can
-     * OOM the worker. Stream large assets at the platform level instead.
+     * OOM the worker.
+     *
+     * Cap enforcement strategy (in order of preference):
+     * 1. If the store returns a {@link FileStoreStream} with a declared `size`
+     *    larger than `maxFileBytes`, the stream is cancelled and the call
+     *    rejects without reading the body.
+     * 2. If the store returns a stream without a declared size, chunks are
+     *    pulled and accumulated; the stream is cancelled and the call
+     *    rejects as soon as accumulated bytes exceed `maxFileBytes`.
+     * 3. If the store returns a plain string, the buffered byte length is
+     *    checked after the fact (legacy path — prefer streaming for any
+     *    source that may produce large files).
      */
     async readFile(path: string): Promise<string | null> {
       const result = await fileStore(path);
       if (result === null) return null;
-      if (maxFileBytes > 0) {
-        // UTF-8 byte length, not character count. crypto.subtle / TextEncoder
-        // are available in every supported edge runtime.
-        const byteLength = new TextEncoder().encode(result).byteLength;
-        if (byteLength > maxFileBytes) {
-          throw new Error(
-            `[runtime-edge] readFile('${path}') returned ${byteLength} bytes; ` +
-              `exceeds maxFileBytes=${maxFileBytes}. ` +
-              `Stream large assets at the platform level (e.g. env.ASSETS.fetch()) ` +
-              `or raise maxFileBytes if you've confirmed the isolate has headroom.`,
-          );
+
+      const tooLarge = (bytes: number): Error =>
+        new Error(
+          `[runtime-edge] readFile('${path}') returned ${bytes} bytes; ` +
+            `exceeds maxFileBytes=${maxFileBytes}. ` +
+            `Stream large assets at the platform level (e.g. env.ASSETS.fetch()) ` +
+            `or raise maxFileBytes if you've confirmed the isolate has headroom.`,
+        );
+
+      if (typeof result === 'string') {
+        if (maxFileBytes > 0) {
+          // UTF-8 byte length, not character count. crypto.subtle / TextEncoder
+          // are available in every supported edge runtime.
+          const byteLength = new TextEncoder().encode(result).byteLength;
+          if (byteLength > maxFileBytes) throw tooLarge(byteLength);
         }
+        return result;
       }
-      return result;
+
+      // Streaming path. Honour declared size first to reject before reading
+      // any body bytes.
+      const { size, stream } = result;
+      if (maxFileBytes > 0 && typeof size === 'number' && size > maxFileBytes) {
+        // Cancel the underlying source so the platform can release resources.
+        await stream.cancel().catch(() => {});
+        throw tooLarge(size);
+      }
+
+      // Pull chunks and abort early if cumulative bytes exceed the cap.
+      const reader = stream.getReader();
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          total += value.byteLength;
+          if (maxFileBytes > 0 && total > maxFileBytes) {
+            await reader.cancel().catch(() => {});
+            throw tooLarge(total);
+          }
+          chunks.push(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      // Concatenate and decode. We could decode incrementally with a
+      // TextDecoder stream but the cap guarantees the buffer is bounded.
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        merged.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return new TextDecoder().decode(merged);
     },
     /**
      * Edge runtimes do not support `AsyncLocalStorage`.

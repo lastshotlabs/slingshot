@@ -26,7 +26,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/ --cache"
+    "lint": "eslint src/ --cache",
+    "test": "bun test"
   },
   "dependencies": {
     "@lastshotlabs/slingshot": "file:../..",

@@ -8,6 +8,7 @@ import {
   defineTask,
   defineWorkflow,
   sleep,
+  step,
 } from '@lastshotlabs/slingshot-orchestration';
 import type { OrchestrationRuntime, Run } from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationRouter } from '../src/routes';
@@ -913,6 +914,87 @@ describe('metadata size validation', () => {
     const oversized = { data: 'x'.repeat(65 * 1024) };
 
     const response = await app.request('/orchestration/tasks/metadata-large-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metadata: oversized }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toContain('64KB');
+  });
+
+  test('POST /tasks/:name/runs counts UTF-8 byte length so multi-byte metadata is rejected when oversize', async () => {
+    const task = defineTask({
+      name: 'metadata-utf8-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [task],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime, tasks: [task], workflows: [] }),
+    );
+
+    // Each "rocket" emoji is 4 bytes in UTF-8 but only 2 JS code units. Pack
+    // enough to cross the 64 KB byte limit while staying under the JS string
+    // length limit — proves we are measuring bytes, not chars.
+    const emoji = '\u{1F680}'; // rocket
+    const repeat = Math.ceil((65_536 + 512) / Buffer.byteLength(emoji, 'utf8'));
+    const oversized = { data: emoji.repeat(repeat) };
+
+    const response = await app.request('/orchestration/tasks/metadata-utf8-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ metadata: oversized }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toContain('64KB');
+  });
+
+  test('POST /workflows/:name/runs counts UTF-8 byte length for emoji metadata', async () => {
+    const wfTask = defineTask({
+      name: 'metadata-utf8-wf-task',
+      input: z.any(),
+      output: z.any(),
+      async handler(input) {
+        return input;
+      },
+    });
+    const workflow = defineWorkflow({
+      name: 'metadata-utf8-wf',
+      input: z.any(),
+      steps: [step('only', wfTask)],
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [wfTask],
+      workflows: [workflow],
+    });
+
+    const app = new Hono();
+    app.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime, tasks: [wfTask], workflows: [workflow] }),
+    );
+
+    const emoji = '\u{1F680}';
+    const repeat = Math.ceil((65_536 + 512) / Buffer.byteLength(emoji, 'utf8'));
+    const oversized = { data: emoji.repeat(repeat) };
+
+    const response = await app.request('/orchestration/workflows/metadata-utf8-wf/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ metadata: oversized }),

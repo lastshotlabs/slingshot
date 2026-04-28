@@ -74,50 +74,13 @@ export function createNotificationBuilder(
       }
     }
 
-    if (!isUrgent && input.dedupKey) {
-      const existing = await options.notifications.findByDedupKey({
-        userId: input.userId,
-        dedupKey: input.dedupKey,
-      });
-      if (existing && !existing.read) {
-        const nextCount = readCount(existing.data) + 1;
-        const updated = await options.notifications.update(existing.id, {
-          data: freezeNotificationData({ ...(existing.data ?? {}), count: nextCount }),
-        });
-        if (updated) {
-          try {
-            options.events.publish(
-              'notifications:notification.updated',
-              {
-                id: existing.id,
-                userId: input.userId,
-                tenantId: input.tenantId ?? null,
-                changes: { count: nextCount },
-              },
-              {
-                userId: input.userId,
-                actorId: input.actorId ?? input.userId,
-                source: 'system',
-                // System-source emit (called from notify() helper, not an HTTP route).
-                // Notification's own tenantId is on the payload + scope, not here.
-                requestTenantId: null,
-              },
-            );
-          } catch (err: unknown) {
-            console.error('[notifications] event publish error:', err);
-          }
-        }
-        return updated;
-      }
-    }
-
     const priority: NotificationPriority = resolveEffectivePriority(
       requestedPriority,
       preferences,
       now,
     );
 
-    const notification = await options.notifications.create({
+    const createInput: Record<string, unknown> = {
       userId: input.userId,
       tenantId: input.tenantId,
       source: options.source,
@@ -132,7 +95,59 @@ export function createNotificationBuilder(
       deliverAt: input.deliverAt,
       dispatched: input.deliverAt == null,
       dispatchedAt: input.deliverAt == null ? now : undefined,
-    });
+    };
+
+    // Atomic dedup-or-create path. The adapter contract guarantees that
+    // concurrent notify() calls for the same (userId, dedupKey) collapse to a
+    // single notification — see NotificationAdapter.dedupOrCreate.
+    if (!isUrgent && input.dedupKey) {
+      const { record: notification, created } = await options.notifications.dedupOrCreate({
+        userId: input.userId,
+        dedupKey: input.dedupKey,
+        create: createInput,
+      });
+
+      if (!created) {
+        const nextCount = readCount(notification.data);
+        try {
+          options.events.publish(
+            'notifications:notification.updated',
+            {
+              id: notification.id,
+              userId: input.userId,
+              tenantId: input.tenantId ?? null,
+              changes: { count: nextCount },
+            },
+            {
+              userId: input.userId,
+              actorId: input.actorId ?? input.userId,
+              source: 'system',
+              requestTenantId: null,
+            },
+          );
+        } catch (err: unknown) {
+          console.error('[notifications] event publish error:', err);
+        }
+        return notification;
+      }
+
+      if (input.deliverAt == null) {
+        const payload: NotificationCreatedEventPayload = { notification, preferences };
+        try {
+          options.events.publish('notifications:notification.created', payload, {
+            userId: notification.userId,
+            actorId: notification.actorId ?? notification.userId,
+            source: 'system',
+            requestTenantId: null,
+          });
+        } catch (err: unknown) {
+          console.error('[notifications] event publish error:', err);
+        }
+      }
+      return notification;
+    }
+
+    const notification = await options.notifications.create(createInput);
 
     if (input.deliverAt == null) {
       const payload: NotificationCreatedEventPayload = {

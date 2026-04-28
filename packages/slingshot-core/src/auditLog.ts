@@ -79,11 +79,24 @@ export interface AuditLogEntry {
  * are returned. There is no OR or NOT support at the query level. To query across
  * disjoint criteria (e.g., entries for user A OR user B), issue two separate queries and
  * merge the results in application code.
+ *
+ * **Tenant isolation contract** — when `requestTenantId` is supplied (a non-`undefined`
+ * value, including `null`), implementations MUST treat it as a HARD security filter:
+ * only entries whose stored `requestTenantId` exactly equals the supplied value may
+ * be returned. Treating `requestTenantId` as a hint, ignoring it, or using fuzzy
+ * matching constitutes a tenant-isolation violation. Callers are responsible for
+ * passing the authenticated principal's tenant on every query that should be
+ * tenant-scoped — the adapter does NOT infer tenancy on its own. Pass `undefined`
+ * (omit the field) only when the caller has already verified that a cross-tenant
+ * read is authorized.
  */
 export interface AuditLogQuery {
   /** Filter by user ID. */
   userId?: string;
-  /** Filter by request-scoped tenant ID. */
+  /**
+   * Filter by request-scoped tenant ID. When supplied, MUST be enforced as a
+   * hard equality filter — see the interface-level tenant isolation contract.
+   */
   requestTenantId?: string;
   /** Filter by request path (exact match). */
   path?: string;

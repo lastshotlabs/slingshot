@@ -504,11 +504,13 @@ export function createOrchestrationRouter(options: {
     }
     // Reject payloads where metadata serializes above 64 KB — prevents memory spikes
     // and runaway Redis/BullMQ job-data growth from unbounded client payloads.
+    // Use Buffer.byteLength so multi-byte UTF-8 sequences (emoji, CJK) are
+    // counted by their on-the-wire byte size rather than JS string length.
     if (
       body['metadata'] &&
       typeof body['metadata'] === 'object' &&
       !Array.isArray(body['metadata']) &&
-      JSON.stringify(body['metadata']).length > 65_536
+      Buffer.byteLength(JSON.stringify(body['metadata']), 'utf8') > 65_536
     ) {
       return c.json({ error: 'metadata exceeds 64KB limit' }, 400);
     }
@@ -551,12 +553,13 @@ export function createOrchestrationRouter(options: {
     if (parseError) {
       return c.json({ error: 'Invalid JSON in request body' }, 400);
     }
-    // Reject payloads where metadata serializes above 64 KB.
+    // Reject payloads where metadata serializes above 64 KB. Use Buffer.byteLength
+    // so multi-byte UTF-8 sequences are counted by on-the-wire byte size.
     if (
       body['metadata'] &&
       typeof body['metadata'] === 'object' &&
       !Array.isArray(body['metadata']) &&
-      JSON.stringify(body['metadata']).length > 65_536
+      Buffer.byteLength(JSON.stringify(body['metadata']), 'utf8') > 65_536
     ) {
       return c.json({ error: 'metadata exceeds 64KB limit' }, 400);
     }

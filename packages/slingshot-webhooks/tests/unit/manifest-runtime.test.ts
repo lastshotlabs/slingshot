@@ -10,6 +10,7 @@ import {
   createWebhooksManifestRuntime,
 } from '../../src/manifest/runtime';
 import type { WebhookAttempt, WebhookEndpointSubscription } from '../../src/types/models';
+import { WebhookSecretDecryptError } from '../../src/types/queue';
 
 declare module '@lastshotlabs/slingshot-core' {
   interface SlingshotEventMap {
@@ -481,5 +482,75 @@ describe('webhooks manifest runtime', () => {
     const enabled = await runtime.listEnabledEndpoints();
     const matching = enabled.find(e => e.id === created.id);
     expect(matching?.secret).toBe('super-secret-value');
+  });
+
+  it('fails closed when an endpoint secret cannot be decrypted', async () => {
+    const SECRET_VALUE = 'cipher-payload-do-not-leak';
+    const errorMessages: string[] = [];
+    const errorFields: Array<Record<string, unknown> | undefined> = [];
+
+    const failingEncryptor = {
+      encrypt: (plaintext: string) => Promise.resolve(plaintext),
+      decrypt: () => Promise.reject(new Error(`bad key while decrypting "${SECRET_VALUE}"`)),
+    };
+
+    const records: EndpointRecord[] = [
+      {
+        id: 'broken-endpoint',
+        ownerType: 'tenant',
+        ownerId: 'tenant-a',
+        tenantId: 'tenant-a',
+        url: 'https://example.com/broken',
+        secret: SECRET_VALUE,
+        subscriptions: [{ event: 'test:webhook.visible', exposure: 'tenant-webhook' }],
+        enabled: true,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+
+    const { runtime } = await setupRuntime({
+      endpoints: records,
+      manifestRuntimeOptions: {
+        encryptor: failingEncryptor,
+        logger: {
+          error(message, fields) {
+            errorMessages.push(message);
+            errorFields.push(fields);
+          },
+          warn() {},
+        },
+      },
+    });
+
+    // getEndpoint must throw rather than return the cipher value as plaintext.
+    let caught: unknown;
+    try {
+      await runtime.getEndpoint('broken-endpoint');
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(WebhookSecretDecryptError);
+    expect((caught as WebhookSecretDecryptError).endpointId).toBe('broken-endpoint');
+    // The thrown error must NOT include the cipher value in its message.
+    expect((caught as Error).message).not.toContain(SECRET_VALUE);
+
+    // Logger should have recorded the failure with structured fields, but
+    // must not have leaked the cipher value into the structured error fields.
+    expect(errorMessages.some(message => message.includes('failed to decrypt'))).toBe(true);
+    expect(
+      errorFields.every(fields => {
+        if (!fields) return true;
+        return !Object.values(fields).some(value =>
+          typeof value === 'string' ? value.includes(SECRET_VALUE) : false,
+        );
+      }),
+    ).toBe(true);
+
+    // listEnabledEndpoints must skip the broken row instead of crashing the
+    // entire batch. With only the broken endpoint present, the resulting list
+    // must be empty (not include garbage / cipher data).
+    const enabled = await runtime.listEnabledEndpoints();
+    expect(enabled).toHaveLength(0);
   });
 });

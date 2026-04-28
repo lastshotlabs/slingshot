@@ -72,6 +72,7 @@ export interface PushDeliveryRecord {
     | 'rateLimited'
     | 'payloadTooLarge'
     | 'transient'
+    | 'permanent'
     | 'repositoryFailure'
     | null;
   readonly attempts: number;
@@ -103,7 +104,7 @@ export interface NotificationDefaults {
 export interface PushSendResult {
   readonly ok: boolean;
   readonly providerMessageId?: string;
-  readonly reason?: 'invalidToken' | 'rateLimited' | 'payloadTooLarge' | 'transient';
+  readonly reason?: 'invalidToken' | 'rateLimited' | 'payloadTooLarge' | 'transient' | 'permanent';
   readonly error?: string;
   readonly retryAfterMs?: number;
   /** Deterministic key the provider was tagged with for de-duping retried sends. */

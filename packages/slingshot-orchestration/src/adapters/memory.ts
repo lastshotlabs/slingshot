@@ -69,7 +69,12 @@ export function createMemoryAdapter(
   const resultPromises = new Map<string, Promise<unknown>>();
   const progressListeners = new Map<string, Map<string, (data: RunProgress | undefined) => void>>();
   const idempotencyKeys = new Map<string, string>();
-  const inFlightIdempotencyKeys = new Set<string>();
+  // Map of in-flight idempotency promises. Keyed by scoped idempotency key, the
+  // value is a Promise that resolves to the runId once the run has been fully
+  // claimed (run record created, idempotency key persisted, handle ready).
+  // Concurrent callers awaiting the same key all observe the same Promise and
+  // therefore the same handle, eliminating the race between has() and add().
+  const inFlightIdempotency = new Map<string, Promise<string>>();
   const workflowControllers = new Map<string, AbortController>();
   const workflowChildren = new Map<string, Set<string>>();
   const delayedWorkflowStarts = new Map<string, AbortController>();
@@ -188,46 +193,66 @@ export function createMemoryAdapter(
         if (existingRunId) {
           return createCachedRunHandle(existingRunId, () => loadRunResult(existingRunId));
         }
-        // Atomically claim the in-flight slot to prevent concurrent duplicate starts
-        if (inFlightIdempotencyKeys.has(scopedIdempotencyKey)) {
-          // Another concurrent call is in the process of starting — wait a tick and retry
-          // by re-checking the settled idempotency map.
-          await Promise.resolve();
-          const settledRunId = idempotencyKeys.get(scopedIdempotencyKey);
-          if (settledRunId) {
-            return createCachedRunHandle(settledRunId, () => loadRunResult(settledRunId));
-          }
+        // Atomically claim the in-flight slot. Use a Map<key, Promise<runId>>
+        // so concurrent callers awaiting the same key observe the same runId
+        // without ever passing a stale has()/add() check.
+        const inFlight = inFlightIdempotency.get(scopedIdempotencyKey);
+        if (inFlight) {
+          const settledRunId = await inFlight;
+          return createCachedRunHandle(settledRunId, () => loadRunResult(settledRunId));
         }
-        inFlightIdempotencyKeys.add(scopedIdempotencyKey);
       }
 
       const runId = generateRunId();
-      // Set idempotency key atomically before any async work to prevent races
+      // Synchronously publish the in-flight promise so any caller that arrives
+      // between this point and idempotencyKeys.set() observes the same runId.
+      let resolveClaim: ((value: string) => void) | undefined;
+      let rejectClaim: ((reason: unknown) => void) | undefined;
       if (scopedIdempotencyKey) {
+        const claim = new Promise<string>((resolve, reject) => {
+          resolveClaim = resolve;
+          rejectClaim = reject;
+        });
+        // Suppress unhandled rejection until a concurrent caller awaits.
+        claim.catch(() => {});
+        inFlightIdempotency.set(scopedIdempotencyKey, claim);
         idempotencyKeys.set(scopedIdempotencyKey, runId);
-        inFlightIdempotencyKeys.delete(scopedIdempotencyKey);
       }
-      runs.set(runId, {
-        id: runId,
-        type: 'task',
-        name,
-        status: 'pending',
-        input,
-        tenantId: opts?.tenantId,
-        priority: opts?.priority,
-        tags: opts?.tags,
-        metadata: opts?.metadata,
-        createdAt: new Date(),
-      });
 
-      const handle = taskRunner.submit(def, input, {
-        runId,
-        tenantId: opts?.tenantId,
-        priority: opts?.priority,
-        delay: opts?.delay,
-      });
-      resultPromises.set(runId, handle.result());
-      return createCachedRunHandle(runId, () => handle.result());
+      try {
+        runs.set(runId, {
+          id: runId,
+          type: 'task',
+          name,
+          status: 'pending',
+          input,
+          tenantId: opts?.tenantId,
+          priority: opts?.priority,
+          tags: opts?.tags,
+          metadata: opts?.metadata,
+          createdAt: new Date(),
+        });
+
+        const handle = taskRunner.submit(def, input, {
+          runId,
+          tenantId: opts?.tenantId,
+          priority: opts?.priority,
+          delay: opts?.delay,
+        });
+        resultPromises.set(runId, handle.result());
+        if (scopedIdempotencyKey) {
+          resolveClaim?.(runId);
+          inFlightIdempotency.delete(scopedIdempotencyKey);
+        }
+        return createCachedRunHandle(runId, () => handle.result());
+      } catch (err) {
+        if (scopedIdempotencyKey) {
+          rejectClaim?.(err);
+          inFlightIdempotency.delete(scopedIdempotencyKey);
+          idempotencyKeys.delete(scopedIdempotencyKey);
+        }
+        throw err;
+      }
     },
     async runWorkflow(name, input, opts) {
       await ensureStarted();
@@ -247,22 +272,24 @@ export function createMemoryAdapter(
         if (existingRunId) {
           return createCachedRunHandle(existingRunId, () => loadRunResult(existingRunId));
         }
-        // Atomically claim the in-flight slot to prevent concurrent duplicate starts
-        if (inFlightIdempotencyKeys.has(scopedIdempotencyKey)) {
-          await Promise.resolve();
-          const settledRunId = idempotencyKeys.get(scopedIdempotencyKey);
-          if (settledRunId) {
-            return createCachedRunHandle(settledRunId, () => loadRunResult(settledRunId));
-          }
+        // Atomically claim the in-flight slot. See runTask above for the
+        // rationale behind the Map<key, Promise<runId>> pattern.
+        const inFlight = inFlightIdempotency.get(scopedIdempotencyKey);
+        if (inFlight) {
+          const settledRunId = await inFlight;
+          return createCachedRunHandle(settledRunId, () => loadRunResult(settledRunId));
         }
-        inFlightIdempotencyKeys.add(scopedIdempotencyKey);
       }
 
       const runId = generateRunId();
-      // Set idempotency key atomically before any async work to prevent races
+      let resolveClaim: ((value: string) => void) | undefined;
       if (scopedIdempotencyKey) {
+        const claim = new Promise<string>(resolve => {
+          resolveClaim = resolve;
+        });
+        claim.catch(() => {});
+        inFlightIdempotency.set(scopedIdempotencyKey, claim);
         idempotencyKeys.set(scopedIdempotencyKey, runId);
-        inFlightIdempotencyKeys.delete(scopedIdempotencyKey);
       }
       const workflowRun: WorkflowRun = {
         id: runId,
@@ -405,6 +432,10 @@ export function createMemoryAdapter(
       // Suppress unhandled-rejection until the caller attaches via handle.result()
       promise.catch(() => {});
       resultPromises.set(runId, promise);
+      if (scopedIdempotencyKey) {
+        resolveClaim?.(runId);
+        inFlightIdempotency.delete(scopedIdempotencyKey);
+      }
       return createCachedRunHandle(runId, () => promise);
     },
     async getRun(runId) {

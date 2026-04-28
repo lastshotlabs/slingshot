@@ -8,6 +8,22 @@ function base64UrlEncode(input: Buffer | string): string {
   return buffer.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
+function parseRetryAfterMs(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.trunc(seconds * 1000);
+  const dateMs = Date.parse(value);
+  if (!Number.isNaN(dateMs)) return Math.max(0, dateMs - Date.now());
+  return undefined;
+}
+
+/**
+ * Default consecutive token-fetch failures before classifying further attempts
+ * as `permanent`. Prevents infinite retry loops when service-account credentials
+ * are invalid or the FCM project is misconfigured.
+ */
+const DEFAULT_FCM_TOKEN_FAILURE_CIRCUIT = 5;
+
 function isTokenResponse(value: unknown): value is { access_token: string; expires_in: number } {
   return (
     typeof value === 'object' &&
@@ -17,6 +33,21 @@ function isTokenResponse(value: unknown): value is { access_token: string; expir
     typeof value.access_token === 'string' &&
     typeof value.expires_in === 'number'
   );
+}
+
+/**
+ * Error thrown by `FcmAccessTokenProvider.getToken()` when the OAuth token
+ * exchange returns an HTTP error. `statusCode` is set when the failure was an
+ * HTTP response (vs. a network/parse error) so callers can distinguish
+ * permanent auth failures (401/403) from transient ones (5xx, network).
+ */
+class FcmTokenError extends Error {
+  readonly statusCode?: number;
+  constructor(message: string, statusCode?: number) {
+    super(message);
+    this.name = 'FcmTokenError';
+    this.statusCode = statusCode;
+  }
 }
 
 class FcmAccessTokenProvider {
@@ -57,9 +88,16 @@ class FcmAccessTokenProvider {
         }),
       },
     );
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new FcmTokenError(
+        `FCM token endpoint responded with status ${response.status}: ${body}`,
+        response.status,
+      );
+    }
     const json: unknown = await response.json();
     if (!isTokenResponse(json)) {
-      throw new Error('FCM token endpoint returned an invalid response payload');
+      throw new FcmTokenError('FCM token endpoint returned an invalid response payload');
     }
     this.cached = {
       token: json.access_token,
@@ -76,10 +114,19 @@ class FcmAccessTokenProvider {
  * short-lived Google OAuth2 access token. The token is cached and auto-renewed.
  * Supports both alert and data-only (silent) push messages.
  *
+ * Token-fetch resilience: a per-provider-instance counter tracks consecutive
+ * OAuth token failures. After `tokenFailureCircuitThreshold` consecutive
+ * failures (default 5) further failures classify as `permanent` so the router
+ * stops retrying. HTTP 401/403 from the token endpoint classify as `permanent`
+ * immediately because they almost always indicate invalid service-account
+ * credentials. The counter resets on every successful token fetch.
+ *
  * @param config - FCM provider configuration.
  * @param config.serviceAccount - Firebase service-account credentials. Must
  *   include `project_id`, `client_email`, and `private_key`. `token_uri`
  *   defaults to `https://oauth2.googleapis.com/token`.
+ * @param config.tokenFailureCircuitThreshold - Consecutive token-fetch
+ *   failures before classifying further attempts as `permanent`. Defaults to 5.
  * @returns A `PushProvider` for the `android` platform.
  *
  * @example
@@ -96,8 +143,15 @@ class FcmAccessTokenProvider {
  */
 export function createFcmProvider(config: {
   serviceAccount: FirebaseServiceAccount;
+  tokenFailureCircuitThreshold?: number;
 }): PushProvider {
   const tokens = new FcmAccessTokenProvider(config.serviceAccount);
+  const circuitThreshold = Math.max(
+    1,
+    config.tokenFailureCircuitThreshold ?? DEFAULT_FCM_TOKEN_FAILURE_CIRCUIT,
+  );
+  let consecutiveTokenFailures = 0;
+
   const stringifyPayload = (value: unknown): string => {
     if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
       return String(value);
@@ -116,18 +170,41 @@ export function createFcmProvider(config: {
       let accessToken: string;
       try {
         accessToken = await tokens.getToken();
+        // Successful token fetch — reset the circuit-breaker counter.
+        consecutiveTokenFailures = 0;
       } catch (err) {
-        // OAuth token acquisition failures are operational/network-level and should
-        // be retried by the router rather than propagated as an unrecoverable error.
+        consecutiveTokenFailures += 1;
         const errorMessage = err instanceof Error ? err.message : String(err);
+        const statusCode = err instanceof FcmTokenError ? err.statusCode : undefined;
+        // 401/403 from the OAuth token endpoint indicates invalid credentials.
+        // These will not heal on retry, so classify as permanent immediately.
+        const authPermanent = statusCode === 401 || statusCode === 403;
+        const circuitTripped = consecutiveTokenFailures >= circuitThreshold;
+        const isPermanent = authPermanent || circuitTripped;
+
         console.error(
           JSON.stringify({
             code: 'fcm-oauth-failure',
             project: config.serviceAccount.project_id,
             providerIdempotencyKey: idempotencyKey,
+            statusCode,
+            consecutiveFailures: consecutiveTokenFailures,
+            circuitThreshold,
+            classification: isPermanent ? 'permanent' : 'transient',
             error: errorMessage,
           }),
         );
+
+        if (isPermanent) {
+          const result: PushSendResult = {
+            ok: false,
+            reason: 'permanent' as const,
+            error: `fcm oauth failure (${authPermanent ? `auth-${statusCode}` : `circuit-open-after-${consecutiveTokenFailures}-failures`}): ${errorMessage}`,
+            providerIdempotencyKey: idempotencyKey,
+          };
+          return result;
+        }
+
         const result: PushSendResult = {
           ok: false,
           reason: 'transient',
@@ -195,6 +272,8 @@ export function createFcmProvider(config: {
           };
         }
 
+        const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+
         if (response.status === 404 || response.status === 410) {
           return { ok: false, reason: 'invalidToken', error: stringifyPayload(json) };
         }
@@ -202,9 +281,19 @@ export function createFcmProvider(config: {
           return { ok: false, reason: 'payloadTooLarge', error: stringifyPayload(json) };
         }
         if (response.status === 429) {
-          return { ok: false, reason: 'rateLimited', error: stringifyPayload(json) };
+          return {
+            ok: false,
+            reason: 'rateLimited',
+            error: stringifyPayload(json),
+            retryAfterMs,
+          };
         }
-        return { ok: false, reason: 'transient', error: stringifyPayload(json) };
+        return {
+          ok: false,
+          reason: 'transient',
+          error: stringifyPayload(json),
+          retryAfterMs,
+        };
       } catch (error) {
         return {
           ok: false,

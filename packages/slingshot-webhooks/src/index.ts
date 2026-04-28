@@ -18,7 +18,7 @@ export type {
   WebhookSubscriptionExposure,
 } from './types/models';
 export type { WebhookQueue, WebhookJob } from './types/queue';
-export { WebhookDeliveryError } from './types/queue';
+export { WebhookDeliveryError, WebhookSecretDecryptError } from './types/queue';
 export type { InboundProvider } from './types/inbound';
 
 export { createMemoryWebhookAdapter } from './adapters/memory';

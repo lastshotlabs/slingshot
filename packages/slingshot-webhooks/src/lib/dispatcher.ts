@@ -1,10 +1,10 @@
 import { promises as dnsPromises } from 'node:dns';
 import { isIP } from 'node:net';
 import {
-  createSafeFetch,
   SafeFetchBlockedError,
   SafeFetchDnsError,
   type SafeFetchOptions,
+  createSafeFetch,
 } from '@lastshotlabs/slingshot-core';
 import { WebhookDeliveryError } from '../types/queue';
 import type { WebhookJob } from '../types/queue';
@@ -61,9 +61,7 @@ function defaultIsIpAllowed(ip: string): boolean {
   }
 }
 
-async function defaultResolveHost(
-  hostname: string,
-): Promise<{ address: string; family: 4 | 6 }[]> {
+async function defaultResolveHost(hostname: string): Promise<{ address: string; family: 4 | 6 }[]> {
   const records = await dnsPromises.lookup(hostname, { all: true, verbatim: true });
   return records.map(r => ({ address: r.address, family: r.family as 4 | 6 }));
 }
@@ -85,15 +83,12 @@ async function resolveAndValidate(
     const family = (isIP(host) === 6 ? 6 : 4) as 4 | 6;
     const allowed = await isIpAllowed(host, family);
     if (!allowed) {
-      throw new WebhookDeliveryError(
-        `Webhook delivery blocked: IP ${host} is not allowed`,
-        false,
-      );
+      throw new WebhookDeliveryError(`Webhook delivery blocked: IP ${host} is not allowed`, false);
     }
     return { address: host, family };
   }
 
-  let records: { address: string; family: 4 | 6 }[] = [];
+  let records: { address: string; family: 4 | 6 }[];
   try {
     records = await resolveHost(host);
   } catch (err) {
@@ -102,7 +97,8 @@ async function resolveAndValidate(
       true,
     );
   }
-  if (records.length === 0) {
+  const first = records[0];
+  if (!first) {
     throw new WebhookDeliveryError(`Webhook DNS lookup failed: ${host}`, true);
   }
 
@@ -118,7 +114,7 @@ async function resolveAndValidate(
 
   // Pin to the first record. Multi-record hosts are validated above; safeFetch
   // also pins to the first record returned by resolveHost.
-  return records[0]!;
+  return first;
 }
 
 /**

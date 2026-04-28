@@ -37,6 +37,13 @@ resource-type definitions instead of each package inventing its own policy engin
   downgrading permissions state to process memory.
 - Set `queryTimeoutMs` in `EvaluatorConfig` to bound adapter queries. Without a timeout a
   hung DB call blocks every permission check on that request indefinitely.
+- `warnSampleRate` defaults to `0.01` (1%) so high-QPS production workloads do not flood logs
+  with the large-group-batch and unscoped-resourceType warnings. Override to `1` in development
+  or tests when you want to see every warning. Group-expansion failure warnings are sampled
+  separately through `onGroupExpansionErrorSampleRate` (default `0.05`).
+- `onGroupExpansionErrorSampleRate` controls how often the `onGroupExpansionError` callback fires
+  and the corresponding `group_expansion_error` warn log emits. Health counters returned by
+  `getHealth()` are updated on every failure regardless of sampling, so observability never lies.
 
 ## Gotchas
 

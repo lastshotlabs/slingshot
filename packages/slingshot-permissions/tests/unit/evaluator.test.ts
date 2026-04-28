@@ -552,6 +552,13 @@ describe('PermissionEvaluator', () => {
   });
 
   test('can() without scope.resourceType emits a console.warn when active grants exist', async () => {
+    // Use warnSampleRate: 1 so the warn always fires; the package default is 0.01
+    // for prod safety, but this test asserts content of the warn message.
+    const verboseEvaluator = createPermissionEvaluator({
+      registry,
+      adapter,
+      warnSampleRate: 1,
+    });
     await adapter.createGrant({
       subjectId: 'user-1',
       subjectType: 'user',
@@ -568,7 +575,7 @@ describe('PermissionEvaluator', () => {
       warnMessage = msg;
     };
     try {
-      await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read');
+      await verboseEvaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'read');
     } finally {
       console.warn = originalWarn;
     }
@@ -627,6 +634,7 @@ describe('PermissionEvaluator', () => {
       adapter: capAdapter,
       groupResolver,
       maxGroups: 3,
+      warnSampleRate: 1,
     });
 
     const originalWarn = console.warn;
@@ -797,6 +805,9 @@ describe('PermissionEvaluator', () => {
         registry,
         adapter: failingAdapter,
         groupResolver,
+        // The package default samples group-expansion warns at 5%; force-on so the
+        // warn message assertion below is deterministic.
+        onGroupExpansionErrorSampleRate: 1,
       }).can({ subjectId: 'user-1', subjectType: 'user' }, 'read', { resourceType: 'post' });
     } finally {
       console.warn = originalWarn;
@@ -912,6 +923,9 @@ describe('PermissionEvaluator', () => {
       adapter: hangingGroupAdapter,
       groupResolver,
       queryTimeoutMs: 50,
+      // Force-on the group-expansion-error warn so the assertion below is
+      // deterministic; default sample rate is 0.05 for prod safety.
+      onGroupExpansionErrorSampleRate: 1,
     });
 
     const warnMessages: string[] = [];
@@ -1064,6 +1078,7 @@ describe('PermissionEvaluator', () => {
         groupResolver,
         maxGroups: 2,
         logger,
+        warnSampleRate: 1,
       });
       await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
         resourceType: 'post',
@@ -1185,6 +1200,7 @@ describe('PermissionEvaluator', () => {
         groupResolver,
         logger,
         onGroupExpansionError,
+        onGroupExpansionErrorSampleRate: 1,
       });
 
       // group-good still grants editor → allow path returns true, evaluation proceeds
@@ -1252,6 +1268,7 @@ describe('PermissionEvaluator', () => {
         onGroupExpansionError() {
           throw new Error('callback exploded');
         },
+        onGroupExpansionErrorSampleRate: 1,
       });
 
       const result = await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
@@ -1262,6 +1279,175 @@ describe('PermissionEvaluator', () => {
       expect(loggerCalls.some(c => c.ctx?.event === 'group_expansion_error_callback_threw')).toBe(
         true,
       );
+    });
+
+    test('default warnSampleRate=0.01 suppresses sampled warns under high call volume', async () => {
+      // Drive 200 unscoped-resourceType warns; with default 0.01 we expect ~2 emissions.
+      const ev = createPermissionEvaluator({ registry, adapter });
+
+      await adapter.createGrant({
+        subjectId: 'user-default',
+        subjectType: 'user',
+        tenantId: null,
+        resourceType: null,
+        resourceId: null,
+        roles: ['editor'],
+        effect: 'allow',
+        grantedBy: 'system',
+      });
+
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        for (let i = 0; i < 200; i++) {
+          await ev.can({ subjectId: 'user-default', subjectType: 'user' }, 'read');
+        }
+      } finally {
+        warnSpy.mockRestore();
+      }
+      // Default 0.01 over 200 calls: expected ~2; allow generous slack to stay
+      // robust against Math.random tail variance. The point is that it is
+      // dramatically lower than 200.
+      expect(warnSpy.mock.calls.length).toBeLessThan(20);
+    });
+
+    test('onGroupExpansionErrorSampleRate=1 always invokes callback and emits warn', async () => {
+      const failingAdapter: PermissionsAdapter = {
+        ...noopBatchAdapterMethods,
+        async createGrant() {
+          return '';
+        },
+        async revokeGrant() {
+          return false;
+        },
+        async getGrantsForSubject() {
+          return [];
+        },
+        async getEffectiveGrantsForSubject(_subjectId, subjectType) {
+          if (subjectType === 'group') throw new Error('group fetch fail');
+          return [];
+        },
+        async listGrantHistory() {
+          return [];
+        },
+        async listGrantsOnResource() {
+          return [];
+        },
+        async deleteAllGrantsForSubject() {},
+      };
+
+      const groupResolver = {
+        async getGroupsForUser() {
+          return ['g-a', 'g-b'];
+        },
+      };
+
+      const callbackHits: GroupExpansionFailure[][] = [];
+      const loggerCalls: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+      const logger: EvaluatorLogger = {
+        warn(msg, ctx) {
+          loggerCalls.push({ msg, ctx });
+        },
+      };
+
+      const ev = createPermissionEvaluator({
+        registry,
+        adapter: failingAdapter,
+        groupResolver,
+        logger,
+        onGroupExpansionError: failures => {
+          callbackHits.push(failures);
+        },
+        onGroupExpansionErrorSampleRate: 1,
+      });
+
+      for (let i = 0; i < 5; i++) {
+        await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+          resourceType: 'post',
+        });
+      }
+
+      expect(callbackHits).toHaveLength(5);
+      expect(loggerCalls.filter(c => c.ctx?.event === 'group_expansion_error')).toHaveLength(5);
+      // Health counters reflect the true failure count regardless of sampling.
+      expect(ev.getHealth().groupExpansionErrorCount).toBe(10);
+    });
+
+    test('onGroupExpansionErrorSampleRate=0.0001 suppresses callback while counters update', async () => {
+      const failingAdapter: PermissionsAdapter = {
+        ...noopBatchAdapterMethods,
+        async createGrant() {
+          return '';
+        },
+        async revokeGrant() {
+          return false;
+        },
+        async getGrantsForSubject() {
+          return [];
+        },
+        async getEffectiveGrantsForSubject(_subjectId, subjectType) {
+          if (subjectType === 'group') throw new Error('group fetch fail');
+          return [];
+        },
+        async listGrantHistory() {
+          return [];
+        },
+        async listGrantsOnResource() {
+          return [];
+        },
+        async deleteAllGrantsForSubject() {},
+      };
+
+      const groupResolver = {
+        async getGroupsForUser() {
+          return ['g-only'];
+        },
+      };
+
+      let callbackCount = 0;
+      const loggerCalls: Array<{ msg: string; ctx?: Record<string, unknown> }> = [];
+      const logger: EvaluatorLogger = {
+        warn(msg, ctx) {
+          loggerCalls.push({ msg, ctx });
+        },
+      };
+
+      const ev = createPermissionEvaluator({
+        registry,
+        adapter: failingAdapter,
+        groupResolver,
+        logger,
+        onGroupExpansionError: () => {
+          callbackCount += 1;
+        },
+        onGroupExpansionErrorSampleRate: 0.0001,
+      });
+
+      const calls = 100;
+      for (let i = 0; i < calls; i++) {
+        await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
+          resourceType: 'post',
+        });
+      }
+
+      // With rate 0.0001 and 100 calls, expected = 0.01. Allow up to 1.
+      expect(callbackCount).toBeLessThanOrEqual(1);
+      expect(loggerCalls.filter(c => c.ctx?.event === 'group_expansion_error').length)
+        .toBeLessThanOrEqual(1);
+      // Counters always update — sampling does not hide truth from health.
+      expect(ev.getHealth().groupExpansionErrorCount).toBe(calls);
+      expect(ev.getHealth().lastGroupExpansionErrorAt).not.toBeNull();
+    });
+
+    test('throws when onGroupExpansionErrorSampleRate is 0', () => {
+      expect(() =>
+        createPermissionEvaluator({ registry, adapter, onGroupExpansionErrorSampleRate: 0 }),
+      ).toThrow('onGroupExpansionErrorSampleRate must be in the range (0, 1]');
+    });
+
+    test('throws when onGroupExpansionErrorSampleRate exceeds 1', () => {
+      expect(() =>
+        createPermissionEvaluator({ registry, adapter, onGroupExpansionErrorSampleRate: 2 }),
+      ).toThrow('onGroupExpansionErrorSampleRate must be in the range (0, 1]');
     });
   });
 

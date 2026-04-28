@@ -118,18 +118,29 @@ interface EvaluatorConfig {
    */
   logger?: EvaluatorLogger;
   /**
-   * Sample rate for non-critical `warn` output (range `(0, 1]`). Defaults to `1`
-   * (every warning is emitted). Set to e.g. `0.01` in high-volume environments to
-   * sample 1% of warnings. Group-expansion failure warnings are NOT sampled — they
-   * always emit. The unscoped-resourceType warning and the large-group-batch warning
-   * are sampled.
+   * Sample rate for non-critical `warn` output (range `(0, 1]`). Defaults to `0.01`
+   * (1% of warnings are emitted) so that production environments do not flood logs
+   * under high QPS. Set to `1` to emit every warning (useful for tests and
+   * development). Group-expansion failure warnings are NOT controlled by this rate;
+   * see `onGroupExpansionErrorSampleRate`. The unscoped-resourceType warning and the
+   * large-group-batch warning are sampled by this rate.
    */
   warnSampleRate?: number;
+  /**
+   * Sample rate for the `onGroupExpansionError` callback and its corresponding warn
+   * log (range `(0, 1]`). Defaults to `0.05` (5%). Group-expansion failures fire on
+   * every adapter error during group fan-out, which under sustained adapter outage
+   * can otherwise generate one callback invocation per request. The error counters
+   * exposed via `getHealth()` are updated regardless of sampling so that operators
+   * always see the true failure count.
+   */
+  onGroupExpansionErrorSampleRate?: number;
   /**
    * Optional callback invoked when one or more group-grant fetches fail during
    * group expansion. Receives the full list of failures for the call. The evaluator
    * still proceeds with whatever grants it managed to collect — this hook gives the
-   * caller visibility, not control.
+   * caller visibility, not control. The callback is sampled at
+   * `onGroupExpansionErrorSampleRate` (default `0.05`).
    */
   onGroupExpansionError?: (failures: GroupExpansionFailure[]) => void;
 }
@@ -251,7 +262,8 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
   const maxGroups = config.maxGroups ?? 50;
   const { queryTimeoutMs } = config;
   const logger: EvaluatorLogger = config.logger ?? console;
-  const warnSampleRate = config.warnSampleRate ?? 1;
+  const warnSampleRate = config.warnSampleRate ?? 0.01;
+  const onGroupExpansionErrorSampleRate = config.onGroupExpansionErrorSampleRate ?? 0.05;
   const { onGroupExpansionError } = config;
 
   // Health-only counters. Updated from existing operation paths so calling
@@ -270,6 +282,11 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
   if (warnSampleRate <= 0 || warnSampleRate > 1) {
     throw new Error('[slingshot-permissions] warnSampleRate must be in the range (0, 1]');
   }
+  if (onGroupExpansionErrorSampleRate <= 0 || onGroupExpansionErrorSampleRate > 1) {
+    throw new Error(
+      '[slingshot-permissions] onGroupExpansionErrorSampleRate must be in the range (0, 1]',
+    );
+  }
 
   // Best-effort identifier for the adapter implementation. Falls back to 'unknown'
   // when the adapter is created without a recognizable constructor name.
@@ -278,6 +295,11 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
   function shouldEmitSampledWarn(): boolean {
     if (warnSampleRate >= 1) return true;
     return Math.random() < warnSampleRate;
+  }
+
+  function shouldEmitSampledGroupExpansionError(): boolean {
+    if (onGroupExpansionErrorSampleRate >= 1) return true;
+    return Math.random() < onGroupExpansionErrorSampleRate;
   }
 
   function maybeWithTimeout<T>(
@@ -365,45 +387,46 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
           }
         }
         if (failures.length > 0) {
+          // Counters always update so `getHealth()` reflects the true failure rate
+          // regardless of sampling. The warn log and callback are sampled at
+          // `onGroupExpansionErrorSampleRate` (default 0.05) to avoid flooding
+          // operators when an adapter is down and every request fails the same way.
           groupExpansionErrorCount += failures.length;
           lastGroupExpansionErrorAt = Date.now();
-          // Group-expansion failures are NOT sampled — operators always need to see them.
-          // We still proceed with whatever grants we did collect (deny-wins still applies
-          // to the partial set). The first failure's reason is included in the message
-          // for quick diagnostics; the full list goes to the structured context and the
-          // optional callback.
-          const first = failures[0];
-          const firstReasonMessage =
-            first.reason instanceof Error ? first.reason.message : String(first.reason);
-          logger.warn(
-            `[slingshot-permissions] evaluator.can() failed to fetch grants for ${failures.length} group(s) ` +
-              `(user '${subject.subjectId}', first failure on group '${first.groupId}': ${firstReasonMessage}). ` +
-              `Proceeding with partial grants.`,
-            {
-              adapter: adapterName,
-              event: 'group_expansion_error',
-              userId: subject.subjectId,
-              action,
-              scope,
-              failureCount: failures.length,
-              failures: failures.map(f => ({
-                groupId: f.groupId,
-                reason: f.reason instanceof Error ? f.reason.message : String(f.reason),
-              })),
-            },
-          );
-          if (onGroupExpansionError) {
-            try {
-              onGroupExpansionError(failures);
-            } catch (cbErr) {
-              logger.warn(
-                `[slingshot-permissions] onGroupExpansionError callback threw: ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
-                {
-                  adapter: adapterName,
-                  event: 'group_expansion_error_callback_threw',
-                  userId: subject.subjectId,
-                },
-              );
+          if (shouldEmitSampledGroupExpansionError()) {
+            const first = failures[0];
+            const firstReasonMessage =
+              first.reason instanceof Error ? first.reason.message : String(first.reason);
+            logger.warn(
+              `[slingshot-permissions] evaluator.can() failed to fetch grants for ${failures.length} group(s) ` +
+                `(user '${subject.subjectId}', first failure on group '${first.groupId}': ${firstReasonMessage}). ` +
+                `Proceeding with partial grants.`,
+              {
+                adapter: adapterName,
+                event: 'group_expansion_error',
+                userId: subject.subjectId,
+                action,
+                scope,
+                failureCount: failures.length,
+                failures: failures.map(f => ({
+                  groupId: f.groupId,
+                  reason: f.reason instanceof Error ? f.reason.message : String(f.reason),
+                })),
+              },
+            );
+            if (onGroupExpansionError) {
+              try {
+                onGroupExpansionError(failures);
+              } catch (cbErr) {
+                logger.warn(
+                  `[slingshot-permissions] onGroupExpansionError callback threw: ${cbErr instanceof Error ? cbErr.message : String(cbErr)}`,
+                  {
+                    adapter: adapterName,
+                    event: 'group_expansion_error_callback_threw',
+                    userId: subject.subjectId,
+                  },
+                );
+              }
             }
           }
         }

@@ -1,11 +1,17 @@
 import { readFileSync } from 'node:fs';
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
-import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
+import type {
+  MetricsEmitter,
+  PluginSetupContext,
+  SlingshotPlugin,
+} from '@lastshotlabs/slingshot-core';
 import {
+  createNoopMetricsEmitter,
   deepFreeze,
   getActorId,
   getActorTenantId,
+  getContextOrNull,
   getNotificationsStateOrNull,
   getPluginState,
   validatePluginConfig,
@@ -135,6 +141,17 @@ export function createPushPlugin(
   let membershipsRef: PushRouterRepos['topicMemberships'] | undefined;
   let deliveriesRef: PushRouterRepos['deliveries'] | undefined;
   let providersRef: Partial<Record<'web' | 'ios' | 'android', PushProvider>> = {};
+
+  // The unified metrics emitter is owned by the framework context and not
+  // available until `setupPost` runs (the router is constructed there). We
+  // resolve it lazily via the indirection below so callers that capture the
+  // proxy ahead of time still see the framework-owned emitter at call time.
+  let resolvedMetricsEmitter: MetricsEmitter = createNoopMetricsEmitter();
+  const metricsProxy: MetricsEmitter = {
+    counter: (name, value, labels) => resolvedMetricsEmitter.counter(name, value, labels),
+    gauge: (name, value, labels) => resolvedMetricsEmitter.gauge(name, value, labels),
+    timing: (name, ms, labels) => resolvedMetricsEmitter.timing(name, ms, labels),
+  };
   const manifestRuntime = createPushManifestRuntime(adapters => {
     subscriptionsRef = adapters.subscriptions;
     topicsRef = adapters.topics;
@@ -332,6 +349,14 @@ export function createPushPlugin(
     async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
 
+      // Resolve the framework-owned metrics emitter so the router publishes
+      // counters/gauges/timings on hot paths. The proxy above ensures the
+      // router constructed below sees this emitter without re-wiring. Test
+      // harnesses may attach a context without a metricsEmitter — keep the
+      // default no-op in that case.
+      const ctx = getContextOrNull(app);
+      if (ctx?.metricsEmitter) resolvedMetricsEmitter = ctx.metricsEmitter;
+
       (
         bus as {
           registerForbiddenClientSafePrefix?(prefix: string): void;
@@ -374,6 +399,7 @@ export function createPushPlugin(
         },
         retries: config.retries,
         bus: bus as { emit(event: string, payload: unknown): void },
+        metrics: metricsProxy,
       });
       const formatters = compilePushFormatters(config.formatters ?? {});
 

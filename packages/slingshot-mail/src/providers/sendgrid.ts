@@ -1,5 +1,6 @@
 import { createMailCircuitBreaker } from '../lib/circuitBreaker';
 import type { MailCircuitBreakerOptions } from '../lib/circuitBreaker';
+import { assertSafeMailHeaders, ensureSafe } from '../lib/headerSanitize';
 import { extractRetryAfterHeader, parseRetryAfterMs } from '../lib/retryAfter';
 import type {
   MailAddress,
@@ -28,9 +29,12 @@ interface SendGridBody {
   headers?: Record<string, string>;
 }
 
-function toSgAddress(addr: MailAddress): SgAddress {
-  if (typeof addr === 'string') return { email: addr };
-  return { email: addr.email, ...(addr.name ? { name: addr.name } : {}) };
+function toSgAddress(addr: MailAddress, header: string): SgAddress {
+  if (typeof addr === 'string') return { email: ensureSafe(addr, header) };
+  return {
+    email: ensureSafe(addr.email, header),
+    ...(addr.name ? { name: ensureSafe(addr.name, header) } : {}),
+  };
 }
 
 /**
@@ -62,20 +66,34 @@ export function createSendgridProvider(config: SendgridConfig): MailProvider {
     name: 'sendgrid',
     async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
       return breaker.guard(async () => {
+        // Reject CR/LF/NUL injection in any header-bound field before
+        // sending. SendGrid's API treats Subject and address fields as
+        // SMTP headers; an unsanitized newline would forge additional
+        // message headers on the wire.
+        assertSafeMailHeaders(message);
         const toAddresses = Array.isArray(message.to)
-          ? message.to.map(toSgAddress)
-          : [toSgAddress(message.to)];
+          ? message.to.map(addr => toSgAddress(addr, 'to'))
+          : [toSgAddress(message.to, 'to')];
+
+        const sanitizedHeaders = message.headers
+          ? Object.fromEntries(
+              Object.entries(message.headers).map(([name, value]) => [
+                name,
+                ensureSafe(value, name),
+              ]),
+            )
+          : undefined;
 
         const body: SendGridBody = {
           personalizations: [{ to: toAddresses }],
-          subject: message.subject,
+          subject: ensureSafe(message.subject, 'Subject'),
           content: [
             { type: 'text/html', value: message.html },
             ...(message.text ? [{ type: 'text/plain', value: message.text }] : []),
           ],
-          ...(message.from ? { from: toSgAddress(message.from) } : {}),
-          ...(message.replyTo ? { reply_to: toSgAddress(message.replyTo) } : {}),
-          ...(message.headers ? { headers: message.headers } : {}),
+          ...(message.from ? { from: toSgAddress(message.from, 'from') } : {}),
+          ...(message.replyTo ? { reply_to: toSgAddress(message.replyTo, 'reply_to') } : {}),
+          ...(sanitizedHeaders ? { headers: sanitizedHeaders } : {}),
         };
 
         const res = await fetch(`${baseUrl}/v3/mail/send`, {

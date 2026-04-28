@@ -1,12 +1,15 @@
 import type {
+  MetricsEmitter,
   PluginSetupContext,
   SlingshotPlugin,
   StoreInfra,
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
+  createNoopMetricsEmitter,
   deepFreeze,
   defineEvent,
+  getContextOrNull,
   getPluginState,
   resolveRepo,
   validatePluginConfig,
@@ -118,6 +121,17 @@ export function createNotificationsPlugin(
   let teardown: (() => Promise<void>) | undefined;
   const deliveryAdapters = new Set<DeliveryAdapter>();
 
+  // The unified metrics emitter is owned by the framework context and not
+  // available until `setupPost` runs. Resolve lazily through this proxy so
+  // the dispatcher and builders see the framework-owned emitter at call
+  // time without needing re-construction.
+  let resolvedMetricsEmitter: MetricsEmitter = createNoopMetricsEmitter();
+  const metricsProxy: MetricsEmitter = {
+    counter: (name, value, labels) => resolvedMetricsEmitter.counter(name, value, labels),
+    gauge: (name, value, labels) => resolvedMetricsEmitter.gauge(name, value, labels),
+    timing: (name, ms, labels) => resolvedMetricsEmitter.timing(name, ms, labels),
+  };
+
   const entities: EntityPluginEntry[] = [
     {
       config: Notification,
@@ -191,6 +205,11 @@ export function createNotificationsPlugin(
     async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
       await innerPlugin.setupPost?.({ app, config: frameworkConfig, bus, events });
 
+      // Resolve the framework-owned metrics emitter so the dispatcher and
+      // per-source builders publish counters/gauges/timings on hot paths.
+      const ctx = getContextOrNull(app);
+      if (ctx?.metricsEmitter) resolvedMetricsEmitter = ctx.metricsEmitter;
+
       if (!notificationsAdapter || !preferencesAdapter) {
         throw new Error(
           '[slingshot-notifications] Entity adapters were not resolved during setupRoutes',
@@ -222,6 +241,7 @@ export function createNotificationsPlugin(
             defaultPreferences: config.defaultPreferences,
             intervalMs: config.dispatcher.intervalMs,
             maxPerTick: config.dispatcher.maxPerTick,
+            metrics: metricsProxy,
           })
         : {
             start() {},
@@ -278,6 +298,7 @@ export function createNotificationsPlugin(
               limit: config.rateLimit.perSourcePerUserPerWindow,
               windowMs: config.rateLimit.windowMs,
             },
+            metrics: metricsProxy,
           }),
         registerDeliveryAdapter(adapter: DeliveryAdapter) {
           deliveryAdapters.add(adapter);

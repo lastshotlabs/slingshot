@@ -10,10 +10,17 @@ import type {
   KafkaConnectorHealth,
   KafkaInboundConnectorHealth,
   KafkaOutboundConnectorHealth,
+  MetricsEmitter,
   SlingshotEventBus,
   ValidationMode,
 } from '@lastshotlabs/slingshot-core';
-import { JSON_SERIALIZER, validatePluginConfig } from '@lastshotlabs/slingshot-core';
+import {
+  JSON_SERIALIZER,
+  createNoopMetricsEmitter,
+  sanitizeHeaderValue,
+  sanitizeLogValue,
+  validatePluginConfig,
+} from '@lastshotlabs/slingshot-core';
 import { getKafkaAdapterIntrospectionOrNull } from './kafkaAdapter';
 import {
   COMPRESSION_CODEC,
@@ -389,16 +396,35 @@ function buildOutboundHeaders(
   serializerContentType: string,
   messageId: string,
 ): Record<string, string> {
+  // Defense-in-depth: every value here is framework-derived (event-key
+  // template literal, UUID, plugin name, tenantId from a resolved scope),
+  // but a misconfigured event registration or a buggy upstream resolver
+  // could still leak CR/LF into one of these fields. Sanitize so the
+  // resulting Kafka headers cannot smuggle header-splitting bytes into
+  // downstream HTTP-bridged consumers; rejection surfaces as a thrown
+  // HeaderInjectionError caught by the surrounding produce path.
   const headers: Record<string, string> = {
-    'slingshot.event': envelope.key,
-    'slingshot.event-id': envelope.meta.eventId,
-    'slingshot.owner-plugin': envelope.meta.ownerPlugin,
-    'slingshot.exposure': envelope.meta.exposure.join(','),
-    'slingshot.content-type': serializerContentType,
-    'slingshot.message-id': messageId,
+    'slingshot.event': sanitizeHeaderValue(String(envelope.key), 'slingshot.event'),
+    'slingshot.event-id': sanitizeHeaderValue(envelope.meta.eventId, 'slingshot.event-id'),
+    'slingshot.owner-plugin': sanitizeHeaderValue(
+      envelope.meta.ownerPlugin,
+      'slingshot.owner-plugin',
+    ),
+    'slingshot.exposure': sanitizeHeaderValue(
+      envelope.meta.exposure.join(','),
+      'slingshot.exposure',
+    ),
+    'slingshot.content-type': sanitizeHeaderValue(
+      serializerContentType,
+      'slingshot.content-type',
+    ),
+    'slingshot.message-id': sanitizeHeaderValue(messageId, 'slingshot.message-id'),
   };
   if (envelope.meta.scope?.tenantId) {
-    headers['slingshot.tenant-id'] = envelope.meta.scope.tenantId;
+    headers['slingshot.tenant-id'] = sanitizeHeaderValue(
+      envelope.meta.scope.tenantId,
+      'slingshot.tenant-id',
+    );
   }
   return headers;
 }
@@ -460,8 +486,23 @@ export function createInMemoryDedupStore(options: { maxKeys?: number } = {}): Me
  * subscribe to Slingshot events and publish them to Kafka with buffering and
  * duplicate-produce safeguards.
  */
-export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConnectorHandle {
-  const opts = validatePluginConfig('slingshot-kafka-connectors', rawOpts, kafkaConnectorsSchema);
+export function createKafkaConnectors(
+  rawOpts: KafkaConnectorsConfig & {
+    /**
+     * Optional metrics sink. When provided, the connector records publish /
+     * consume / dlq counters and durations alongside the existing
+     * observability hooks. Defaults to a no-op emitter.
+     */
+    metrics?: MetricsEmitter;
+  },
+): KafkaConnectorHandle {
+  const { metrics: metricsOpt, ...connectorOpts } = rawOpts;
+  const metrics: MetricsEmitter = metricsOpt ?? createNoopMetricsEmitter();
+  const opts = validatePluginConfig(
+    'slingshot-kafka-connectors',
+    connectorOpts,
+    kafkaConnectorsSchema,
+  );
 
   opts.inbound?.forEach((conn, i) => {
     const hasTopic = !!conn.topic;
@@ -650,11 +691,18 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
     errorType: InboundErrorType,
   ): Promise<void> {
     const dlqTopic = config.dlqTopic ?? `${metadata.topic}.dlq`;
+    metrics.counter('kafka.dlq.count', 1, { topic: metadata.topic, errorType });
     const ensuredProducer = await ensureProducer();
     if (config.autoCreateDLQ) {
       await ensureTopics([{ topic: dlqTopic }]);
     }
     const errorMessage = error instanceof Error ? error.message : String(error);
+    // The error message frequently embeds upstream payload fragments and
+    // can therefore carry CR/LF if the upstream code threw with
+    // user-controlled text. Strip control characters so a downstream
+    // HTTP-bridged consumer cannot have its headers split. Use
+    // sanitizeLogValue (escapes rather than throws) so DLQ persistence
+    // never fails due to a hostile error message.
     await ensuredProducer.send({
       topic: dlqTopic,
       messages: [
@@ -662,10 +710,10 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
           key: metadata.key ?? undefined,
           value: rawMessage.value ? Buffer.from(rawMessage.value) : null,
           headers: {
-            'slingshot.original-topic': metadata.topic,
+            'slingshot.original-topic': sanitizeLogValue(metadata.topic),
             'slingshot.original-partition': String(metadata.partition),
-            'slingshot.original-offset': metadata.offset,
-            'slingshot.error': errorMessage,
+            'slingshot.original-offset': sanitizeLogValue(metadata.offset),
+            'slingshot.error': sanitizeLogValue(errorMessage),
             'slingshot.error-type': errorType,
             'x-slingshot-dlq-reason': errorType,
           },
@@ -772,6 +820,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
     for (const runtime of outboundRuntimes) {
       runtime.health.pendingCount = pendingCountByTopic.get(runtime.config.topic) ?? 0;
     }
+    metrics.gauge('kafka.pending.size', pendingBuffer.length);
   }
 
   async function produceOutbound(
@@ -830,20 +879,23 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
         messageId,
       );
       if (config.headers) {
-        messageHeaders = config.headers(messageHeaders, outboundEnvelope);
+        const enriched = config.headers(messageHeaders, outboundEnvelope);
+        // The enricher is user-supplied — re-sanitize its return value so
+        // a buggy or hostile callback cannot inject CR/LF/NUL into header
+        // values and smuggle header-splitting bytes into downstream
+        // HTTP-bridged consumers.
+        messageHeaders = Object.fromEntries(
+          Object.entries(enriched).map(([k, v]) => [k, sanitizeHeaderValue(v, k)]),
+        );
       }
+      // Re-apply the framework-controlled headers last so a user-supplied
+      // enricher cannot override identity/provenance fields. All values
+      // are sanitized inside buildOutboundHeaders; the explicit overrides
+      // mirror those guarantees.
       messageHeaders = {
         ...messageHeaders,
-        'slingshot.event': outboundEnvelope.key,
-        'slingshot.event-id': outboundEnvelope.meta.eventId,
-        'slingshot.owner-plugin': outboundEnvelope.meta.ownerPlugin,
-        'slingshot.exposure': outboundEnvelope.meta.exposure.join(','),
-        'slingshot.content-type': serializer.contentType,
-        'slingshot.message-id': messageId,
+        ...buildOutboundHeaders(outboundEnvelope, serializer.contentType, messageId),
       };
-      if (outboundEnvelope.meta.scope?.tenantId) {
-        messageHeaders['slingshot.tenant-id'] = outboundEnvelope.meta.scope.tenantId;
-      }
       pendingEntry = {
         topic: config.topic,
         event: config.event,
@@ -874,8 +926,11 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
       runtime.health.messagesProduced += 1;
       runtime.health.status = 'active';
       runtime.health.error = undefined;
+      metrics.counter('kafka.publish.count', 1, { topic: config.topic, result: 'success' });
+      metrics.timing('kafka.publish.duration', Date.now() - startMs, { topic: config.topic });
       hooks?.onOutboundSuccess?.(config.event, config.topic, Date.now() - startMs);
     } catch (err) {
+      metrics.counter('kafka.publish.count', 1, { topic: config.topic, result: 'failure' });
       hooks?.onOutboundError?.(config.event, config.topic, err);
       runtime.health.status = 'error';
       runtime.health.error = err instanceof Error ? err.message : String(err);
@@ -901,6 +956,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
       const count = (pendingCountByTopic.get(config.topic) ?? 0) + 1;
       pendingCountByTopic.set(config.topic, count);
       runtime.health.pendingCount = count;
+      metrics.gauge('kafka.pending.size', pendingBuffer.length);
     }
   }
 
@@ -1138,6 +1194,16 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
             partitionsConsumedConcurrently: config.concurrency ?? 1,
             eachMessage: async ({ topic, partition, message, heartbeat, pause }) => {
               // Track in-flight so a rebalance can quiesce before flushing offsets.
+              const consumeStart = performance.now();
+              metrics.counter('kafka.consume.count', 1, { topic });
+              let timingRecorded = false;
+              const recordTiming = (): void => {
+                if (timingRecorded) return;
+                timingRecorded = true;
+                metrics.timing('kafka.consume.duration', performance.now() - consumeStart, {
+                  topic,
+                });
+              };
               let resolveTracker: (() => void) | null = null;
               const tracker = new Promise<void>(resolve => {
                 resolveTracker = resolve;
@@ -1146,6 +1212,7 @@ export function createKafkaConnectors(rawOpts: KafkaConnectorsConfig): KafkaConn
               inflightSet.add(tracker);
               inFlightByConsumer.set(consumerKey, inflightSet);
               const finish = () => {
+                recordTiming();
                 inflightSet.delete(tracker);
                 resolveTracker?.();
               };

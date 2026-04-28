@@ -1,10 +1,12 @@
 import { promises as dnsPromises } from 'node:dns';
 import { isIP } from 'node:net';
 import {
+  HeaderInjectionError,
   SafeFetchBlockedError,
   SafeFetchDnsError,
   type SafeFetchOptions,
   createSafeFetch,
+  sanitizeHeaderValue,
 } from '@lastshotlabs/slingshot-core';
 import { WebhookDeliveryError } from '../types/queue';
 import type { WebhookJob } from '../types/queue';
@@ -180,18 +182,37 @@ export async function deliverWebhook(
   const timestamp = Math.floor(Date.now() / 1000);
   const signature = await signPayload(job.secret, job.payload, timestamp);
 
+  // Defense-in-depth: every value below is framework-derived (event-key
+  // template literal, UUID, ISO timestamp, hex/base64 signature), but a
+  // misconfigured event registration or a buggy upstream could still smuggle
+  // CR/LF into one of these fields. Sanitize at the sink so the wire bytes
+  // can never contain header-splitting characters; surface a non-retryable
+  // delivery error instead of silently stripping.
+  let outboundHeaders: Record<string, string>;
+  try {
+    outboundHeaders = {
+      'Content-Type': 'application/json',
+      'X-Webhook-Signature': sanitizeHeaderValue(signature, 'X-Webhook-Signature'),
+      'X-Webhook-Event': sanitizeHeaderValue(String(job.event), 'X-Webhook-Event'),
+      'X-Webhook-Event-Id': sanitizeHeaderValue(job.eventId, 'X-Webhook-Event-Id'),
+      'X-Webhook-Occurred-At': sanitizeHeaderValue(job.occurredAt, 'X-Webhook-Occurred-At'),
+      'X-Webhook-Delivery': sanitizeHeaderValue(job.deliveryId, 'X-Webhook-Delivery'),
+    };
+  } catch (err) {
+    if (err instanceof HeaderInjectionError) {
+      throw new WebhookDeliveryError(
+        `Webhook delivery aborted: header "${err.header ?? 'unknown'}" contains CR, LF, or NUL`,
+        false,
+      );
+    }
+    throw err;
+  }
+
   let res: Response;
   try {
     res = await fetchImpl(job.url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Webhook-Signature': signature,
-        'X-Webhook-Event': job.event,
-        'X-Webhook-Event-Id': job.eventId,
-        'X-Webhook-Occurred-At': job.occurredAt,
-        'X-Webhook-Delivery': job.deliveryId,
-      },
+      headers: outboundHeaders,
       body: job.payload,
       signal: AbortSignal.timeout(timeoutMs),
     });

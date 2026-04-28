@@ -1,13 +1,19 @@
 import type { MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import type {
+  MetricsEmitter,
   PluginSetupContext,
   SlingshotEventBus,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
+  HeaderInjectionError,
+  SafeFetchBlockedError,
+  SafeFetchDnsError,
+  createNoopMetricsEmitter,
   deepFreeze,
   getActor,
+  getContextOrNull,
   getPluginState,
   getRouteAuthOrNull,
   validatePluginConfig,
@@ -102,12 +108,30 @@ function buildInboundPublicPaths(
   return [`${mountPath}/inbound/*`];
 }
 
+function classifyDeliveryFailure(err: unknown): string {
+  if (err instanceof HeaderInjectionError) return 'injection';
+  if (err instanceof SafeFetchBlockedError) return 'sslError';
+  if (err instanceof SafeFetchDnsError) return 'dnsError';
+  if (err instanceof WebhookDeliveryError) {
+    // Header-injection failures are surfaced as WebhookDeliveryError by the
+    // dispatcher when sanitizeHeaderValue rejects. Detect via message prefix
+    // since the inner error type was already mapped.
+    if (err.message.startsWith('Webhook delivery aborted: header')) return 'injection';
+    if (err.message.startsWith('Webhook delivery blocked')) return 'sslError';
+    if (err.message.startsWith('Webhook DNS lookup failed')) return 'dnsError';
+    if (err.message.startsWith('Webhook delivery aborted: signing')) return 'signError';
+  }
+  if (err instanceof Error && /timed out/i.test(err.message)) return 'timeout';
+  return 'failure';
+}
+
 async function activate(
   bus: SlingshotEventBus,
   events: PluginSetupContext['events'],
   config: Readonly<WebhookPluginConfig>,
   queue: WebhookQueue,
   runtime: WebhookAdapter,
+  metrics: MetricsEmitter,
 ): Promise<Array<() => void>> {
   const maxAttempts = config.queueConfig?.maxAttempts ?? 5;
   const baseDelay = config.queueConfig?.retryBaseDelayMs ?? 1000;
@@ -122,6 +146,7 @@ async function activate(
 
     const attemptedAt = new Date().toISOString();
     const start = Date.now();
+    const dispatchStart = performance.now();
     try {
       // Resolution order: per-endpoint override (job.deliveryTimeoutMs) >
       // plugin-wide default (config.deliveryTimeoutMs) > 30s baseline.
@@ -131,6 +156,11 @@ async function activate(
         validateResolvedIp: config.validateResolvedIp ?? true,
       });
       const durationMs = Date.now() - start;
+      // Cardinality discipline: timing has no labels — endpointId would
+      // explode the series count. Use an aggregate timing for dispatch
+      // duration and rely on result-labelled counters for breakdowns.
+      metrics.timing('webhooks.delivery.duration', performance.now() - dispatchStart);
+      metrics.counter('webhooks.delivery.count', 1, { result: 'success' });
       await runtime.updateDelivery(job.deliveryId, {
         status: 'delivered',
         attempts: job.attempts + 1,
@@ -149,6 +179,12 @@ async function activate(
       const retryable = err instanceof WebhookDeliveryError ? err.retryable : true;
       const code = err instanceof WebhookDeliveryError ? err.statusCode : undefined;
       const isLast = !retryable || job.attempts + 1 >= maxAttempts;
+      const result = classifyDeliveryFailure(err);
+      metrics.timing('webhooks.delivery.duration', performance.now() - dispatchStart);
+      metrics.counter('webhooks.delivery.count', 1, { result });
+      if (isLast) {
+        metrics.counter('webhooks.dlq.count');
+      }
       await runtime.updateDelivery(job.deliveryId, {
         status: isLast ? 'dead' : 'failed',
         attempts: job.attempts + 1,
@@ -174,6 +210,17 @@ async function activate(
         error: err instanceof Error ? err.message : String(err),
       });
       throw err;
+    } finally {
+      // Sample queue depth on every job completion. Best-effort observability:
+      // a depth read failure must never propagate as a delivery failure.
+      if (typeof queue.depth === 'function') {
+        try {
+          const depth = await queue.depth();
+          metrics.gauge('webhooks.queue.depth', depth);
+        } catch {
+          // ignore — observability is best-effort.
+        }
+      }
     }
   };
 
@@ -268,6 +315,15 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
   let unsubscribers: Array<() => void> = [];
   let innerPlugin: SlingshotPlugin | undefined;
   let runtimeAdapter: WebhookAdapter | undefined;
+
+  // Lazy metrics resolution — proxied so the dispatcher pipeline picks up the
+  // framework-owned emitter the moment setupPost runs.
+  let resolvedMetricsEmitter: MetricsEmitter = createNoopMetricsEmitter();
+  const metricsProxy: MetricsEmitter = {
+    counter: (name, value, labels) => resolvedMetricsEmitter.counter(name, value, labels),
+    gauge: (name, value, labels) => resolvedMetricsEmitter.gauge(name, value, labels),
+    timing: (name, ms, labels) => resolvedMetricsEmitter.timing(name, ms, labels),
+  };
 
   return {
     name: WEBHOOKS_PLUGIN_STATE_KEY,
@@ -382,7 +438,11 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
         );
       }
       getPluginState(app).set(WEBHOOKS_PLUGIN_STATE_KEY, runtimeAdapter);
-      unsubscribers = await activate(bus, events, config, queue, runtimeAdapter);
+      // Resolve the framework-owned metrics emitter so the dispatcher
+      // pipeline publishes counters/gauges/timings on hot paths.
+      const ctx = getContextOrNull(app);
+      if (ctx?.metricsEmitter) resolvedMetricsEmitter = ctx.metricsEmitter;
+      unsubscribers = await activate(bus, events, config, queue, runtimeAdapter, metricsProxy);
     },
 
     async teardown(): Promise<void> {

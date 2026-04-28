@@ -17,6 +17,7 @@ export interface FakeWorkerRecord {
   processor: (job: { data: unknown }) => Promise<void>;
   errorHandlers: Array<(err: unknown) => void>;
   failedHandlers: Array<(job: unknown, err: unknown) => void>;
+  completedHandlers: Array<(job: unknown) => void>;
   closed: boolean;
 }
 
@@ -51,7 +52,14 @@ export function createFakeBullMQState(): FakeBullMQState {
     async dispatchJob(queueName: string, event: string, data: unknown) {
       const worker = workers.find(w => w.queueName === queueName && !w.closed);
       if (!worker) throw new Error(`No worker for queue "${queueName}"`);
-      await worker.processor({ data });
+      const job = { id: `job-${queueName}-${Date.now()}-${Math.random()}`, data };
+      try {
+        await worker.processor(job);
+        for (const h of worker.completedHandlers) h(job);
+      } catch (err) {
+        for (const h of worker.failedHandlers) h(job, err);
+        throw err;
+      }
     },
     nextAddError(err: unknown) {
       nextAddErrors.push(err);
@@ -121,14 +129,16 @@ export function createFakeBullMQModule(state: FakeBullMQState = fakeBullMQState)
         processor,
         errorHandlers: [],
         failedHandlers: [],
+        completedHandlers: [],
         closed: false,
       };
       state.workers.push(this._record);
     }
 
-    on(event: 'error' | 'failed', handler: (...args: any[]) => void): this {
+    on(event: 'error' | 'failed' | 'completed', handler: (...args: any[]) => void): this {
       if (event === 'error') this._record.errorHandlers.push(handler);
       if (event === 'failed') this._record.failedHandlers.push(handler);
+      if (event === 'completed') this._record.completedHandlers.push(handler);
       return this;
     }
 

@@ -863,6 +863,9 @@ export function createGameEnginePlugin(
         }));
 
         const rules = (session.rules ?? {}) as Record<string, unknown>;
+        // Non-security: this is a Mulberry32 game-RNG seed for deterministic
+        // gameplay (shuffles, dice rolls). It is NOT a credential and a
+        // weak/predictable seed has no security impact — `Math.random()` is fine.
         const rngSeed =
           typeof session.rngSeed === 'number'
             ? session.rngSeed

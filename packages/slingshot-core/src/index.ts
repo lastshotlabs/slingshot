@@ -177,6 +177,15 @@ export type { CsrfConfig } from './csrf';
 /** Framework error types used for HTTP, validation, and adapter capability failures. */
 export { HttpError, ValidationError, UnsupportedAdapterFeatureError } from './errors';
 export { errorResponse } from './errorResponse';
+
+// --- path safety ---
+/**
+ * Helpers for confining filesystem operations to a fixed base directory.
+ * Use these whenever an externally-supplied value (URL pathname, manifest
+ * route name, upload key) is concatenated with a directory before being
+ * handed to `fs.*`.
+ */
+export { safeJoin, PathTraversalError } from './lib/safePath';
 /** Transport-agnostic handler contracts shared across HTTP and functions runtimes. */
 export type {
   HandlerMeta,
@@ -714,3 +723,7 @@ export {
   isPrivateOrLoopbackIp,
 } from './http/safeFetch';
 export type { SafeFetchOptions } from './http/safeFetch';
+
+// --- header / log sanitization (CRLF injection guards) ---
+/** CRLF / NUL injection guards for HTTP, email, queue, and log sinks. */
+export { HeaderInjectionError, sanitizeHeaderValue, sanitizeLogValue } from './lib/sanitize';

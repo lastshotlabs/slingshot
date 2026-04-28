@@ -4,12 +4,14 @@ import { ZodError, z } from 'zod';
 import type {
   EventBusSerializationOptions,
   EventEnvelope,
+  MetricsEmitter,
   SlingshotEventBus,
   SlingshotEventMap,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
 import {
   JSON_SERIALIZER,
+  createNoopMetricsEmitter,
   createRawEventEnvelope,
   isEventEnvelope,
   validateEventPayload,
@@ -433,13 +435,28 @@ export function createBullMQAdapter(
        * logger with structured context fields.
        */
       logger?: BullMQAdapterLogger;
+      /**
+       * Optional metrics sink. When provided, the adapter records publish /
+       * consume / dlq counters, publish/consume durations, and pending-buffer
+       * + worker-paused gauges so operators can wire ad-hoc dashboards
+       * without log scraping. Defaults to a no-op emitter.
+       */
+      metrics?: MetricsEmitter;
     },
 ): SlingshotEventBus & {
   _drainPendingBuffer: () => Promise<void>;
   getHealth: () => BullMQAdapterHealth;
   getHealthAsync: () => Promise<BullMQAdapterHealth>;
 } {
-  const { serializer, schemaRegistry, onDrop, logger: rawLogger, ...adapterOpts } = rawOpts;
+  const {
+    serializer,
+    schemaRegistry,
+    onDrop,
+    logger: rawLogger,
+    metrics: metricsOpt,
+    ...adapterOpts
+  } = rawOpts;
+  const metrics: MetricsEmitter = metricsOpt ?? createNoopMetricsEmitter();
   const opts = validatePluginConfig('slingshot-bullmq', adapterOpts, bullmqAdapterOptionsSchema);
   const prefix = opts.prefix ?? 'slingshot:events';
   const attempts = opts.attempts ?? 3;
@@ -603,8 +620,14 @@ export function createBullMQAdapter(
     isDraining = true;
     const retry: PendingEnqueue[] = [];
     for (const item of pendingBuffer) {
+      const drainStart = performance.now();
       try {
         await addWithTimeout(item.queue, item.event, item.payload, enqueueTimeoutMs);
+        const queueName = (item.queue as { name?: string }).name ?? item.name;
+        metrics.counter('bullmq.publish.count', 1, { queue: queueName });
+        metrics.timing('bullmq.publish.duration', performance.now() - drainStart, {
+          queue: queueName,
+        });
       } catch (err: unknown) {
         if (!isRetryableError(err)) {
           bufferDroppedCount += 1;
@@ -634,6 +657,7 @@ export function createBullMQAdapter(
     }
     pendingBuffer.length = 0;
     pendingBuffer.push(...retry);
+    metrics.gauge('bullmq.pending.size', pendingBuffer.length);
     isDraining = false;
     if (pendingBuffer.length > 0) {
       drainBackoffCount += 1;
@@ -670,9 +694,12 @@ export function createBullMQAdapter(
       queues.push(queue);
       durableQueues.set(mapKey, queue);
 
+      const consumeStartByJob = new Map<string, number>();
+
       const worker = new Worker(
         bullmqQueueName,
         async job => {
+          if (job.id) consumeStartByJob.set(job.id, performance.now());
           let decoded: unknown = job.data;
           if (isSerializedBullMQEnvelope(job.data)) {
             decoded = eventSerializer.deserialize(
@@ -703,6 +730,7 @@ export function createBullMQAdapter(
                 throw validationErr;
               }
               validationDroppedCount += 1;
+              metrics.counter('bullmq.dlq.count', 1, { queue: bullmqQueueName });
               const dlq = getValidationDlq(bullmqQueueName);
               const dlqPayload = {
                 event: event as string,
@@ -770,10 +798,40 @@ export function createBullMQAdapter(
 
       worker.on('error', err => {
         workerPausedCount += 1;
+        metrics.gauge('bullmq.worker.paused', 1, { queue: bullmqQueueName });
         logger.error({ queue: bullmqQueueName, err: errInfo(err) }, 'worker error');
       });
 
+      worker.on('completed', job => {
+        metrics.counter('bullmq.consume.count', 1, {
+          queue: bullmqQueueName,
+          result: 'success',
+        });
+        if (job?.id) {
+          const start = consumeStartByJob.get(job.id);
+          if (typeof start === 'number') {
+            metrics.timing('bullmq.consume.duration', performance.now() - start, {
+              queue: bullmqQueueName,
+            });
+            consumeStartByJob.delete(job.id);
+          }
+        }
+      });
+
       worker.on('failed', (job, err) => {
+        metrics.counter('bullmq.consume.count', 1, {
+          queue: bullmqQueueName,
+          result: 'failure',
+        });
+        if (job?.id) {
+          const start = consumeStartByJob.get(job.id);
+          if (typeof start === 'number') {
+            metrics.timing('bullmq.consume.duration', performance.now() - start, {
+              queue: bullmqQueueName,
+            });
+            consumeStartByJob.delete(job.id);
+          }
+        }
         logger.error(
           {
             queue: bullmqQueueName,
@@ -858,7 +916,15 @@ export function createBullMQAdapter(
                   ).toString('base64'),
                   __slingshot_content_type: eventSerializer.contentType,
                 } satisfies SerializedBullMQEnvelope);
-          addWithTimeout(queue, event as string, durablePayload, enqueueTimeoutMs).catch(
+          const queueName = (queue as { name?: string }).name ?? name;
+          const publishStart = performance.now();
+          addWithTimeout(queue, event as string, durablePayload, enqueueTimeoutMs).then(
+            () => {
+              metrics.counter('bullmq.publish.count', 1, { queue: queueName });
+              metrics.timing('bullmq.publish.duration', performance.now() - publishStart, {
+                queue: queueName,
+              });
+            },
             (err: unknown) => {
               if (pendingBuffer.length >= MAX_PENDING_BUFFER) {
                 bufferDroppedCount += 1;
@@ -876,6 +942,7 @@ export function createBullMQAdapter(
                 payload: durablePayload,
                 attempts: 1,
               });
+              metrics.gauge('bullmq.pending.size', pendingBuffer.length);
               scheduleDrain();
             },
           );

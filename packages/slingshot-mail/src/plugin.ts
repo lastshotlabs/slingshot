@@ -1,9 +1,15 @@
 import type {
+  MetricsEmitter,
   PluginSetupContext,
   SlingshotEventBus,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
-import { validateAdapterShape, validatePluginConfig } from '@lastshotlabs/slingshot-core';
+import {
+  createNoopMetricsEmitter,
+  getContextOrNull,
+  validateAdapterShape,
+  validatePluginConfig,
+} from '@lastshotlabs/slingshot-core';
 import { validateSubscriptionTemplates, wireSubscriptions } from './lib/subscriptionWiring';
 import { createMemoryQueue } from './queues/memory';
 import type { MailPluginConfig } from './types/config';
@@ -58,13 +64,32 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
   let unsubscribers: Array<() => void> = [];
   let activated = false;
 
-  async function activate(bus: SlingshotEventBus): Promise<void> {
+  // Lazy metrics resolution — the framework-owned emitter is not available
+  // until setupPost runs, but the in-memory queue is constructed at that
+  // moment too, so we pass the proxy through `config.metrics` and have it
+  // forward to whatever the plugin resolves from the app context.
+  let resolvedMetricsEmitter: MetricsEmitter = createNoopMetricsEmitter();
+  const metricsProxy: MetricsEmitter = {
+    counter: (name, value, labels) => resolvedMetricsEmitter.counter(name, value, labels),
+    gauge: (name, value, labels) => resolvedMetricsEmitter.gauge(name, value, labels),
+    timing: (name, ms, labels) => resolvedMetricsEmitter.timing(name, ms, labels),
+  };
+
+  async function activate(bus: SlingshotEventBus, app: unknown): Promise<void> {
     if (activated) {
       throw new Error(
         '[slingshot-mail] createMailPlugin: already activated — do not call setupPost() more than once',
       );
     }
     activated = true;
+
+    // Resolve the framework-owned metrics emitter so the queue (and any
+    // user-supplied queue that observed config.metrics) publishes mail
+    // counters/gauges/timings on hot paths.
+    if (app !== null && app !== undefined) {
+      const ctx = getContextOrNull(app as Parameters<typeof getContextOrNull>[0]);
+      if (ctx?.metricsEmitter) resolvedMetricsEmitter = ctx.metricsEmitter;
+    }
 
     // 1. Resolve queue
     const providedQueue = config.queue ?? null;
@@ -73,6 +98,7 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
       createMemoryQueue({
         maxAttempts: config.queueConfig?.maxAttempts,
         onDeadLetter: config.onDeadLetter,
+        metrics: metricsProxy,
       });
 
     if (config.durableSubscriptions && queue.name === 'memory') {
@@ -131,8 +157,8 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
      * Post-assembly phase — used when running inside the Slingshot framework.
      * Mail doesn't need routes or middleware; it only needs the event bus.
      */
-    async setupPost({ bus }: PluginSetupContext): Promise<void> {
-      await activate(bus);
+    async setupPost({ app, bus }: PluginSetupContext): Promise<void> {
+      await activate(bus, app);
     },
 
     async teardown(): Promise<void> {

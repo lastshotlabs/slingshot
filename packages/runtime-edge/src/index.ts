@@ -93,10 +93,40 @@ export interface EdgeRuntimeOptions {
 // ---------------------------------------------------------------------------
 
 /**
+ * Iteration count for newly hashed passwords. Aligned with OWASP's 2023
+ * recommendation for PBKDF2-SHA-256 (>= 600 000). Older hashes that pre-date
+ * this constant still verify because the iteration count is now stored
+ * alongside the hash; legacy two-part hashes (`salt:hash`) verify with
+ * {@link LEGACY_PBKDF2_ITERATIONS}.
+ *
+ * @internal
+ */
+const PBKDF2_ITERATIONS = 600_000;
+
+/**
+ * Iteration count used by hashes produced before the iteration count was
+ * embedded in the stored format. Required for verification of legacy rows.
+ *
+ * @internal
+ */
+const LEGACY_PBKDF2_ITERATIONS = 100_000;
+
+/**
+ * Storage-format prefix that signals an iteration-count-embedded hash.
+ * Format: `pbkdf2-sha256$<iter>$<saltB64>$<hashB64>`. Hashes without this
+ * prefix are treated as legacy `<saltB64>:<hashB64>` rows.
+ *
+ * @internal
+ */
+const PBKDF2_PREFIX = 'pbkdf2-sha256$';
+
+/**
  * Hash a plaintext password using PBKDF2-SHA-256 via the Web Crypto API.
  *
- * Produces a `base64(salt):base64(hash)` string. The salt is 16 random bytes;
- * 100 000 iterations of PBKDF2 with SHA-256 produces a 256-bit (32-byte) derived key.
+ * Produces a `pbkdf2-sha256$<iter>$<salt-b64>$<hash-b64>` string. The salt is
+ * 16 random bytes; the iteration count (currently {@link PBKDF2_ITERATIONS},
+ * 600 000 — OWASP's recommended minimum for SHA-256) is embedded so a future
+ * iteration-count bump remains backwards compatible.
  *
  * This is not bcrypt or argon2. It is deliberately simple so it works without
  * any native modules on edge runtimes. For higher-security requirements, provide
@@ -114,7 +144,7 @@ async function hashWithWebCrypto(plain: string): Promise<string> {
     ['deriveBits'],
   );
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
     key,
     256,
   );
@@ -122,20 +152,43 @@ async function hashWithWebCrypto(plain: string): Promise<string> {
   // Encode using btoa on individual byte values to avoid spread args on large arrays
   const saltB64 = btoa(Array.from(salt, b => String.fromCharCode(b)).join(''));
   const hashB64 = btoa(Array.from(hashArr, b => String.fromCharCode(b)).join(''));
-  return `${saltB64}:${hashB64}`;
+  return `${PBKDF2_PREFIX}${PBKDF2_ITERATIONS}$${saltB64}$${hashB64}`;
 }
 
 /**
  * Verify a plaintext password against a hash produced by `hashWithWebCrypto`.
  *
+ * Accepts both the modern `pbkdf2-sha256$<iter>$<salt>$<hash>` format and the
+ * legacy `<salt>:<hash>` format (verified at the historical iteration count).
+ *
  * @param plain - The candidate plaintext password.
- * @param stored - The stored hash in `base64(salt):base64(hash)` format.
+ * @param stored - The stored hash.
  * @returns `true` if `plain` matches the stored hash.
  * @internal
  */
 async function verifyWithWebCrypto(plain: string, stored: string): Promise<boolean> {
   try {
-    const [saltB64, hashB64] = stored.split(':');
+    let saltB64: string | undefined;
+    let hashB64: string | undefined;
+    let iterations = LEGACY_PBKDF2_ITERATIONS;
+
+    if (stored.startsWith(PBKDF2_PREFIX)) {
+      // Modern format: `pbkdf2-sha256$<iter>$<salt-b64>$<hash-b64>`.
+      const parts = stored.slice(PBKDF2_PREFIX.length).split('$');
+      if (parts.length !== 3) return false;
+      const [iterStr, saltPart, hashPart] = parts;
+      const parsed = Number(iterStr);
+      if (!Number.isInteger(parsed) || parsed < 1) return false;
+      iterations = parsed;
+      saltB64 = saltPart;
+      hashB64 = hashPart;
+    } else {
+      // Legacy format: `<salt-b64>:<hash-b64>` at LEGACY_PBKDF2_ITERATIONS.
+      const parts = stored.split(':');
+      if (parts.length !== 2) return false;
+      [saltB64, hashB64] = parts;
+    }
+
     if (!saltB64 || !hashB64) return false;
 
     const salt = new Uint8Array(
@@ -157,7 +210,7 @@ async function verifyWithWebCrypto(plain: string, stored: string): Promise<boole
       ['deriveBits'],
     );
     const bits = await crypto.subtle.deriveBits(
-      { name: 'PBKDF2', salt, iterations: 100_000, hash: 'SHA-256' },
+      { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
       key,
       256,
     );

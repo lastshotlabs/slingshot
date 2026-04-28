@@ -6,9 +6,9 @@ import type {
 } from '@aws-sdk/client-sesv2';
 import { createMailCircuitBreaker } from '../lib/circuitBreaker';
 import type { MailCircuitBreakerOptions } from '../lib/circuitBreaker';
+import { assertSafeMailHeaders, ensureSafe, formatSafeAddress } from '../lib/headerSanitize';
 import { extractRetryAfterHeader, parseRetryAfterMs } from '../lib/retryAfter';
 import type {
-  MailAddress,
   MailMessage,
   MailProvider,
   MailSendOptions,
@@ -27,11 +27,6 @@ type SesHandle = {
   client: SESv2Client;
   SendEmailCommand: typeof SendEmailCommand;
 };
-
-function formatAddress(addr: MailAddress): string {
-  if (typeof addr === 'string') return addr;
-  return addr.name ? `${addr.name} <${addr.email}>` : addr.email;
-}
 
 /**
  * Creates a `MailProvider` backed by AWS SES v2 (`@aws-sdk/client-sesv2`).
@@ -84,18 +79,23 @@ export function createSesProvider(config: SesConfig): MailProvider {
     name: 'ses',
     async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
       return breaker.guard(async () => {
+        // Reject CR/LF/NUL injection in any header-bound field before
+        // handing the message to the SES SDK; the v2 API surfaces these
+        // values as SMTP headers and an unsanitized newline would forge
+        // additional message headers on the wire.
+        assertSafeMailHeaders(message);
         const { client, SendEmailCommand: SESCommand } = await getSes();
 
         const toAddresses = Array.isArray(message.to)
-          ? message.to.map(formatAddress)
-          : [formatAddress(message.to)];
+          ? message.to.map(addr => formatSafeAddress(addr, 'To'))
+          : [formatSafeAddress(message.to, 'To')];
 
         const input: SendEmailCommandInput = {
-          ...(message.from ? { FromEmailAddress: formatAddress(message.from) } : {}),
+          ...(message.from ? { FromEmailAddress: formatSafeAddress(message.from, 'From') } : {}),
           Destination: { ToAddresses: toAddresses },
           Content: {
             Simple: {
-              Subject: { Data: message.subject },
+              Subject: { Data: ensureSafe(message.subject, 'Subject') },
               Body: {
                 Html: { Data: message.html },
                 ...(message.text ? { Text: { Data: message.text } } : {}),
@@ -104,13 +104,15 @@ export function createSesProvider(config: SesConfig): MailProvider {
                 ? {
                     Headers: Object.entries(message.headers).map(([Name, Value]) => ({
                       Name,
-                      Value,
+                      Value: ensureSafe(Value, Name),
                     })),
                   }
                 : {}),
             },
           },
-          ...(message.replyTo ? { ReplyToAddresses: [formatAddress(message.replyTo)] } : {}),
+          ...(message.replyTo
+            ? { ReplyToAddresses: [formatSafeAddress(message.replyTo, 'Reply-To')] }
+            : {}),
           ...(message.tags
             ? {
                 EmailTags: Object.entries(message.tags).map(([Name, Value]) => ({ Name, Value })),

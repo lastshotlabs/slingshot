@@ -1,4 +1,5 @@
 import { createPrivateKey, createSign } from 'node:crypto';
+import { HeaderInjectionError, sanitizeHeaderValue } from '@lastshotlabs/slingshot-core';
 import { deriveUuidV4FromKey } from '../lib/idempotency';
 import type { ApnsAuthInput } from '../types/config';
 import type { PushSendResult } from '../types/models';
@@ -222,14 +223,40 @@ export function createApnsProvider(config: {
           };
 
       try {
+        // Sanitize header-bound values that originate from subscription
+        // registration (bundleId) or caller-supplied context (idempotencyKey).
+        // These are durable in the persistence store but are originally
+        // user-controlled, so a CR/LF here would forge HTTP/2 headers on
+        // the wire. Reject at the boundary; treat as a transient failure
+        // so the router records it without retrying the bad subscription
+        // forever.
+        let safeBundleId: string;
+        let safeApnsId: string | undefined;
+        try {
+          safeBundleId = sanitizeHeaderValue(bundleId, 'apns-topic');
+          safeApnsId = apnsId
+            ? sanitizeHeaderValue(apnsId, 'apns-id')
+            : undefined;
+        } catch (err) {
+          if (err instanceof HeaderInjectionError) {
+            return {
+              ok: false,
+              reason: 'transient',
+              error: `apns header rejected: ${err.header ?? 'unknown'} contains CR, LF, or NUL`,
+              providerIdempotencyKey: idempotencyKey,
+            };
+          }
+          throw err;
+        }
+
         const headers: Record<string, string> = {
           authorization: `bearer ${config.auth.getToken()}`,
-          'apns-topic': bundleId,
+          'apns-topic': safeBundleId,
           'apns-push-type': message.silent ? 'background' : 'alert',
           'apns-priority': message.silent ? '5' : '10',
           'content-type': 'application/json',
         };
-        if (apnsId) headers['apns-id'] = apnsId;
+        if (safeApnsId) headers['apns-id'] = safeApnsId;
         const response = await fetch(`${origin}/3/device/${platformData.deviceToken}`, {
           method: 'POST',
           headers,

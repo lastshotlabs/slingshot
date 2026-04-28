@@ -2,7 +2,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import type { MiddlewareHandler } from 'hono';
-import { getContext } from '@lastshotlabs/slingshot-core';
+import { PathTraversalError, getContext, safeJoin } from '@lastshotlabs/slingshot-core';
 import { buildAfterFn, drainAfterCallbacks, withAfterContext } from './after/index';
 import type { ViteManifest } from './assets';
 import { buildDevAssetTags, resolveAssetTags } from './assets';
@@ -182,16 +182,32 @@ export function buildSsrMiddleware(
 
     // Static file short-circuit — serve pre-rendered .html before hitting the renderer.
     // This is the SSG serving path: zero renderer overhead for pre-built pages.
+    //
+    // Hardened against path-traversal: a malicious request URL like
+    // `/foo/../../../etc/passwd` would otherwise be collapsed by `path.join`
+    // into a path outside `staticDir`. `safeJoin()` rejects any pathname that
+    // escapes the configured root; rejections fall through to the renderer
+    // pipeline (which has its own routing checks) instead of leaking files.
     if (config.staticDir) {
-      const staticFile =
-        pathname === '/'
-          ? path.join(config.staticDir, 'index.html')
-          : path.join(config.staticDir, pathname, 'index.html');
-      const html = await readFileViaRuntime(staticFile, config);
-      if (html !== null) {
-        return c.html(html, 200, {
-          'cache-control': 'public, max-age=31536000, immutable',
-        });
+      let staticFile: string | null;
+      if (pathname === '/') {
+        staticFile = path.join(config.staticDir, 'index.html');
+      } else {
+        try {
+          const relative = pathname.replace(/^\/+/, '');
+          staticFile = path.join(safeJoin(config.staticDir, relative), 'index.html');
+        } catch (err) {
+          if (!(err instanceof PathTraversalError)) throw err;
+          staticFile = null;
+        }
+      }
+      if (staticFile !== null) {
+        const html = await readFileViaRuntime(staticFile, config);
+        if (html !== null) {
+          return c.html(html, 200, {
+            'cache-control': 'public, max-age=31536000, immutable',
+          });
+        }
       }
     }
 

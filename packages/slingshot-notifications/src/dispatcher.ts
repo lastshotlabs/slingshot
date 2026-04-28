@@ -1,4 +1,9 @@
-import type { SlingshotEventBus, SlingshotEvents } from '@lastshotlabs/slingshot-core';
+import type {
+  MetricsEmitter,
+  SlingshotEventBus,
+  SlingshotEvents,
+} from '@lastshotlabs/slingshot-core';
+import { createNoopMetricsEmitter, sanitizeLogValue } from '@lastshotlabs/slingshot-core';
 import { DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS, resolvePreferences } from './preferences';
 import type {
   NotificationAdapter,
@@ -104,6 +109,16 @@ export interface CreateIntervalDispatcherOptions {
   readonly pendingAlarmThrottleMs?: number;
   /** Optional clock injection for tests. */
   readonly now?: () => number;
+  /**
+   * Optional unified metrics emitter. Defaults to a no-op. When provided, the
+   * dispatcher records:
+   * - `notifications.dispatch.count` counter (labels: `result=success|failure`)
+   * - `notifications.dispatch.duration` timing per tick (no labels)
+   * - `notifications.pending.size` gauge per tick (no labels)
+   * - `notifications.retry.count` counter on every publish retry (labels: `attempt=<N>`)
+   * - `notifications.circuitBreaker.openCount` gauge per tick (no labels — aggregate to keep cardinality bounded)
+   */
+  readonly metrics?: MetricsEmitter;
 }
 
 interface BreakerState {
@@ -163,6 +178,7 @@ export function createIntervalDispatcher(
   const maxPendingBeforeAlarm = Math.max(0, options.maxPendingBeforeAlarm ?? 50_000);
   const pendingAlarmThrottleMs = Math.max(0, options.pendingAlarmThrottleMs ?? 60_000);
   const now = options.now ?? (() => Date.now());
+  const metrics: MetricsEmitter = options.metrics ?? createNoopMetricsEmitter();
 
   // Most-recent observability state. Populated at the start of every tick.
   let lastPendingCount: number | null = null;
@@ -312,6 +328,7 @@ export function createIntervalDispatcher(
       const dispatchedAt = new Date();
       const abortController = new AbortController();
       activeTickAbortController = abortController;
+      const tickStart = performance.now();
       try {
         // `stopped` short-circuit before the first async hop. When stop() runs
         // between schedule and dispatch this guard prevents a wasted DB query.
@@ -359,6 +376,13 @@ export function createIntervalDispatcher(
             maybeWarnPendingSaturation(rows.length, false);
           }
         }
+        // Publish the pending-size gauge once per tick now that we have the
+        // most up-to-date observation (exact when available, lower-bound
+        // otherwise). Cardinality discipline: no labels — aggregating across
+        // notification types or destinations would explode the series count.
+        if (lastPendingCount !== null) {
+          metrics.gauge('notifications.pending.size', lastPendingCount);
+        }
         if (stopped) return 0;
 
         let dispatchedCount = 0;
@@ -401,8 +425,11 @@ export function createIntervalDispatcher(
                 dispatchedAt: null,
               });
             } catch (rollbackErr) {
+              // row.id is generated server-side but originates ultimately
+              // from a notification create call; sanitize so a hostile
+              // identifier cannot split the log line.
               console.error(
-                `[slingshot-notifications] Failed to roll back '${row.id}' after stop()`,
+                `[slingshot-notifications] Failed to roll back '${sanitizeLogValue(row.id)}' after stop()`,
                 rollbackErr,
               );
             }
@@ -412,6 +439,12 @@ export function createIntervalDispatcher(
           let lastErr: unknown;
           for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             if (abortController.signal.aborted || stopped) break;
+            // Count every attempt past the first as a retry, labeled by
+            // attempt number so operators can see whether retries are
+            // succeeding on the second/third try or running out the budget.
+            if (attempt > 1) {
+              metrics.counter('notifications.retry.count', 1, { attempt: String(attempt) });
+            }
             try {
               options.events.publish('notifications:notification.created', payload, {
                 userId: row.userId,
@@ -423,6 +456,7 @@ export function createIntervalDispatcher(
               published = true;
               recordSuccess(destination);
               dispatchedCount += 1;
+              metrics.counter('notifications.dispatch.count', 1, { result: 'success' });
               break;
             } catch (err) {
               lastErr = err;
@@ -442,6 +476,11 @@ export function createIntervalDispatcher(
           }
 
           if (!published) {
+            metrics.counter('notifications.dispatch.count', 1, { result: 'failure' });
+          }
+
+          if (!published) {
+            const safeRowId = sanitizeLogValue(row.id);
             try {
               await options.notifications.update(row.id, {
                 dispatched: false,
@@ -449,12 +488,12 @@ export function createIntervalDispatcher(
               });
             } catch (rollbackErr) {
               console.error(
-                `[slingshot-notifications] Failed to roll back dispatched state for notification '${row.id}'`,
+                `[slingshot-notifications] Failed to roll back dispatched state for notification '${safeRowId}'`,
                 rollbackErr,
               );
             }
             console.error(
-              `[slingshot-notifications] Failed to publish notification '${row.id}' after marking it dispatched`,
+              `[slingshot-notifications] Failed to publish notification '${safeRowId}' after marking it dispatched`,
               lastErr,
             );
           }
@@ -463,8 +502,18 @@ export function createIntervalDispatcher(
 
         lastDispatchedCount = dispatchedCount;
         lastTickAt = now();
+        // Aggregate breaker-open count to keep cardinality bounded. Per-
+        // destination labels would put a userId into a metric label, which the
+        // emitter contract explicitly warns against.
+        let openBreakers = 0;
+        const ts = now();
+        for (const state of breakerByDestination.values()) {
+          if (state.openUntil !== 0 && ts < state.openUntil) openBreakers += 1;
+        }
+        metrics.gauge('notifications.circuitBreaker.openCount', openBreakers);
         return dispatchedCount;
       } finally {
+        metrics.timing('notifications.dispatch.duration', performance.now() - tickStart);
         if (activeTickAbortController === abortController) {
           activeTickAbortController = null;
         }

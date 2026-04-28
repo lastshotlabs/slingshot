@@ -1,3 +1,5 @@
+import type { MetricsEmitter } from '@lastshotlabs/slingshot-core';
+import { createNoopMetricsEmitter, sanitizeLogValue } from '@lastshotlabs/slingshot-core';
 import { buildProviderIdempotencyKey } from './lib/idempotency';
 import type { PushProvider } from './providers/provider';
 import type {
@@ -212,6 +214,14 @@ export function createPushRouter(options: {
   topicFanoutBatchSize?: number;
   /** Max concurrent in-flight batches before back-pressure kicks in. Default: 10. */
   topicFanoutMaxPending?: number;
+  /**
+   * Optional metrics sink. When provided, the router records per-send
+   * counters/timings, topic fan-out counters, subscription-cleanup counters,
+   * and per-provider circuit-breaker / consecutive-failure gauges so
+   * operators can wire ad-hoc dashboards without parsing logs. Defaults to
+   * a no-op emitter.
+   */
+  metrics?: MetricsEmitter;
 }): PushRouter {
   const maxAttempts = options.retries?.maxAttempts ?? 3;
   const initialDelayMs = options.retries?.initialDelayMs ?? 1_000;
@@ -221,6 +231,25 @@ export function createPushRouter(options: {
   const providerTimeoutMs = options.providerTimeoutMs ?? 30_000;
   const topicFanoutBatchSize = Math.max(1, options.topicFanoutBatchSize ?? 1000);
   const topicFanoutMaxPending = Math.max(1, options.topicFanoutMaxPending ?? 10);
+  const metrics: MetricsEmitter = options.metrics ?? createNoopMetricsEmitter();
+
+  const CIRCUIT_STATE_VALUES: Record<'closed' | 'open' | 'half-open', number> = {
+    closed: 0,
+    open: 1,
+    'half-open': 2,
+  };
+
+  function sampleProviderHealth(platform: PushPlatform): void {
+    const provider = options.providers[platform];
+    if (!provider?.getHealth) return;
+    const health = provider.getHealth();
+    metrics.gauge('push.circuitBreaker.state', CIRCUIT_STATE_VALUES[health.circuitState] ?? 0, {
+      provider: platform,
+    });
+    metrics.gauge('push.consecutiveFailures', health.consecutiveFailures, {
+      provider: platform,
+    });
+  }
 
   async function sendToSubscriptions(
     subscriptions: readonly RouterSubscriptionRecord[],
@@ -249,8 +278,10 @@ export function createPushRouter(options: {
           notificationId: opts.notificationId,
         });
       } catch (err) {
+        // subscription.id is server-generated but originates ultimately
+        // from a registration request; sanitize before interpolating.
         console.error(
-          `[slingshot-push] Failed to create delivery for subscription="${subscription.id}"`,
+          `[slingshot-push] Failed to create delivery for subscription="${sanitizeLogValue(subscription.id)}"`,
           err,
         );
         options.bus?.emit('push:delivery.failed', {
@@ -280,6 +311,7 @@ export function createPushRouter(options: {
 
           const idempotencyKey = buildProviderIdempotencyKey(delivery.id, attempts);
           let result;
+          const sendStart = performance.now();
           try {
             result = await sendWithProviderTimeout(
               provider,
@@ -290,7 +322,7 @@ export function createPushRouter(options: {
             );
           } catch (err) {
             console.error(
-              `[slingshot-push] Provider threw or timed out for platform="${platform}" userId="${subscription.userId}"`,
+              `[slingshot-push] Provider threw or timed out for platform="${sanitizeLogValue(platform)}" userId="${sanitizeLogValue(subscription.userId)}"`,
               err,
             );
             result = {
@@ -299,6 +331,16 @@ export function createPushRouter(options: {
               error: err instanceof Error ? err.message : 'push provider threw or timed out',
             };
           }
+          metrics.timing('push.send.duration', performance.now() - sendStart, {
+            provider: platform,
+          });
+          metrics.counter('push.send.count', 1, {
+            provider: platform,
+            result: result.ok ? 'success' : (result.reason ?? 'transient'),
+          });
+          // After each attempt, refresh circuit-breaker / failure gauges so
+          // dashboards reflect provider health without polling getHealth().
+          sampleProviderHealth(platform);
           if (result.ok) {
             await options.repos.deliveries.markSent({
               id: delivery.id,
@@ -325,6 +367,10 @@ export function createPushRouter(options: {
             await options.repos.subscriptions.delete(subscription.id);
             await options.repos.topicMemberships.removeBySubscription({
               subscriptionId: subscription.id,
+            });
+            metrics.counter('push.subscription.cleanup.count', 1, {
+              provider: platform,
+              reason: 'invalidToken',
             });
             options.bus?.emit('push:delivery.failed', {
               deliveryId: delivery.id,
@@ -407,8 +453,9 @@ export function createPushRouter(options: {
           await sleep(delay);
         }
       } catch (err) {
+        const safeDeliveryId = sanitizeLogValue(delivery.id);
         console.error(
-          `[slingshot-push] Repository failure during fan-out for delivery="${delivery.id}"`,
+          `[slingshot-push] Repository failure during fan-out for delivery="${safeDeliveryId}"`,
           err,
         );
         try {
@@ -418,7 +465,7 @@ export function createPushRouter(options: {
           });
         } catch (markErr) {
           console.error(
-            `[slingshot-push] Failed to mark delivery="${delivery.id}" failed after repository error`,
+            `[slingshot-push] Failed to mark delivery="${safeDeliveryId}" failed after repository error`,
             markErr,
           );
         }
@@ -439,7 +486,10 @@ export function createPushRouter(options: {
             failureReason: 'transient',
           });
         } catch (err) {
-          console.error(`[slingshot-push] Failed to mark delivery="${delivery.id}" failed`, err);
+          console.error(
+            `[slingshot-push] Failed to mark delivery="${sanitizeLogValue(delivery.id)}" failed`,
+            err,
+          );
         }
         options.bus?.emit('push:delivery.failed', {
           deliveryId: delivery.id,
@@ -503,9 +553,14 @@ export function createPushRouter(options: {
       const allMemberships = asItems(
         await options.repos.topicMemberships.listByTopic({ topicId: topic.id }),
       );
+      metrics.counter('push.topic.fanout.count', allMemberships.length, { topic: topicName });
+      // topicName is caller-supplied; sanitize before interpolating into a
+      // log line so a hostile name cannot inject newlines and forge a
+      // separate log record.
+      const safeTopicName = sanitizeLogValue(topicName);
       if (allMemberships.length > LARGE_TOPIC_WARNING_THRESHOLD) {
         console.warn(
-          `[slingshot-push] Topic '${topicName}' has ${allMemberships.length} members; publishing in batched fan-out (batchSize=${topicFanoutBatchSize}, maxPending=${topicFanoutMaxPending}).`,
+          `[slingshot-push] Topic '${safeTopicName}' has ${allMemberships.length} members; publishing in batched fan-out (batchSize=${topicFanoutBatchSize}, maxPending=${topicFanoutMaxPending}).`,
         );
       }
 
@@ -538,7 +593,7 @@ export function createPushRouter(options: {
             (s): s is RouterSubscriptionRecord => s !== null,
           );
           console.info(
-            `[slingshot-push] Topic '${topicName}' batch ${batchIndex + 1}/${totalBatches} dispatched (size=${subscriptions.length}).`,
+            `[slingshot-push] Topic '${safeTopicName}' batch ${batchIndex + 1}/${totalBatches} dispatched (size=${subscriptions.length}).`,
           );
           options.bus?.emit('push:topic.batch.dispatched', {
             topicName,

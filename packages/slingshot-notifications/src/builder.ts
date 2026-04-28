@@ -1,4 +1,5 @@
 import type {
+  MetricsEmitter,
   NotificationBuilder,
   NotificationCreatedEventPayload,
   NotificationRecord,
@@ -6,6 +7,7 @@ import type {
   SlingshotEventBus,
   SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
+import { createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { freezeNotificationData } from './data';
 import { resolveEffectivePriority, resolvePreferences } from './preferences';
 import type { RateLimitBackend } from './rateLimit';
@@ -33,6 +35,12 @@ export interface CreateNotificationBuilderOptions {
     readonly limit: number;
     readonly windowMs: number;
   };
+  /**
+   * Optional unified metrics emitter. Defaults to a no-op. When provided, the
+   * builder records `notifications.dedup.hits` whenever `dedupOrCreate` finds
+   * an existing row.
+   */
+  readonly metrics?: MetricsEmitter;
 }
 
 /**
@@ -44,6 +52,7 @@ export interface CreateNotificationBuilderOptions {
 export function createNotificationBuilder(
   options: CreateNotificationBuilderOptions,
 ): NotificationBuilder {
+  const metrics: MetricsEmitter = options.metrics ?? createNoopMetricsEmitter();
   async function notify(input: NotifyInput): Promise<NotificationRecord | null> {
     if (input.actorId === input.userId && !input.allowSelfNotify) {
       return null;
@@ -108,6 +117,11 @@ export function createNotificationBuilder(
       });
 
       if (!created) {
+        // Dedup hit — adapter returned an existing row and incremented its
+        // count rather than creating a new one. No labels: dedupKeys are
+        // intentionally application-defined and could include high-cardinality
+        // values, so leaving the label off keeps the series count bounded.
+        metrics.counter('notifications.dedup.hits');
         const nextCount = readCount(notification.data);
         try {
           options.events.publish(

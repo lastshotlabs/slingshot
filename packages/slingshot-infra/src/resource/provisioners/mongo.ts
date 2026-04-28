@@ -1,3 +1,4 @@
+import { secureRandomString } from '../../lib/secureRandom';
 import type { SharedResourceConfig } from '../../types/platform';
 import type {
   ResourceOutput,
@@ -274,27 +275,21 @@ function buildClusterName(ctx: ResourceProvisionerContext): string {
 }
 
 /**
- * Generate a random 32-character alphanumeric password for the Atlas database user.
+ * Generate a cryptographically secure 32-character alphanumeric password for
+ * the Atlas database user.
  *
  * @returns A 32-character string drawn from `[A-Za-z0-9]` (62 possible characters
  *   per position, ~190 bits of entropy).
  *
  * @remarks
- * Uses `Math.random()` rather than a cryptographically secure source. This is
- * acceptable because the password is stored immediately in the Atlas database user
- * record and in the registry outputs — it is never transmitted insecurely. If
- * stronger entropy is required, replace with `crypto.getRandomValues()`.
- *
- * The character set deliberately excludes special characters to avoid shell
- * escaping issues in the Atlas Admin API JSON body.
+ * Backed by `crypto.getRandomValues()` via {@link secureRandomString}, which
+ * uses rejection sampling to avoid modulo bias. The character set deliberately
+ * excludes special characters to avoid shell escaping issues in the Atlas
+ * Admin API JSON body.
  */
 function generatePassword(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let password = '';
-  for (let i = 0; i < 32; i++) {
-    password += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return password;
+  return secureRandomString(32, chars);
 }
 
 /**

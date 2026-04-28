@@ -6,6 +6,9 @@ import type {
   Worker as BullWorker,
 } from 'bullmq';
 import type { Redis } from 'ioredis';
+import type { MetricsEmitter } from '@lastshotlabs/slingshot-core';
+import { createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
+import { MailCircuitOpenError } from '../lib/circuitBreaker';
 import type { MailMessage, MailProvider } from '../types/provider';
 import { MailSendError } from '../types/provider';
 import type { MailJob, MailQueue, MailQueueConfig } from '../types/queue';
@@ -52,6 +55,7 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
   const maxAttempts = config.maxAttempts ?? 3;
   const retryBaseDelayMs = config.retryBaseDelayMs ?? 1000;
   const sendTimeoutMs = config.sendTimeoutMs ?? 30_000;
+  const metrics: MetricsEmitter = config.metrics ?? createNoopMetricsEmitter();
   let queue: BullQueue | null = null;
   let worker: BullWorker | null = null;
   let connection: Redis | null = null;
@@ -87,6 +91,15 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
       );
       if (job.id === undefined) {
         throw new Error('BullMQ mail queue: queued job is missing an id');
+      }
+      // Sample queue depth on each enqueue. BullMQ's `count()` is a Redis
+      // round-trip, so we treat a missing count as a no-op rather than
+      // letting a network hiccup propagate up to the publisher.
+      try {
+        const depth = await queue.count();
+        metrics.gauge('mail.queue.depth', depth);
+      } catch {
+        // best-effort observability — never fail an enqueue on a depth read.
       }
       return job.id;
     },
@@ -137,14 +150,27 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
       // objects. Bridging via `unknown` is the documented interop pattern.
       const conn = connection as unknown as BullConnectionOptions;
       queue = new QueueCtor(queueName, { connection: conn });
+      const providerLabel = { provider: provider.name };
       worker = new WorkerCtor(
         queueName,
         async (job: BullJob<MailJobData>) => {
           const { message } = job.data;
           let result;
+          const sendStart = performance.now();
           try {
             result = await sendWithTimeout(provider, message, sendTimeoutMs);
           } catch (err) {
+            const elapsed = performance.now() - sendStart;
+            if (err instanceof MailCircuitOpenError) {
+              metrics.gauge('mail.circuitBreaker.state', 1, providerLabel);
+              metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'circuitOpen' });
+            } else {
+              metrics.timing('mail.send.duration', elapsed, providerLabel);
+              metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'failure' });
+              if (err instanceof MailSendError && err.retryAfterMs !== undefined) {
+                metrics.gauge('mail.retryAfter', err.retryAfterMs, providerLabel);
+              }
+            }
             if (err instanceof MailSendError && !err.retryable) {
               // Use BullMQ's UnrecoverableError to prevent retries, and preserve the
               // original MailSendError so onDeadLetter receives full provider context.
@@ -154,7 +180,11 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
             }
             throw err;
           }
+          const elapsed = performance.now() - sendStart;
+          metrics.timing('mail.send.duration', elapsed, providerLabel);
+          metrics.gauge('mail.circuitBreaker.state', 0, providerLabel);
           if (result.status === 'rejected') {
+            metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'failure' });
             // Provider accepted the HTTP request but explicitly rejected the message.
             // Do not retry — dead-letter immediately.
             const rejectedErr = new MailSendError('Provider rejected message', false);
@@ -162,6 +192,7 @@ export function createBullMQMailQueue(config: BullMQMailQueueConfig): MailQueue 
             nonRetryableOrigins.set(unrecoverable, rejectedErr);
             throw unrecoverable;
           }
+          metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'success' });
         },
         { connection: conn },
       );

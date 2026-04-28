@@ -1,5 +1,7 @@
-import { DEFAULT_MAX_ENTRIES } from '@lastshotlabs/slingshot-core';
+import type { MetricsEmitter } from '@lastshotlabs/slingshot-core';
+import { DEFAULT_MAX_ENTRIES, createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { TemplateNotFoundError } from '@lastshotlabs/slingshot-core';
+import { MailCircuitOpenError } from '../lib/circuitBreaker';
 import type { MailMessage, MailProvider } from '../types/provider';
 import { MailSendError } from '../types/provider';
 import type { MailJob, MailQueue, MailQueueConfig } from '../types/queue';
@@ -32,6 +34,11 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
   const onDeadLetter = config?.onDeadLetter ?? null;
   const drainTimeoutMs = config?.drainTimeoutMs ?? 30_000;
   const sendTimeoutMs = config?.sendTimeoutMs ?? 30_000;
+  const maxEntries = config?.maxEntries ?? DEFAULT_MAX_ENTRIES;
+  // Optional unified metrics emitter. The plugin passes its lazily-resolved
+  // proxy in here so the queue does not need to be rebuilt once the framework
+  // context is available.
+  const metrics: MetricsEmitter = config?.metrics ?? createNoopMetricsEmitter();
   const pending: Map<string, MailJob> = new Map();
   const activeJobs = new Set<Promise<void>>();
   // Maps idempotency key -> original job id so repeated enqueues dedup.
@@ -50,20 +57,47 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
         if (!activeProvider) {
           throw new Error('Memory mail queue not started â€” call start() first');
         }
+        const providerLabel = { provider: activeProvider.name };
+        const sendStart = performance.now();
         const result = await sendWithTimeout(activeProvider, job.message, sendTimeoutMs);
+        const elapsed = performance.now() - sendStart;
+        // Closed breaker on success — the provider's internal breaker
+        // resets too. Sample the gauge so dashboards show recovery
+        // promptly. 0=closed, 1=open, 2=half-open.
+        metrics.gauge('mail.circuitBreaker.state', 0, providerLabel);
+        metrics.timing('mail.send.duration', elapsed, providerLabel);
         if (result.status === 'rejected') {
+          metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'failure' });
           onDeadLetter?.(job, new MailSendError('Provider rejected message', false));
           pending.delete(job.id);
+          metrics.gauge('mail.queue.depth', pending.size);
           return;
         }
+        metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'success' });
         pending.delete(job.id);
+        metrics.gauge('mail.queue.depth', pending.size);
         return;
       } catch (err) {
+        const providerLabel = provider ? { provider: provider.name } : { provider: 'unknown' };
+        if (err instanceof MailCircuitOpenError) {
+          // Breaker is currently open — emit a state gauge sample (1 = open)
+          // so operators can see open-state dwell time without scraping logs.
+          metrics.gauge('mail.circuitBreaker.state', 1, providerLabel);
+          metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'circuitOpen' });
+        } else {
+          metrics.counter('mail.send.count', 1, { ...providerLabel, result: 'failure' });
+          if (err instanceof MailSendError && err.retryAfterMs !== undefined) {
+            // Surface the provider's Retry-After hint so operators can see
+            // back-pressure from rate limits even when retries are silent.
+            metrics.gauge('mail.retryAfter', err.retryAfterMs, providerLabel);
+          }
+        }
         const isRetryable = err instanceof MailSendError ? err.retryable : true;
         const isPermanent = err instanceof TemplateNotFoundError || !isRetryable;
         if (isPermanent || job.attempts >= maxAttempts) {
           onDeadLetter?.(job, err instanceof Error ? err : new Error(String(err)));
           pending.delete(job.id);
+          metrics.gauge('mail.queue.depth', pending.size);
           return;
         }
       }
@@ -103,8 +137,8 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
         if (opts?.idempotencyKey) {
           idempotencyIndex.set(opts.idempotencyKey, id);
         }
-        if (pending.size > DEFAULT_MAX_ENTRIES) {
-          const overflow = pending.size - DEFAULT_MAX_ENTRIES;
+        if (pending.size > maxEntries) {
+          const overflow = pending.size - maxEntries;
           for (let i = 0; i < overflow; i++) {
             const oldest = pending.entries().next().value as [string, MailJob] | undefined;
             if (!oldest) break;
@@ -119,6 +153,7 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
         if (running && provider) {
           trackJob(job);
         }
+        metrics.gauge('mail.queue.depth', pending.size);
         return id;
       });
     },

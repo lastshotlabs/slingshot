@@ -1,3 +1,4 @@
+import { HeaderInjectionError, sanitizeHeaderValue } from '@lastshotlabs/slingshot-core';
 import webpush from 'web-push';
 import type { PushSendResult } from '../types/models';
 import type { PushProvider, PushProviderHealth } from './provider';
@@ -153,7 +154,25 @@ export function createWebPushProvider(config: {
       }
 
       const headers: Record<string, string> = {};
-      if (idempotencyKey) headers['X-Idempotency-Key'] = idempotencyKey;
+      if (idempotencyKey) {
+        // Caller-supplied idempotency keys flow into a header, so reject
+        // CR/LF/NUL at the boundary. Surface a transient failure rather
+        // than letting `webpush.sendNotification` reach the wire with a
+        // forged header.
+        try {
+          headers['X-Idempotency-Key'] = sanitizeHeaderValue(idempotencyKey, 'X-Idempotency-Key');
+        } catch (err) {
+          if (err instanceof HeaderInjectionError) {
+            return {
+              ok: false,
+              reason: 'transient',
+              error: 'web push header rejected: X-Idempotency-Key contains CR, LF, or NUL',
+              providerIdempotencyKey: idempotencyKey,
+            };
+          }
+          throw err;
+        }
+      }
 
       try {
         await webpush.sendNotification(

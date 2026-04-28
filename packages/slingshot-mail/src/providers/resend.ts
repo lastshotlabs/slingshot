@@ -1,5 +1,6 @@
 import { createMailCircuitBreaker } from '../lib/circuitBreaker';
 import type { MailCircuitBreakerOptions } from '../lib/circuitBreaker';
+import { assertSafeMailHeaders, ensureSafe, formatSafeAddress } from '../lib/headerSanitize';
 import { extractRetryAfterHeader, parseRetryAfterMs } from '../lib/retryAfter';
 import type {
   MailAddress,
@@ -28,14 +29,12 @@ interface ResendBody {
   tags?: Array<{ name: string; value: string }>;
 }
 
-function formatAddress(addr: MailAddress): string {
-  if (typeof addr === 'string') return addr;
-  return addr.name ? `${addr.name} <${addr.email}>` : addr.email;
-}
-
-function formatAddresses(addr: MailAddress | MailAddress[]): string | string[] {
-  if (Array.isArray(addr)) return addr.map(formatAddress);
-  return formatAddress(addr);
+function formatAddresses(
+  addr: MailAddress | MailAddress[],
+  header: string,
+): string | string[] {
+  if (Array.isArray(addr)) return addr.map(item => formatSafeAddress(item, header));
+  return formatSafeAddress(addr, header);
 }
 
 /**
@@ -66,14 +65,27 @@ export function createResendProvider(config: ResendConfig): MailProvider {
     name: 'resend',
     async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
       return breaker.guard(async () => {
+        // Reject CR/LF/NUL injection in any header-bound field before
+        // sending. Resend's HTTP API treats Subject and address fields
+        // as headers; an unsanitized newline would forge additional
+        // message headers on the wire.
+        assertSafeMailHeaders(message);
+        const sanitizedHeaders = message.headers
+          ? Object.fromEntries(
+              Object.entries(message.headers).map(([name, value]) => [
+                name,
+                ensureSafe(value, name),
+              ]),
+            )
+          : undefined;
         const body: ResendBody = {
-          to: formatAddresses(message.to),
-          subject: message.subject,
+          to: formatAddresses(message.to, 'to'),
+          subject: ensureSafe(message.subject, 'Subject'),
           html: message.html,
-          ...(message.from ? { from: formatAddress(message.from) } : {}),
+          ...(message.from ? { from: formatSafeAddress(message.from, 'from') } : {}),
           ...(message.text ? { text: message.text } : {}),
-          ...(message.replyTo ? { reply_to: formatAddress(message.replyTo) } : {}),
-          ...(message.headers ? { headers: message.headers } : {}),
+          ...(message.replyTo ? { reply_to: formatSafeAddress(message.replyTo, 'reply_to') } : {}),
+          ...(sanitizedHeaders ? { headers: sanitizedHeaders } : {}),
           ...(message.tags
             ? { tags: Object.entries(message.tags).map(([name, value]) => ({ name, value })) }
             : {}),

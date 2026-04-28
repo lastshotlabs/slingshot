@@ -131,6 +131,10 @@ export function createAuth0AccessProvider(
           deps.jwtVerify(token, JWKS, {
             audience: config.audience,
             issuer: `https://${config.domain}/`,
+            // Restrict to RS256 (Auth0's standard signing algorithm). This rejects
+            // `alg: none` AND any algorithm-substitution attempt where an attacker
+            // tries to coerce verification into a weaker symmetric algorithm.
+            algorithms: ['RS256'],
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('JWT verification timed out')), timeoutMs),

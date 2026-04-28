@@ -292,3 +292,40 @@ describe('renderSsgPages — batch rendering', () => {
     expect(existsSync(join(config.outDir, 'ok', 'index.html'))).toBe(true);
   });
 });
+
+describe('renderSsgPage — path traversal', () => {
+  it('rejects URL paths containing parent-directory segments', async () => {
+    const config = makeConfig();
+    const result = await renderSsgPage(
+      '/../../../etc/passwd',
+      makeOkRenderer(),
+      config,
+    );
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toContain('rejected URL path');
+    // Crucially, no file is written outside outDir.
+    expect(existsSync(join(config.outDir, '..', '..', '..', 'etc', 'passwd'))).toBe(false);
+  });
+
+  it('rejects URL paths containing embedded .. segments', async () => {
+    const config = makeConfig();
+    const result = await renderSsgPage('/foo/../../bar', makeOkRenderer(), config);
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toContain('rejected URL path');
+  });
+
+  it('rejects URL paths containing a NUL byte', async () => {
+    const config = makeConfig();
+    const result = await renderSsgPage('/foo bar', makeOkRenderer(), config);
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error?.message).toContain('rejected URL path');
+  });
+
+  it('allows .. that does not escape outDir', async () => {
+    const config = makeConfig();
+    // /a/b/../c resolves to /a/c — still inside outDir.
+    const result = await renderSsgPage('/a/b/../c', makeOkRenderer(), config);
+    expect(result.error).toBeUndefined();
+    expect(existsSync(join(config.outDir, 'a', 'c', 'index.html'))).toBe(true);
+  });
+});

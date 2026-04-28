@@ -1,8 +1,8 @@
 import { createMailCircuitBreaker } from '../lib/circuitBreaker';
 import type { MailCircuitBreakerOptions } from '../lib/circuitBreaker';
+import { assertSafeMailHeaders, ensureSafe, formatSafeAddress } from '../lib/headerSanitize';
 import { extractRetryAfterHeader, parseRetryAfterMs } from '../lib/retryAfter';
 import type {
-  MailAddress,
   MailMessage,
   MailProvider,
   MailSendOptions,
@@ -25,11 +25,6 @@ interface PostmarkBody {
   TextBody?: string;
   ReplyTo?: string;
   Headers?: Array<{ Name: string; Value: string }>;
-}
-
-function formatAddress(addr: MailAddress): string {
-  if (typeof addr === 'string') return addr;
-  return addr.name ? `${addr.name} <${addr.email}>` : addr.email;
 }
 
 /**
@@ -60,20 +55,28 @@ export function createPostmarkProvider(config: PostmarkConfig): MailProvider {
     name: 'postmark',
     async send(message: MailMessage, options?: MailSendOptions): Promise<SendResult> {
       return breaker.guard(async () => {
+        // Reject CR/LF/NUL injection in any header-bound field before
+        // sending. Postmark's HTTP API treats Subject and address fields
+        // as headers; an unsanitized newline would forge additional
+        // message headers (e.g. Bcc) on the wire.
+        assertSafeMailHeaders(message);
         const to = Array.isArray(message.to)
-          ? message.to.map(formatAddress).join(', ')
-          : formatAddress(message.to);
+          ? message.to.map(addr => formatSafeAddress(addr, 'To')).join(', ')
+          : formatSafeAddress(message.to, 'To');
 
         const body: PostmarkBody = {
           To: to,
-          Subject: message.subject,
+          Subject: ensureSafe(message.subject, 'Subject'),
           HtmlBody: message.html,
-          ...(message.from ? { From: formatAddress(message.from) } : {}),
+          ...(message.from ? { From: formatSafeAddress(message.from, 'From') } : {}),
           ...(message.text ? { TextBody: message.text } : {}),
-          ...(message.replyTo ? { ReplyTo: formatAddress(message.replyTo) } : {}),
+          ...(message.replyTo ? { ReplyTo: formatSafeAddress(message.replyTo, 'Reply-To') } : {}),
           ...(message.headers
             ? {
-                Headers: Object.entries(message.headers).map(([Name, Value]) => ({ Name, Value })),
+                Headers: Object.entries(message.headers).map(([Name, Value]) => ({
+                  Name,
+                  Value: ensureSafe(Value, Name),
+                })),
               }
             : {}),
         };

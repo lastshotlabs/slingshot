@@ -42,6 +42,11 @@ export interface LocalStorageConfig {
 function resolveKey(directory: string, key: string): string {
   if (!key || !key.trim()) throw new HttpError(400, 'Invalid storage key');
 
+  // Reject NUL bytes — some Node fs APIs misbehave on these (truncation,
+  // bypass of suffix checks, etc.). Belt-and-braces alongside the
+  // base-directory containment check below.
+  if (key.includes('\0')) throw new HttpError(400, 'Invalid storage key');
+
   const normalized = key.replace(/\\/g, '/');
   if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized) || normalized.startsWith('//')) {
     throw new HttpError(400, 'Invalid storage key');

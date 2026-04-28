@@ -1,6 +1,7 @@
 // packages/slingshot-ssg/src/renderer.ts
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { PathTraversalError, safeJoin } from '@lastshotlabs/slingshot-core';
 import type { SlingshotSsrRenderer, SsrShell } from '@lastshotlabs/slingshot-ssr';
 import { resolveRouteChain } from '@lastshotlabs/slingshot-ssr';
 import type { SsgConfig, SsgPageResult, SsgResult } from './types';
@@ -51,7 +52,20 @@ export async function renderSsgPage(
   assetTagsHtml: string = '',
 ): Promise<SsgPageResult> {
   const start = Date.now();
-  const filePath = resolveOutputPath(urlPath, config.outDir);
+  let filePath: string;
+  try {
+    filePath = resolveOutputPath(urlPath, config.outDir);
+  } catch (err) {
+    // Reject malicious or malformed URL paths (path traversal, NUL byte, etc.)
+    // before any rendering occurs. The page is recorded as failed so the build
+    // surfaces it in the summary instead of silently writing outside outDir.
+    if (err instanceof PathTraversalError) {
+      const error = new Error(`[slingshot-ssg] rejected URL path "${urlPath}": ${err.message}`);
+      console.warn(error.message);
+      return { path: urlPath, filePath: '', durationMs: Date.now() - start, error };
+    }
+    throw err;
+  }
   const renderPromise = renderSsgPageUnchecked(
     urlPath,
     renderer,
@@ -270,13 +284,29 @@ async function withPageTimeout(
  * - `/`            → `{outDir}/index.html`
  * - `/about`       → `{outDir}/about/index.html`
  * - `/posts/foo`   → `{outDir}/posts/foo/index.html`
+ *
+ * Hardened against path-traversal: a `urlPath` containing `..` segments or a
+ * NUL byte (e.g. a malformed manifest route name like `../../etc/passwd`) is
+ * rejected via `safeJoin()` rather than silently writing outside `outDir`.
  */
 function resolveOutputPath(urlPath: string, outDir: string): string {
   if (urlPath === '/' || urlPath === '') {
     return join(outDir, 'index.html');
   }
-  return join(outDir, urlPath, 'index.html');
+  // Strip leading slashes so safeJoin treats the path as relative to outDir.
+  // Without this, a urlPath beginning with `/` would resolve from filesystem
+  // root and trigger PathTraversalError for legitimate routes like `/about`.
+  const relative = urlPath.replace(/^\/+/, '');
+  const dir = safeJoin(outDir, relative);
+  return join(dir, 'index.html');
 }
+
+/**
+ * Re-export for tests and callers that want to detect path-traversal
+ * rejections explicitly. {@link resolveOutputPath} throws this when a route
+ * name escapes `outDir`.
+ */
+export { PathTraversalError };
 
 function resolveConcurrency(value: number | undefined): number {
   if (value === undefined || !Number.isFinite(value)) return 4;

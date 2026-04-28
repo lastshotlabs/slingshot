@@ -19,13 +19,34 @@ interface SessionCreateGuardDeps {
   getRegistry: () => ReadonlyMap<string, GameDefinition>;
 }
 
-/** Characters for join codes (excluding ambiguous I, O, 0, 1). */
+/** Characters for join codes (excluding ambiguous I, O, 0, 1). 32 chars → 5 bits each. */
 const JOIN_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-function generateJoinCode(length: number): string {
+/**
+ * Generate a session join code using cryptographically secure random bytes.
+ *
+ * Join codes are short (typically 4 chars, ~20 bits of entropy) and are
+ * displayed to other users so they can join the session. While the search
+ * space is small enough that brute-force enumeration matters at scale, using
+ * `crypto.getRandomValues()` here ensures codes are not predictable from
+ * previously observed codes — i.e. an attacker cannot derive the PRNG seed
+ * from one code and predict the next host's code, which would enable lobby
+ * hijacking.
+ *
+ * The alphabet has 32 characters, which is a power of 2, so masking the low
+ * 5 bits of each byte yields an unbiased uniform distribution without
+ * rejection sampling.
+ *
+ * @internal
+ */
+export function generateJoinCode(length: number): string {
+  // 32-char alphabet → 5 bits per char. Mask of 0x1F maps any byte to a
+  // valid alphabet index without modulo bias.
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
   let code = '';
   for (let i = 0; i < length; i++) {
-    code += JOIN_CODE_CHARS[Math.floor(Math.random() * JOIN_CODE_CHARS.length)];
+    code += JOIN_CODE_CHARS[(bytes[i] as number) & 0x1f];
   }
   return code;
 }

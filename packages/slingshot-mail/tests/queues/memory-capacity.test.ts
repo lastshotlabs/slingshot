@@ -1,25 +1,5 @@
 import { beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-
-class TestTemplateNotFoundError extends Error {
-  constructor(public readonly templateName: string) {
-    super(`Template not found: ${templateName}`);
-    this.name = 'TemplateNotFoundError';
-  }
-}
-
-mock.module('@lastshotlabs/slingshot-core', () => ({
-  DEFAULT_MAX_ENTRIES: 2,
-  TemplateNotFoundError: TestTemplateNotFoundError,
-  evictOldest<K, V>(map: Map<K, V>, maxEntries: number): void {
-    while (map.size > maxEntries) {
-      const oldest = map.entries().next().value as [K, V] | undefined;
-      if (!oldest) break;
-      map.delete(oldest[0]);
-    }
-  },
-}));
-
-const { createMemoryQueue } = await import('../../src/queues/memory.js');
+import { createMemoryQueue } from '../../src/queues/memory.js';
 
 const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -38,7 +18,7 @@ describe('createMemoryQueue capacity', () => {
 
   it('dead-letters the oldest job when the queue exceeds capacity', async () => {
     const deadLetterCallback = mock(() => {});
-    const queue = createMemoryQueue({ onDeadLetter: deadLetterCallback });
+    const queue = createMemoryQueue({ onDeadLetter: deadLetterCallback, maxEntries: 2 });
 
     await queue.enqueue(makeMessage());
     await queue.enqueue(makeMessage());

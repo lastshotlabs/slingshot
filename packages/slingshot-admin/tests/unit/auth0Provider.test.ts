@@ -167,4 +167,22 @@ describe('createAuth0AccessProvider', () => {
     expect(principal).not.toBeNull();
     expect(principal?.subject).toBe('auth0|user-123');
   });
+
+  test('restricts JWT verification to the RS256 algorithm', async () => {
+    // Auth0 issues RS256 by default. Pinning the alg list rejects `alg: none`
+    // and any algorithm-substitution attempt that swaps to a weaker algorithm
+    // the JWKS happens to also support.
+    const deps = makeStubDeps();
+    const provider = createAuth0AccessProvider({ domain: DOMAIN, audience: AUDIENCE }, deps);
+    await provider.verifyRequest(makeContext('valid.jwt.token'));
+
+    expect(deps.jwtVerify).toHaveBeenCalledTimes(1);
+    const call = (deps.jwtVerify as ReturnType<typeof mock>).mock.calls[0];
+    const options = call?.[2] as { algorithms?: string[] };
+    expect(options.algorithms).toEqual(['RS256']);
+    expect(options).toMatchObject({
+      audience: AUDIENCE,
+      issuer: `https://${DOMAIN}/`,
+    });
+  });
 });

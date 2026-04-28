@@ -170,4 +170,42 @@ describe('SSR middleware runtime request paths', () => {
     expect(await rewriteRes.text()).toContain('/rewritten?via=middleware');
     expect(rendered).toContain('/rewritten?via=middleware');
   });
+
+  it('does not read static files outside staticDir for traversal pathnames', async () => {
+    // Track every path the runtime is asked to read. The hardened middleware
+    // must never call readFile() with a path that escapes staticDir.
+    const reads: string[] = [];
+    const readFile = mock(async (filePath: string) => {
+      reads.push(filePath);
+      return null;
+    });
+    const renderer = makeRenderer(() => new Response('<html>fallback render</html>'));
+    const app = new Hono();
+    app.use(
+      '*',
+      buildSsrMiddleware(
+        {
+          renderer,
+          serverRoutesDir: '/fake/routes',
+          assetsManifest: '/fake/manifest.json',
+          devMode: true,
+          staticDir: '/var/www/static',
+          runtime: { readFile } as never,
+        },
+        null,
+        app,
+      ),
+    );
+    app.get('*', c => c.text('fallback'));
+
+    // Hono normalises `..` in some routing decisions but `path.join` does not
+    // — the legacy code would have asked the runtime for `/var/www/etc/passwd`.
+    // The hardened middleware skips the static lookup entirely instead.
+    await app.request('/../../../etc/passwd');
+    await app.request('/foo/../../bar');
+
+    for (const p of reads) {
+      expect(p.startsWith('/var/www/static/')).toBe(true);
+    }
+  });
 });

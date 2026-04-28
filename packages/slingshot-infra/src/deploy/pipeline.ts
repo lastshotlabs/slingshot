@@ -422,11 +422,18 @@ function groupByStack(
  * Format: `YYYYMMDD-HHmmss-<4-char random suffix>` (UTC).
  *
  * @returns A string like `'20240315-143022-a4f7'`.
+ *
+ * @remarks
+ * The 4-char suffix uses `Math.random()` because this is purely a uniqueness
+ * tiebreaker for deploys that land in the same second — it is NOT a credential
+ * or secret. The image tag is publicly visible in the registry; predictability
+ * has no security impact.
  */
 function generateImageTag(): string {
   const now = new Date();
   const date = now.toISOString().slice(0, 10).replace(/-/g, '');
   const time = now.toISOString().slice(11, 19).replace(/:/g, '');
+  // Non-security: dedup suffix for same-second deploys, not a secret.
   const rand = Math.random().toString(36).slice(2, 6);
   return `${date}-${time}-${rand}`;
 }

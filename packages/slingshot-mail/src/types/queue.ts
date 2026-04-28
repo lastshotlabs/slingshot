@@ -1,4 +1,4 @@
-import type { QueueLifecycle } from '@lastshotlabs/slingshot-core';
+import type { MetricsEmitter, QueueLifecycle } from '@lastshotlabs/slingshot-core';
 import type { MailMessage } from './provider';
 import type { MailProvider } from './provider';
 
@@ -49,10 +49,27 @@ export interface MailQueueConfig {
    */
   sendTimeoutMs?: number;
   /**
+   * Maximum pending in-memory jobs (memory queue only). When exceeded, the
+   * oldest job is dead-lettered. Defaults to the framework's
+   * `DEFAULT_MAX_ENTRIES`. Set explicitly in tests rather than mocking the
+   * core constant.
+   */
+  maxEntries?: number;
+  /**
    * Called when a job exceeds `maxAttempts` or encounters a permanent failure.
    * Use this for alerting, logging, or persisting failed deliveries.
    */
   onDeadLetter?: (job: MailJob, error: Error) => void;
+  /**
+   * Optional unified metrics emitter. Defaults to a no-op. When provided, the
+   * queue records:
+   * - `mail.send.count` counter (labels: `provider`, `result=success|failure|circuitOpen`)
+   * - `mail.send.duration` timing (labels: `provider`)
+   * - `mail.queue.depth` gauge (sampled on each enqueue and dequeue)
+   * - `mail.retryAfter` gauge when the provider returns a 429 with a Retry-After hint (labels: `provider`)
+   * - `mail.circuitBreaker.state` gauge per provider (`0=closed`, `1=open`, `2=half-open`)
+   */
+  metrics?: MetricsEmitter;
 }
 
 /**

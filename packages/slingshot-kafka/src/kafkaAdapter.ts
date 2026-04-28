@@ -10,14 +10,17 @@ import { z } from 'zod';
 import type {
   EventBusSerializationOptions,
   EventEnvelope,
+  MetricsEmitter,
   SlingshotEventBus,
   SlingshotEventMap,
   SubscriptionOpts,
 } from '@lastshotlabs/slingshot-core';
 import {
   JSON_SERIALIZER,
+  createNoopMetricsEmitter,
   createRawEventEnvelope,
   isEventEnvelope,
+  sanitizeHeaderValue,
   validateEventPayload,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -276,15 +279,33 @@ function buildEnvelopeHeaders(
   envelope: EventEnvelope,
   serializerContentType: string,
 ): Record<string, string> {
+  // Defense-in-depth: every value here is framework-derived (event-key
+  // template literal, UUID, plugin name, tenantId from a resolved scope),
+  // but a misconfigured event registration or a buggy upstream resolver
+  // could still leak CR/LF into one of these fields. Sanitize so the
+  // resulting Kafka headers cannot smuggle header-splitting bytes into
+  // downstream HTTP-bridged consumers.
   const headers: Record<string, string> = {
-    'slingshot.event': envelope.key,
-    'slingshot.event-id': envelope.meta.eventId,
-    'slingshot.owner-plugin': envelope.meta.ownerPlugin,
-    'slingshot.exposure': envelope.meta.exposure.join(','),
-    'slingshot.content-type': serializerContentType,
+    'slingshot.event': sanitizeHeaderValue(String(envelope.key), 'slingshot.event'),
+    'slingshot.event-id': sanitizeHeaderValue(envelope.meta.eventId, 'slingshot.event-id'),
+    'slingshot.owner-plugin': sanitizeHeaderValue(
+      envelope.meta.ownerPlugin,
+      'slingshot.owner-plugin',
+    ),
+    'slingshot.exposure': sanitizeHeaderValue(
+      envelope.meta.exposure.join(','),
+      'slingshot.exposure',
+    ),
+    'slingshot.content-type': sanitizeHeaderValue(
+      serializerContentType,
+      'slingshot.content-type',
+    ),
   };
   if (envelope.meta.scope?.tenantId) {
-    headers['slingshot.tenant-id'] = envelope.meta.scope.tenantId;
+    headers['slingshot.tenant-id'] = sanitizeHeaderValue(
+      envelope.meta.scope.tenantId,
+      'slingshot.tenant-id',
+    );
   }
   return headers;
 }
@@ -326,7 +347,16 @@ export function getKafkaAdapterIntrospectionOrNull(
  * producer failures.
  */
 export function createKafkaAdapter(
-  rawOpts: KafkaAdapterOptions & EventBusSerializationOptions,
+  rawOpts: KafkaAdapterOptions &
+    EventBusSerializationOptions & {
+      /**
+       * Optional metrics sink. When provided, the adapter records publish /
+       * consume / dlq counters, publish/consume durations, and pending-buffer
+       * + connection-state gauges so operators can wire ad-hoc dashboards
+       * without log scraping. Defaults to a no-op emitter.
+       */
+      metrics?: MetricsEmitter;
+    },
 ): SlingshotEventBus & {
   readonly __slingshotKafkaAdapter?: KafkaAdapterIntrospection;
   health(): KafkaAdapterHealth;
@@ -334,7 +364,8 @@ export function createKafkaAdapter(
   _drainPendingBuffer(): Promise<void>;
   shutdown(): Promise<void>;
 } {
-  const { serializer, schemaRegistry, ...adapterOpts } = rawOpts;
+  const { serializer, schemaRegistry, metrics: metricsOpt, ...adapterOpts } = rawOpts;
+  const metrics: MetricsEmitter = metricsOpt ?? createNoopMetricsEmitter();
   const opts = validatePluginConfig('slingshot-kafka', adapterOpts, kafkaAdapterOptionsSchema);
   const config: ResolvedKafkaConfig = Object.freeze({
     brokers: [...opts.brokers],
@@ -467,10 +498,12 @@ export function createKafkaAdapter(
       await nextProducer.connect();
       producer = nextProducer;
       producerConnected = true;
+      metrics.gauge('kafka.producer.connected', 1);
       return nextProducer;
     } catch (err) {
       producer = null;
       producerConnected = false;
+      metrics.gauge('kafka.producer.connected', 0);
       throw err;
     }
   }
@@ -525,6 +558,7 @@ export function createKafkaAdapter(
       const ensuredProducer = await ensureProducer();
 
       for (const item of entries) {
+        const drainStart = performance.now();
         try {
           await ensureTopic(item.topic);
           await ensuredProducer.send({
@@ -538,7 +572,12 @@ export function createKafkaAdapter(
               },
             ],
           });
+          metrics.counter('kafka.publish.count', 1, { topic: item.topic, result: 'success' });
+          metrics.timing('kafka.publish.duration', performance.now() - drainStart, {
+            topic: item.topic,
+          });
         } catch (err) {
+          metrics.counter('kafka.publish.count', 1, { topic: item.topic, result: 'failure' });
           const next = { ...item, attempts: item.attempts + 1 };
           if (next.attempts >= MAX_PENDING_ATTEMPTS) {
             console.error(
@@ -560,12 +599,14 @@ export function createKafkaAdapter(
     } catch (err) {
       console.error('[KafkaAdapter] unable to reconnect while draining buffered events:', err);
       pendingBuffer.unshift(...entries);
+      metrics.gauge('kafka.pending.size', pendingBuffer.length);
       return;
     } finally {
       isDraining = false;
       if (retry.length > 0) {
         pendingBuffer.push(...retry);
       }
+      metrics.gauge('kafka.pending.size', pendingBuffer.length);
       if (pendingBuffer.length > 0) scheduleDrain();
     }
   }
@@ -685,6 +726,7 @@ export function createKafkaAdapter(
                 async (rebalanceEvent: unknown) => {
                   connectedConsumers.delete(entryKey);
                   rebalancingConsumers.add(entryKey);
+                  metrics.gauge('kafka.consumer.connected', 0, { topic, groupId });
                   console.info(
                     `[KafkaAdapter] rebalancing event="${eventName}" ` +
                       `group="${groupId}" topic="${topic}"`,
@@ -703,6 +745,7 @@ export function createKafkaAdapter(
               consumerOn.call(consumer, consumerEvents.GROUP_JOIN, (joinEvent: unknown) => {
                 connectedConsumers.add(entryKey);
                 rebalancingConsumers.delete(entryKey);
+                metrics.gauge('kafka.consumer.connected', 1, { topic, groupId });
                 const member = (joinEvent as { payload?: { memberId?: string } } | undefined)
                   ?.payload?.memberId;
                 console.info(
@@ -735,6 +778,7 @@ export function createKafkaAdapter(
           });
           if (!hasGroupJoinHook) {
             connectedConsumers.add(entryKey);
+            metrics.gauge('kafka.consumer.connected', 1, { topic, groupId });
           }
         } catch (err) {
           connectedConsumers.delete(entryKey);
@@ -839,6 +883,7 @@ export function createKafkaAdapter(
     // (deserialize) from logic-bug (handler) failures without parsing the
     // topic suffix. `x-slingshot-dlq-reason` is the canonical filter header.
     const errorType: 'deserialize' | 'handler' = suffix === 'deser-dlq' ? 'deserialize' : 'handler';
+    metrics.counter('kafka.dlq.count', 1, { topic, errorType });
     await ensuredProducer.send({
       topic: dlqTopic,
       messages: [
@@ -868,6 +913,8 @@ export function createKafkaAdapter(
     payload: EachMessagePayload,
   ): Promise<void> {
     const { topic, partition, message, heartbeat } = payload;
+    const consumeStart = performance.now();
+    metrics.counter('kafka.consume.count', 1, { topic });
     let decodedEnvelope: EventEnvelope;
 
     // Track this handler so a rebalance can wait for it to finish before
@@ -905,17 +952,14 @@ export function createKafkaAdapter(
       // Heartbeat before deserialize so the broker session stays alive even if
       // a large/expensive payload would otherwise block the consumer thread.
       await heartbeat();
-      // Yield to the event loop so the consumer's heartbeat task gets a tick
-      // between batches and we don't starve I/O while decoding.
-      const decoded = await new Promise<unknown>((resolve, reject) => {
-        setImmediate(() => {
-          try {
-            resolve(eventSerializer.deserialize(entry.event, message.value as Buffer));
-          } catch (err) {
-            reject(err);
-          }
-        });
-      });
+      // Yield once to the event loop between batches so other I/O callbacks
+      // (and any heartbeat task scheduled by setInterval elsewhere) get CPU.
+      // We yield BEFORE deserialize, then run the decode synchronously, so
+      // observers (tests, metrics) see a deterministic ordering: yield ->
+      // decode -> validate -> next-heartbeat, with no interleaved scheduling
+      // surprises depending on the runtime's setImmediate semantics.
+      await new Promise<void>(resolve => setImmediate(resolve));
+      const decoded = eventSerializer.deserialize(entry.event, message.value as Buffer);
       decodedEnvelope = isEventEnvelope(decoded, entry.event as never)
         ? (decoded as EventEnvelope)
         : createRawEventEnvelope(
@@ -967,6 +1011,7 @@ export function createKafkaAdapter(
         try {
           await Promise.resolve(listener(decodedEnvelope));
           await commitProcessedMessage(entry.consumer, topic, partition, message, entryKey);
+          metrics.timing('kafka.consume.duration', performance.now() - consumeStart, { topic });
           return;
         } catch (err) {
           if (attempt >= config.maxRetries) {
@@ -1043,6 +1088,7 @@ export function createKafkaAdapter(
           envelope as EventEnvelope,
           eventSerializer.contentType,
         );
+        const publishStart = performance.now();
         try {
           key = resolvePartitionKey(config, event as string, envelope.payload);
           serialized = eventSerializer.serialize(event as string, envelope);
@@ -1059,7 +1105,10 @@ export function createKafkaAdapter(
               },
             ],
           });
+          metrics.counter('kafka.publish.count', 1, { topic, result: 'success' });
+          metrics.timing('kafka.publish.duration', performance.now() - publishStart, { topic });
         } catch (err) {
+          metrics.counter('kafka.publish.count', 1, { topic, result: 'failure' });
           if (!serialized) {
             console.error(
               `[KafkaAdapter] failed to serialize event "${event}" for topic "${topic}":`,
@@ -1094,6 +1143,7 @@ export function createKafkaAdapter(
             headers,
             attempts: 1,
           });
+          metrics.gauge('kafka.pending.size', pendingBuffer.length);
           scheduleDrain();
         }
       })();
@@ -1177,6 +1227,7 @@ export function createKafkaAdapter(
       inFlightHandlers.clear();
       rebalancingConsumers.clear();
       for (const entry of consumers) {
+        metrics.gauge('kafka.consumer.connected', 0, { topic: entry.topic, groupId: entry.groupId });
         try {
           await entry.consumer.disconnect();
         } catch (err) {
@@ -1206,6 +1257,7 @@ export function createKafkaAdapter(
         }
         producer = null;
         producerConnected = false;
+        metrics.gauge('kafka.producer.connected', 0);
       }
 
       if (admin) {

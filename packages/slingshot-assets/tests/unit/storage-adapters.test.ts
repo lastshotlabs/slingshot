@@ -59,15 +59,29 @@ describe('localStorage', () => {
     await expect(adapter.delete('nested/missing.txt')).resolves.toBeUndefined();
   });
 
-  it('rejects empty, absolute, drive-letter, UNC, and traversal storage keys', async () => {
+  it('rejects empty, absolute, drive-letter, UNC, traversal, and NUL-byte storage keys', async () => {
     const dir = await makeTempDir();
     const adapter = localStorage({ directory: dir });
-    const invalidKeys = ['', '   ', '/absolute.txt', 'C:/windows.txt', '//server/share', '../x'];
+    const invalidKeys = [
+      '',
+      '   ',
+      '/absolute.txt',
+      'C:/windows.txt',
+      '//server/share',
+      '../x',
+      '../../etc/passwd',
+      'foo/../../bar',
+      // NUL byte — historically a sneaky way to truncate paths in some Node APIs.
+      'foo\0bar',
+      '\0',
+    ];
 
     for (const key of invalidKeys) {
       await expect(
         adapter.put(key, Buffer.from('x'), { mimeType: 'text/plain', size: 1 }),
       ).rejects.toMatchObject({ status: 400 });
+      await expect(adapter.get(key)).rejects.toMatchObject({ status: 400 });
+      await expect(adapter.delete(key)).rejects.toMatchObject({ status: 400 });
     }
   });
 

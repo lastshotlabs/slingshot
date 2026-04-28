@@ -4,6 +4,7 @@ import type {
   AppEnv,
   CoreRegistrar,
   EntityRegistry,
+  MetricsEmitter,
   PluginSetupContext,
   ResolvedEntityConfig,
   SlingshotEvents,
@@ -64,6 +65,12 @@ interface WebhooksTestFrameworkOptions {
   /** When true, use the in-memory adapter instead of slingshot-entity. */
   standalone?: boolean;
   registerDefinitions?: (events: SlingshotEvents) => void;
+  /**
+   * Optional unified metrics emitter wired into the framework context so the
+   * plugin's setupPost picks it up via `getContextOrNull(app).metricsEmitter`.
+   * Defaults to a no-op when omitted.
+   */
+  metricsEmitter?: MetricsEmitter;
 }
 
 function createTestFrameworkConfig(options: WebhooksTestFrameworkOptions = {}) {
@@ -213,6 +220,9 @@ export async function createWebhooksTestApp(
     ws: null,
     wsEndpoints: {},
     wsPublish: null,
+    ...(frameworkOptions.metricsEmitter
+      ? { metricsEmitter: frameworkOptions.metricsEmitter }
+      : {}),
   } as unknown as Parameters<typeof attachContext>[1]);
 
   const setupContext: PluginSetupContext = {

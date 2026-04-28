@@ -181,6 +181,26 @@ export const assetsPluginConfigSchema = z.object({
       'Number of attempts for storage put/delete operations before giving up. Default: 3. ' +
         'Each retry uses an increasing delay (attempt × 500 ms).',
     ),
+  storageCircuitBreakerThreshold: z
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe(
+      'S3 circuit breaker — number of consecutive operation failures (after retries) ' +
+        'before the breaker opens and short-circuits subsequent calls. Default: 5.',
+    ),
+  storageCircuitBreakerCooldownMs: z
+    .number()
+    .int()
+    .min(100)
+    .max(600_000)
+    .optional()
+    .describe(
+      'S3 circuit breaker — cooldown duration in ms before allowing a half-open probe ' +
+        'after the breaker opens. Default: 30 000 ms.',
+    ),
   allowOrphanedStorage: z
     .boolean()
     .optional()

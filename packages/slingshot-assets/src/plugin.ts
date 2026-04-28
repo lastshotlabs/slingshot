@@ -49,6 +49,12 @@ export function createAssetsPlugin(rawConfig: AssetsPluginConfig): SlingshotPlug
   const mountPath = config.mountPath ?? '/assets';
   const storage = resolveStorageAdapter(config.storage, {
     storageRetryAttempts: config.storageRetryAttempts,
+    ...(config.storageCircuitBreakerThreshold !== undefined
+      ? { storageCircuitBreakerThreshold: config.storageCircuitBreakerThreshold }
+      : {}),
+    ...(config.storageCircuitBreakerCooldownMs !== undefined
+      ? { storageCircuitBreakerCooldownMs: config.storageCircuitBreakerCooldownMs }
+      : {}),
   });
   const imageConfig = resolveImageConfig(config.image);
   const imageCache =

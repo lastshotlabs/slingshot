@@ -2,6 +2,7 @@
 import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { validatePluginConfig } from '@lastshotlabs/slingshot-core';
+import { MAX_CONCURRENCY } from './constants';
 import type { SsgConfig } from './types';
 
 const absolutePath = (label: string) =>
@@ -35,9 +36,12 @@ export const ssgConfigSchema = z.object({
     .number()
     .int()
     .positive()
+    .max(MAX_CONCURRENCY, {
+      message: `concurrency must be between 1 and ${MAX_CONCURRENCY}`,
+    })
     .optional()
     .describe(
-      'Maximum number of pages to render in parallel. Must be a positive integer. Omit to use the default (4).',
+      `Maximum number of pages to render in parallel. Must be a positive integer between 1 and ${MAX_CONCURRENCY}. Omit to use the default (4).`,
     ),
   clientEntry: z
     .string()

@@ -373,6 +373,59 @@ describe('webhooks manifest runtime', () => {
     ).rejects.toThrow('legacy "events" input is no longer supported');
   });
 
+  it('persists per-endpoint deliveryTimeoutMs and rejects values above the 120000 ceiling', async () => {
+    const records: EndpointRecord[] = [];
+    const { runtime, endpointCrud } = await setupRuntime({ endpoints: records });
+    await runtime.initializeGovernance(createDefinitions());
+
+    // Valid override is persisted and surfaced through getEndpoint().
+    const created = (await endpointCrud.create({
+      id: 'endpoint-fast',
+      tenantId: 'tenant-a',
+      url: 'https://example.com/hook',
+      secret: 'super-secret',
+      subscriptions: [{ event: 'test:webhook.visible' }],
+      deliveryTimeoutMs: 5_000,
+    })) as { id: string; deliveryTimeoutMs?: number | null };
+    expect(created.deliveryTimeoutMs).toBe(5_000);
+    const fetched = await runtime.getEndpoint(created.id);
+    expect(fetched?.deliveryTimeoutMs).toBe(5_000);
+
+    // Out-of-bounds and non-integer overrides are rejected at the boundary.
+    await expect(
+      endpointCrud.create({
+        id: 'endpoint-too-slow',
+        tenantId: 'tenant-a',
+        url: 'https://example.com/hook',
+        secret: 'super-secret',
+        subscriptions: [{ event: 'test:webhook.visible' }],
+        deliveryTimeoutMs: 120_001,
+      }),
+    ).rejects.toThrow(/deliveryTimeoutMs/);
+
+    await expect(
+      endpointCrud.create({
+        id: 'endpoint-zero',
+        tenantId: 'tenant-a',
+        url: 'https://example.com/hook',
+        secret: 'super-secret',
+        subscriptions: [{ event: 'test:webhook.visible' }],
+        deliveryTimeoutMs: 0,
+      }),
+    ).rejects.toThrow(/deliveryTimeoutMs/);
+
+    await expect(
+      endpointCrud.create({
+        id: 'endpoint-fractional',
+        tenantId: 'tenant-a',
+        url: 'https://example.com/hook',
+        secret: 'super-secret',
+        subscriptions: [{ event: 'test:webhook.visible' }],
+        deliveryTimeoutMs: 1.5,
+      }),
+    ).rejects.toThrow(/deliveryTimeoutMs/);
+  });
+
   it('fails fast when delivery runtime hooks are incomplete', async () => {
     const manifestRuntime = createWebhooksManifestRuntime(() => {});
     const endpointAdapter = createEndpointBaseAdapter([]);

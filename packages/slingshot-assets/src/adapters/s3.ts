@@ -70,6 +70,22 @@ export interface S3StorageConfig {
    * the error. Each retry waits `attempt × 500 ms` before retrying. Default: 3.
    */
   readonly retryAttempts?: number;
+  /**
+   * Circuit breaker — number of consecutive failed operations (after retries
+   * exhaust) before the breaker opens and short-circuits subsequent calls.
+   * Default: 5.
+   */
+  readonly circuitBreakerThreshold?: number;
+  /**
+   * Circuit breaker — cooldown duration in ms before allowing a half-open
+   * probe after the breaker opens. Default: 30 000 ms.
+   */
+  readonly circuitBreakerCooldownMs?: number;
+  /**
+   * Circuit breaker — clock used for cooldown comparisons. Override in tests
+   * for deterministic state machines. Default: `Date.now`.
+   */
+  readonly now?: () => number;
 }
 
 interface S3ClientShape {
@@ -128,6 +144,128 @@ function requireLibStorage(): LibStorageModule {
 }
 
 /**
+ * Structured error thrown when the S3 circuit breaker is open. Callers can
+ * pattern-match on `code === 'S3_CIRCUIT_OPEN'` to fail fast without waiting
+ * for the underlying request retries.
+ */
+export class S3CircuitOpenError extends Error {
+  readonly code = 'S3_CIRCUIT_OPEN' as const;
+  readonly retryAfterMs: number;
+  constructor(message: string, retryAfterMs: number) {
+    super(message);
+    this.name = 'S3CircuitOpenError';
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+/** Snapshot of the S3 adapter circuit breaker state. */
+export interface S3CircuitBreakerHealth {
+  readonly state: 'closed' | 'open' | 'half-open';
+  readonly consecutiveFailures: number;
+  /** Epoch ms when the breaker last opened. `undefined` while closed. */
+  readonly openedAt: number | undefined;
+  /** Earliest epoch ms at which a half-open probe will be allowed. */
+  readonly nextProbeAt: number | undefined;
+}
+
+interface S3CircuitBreaker {
+  /**
+   * Run `fn` through the breaker. When the breaker is open and the cooldown
+   * has not yet elapsed, throws `S3CircuitOpenError` without invoking `fn`.
+   * Otherwise runs `fn`; success closes the breaker, failure feeds the
+   * consecutive-failure counter and may trip it open.
+   */
+  guard<T>(fn: () => Promise<T>, op: string): Promise<T>;
+  getHealth(): S3CircuitBreakerHealth;
+}
+
+/**
+ * Construct the S3 adapter circuit breaker.
+ *
+ * State machine mirrors the search provider breaker so the two surfaces
+ * behave identically under sustained outages:
+ *   closed    — normal operation; failures increment a counter
+ *   open      — fail fast; reject every request until cooldown elapses
+ *   half-open — let exactly one probe through; success resets, failure re-opens
+ *
+ * Retried operations count as a single breaker-failure (we feed the breaker
+ * after retries exhaust, not per attempt) so a transient blip that recovers
+ * inside `retryAttempts` does not trip the breaker.
+ */
+function createS3CircuitBreaker(opts: {
+  readonly threshold: number;
+  readonly cooldownMs: number;
+  readonly now: () => number;
+}): S3CircuitBreaker {
+  const { threshold, cooldownMs, now } = opts;
+
+  let state: 'closed' | 'open' | 'half-open' = 'closed';
+  let consecutiveFailures = 0;
+  let openedAt: number | undefined;
+  let halfOpenInFlight = false;
+
+  function getHealth(): S3CircuitBreakerHealth {
+    const nextProbeAt =
+      state === 'open' && openedAt !== undefined ? openedAt + cooldownMs : undefined;
+    return { state, consecutiveFailures, openedAt, nextProbeAt };
+  }
+
+  function recordSuccess(): void {
+    consecutiveFailures = 0;
+    state = 'closed';
+    openedAt = undefined;
+    halfOpenInFlight = false;
+  }
+
+  function recordFailure(): void {
+    consecutiveFailures += 1;
+    if (state === 'half-open') {
+      // Probe failed — reopen and back off again.
+      state = 'open';
+      openedAt = now();
+      halfOpenInFlight = false;
+      return;
+    }
+    if (consecutiveFailures >= threshold && state === 'closed') {
+      state = 'open';
+      openedAt = now();
+    }
+  }
+
+  function tryEnterHalfOpen(): boolean {
+    if (state !== 'open') return true;
+    if (openedAt === undefined) return true;
+    if (now() - openedAt < cooldownMs) return false;
+    if (halfOpenInFlight) return false;
+    state = 'half-open';
+    halfOpenInFlight = true;
+    return true;
+  }
+
+  async function guard<T>(fn: () => Promise<T>, op: string): Promise<T> {
+    if (!tryEnterHalfOpen()) {
+      const retryAfterMs = openedAt !== undefined ? Math.max(0, openedAt + cooldownMs - now()) : 0;
+      throw new S3CircuitOpenError(
+        `[slingshot-assets:s3] Circuit breaker open after ${consecutiveFailures} ` +
+          `consecutive failures. Retrying in ~${retryAfterMs}ms. Operation: ${op}`,
+        retryAfterMs,
+      );
+    }
+
+    try {
+      const result = await fn();
+      recordSuccess();
+      return result;
+    } catch (err) {
+      recordFailure();
+      throw err;
+    }
+  }
+
+  return { guard, getHealth };
+}
+
+/**
  * Retry a potentially-failing async operation with linear back-off.
  *
  * Attempts `fn` up to `attempts` times. On each failure (except the last),
@@ -152,16 +290,48 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 500): 
 }
 
 /**
+ * S3 storage adapter augmented with circuit breaker observability.
+ *
+ * The returned object satisfies `StorageAdapter` and exposes a stable
+ * `getCircuitBreakerHealth()` helper so callers (health endpoints, metrics)
+ * can surface breaker state without poking at internals.
+ */
+export interface S3StorageAdapter extends StorageAdapter {
+  /** Inspect the circuit breaker — stable observability surface. */
+  getCircuitBreakerHealth(): S3CircuitBreakerHealth;
+}
+
+/**
  * Create a `StorageAdapter` backed by an S3-compatible object store.
  *
  * AWS SDK modules are loaded lazily so apps that do not use S3 avoid the import cost.
  *
  * @param config - S3 storage configuration.
  * @returns A storage adapter that supports upload, download, delete, and presign operations.
+ *
+ * @remarks
+ * **Circuit breaker** — the adapter wraps every S3 call (put/get/delete and
+ * presign-get) in a circuit breaker. After `circuitBreakerThreshold`
+ * consecutive operation failures (each one already retried up to
+ * `retryAttempts` times) the breaker opens for `circuitBreakerCooldownMs`
+ * and rejects subsequent calls with `S3CircuitOpenError` (`code:
+ * 'S3_CIRCUIT_OPEN'`) until the cooldown elapses, then admits a single
+ * half-open probe. This prevents a sustained S3 outage from amplifying load
+ * against a struggling provider.
+ *
+ * `presignPut()` is intentionally **not** breaker-gated: it is a local
+ * signing operation that does not touch S3 servers. `presignGet()` is gated
+ * because the current implementation routes through `withRetry` and could
+ * (in some SDK versions) trigger STS lookups.
  */
-export function s3Storage(config: S3StorageConfig): StorageAdapter {
+export function s3Storage(config: S3StorageConfig): S3StorageAdapter {
   let clientRef: S3ClientShape | null = null;
   const retryAttempts = config.retryAttempts ?? 3;
+  const breaker = createS3CircuitBreaker({
+    threshold: config.circuitBreakerThreshold ?? 5,
+    cooldownMs: config.circuitBreakerCooldownMs ?? 30_000,
+    now: config.now ?? (() => Date.now()),
+  });
 
   function getClient(): S3ClientShape {
     if (clientRef) return clientRef;
@@ -179,58 +349,64 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
   }
 
   return {
+    getCircuitBreakerHealth: () => breaker.getHealth(),
+
     async put(key, data, meta) {
       const bucket = meta.bucket ?? config.bucket;
       const client = getClient();
 
-      await withRetry(async () => {
-        if (config.streaming && data instanceof ReadableStream) {
-          const { Upload } = requireLibStorage();
-          const upload = new Upload({
-            client,
-            params: {
-              Bucket: bucket,
-              Key: key,
-              Body: data,
-              ContentType: meta.mimeType,
-            },
-          });
-          try {
-            await upload.done();
-          } catch (err) {
-            // lib-storage usually aborts in-flight multipart on error, but
-            // explicitly abort here to defend against partial-upload bills.
-            try {
-              await upload.abort();
-            } catch {
-              // already aborted or never started — ignore
+      await breaker.guard(
+        () =>
+          withRetry(async () => {
+            if (config.streaming && data instanceof ReadableStream) {
+              const { Upload } = requireLibStorage();
+              const upload = new Upload({
+                client,
+                params: {
+                  Bucket: bucket,
+                  Key: key,
+                  Body: data,
+                  ContentType: meta.mimeType,
+                },
+              });
+              try {
+                await upload.done();
+              } catch (err) {
+                // lib-storage usually aborts in-flight multipart on error, but
+                // explicitly abort here to defend against partial-upload bills.
+                try {
+                  await upload.abort();
+                } catch {
+                  // already aborted or never started — ignore
+                }
+                throw err;
+              }
+            } else {
+              const { PutObjectCommand } = requireS3Client();
+              let body: Blob | Buffer | Uint8Array;
+
+              if (data instanceof ReadableStream) {
+                const response = new Response(data);
+                body = Buffer.from(await response.arrayBuffer());
+              } else if (data instanceof Blob) {
+                body = Buffer.from(await data.arrayBuffer());
+              } else {
+                body = data;
+              }
+
+              await client.send(
+                new PutObjectCommand({
+                  Bucket: bucket,
+                  Key: key,
+                  Body: body,
+                  ContentType: meta.mimeType,
+                  ContentLength: meta.size,
+                }),
+              );
             }
-            throw err;
-          }
-        } else {
-          const { PutObjectCommand } = requireS3Client();
-          let body: Blob | Buffer | Uint8Array;
-
-          if (data instanceof ReadableStream) {
-            const response = new Response(data);
-            body = Buffer.from(await response.arrayBuffer());
-          } else if (data instanceof Blob) {
-            body = Buffer.from(await data.arrayBuffer());
-          } else {
-            body = data;
-          }
-
-          await client.send(
-            new PutObjectCommand({
-              Bucket: bucket,
-              Key: key,
-              Body: body,
-              ContentType: meta.mimeType,
-              ContentLength: meta.size,
-            }),
-          );
-        }
-      }, retryAttempts);
+          }, retryAttempts),
+        'put',
+      );
 
       const url = config.publicUrl ? `${config.publicUrl.replace(/\/$/, '')}/${key}` : undefined;
       return url === undefined ? {} : { url };
@@ -238,31 +414,39 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
 
     async get(key) {
       const { GetObjectCommand } = requireS3Client();
-      return withRetry(async () => {
-        try {
-          const result = await getClient().send(
-            new GetObjectCommand({ Bucket: config.bucket, Key: key }),
-          );
-          return {
-            stream: result.Body as ReadableStream,
-            mimeType: result.ContentType,
-            size: result.ContentLength,
-          };
-        } catch (error: unknown) {
-          const typed = error as { name?: string; $metadata?: { httpStatusCode?: number } };
-          if (typed.name === 'NoSuchKey' || typed.$metadata?.httpStatusCode === 404) {
-            return null;
-          }
-          throw error;
-        }
-      }, retryAttempts);
+      return breaker.guard(
+        () =>
+          withRetry(async () => {
+            try {
+              const result = await getClient().send(
+                new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+              );
+              return {
+                stream: result.Body as ReadableStream,
+                mimeType: result.ContentType,
+                size: result.ContentLength,
+              };
+            } catch (error: unknown) {
+              const typed = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+              if (typed.name === 'NoSuchKey' || typed.$metadata?.httpStatusCode === 404) {
+                return null;
+              }
+              throw error;
+            }
+          }, retryAttempts),
+        'get',
+      );
     },
 
     async delete(key) {
       const { DeleteObjectCommand } = requireS3Client();
-      await withRetry(
-        () => getClient().send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key })),
-        retryAttempts,
+      await breaker.guard(
+        () =>
+          withRetry(
+            () => getClient().send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key })),
+            retryAttempts,
+          ),
+        'delete',
       );
     },
 
@@ -274,6 +458,7 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
         Key: key,
         ...(opts.mimeType ? { ContentType: opts.mimeType } : {}),
       };
+      // Note: presignPut is a local signing op — not breaker-gated.
       return presigner.getSignedUrl(getClient(), new PutObjectCommand(params), {
         expiresIn: opts.expirySeconds,
       });
@@ -282,14 +467,18 @@ export function s3Storage(config: S3StorageConfig): StorageAdapter {
     async presignGet(key, opts) {
       const { GetObjectCommand } = requireS3Client();
       const presigner = requirePresigner();
-      return withRetry(
+      return breaker.guard(
         () =>
-          presigner.getSignedUrl(
-            getClient(),
-            new GetObjectCommand({ Bucket: config.bucket, Key: key }),
-            { expiresIn: opts.expirySeconds },
+          withRetry(
+            () =>
+              presigner.getSignedUrl(
+                getClient(),
+                new GetObjectCommand({ Bucket: config.bucket, Key: key }),
+                { expiresIn: opts.expirySeconds },
+              ),
+            retryAttempts,
           ),
-        retryAttempts,
+        'presignGet',
       );
     },
   };

@@ -22,22 +22,12 @@
 import { accessSync, constants, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { SlingshotSsrRenderer } from '@lastshotlabs/slingshot-ssr';
+import { MAX_CONCURRENCY } from './constants';
 import { collectSsgRoutes } from './crawler';
 import { renderSsgPages } from './renderer';
 import type { SsgConfig } from './types';
 
 // ─── Argument parsing ─────────────────────────────────────────────────────────
-
-/**
- * Upper bound on the `--concurrency` flag.
- *
- * Picked to leave headroom under typical FD ulimits — most Linux/macOS systems
- * default to 1024 file descriptors per process and SSG renders may open
- * multiple files per route (route module + asset reads + output stream).
- * Keeping concurrency well below the ulimit prevents EMFILE during large
- * crawls. Override in custom forks if you have raised your ulimit.
- */
-const MAX_CONCURRENCY = 256;
 
 /**
  * Parse and validate a positive integer CLI argument.

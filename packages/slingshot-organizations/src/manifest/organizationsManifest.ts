@@ -20,6 +20,10 @@ export const organizationsManifest: MultiEntityManifest = {
       operations: organizationOperations.operations,
       routePath: 'orgs',
       adapterTransforms: [
+        // Innermost: convert duplicate-slug DB errors into a typed
+        // `SlugConflictError` (HTTP 409). Must wrap the real storage adapter
+        // so it sees raw unique-constraint violations.
+        { handler: 'organizations.organization.slugConflictCatch' },
         { handler: 'organizations.organization.slugValidation' },
         { handler: 'organizations.organization.deleteCascade' },
       ],

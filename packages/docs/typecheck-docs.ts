@@ -149,6 +149,20 @@ function getSourceCandidates(
 
 function toSourceVariants(filePath: string): string[] {
   const variants = new Set<string>();
+  const addTypeScriptFirst = (candidate: string): void => {
+    for (const sourceCandidate of [
+      candidate.replace(/\.d\.ts$/, '.ts'),
+      candidate.replace(/\.m?js$/, '.ts'),
+      candidate.replace(/\.cjs$/, '.ts'),
+      candidate.replace(/\.jsx$/, '.tsx'),
+    ]) {
+      if (sourceCandidate !== candidate) {
+        variants.add(sourceCandidate);
+      }
+    }
+    variants.add(candidate);
+  };
+
   if (filePath.includes('/dist/')) {
     const sourceLikePaths = new Set<string>([
       filePath.replace('/dist/src/', '/src/'),
@@ -156,18 +170,11 @@ function toSourceVariants(filePath: string): string[] {
     ]);
 
     for (const sourceLikePath of sourceLikePaths) {
-      variants.add(sourceLikePath);
-      variants.add(sourceLikePath.replace(/\.d\.ts$/, '.ts'));
-      variants.add(sourceLikePath.replace(/\.m?js$/, '.ts'));
-      variants.add(sourceLikePath.replace(/\.cjs$/, '.ts'));
+      addTypeScriptFirst(sourceLikePath);
     }
   }
 
-  variants.add(filePath);
-  variants.add(filePath.replace(/\.d\.ts$/, '.ts'));
-  variants.add(filePath.replace(/\.m?js$/, '.ts'));
-  variants.add(filePath.replace(/\.cjs$/, '.ts'));
-  variants.add(filePath.replace(/\.jsx$/, '.tsx'));
+  addTypeScriptFirst(filePath);
 
   return Array.from(variants);
 }

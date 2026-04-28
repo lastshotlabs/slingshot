@@ -53,6 +53,11 @@ describe('ssgConfigSchema — valid configs', () => {
     expect(data?.concurrency).toBe(1);
   });
 
+  test('accepts concurrency at the upper bound (256)', () => {
+    const data = valid({ ...minimalValid, concurrency: 256 });
+    expect(data?.concurrency).toBe(256);
+  });
+
   test('strips unknown fields', () => {
     const data = valid({ ...minimalValid, unknownField: true, anotherExtra: 'oops' });
     expect(data).not.toBeNull();
@@ -121,6 +126,20 @@ describe('ssgConfigSchema — concurrency validation', () => {
   test('rejects non-numeric concurrency', () => {
     const err = invalid({ ...minimalValid, concurrency: 'four' });
     expect(err).toBeDefined();
+  });
+
+  test('rejects concurrency above the upper bound (300)', () => {
+    const err = invalid({ ...minimalValid, concurrency: 300 });
+    const paths = err?.issues.map(i => i.path.join('.'));
+    expect(paths?.some(p => p.includes('concurrency'))).toBe(true);
+    const messages = err?.issues.map(i => i.message) ?? [];
+    expect(messages.some(m => m.includes('between 1 and 256'))).toBe(true);
+  });
+
+  test('rejects pathologically large concurrency (10000)', () => {
+    const err = invalid({ ...minimalValid, concurrency: 10000 });
+    const paths = err?.issues.map(i => i.path.join('.'));
+    expect(paths?.some(p => p.includes('concurrency'))).toBe(true);
   });
 });
 

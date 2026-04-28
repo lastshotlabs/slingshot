@@ -83,6 +83,19 @@ export interface AssetsPluginConfig {
    */
   readonly storageRetryAttempts?: number;
   /**
+   * S3 circuit breaker — number of consecutive operation failures (after
+   * retries) before the breaker opens and short-circuits subsequent calls
+   * with `S3CircuitOpenError`. Default: 5. Only applies to the built-in S3
+   * adapter; runtime adapter instances are used as-is.
+   */
+  readonly storageCircuitBreakerThreshold?: number;
+  /**
+   * S3 circuit breaker — cooldown duration in ms before allowing a half-open
+   * probe after the breaker opens. Default: 30 000 ms. Only applies to the
+   * built-in S3 adapter; runtime adapter instances are used as-is.
+   */
+  readonly storageCircuitBreakerCooldownMs?: number;
+  /**
    * Permit asset deletes to leave behind storage objects when the manifest
    * runtime did not wire a delete-storage middleware. Defaults to `false`.
    *

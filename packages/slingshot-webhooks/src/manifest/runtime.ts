@@ -47,9 +47,19 @@ type EndpointRecord = {
   subscriptions?: WebhookEndpointSubscription[];
   events?: string[];
   enabled: boolean;
+  deliveryTimeoutMs?: number | null;
   createdAt: string;
   updatedAt: string;
 };
+
+/**
+ * Upper bound (in ms) on the per-endpoint HTTP delivery timeout. Mirrored in
+ * `webhookPluginConfigSchema.deliveryTimeoutMs` so the global default and the
+ * per-endpoint override share the same ceiling. Two minutes is comfortably
+ * above the slowest reasonable third-party API while keeping a single stuck
+ * delivery from monopolising a queue worker.
+ */
+const MAX_DELIVERY_TIMEOUT_MS = 120_000;
 
 type DeliveryTransitionStatus = WebhookDelivery['status'];
 
@@ -168,6 +178,7 @@ function sanitizeEndpoint(record: EndpointRecord): WebhookEndpoint {
     secret: maskSecret(record.secret),
     subscriptions: normalizeStoredSubscriptions(record.subscriptions),
     enabled: record.enabled,
+    deliveryTimeoutMs: record.deliveryTimeoutMs ?? null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
@@ -302,6 +313,27 @@ function normalizeStoredSubscriptions(
 function assertValidEnabled(value: unknown): void {
   if (value !== undefined && typeof value !== 'boolean') {
     throw new HTTPException(400, { message: 'enabled must be a boolean' });
+  }
+}
+
+/**
+ * Validate a per-endpoint `deliveryTimeoutMs`. Allowed values: positive integer
+ * <= {@link MAX_DELIVERY_TIMEOUT_MS}. Explicit null clears the override (so the
+ * plugin-wide default applies again). Undefined is a no-op.
+ */
+function assertValidDeliveryTimeoutMs(value: unknown): void {
+  if (value === undefined || value === null) {
+    return;
+  }
+  if (
+    typeof value !== 'number' ||
+    !Number.isInteger(value) ||
+    value <= 0 ||
+    value > MAX_DELIVERY_TIMEOUT_MS
+  ) {
+    throw new HTTPException(400, {
+      message: `deliveryTimeoutMs must be a positive integer no greater than ${MAX_DELIVERY_TIMEOUT_MS}`,
+    });
   }
 }
 
@@ -520,6 +552,7 @@ function normalizeEndpointCreateInput(
   assertEndpointUrl(input, false);
   assertEndpointSecret(input, false);
   assertValidEnabled(input.enabled);
+  assertValidDeliveryTimeoutMs(input.deliveryTimeoutMs);
   const owner = inferCreateOwner(input);
   const requestedSubscriptions = normalizeSubscriptionRequests(input.subscriptions, false);
   if (!requestedSubscriptions) {
@@ -531,7 +564,7 @@ function normalizeEndpointCreateInput(
     requestedSubscriptions,
   );
 
-  return {
+  const normalized: Record<string, unknown> = {
     url: input.url,
     secret: input.secret,
     enabled: input.enabled ?? true,
@@ -541,6 +574,10 @@ function normalizeEndpointCreateInput(
     subscriptions,
     events: [],
   };
+  if (input.deliveryTimeoutMs !== undefined) {
+    normalized.deliveryTimeoutMs = input.deliveryTimeoutMs;
+  }
+  return normalized;
 }
 
 function normalizeEndpointUpdateInput(
@@ -560,6 +597,9 @@ function normalizeEndpointUpdateInput(
     assertEndpointSecret(input, true);
   }
   assertValidEnabled(input.enabled);
+  if (Object.prototype.hasOwnProperty.call(input, 'deliveryTimeoutMs')) {
+    assertValidDeliveryTimeoutMs(input.deliveryTimeoutMs);
+  }
 
   const normalized: Record<string, unknown> = {
     events: [],
@@ -567,6 +607,9 @@ function normalizeEndpointUpdateInput(
   if (input.url !== undefined) normalized.url = input.url;
   if (input.secret !== undefined) normalized.secret = input.secret;
   if (input.enabled !== undefined) normalized.enabled = input.enabled;
+  if (Object.prototype.hasOwnProperty.call(input, 'deliveryTimeoutMs')) {
+    normalized.deliveryTimeoutMs = input.deliveryTimeoutMs ?? null;
+  }
   const ownerType = existing.ownerType ?? (existing.tenantId ? 'tenant' : undefined);
   if (!ownerType) {
     throw new HTTPException(400, {
@@ -779,6 +822,7 @@ function buildRuntimeAdapter(
         secret: await decryptSecret(record.secret, record.id),
         subscriptions: normalizeStoredSubscriptions(record.subscriptions),
         enabled: record.enabled,
+        deliveryTimeoutMs: record.deliveryTimeoutMs ?? null,
         createdAt: record.createdAt,
         updatedAt: record.updatedAt,
       };
@@ -807,6 +851,7 @@ function buildRuntimeAdapter(
               secret: await decryptSecret(record.secret, record.id),
               subscriptions: normalizeStoredSubscriptions(record.subscriptions),
               enabled: record.enabled,
+              deliveryTimeoutMs: record.deliveryTimeoutMs ?? null,
               createdAt: record.createdAt,
               updatedAt: record.updatedAt,
             })),
@@ -1040,6 +1085,7 @@ export async function resolveWebhookDeliveries(
         subscriber,
         payload,
         attempts: 0,
+        deliveryTimeoutMs: endpoint.deliveryTimeoutMs ?? null,
       },
     });
   }

@@ -16,6 +16,12 @@ export const WebhookEndpointEntity = defineEntity('WebhookEndpoint', {
     // Legacy storage shadow used only for explicit startup migration.
     events: field.stringArray({ optional: true }),
     enabled: field.boolean({ default: true }),
+    /**
+     * Per-endpoint HTTP delivery timeout in milliseconds. When set, overrides
+     * the plugin-wide `deliveryTimeoutMs` default. Must be a positive integer
+     * <= 120_000 (2 minutes); validated at the manifest runtime boundary.
+     */
+    deliveryTimeoutMs: field.integer({ optional: true }),
     createdAt: field.date({ default: 'now', immutable: true }),
     updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
   },

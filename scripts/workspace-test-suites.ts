@@ -8,11 +8,18 @@ export interface TestCommandSuite {
   configPath?: string;
 }
 
+export interface CoverageThresholds {
+  lines?: number;
+  functions?: number;
+  branches?: number;
+}
+
 export interface CoverageSuite extends TestCommandSuite {
   coverageDir: string;
   command: string[];
   ownedGlobs: string[];
   ignoredGlobs: string[];
+  thresholds?: CoverageThresholds;
 }
 
 const coverageReporterArgs = [
@@ -85,7 +92,38 @@ interface PackageCoverageOverride {
   coverageTestFiles: string[];
   configPath?: string;
   coverageCommand?: string[];
+  coverageIgnoredGlobs?: string[];
+  coverageThresholds?: CoverageThresholds;
 }
+
+export const productionReadinessPackageNames = new Set([
+  'runtime-bun',
+  'runtime-edge',
+  'runtime-node',
+  'slingshot-admin',
+  'slingshot-assets',
+  'slingshot-bullmq',
+  'slingshot-kafka',
+  'slingshot-mail',
+  'slingshot-notifications',
+  'slingshot-orchestration',
+  'slingshot-orchestration-bullmq',
+  'slingshot-orchestration-plugin',
+  'slingshot-orchestration-temporal',
+  'slingshot-organizations',
+  'slingshot-permissions',
+  'slingshot-push',
+  'slingshot-runtime-lambda',
+  'slingshot-search',
+  'slingshot-ssg',
+  'slingshot-ssr',
+  'slingshot-webhooks',
+]);
+
+export const productionReadinessCoverageThresholds: CoverageThresholds = {
+  lines: 70,
+  functions: 70,
+};
 
 const packageCoverageOverrides: Record<string, PackageCoverageOverride> = {
   'slingshot-auth': {
@@ -105,6 +143,11 @@ const packageCoverageOverrides: Record<string, PackageCoverageOverride> = {
   },
   'slingshot-orchestration-temporal': {
     coverageTestFiles: ['tests/isolated/temporal-activities-hook-errors.test.ts'],
+  },
+  'slingshot-orchestration': {
+    coverageTestFiles: [],
+    coverageCommand: ['scripts/run-orchestration-coverage.ts'],
+    coverageIgnoredGlobs: ['packages/slingshot-orchestration/src/adapters/sqlite.ts'],
   },
   'slingshot-webhooks': {
     coverageTestFiles: [
@@ -239,7 +282,13 @@ function packageCoverageSuites(): CoverageSuite[] {
           `packages/${name}/dist/**`,
           `packages/${name}/coverage/**`,
           `packages/${name}/**/*.d.ts`,
+          ...(override?.coverageIgnoredGlobs ?? []),
         ],
+        thresholds:
+          override?.coverageThresholds ??
+          (productionReadinessPackageNames.has(name)
+            ? productionReadinessCoverageThresholds
+            : undefined),
       },
     ];
   });

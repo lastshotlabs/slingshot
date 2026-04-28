@@ -29,12 +29,13 @@ The webhook entities themselves follow the shared package-first/entity authoring
 - Management writes use `subscriptions`, not legacy `events`. Each entry is either `{ event }` or `{ pattern }`, and patterns are normalized up front into concrete approved event keys.
 - Endpoint records now carry `ownerType`, `ownerId`, optional `tenantId`, and normalized `subscriptions`. Delivery records preserve `eventId`, `occurredAt`, subscriber identity, and source scope.
 - Existing legacy rows are normalized at startup. If stored subscriptions cannot be resolved safely, the endpoint is disabled rather than widened.
+- HTTP delivery timeout is configurable via the plugin-wide `deliveryTimeoutMs` (default 30000) and the per-endpoint `deliveryTimeoutMs` override. Both are bounded to a hard 120000 ms ceiling to keep stuck deliveries from monopolising queue workers.
 
 ## Gotchas
 
 - Plugin config still has an `events` field, but that is only the webhook plugin's own intake filter on the app bus. It is not the endpoint-management payload shape.
 - Future plugin event registrations do not silently expand existing endpoint subscriptions. Concrete event subscriptions stay frozen until an endpoint is updated explicitly.
-- Each delivery attempt has a hard 30-second HTTP timeout. Endpoints that take longer than 30 seconds will receive a delivery failure (retryable). There is no way to configure this timeout per endpoint.
+- Delivery attempts time out after `endpoint.deliveryTimeoutMs` (when set), otherwise `config.deliveryTimeoutMs`, otherwise 30 s. Both knobs accept a positive integer up to 120000 ms (2 min); larger values are rejected at validation time. Timeouts surface as retryable delivery failures.
 - If enqueueing a delivery fails, the delivery record is immediately marked `dead`. If that status update itself fails, the error is logged but does not propagate — the event handler always returns cleanly.
 
 ## Key Files

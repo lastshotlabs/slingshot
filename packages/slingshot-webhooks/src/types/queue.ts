@@ -31,6 +31,11 @@ export interface WebhookJob {
   payload: string;
   /** Number of delivery attempts made for this job so far. */
   attempts: number;
+  /**
+   * Optional per-endpoint HTTP delivery timeout (ms). When unset, the
+   * plugin-wide `deliveryTimeoutMs` default applies (30000 ms when also unset).
+   */
+  deliveryTimeoutMs?: number | null;
   /** Timestamp when this job was enqueued. */
   createdAt: Date;
 }

@@ -1,5 +1,6 @@
 export { createOrganizationsPlugin } from './plugin';
 export type { OrganizationsPluginConfig } from './plugin';
+export { SlugConflictError, isUniqueViolationError } from './errors';
 export { organizationsManifest } from './manifest/organizationsManifest';
 export {
   ORGANIZATIONS_ORG_SERVICE_STATE_KEY,

@@ -11,7 +11,30 @@ import {
   createEntityPluginHookRegistry,
 } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
+import { SlugConflictError, isUniqueViolationError } from '../errors';
 import type { OrganizationsAuthRuntime } from '../lib/authRuntime';
+
+/**
+ * Structured-log helper for the package. Writes a single JSON line tagged
+ * with the package prefix so log aggregators can group all
+ * `slingshot-organizations` events. Keeps the same on-disk shape regardless
+ * of which call site emits the event.
+ */
+function logError(event: string, context: Record<string, unknown>, error: unknown): void {
+  const errorPayload =
+    error instanceof Error
+      ? { name: error.name, message: error.message, stack: error.stack }
+      : error;
+  console.error(
+    `[slingshot-organizations] ${event} ${JSON.stringify({
+      level: 'error',
+      pkg: 'slingshot-organizations',
+      event,
+      ...context,
+      error: errorPayload,
+    })}`,
+  );
+}
 
 type MemberRole = string;
 
@@ -298,6 +321,31 @@ export function createOrganizationsManifestRuntime(args: {
   const hooks = createEntityPluginHookRegistry();
   const refs: AdapterRefs = {};
 
+  // Convert duplicate-key violations on `Organization.create` into a typed
+  // `SlugConflictError` (HTTP 409, code `SLUG_CONFLICT`). Authoritative
+  // correctness comes from the unique index on `Organization.slug` — the
+  // pre-flight availability check is a UX optimization. Under concurrent
+  // requests, two callers can both observe "slug available" and only the
+  // unique-constraint catch reliably converts the loser into a 409.
+  adapterTransforms.register('organizations.organization.slugConflictCatch', adapter => {
+    const orgAdapter = requireMethod(adapter, 'create');
+    return {
+      ...adapter,
+      create: async (input: unknown) => {
+        const record = (input ?? {}) as Record<string, unknown>;
+        try {
+          return await orgAdapter.create(record);
+        } catch (err) {
+          if (isUniqueViolationError(err)) {
+            const slug = typeof record.slug === 'string' ? record.slug : '';
+            throw new SlugConflictError(slug);
+          }
+          throw err;
+        }
+      },
+    };
+  });
+
   if (slugSchema) {
     adapterTransforms.register('organizations.organization.slugValidation', adapter => {
       const orgAdapter = requireMethod(adapter, 'create');
@@ -341,14 +389,7 @@ export function createOrganizationsManifestRuntime(args: {
             await deleteAllByFilter(memberAdapter, { orgId: id });
           } catch (err) {
             failed.push('memberships');
-            console.error(
-              JSON.stringify({
-                level: 'error',
-                event: 'organizations.delete.cascade.memberships_failed',
-                orgId: id,
-                error: err instanceof Error ? err.message : String(err),
-              }),
-            );
+            logError('organizations.delete.cascade.memberships_failed', { orgId: id }, err);
           }
         }
 
@@ -358,14 +399,7 @@ export function createOrganizationsManifestRuntime(args: {
             await deleteAllByFilter(inviteAdapter, { orgId: id });
           } catch (err) {
             failed.push('invites');
-            console.error(
-              JSON.stringify({
-                level: 'error',
-                event: 'organizations.delete.cascade.invites_failed',
-                orgId: id,
-                error: err instanceof Error ? err.message : String(err),
-              }),
-            );
+            logError('organizations.delete.cascade.invites_failed', { orgId: id }, err);
           }
         }
 
@@ -377,14 +411,7 @@ export function createOrganizationsManifestRuntime(args: {
             groupIds = await collectIds(groupAdapter, { orgId: id });
           } catch (err) {
             failed.push('groups');
-            console.error(
-              JSON.stringify({
-                level: 'error',
-                event: 'organizations.delete.cascade.group_lookup_failed',
-                orgId: id,
-                error: err instanceof Error ? err.message : String(err),
-              }),
-            );
+            logError('organizations.delete.cascade.group_lookup_failed', { orgId: id }, err);
           }
 
           if (groupIds.length > 0 && groupMembershipAdapter) {
@@ -395,14 +422,10 @@ export function createOrganizationsManifestRuntime(args: {
                 if (!failed.includes('groupMemberships')) {
                   failed.push('groupMemberships');
                 }
-                console.error(
-                  JSON.stringify({
-                    level: 'error',
-                    event: 'organizations.delete.cascade.group_memberships_failed',
-                    orgId: id,
-                    groupId,
-                    error: err instanceof Error ? err.message : String(err),
-                  }),
+                logError(
+                  'organizations.delete.cascade.group_memberships_failed',
+                  { orgId: id, groupId },
+                  err,
                 );
               }
             }
@@ -414,14 +437,7 @@ export function createOrganizationsManifestRuntime(args: {
             if (!failed.includes('groups')) {
               failed.push('groups');
             }
-            console.error(
-              JSON.stringify({
-                level: 'error',
-                event: 'organizations.delete.cascade.groups_failed',
-                orgId: id,
-                error: err instanceof Error ? err.message : String(err),
-              }),
-            );
+            logError('organizations.delete.cascade.groups_failed', { orgId: id }, err);
           }
         }
 
@@ -663,15 +679,10 @@ export function createOrganizationsManifestRuntime(args: {
         // the invite remains in a non-final state and structured-log the error
         // for an admin reconciliation job.
         acceptedAtMarked = false;
-        console.error(
-          JSON.stringify({
-            level: 'error',
-            event: 'organizations.invite.acceptedAt.update_failed',
-            inviteId: revealed.id,
-            orgId: invite.orgId,
-            userId: actorUserId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
+        logError(
+          'organizations.invite.acceptedAt.update_failed',
+          { inviteId: revealed.id, orgId: invite.orgId, userId: actorUserId },
+          err,
         );
       }
     }

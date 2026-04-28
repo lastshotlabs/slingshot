@@ -27,7 +27,7 @@ bun add @lastshotlabs/slingshot-runtime-node
 
 ## Package Scripts
 
-- `build`: `tsc --noEmit`
+- `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
 - `test`: `bun test`
 - `typecheck`: `tsc --noEmit`

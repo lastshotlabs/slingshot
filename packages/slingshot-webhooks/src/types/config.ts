@@ -123,14 +123,20 @@ export const webhookPluginConfigSchema = z.object({
     .describe(
       'Custom persistence adapter for webhook endpoints and deliveries. When provided, slingshot-entity is not required and entity-backed CRUD routes are skipped.',
     ),
-  /** Timeout in milliseconds for outbound webhook delivery requests. Default: 30000. */
+  /**
+   * Plugin-wide default timeout in milliseconds for outbound webhook delivery
+   * requests. Per-endpoint `deliveryTimeoutMs` overrides this when set.
+   * Must be a positive integer no greater than 120_000 ms (2 minutes) to
+   * prevent worker starvation. Default: 30000.
+   */
   deliveryTimeoutMs: z
     .number()
     .int()
     .positive()
+    .max(120_000)
     .optional()
     .describe(
-      'Timeout in milliseconds for outbound webhook HTTP delivery requests. Omit to use the default of 30000.',
+      'Default timeout in milliseconds for outbound webhook HTTP delivery requests. Per-endpoint overrides win when set. Maximum 120000 (2 minutes). Omit to use the default of 30000.',
     ),
   /**
    * Base64-encoded 32-byte AES-256-GCM key used to encrypt webhook endpoint

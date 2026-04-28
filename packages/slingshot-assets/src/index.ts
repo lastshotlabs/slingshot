@@ -26,7 +26,13 @@ export type {
 /**
  * Create an S3-compatible storage adapter.
  */
-export { s3Storage, type S3StorageConfig } from './adapters/s3';
+export {
+  s3Storage,
+  S3CircuitOpenError,
+  type S3CircuitBreakerHealth,
+  type S3StorageAdapter,
+  type S3StorageConfig,
+} from './adapters/s3';
 
 /**
  * Create a local-filesystem storage adapter.

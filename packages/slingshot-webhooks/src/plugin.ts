@@ -108,8 +108,11 @@ async function activate(
     const attemptedAt = new Date().toISOString();
     const start = Date.now();
     try {
+      // Resolution order: per-endpoint override (job.deliveryTimeoutMs) >
+      // plugin-wide default (config.deliveryTimeoutMs) > 30s baseline.
+      const resolvedTimeoutMs = job.deliveryTimeoutMs ?? config.deliveryTimeoutMs ?? 30_000;
       await deliverWebhook(job, {
-        timeoutMs: config.deliveryTimeoutMs ?? 30_000,
+        timeoutMs: resolvedTimeoutMs,
         validateResolvedIp: config.validateResolvedIp ?? true,
       });
       const durationMs = Date.now() - start;
@@ -210,6 +213,7 @@ async function resolveTestDelivery(
       subscriber: delivery.subscriber,
       payload,
       attempts: 0,
+      deliveryTimeoutMs: endpoint.deliveryTimeoutMs ?? null,
     });
   } catch (err) {
     await runtime.updateDelivery(delivery.id, {

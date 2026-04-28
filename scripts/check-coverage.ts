@@ -37,9 +37,17 @@ export function readThreshold(
   const suiteSpecific = Bun.env[`SLINGSHOT_COVERAGE_MIN_${suiteEnvPrefix(suite)}_${metric}`];
   const global = Bun.env[`SLINGSHOT_COVERAGE_MIN_${metric}`];
   const raw = suiteSpecific ?? global;
-  if (raw == null || raw.trim().length === 0) return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
+  if (raw != null && raw.trim().length > 0) {
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const thresholdKey = {
+    LINES: 'lines',
+    FUNCTIONS: 'functions',
+    BRANCHES: 'branches',
+  } as const;
+  return suite.thresholds?.[thresholdKey[metric]] ?? null;
 }
 
 export function summarizeCoverage(

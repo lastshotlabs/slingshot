@@ -7,15 +7,36 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 describe('coverage tooling', () => {
   let tempDir = '';
   const originalSuiteFilter = Bun.env.SLINGSHOT_SUITE_FILTER;
+  const coverageThresholdEnvKeys = [
+    'SLINGSHOT_COVERAGE_MIN_LINES',
+    'SLINGSHOT_COVERAGE_MIN_FUNCTIONS',
+    'SLINGSHOT_COVERAGE_MIN_BRANCHES',
+    'SLINGSHOT_COVERAGE_MIN_SLINGSHOT_SEARCH_LINES',
+    'SLINGSHOT_COVERAGE_MIN_SLINGSHOT_SEARCH_FUNCTIONS',
+  ] as const;
+  const originalCoverageThresholdEnv = new Map(
+    coverageThresholdEnvKeys.map(key => [key, Bun.env[key]]),
+  );
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'slingshot-coverage-tooling-'));
     delete Bun.env.SLINGSHOT_SUITE_FILTER;
+    for (const key of coverageThresholdEnvKeys) {
+      delete Bun.env[key];
+    }
   });
 
   afterEach(async () => {
     mock.restore();
     Bun.env.SLINGSHOT_SUITE_FILTER = originalSuiteFilter;
+    for (const key of coverageThresholdEnvKeys) {
+      const original = originalCoverageThresholdEnv.get(key);
+      if (original == null) {
+        delete Bun.env[key];
+      } else {
+        Bun.env[key] = original;
+      }
+    }
     if (tempDir) {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
       tempDir = '';
@@ -50,6 +71,48 @@ describe('coverage tooling', () => {
       'runtime-bun',
       'slingshot-bullmq',
     ]);
+  });
+
+  test('applies production readiness coverage thresholds to release packages', async () => {
+    const suitesModule = await import(`../../scripts/workspace-test-suites.ts?thresholds=${Date.now()}`);
+    const thresholdsByName = new Map(
+      suitesModule.coverageSuites.map((suite: { name: string; thresholds?: unknown }) => [
+        suite.name,
+        suite.thresholds,
+      ]),
+    );
+
+    for (const name of suitesModule.productionReadinessPackageNames as Set<string>) {
+      expect(thresholdsByName.get(name)).toEqual({ lines: 70, functions: 70 });
+    }
+
+    expect(thresholdsByName.get('root')).toBeUndefined();
+    expect(thresholdsByName.get('slingshot-auth')).toBeUndefined();
+  });
+
+  test('reads suite coverage thresholds and allows environment overrides', async () => {
+    const { readThreshold } = await import(
+      `../../scripts/check-coverage.ts?read-threshold=${Date.now()}`
+    );
+    const suite = {
+      name: 'slingshot-search',
+      testsPath: 'packages/slingshot-search/tests',
+      coverageDir: 'coverage/slingshot-search',
+      command: [],
+      ownedGlobs: ['packages/slingshot-search/src/**/*.ts'],
+      ignoredGlobs: [],
+      thresholds: { lines: 70, functions: 70 },
+    };
+
+    expect(readThreshold(suite, 'LINES')).toBe(70);
+    expect(readThreshold(suite, 'FUNCTIONS')).toBe(70);
+    expect(readThreshold(suite, 'BRANCHES')).toBeNull();
+
+    Bun.env.SLINGSHOT_COVERAGE_MIN_LINES = '80';
+    expect(readThreshold(suite, 'LINES')).toBe(80);
+
+    Bun.env.SLINGSHOT_COVERAGE_MIN_SLINGSHOT_SEARCH_LINES = '90';
+    expect(readThreshold(suite, 'LINES')).toBe(90);
   });
 
   test('parses, merges, and filters LCOV artifacts to suite-owned files', async () => {

@@ -162,6 +162,9 @@ describe('script entrypoints', () => {
     const runRuntimeNodeCoverageModule = await import(
       `../../scripts/run-runtime-node-coverage.ts?rtnode=${Date.now()}`
     );
+    const runOrchestrationCoverageModule = await import(
+      `../../scripts/run-orchestration-coverage.ts?orch=${Date.now()}`
+    );
     const runCoverageModule = await import(`../../scripts/run-coverage.ts?all=${Date.now()}`);
 
     const coverageDir = join(tempDir, 'coverage-files');
@@ -306,6 +309,42 @@ describe('script entrypoints', () => {
     expect(runtimeNodeCalls[1]?.cmd.slice(0, 4)).toEqual([process.execPath, 'x', 'vitest', 'run']);
     expect(readFileSync(join(tempDir, 'runtime-node-coverage', 'lcov.info'), 'utf8')).toContain(
       'SF:packages/runtime-node/src/index.ts',
+    );
+
+    const orchestrationCalls: SpawnCalls = [];
+    expect(
+      await runOrchestrationCoverageModule.runOrchestrationCoverage(
+        createSpawnStub(cmd => {
+          if (cmd.includes('vitest')) return;
+          const orchestrationCoverageDir = join(tempDir, 'orchestration-coverage');
+          const coverageDir =
+            cmd[cmd.indexOf('--coverage-dir') + 1] ?? join(orchestrationCoverageDir, 'bun');
+          mkdirSync(coverageDir, { recursive: true });
+          writeFileSync(
+            join(coverageDir, 'lcov.info'),
+            [
+              'SF:packages/slingshot-orchestration/src/adapters/sqlite.ts',
+              'LF:1',
+              'LH:1',
+              'end_of_record',
+              '',
+            ].join('\n'),
+            'utf8',
+          );
+        }, orchestrationCalls),
+        join(tempDir, 'orchestration-coverage'),
+      ),
+    ).toBe(0);
+    expect(orchestrationCalls).toHaveLength(2);
+    expect(orchestrationCalls[0]?.cmd[1]).toBe('scripts/run-coverage-files.ts');
+    expect(orchestrationCalls[1]?.cmd.slice(0, 4)).toEqual([
+      process.execPath,
+      'x',
+      'vitest',
+      'run',
+    ]);
+    expect(readFileSync(join(tempDir, 'orchestration-coverage', 'lcov.info'), 'utf8')).toContain(
+      'SF:packages/slingshot-orchestration/src/adapters/sqlite.ts',
     );
 
     const suiteRoot = join('.tmp', 'run-coverage-script-test');

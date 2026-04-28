@@ -36,6 +36,12 @@ export interface WebhookEndpoint {
   secret: string;
   subscriptions: WebhookEndpointSubscription[];
   enabled: boolean;
+  /**
+   * Optional per-endpoint HTTP delivery timeout in milliseconds. When unset,
+   * the plugin-wide `deliveryTimeoutMs` (or its 30s default) applies. The
+   * manifest runtime enforces a positive integer with a 120_000 ms ceiling.
+   */
+  deliveryTimeoutMs?: number | null;
   createdAt: string;
   updatedAt: string;
 }

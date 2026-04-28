@@ -234,6 +234,7 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
               subscriber: bullJob.data.subscriber,
               payload: bullJob.data.payload,
               attempts: bullJob.attemptsMade,
+              deliveryTimeoutMs: bullJob.data.deliveryTimeoutMs ?? null,
               createdAt: new Date(bullJob.timestamp),
             };
             try {
@@ -265,6 +266,7 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
               subscriber: bullJob.data.subscriber,
               payload: bullJob.data.payload,
               attempts: bullJob.attemptsMade,
+              deliveryTimeoutMs: bullJob.data.deliveryTimeoutMs ?? null,
               createdAt: new Date(bullJob.timestamp),
             };
             if (config.onDeadLetter) {

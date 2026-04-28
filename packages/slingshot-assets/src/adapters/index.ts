@@ -76,6 +76,10 @@ function parseS3StorageConfig(
 export interface ResolveStorageAdapterOptions {
   /** Override the retry attempt count for `put()` and `delete()` on the S3 adapter. */
   readonly storageRetryAttempts?: number;
+  /** Override the S3 circuit breaker consecutive-failure threshold. */
+  readonly storageCircuitBreakerThreshold?: number;
+  /** Override the S3 circuit breaker cooldown in milliseconds. */
+  readonly storageCircuitBreakerCooldownMs?: number;
 }
 
 /**
@@ -103,6 +107,12 @@ export function resolveStorageAdapter(
         ...s3Config,
         ...(options?.storageRetryAttempts !== undefined
           ? { retryAttempts: options.storageRetryAttempts }
+          : {}),
+        ...(options?.storageCircuitBreakerThreshold !== undefined
+          ? { circuitBreakerThreshold: options.storageCircuitBreakerThreshold }
+          : {}),
+        ...(options?.storageCircuitBreakerCooldownMs !== undefined
+          ? { circuitBreakerCooldownMs: options.storageCircuitBreakerCooldownMs }
           : {}),
       });
     }

@@ -55,8 +55,8 @@ bun add @lastshotlabs/slingshot
 - `lint`: `eslint src/ --cache && bun run --filter '@lastshotlabs/slingshot-*' lint`
 - `lint:deps`: `depcruise packages/ src/ --config .dependency-cruiser.cjs`
 - `lint:fix`: `eslint src/ --cache --fix && bun run --filter '@lastshotlabs/slingshot-*' lint -- --fix`
-- `prepublishOnly`: `bun run build`
-- `release`: `bun run build && bun publish --access public && bun run --filter '*' publish`
+- `prepublishOnly`: `bun run hardening:full`
+- `release`: `bun run hardening:full && bun publish --access public && bun run --filter '*' publish`
 - `release:major`: `bun run --filter '*' version major && npm version major && bun run release`
 - `release:minor`: `bun run --filter '*' version minor && npm version minor && bun run release`
 - `release:patch`: `bun run --filter '*' version patch && npm version patch && bun run release`
@@ -65,13 +65,13 @@ bun add @lastshotlabs/slingshot
 - `test:all`: `bun run test && bun run test:docker && bun run test:e2e`
 - `test:coverage`: `bun scripts/run-coverage.ts`
 - `test:coverage:check`: `bun run test:coverage && bun scripts/check-coverage.ts`
-- `test:coverage:full`: `bun run test:docker:up && bun test --coverage --config bunfig.ci.toml tests/unit tests/integration tests/docker; bun run test:docker:down`
-- `test:docker`: `bun run test:docker:up && bun run test:docker:run; bun run test:docker:down`
+- `test:coverage:full`: `bun run test:docker:up && bun test --coverage --config bunfig.ci.toml tests/unit tests/integration tests/docker; code=$?; bun run test:docker:down; exit $code`
+- `test:docker`: `bun run test:docker:up && bun run test:docker:run; code=$?; bun run test:docker:down; exit $code`
 - `test:docker:down`: `docker compose -f docker-compose.test.yml down`
 - `test:docker:run`: `bun scripts/run-docker-tests.ts`
 - `test:docker:up`: `docker compose -f docker-compose.test.yml up -d --wait`
 - `test:docs`: `bun test packages/docs/tests`
-- `test:e2e`: `bun run test:docker:up && bun test --config bunfig.e2e.toml tests/e2e/; bun run test:docker:down`
+- `test:e2e`: `bun run test:docker:up && bun test --config bunfig.e2e.toml tests/e2e/; code=$?; bun run test:docker:down; exit $code`
 - `test:e2e:ci`: `bun test --config bunfig.e2e.toml tests/e2e/`
 - `test:e2e:mongo`: `TEST_BACKEND=mongo bun run test:e2e:ci`
 - `test:e2e:postgres`: `TEST_BACKEND=postgres bun run test:e2e:ci`

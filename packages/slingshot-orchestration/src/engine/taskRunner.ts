@@ -1,3 +1,6 @@
+import type { Logger } from '@lastshotlabs/slingshot-core';
+import { noopLogger } from '@lastshotlabs/slingshot-core';
+
 import { createCachedRunHandle } from '../adapter';
 import { OrchestrationError } from '../errors';
 import type {
@@ -106,7 +109,9 @@ export function createTaskRunner(options: {
   concurrency: number;
   callbacks: TaskRunnerCallbacks;
   eventSink?: OrchestrationEventSink;
+  logger?: Logger;
 }): TaskRunner {
+  const logger = options.logger ?? noopLogger;
   const pending: PendingTask[] = [];
   const active = new Map<string, ActiveTask>();
   const perTaskCounts = new Map<string, number>();
@@ -363,7 +368,42 @@ export function createTaskRunner(options: {
         schedule();
       });
       promise.catch(err => {
-        console.error('[orchestration] task post-return error:', err);
+        const runError = err instanceof Error ? err : new Error(String(err));
+        logger.error('orchestration.task.postReturnError', {
+          runId: submissionOptions.runId,
+          task: def.name,
+          tenantId: submissionOptions.tenantId,
+          error: { message: runError.message, stack: runError.stack },
+        });
+        if (options.eventSink) {
+          try {
+            const result = options.eventSink.emit('orchestration.task.postReturnError', {
+              runId: submissionOptions.runId,
+              task: def.name,
+              error: { message: runError.message, stack: runError.stack },
+              tenantId: submissionOptions.tenantId,
+            });
+            if (result && typeof (result as Promise<void>).catch === 'function') {
+              (result as Promise<void>).catch(emitErr => {
+                logger.error('orchestration.eventSink.emitError', {
+                  label: 'task.postReturnError',
+                  error:
+                    emitErr instanceof Error
+                      ? { message: emitErr.message, stack: emitErr.stack }
+                      : { message: String(emitErr) },
+                });
+              });
+            }
+          } catch (emitErr) {
+            logger.error('orchestration.eventSink.emitError', {
+              label: 'task.postReturnError',
+              error:
+                emitErr instanceof Error
+                  ? { message: emitErr.message, stack: emitErr.stack }
+                  : { message: String(emitErr) },
+            });
+          }
+        }
       });
       executionPromises.set(submissionOptions.runId, promise);
       return createCachedRunHandle(submissionOptions.runId, () => promise);

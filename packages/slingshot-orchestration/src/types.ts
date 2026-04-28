@@ -48,11 +48,11 @@ type StepDurationMapper<TWorkflowInput> = {
   bivarianceHack(ctx: StepInputContext<TWorkflowInput>): number;
 }['bivarianceHack'];
 
-type WorkflowStartHook<TInput> = {
+type WorkflowStartHookFn<TInput> = {
   bivarianceHack(ctx: { runId: string; input: TInput; tenantId?: string }): Promise<void> | void;
 }['bivarianceHack'];
 
-type WorkflowCompleteHook<TOutput> = {
+type WorkflowCompleteHookFn<TOutput> = {
   bivarianceHack(ctx: {
     runId: string;
     output: TOutput;
@@ -61,7 +61,7 @@ type WorkflowCompleteHook<TOutput> = {
   }): Promise<void> | void;
 }['bivarianceHack'];
 
-type WorkflowFailHook = {
+type WorkflowFailHookFn = {
   bivarianceHack(ctx: {
     runId: string;
     error: Error;
@@ -69,6 +69,22 @@ type WorkflowFailHook = {
     tenantId?: string;
   }): Promise<void> | void;
 }['bivarianceHack'];
+
+/**
+ * Per-hook configuration. When passed as a function the hook defaults to halt-on-error
+ * (`continueOnHookError: false`). Pass an object form to opt into resilient hooks.
+ */
+export type WorkflowStartHook<TInput> =
+  | WorkflowStartHookFn<TInput>
+  | { handler: WorkflowStartHookFn<TInput>; continueOnHookError?: boolean };
+
+export type WorkflowCompleteHook<TOutput> =
+  | WorkflowCompleteHookFn<TOutput>
+  | { handler: WorkflowCompleteHookFn<TOutput>; continueOnHookError?: boolean };
+
+export type WorkflowFailHook =
+  | WorkflowFailHookFn
+  | { handler: WorkflowFailHookFn; continueOnHookError?: boolean };
 
 /**
  * User-authored task definition before normalization.
@@ -461,6 +477,12 @@ export interface OrchestrationEventMap {
     workflow: string;
     hook: 'onStart' | 'onComplete' | 'onFail';
     error: RunError;
+  };
+  'orchestration.task.postReturnError': {
+    runId: string;
+    task: string;
+    error: RunError;
+    tenantId?: string;
   };
 }
 

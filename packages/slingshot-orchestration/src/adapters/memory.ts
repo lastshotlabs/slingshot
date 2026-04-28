@@ -56,6 +56,7 @@ export function createMemoryAdapter(
     concurrency?: number;
     eventSink?: OrchestrationEventSink;
     maxPayloadBytes?: number;
+    logger?: import('@lastshotlabs/slingshot-core').Logger;
   } = {},
 ): OrchestrationAdapter & ObservabilityCapability {
   const parsed = memoryAdapterOptionsSchema.parse({
@@ -119,6 +120,7 @@ export function createMemoryAdapter(
   const taskRunner = createTaskRunner({
     concurrency: parsed.concurrency ?? 10,
     eventSink: options.eventSink,
+    logger: options.logger,
     callbacks: {
       onStarted(runId) {
         const run = runs.get(runId);

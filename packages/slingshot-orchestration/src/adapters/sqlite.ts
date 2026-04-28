@@ -131,6 +131,7 @@ export function createSqliteAdapter(options: {
   concurrency?: number;
   eventSink?: OrchestrationEventSink;
   maxPayloadBytes?: number;
+  logger?: import('@lastshotlabs/slingshot-core').Logger;
 }): OrchestrationAdapter & ObservabilityCapability {
   const parsed = sqliteAdapterOptionsSchema.parse(options);
   const maxPayloadBytes = resolveMaxPayloadBytes(parsed.maxPayloadBytes, 'sqlite adapter');
@@ -199,6 +200,23 @@ export function createSqliteAdapter(options: {
   const delayedWorkflowStarts = new Map<string, AbortController>();
   let started = false;
   let shuttingDown = false;
+  let dbClosed = false;
+  function closeDb(): void {
+    if (dbClosed) return;
+    dbClosed = true;
+    try {
+      db.close();
+    } catch (err) {
+      const logger = options.logger;
+      if (logger) {
+        logger.error('orchestration.sqlite.closeFailed', {
+          error: err instanceof Error ? { message: err.message, stack: err.stack } : { message: String(err) },
+        });
+      } else {
+        console.error('[orchestration] sqlite db close failed', err);
+      }
+    }
+  }
 
   const insertRun = db.prepare(`
     INSERT INTO orchestration_runs (
@@ -303,6 +321,7 @@ export function createSqliteAdapter(options: {
   const taskRunner = createTaskRunner({
     concurrency: parsed.concurrency ?? 10,
     eventSink: options.eventSink,
+    logger: options.logger,
     callbacks: {
       onStarted(runId) {
         updateRunStatus.run({
@@ -887,23 +906,26 @@ export function createSqliteAdapter(options: {
     },
     async shutdown() {
       shuttingDown = true;
-      for (const controller of delayedWorkflowStarts.values()) {
-        controller.abort(new Error('Run cancelled'));
+      try {
+        for (const controller of delayedWorkflowStarts.values()) {
+          controller.abort(new Error('Run cancelled'));
+        }
+        for (const controller of workflowControllers.values()) {
+          controller.abort(new Error('Run cancelled'));
+        }
+        const SHUTDOWN_TIMEOUT_MS = 30_000;
+        const timeoutPromise = new Promise<void>(resolve => {
+          setTimeout(() => {
+            console.warn(
+              '[orchestration] shutdown timed out after 30s — some tasks may still be running',
+            );
+            resolve();
+          }, SHUTDOWN_TIMEOUT_MS);
+        });
+        await Promise.race([taskRunner.waitForIdle(), timeoutPromise]);
+      } finally {
+        closeDb();
       }
-      for (const controller of workflowControllers.values()) {
-        controller.abort(new Error('Run cancelled'));
-      }
-      const SHUTDOWN_TIMEOUT_MS = 30_000;
-      const timeoutPromise = new Promise<void>(resolve => {
-        setTimeout(() => {
-          console.warn(
-            '[orchestration] shutdown timed out after 30s — some tasks may still be running',
-          );
-          resolve();
-        }, SHUTDOWN_TIMEOUT_MS);
-      });
-      await Promise.race([taskRunner.waitForIdle(), timeoutPromise]);
-      db.close();
     },
     async listRuns(filter) {
       const rows = db

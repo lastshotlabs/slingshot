@@ -105,4 +105,23 @@ describe('sqlite orchestration adapter', () => {
 
     await adapter.shutdown();
   });
+
+  sqliteTest('shutdown closes the database connection (P-ORCH-4)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'slingshot-orchestration-close-'));
+    tempDirs.push(dir);
+
+    const dbPath = join(dir, 'orchestration.sqlite');
+    const { createSqliteAdapter } = sqliteModule!;
+    const adapter = createSqliteAdapter({ path: dbPath, concurrency: 1 });
+    await adapter.start();
+    await adapter.shutdown();
+
+    // Second shutdown is idempotent: closeDb is guarded against double-close.
+    await adapter.shutdown();
+
+    // After shutdown, attempts to use the runtime should fail because the
+    // underlying database is closed. listRuns goes through better-sqlite3 which
+    // throws once the handle is closed.
+    expect(() => adapter.listRuns({})).toThrow();
+  });
 });

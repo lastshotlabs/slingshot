@@ -92,6 +92,42 @@ function reportWorkflowHookError(options: {
   console.error(`[orchestration] workflow ${options.hook} hook failed`, options.error);
 }
 
+interface HookConfigShape<TFn> {
+  handler: TFn;
+  continueOnHookError?: boolean;
+}
+
+function normalizeHook<TFn>(
+  hook: TFn | HookConfigShape<TFn> | undefined,
+): { handler: TFn; continueOnHookError: boolean } | undefined {
+  if (hook === undefined) return undefined;
+  if (typeof hook === 'function') {
+    return { handler: hook, continueOnHookError: false };
+  }
+  if (typeof hook === 'object' && hook !== null && 'handler' in hook) {
+    const cfg = hook as HookConfigShape<TFn>;
+    return { handler: cfg.handler, continueOnHookError: cfg.continueOnHookError ?? false };
+  }
+  return undefined;
+}
+
+/**
+ * Thrown when a workflow lifecycle hook (`onStart`, `onComplete`, or `onFail`)
+ * raises and `continueOnHookError` is not set on the hook configuration. The
+ * workflow is failed with a `hookFailed` failure step.
+ */
+export class WorkflowHookError extends Error {
+  public readonly hook: 'onStart' | 'onComplete' | 'onFail';
+  public readonly cause: unknown;
+  constructor(hook: 'onStart' | 'onComplete' | 'onFail', cause: unknown) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(`Workflow ${hook} hook failed: ${message}`);
+    this.name = 'WorkflowHookError';
+    this.hook = hook;
+    this.cause = cause;
+  }
+}
+
 function assertSleepDuration(stepName: string, durationMs: number): void {
   if (!Number.isFinite(durationMs) || durationMs < 0) {
     throw new OrchestrationError(
@@ -269,9 +305,10 @@ export async function executeWorkflow(options: {
     'workflow.started',
   );
 
-  if (options.def.onStart) {
+  const onStart = normalizeHook(options.def.onStart);
+  if (onStart) {
     try {
-      await options.def.onStart({
+      await onStart.handler({
         runId: options.runId,
         input: workflowInput,
         tenantId: options.tenantId,
@@ -284,6 +321,32 @@ export async function executeWorkflow(options: {
         hook: 'onStart',
         error,
       });
+      if (!onStart.continueOnHookError) {
+        failedStep = 'hook:onStart';
+        cleanup();
+        const hookError = new WorkflowHookError('onStart', error);
+        const runError = toRunError(hookError);
+        await options.callbacks.onFailed(
+          options.runId,
+          runError,
+          failedStep,
+          Date.now() - startedAt,
+          'failed',
+        );
+        safeEmit(
+          options.eventSink,
+          'orchestration.workflow.failed',
+          {
+            runId: options.runId,
+            workflow: options.def.name,
+            error: runError,
+            failedStep,
+            tenantId: options.tenantId,
+          },
+          'workflow.failed',
+        );
+        throw hookError;
+      }
     }
   }
 
@@ -532,23 +595,11 @@ export async function executeWorkflow(options: {
     if (options.def.output) {
       options.def.output.parse(output);
     }
-    await options.callbacks.onCompleted(options.runId, output, Date.now() - startedAt);
-    safeEmit(
-      options.eventSink,
-      'orchestration.workflow.completed',
-      {
-        runId: options.runId,
-        workflow: options.def.name,
-        output,
-        durationMs: Date.now() - startedAt,
-        tenantId: options.tenantId,
-      },
-      'workflow.completed',
-    );
 
-    if (options.def.onComplete) {
+    const onComplete = normalizeHook(options.def.onComplete);
+    if (onComplete) {
       try {
-        await options.def.onComplete({
+        await onComplete.handler({
           runId: options.runId,
           output,
           durationMs: Date.now() - startedAt,
@@ -562,8 +613,26 @@ export async function executeWorkflow(options: {
           hook: 'onComplete',
           error: hookError,
         });
+        if (!onComplete.continueOnHookError) {
+          failedStep = 'hook:onComplete';
+          throw new WorkflowHookError('onComplete', hookError);
+        }
       }
     }
+
+    await options.callbacks.onCompleted(options.runId, output, Date.now() - startedAt);
+    safeEmit(
+      options.eventSink,
+      'orchestration.workflow.completed',
+      {
+        runId: options.runId,
+        workflow: options.def.name,
+        output,
+        durationMs: Date.now() - startedAt,
+        tenantId: options.tenantId,
+      },
+      'workflow.completed',
+    );
 
     return output;
   } catch (error) {
@@ -598,9 +667,10 @@ export async function executeWorkflow(options: {
         'workflow.failed',
       );
     }
-    if (options.def.onFail) {
+    const onFail = normalizeHook(options.def.onFail);
+    if (onFail) {
       try {
-        await options.def.onFail({
+        await onFail.handler({
           runId: options.runId,
           error: error instanceof Error ? error : new Error(String(error)),
           failedStep,
@@ -614,6 +684,9 @@ export async function executeWorkflow(options: {
           hook: 'onFail',
           error: hookError,
         });
+        if (!onFail.continueOnHookError) {
+          throw new WorkflowHookError('onFail', hookError);
+        }
       }
     }
     throw error;

@@ -164,7 +164,7 @@ describe('memory orchestration runtime', () => {
     ]);
   });
 
-  test('logs workflow hook failures when no event sink is configured', async () => {
+  test('halts the workflow when an onStart hook fails by default', async () => {
     const consoleError = spyOn(console, 'error').mockImplementation(() => {});
     try {
       const hookErrorWorkflow = defineWorkflow({
@@ -183,11 +183,9 @@ describe('memory orchestration runtime', () => {
       });
 
       const handle = await runtime.runWorkflow(hookErrorWorkflow, {});
-      await expect(handle.result()).resolves.toEqual(
-        expect.objectContaining({
-          'noop-step': expect.objectContaining({ sleptMs: 1 }),
-        }),
-      );
+      await expect(handle.result()).rejects.toThrow('Workflow onStart hook failed');
+      const run = await runtime.getRun(handle.id);
+      expect(run?.status).toBe('failed');
       expect(consoleError).toHaveBeenCalledWith(
         '[orchestration] workflow onStart hook failed',
         expect.objectContaining({ message: 'hook exploded' }),
@@ -195,6 +193,91 @@ describe('memory orchestration runtime', () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  test('continues when onStart hook fails and continueOnHookError is true', async () => {
+    const consoleError = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const hookErrorWorkflow = defineWorkflow({
+        name: 'hook-resilient-workflow',
+        input: z.object({}),
+        steps: [sleep('noop-step', 1)],
+        onStart: {
+          continueOnHookError: true,
+          handler() {
+            throw new Error('hook exploded');
+          },
+        },
+      });
+
+      const runtime = createOrchestrationRuntime({
+        adapter: createMemoryAdapter({ concurrency: 1 }),
+        tasks: [],
+        workflows: [hookErrorWorkflow],
+      });
+
+      const handle = await runtime.runWorkflow(hookErrorWorkflow, {});
+      await expect(handle.result()).resolves.toEqual(
+        expect.objectContaining({
+          'noop-step': expect.objectContaining({ sleptMs: 1 }),
+        }),
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
+  test('halts when onComplete hook fails by default', async () => {
+    const eventSink: OrchestrationEventSink = { emit() {} };
+    const failOnCompleteWorkflow = defineWorkflow({
+      name: 'on-complete-halt-workflow',
+      input: z.object({}),
+      steps: [sleep('noop-step', 1)],
+      onComplete() {
+        throw new Error('after-complete kaboom');
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1, eventSink }),
+      tasks: [],
+      workflows: [failOnCompleteWorkflow],
+    });
+
+    const handle = await runtime.runWorkflow(failOnCompleteWorkflow, {});
+    await expect(handle.result()).rejects.toThrow('Workflow onComplete hook failed');
+    const run = await runtime.getRun(handle.id);
+    expect(run?.status).toBe('failed');
+  });
+
+  test('halts when onFail hook fails by default', async () => {
+    const failTask = defineTask({
+      name: 'on-fail-halt-task',
+      input: z.object({}),
+      output: z.object({}),
+      async handler() {
+        throw new Error('boom');
+      },
+    });
+    const onFailHaltWorkflow = defineWorkflow({
+      name: 'on-fail-halt-workflow',
+      input: z.object({}),
+      steps: [step('failing', failTask)],
+      onFail() {
+        throw new Error('on-fail kaboom');
+      },
+    });
+
+    const runtime = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [failTask],
+      workflows: [onFailHaltWorkflow],
+    });
+
+    const handle = await runtime.runWorkflow(onFailHaltWorkflow, {});
+    await expect(handle.result()).rejects.toThrow();
+    const run = await runtime.getRun(handle.id);
+    expect(run?.status).toBe('failed');
   });
 
   test('continueOnFailure: true allows workflow to complete when step fails', async () => {

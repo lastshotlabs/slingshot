@@ -31,6 +31,13 @@ describe('search provider facet helpers', () => {
     expect(result.stats.score).toEqual({ min: 5, max: 10, avg: 22 / 3, sum: 22, count: 3 });
     expect(result.stats.status).toBeUndefined();
   });
+
+  it('returns empty aggregates when no facets are requested', () => {
+    expect(computeFacets([{ status: 'published', score: 10 }], [])).toEqual({
+      distribution: {},
+      stats: {},
+    });
+  });
 });
 
 describe('search provider text scoring helpers', () => {

@@ -93,6 +93,21 @@ function isMongoDuplicateKeyError(err: unknown): boolean {
   return (err as { code?: unknown }).code === 11000;
 }
 
+function createIndexEnsurer(
+  models: Array<{ createIndexes(): Promise<unknown> }>,
+): () => Promise<void> {
+  let pending: Promise<void> | null = null;
+  return async () => {
+    pending ??= Promise.all(models.map(model => model.createIndexes()))
+      .then(() => undefined)
+      .catch((err: unknown) => {
+        pending = null;
+        throw err;
+      });
+    await pending;
+  };
+}
+
 /**
  * Creates a MongoDB-backed `AuthAdapter` using Mongoose.
  *
@@ -126,8 +141,16 @@ export function createMongoAuthAdapter(
   const Group = createGroupModel(conn, mg);
   const GroupMembership = createGroupMembershipModel(conn, mg);
   const M2MClient = createM2MClientModel(conn, mg);
+  const ensureIndexes = createIndexEnsurer([
+    AuthUser,
+    TenantRole,
+    Group,
+    GroupMembership,
+    M2MClient,
+  ]);
 
-  return {
+  const adapter: AuthAdapter & { ready(): Promise<void> } = {
+    ready: ensureIndexes,
     async findByEmail(email) {
       const user = await AuthUser.findOne({ email: normalizeEmail(email) });
       if (!user) return null;
@@ -135,6 +158,7 @@ export function createMongoAuthAdapter(
     },
     async create(email, passwordHash) {
       try {
+        await ensureIndexes();
         const normalized = normalizeEmail(email);
         const user = await AuthUser.create({
           email: normalized,
@@ -182,6 +206,7 @@ export function createMongoAuthAdapter(
 
       const normalizedEmail = profile.email ? normalizeEmail(profile.email) : undefined;
       try {
+        await ensureIndexes();
         user = await AuthUser.create({
           email: normalizedEmail,
           identifier: normalizedEmail,
@@ -211,6 +236,7 @@ export function createMongoAuthAdapter(
       if (!providerIds.includes(key)) {
         user.providerIds = [...providerIds, key];
         try {
+          await ensureIndexes();
           await user.save();
         } catch (err: unknown) {
           if (isMongoDuplicateKeyError(err)) {
@@ -510,6 +536,7 @@ export function createMongoAuthAdapter(
 
     async createGroup(group) {
       try {
+        await ensureIndexes();
         const doc = await Group.create(group);
         return { id: String(doc._id) };
       } catch (err: unknown) {
@@ -567,6 +594,7 @@ export function createMongoAuthAdapter(
       const group = (await Group.findById(groupId, 'tenantId').lean()) as MongoGroupDoc | null;
       if (!group) throw new HttpError(404, 'Group not found');
       try {
+        await ensureIndexes();
         await GroupMembership.create({ groupId, userId, roles, tenantId: group.tenantId ?? null });
       } catch (err: unknown) {
         if ((err as { code?: unknown }).code === 11000)
@@ -699,6 +727,7 @@ export function createMongoAuthAdapter(
 
     async createM2MClient(data) {
       try {
+        await ensureIndexes();
         const client = await M2MClient.create(data);
         return { id: String(client._id) };
       } catch (err: unknown) {
@@ -722,4 +751,5 @@ export function createMongoAuthAdapter(
       }));
     },
   };
+  return adapter;
 }

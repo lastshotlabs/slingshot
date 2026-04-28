@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import {
   defineTask,
@@ -81,6 +81,173 @@ function createEventCollector() {
 }
 
 describe('bullmq workflow processor', () => {
+  test('rejects jobs with missing workflowName without logging job data', async () => {
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const processor = createBullMQWorkflowProcessor({
+      workflowRegistry: new Map(),
+      taskRegistry: new Map(),
+      getTaskQueue() {
+        return new FakeQueue() as never;
+      },
+      getTaskQueueEvents() {
+        return {} as never;
+      },
+    });
+
+    try {
+      await expect(
+        processor({
+          id: 'workflow-corrupt-1',
+          name: 'unknown',
+          data: { input: { email: 'secret@example.com' }, runId: 'workflow-corrupt-1' },
+          opts: {},
+          async updateData() {},
+        } as never),
+      ).rejects.toThrow(/missing 'workflowName' field/);
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("missing 'workflowName' field"),
+        expect.objectContaining({
+          runId: 'workflow-corrupt-1',
+          workflowName: undefined,
+          errorCode: 'WORKFLOW_DATA_MISSING_WORKFLOW_NAME',
+        }),
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  test('rejects jobs for workflows that are not registered', async () => {
+    const processor = createBullMQWorkflowProcessor({
+      workflowRegistry: new Map(),
+      taskRegistry: new Map(),
+      getTaskQueue() {
+        return new FakeQueue() as never;
+      },
+      getTaskQueueEvents() {
+        return {} as never;
+      },
+    });
+
+    await expect(processor(makeWorkflowJob('missing-workflow', {}) as never)).rejects.toMatchObject(
+      {
+        code: 'WORKFLOW_NOT_FOUND',
+        message: "Workflow 'missing-workflow' not registered",
+      },
+    );
+  });
+
+  test('runs sleep steps, applies outputMapper, and forwards priority plus adapter hints', async () => {
+    const { eventSink, events } = createEventCollector();
+    const queue = new FakeQueue();
+    queue.pushSuccess({ sleptMs: 25 });
+    queue.pushSuccess({ done: true });
+
+    const finishTask = defineTask({
+      name: 'finish-after-sleep-task',
+      input: z.object({ sleptMs: z.number() }),
+      output: z.object({ done: z.boolean() }),
+      async handler() {
+        return { done: true };
+      },
+    });
+    const workflow = defineWorkflow({
+      name: 'sleep-then-finish-workflow',
+      input: z.object({}),
+      output: z.object({ finished: z.boolean(), sleptMs: z.number() }),
+      steps: [
+        sleep('wait-step', () => 25),
+        step('finish-step', finishTask, {
+          input: ctx => ctx.results['wait-step'],
+          timeout: 5_000,
+          retry: { maxAttempts: 3, backoff: 'fixed', delayMs: 10 },
+        }),
+      ],
+      outputMapper(results) {
+        return {
+          finished: Boolean((results['finish-step'] as { done?: boolean }).done),
+          sleptMs: (results['wait-step'] as { sleptMs: number }).sleptMs,
+        };
+      },
+    });
+    const job = makeWorkflowJob(workflow.name, {}, 'workflow-sleep-1');
+    job.opts.priority = 7;
+    job.data['tenantId'] = 'tenant-a';
+    job.data['adapterHints'] = { removeOnComplete: 12 };
+
+    const processor = createBullMQWorkflowProcessor({
+      workflowRegistry: new Map([[workflow.name, workflow]]),
+      taskRegistry: new Map([[finishTask.name, finishTask]]),
+      getTaskQueue() {
+        return queue as never;
+      },
+      getTaskQueueEvents() {
+        return {} as never;
+      },
+      eventSink,
+    });
+
+    await expect(processor(job as never)).resolves.toEqual({ finished: true, sleptMs: 25 });
+    expect(queue.addCalls[0]).toMatchObject({
+      name: '__slingshot_sleep',
+      data: { runId: 'workflow-sleep-1', durationMs: 25 },
+      opts: { jobId: 'workflow-sleep-1:sleep:wait-step', delay: 25 },
+    });
+    expect(queue.addCalls[1]?.opts).toMatchObject({
+      priority: 7,
+      attempts: 3,
+      backoff: { type: 'slingshot', delay: 10 },
+      removeOnComplete: 12,
+    });
+    expect(events.map(event => event.name)).toContain('orchestration.workflow.completed');
+    expect(job.data['_childJobIds']).toHaveLength(2);
+  });
+
+  test('logs onStart hook failures when no event sink is configured and continues', async () => {
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const queue = new FakeQueue();
+    queue.pushSuccess({ delivered: true });
+    const task = defineTask({
+      name: 'onstart-task',
+      input: z.object({}),
+      output: z.object({ delivered: z.boolean() }),
+      async handler() {
+        return { delivered: true };
+      },
+    });
+    const workflow = defineWorkflow({
+      name: 'onstart-hook-workflow',
+      input: z.object({}),
+      steps: [step('deliver-step', task)],
+      onStart() {
+        throw new Error('onStart failed');
+      },
+    });
+    const processor = createBullMQWorkflowProcessor({
+      workflowRegistry: new Map([[workflow.name, workflow]]),
+      taskRegistry: new Map([[task.name, task]]),
+      getTaskQueue() {
+        return queue as never;
+      },
+      getTaskQueueEvents() {
+        return {} as never;
+      },
+    });
+
+    try {
+      await expect(processor(makeWorkflowJob(workflow.name, {}) as never)).resolves.toEqual({
+        'deliver-step': { delivered: true },
+      });
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[orchestration] workflow onStart hook failed',
+        expect.any(Error),
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
   test('emits hookError after workflow.completed when onComplete throws', async () => {
     const { eventSink, events } = createEventCollector();
     const queue = new FakeQueue();
@@ -155,6 +322,51 @@ describe('bullmq workflow processor', () => {
     });
   });
 
+  test('string hook failures are converted to portable run errors', async () => {
+    const { eventSink, events } = createEventCollector();
+    const queue = new FakeQueue();
+    queue.pushSuccess({ ok: true });
+    const task = defineTask({
+      name: 'string-hook-task',
+      input: z.object({}),
+      output: z.object({ ok: z.boolean() }),
+      async handler() {
+        return { ok: true };
+      },
+    });
+    const workflow = defineWorkflow({
+      name: 'string-hook-workflow',
+      input: z.object({}),
+      steps: [step('ok-step', task)],
+      onComplete() {
+        throw 'string hook failed';
+      },
+    });
+    const processor = createBullMQWorkflowProcessor({
+      workflowRegistry: new Map([[workflow.name, workflow]]),
+      taskRegistry: new Map([[task.name, task]]),
+      getTaskQueue() {
+        return queue as never;
+      },
+      getTaskQueueEvents() {
+        return {} as never;
+      },
+      eventSink,
+    });
+
+    await expect(processor(makeWorkflowJob(workflow.name, {}) as never)).resolves.toEqual({
+      'ok-step': { ok: true },
+    });
+    expect(events.at(-1)).toEqual({
+      name: 'orchestration.workflow.hookError',
+      payload: expect.objectContaining({
+        workflow: workflow.name,
+        hook: 'onComplete',
+        error: { message: 'string hook failed' },
+      }),
+    });
+  });
+
   test('rejects invalid dynamic sleep durations before scheduling a sleep job', async () => {
     const queue = new FakeQueue();
     const workflow = defineWorkflow({
@@ -198,6 +410,110 @@ describe('bullmq workflow processor', () => {
       `Sleep step 'wait-step' duration must be a non-negative finite number.`,
     );
     expect(queue.addCalls).toHaveLength(0);
+  });
+
+  test('continues after sequential step failure when continueOnFailure is true', async () => {
+    const { eventSink, events } = createEventCollector();
+    const queue = new FakeQueue();
+    queue.pushFailure(new Error('optional failed'));
+    queue.pushSuccess({ ok: true });
+    const optionalTask = defineTask({
+      name: 'optional-sequential-task',
+      input: z.object({}),
+      output: z.object({ ok: z.boolean() }),
+      async handler() {
+        return { ok: false };
+      },
+    });
+    const finalTask = defineTask({
+      name: 'final-sequential-task',
+      input: z.object({}),
+      output: z.object({ ok: z.boolean() }),
+      async handler() {
+        return { ok: true };
+      },
+    });
+    const workflow = defineWorkflow({
+      name: 'sequential-continue-workflow',
+      input: z.object({}),
+      steps: [
+        step('optional-step', optionalTask, { continueOnFailure: true }),
+        step('final-step', finalTask),
+      ],
+    });
+    const processor = createBullMQWorkflowProcessor({
+      workflowRegistry: new Map([[workflow.name, workflow]]),
+      taskRegistry: new Map([
+        [optionalTask.name, optionalTask],
+        [finalTask.name, finalTask],
+      ]),
+      getTaskQueue() {
+        return queue as never;
+      },
+      getTaskQueueEvents() {
+        return {} as never;
+      },
+      eventSink,
+    });
+
+    const result = (await processor(makeWorkflowJob(workflow.name, {}) as never)) as Record<
+      string,
+      unknown
+    >;
+
+    expect(result['optional-step']).toBeUndefined();
+    expect(result['final-step']).toEqual({ ok: true });
+    expect(events.map(event => event.name)).toEqual([
+      'orchestration.workflow.started',
+      'orchestration.step.failed',
+      'orchestration.step.completed',
+      'orchestration.workflow.completed',
+    ]);
+  });
+
+  test('reports failed sequential steps and logs onFail hook failures without an event sink', async () => {
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const queue = new FakeQueue();
+    queue.pushFailure(new Error('hard sequential failure'));
+    const task = defineTask({
+      name: 'hard-sequential-task',
+      input: z.object({}),
+      output: z.object({ ok: z.boolean() }),
+      async handler() {
+        return { ok: false };
+      },
+    });
+    const workflow = defineWorkflow({
+      name: 'sequential-fail-workflow',
+      input: z.object({}),
+      steps: [step('hard-step', task)],
+      onFail(ctx) {
+        expect(ctx.failedStep).toBe('hard-step');
+        throw new Error('onFail failed');
+      },
+    });
+    const processor = createBullMQWorkflowProcessor({
+      workflowRegistry: new Map([[workflow.name, workflow]]),
+      taskRegistry: new Map([[task.name, task]]),
+      getTaskQueue() {
+        return queue as never;
+      },
+      getTaskQueueEvents() {
+        return {} as never;
+      },
+    });
+
+    try {
+      await expect(processor(makeWorkflowJob(workflow.name, {}) as never)).rejects.toThrow(
+        'hard sequential failure',
+      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[orchestration] workflow onFail hook failed',
+        expect.any(Error),
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 });
 

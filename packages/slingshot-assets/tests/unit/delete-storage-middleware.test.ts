@@ -80,17 +80,26 @@ describe('createDeleteStorageFileMiddleware', () => {
     await createDeleteStorageFileMiddleware({
       storage,
       assetAdapter: makeAssetAdapter(null),
-    })(makeContext('missing') as never, mock(async () => {}));
+    })(
+      makeContext('missing') as never,
+      mock(async () => {}),
+    );
 
     await createDeleteStorageFileMiddleware({
       storage,
       assetAdapter: makeAssetAdapter(makeAsset()),
-    })(makeContext(undefined) as never, mock(async () => {}));
+    })(
+      makeContext(undefined) as never,
+      mock(async () => {}),
+    );
 
     await createDeleteStorageFileMiddleware({
       storage,
       assetAdapter: makeAssetAdapter(makeAsset()),
-    })(makeContext('asset-1', 404) as never, mock(async () => {}));
+    })(
+      makeContext('asset-1', 404) as never,
+      mock(async () => {}),
+    );
 
     expect(storageDelete).not.toHaveBeenCalled();
   });
@@ -124,7 +133,10 @@ describe('createDeleteStorageFileMiddleware', () => {
         retryAttempts: 2,
       });
 
-      await middleware(makeContext(asset.id) as never, mock(async () => {}));
+      await middleware(
+        makeContext(asset.id) as never,
+        mock(async () => {}),
+      );
     } finally {
       setTimeoutSpy.mockRestore();
     }
@@ -154,7 +166,10 @@ describe('createDeleteStorageFileMiddleware', () => {
     });
 
     try {
-      await middleware(makeContext(asset.id) as never, mock(async () => {}));
+      await middleware(
+        makeContext(asset.id) as never,
+        mock(async () => {}),
+      );
 
       expect(storageDelete).toHaveBeenCalledTimes(1);
       expect(error).toHaveBeenCalledWith(

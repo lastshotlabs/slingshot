@@ -204,6 +204,15 @@ interface TimingCell {
  */
 const RESERVOIR_LIMIT = 1024;
 
+/**
+ * Maximum number of unique label sets retained per metric name (per kind).
+ * Once a metric reaches this cap, additional label combinations are silently
+ * dropped — better to lose visibility into outliers than to leak memory when
+ * a caller accidentally puts a high-cardinality value (request id, user id)
+ * into a label.
+ */
+const LABEL_CARDINALITY_LIMIT = 1000;
+
 function fingerprintLabels(labels: Record<string, string> | undefined): string {
   if (!labels) return '';
   const keys = Object.keys(labels).sort();
@@ -254,6 +263,22 @@ export function createInProcessMetricsEmitter(): InProcessMetricsEmitter {
   const counters = new Map<string, Map<string, CounterCell>>();
   const gauges = new Map<string, Map<string, GaugeCell>>();
   const timings = new Map<string, Map<string, TimingCell>>();
+  // Track which (kind, name) pairs have already logged a cardinality cap
+  // warning so we don't spam the console when a high-cardinality label is
+  // accidentally used on a hot path.
+  const cardinalityCapWarned = new Set<string>();
+
+  function warnCardinalityCap(kind: 'counter' | 'gauge' | 'timing', name: string): void {
+    const key = `${kind}:${name}`;
+    if (cardinalityCapWarned.has(key)) return;
+    cardinalityCapWarned.add(key);
+    console.warn(
+      `[slingshot-core/metrics] ${kind} '${name}' reached the per-metric label cardinality cap ` +
+        `(${LABEL_CARDINALITY_LIMIT} unique label sets). Additional label combinations will be ` +
+        `dropped. Check that no high-cardinality value (request id, user id, full URL) is being ` +
+        `passed as a label.`,
+    );
+  }
 
   function counterImpl(name: string, value: number = 1, labels?: Record<string, string>): void {
     if (!Number.isFinite(value)) return;
@@ -266,9 +291,13 @@ export function createInProcessMetricsEmitter(): InProcessMetricsEmitter {
     const cell = series.get(fp);
     if (cell) {
       cell.value += value;
-    } else {
-      series.set(fp, { labels: freezeLabels(labels), value });
+      return;
     }
+    if (series.size >= LABEL_CARDINALITY_LIMIT) {
+      warnCardinalityCap('counter', name);
+      return;
+    }
+    series.set(fp, { labels: freezeLabels(labels), value });
   }
 
   function gaugeImpl(name: string, value: number, labels?: Record<string, string>): void {
@@ -282,9 +311,13 @@ export function createInProcessMetricsEmitter(): InProcessMetricsEmitter {
     const cell = series.get(fp);
     if (cell) {
       cell.value = value;
-    } else {
-      series.set(fp, { labels: freezeLabels(labels), value });
+      return;
     }
+    if (series.size >= LABEL_CARDINALITY_LIMIT) {
+      warnCardinalityCap('gauge', name);
+      return;
+    }
+    series.set(fp, { labels: freezeLabels(labels), value });
   }
 
   function timingImpl(name: string, ms: number, labels?: Record<string, string>): void {
@@ -297,6 +330,10 @@ export function createInProcessMetricsEmitter(): InProcessMetricsEmitter {
     const fp = fingerprintLabels(labels);
     let cell = series.get(fp);
     if (!cell) {
+      if (series.size >= LABEL_CARDINALITY_LIMIT) {
+        warnCardinalityCap('timing', name);
+        return;
+      }
       cell = {
         labels: freezeLabels(labels),
         samples: [],
@@ -364,6 +401,7 @@ export function createInProcessMetricsEmitter(): InProcessMetricsEmitter {
     counters.clear();
     gauges.clear();
     timings.clear();
+    cardinalityCapWarned.clear();
   }
 
   return {

@@ -1,5 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
 import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
+import { createMemoryImageCache } from '../../src/image/cache';
 import {
   createServeImageResponse,
   fetchSourceImage,
@@ -9,7 +10,6 @@ import {
   validateSourceUrl,
 } from '../../src/image/serve';
 import { transformImage, transformImageStream } from '../../src/image/transform';
-import { createMemoryImageCache } from '../../src/image/cache';
 import { ImageInputTooLargeError } from '../../src/image/types';
 import type { Asset } from '../../src/types';
 
@@ -64,9 +64,9 @@ function asset(overrides: Partial<Asset> = {}): Asset {
 
 describe('image transform fallback behavior', () => {
   it('validates requested transform dimensions before loading sharp', async () => {
-    await expect(transformImage(buffer('x'), 'image/png', imageOptions({ width: 501 }))).rejects.toThrow(
-      'exceeds maximum allowed width',
-    );
+    await expect(
+      transformImage(buffer('x'), 'image/png', imageOptions({ width: 501 })),
+    ).rejects.toThrow('exceeds maximum allowed width');
     await expect(
       transformImage(buffer('x'), 'image/png', imageOptions({ height: 501 })),
     ).rejects.toThrow('exceeds maximum allowed height');
@@ -86,7 +86,11 @@ describe('image transform fallback behavior', () => {
   });
 
   it('transforms valid image bytes and exposes stream cache output', async () => {
-    const direct = await transformImage(tinyPngBuffer(), 'image/png', imageOptions({ format: 'png' }));
+    const direct = await transformImage(
+      tinyPngBuffer(),
+      'image/png',
+      imageOptions({ format: 'png' }),
+    );
     expect(direct.buffer.byteLength).toBeGreaterThan(0);
     expect(direct.contentType).toBe('image/png');
     expect(direct.warningHeader).toBeUndefined();
@@ -144,7 +148,8 @@ describe('image serve helpers', () => {
   it('maps source fetch failures and oversized responses to typed errors', async () => {
     await expect(
       fetchSourceImage('https://cdn.example/missing.png', undefined, 1024, 100, {
-        fetchImpl: (async () => new Response('missing', { status: 404 })) as typeof fetch,
+        fetchImpl: (async () =>
+          new Response('missing', { status: 404 })) as unknown as typeof fetch,
       }),
     ).rejects.toMatchObject({ status: 502 });
 
@@ -154,20 +159,22 @@ describe('image serve helpers', () => {
           new Response('too-large', {
             status: 200,
             headers: { 'content-length': '99' },
-          })) as typeof fetch,
+          })) as unknown as typeof fetch,
       }),
     ).rejects.toMatchObject({ status: 413 });
 
     await expect(
       fetchSourceImage('https://cdn.example/no-body.png', undefined, 1024, 100, {
-        fetchImpl: (async () => new Response(null, { status: 200 })) as typeof fetch,
+        fetchImpl: (async () => new Response(null, { status: 200 })) as unknown as typeof fetch,
       }),
     ).rejects.toMatchObject({ status: 502 });
 
     await expect(
       fetchSourceImage('https://cdn.example/stream.png', undefined, 3, 100, {
         fetchImpl: (async () =>
-          new Response(stream(encoder.encode('too-large')), { status: 200 })) as typeof fetch,
+          new Response(stream(encoder.encode('too-large')), {
+            status: 200,
+          })) as unknown as typeof fetch,
       }),
     ).rejects.toBeInstanceOf(ImageInputTooLargeError);
   });

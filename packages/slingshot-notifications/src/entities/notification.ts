@@ -7,6 +7,73 @@ function toDate(value: Date | string | null | undefined): Date | null {
   return value instanceof Date ? value : new Date(value);
 }
 
+// Throttle state for corrupt-data warnings. We log at most once per
+// `PARSE_WARN_THROTTLE_MS` window so a sweeping corruption does not flood
+// logs. Mirrors the throttling approach used by the dispatcher's
+// `maybeWarnPendingSaturation` helper.
+const PARSE_WARN_THROTTLE_MS = 60_000;
+let lastParseWarnAt = 0;
+
+function warnCorruptRowData(rowId: unknown, entityHint: string | undefined, err: unknown): void {
+  const ts = Date.now();
+  if (ts - lastParseWarnAt < PARSE_WARN_THROTTLE_MS) return;
+  lastParseWarnAt = ts;
+  const message = err instanceof Error ? err.message : String(err);
+  const id = typeof rowId === 'string' || typeof rowId === 'number' ? String(rowId) : 'unknown';
+  console.warn(
+    `[slingshot-notifications] Corrupt notification row.data — ignoring (rowId=${id}` +
+      (entityHint ? `, entity=${entityHint}` : '') +
+      `): ${message}. Further occurrences within ${PARSE_WARN_THROTTLE_MS}ms suppressed.`,
+  );
+}
+
+/**
+ * Safely parse a row's `data` column. Tolerates the four shapes we see across
+ * backends (and one we should not see, but might if the row is corrupt):
+ *
+ *   - already-parsed object (memory, mongo, postgres jsonb)        -> returned as-is
+ *   - JSON-encoded string (sqlite, legacy postgres rows)           -> parsed
+ *   - null/undefined                                                -> undefined
+ *   - corrupt JSON string                                           -> undefined + throttled warn
+ *   - JSON array (data column is supposed to hold a plain object)  -> undefined
+ *
+ * The `data` column should never be present as anything other than an object,
+ * so we explicitly reject arrays and primitive parse results.
+ */
+function parseRowData(
+  value: unknown,
+  rowId: unknown,
+  entityHint?: string,
+): Record<string, unknown> | undefined {
+  if (value == null) return undefined;
+  if (typeof value === 'object') {
+    if (Array.isArray(value)) return undefined;
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== 'string') return undefined;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return undefined;
+  } catch (err) {
+    warnCorruptRowData(rowId, entityHint, err);
+    return undefined;
+  }
+}
+
+// Test-only hook: reset the throttle so suite ordering does not affect the
+// "warning emitted once" assertion. Exported via the package's testing surface
+// to keep production callers from depending on it.
+export function __resetNotificationDataParseWarnThrottleForTests(): void {
+  lastParseWarnAt = 0;
+}
+
+// Test-only re-export of `parseRowData`. Production callers should not import
+// this — the `__` prefix marks it as internal.
+export const __parseNotificationRowDataForTests = parseRowData;
+
 function extractMemoryRow(value: Record<string, unknown>): Record<string, unknown> {
   const nested = value['record'];
   return nested && typeof nested === 'object' ? (nested as Record<string, unknown>) : value;
@@ -269,12 +336,7 @@ export const notificationOperations = defineOperations(Notification, {
         }
 
         function rowToRecord(row: Record<string, unknown>): NotificationRecord {
-          const rawData =
-            typeof row['data'] === 'string'
-              ? (JSON.parse(row['data'] as string) as Record<string, unknown>)
-              : row['data'] && typeof row['data'] === 'object'
-                ? (row['data'] as Record<string, unknown>)
-                : undefined;
+          const rawData = parseRowData(row['data'], row['id'], 'Notification');
           const camel: Record<string, unknown> = {
             id: row['id'],
             userId: row['user_id'],
@@ -302,11 +364,7 @@ export const notificationOperations = defineOperations(Notification, {
         const existingRow = readExisting();
         if (existingRow) {
           const rawData =
-            typeof existingRow['data'] === 'string'
-              ? (JSON.parse(existingRow['data'] as string) as Record<string, unknown>)
-              : existingRow['data'] && typeof existingRow['data'] === 'object'
-                ? (existingRow['data'] as Record<string, unknown>)
-                : {};
+            parseRowData(existingRow['data'], existingRow['id'], 'Notification') ?? {};
           const currentCount =
             typeof rawData['count'] === 'number' && Number.isFinite(rawData['count'])
               ? (rawData['count'] as number)
@@ -354,11 +412,7 @@ export const notificationOperations = defineOperations(Notification, {
           const existingAfter = readExisting();
           if (existingAfter) {
             const rawData =
-              typeof existingAfter['data'] === 'string'
-                ? (JSON.parse(existingAfter['data'] as string) as Record<string, unknown>)
-                : existingAfter['data'] && typeof existingAfter['data'] === 'object'
-                  ? (existingAfter['data'] as Record<string, unknown>)
-                  : {};
+              parseRowData(existingAfter['data'], existingAfter['id'], 'Notification') ?? {};
             const currentCount =
               typeof rawData['count'] === 'number' && Number.isFinite(rawData['count'])
                 ? (rawData['count'] as number)

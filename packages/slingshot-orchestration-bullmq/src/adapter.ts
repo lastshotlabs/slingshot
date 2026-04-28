@@ -46,6 +46,26 @@ const DEFAULT_REMOVE_ON_FAIL_AGE_SECONDS = 86_400;
 const DRAIN_POLL_INTERVAL_MS = 100;
 
 const CANCELLATION_ERROR_MESSAGE = 'Run cancelled';
+const ADAPTER_DISPOSED_MESSAGE =
+  'Adapter has been shut down; construct a new adapter instance to start again.';
+
+/**
+ * Thrown when an operation is attempted on a BullMQ orchestration adapter that has
+ * already been shut down. Re-using a disposed adapter is a programming error — the
+ * underlying queues, workers, and Redis connections have been released and cannot be
+ * resurrected. Callers should construct a fresh adapter via
+ * {@link createBullMQOrchestrationAdapter}.
+ *
+ * Extends {@link OrchestrationError} with `code = 'ADAPTER_ERROR'` so existing error
+ * branches that key on `code` continue to work; the subclass exists to allow callers
+ * to distinguish disposal from other adapter errors via `instanceof`.
+ */
+export class OrchestrationAdapterDisposedError extends OrchestrationError {
+  constructor(message: string = ADAPTER_DISPOSED_MESSAGE) {
+    super('ADAPTER_ERROR', message);
+    this.name = 'OrchestrationAdapterDisposedError';
+  }
+}
 
 type SerializedStepRun = Omit<StepRun, 'startedAt' | 'completedAt'> & {
   startedAt?: string;
@@ -392,8 +412,14 @@ export function createBullMQOrchestrationAdapter(
   let taskWorker: Worker | null = null;
   let workflowWorker: Worker | null = null;
   let started = false;
+  // Memoized in-flight init promise. Concurrent ensureStarted() callers all
+  // await the SAME promise so initialization is serialized and only runs once.
+  // Cleared in .finally() — see ensureStarted() body.
   let startPromise: Promise<void> | null = null;
-  let closed = false;
+  // disposed is set by shutdown() and is permanent for the lifetime of the
+  // instance. A disposed adapter cannot be re-started (the underlying queues
+  // and workers have been closed); callers must construct a fresh adapter.
+  let disposed = false;
 
   function resolveTask(taskName: string): AnyResolvedTask {
     const task = taskRegistry.get(taskName);
@@ -404,109 +430,115 @@ export function createBullMQOrchestrationAdapter(
   }
 
   async function ensureStarted(): Promise<void> {
+    // Disposed-then-start is a programming error. Surface it instead of
+    // silently re-initializing on a half-torn-down instance.
+    if (disposed) {
+      throw new OrchestrationAdapterDisposedError();
+    }
+    // Fast path: already initialized.
     if (started) return;
-    if (closed) {
-      throw new OrchestrationError('ADAPTER_ERROR', 'Adapter has been shut down.');
-    }
-    if (!startPromise) {
-      startPromise = (async () => {
-        if (!taskQueueEvents) {
-          taskQueueEvents = new QueueEvents(taskQueueName, { connection });
-        }
-        if (!workflowQueueEvents) {
-          workflowQueueEvents = new QueueEvents(workflowQueueName, { connection });
-        }
-        if (!taskWorker) {
-          taskWorker = new Worker(
-            taskQueueName,
-            createBullMQTaskProcessor({
-              taskRegistry,
-              eventSink,
-            }),
-            {
-              connection,
-              concurrency: options.concurrency ?? 10,
-              settings: { backoffStrategy: bullmqBackoffStrategy },
-              maxStalledCount: 1,
-              stalledInterval: 30_000,
+    // Concurrent-call guard: re-use the in-flight init promise so two callers
+    // racing through this function do not both proceed past the started check
+    // and double-construct workers/queues.
+    if (startPromise) return startPromise;
+    startPromise = (async () => {
+      if (!taskQueueEvents) {
+        taskQueueEvents = new QueueEvents(taskQueueName, { connection });
+      }
+      if (!workflowQueueEvents) {
+        workflowQueueEvents = new QueueEvents(workflowQueueName, { connection });
+      }
+      if (!taskWorker) {
+        taskWorker = new Worker(
+          taskQueueName,
+          createBullMQTaskProcessor({
+            taskRegistry,
+            eventSink,
+          }),
+          {
+            connection,
+            concurrency: options.concurrency ?? 10,
+            settings: { backoffStrategy: bullmqBackoffStrategy },
+            maxStalledCount: 1,
+            stalledInterval: 30_000,
+          },
+        );
+        taskWorker.on('stalled', (jobId: string) => {
+          console.error(`[slingshot-orchestration-bullmq] Job stalled in task queue: ${jobId}`);
+        });
+      }
+      if (!workflowWorker) {
+        workflowWorker = new Worker(
+          workflowQueueName,
+          createBullMQWorkflowProcessor({
+            workflowRegistry,
+            taskRegistry,
+            getTaskQueue(taskName) {
+              if (taskName === '__slingshot_sleep') return defaultTaskQueue;
+              return getQueueForTaskName(taskName);
             },
-          );
-          taskWorker.on('stalled', (jobId: string) => {
-            console.error(`[slingshot-orchestration-bullmq] Job stalled in task queue: ${jobId}`);
-          });
-        }
-        if (!workflowWorker) {
-          workflowWorker = new Worker(
-            workflowQueueName,
-            createBullMQWorkflowProcessor({
-              workflowRegistry,
-              taskRegistry,
-              getTaskQueue(taskName) {
-                if (taskName === '__slingshot_sleep') return defaultTaskQueue;
-                return getQueueForTaskName(taskName);
-              },
-              getTaskQueueEvents(taskName) {
-                if (taskName === '__slingshot_sleep') {
-                  if (!taskQueueEvents) {
-                    throw new OrchestrationError(
-                      'ADAPTER_ERROR',
-                      'Task queue events are not started.',
-                    );
-                  }
-                  return taskQueueEvents;
+            getTaskQueueEvents(taskName) {
+              if (taskName === '__slingshot_sleep') {
+                if (!taskQueueEvents) {
+                  throw new OrchestrationError(
+                    'ADAPTER_ERROR',
+                    'Task queue events are not started.',
+                  );
                 }
-                return getQueueEventsForTaskName(taskName);
-              },
-              eventSink,
-            }),
-            {
-              connection,
-              concurrency: workflowConcurrency ?? 5,
-              maxStalledCount: 1,
-              stalledInterval: 30_000,
+                return taskQueueEvents;
+              }
+              return getQueueEventsForTaskName(taskName);
             },
+            eventSink,
+          }),
+          {
+            connection,
+            concurrency: workflowConcurrency ?? 5,
+            maxStalledCount: 1,
+            stalledInterval: 30_000,
+          },
+        );
+        workflowWorker.on('stalled', (jobId: string) => {
+          console.error(
+            `[slingshot-orchestration-bullmq] Job stalled in workflow queue: ${jobId}`,
           );
-          workflowWorker.on('stalled', (jobId: string) => {
-            console.error(
-              `[slingshot-orchestration-bullmq] Job stalled in workflow queue: ${jobId}`,
-            );
-          });
-        }
-        for (const task of taskRegistry.values()) {
-          if (!task.queue || namedWorkers.has(task.queue)) continue;
-          const queueName = namedTaskQueueName(task.queue);
-          const worker = new Worker(
-            queueName,
-            createBullMQTaskProcessor({
-              taskRegistry,
-              eventSink,
-            }),
-            {
-              connection,
-              settings: { backoffStrategy: bullmqBackoffStrategy },
-              maxStalledCount: 1,
-              stalledInterval: 30_000,
-            },
+        });
+      }
+      for (const task of taskRegistry.values()) {
+        if (!task.queue || namedWorkers.has(task.queue)) continue;
+        const queueName = namedTaskQueueName(task.queue);
+        const worker = new Worker(
+          queueName,
+          createBullMQTaskProcessor({
+            taskRegistry,
+            eventSink,
+          }),
+          {
+            connection,
+            settings: { backoffStrategy: bullmqBackoffStrategy },
+            maxStalledCount: 1,
+            stalledInterval: 30_000,
+          },
+        );
+        worker.on('stalled', (jobId: string) => {
+          console.error(
+            `[slingshot-orchestration-bullmq] Job stalled in named queue '${task.queue}': ${jobId}`,
           );
-          worker.on('stalled', (jobId: string) => {
-            console.error(
-              `[slingshot-orchestration-bullmq] Job stalled in named queue '${task.queue}': ${jobId}`,
-            );
-          });
-          const queueEvents = new QueueEvents(queueName, { connection });
-          namedWorkers.set(task.queue, worker);
-          namedQueueEvents.set(task.queue, queueEvents);
-          if (!namedQueues.has(task.queue)) {
-            namedQueues.set(task.queue, new Queue(queueName, queueOptions));
-          }
+        });
+        const queueEvents = new QueueEvents(queueName, { connection });
+        namedWorkers.set(task.queue, worker);
+        namedQueueEvents.set(task.queue, queueEvents);
+        if (!namedQueues.has(task.queue)) {
+          namedQueues.set(task.queue, new Queue(queueName, queueOptions));
         }
-        started = true;
-      })().catch(error => {
-        startPromise = null;
-        throw error;
-      });
-    }
-    await startPromise;
+      }
+      started = true;
+    })().finally(() => {
+      // Always clear the memo. On success, started=true is the new fast-path.
+      // On failure, clearing lets a subsequent call retry from scratch.
+      startPromise = null;
+    });
+    return startPromise;
   }
 
   function getQueueForTaskName(taskName: string): Queue {
@@ -969,7 +1001,30 @@ export function createBullMQOrchestrationAdapter(
       await ensureStarted();
     },
     async shutdown() {
-      closed = true;
+      // Idempotent: a second shutdown() on a disposed adapter is a no-op.
+      // Without this, a redundant call would attempt to close already-closed
+      // workers and produce spurious errors during process teardown.
+      if (disposed) {
+        return;
+      }
+      // Wait for any in-flight start to finish BEFORE tearing down. Otherwise
+      // a start racing with a shutdown can leave fresh workers/queues
+      // connected to Redis after teardown completed — leaking connections
+      // and (worse) picking up jobs after the adapter is supposed to be gone.
+      // We swallow start errors here since the caller's intent is shutdown;
+      // they will surface elsewhere if relevant.
+      if (startPromise) {
+        try {
+          await startPromise;
+        } catch {
+          // Start failed; nothing to drain for the failed init, fall through
+          // to teardown of whatever partial state was created.
+        }
+      }
+      // Mark disposed AFTER awaiting startPromise so an in-flight start does
+      // not see disposed=true mid-init and throw — that would leave the
+      // adapter in an inconsistent state with workers half-constructed.
+      disposed = true;
       cancelledRunSignals.clear();
       runIdToJobId.clear();
 
@@ -1066,6 +1121,10 @@ export function createBullMQOrchestrationAdapter(
         namedQueues.clear();
         await defaultTaskQueue.close();
         await workflowQueue.close();
+        // Reset started so that any reference to this adapter that bypasses
+        // the disposed guard (e.g. internal state inspection) sees a clean
+        // slate. The disposed flag remains set; ensureStarted() will throw
+        // OrchestrationAdapterDisposedError on any further call.
         started = false;
         startPromise = null;
       };

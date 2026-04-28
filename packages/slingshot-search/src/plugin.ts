@@ -15,6 +15,7 @@
  * 4. **teardown**: Flushes pending syncs and disconnects all providers.
  */
 import type {
+  MetricsEmitter,
   PluginSetupContext,
   ResolvedEntityConfig,
   SearchPluginRuntime,
@@ -22,7 +23,9 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   SEARCH_PLUGIN_STATE_KEY,
+  createNoopMetricsEmitter,
   defineEvent,
+  getContextOrNull,
   getPluginState,
   validateAdapterShape,
   validatePluginConfig,
@@ -98,9 +101,21 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
     }
   }
 
+  // The unified metrics emitter is owned by the framework context and not
+  // available until `setupPost` runs (the manager is constructed here at
+  // plugin-factory time, before the app exists). We resolve it lazily via
+  // the indirection below so the manager doesn't need a re-construction.
+  let resolvedMetricsEmitter: MetricsEmitter = createNoopMetricsEmitter();
+  const metricsProxy: MetricsEmitter = {
+    counter: (name, value, labels) => resolvedMetricsEmitter.counter(name, value, labels),
+    gauge: (name, value, labels) => resolvedMetricsEmitter.gauge(name, value, labels),
+    timing: (name, ms, labels) => resolvedMetricsEmitter.timing(name, ms, labels),
+  };
+
   const searchManager = createSearchManager({
     pluginConfig: config,
     transformRegistry,
+    metrics: metricsProxy,
   });
 
   // Event sync manager — created lazily in setupPost
@@ -161,6 +176,13 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
     },
 
     async setupPost({ app, config: frameworkConfig, bus, events }: PluginSetupContext) {
+      // Resolve the framework-owned metrics emitter so the search manager and
+      // event sync manager can publish counters/gauges/timings on hot paths.
+      // The proxy above ensures the plugin-factory-time manager construction
+      // sees this emitter without a second factory call.
+      const ctx = getContextOrNull(app);
+      if (ctx) resolvedMetricsEmitter = ctx.metricsEmitter;
+
       // Discover entities with search config via entity registry.
       // The framework attaches the entity registry during bootstrap, and
       // owner plugins populate it during setupMiddleware/setupRoutes.
@@ -186,6 +208,7 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
         transformRegistry,
         bus,
         events,
+        metrics: metricsProxy,
       });
 
       // Subscribe to events for config-driven entities with event-bus sync

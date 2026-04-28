@@ -249,6 +249,92 @@ describe('slingshot-ssg CLI --rsc-manifest', () => {
     expect(existsSync(join(fixture.outDir, 'about', 'index.html'))).toBe(true);
   });
 
+  it('exits with a clean error when --rsc-manifest is empty', () => {
+    const fixture = createSsgFixture(makeTempDir());
+    const emptyManifestPath = writeFixtureFile(
+      // Reuse the fixture base dir (parent of routes) so cleanup picks it up.
+      dirname(fixture.routesDir),
+      'empty-rsc-manifest.json',
+      '',
+    );
+
+    const result = runCli([
+      '--routes-dir',
+      fixture.routesDir,
+      '--assets-manifest',
+      fixture.assetsManifestPath,
+      '--out',
+      fixture.outDir,
+      '--renderer',
+      fixture.rendererWithHookPath,
+      '--rsc-manifest',
+      emptyManifestPath,
+    ]);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.combined).toContain('--rsc-manifest is empty');
+    expect(result.combined).toContain(emptyManifestPath);
+    // The pre-labeled error is printed without a Node stack trace.
+    expect(result.combined).not.toContain('SyntaxError');
+    expect(result.combined).not.toContain('at JSON.parse');
+  });
+
+  it('exits with a clean error when --rsc-manifest is malformed JSON', () => {
+    const fixture = createSsgFixture(makeTempDir());
+    const malformedManifestPath = writeFixtureFile(
+      dirname(fixture.routesDir),
+      'malformed-rsc-manifest.json',
+      '{ "modules": { "broken": ',
+    );
+
+    const result = runCli([
+      '--routes-dir',
+      fixture.routesDir,
+      '--assets-manifest',
+      fixture.assetsManifestPath,
+      '--out',
+      fixture.outDir,
+      '--renderer',
+      fixture.rendererWithHookPath,
+      '--rsc-manifest',
+      malformedManifestPath,
+    ]);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.combined).toContain('--rsc-manifest is not valid JSON');
+    expect(result.combined).toContain(malformedManifestPath);
+    expect(result.combined).toContain('snapshotSsr({ rsc: true })');
+    // The pre-labeled error is printed without a Node stack trace.
+    expect(result.combined).not.toContain('at JSON.parse');
+  });
+
+  it('exits with a schema error when --rsc-manifest has the wrong shape', () => {
+    const fixture = createSsgFixture(makeTempDir());
+    // Valid JSON, but missing the required `modules` field.
+    const wrongShapePath = writeFixtureFile(
+      dirname(fixture.routesDir),
+      'wrong-shape-rsc-manifest.json',
+      JSON.stringify(['not', 'an', 'object']),
+    );
+
+    const result = runCli([
+      '--routes-dir',
+      fixture.routesDir,
+      '--assets-manifest',
+      fixture.assetsManifestPath,
+      '--out',
+      fixture.outDir,
+      '--renderer',
+      fixture.rendererWithHookPath,
+      '--rsc-manifest',
+      wrongShapePath,
+    ]);
+
+    expect(result.exitCode).not.toBe(0);
+    expect(result.combined).toContain('--rsc-manifest has an unexpected shape');
+    expect(result.combined).toContain(wrongShapePath);
+  });
+
   it('exits with error when outDir cannot be created (unwritable parent)', () => {
     const fixture = createSsgFixture(makeTempDir());
     const unwritableOut = '/proc/slingshot-test-unwritable/out';

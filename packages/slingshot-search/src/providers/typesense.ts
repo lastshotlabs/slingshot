@@ -1002,6 +1002,15 @@ export function createTypesenseProvider(config: TypesenseProviderConfig): Search
       return Promise.resolve();
     },
 
+    /**
+     * Synchronous breaker accessor used by the unified metrics emitter.
+     * Returns the closure-owned breaker state without making any HTTP calls
+     * so it is safe to invoke on the search hot path.
+     */
+    getCircuitBreakerState(): 'closed' | 'open' | 'half-open' | undefined {
+      return http.getBreakerHealth().state;
+    },
+
     // --- Index Management ---
 
     async createOrUpdateIndex(

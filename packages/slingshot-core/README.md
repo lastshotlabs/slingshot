@@ -114,6 +114,52 @@ Core now owns the registry-backed event contract:
 If a package needs externally visible events, the definition belongs in core-owned contracts and the
 publish path should go through `ctx.events`, not raw `bus.emit(...)` plus sidecar allowlists.
 
+### Unified metrics emitter
+
+Core owns the thin `MetricsEmitter` contract that prod-track packages call to record
+counters, gauges, and timings without coupling to a specific backend. The emitter is
+exposed as `ctx.metricsEmitter` and defaults to `createNoopMetricsEmitter()` when the
+host application has not configured one — plugins can call it unconditionally.
+
+This is a separate seam from the framework-owned `/metrics` endpoint registry. Use
+`MetricsEmitter` for ad-hoc plugin signals (`search.query.duration`, etc.); use the
+metrics plugin for HTTP request-level scrape data.
+
+To wire a custom backend, attach an emitter that adapts your client of choice. A
+minimal Prometheus example using `prom-client`:
+
+```ts
+import { Counter, Gauge, Histogram } from 'prom-client';
+import type { MetricsEmitter } from '@lastshotlabs/slingshot-core';
+
+const counters = new Map<string, Counter<string>>();
+const gauges = new Map<string, Gauge<string>>();
+const histograms = new Map<string, Histogram<string>>();
+
+export const promEmitter: MetricsEmitter = {
+  counter(name, value = 1, labels = {}) {
+    const c =
+      counters.get(name) ?? new Counter({ name, help: name, labelNames: Object.keys(labels) });
+    counters.set(name, c);
+    c.inc(labels, value);
+  },
+  gauge(name, value, labels = {}) {
+    const g = gauges.get(name) ?? new Gauge({ name, help: name, labelNames: Object.keys(labels) });
+    gauges.set(name, g);
+    g.set(labels, value);
+  },
+  timing(name, ms, labels = {}) {
+    const h =
+      histograms.get(name) ?? new Histogram({ name, help: name, labelNames: Object.keys(labels) });
+    histograms.set(name, h);
+    h.observe(labels, ms / 1000);
+  },
+};
+
+// Pass through `metrics.emitter` in your app config:
+// createApp({ metrics: { emitter: promEmitter } })
+```
+
 ### Config-driven platform
 
 Core owns the types for entity definitions, operations, route configs, and channel configs. Those types are consumed by `@lastshotlabs/slingshot-entity`, by runtime route wiring, and by real feature packages such as community.

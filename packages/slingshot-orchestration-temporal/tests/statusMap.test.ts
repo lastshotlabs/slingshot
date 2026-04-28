@@ -7,6 +7,13 @@ describe('mapTemporalStatus', () => {
     expect(mapTemporalStatus('COMPLETED')).toBe('completed');
     expect(mapTemporalStatus('FAILED')).toBe('failed');
     expect(mapTemporalStatus('TIMED_OUT')).toBe('failed');
+    expect(mapTemporalStatus('TERMINATED')).toBe('failed');
     expect(mapTemporalStatus('CANCELLED')).toBe('cancelled');
+    expect(mapTemporalStatus('PAUSED')).toBe('pending');
+    expect(mapTemporalStatus('CONTINUED_AS_NEW')).toBe('pending');
+    expect(mapTemporalStatus('UNKNOWN')).toBe('pending');
+    expect(mapTemporalStatus('UNSPECIFIED')).toBe('pending');
+    expect(mapTemporalStatus(undefined)).toBe('pending');
+    expect(mapTemporalStatus('UNRECOGNIZED')).toBe('pending');
   });
 });

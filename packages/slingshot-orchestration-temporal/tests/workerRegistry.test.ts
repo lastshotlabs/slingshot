@@ -46,4 +46,23 @@ describe('Temporal worker registries', () => {
     expect(getRegisteredWorkflow('welcome-flow')).toBeUndefined();
     expect(getRegisteredWorkflowHooks('welcome-flow')).toBeUndefined();
   });
+
+  test('preserves workflow hook entries when hooks are omitted', () => {
+    clearWorkerRegistries();
+
+    const workflow = {
+      _tag: 'ResolvedWorkflow',
+      name: 'no-hook-flow',
+    } as unknown as AnyResolvedWorkflow;
+
+    installWorkerRegistries({ tasks: [], workflows: [workflow] });
+
+    expect(getRegisteredWorkflowHooks('no-hook-flow')).toEqual({
+      onStart: undefined,
+      onComplete: undefined,
+      onFail: undefined,
+    });
+
+    clearWorkerRegistries();
+  });
 });

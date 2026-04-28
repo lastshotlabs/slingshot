@@ -11,10 +11,12 @@
  */
 import type {
   GeoSearchConfig,
+  MetricsEmitter,
   ResolvedEntityConfig,
   SlingshotEventBus,
   SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
+import { createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { applyGeoTransform } from './geoTransform';
 import type { SearchManager } from './searchManager';
 import type { SearchTransformRegistry } from './transformRegistry';
@@ -75,6 +77,14 @@ export interface EventSyncManagerConfig {
    * unbounded memory. Persistent DLQ retention belongs to `onFlushDeadLetter`.
    */
   readonly maxDeadLetterEntries?: number;
+
+  /**
+   * Optional unified metrics emitter. When provided, the manager records
+   * `search.eventSync.flush.count` (counter) on each flush attempt and
+   * publishes `search.eventSync.dlq.size` (gauge) whenever the dead-letter
+   * map changes. Defaults to a no-op emitter.
+   */
+  readonly metrics?: MetricsEmitter;
 }
 
 /** Public interface for an event-bus sync manager instance. */
@@ -278,6 +288,7 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     onFlushDeadLetter,
     maxDeadLetterEntries = 10_000,
   } = config;
+  const metrics: MetricsEmitter = config.metrics ?? createNoopMetricsEmitter();
 
   // Closure-owned state
   const unsubscribers: Array<() => void> = [];
@@ -371,6 +382,10 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
     if (flushing) return;
     flushing = true;
     flushRequested = false;
+    // Counter increments unconditionally so dashboards can observe flush
+    // cadence and infer health from rate changes (failures don't suppress
+    // attempts). One increment per flush attempt, not per per-index batch.
+    metrics.counter('search.eventSync.flush.count');
 
     try {
       // Snapshot and clear pending queue atomically
@@ -606,6 +621,10 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
       evictedFromDeadLetter += 1;
     }
 
+    // Publish the current DLQ depth as a gauge. Done after eviction so the
+    // value reflects the bounded steady-state size, not the transient peak.
+    metrics.gauge('search.eventSync.dlq.size', deadLetterCount);
+
     emitSyncDead(indexName, entityName, documentId, operation, err, attempts);
 
     if (onFlushDeadLetter) {
@@ -775,6 +794,9 @@ export function createEventSyncManager(config: EventSyncManagerConfig): EventSyn
       deadLetters.clear();
       deadLetterInsertionOrder.length = 0;
       deadLetterCount = 0;
+      // Publish the post-teardown gauge so dashboards show 0, not the last
+      // pre-teardown peak. Cheap and avoids stale alarms after shutdown.
+      metrics.gauge('search.eventSync.dlq.size', 0);
     },
 
     getHealth(): EventSyncHealth {

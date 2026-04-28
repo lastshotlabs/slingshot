@@ -7,18 +7,24 @@ import type { Context } from 'hono';
  * `POST /webhooks/inbound/<provider>` request, the plugin calls `verify()`. If verification
  * passes, the payload is re-emitted as `webhook:inbound.<provider>` on the bus.
  *
+ * Implementers MUST handle malformed JSON. The `rawBody` is attacker-controlled, so a
+ * naive `JSON.parse(rawBody)` will throw on bad input and surface as an unhelpful 500.
+ * Use the `safeParseInboundBody` helper exported from this package, or wrap `JSON.parse`
+ * in your own try/catch and return `{ verified: false, reason }` on failure.
+ *
  * @example
  * ```ts
- * import type { InboundProvider } from '@lastshotlabs/slingshot-webhooks';
+ * import { safeParseInboundBody, type InboundProvider } from '@lastshotlabs/slingshot-webhooks';
  *
  * const stripeProvider: InboundProvider = {
  *   name: 'stripe',
  *   async verify(c, rawBody) {
  *     const sig = c.req.header('stripe-signature') ?? '';
  *     const valid = verifyStripeSignature(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET!);
- *     return valid
- *       ? { verified: true, payload: JSON.parse(rawBody) }
- *       : { verified: false, reason: 'Invalid signature' };
+ *     if (!valid) return { verified: false, reason: 'Invalid signature' };
+ *     const parsed = safeParseInboundBody(rawBody);
+ *     if (!parsed.ok) return { verified: false, reason: parsed.reason };
+ *     return { verified: true, payload: parsed.payload };
  *   },
  * };
  * ```

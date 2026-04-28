@@ -3,6 +3,7 @@
  */
 export {
   createBullMQOrchestrationAdapter,
+  OrchestrationAdapterDisposedError,
   type BullMQOrchestrationAdapterMetrics,
   type BullMQOrchestrationMetricsCapability,
 } from './adapter';

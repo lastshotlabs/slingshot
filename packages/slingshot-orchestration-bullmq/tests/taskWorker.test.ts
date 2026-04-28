@@ -69,6 +69,18 @@ describe('bullmq task processor error handling', () => {
 });
 
 describe('bullmq task processor', () => {
+  test('returns a sleep result for internal sleep jobs', async () => {
+    const processor = createBullMQTaskProcessor({
+      taskRegistry: new Map(),
+    });
+    const job = {
+      name: '__slingshot_sleep',
+      data: { durationMs: 125 },
+    } as unknown as Job<Record<string, unknown>>;
+
+    await expect(processor(job)).resolves.toEqual({ sleptMs: 125 });
+  });
+
   test('emits started, progress, and completed events', async () => {
     const task = defineTask({
       name: 'worker-task',
@@ -110,6 +122,52 @@ describe('bullmq task processor', () => {
       'orchestration.task.progress',
       'orchestration.task.completed',
     ]);
+  });
+
+  test('logs when progress event emission rejects without failing the task', async () => {
+    const consoleErrorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const task = defineTask({
+      name: 'progress-event-error-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input, ctx) {
+        ctx.reportProgress({ percent: 25 });
+        return input;
+      },
+    });
+    const eventSink: OrchestrationEventSink = {
+      emit(name) {
+        if (name === 'orchestration.task.progress') {
+          return Promise.reject(new Error('sink unavailable'));
+        }
+        return Promise.resolve();
+      },
+    };
+
+    const processor = createBullMQTaskProcessor({
+      taskRegistry: new Map([[task.name, task]]),
+      eventSink,
+    });
+
+    try {
+      await expect(
+        processor(
+          createFakeJob({
+            taskName: task.name,
+            input: { value: 'ok' },
+            runId: 'run_progress_sink_error',
+          }),
+        ),
+      ).resolves.toEqual({ value: 'ok' });
+      await Promise.resolve();
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[slingshot-orchestration-bullmq] Failed to emit progress event:',
+        expect.any(Error),
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   test('emits failed events when task execution throws', async () => {
@@ -242,6 +300,53 @@ describe('bullmq task processor – job data corruption', () => {
       expect.stringContaining("missing 'taskName' field"),
       expect.anything(),
     );
+  });
+
+  test('missing input field throws a clear error without logging payload data', async () => {
+    const task = defineTask({
+      name: 'missing-input-task',
+      input: z.object({ value: z.string() }),
+      output: z.object({ value: z.string() }),
+      async handler(input) {
+        return input;
+      },
+    });
+
+    const processor = createBullMQTaskProcessor({
+      taskRegistry: new Map([[task.name, task]]),
+    });
+
+    await expect(
+      processor(createFakeJob({ taskName: task.name, runId: 'run_missing_input' })),
+    ).rejects.toThrow(/BullMQ job .* has invalid data: missing 'input' field/);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("missing 'input' field"),
+      expect.objectContaining({
+        runId: 'run_missing_input',
+        taskName: task.name,
+        errorCode: 'TASK_DATA_MISSING_INPUT',
+      }),
+    );
+  });
+
+  test('unknown task names fail with TASK_NOT_FOUND', async () => {
+    const processor = createBullMQTaskProcessor({
+      taskRegistry: new Map(),
+    });
+
+    await expect(
+      processor(
+        createFakeJob({
+          taskName: 'missing-task',
+          input: {},
+          runId: 'run_missing_task',
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: 'TASK_NOT_FOUND',
+      message: "Task 'missing-task' not registered",
+    });
   });
 
   test('null input field causes graceful failure without cryptic type error', async () => {

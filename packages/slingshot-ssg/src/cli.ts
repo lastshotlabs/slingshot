@@ -21,6 +21,7 @@
 //                       (optional; only used when the renderer implements ssgConfigure())
 import { accessSync, constants, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { z } from 'zod';
 import type { SlingshotSsrRenderer } from '@lastshotlabs/slingshot-ssr';
 import { MAX_CONCURRENCY } from './constants';
 import { collectSsgRoutes } from './crawler';
@@ -218,6 +219,103 @@ export async function resolveAssetTagsHtml(
   }
 }
 
+// ─── RSC manifest loading ─────────────────────────────────────────────────────
+
+/**
+ * Minimal structural schema for `rsc-manifest.json`.
+ *
+ * The runner does not need to interpret the manifest — it only forwards the
+ * parsed value to the renderer's `ssgConfigure()` hook. We validate that the
+ * top-level value is a JSON object containing a `modules` map (the well-known
+ * shape produced by `snapshotSsr({ rsc: true })`) so that an obviously wrong
+ * file (HTML error page, build log, empty file) fails fast with a clear
+ * message instead of being passed through to the renderer where it would
+ * surface as a confusing downstream error.
+ *
+ * Unknown keys are allowed — renderers may extend the manifest format.
+ *
+ * @internal
+ */
+const rscManifestSchema = z
+  .object({
+    modules: z.record(z.string(), z.unknown()),
+  })
+  .passthrough();
+
+/**
+ * Read, parse, and validate an RSC manifest file produced by the Vite build.
+ *
+ * Distinguishes three failure modes and raises a single, labeled `[slingshot-ssg]`
+ * error in each case so the top-level CLI handler can exit with a clean,
+ * stack-free message:
+ * - File missing (ENOENT) — race between existsSync() and the read, or a
+ *   permission error masquerading as missing.
+ * - Malformed JSON — `JSON.parse` throws a `SyntaxError`.
+ * - Wrong shape — parses as JSON but does not match {@link rscManifestSchema}.
+ *
+ * The thrown error message always includes the resolved absolute path and a
+ * hint about the expected format so the user can correct the input without
+ * reading the source.
+ *
+ * @internal
+ */
+export async function loadRscManifest(absRscManifest: string): Promise<unknown> {
+  let raw: string;
+  try {
+    raw = await Bun.file(absRscManifest).text();
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code === 'ENOENT') {
+      throw new Error(
+        `[slingshot-ssg] --rsc-manifest file not readable: ${absRscManifest}\n` +
+          `The file does not exist or is not accessible. ` +
+          `Ensure the Vite build ran with rsc: true and the manifest path is correct.`,
+      );
+    }
+    throw new Error(
+      `[slingshot-ssg] --rsc-manifest could not be read: ${absRscManifest}\n` +
+        `${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
+
+  if (raw.trim() === '') {
+    throw new Error(
+      `[slingshot-ssg] --rsc-manifest is empty: ${absRscManifest}\n` +
+        `Expected a JSON object produced by snapshotSsr({ rsc: true }) ` +
+        `(e.g. { "modules": { ... } }).`,
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err: unknown) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `[slingshot-ssg] --rsc-manifest is not valid JSON: ${absRscManifest}\n` +
+        `${detail}\n` +
+        `Expected a JSON object produced by snapshotSsr({ rsc: true }) ` +
+        `(e.g. { "modules": { ... } }).`,
+      { cause: err },
+    );
+  }
+
+  const result = rscManifestSchema.safeParse(parsed);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map(issue => `  - ${issue.path.join('.') || '<root>'}: ${issue.message}`)
+      .join('\n');
+    throw new Error(
+      `[slingshot-ssg] --rsc-manifest has an unexpected shape: ${absRscManifest}\n` +
+        `${issues}\n` +
+        `Expected a JSON object with a "modules" map (as produced by snapshotSsr({ rsc: true })).`,
+    );
+  }
+
+  return result.data;
+}
+
 // ─── Renderer loading ─────────────────────────────────────────────────────────
 
 /**
@@ -294,7 +392,7 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
           `Ensure the Vite build ran with rsc: true before running SSG.`,
       );
     } else if (typeof renderer.ssgConfigure === 'function') {
-      const rscManifest = JSON.parse(await Bun.file(absRscManifest).text()) as unknown;
+      const rscManifest = await loadRscManifest(absRscManifest);
       await renderer.ssgConfigure({ rscManifest });
       console.log(`[slingshot-ssg] RSC manifest loaded from ${absRscManifest}.`);
     } else {
@@ -339,7 +437,15 @@ export async function runCli(argv = process.argv.slice(2)): Promise<void> {
 
 if (import.meta.main) {
   runCli().catch((err: unknown) => {
-    console.error('[slingshot-ssg] Fatal error:', err);
+    // Errors produced by the CLI itself are pre-labeled with `[slingshot-ssg]`
+    // and have user-facing messages — print them cleanly without a stack
+    // trace. Unexpected errors (assertion failures, third-party bugs) are
+    // dumped in full so the user can file a bug report.
+    if (err instanceof Error && err.message.startsWith('[slingshot-ssg]')) {
+      console.error(err.message);
+    } else {
+      console.error('[slingshot-ssg] Fatal error:', err);
+    }
     process.exit(1);
   });
 }

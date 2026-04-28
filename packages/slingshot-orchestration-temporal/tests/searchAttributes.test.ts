@@ -2,8 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import {
   buildSearchAttributes,
   buildVisibilityQuery,
+  buildVisibilityValidationQueries,
   decodeTag,
+  decodeTags,
   encodeTag,
+  encodeTags,
 } from '../src/searchAttributes';
 
 describe('Temporal search attributes helpers', () => {
@@ -36,5 +39,49 @@ describe('Temporal search attributes helpers', () => {
         tags: { team: 'ops' },
       }),
     ).toContain(`SlingshotTags = '${encodeTag('team', 'ops')}'`);
+  });
+
+  test('sorts, decodes, and tolerates malformed visibility tag values', () => {
+    expect(encodeTags({ zed: 'last', alpha: 'first' })).toEqual([
+      encodeTag('alpha', 'first'),
+      encodeTag('zed', 'last'),
+    ]);
+    expect(decodeTag('raw-token')).toEqual(['raw-token', '']);
+    expect(decodeTags([encodeTag('team', 'ops'), 123, encodeTag('env', 'prod')])).toEqual({
+      team: 'ops',
+      env: 'prod',
+    });
+    expect(decodeTags(undefined)).toBeUndefined();
+    expect(decodeTags([123, false])).toBeUndefined();
+  });
+
+  test('builds optional visibility filters for statuses, dates, and escaped values', () => {
+    const query = buildVisibilityQuery({
+      type: 'task',
+      name: "sync'user\\data",
+      tenantId: 'tenant-prod',
+      status: ['completed', 'cancelled', 'skipped'],
+      createdAfter: new Date('2026-01-01T00:00:00.000Z'),
+      createdBefore: new Date('2026-01-02T00:00:00.000Z'),
+    });
+
+    expect(query).toContain("SlingshotName = 'sync\\'user\\\\data'");
+    expect(query).toContain(
+      "(ExecutionStatus = 'Completed' OR ExecutionStatus = 'Canceled' OR ExecutionStatus = 'Completed')",
+    );
+    expect(query).toContain("StartTime >= '2026-01-01T00:00:00.000Z'");
+    expect(query).toContain("StartTime <= '2026-01-02T00:00:00.000Z'");
+    expect(buildVisibilityQuery()).toBeUndefined();
+    expect(buildVisibilityQuery({})).toBeUndefined();
+  });
+
+  test('exposes validation probes for every reserved Temporal search attribute', () => {
+    expect(buildVisibilityValidationQueries()).toEqual([
+      "SlingshotKind = 'task' OR SlingshotKind = 'workflow'",
+      "SlingshotName = 'slingshot'",
+      "SlingshotTenantId = 'tenant'",
+      'SlingshotPriority >= 0 OR SlingshotPriority < 0',
+      `SlingshotTags = '${encodeTag('key', 'value')}'`,
+    ]);
   });
 });

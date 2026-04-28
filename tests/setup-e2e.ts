@@ -4,6 +4,7 @@ import type { CreateAppConfig } from '../src/app';
 import { createServer, getServerContext } from '../src/server';
 import type { CreateServerConfig } from '../src/server';
 import { logTestBackend, resolveTestDbConfig } from './e2e/helpers/backend-factory';
+import { dbConfigUsesMongo, resetMongoE2eState, resolveTestMongoUrl } from './e2e/helpers/mongo';
 import {
   dbConfigUsesPostgres,
   resetPostgresE2eState,
@@ -37,6 +38,9 @@ export async function createTestHttpServer(
   }
   if (options?.resetBackend !== false && dbConfigUsesPostgres(mergedDbConfig)) {
     await resetPostgresE2eState(resolveTestPostgresUrl());
+  }
+  if (options?.resetBackend !== false && dbConfigUsesMongo(mergedDbConfig)) {
+    await resetMongoE2eState(resolveTestMongoUrl());
   }
   const app = await createTestApp({ ...overrides, db: mergedDbConfig }, authOverrides);
   const server = Bun.serve({ port: 0, fetch: app.fetch });
@@ -73,6 +77,9 @@ export async function createTestFullServer(
   const mergedDbConfig = { ...dbConfig, ...config?.db };
   if (options?.resetBackend !== false && dbConfigUsesPostgres(mergedDbConfig)) {
     await resetPostgresE2eState(resolveTestPostgresUrl());
+  }
+  if (options?.resetBackend !== false && dbConfigUsesMongo(mergedDbConfig)) {
+    await resetMongoE2eState(resolveTestMongoUrl());
   }
   const fullConfig: CreateServerConfig = {
     routesDir: import.meta.dir + '/fixtures/routes',

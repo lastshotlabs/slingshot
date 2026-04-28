@@ -5,7 +5,12 @@
  * lifecycle, index creation/update, entity search clients, federated search,
  * and reindex operations. All state is closure-owned — no singletons.
  */
-import type { GeoSearchConfig, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
+import type {
+  GeoSearchConfig,
+  MetricsEmitter,
+  ResolvedEntityConfig,
+} from '@lastshotlabs/slingshot-core';
+import { createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { applyGeoTransform } from './geoTransform';
 import { deriveIndexSettings } from './indexSettings';
 import { createAlgoliaProvider } from './providers/algolia';
@@ -274,6 +279,8 @@ export interface SearchManager {
 interface EntitySearchState {
   readonly indexName: string;
   readonly provider: SearchProvider;
+  /** Stable provider key (e.g. `'default'`) used as a metric label. */
+  readonly providerKey: string;
   readonly settings: SearchIndexSettings;
   readonly pkField: string;
   readonly transformName?: string;
@@ -326,6 +333,13 @@ export interface SearchManagerConfig {
    * re-issue `createOrUpdateIndex` the next time that tenant is touched.
    */
   readonly onTenantIndexEvicted?: TenantIndexEvictedHandler;
+  /**
+   * Optional unified metrics emitter. When provided, the manager records
+   * counters/gauges/timings on hot paths (`search.query.count`,
+   * `search.query.duration`, `search.circuitBreaker.state`). Defaults to a
+   * no-op emitter so callers can omit the field without a feature check.
+   */
+  readonly metrics?: MetricsEmitter;
 }
 
 /**
@@ -379,6 +393,7 @@ export interface SearchManagerConfig {
  */
 export function createSearchManager(config: SearchManagerConfig): SearchManager {
   const { pluginConfig, transformRegistry, onTenantIndexEvicted } = config;
+  const metrics: MetricsEmitter = config.metrics ?? createNoopMetricsEmitter();
 
   // Closure-owned state
   const providers = new Map<string, SearchProvider>();
@@ -400,6 +415,21 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
   let tenantIndexEvictions = 0;
   let initialized = false;
   let providersConnected = false;
+
+  /**
+   * Publish a `search.circuitBreaker.state` gauge for a provider that
+   * supports the optional `getCircuitBreakerState()` accessor. Mapping:
+   * 0 = closed, 1 = open, 2 = half-open. Providers without a breaker are
+   * silently skipped so the gauge stays interpretable for observers (a
+   * missing series means "no breaker", not "closed").
+   */
+  function sampleCircuitBreaker(provider: SearchProvider, providerKey: string): void {
+    if (typeof provider.getCircuitBreakerState !== 'function') return;
+    const state = provider.getCircuitBreakerState();
+    if (state === undefined) return;
+    const value = state === 'closed' ? 0 : state === 'open' ? 1 : 2;
+    metrics.gauge('search.circuitBreaker.state', value, { provider: providerKey });
+  }
 
   /**
    * Parse a tenant-scoped index key (`<baseIndex>__tenant_<tenantId>`) into
@@ -504,6 +534,7 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
     entityStates.set(entity._storageName, {
       indexName,
       provider,
+      providerKey,
       settings,
       pkField: entity._pkField,
       transformName: searchConfig.transform,
@@ -599,6 +630,7 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
       const {
         indexName,
         provider,
+        providerKey,
         pkField,
         transformName,
         geoConfig,
@@ -606,6 +638,7 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
         tenantField,
         settings,
       } = state;
+      const metricsLabels: Record<string, string> = { provider: providerKey };
       const transform = transformRegistry.resolve(transformName);
 
       function prepareDoc(entity: Record<string, unknown>): Record<string, unknown> {
@@ -692,7 +725,21 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
             await ensureTenantIndex(targetIndex);
           }
           const decoratedQuery = { ...query, filter: applyTenantFilter(query.filter, opts) };
-          return provider.search(targetIndex, decoratedQuery);
+          // Metrics: count + duration on the search hot path. Counter increments
+          // unconditionally (success or failure) so dashboards reflect total
+          // attempts; duration is recorded only on success to keep latency
+          // distributions free of error-path artefacts.
+          metrics.counter('search.query.count', 1, metricsLabels);
+          const start = performance.now();
+          try {
+            const response = await provider.search(targetIndex, decoratedQuery);
+            metrics.timing('search.query.duration', performance.now() - start, metricsLabels);
+            sampleCircuitBreaker(provider, providerKey);
+            return response;
+          } catch (err) {
+            sampleCircuitBreaker(provider, providerKey);
+            throw err;
+          }
         },
 
         async suggest(query: SuggestQuery, opts?: TenantContext): Promise<SuggestResponse> {
@@ -701,7 +748,17 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
             await ensureTenantIndex(targetIndex);
           }
           const decoratedQuery = { ...query, filter: applyTenantFilter(query.filter, opts) };
-          return provider.suggest(targetIndex, decoratedQuery);
+          metrics.counter('search.query.count', 1, metricsLabels);
+          const start = performance.now();
+          try {
+            const response = await provider.suggest(targetIndex, decoratedQuery);
+            metrics.timing('search.query.duration', performance.now() - start, metricsLabels);
+            sampleCircuitBreaker(provider, providerKey);
+            return response;
+          } catch (err) {
+            sampleCircuitBreaker(provider, providerKey);
+            throw err;
+          }
         },
 
         async indexDocument(entity: Record<string, unknown>, opts?: TenantContext): Promise<void> {

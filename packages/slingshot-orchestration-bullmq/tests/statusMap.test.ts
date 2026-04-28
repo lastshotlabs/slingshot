@@ -21,5 +21,6 @@ describe('mapBullMQStatus', () => {
 
   test('maps unknown state to pending via default case', () => {
     expect(mapBullMQStatus('unknown')).toBe('pending');
+    expect(mapBullMQStatus('stalled' as never)).toBe('pending');
   });
 });

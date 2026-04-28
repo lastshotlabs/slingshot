@@ -20,6 +20,8 @@ export type {
 export type { WebhookQueue, WebhookJob } from './types/queue';
 export { WebhookDeliveryError, WebhookSecretDecryptError } from './types/queue';
 export type { InboundProvider } from './types/inbound';
+export { safeParseInboundBody } from './lib/inbound';
+export type { SafeParseInboundBodyResult } from './lib/inbound';
 
 export { createMemoryWebhookAdapter } from './adapters/memory';
 export type { MemoryWebhookAdapter } from './adapters/memory';

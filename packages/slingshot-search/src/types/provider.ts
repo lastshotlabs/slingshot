@@ -342,6 +342,18 @@ export interface SearchProvider extends SearchProviderContract {
    * @param timeoutMs - Maximum wait time in milliseconds. Default: provider-specific.
    */
   waitForTask?(taskId: string | number, timeoutMs?: number): Promise<SearchIndexTask>;
+
+  /**
+   * Synchronous read of the provider-level circuit breaker state. Optional —
+   * implemented by providers that maintain an internal breaker (currently
+   * `typesense`). Used by the unified metrics emitter to publish a
+   * `search.circuitBreaker.state` gauge without an extra round-trip to the
+   * upstream service.
+   *
+   * @returns The current breaker state, or `undefined` if no breaker is in
+   *   effect for this provider instance.
+   */
+  getCircuitBreakerState?(): 'closed' | 'open' | 'half-open' | undefined;
 }
 
 // ============================================================================

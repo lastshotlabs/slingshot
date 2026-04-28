@@ -66,7 +66,7 @@ describe('localStorage', () => {
 
     for (const key of invalidKeys) {
       await expect(
-        adapter.put(key, encoder.encode('x'), { mimeType: 'text/plain', size: 1 }),
+        adapter.put(key, Buffer.from('x'), { mimeType: 'text/plain', size: 1 }),
       ).rejects.toMatchObject({ status: 400 });
     }
   });
@@ -87,7 +87,7 @@ describe('localStorage', () => {
     };
     const adapter = localStorage({ directory: dir, fs });
 
-    await adapter.put('file.bin', encoder.encode('virtual'), {
+    await adapter.put('file.bin', Buffer.from('virtual'), {
       mimeType: 'application/octet-stream',
       size: 7,
     });
@@ -145,7 +145,7 @@ describe('resolveStorageAdapter', () => {
     await expect(
       resolveStorageAdapter({ adapter: 'local', config: { directory: dir } }).put(
         'ok.txt',
-        encoder.encode('ok'),
+        Buffer.from('ok'),
         { mimeType: 'text/plain', size: 2 },
       ),
     ).resolves.toEqual({});

@@ -3,6 +3,7 @@ import * as entry from '../src/index';
 import { createSearchPlugin } from '../src/plugin';
 import { SEARCH_ROUTES } from '../src/routes/index';
 import { createTestSearchPlugin, createTestSearchProvider } from '../src/testing';
+import { searchPluginConfigSchema } from '../src/types/config';
 
 describe('slingshot-search public api', () => {
   test('entrypoint re-exports plugin and route ids', () => {
@@ -44,5 +45,21 @@ describe('slingshot-search public api', () => {
         mountPath: 'search',
       }),
     ).toThrow(/mountPath must start with '\//i);
+  });
+
+  test('searchPluginConfigSchema normalizes and rejects unsafe mount paths', () => {
+    expect(
+      searchPluginConfigSchema.parse({
+        providers: { default: { provider: 'db-native' } },
+        mountPath: ' /tenant-search/// ',
+      }).mountPath,
+    ).toBe('/tenant-search');
+
+    expect(() =>
+      searchPluginConfigSchema.parse({
+        providers: { default: { provider: 'db-native' } },
+        mountPath: '/',
+      }),
+    ).toThrow(/mountPath must not be '\//i);
   });
 });

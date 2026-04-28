@@ -121,6 +121,13 @@ function assertMongoAuthAvailable(
   }
 }
 
+async function awaitAdapterReadiness(adapter: AuthAdapter): Promise<void> {
+  const ready = (adapter as AuthAdapter & { ready?: unknown }).ready;
+  if (typeof ready === 'function') {
+    await (ready as () => Promise<void>).call(adapter);
+  }
+}
+
 function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -268,6 +275,8 @@ export async function bootstrapAuth(
       );
     authAdapter = createMongoAuthAdapter(authConn, resolveMg(), password);
   }
+
+  await awaitAdapterReadiness(authAdapter);
 
   // Section F: Config-vs-config validations
   const emailVerification = authConfig.emailVerification;

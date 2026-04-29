@@ -1,9 +1,15 @@
 import type {
+  DynamicEventBus,
+  Logger,
   MetricsEmitter,
   SlingshotEventBus,
   SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
-import { createNoopMetricsEmitter, sanitizeLogValue } from '@lastshotlabs/slingshot-core';
+import {
+  createConsoleLogger,
+  createNoopMetricsEmitter,
+  sanitizeLogValue,
+} from '@lastshotlabs/slingshot-core';
 import { DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS, resolvePreferences } from './preferences';
 import type {
   NotificationAdapter,
@@ -119,6 +125,8 @@ export interface CreateIntervalDispatcherOptions {
    * - `notifications.circuitBreaker.openCount` gauge per tick (no labels — aggregate to keep cardinality bounded)
    */
   readonly metrics?: MetricsEmitter;
+  /** Optional structured logger. Defaults to a console-backed JSON logger. */
+  readonly logger?: Logger;
 }
 
 interface BreakerState {
@@ -179,6 +187,9 @@ export function createIntervalDispatcher(
   const pendingAlarmThrottleMs = Math.max(0, options.pendingAlarmThrottleMs ?? 60_000);
   const now = options.now ?? (() => Date.now());
   const metrics: MetricsEmitter = options.metrics ?? createNoopMetricsEmitter();
+  const logger: Logger =
+    options.logger ?? createConsoleLogger({ base: { plugin: 'slingshot-notifications' } });
+  const dynamicBus = options.bus as unknown as DynamicEventBus;
 
   // Most-recent observability state. Populated at the start of every tick.
   let lastPendingCount: number | null = null;
@@ -399,13 +410,43 @@ export function createIntervalDispatcher(
             continue;
           }
 
-          const preferences = await resolvePreferences(
-            options.preferences,
-            row.userId,
-            row.source,
-            row.type,
-            defaultPreferences,
-          );
+          let preferences;
+          try {
+            preferences = await resolvePreferences(
+              options.preferences,
+              row.userId,
+              row.source,
+              row.type,
+              defaultPreferences,
+            );
+          } catch (err) {
+            // P-NOTIF-10: a throwing preference adapter is operationally
+            // distinct from a missing preference (defaults). Escalate via
+            // structured logger and emit `notify:dispatcher.preferenceError`
+            // so apps can alert; skip the row and re-queue for the next tick
+            // by rolling back the dispatched flag.
+            const e = err instanceof Error ? err : new Error(String(err));
+            logger.warn('dispatcher preference resolution failed', {
+              userId: row.userId,
+              source: row.source,
+              type: row.type,
+              err: e.message,
+            });
+            metrics.counter('notifications.preferences.error', 1);
+            try {
+              dynamicBus.emit('notify:dispatcher.preferenceError', {
+                notificationId: row.id,
+                userId: row.userId,
+                source: row.source,
+                type: row.type,
+                error: { message: e.message, name: e.name },
+              });
+            } catch {
+              // bus emission must never break the dispatch loop
+            }
+            // Do NOT mark dispatched — leave it pending for the next tick.
+            continue;
+          }
           if (abortController.signal.aborted || stopped) break;
           const payload: NotificationCreatedEventPayload = {
             notification: row,

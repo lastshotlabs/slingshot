@@ -112,6 +112,33 @@ export const notificationsPluginConfigSchema = z.object({
     .describe(
       'Default channel preferences applied when a user has not stored explicit notification preferences. Default: push=true, email=true, inApp=true.',
     ),
+  /**
+   * Maximum age (ms) a notification is retained. When set, listByUser /
+   * listUnread results filter out rows older than this, and a periodic
+   * sweep deletes them outright. `0` disables both filtering and the
+   * sweeper. Default: `0` (no TTL).
+   */
+  notificationTtlMs: z
+    .number()
+    .int()
+    .nonnegative()
+    .default(0)
+    .describe(
+      'Maximum age (ms) a notification record is retained before being filtered from list responses and deleted by the periodic sweeper. 0 disables.',
+    ),
+  /**
+   * Interval (ms) for the periodic sweep that deletes notifications older
+   * than `notificationTtlMs`. Ignored when `notificationTtlMs === 0`.
+   * Default: 1 hour.
+   */
+  notificationSweepIntervalMs: z
+    .number()
+    .int()
+    .positive()
+    .default(60 * 60_000)
+    .describe(
+      'Interval (ms) for the periodic notification expiry sweep. Default: 3,600,000 (1 hour).',
+    ),
 });
 
 export type NotificationsPluginConfig = z.infer<typeof notificationsPluginConfigSchema>;

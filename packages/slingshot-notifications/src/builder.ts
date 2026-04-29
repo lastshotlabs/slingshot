@@ -1,4 +1,6 @@
 import type {
+  DynamicEventBus,
+  Logger,
   MetricsEmitter,
   NotificationBuilder,
   NotificationCreatedEventPayload,
@@ -7,7 +9,7 @@ import type {
   SlingshotEventBus,
   SlingshotEvents,
 } from '@lastshotlabs/slingshot-core';
-import { createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger, createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { freezeNotificationData } from './data';
 import { resolveEffectivePriority, resolvePreferences } from './preferences';
 import type { RateLimitBackend } from './rateLimit';
@@ -41,6 +43,22 @@ export interface CreateNotificationBuilderOptions {
    * an existing row.
    */
   readonly metrics?: MetricsEmitter;
+  /**
+   * Optional structured logger. Defaults to the console-backed logger so
+   * publish errors and rate-limit faults are not silently swallowed.
+   */
+  readonly logger?: Logger;
+  /**
+   * Optional callback invoked when `events.publish()` rejects so apps can
+   * implement retry logic (e.g. enqueue the failed publish into a durable
+   * queue). When omitted the builder still logs and emits
+   * `notify:publishFailed`. P-NOTIF-7.
+   */
+  readonly onPublishError?: (input: {
+    event: string;
+    payload: unknown;
+    error: Error;
+  }) => void | Promise<void>;
 }
 
 /**
@@ -53,6 +71,47 @@ export function createNotificationBuilder(
   options: CreateNotificationBuilderOptions,
 ): NotificationBuilder {
   const metrics: MetricsEmitter = options.metrics ?? createNoopMetricsEmitter();
+  const logger: Logger =
+    options.logger ?? createConsoleLogger({ base: { plugin: 'slingshot-notifications' } });
+  const dynamicBus = options.bus as unknown as DynamicEventBus;
+  let publishFailureCount = 0;
+
+  function reportPublishError(event: string, payload: unknown, err: Error): void {
+    publishFailureCount += 1;
+    logger.error('event publish failed', {
+      event,
+      err: err.message,
+      name: err.name,
+    });
+    metrics.counter('notifications.publish.failure', 1, { event });
+    try {
+      dynamicBus.emit('notify:publishFailed', {
+        event,
+        error: { message: err.message, name: err.name },
+      });
+    } catch {
+      // Bus emission must never escalate the original error.
+    }
+    if (options.onPublishError) {
+      try {
+        const result = options.onPublishError({ event, payload, error: err });
+        if (result instanceof Promise) {
+          result.catch(retryErr => {
+            logger.warn('onPublishError callback rejected', {
+              event,
+              err: retryErr instanceof Error ? retryErr.message : String(retryErr),
+            });
+          });
+        }
+      } catch (callbackErr) {
+        logger.warn('onPublishError callback threw', {
+          event,
+          err: callbackErr instanceof Error ? callbackErr.message : String(callbackErr),
+        });
+      }
+    }
+  }
+
   async function notify(input: NotifyInput): Promise<NotificationRecord | null> {
     if (input.actorId === input.userId && !input.allowSelfNotify) {
       return null;
@@ -73,11 +132,36 @@ export function createNotificationBuilder(
     }
 
     if (!isUrgent) {
-      const allowed = await options.rateLimitBackend.check(
-        `${options.source}:${input.userId}`,
-        options.rateLimit.limit,
-        options.rateLimit.windowMs,
-      );
+      let allowed = false;
+      try {
+        allowed = await options.rateLimitBackend.check(
+          `${options.source}:${input.userId}`,
+          options.rateLimit.limit,
+          options.rateLimit.windowMs,
+        );
+      } catch (err) {
+        // P-NOTIF-9: a throwing backend is operationally distinct from a
+        // hard `false` (the latter is an expected rate-limit block). Log
+        // structured + emit `notify:rateLimit.error` so apps can alert; the
+        // notification is dropped to fail closed.
+        const e = err instanceof Error ? err : new Error(String(err));
+        logger.error('rate limit backend threw', {
+          source: options.source,
+          userId: input.userId,
+          err: e.message,
+        });
+        metrics.counter('notifications.rateLimit.error', 1, { source: options.source });
+        try {
+          dynamicBus.emit('notify:rateLimit.error', {
+            source: options.source,
+            userId: input.userId,
+            error: { message: e.message, name: e.name },
+          });
+        } catch {
+          // Bus emission must never break notify().
+        }
+        return null;
+      }
       if (!allowed) {
         return null;
       }
@@ -123,15 +207,16 @@ export function createNotificationBuilder(
         // values, so leaving the label off keeps the series count bounded.
         metrics.counter('notifications.dedup.hits');
         const nextCount = readCount(notification.data);
+        const payload = {
+          id: notification.id,
+          userId: input.userId,
+          tenantId: input.tenantId ?? null,
+          changes: { count: nextCount },
+        };
         try {
           options.events.publish(
             'notifications:notification.updated',
-            {
-              id: notification.id,
-              userId: input.userId,
-              tenantId: input.tenantId ?? null,
-              changes: { count: nextCount },
-            },
+            payload,
             {
               userId: input.userId,
               actorId: input.actorId ?? input.userId,
@@ -140,7 +225,11 @@ export function createNotificationBuilder(
             },
           );
         } catch (err: unknown) {
-          console.error('[notifications] event publish error:', err);
+          reportPublishError(
+            'notifications:notification.updated',
+            payload,
+            err instanceof Error ? err : new Error(String(err)),
+          );
         }
         return notification;
       }
@@ -155,7 +244,11 @@ export function createNotificationBuilder(
             requestTenantId: null,
           });
         } catch (err: unknown) {
-          console.error('[notifications] event publish error:', err);
+          reportPublishError(
+            'notifications:notification.created',
+            payload,
+            err instanceof Error ? err : new Error(String(err)),
+          );
         }
       }
       return notification;
@@ -178,7 +271,11 @@ export function createNotificationBuilder(
           requestTenantId: null,
         });
       } catch (err: unknown) {
-        console.error('[notifications] event publish error:', err);
+        reportPublishError(
+          'notifications:notification.created',
+          payload,
+          err instanceof Error ? err : new Error(String(err)),
+        );
       }
     }
 

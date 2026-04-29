@@ -219,7 +219,8 @@ describe('createNotificationBuilder', () => {
     // Notification was created despite the event publish failure
     expect(notification).not.toBeNull();
     expect(errorSpy).toHaveBeenCalled();
-    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('[notifications]');
+    // Structured logger emits a JSON line containing the plugin name + msg.
+    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('"plugin":"slingshot-notifications"');
   });
 
   test('dedup event publish failure does not propagate — deduplicated notification is still returned', async () => {
@@ -273,6 +274,7 @@ describe('createNotificationBuilder', () => {
     // Dedup returned the existing notification despite the event publish failure
     expect(collapsed).not.toBeNull();
     expect(errorSpy).toHaveBeenCalled();
-    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('[notifications]');
+    // Structured logger emits a JSON line containing the plugin name + msg.
+    expect(String((errorSpy.mock.calls[0] as string[])[0])).toContain('"plugin":"slingshot-notifications"');
   });
 });

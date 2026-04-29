@@ -31,6 +31,7 @@ import type {
   NotificationAdapter,
   NotificationCreatedEventPayload,
   NotificationPreferenceAdapter,
+  NotificationRecord,
 } from './types';
 import type { NotificationsPluginConfig } from './types/config';
 import { notificationsPluginConfigSchema } from './types/config';
@@ -64,12 +65,42 @@ function toActorParam(params: { userId: string }): ActorParam {
   return { 'actor.id': params.userId };
 }
 
-function wrapNotificationAdapter(adapter: NotificationAdapter): NotificationAdapter {
+/**
+ * Filter list responses by `notificationTtlMs` so expired rows don't appear
+ * to clients before the periodic sweep deletes them. P-NOTIF-8.
+ */
+function isExpired(record: NotificationRecord, ttlMs: number, nowMs: number): boolean {
+  if (ttlMs <= 0) return false;
+  const created = record.createdAt;
+  const createdMs =
+    created instanceof Date
+      ? created.getTime()
+      : typeof created === 'string'
+        ? Date.parse(created)
+        : NaN;
+  if (Number.isNaN(createdMs)) return false;
+  return nowMs - createdMs > ttlMs;
+}
+
+function filterExpired<T extends { items: NotificationRecord[] }>(
+  result: T,
+  ttlMs: number,
+): T {
+  if (ttlMs <= 0) return result;
+  const nowMs = Date.now();
+  const items = result.items.filter(r => !isExpired(r, ttlMs, nowMs));
+  return { ...result, items };
+}
+
+function wrapNotificationAdapter(
+  adapter: NotificationAdapter,
+  ttlMs: number,
+): NotificationAdapter {
   const generated = adapter as GeneratedNotificationAdapter;
   return {
     ...adapter,
-    listByUser: params => generated.listByUser(toActorParam(params)),
-    listUnread: params => generated.listUnread(toActorParam(params)),
+    listByUser: async params => filterExpired(await generated.listByUser(toActorParam(params)), ttlMs),
+    listUnread: async params => filterExpired(await generated.listUnread(toActorParam(params)), ttlMs),
     markRead: params =>
       generated.markRead(
         { id: params.id, ...toActorParam(params) },
@@ -215,7 +246,10 @@ export function createNotificationsPlugin(
           '[slingshot-notifications] Entity adapters were not resolved during setupRoutes',
         );
       }
-      const notifications = wrapNotificationAdapter(notificationsAdapter);
+      const notifications = wrapNotificationAdapter(
+        notificationsAdapter,
+        config.notificationTtlMs,
+      );
       const preferences = wrapPreferenceAdapter(preferencesAdapter);
 
       // Trigger the entity adapter's lazy ensureTable() before any custom op
@@ -308,8 +342,52 @@ export function createNotificationsPlugin(
       getPluginState(app).set(NOTIFICATIONS_PLUGIN_STATE_KEY, state);
       dispatcher.start();
 
+      // P-NOTIF-8: optional periodic sweep that deletes expired notifications.
+      let sweepTimer: ReturnType<typeof setInterval> | null = null;
+      if (config.notificationTtlMs > 0) {
+        const ttlMs = config.notificationTtlMs;
+        const sweep = async (): Promise<void> => {
+          const cutoff = Date.now() - ttlMs;
+          try {
+            // Page through everything; the underlying adapter accepts a
+            // generic `opts` map. Deletion happens one record at a time so a
+            // partial failure does not poison the rest of the sweep.
+            const all = await notifications.list({ limit: 500 });
+            for (const row of all.items) {
+              const created =
+                row.createdAt instanceof Date
+                  ? row.createdAt.getTime()
+                  : typeof row.createdAt === 'string'
+                    ? Date.parse(row.createdAt)
+                    : NaN;
+              if (!Number.isFinite(created) || created > cutoff) continue;
+              try {
+                await notifications.delete(row.id);
+              } catch (err) {
+                console.error(
+                  `[slingshot-notifications] expiry sweep delete failed for id=${row.id}`,
+                  err,
+                );
+              }
+            }
+          } catch (err) {
+            console.error('[slingshot-notifications] expiry sweep failed', err);
+          }
+        };
+        // Fire-and-forget initial sweep so apps that just enabled TTL get
+        // immediate cleanup of historical data.
+        void sweep();
+        sweepTimer = setInterval(() => {
+          void sweep();
+        }, config.notificationSweepIntervalMs);
+      }
+
       teardown = async () => {
         bus.off('notifications:notification.created', createdListener);
+        if (sweepTimer) {
+          clearInterval(sweepTimer);
+          sweepTimer = null;
+        }
         await dispatcher.stop();
         deliveryAdapters.clear();
         await rateLimitBackend.close?.();

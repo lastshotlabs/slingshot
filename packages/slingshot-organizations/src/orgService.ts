@@ -1,6 +1,12 @@
 import type { PluginStateCarrier, PluginStateMap } from '@lastshotlabs/slingshot-core';
 import { getPluginStateOrNull } from '@lastshotlabs/slingshot-core';
 
+/**
+ * Runtime organization service published through plugin state.
+ *
+ * Peer plugins use this contract to resolve organizations by slug, create
+ * organizations, and add members without depending on a concrete adapter.
+ */
 export type OrganizationsOrgService = {
   /**
    * Look up an organization by slug, optionally scoped to a tenant.

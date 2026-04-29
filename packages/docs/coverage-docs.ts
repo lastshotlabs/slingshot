@@ -21,11 +21,40 @@ const STARTER_TEMPLATE_MARKERS = [
 ] as const;
 
 const DOC_REFERENCE_ROOT = resolve(docsPackageRoot, 'src/content/docs');
+const API_REFERENCE_ROOT = resolve(DOC_REFERENCE_ROOT, 'api');
 const TOP_LEVEL_SKIP_DIRS = new Set(['api', 'packages']);
 const DEFAULT_COVERAGE_POLICY_PATH = resolve(
   repoRoot,
   '../slingshot-docs/documentation-coverage.json',
 );
+const PRODUCTION_PATH_PACKAGE_SLUGS = [
+  'slingshot-permissions',
+  'slingshot-organizations',
+  'slingshot-orchestration',
+  'slingshot-orchestration-bullmq',
+  'slingshot-orchestration-temporal',
+  'slingshot-orchestration-plugin',
+  'slingshot-bullmq',
+  'slingshot-assets',
+  'slingshot-search',
+  'slingshot-webhooks',
+  'slingshot-kafka',
+  'slingshot-admin',
+  'slingshot-mail',
+  'slingshot-notifications',
+  'slingshot-push',
+  'slingshot-runtime-bun',
+  'slingshot-runtime-node',
+  'slingshot-runtime-edge',
+  'slingshot-runtime-lambda',
+  'slingshot-ssr',
+  'slingshot-ssg',
+  'slingshot-postgres',
+] as const;
+const DEFAULT_PACKAGE_THRESHOLDS: CoverageThreshold[] = PRODUCTION_PATH_PACKAGE_SLUGS.map(slug => ({
+  slug,
+  minimumPercent: 100,
+}));
 
 interface JsDocCoverage {
   documented: number;
@@ -55,6 +84,11 @@ interface ThresholdFailure {
   percent: number;
 }
 
+interface ApiDescriptionFailure {
+  entry: CoverageEntry;
+  missingSymbols: string[];
+}
+
 function readTextIfExists(filePath: string): string | null {
   return existsSync(filePath) ? readFileSync(filePath, 'utf8') : null;
 }
@@ -62,7 +96,7 @@ function readTextIfExists(filePath: string): string | null {
 function loadCoveragePolicy(filePath = DEFAULT_COVERAGE_POLICY_PATH): CoveragePolicy {
   const content = readTextIfExists(filePath);
   if (!content) {
-    return {};
+    return { packageThresholds: DEFAULT_PACKAGE_THRESHOLDS };
   }
 
   const raw = JSON.parse(content) as CoveragePolicy;
@@ -74,7 +108,24 @@ function loadCoveragePolicy(filePath = DEFAULT_COVERAGE_POLICY_PATH): CoveragePo
     }
   }
 
-  return raw;
+  const thresholdMap = new Map(
+    DEFAULT_PACKAGE_THRESHOLDS.map(threshold => [threshold.slug, threshold]),
+  );
+  for (const threshold of thresholds) {
+    const defaultThreshold = thresholdMap.get(threshold.slug);
+    thresholdMap.set(threshold.slug, {
+      slug: threshold.slug,
+      minimumPercent: Math.max(
+        threshold.minimumPercent,
+        defaultThreshold?.minimumPercent ?? threshold.minimumPercent,
+      ),
+    });
+  }
+
+  return {
+    ...raw,
+    packageThresholds: [...thresholdMap.values()],
+  };
 }
 
 function countLines(content: string): number {
@@ -212,6 +263,31 @@ function coveragePercent(coverage: JsDocCoverage): number {
   return coverage.total === 0 ? 100 : (coverage.documented / coverage.total) * 100;
 }
 
+function collectMissingApiDescriptions(slug: string): string[] {
+  const content = readTextIfExists(resolve(API_REFERENCE_ROOT, slug, 'index.mdx'));
+  if (!content) {
+    return [];
+  }
+
+  const misses: string[] = [];
+  const sectionPattern = /^### `([^`]+)`\n\n([\s\S]*?)(?=^### `|^## |$(?![\s\S]))/gm;
+
+  for (const match of content.matchAll(sectionPattern)) {
+    const symbolName = match[1];
+    const body = match[2]?.trimStart() ?? '';
+    if (
+      symbolName &&
+      (body.startsWith('```typescript') ||
+        body.startsWith('*Source:') ||
+        body.startsWith('#### Config Fields'))
+    ) {
+      misses.push(symbolName);
+    }
+  }
+
+  return misses;
+}
+
 function slugToTopic(slug: string): string {
   return slug
     .split('-')
@@ -274,6 +350,27 @@ export async function main(): Promise<number> {
       };
     })
     .filter((value): value is ThresholdFailure => value !== null);
+  const thresholdSlugs = new Set(thresholdMap.keys());
+  const thresholdEntries = entries.filter(entry => thresholdSlugs.has(entry.pkg.slug));
+  const thresholdTotalJsDoc = thresholdEntries.reduce(
+    (sum, entry) => sum + entry.jsDocCoverage.total,
+    0,
+  );
+  const thresholdDocumentedJsDoc = thresholdEntries.reduce(
+    (sum, entry) => sum + entry.jsDocCoverage.documented,
+    0,
+  );
+  const thresholdJsDocPercent =
+    thresholdTotalJsDoc === 0
+      ? 100
+      : Math.round((thresholdDocumentedJsDoc / thresholdTotalJsDoc) * 100);
+  const apiDescriptionFailures: ApiDescriptionFailure[] = entries
+    .filter(entry => thresholdSlugs.has(entry.pkg.slug))
+    .map(entry => ({
+      entry,
+      missingSymbols: collectMissingApiDescriptions(entry.pkg.slug),
+    }))
+    .filter(failure => failure.missingSymbols.length > 0);
 
   console.log('Documentation Coverage Report');
   console.log('=============================');
@@ -312,6 +409,11 @@ export async function main(): Promise<number> {
   console.log(
     `JSDoc coverage: ${documentedJsDoc}/${totalJsDoc} exported symbols (${jsDocPercent}%)`,
   );
+  if (thresholdEntries.length > 0) {
+    console.log(
+      `Enforced prod-path JSDoc coverage: ${thresholdDocumentedJsDoc}/${thresholdTotalJsDoc} exported symbols (${thresholdJsDocPercent}%)`,
+    );
+  }
   console.log('');
 
   console.log('Missing topic coverage:');
@@ -342,6 +444,22 @@ export async function main(): Promise<number> {
     }
   }
 
+  console.log('');
+  console.log('API descriptions:');
+  if (thresholdMap.size === 0) {
+    console.log('  (none)');
+  } else {
+    for (const entry of entries) {
+      if (!thresholdSlugs.has(entry.pkg.slug)) {
+        continue;
+      }
+
+      const missingSymbols = collectMissingApiDescriptions(entry.pkg.slug);
+      const status = missingSymbols.length === 0 ? 'ok' : `${missingSymbols.length} missing`;
+      console.log(`  ${entry.pkg.slug.padEnd(22, ' ')} ${status}`);
+    }
+  }
+
   if (thresholdFailures.length > 0) {
     console.error('');
     console.error(
@@ -350,6 +468,19 @@ export async function main(): Promise<number> {
     for (const failure of thresholdFailures) {
       console.error(
         `  ${failure.entry.pkg.slug}: ${failure.percent.toFixed(1)}% < ${failure.threshold.minimumPercent}%`,
+      );
+    }
+    return 1;
+  }
+
+  if (apiDescriptionFailures.length > 0) {
+    console.error('');
+    console.error(
+      `[docs:coverage] ${apiDescriptionFailures.length} prod-path package(s) have API symbols without descriptions.`,
+    );
+    for (const failure of apiDescriptionFailures) {
+      console.error(
+        `  ${failure.entry.pkg.slug}: ${failure.missingSymbols.slice(0, 12).join(', ')}`,
       );
     }
     return 1;

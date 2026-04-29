@@ -37,6 +37,9 @@ export interface MailCircuitBreakerHealth {
   readonly nextProbeAt: number | undefined;
 }
 
+/**
+ * Runtime circuit breaker guarding outbound mail provider calls.
+ */
 export interface MailCircuitBreaker {
   /**
    * Run `fn` through the breaker. When the breaker is open and the cooldown
@@ -48,6 +51,9 @@ export interface MailCircuitBreaker {
   getHealth(): MailCircuitBreakerHealth;
 }
 
+/**
+ * Tunable options used to construct a mail provider circuit breaker.
+ */
 export interface MailCircuitBreakerOptions {
   /** Consecutive failure count required to trip the breaker. Default 5. */
   readonly threshold?: number;

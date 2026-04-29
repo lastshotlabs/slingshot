@@ -4,8 +4,8 @@
  * Tests EntitySearchClient (the WriteThroughSearchSync interface) via the
  * search manager's getSearchClient() method. Uses the DB-native provider.
  */
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { Logger, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { createSearchManager } from '../src/searchManager';
 import type { SearchManager } from '../src/searchManager';
 import { createSearchTransformRegistry } from '../src/transformRegistry';
@@ -106,7 +106,18 @@ describe('write-through sync (EntitySearchClient)', () => {
   });
 
   it('indexDocument() logs error and does not propagate when transform throws', async () => {
-    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const errors: string[] = [];
+    const logger: Logger = {
+      debug() {},
+      info() {},
+      warn() {},
+      error(msg: string) {
+        errors.push(msg);
+      },
+      child() {
+        return logger;
+      },
+    };
     const registry = createSearchTransformRegistry();
     registry.register('failing-transform', () => {
       throw new Error('transform crash');
@@ -114,6 +125,7 @@ describe('write-through sync (EntitySearchClient)', () => {
     const failManager = createSearchManager({
       pluginConfig: PLUGIN_CONFIG,
       transformRegistry: registry,
+      logger,
     });
     const entity: ResolvedEntityConfig = {
       ...makeEntity('transform_widgets'),
@@ -129,16 +141,25 @@ describe('write-through sync (EntitySearchClient)', () => {
       client.indexDocument({ id: 'err-1', title: 'Bad Doc', category: 'test' }),
     ).resolves.toBeUndefined();
 
-    const errorCalls = errorSpy.mock.calls.map(c => String(c[0]));
-    expect(errorCalls.some(m => m.includes('[slingshot-search] Transform error'))).toBe(true);
-    expect(errorCalls.some(m => m.includes('err-1'))).toBe(true);
+    expect(errors.some(m => m.includes('[slingshot-search] Transform error'))).toBe(true);
+    expect(errors.some(m => m.includes('err-1'))).toBe(true);
 
-    errorSpy.mockRestore();
     await failManager.teardown();
   });
 
   it('indexDocuments() skips failing documents but indexes successful ones', async () => {
-    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    const errors: string[] = [];
+    const logger: Logger = {
+      debug() {},
+      info() {},
+      warn() {},
+      error(msg: string) {
+        errors.push(msg);
+      },
+      child() {
+        return logger;
+      },
+    };
     const registry = createSearchTransformRegistry();
     registry.register('selective-fail', doc => {
       if ((doc as { title?: string }).title === 'BAD') {
@@ -149,6 +170,7 @@ describe('write-through sync (EntitySearchClient)', () => {
     const batchManager = createSearchManager({
       pluginConfig: PLUGIN_CONFIG,
       transformRegistry: registry,
+      logger,
     });
     const entity: ResolvedEntityConfig = {
       ...makeEntity('batch_widgets'),
@@ -175,10 +197,8 @@ describe('write-through sync (EntitySearchClient)', () => {
     expect(ids).toContain('ok-2');
     expect(ids).not.toContain('bad-1');
 
-    const errorCalls = errorSpy.mock.calls.map(c => String(c[0]));
-    expect(errorCalls.some(m => m.includes('[slingshot-search] Transform error'))).toBe(true);
+    expect(errors.some(m => m.includes('[slingshot-search] Transform error'))).toBe(true);
 
-    errorSpy.mockRestore();
     await batchManager.teardown();
   });
 

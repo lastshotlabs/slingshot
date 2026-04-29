@@ -7,6 +7,9 @@ export {
   type BullMQOrchestrationAdapterMetrics,
   type BullMQOrchestrationMetricsCapability,
 } from './adapter';
+/**
+ * Classify orchestration failures so retry and failure handling can distinguish cancellation, timeout, and fatal errors.
+ */
 export { classifyOrchestrationError, type ErrorClassification } from './errorClassification';
 /**
  * Map BullMQ run states into portable Slingshot orchestration statuses.

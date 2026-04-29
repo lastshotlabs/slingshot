@@ -2,6 +2,9 @@
  * Portable orchestration surface for tasks, workflows, and built-in adapters.
  */
 export { OrchestrationError } from './errors';
+/**
+ * Error raised when a workflow lifecycle hook fails.
+ */
 export { WorkflowHookError } from './engine/workflowRunner';
 /**
  * Define a portable orchestration task with typed input, output, and handler logic.

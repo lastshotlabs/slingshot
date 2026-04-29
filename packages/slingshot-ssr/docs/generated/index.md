@@ -41,7 +41,7 @@ bun add @lastshotlabs/slingshot-ssr
 
 ## Peer Dependencies
 
-- `hono`: `>=4.12.12 <5`
+- `hono`: `>=4.12.14 <5`
 - `zod`: `>=4.0 <5`
 
 ## Related Docs

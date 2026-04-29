@@ -34,6 +34,9 @@ export interface NotificationPreferenceDefaults {
   readonly inAppEnabled: boolean;
 }
 
+/**
+ * Persistence adapter for notification records and dispatch state.
+ */
 export interface NotificationAdapter {
   create(input: Record<string, unknown>): Promise<NotificationRecord>;
   getById(id: string): Promise<NotificationRecord | null>;
@@ -99,6 +102,9 @@ export interface NotificationAdapter {
   countPendingDispatch?(params: { now: Date; signal?: AbortSignal }): Promise<number>;
 }
 
+/**
+ * Persistence adapter for per-user notification preference records.
+ */
 export interface NotificationPreferenceAdapter {
   create(input: Record<string, unknown>): Promise<NotificationPreferenceRecord>;
   getById(id: string): Promise<NotificationPreferenceRecord | null>;
@@ -110,6 +116,9 @@ export interface NotificationPreferenceAdapter {
   resolveForNotification(params: { userId: string }): Promise<NotificationPreferenceRecord[]>;
 }
 
+/**
+ * Peer-facing notification contracts re-exported from slingshot-core.
+ */
 export type {
   DeliveryAdapter,
   NotificationCreatedEventPayload,

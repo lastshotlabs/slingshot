@@ -364,6 +364,9 @@ export interface CancelOutcome {
   message?: string;
 }
 
+/**
+ * Required orchestration adapter contract implemented by all providers.
+ */
 export interface CoreOrchestrationAdapter {
   registerTask(def: AnyResolvedTask): void;
   registerWorkflow(def: AnyResolvedWorkflow): void;

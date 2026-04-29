@@ -6,10 +6,10 @@
  * - Fires the `onTenantIndexEvicted` callback with the correct tenant id and
  *   index name and `reason: 'lru-capacity'`.
  * - Increments the `metrics.tenantIndexEvictions` counter.
- * - Emits a structured eviction log line.
+ * - Emits a structured eviction log via the injected logger.
  */
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { LogFields, Logger, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { createSearchManager } from '../../src/searchManager';
 import type { SearchManager } from '../../src/searchManager';
 import { createSearchTransformRegistry } from '../../src/transformRegistry';
@@ -40,16 +40,23 @@ describe('searchManager — tenant index LRU eviction observability', () => {
     indexName: string;
     reason: 'lru-capacity';
   }>;
-  let originalLog: typeof console.log;
-  let logLines: string[];
+  let logRecords: Array<{ msg: string; fields?: LogFields }>;
+  let logger: Logger;
 
   beforeEach(async () => {
     evictedEvents = [];
-    logLines = [];
-    originalLog = console.log;
-    console.log = mock((...args: unknown[]) => {
-      logLines.push(args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '));
-    }) as typeof console.log;
+    logRecords = [];
+    logger = {
+      debug() {},
+      info(msg: string, fields?: LogFields) {
+        logRecords.push({ msg, fields });
+      },
+      warn() {},
+      error() {},
+      child() {
+        return logger;
+      },
+    };
 
     manager = createSearchManager({
       pluginConfig: { providers: { default: { provider: 'db-native' } } },
@@ -58,12 +65,12 @@ describe('searchManager — tenant index LRU eviction observability', () => {
       onTenantIndexEvicted: event => {
         evictedEvents.push({ ...event });
       },
+      logger,
     });
     await manager.initialize([makeIndexPerTenantEntity('items')]);
   });
 
   afterEach(async () => {
-    console.log = originalLog;
     await manager.teardown();
   });
 
@@ -105,13 +112,13 @@ describe('searchManager — tenant index LRU eviction observability', () => {
     await client.indexDocument({ id: 'b-1', title: 'two' }, { tenantId: 'B' });
     await client.indexDocument({ id: 'c-1', title: 'three' }, { tenantId: 'C' });
 
-    const evictionLine = logLines.find(line => line.includes('search.tenant_index.evicted'));
-    expect(evictionLine).toBeDefined();
-    const parsed = JSON.parse(evictionLine!);
-    expect(parsed.event).toBe('search.tenant_index.evicted');
-    expect(parsed.reason).toBe('lru-capacity');
-    expect(parsed.tenantId).toBe('A');
-    expect(parsed.indexName).toBe('items');
-    expect(parsed.capacity).toBe(2);
+    const evictionRecord = logRecords.find(r =>
+      r.msg.includes('tenant index cache evicted'),
+    );
+    expect(evictionRecord).toBeDefined();
+    expect(evictionRecord!.fields?.reason).toBe('lru-capacity');
+    expect(evictionRecord!.fields?.tenantId).toBe('A');
+    expect(evictionRecord!.fields?.indexName).toBe('items');
+    expect(evictionRecord!.fields?.capacity).toBe(2);
   });
 });

@@ -49,7 +49,7 @@
     "@asteasolutions/zod-to-openapi": ">=7.0"
   },
   "peerDependencies": {
-    "hono": ">=4.12.12 <5",
+    "hono": ">=4.12.14 <5",
     "zod": ">=4.0 <5"
   },
   "devDependencies": {

@@ -377,6 +377,19 @@ async function runMigrations(pool: Pool): Promise<void> {
 export interface PostgresAdapterOptions {
   /** An open, verified `pg.Pool` (e.g. from `connectPostgres(...).pool`). */
   pool: Pool;
+  /**
+   * Password verification function.
+   *
+   * When provided, the adapter uses this to verify passwords instead of the
+   * `Bun.password` built-in. Required for Node.js deployments — pass the
+   * `verify` function from your runtime of choice (e.g. `runtime-node`'s
+   * argon2 verifier, or `runtime-edge`'s PBKDF2 verifier).
+   *
+   * When omitted and running under Bun, `Bun.password.verify` is used
+   * automatically. When omitted under Node.js, password verification throws
+   * a descriptive error.
+   */
+  verifyPassword?: (plain: string, hash: string) => Promise<boolean>;
 }
 
 /**
@@ -444,7 +457,17 @@ export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promi
         .where(eq(users.id, userId))
         .then(firstRowOrNull);
       if (!row?.passwordHash) return false;
-      return Bun.password.verify(password, row.passwordHash);
+      if (opts.verifyPassword) {
+        return opts.verifyPassword(password, row.passwordHash);
+      }
+      if (typeof Bun !== 'undefined' && Bun.password?.verify) {
+        return Bun.password.verify(password, row.passwordHash);
+      }
+      throw new Error(
+        '[slingshot-postgres] No password verifier available. Pass `verifyPassword` to ' +
+          '`createPostgresAdapter()` — e.g. the `verify` function from your runtime package ' +
+          '(runtime-node uses argon2, runtime-edge uses PBKDF2).',
+      );
     },
 
     async getIdentifier(userId) {

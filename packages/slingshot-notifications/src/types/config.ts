@@ -14,6 +14,9 @@ function normalizeMountPath(value: string): string {
   return normalized;
 }
 
+/**
+ * Runtime schema for validating notifications plugin configuration.
+ */
 export const notificationsPluginConfigSchema = z.object({
   mountPath: z
     .string()

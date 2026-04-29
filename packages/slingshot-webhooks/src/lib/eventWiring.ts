@@ -134,7 +134,7 @@ export function wireEventSubscriptions(
             err: err instanceof Error ? err.message : String(err),
           });
           try {
-            (bus as { emit(event: string, payload: unknown): void }).emit('webhook:enqueueFailed', {
+            bus.emit('webhook:enqueueFailed', {
               deliveryId: resolved.delivery.id,
               endpointId: resolved.endpoint.id,
               event: String(key),

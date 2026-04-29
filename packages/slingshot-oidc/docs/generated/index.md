@@ -38,7 +38,7 @@ bun add @lastshotlabs/slingshot-oidc
 ## Peer Dependencies
 
 - `@lastshotlabs/slingshot-auth`: `workspace:*`
-- `hono`: `>=4.12.12 <5`
+- `hono`: `>=4.12.14 <5`
 - `jose`: `>=6.0`
 - `zod`: `>=4.0 <5`
 

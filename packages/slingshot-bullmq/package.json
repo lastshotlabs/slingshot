@@ -46,7 +46,7 @@
     }
   },
   "devDependencies": {
-    "bullmq": "^5.70.4",
+    "bullmq": "^5.76.4",
     "ioredis": "5.10.0"
   },
   "engines": {

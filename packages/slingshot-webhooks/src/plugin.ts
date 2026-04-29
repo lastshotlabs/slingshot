@@ -118,7 +118,7 @@ export const TIMEOUT_CLAMP_MS = 120_000;
 export function clampDeliveryTimeoutMs(
   requestedMs: number,
   ctx: { deliveryId: string; endpointId: string },
-  bus: { emit?(event: string, payload: unknown): void } | undefined,
+  bus: SlingshotEventBus | undefined,
 ): number {
   if (requestedMs <= TIMEOUT_CLAMP_MS) return requestedMs;
   logWebhookEvent('warn', 'webhook timeout clamped', {

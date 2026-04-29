@@ -93,6 +93,8 @@ export function createAssetsPlugin(
     validatePluginConfig(ASSETS_PLUGIN_STATE_KEY, rawConfig, assetsPluginConfigSchema),
   );
   const mountPath = config.mountPath ?? '/assets';
+  const logger: Logger = options?.logger ?? noopLogger;
+
   const storage = resolveStorageAdapter(config.storage, {
     storageRetryAttempts: config.storageRetryAttempts,
     ...(config.storageCircuitBreakerThreshold !== undefined
@@ -109,7 +111,7 @@ export function createAssetsPlugin(
         ? config.image.cache
         : (() => {
             if (config.image?.cache !== undefined) {
-              console.warn(
+              logger.warn(
                 '[slingshot-assets] image.cache is not a valid ImageCacheAdapter — falling back to in-memory cache. ' +
                   'This cache is not shared across processes.',
               );
@@ -145,7 +147,6 @@ export function createAssetsPlugin(
   let assetAdapterRef: AssetAdapter | undefined;
   let innerPlugin: EntityPlugin | undefined;
 
-  const logger: Logger = options?.logger ?? noopLogger;
   const orphanRegistry: OrphanedKeyRegistry = createOrphanedKeyRegistry();
   // `events` is populated lazily during setupMiddleware once the host has
   // initialised the registry-backed publisher. The manifest runtime captures
@@ -283,7 +284,7 @@ export function createAssetsPlugin(
       const hasAssetEntities = Object.keys(assetManifest.entities ?? {}).length > 0;
       if (!deleteMiddlewareWired && hasAssetEntities) {
         if (allowOrphanedStorage) {
-          console.warn(
+          logger.warn(
             '[slingshot-assets] storage-delete middleware was not wired and ' +
               '`allowOrphanedStorage: true` is set. Asset deletes will leave storage objects ' +
               'behind. Ensure cleanup runs elsewhere.',

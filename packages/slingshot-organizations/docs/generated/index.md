@@ -39,7 +39,7 @@ bun add @lastshotlabs/slingshot-organizations
 ## Peer Dependencies
 
 - `@lastshotlabs/slingshot-auth`: `workspace:*`
-- `hono`: `>=4.12.12 <5`
+- `hono`: `>=4.12.14 <5`
 - `mongoose`: `>=9.0 <10`
 - `zod`: `>=4.0 <5`
 

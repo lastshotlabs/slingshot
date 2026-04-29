@@ -15,6 +15,7 @@
  * 4. **teardown**: Flushes pending syncs and disconnects all providers.
  */
 import type {
+  Logger,
   MetricsEmitter,
   PluginSetupContext,
   ResolvedEntityConfig,
@@ -27,6 +28,7 @@ import {
   defineEvent,
   getContextOrNull,
   getPluginState,
+  noopLogger,
   validateAdapterShape,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -83,9 +85,14 @@ import { searchPluginConfigSchema } from './types/config';
  * });
  * ```
  */
-export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlugin {
+export function createSearchPlugin(
+  rawConfig: SearchPluginConfig,
+  options?: { logger?: Logger },
+): SlingshotPlugin {
   // Zod schema validation — catches missing/mistyped fields at construction time
   const config = validatePluginConfig('slingshot-search', rawConfig, searchPluginConfigSchema);
+
+  const logger: Logger = options?.logger ?? noopLogger;
 
   // Validate adminGate adapter shape if present
   if (config.adminGate) {
@@ -116,6 +123,7 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
     pluginConfig: config,
     transformRegistry,
     metrics: metricsProxy,
+    logger,
   });
 
   // Event sync manager — created lazily in setupPost
@@ -191,7 +199,7 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
       if (!disabled.has(SEARCH_ROUTES.ADMIN) && config.adminGate) {
         app.route(mountPath, createAdminRouter(searchManager, config, frameworkConfig.storeInfra));
       } else if (!disabled.has(SEARCH_ROUTES.ADMIN) && !config.adminGate) {
-        console.warn(
+        logger.warn(
           '[slingshot-search] Admin routes not mounted — set config.adminGate to enable index management endpoints.',
         );
       }
@@ -214,7 +222,7 @@ export function createSearchPlugin(rawConfig: SearchPluginConfig): SlingshotPlug
       );
 
       if (searchableEntities.length === 0) {
-        console.warn(
+        logger.warn(
           '[slingshot-search] entityRegistry is present but contains no entities with search config. ' +
             'No config-driven indexes will be created.',
         );

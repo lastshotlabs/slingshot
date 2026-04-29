@@ -41,7 +41,7 @@ bun add @lastshotlabs/slingshot-push
 ## Peer Dependencies
 
 - `@lastshotlabs/slingshot-notifications`: `workspace:*`
-- `hono`: `>=4.12.12 <5`
+- `hono`: `>=4.12.14 <5`
 - `mongoose`: `>=9.0 <10`
 - `pg`: `^8.20.0`
 - `zod`: `>=4.0 <5`

@@ -120,7 +120,7 @@ bun add @lastshotlabs/slingshot
 - `@simplewebauthn/server`: `>=10.0.0`
 - `arctic`: `^3.7.0`
 - `bullmq`: `>=5.0 <6`
-- `hono`: `>=4.12.12 <5`
+- `hono`: `>=4.12.14 <5`
 - `ioredis`: `>=5.0 <6`
 - `jose`: `6.2.0`
 - `mongoose`: `>=9.0 <10`

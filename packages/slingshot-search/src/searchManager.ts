@@ -7,10 +7,11 @@
  */
 import type {
   GeoSearchConfig,
+  Logger,
   MetricsEmitter,
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
-import { createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
+import { createNoopMetricsEmitter, noopLogger } from '@lastshotlabs/slingshot-core';
 import { applyGeoTransform } from './geoTransform';
 import { deriveIndexSettings } from './indexSettings';
 import { createAlgoliaProvider } from './providers/algolia';
@@ -340,6 +341,12 @@ export interface SearchManagerConfig {
    * no-op emitter so callers can omit the field without a feature check.
    */
   readonly metrics?: MetricsEmitter;
+  /**
+   * Optional structured logger. When provided, the manager routes operational
+   * messages (warnings, errors, tenant index eviction events) through this
+   * logger instead of `console`. Defaults to a no-op logger.
+   */
+  readonly logger?: Logger;
 }
 
 /**
@@ -394,6 +401,7 @@ export interface SearchManagerConfig {
 export function createSearchManager(config: SearchManagerConfig): SearchManager {
   const { pluginConfig, transformRegistry, onTenantIndexEvicted } = config;
   const metrics: MetricsEmitter = config.metrics ?? createNoopMetricsEmitter();
+  const logger: Logger = config.logger ?? noopLogger;
 
   // Closure-owned state
   const providers = new Map<string, SearchProvider>();
@@ -672,18 +680,13 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
             const parsed = parseTenantIndexKey(oldest);
             const evictedIndexName = parsed?.indexName ?? oldest;
             const evictedTenantId = parsed?.tenantId ?? '';
-            console.log(
-              JSON.stringify({
-                level: 'info',
-                event: 'search.tenant_index.evicted',
-                message: '[slingshot-search] tenant index cache evicted (lru-capacity)',
-                indexName: evictedIndexName,
-                tenantId: evictedTenantId,
-                cacheKey: oldest,
-                reason: 'lru-capacity',
-                capacity: MAX_TENANT_INDEXES_CACHE,
-              }),
-            );
+            logger.info('[slingshot-search] tenant index cache evicted (lru-capacity)', {
+              indexName: evictedIndexName,
+              tenantId: evictedTenantId,
+              cacheKey: oldest,
+              reason: 'lru-capacity',
+              capacity: MAX_TENANT_INDEXES_CACHE,
+            });
             if (onTenantIndexEvicted) {
               try {
                 onTenantIndexEvicted({
@@ -692,7 +695,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
                   reason: 'lru-capacity',
                 });
               } catch (err) {
-                console.error('[slingshot-search] onTenantIndexEvicted callback threw:', err);
+                logger.error('[slingshot-search] onTenantIndexEvicted callback threw', {
+                  error: err instanceof Error ? err.message : String(err),
+                });
               }
             }
           }
@@ -769,9 +774,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
             doc = prepareDoc(entity);
           } catch (err) {
             const docId = entity[pkField];
-            console.error(
-              `[slingshot-search] Transform error for document id="${String(docId)}" in index '${targetIndex}' — skipping document:`,
-              err,
+            logger.error(
+              `[slingshot-search] Transform error for document id="${String(docId)}" in index '${targetIndex}' — skipping document`,
+              { error: err instanceof Error ? err.message : String(err), index: targetIndex },
             );
             return;
           }
@@ -791,9 +796,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
               docs.push(prepareDoc(e));
             } catch (err) {
               const docId = e[pkField];
-              console.error(
-                `[slingshot-search] Transform error for document id="${String(docId)}" in index '${targetIndex}' — skipping document:`,
-                err,
+              logger.error(
+                `[slingshot-search] Transform error for document id="${String(docId)}" in index '${targetIndex}' — skipping document`,
+                { error: err instanceof Error ? err.message : String(err), index: targetIndex },
               );
             }
           }
@@ -994,9 +999,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
           doc = prepareDoc(raw);
         } catch (err) {
           const docId = raw[pkField];
-          console.error(
-            `[slingshot-search] Transform error for document id="${String(docId)}" in entity '${entityStorageName}' — skipping document:`,
-            err,
+          logger.error(
+            `[slingshot-search] Transform error for document id="${String(docId)}" in entity '${entityStorageName}' — skipping document`,
+            { error: err instanceof Error ? err.message : String(err) },
           );
           continue;
         }

@@ -10,9 +10,18 @@ import './events';
  * Create the slingshot-assets plugin.
  */
 export { createAssetsPlugin } from './plugin';
+/**
+ * Entity manifest describing the asset resources owned by the assets plugin.
+ */
 export { assetManifest } from './manifest/assetManifest';
+/**
+ * Plugin state key used to retrieve the assets runtime state from app context.
+ */
 export { ASSETS_PLUGIN_STATE_KEY } from './types';
 
+/**
+ * Public asset records, adapter contracts, plugin config, and storage input types.
+ */
 export type {
   Asset,
   AssetAdapter,
@@ -32,6 +41,9 @@ export type {
  * Bounded in-memory orphan-key registry used for the recovery API.
  */
 export type { OrphanedKeyRegistry } from './middleware/deleteStorageFile';
+/**
+ * Create a bounded in-memory registry for storage keys that need orphan cleanup.
+ */
 export { createOrphanedKeyRegistry } from './middleware/deleteStorageFile';
 
 /**

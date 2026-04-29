@@ -41,7 +41,7 @@ bun add @lastshotlabs/slingshot-interactions
 ## Peer Dependencies
 
 - `@lastshotlabs/slingshot-permissions`: `workspace:*`
-- `hono`: `>=4.12.12 <5`
+- `hono`: `>=4.12.14 <5`
 
 ## Related Docs
 

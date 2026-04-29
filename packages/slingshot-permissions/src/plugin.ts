@@ -45,6 +45,12 @@ export interface PermissionsHealth {
   };
 }
 
+/**
+ * Configuration for the permissions plugin wrapper.
+ *
+ * Controls the backing adapter, optional group expansion, and evaluator limits
+ * used when resolving role grants for user, group, and service-account subjects.
+ */
 export interface PermissionsPluginConfig {
   /**
    * Override the store backend for the permissions adapter.

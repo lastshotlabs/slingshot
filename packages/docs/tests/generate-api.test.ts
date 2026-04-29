@@ -90,6 +90,22 @@ describe('extractJSDoc', () => {
       "Call writeGenerated(messageConfig, \\{ outDir: './src/generated/message' \\}).",
     );
   });
+
+  test('extracts descriptions from local export lists', () => {
+    const content = `
+      /**
+       * Peer-facing notification contracts re-exported from core.
+       */
+      export type { NotificationRecord, NotifyInput };
+    `;
+
+    expect(extractJSDoc(content, 'NotificationRecord')).toBe(
+      'Peer-facing notification contracts re-exported from core.',
+    );
+    expect(extractJSDoc(content, 'NotifyInput')).toBe(
+      'Peer-facing notification contracts re-exported from core.',
+    );
+  });
 });
 
 describe('extractZodDescriptions', () => {

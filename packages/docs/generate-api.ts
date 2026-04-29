@@ -24,6 +24,7 @@ interface PackageEntry {
 
 interface ExportedSymbol {
   name: string;
+  localName?: string;
   kind: 'function' | 'interface' | 'type' | 'class' | 'const' | 'enum' | 'variable';
   signature?: string;
   description?: string;
@@ -57,12 +58,22 @@ async function parseExports(filePath: string): Promise<ExportedSymbol[]> {
     if (!rawNames || !source) continue;
 
     const names = rawNames.split(',').map((part: string) => {
-      const pieces = part.trim().split(/\s+as\s+/);
-      return pieces[pieces.length - 1].trim();
+      const pieces = part
+        .trim()
+        .replace(/^type\s+/, '')
+        .split(/\s+as\s+/);
+      const localName = pieces[0]?.trim();
+      const name = pieces[pieces.length - 1]?.trim();
+      return { localName, name };
     });
-    for (const name of names) {
+    for (const { localName, name } of names) {
       if (!name || name.startsWith('//')) continue;
-      symbols.push({ name, kind: 'variable', source });
+      symbols.push({
+        name,
+        localName: localName === name ? undefined : localName,
+        kind: 'variable',
+        source,
+      });
     }
   }
 
@@ -72,12 +83,22 @@ async function parseExports(filePath: string): Promise<ExportedSymbol[]> {
     if (!rawNames || !source) continue;
 
     const names = rawNames.split(',').map((part: string) => {
-      const pieces = part.trim().split(/\s+as\s+/);
-      return pieces[pieces.length - 1].trim();
+      const pieces = part
+        .trim()
+        .replace(/^type\s+/, '')
+        .split(/\s+as\s+/);
+      const localName = pieces[0]?.trim();
+      const name = pieces[pieces.length - 1]?.trim();
+      return { localName, name };
     });
-    for (const name of names) {
+    for (const { localName, name } of names) {
       if (!name || name.startsWith('//')) continue;
-      symbols.push({ name, kind: 'type', source });
+      symbols.push({
+        name,
+        localName: localName === name ? undefined : localName,
+        kind: 'type',
+        source,
+      });
     }
   }
 
@@ -112,6 +133,13 @@ function resolveSymbolSourcePath(symbol: ExportedSymbol, packageEntryPoint: stri
   }
 
   const entryDir = resolve(packageEntryPoint, '..');
+  if (symbol.source.endsWith('.js')) {
+    const tsCandidate = resolve(entryDir, symbol.source.replace(/\.js$/, '.ts'));
+    if (isFilePath(tsCandidate)) {
+      return tsCandidate;
+    }
+  }
+
   for (const ext of ['', '.ts', '.js', '/index.ts', '/index.js']) {
     const candidate = resolve(entryDir, symbol.source + ext);
     if (isFilePath(candidate)) {
@@ -120,6 +148,51 @@ function resolveSymbolSourcePath(symbol: ExportedSymbol, packageEntryPoint: stri
   }
 
   return null;
+}
+
+async function resolveExportedSymbolSourcePath(
+  symbol: ExportedSymbol,
+  packageEntryPoint: string,
+  seen = new Set<string>(),
+): Promise<string | null> {
+  const lookupName = symbol.localName ?? symbol.name;
+  const workspacePackage = packages.find(pkg => pkg.label === symbol.source);
+  if (workspacePackage) {
+    const seenKey = `${workspacePackage.entryPoint}:${lookupName}`;
+    if (seen.has(seenKey)) {
+      return workspacePackage.entryPoint;
+    }
+    seen.add(seenKey);
+
+    const workspaceExports = await parseExports(workspacePackage.entryPoint);
+    const workspaceSymbol = workspaceExports.find(exported => exported.name === lookupName);
+    if (!workspaceSymbol) {
+      return workspacePackage.entryPoint;
+    }
+
+    return resolveExportedSymbolSourcePath(workspaceSymbol, workspacePackage.entryPoint, seen);
+  }
+
+  const sourcePath = resolveSymbolSourcePath(symbol, packageEntryPoint);
+  if (!sourcePath) {
+    return null;
+  }
+
+  const seenKey = `${sourcePath}:${lookupName}`;
+  if (seen.has(seenKey)) {
+    return sourcePath;
+  }
+  seen.add(seenKey);
+
+  const sourceExports = await parseExports(sourcePath);
+  const reExport = sourceExports.find(
+    exported => exported.name === lookupName && exported.source !== sourcePath,
+  );
+  if (reExport) {
+    return resolveExportedSymbolSourcePath(reExport, sourcePath, seen);
+  }
+
+  return sourcePath;
 }
 
 function sanitizeJSDocInlineTags(text: string): string {
@@ -202,7 +275,7 @@ export function extractJSDoc(content: string, symbolName: string): string | null
       'g',
     ),
     new RegExp(
-      `/\\*\\*[\\s\\S]*?\\*/\\s*export\\s+(?:type\\s+)?\\{[^}]*\\b${escapedName}\\b[^}]*\\}\\s*from`,
+      `/\\*\\*[\\s\\S]*?\\*/\\s*export\\s+(?:type\\s+)?\\{[^}]*\\b${escapedName}\\b[^}]*\\}\\s*(?:from\\s*['"][^'"]+['"])?`,
       'g',
     ),
   ];
@@ -391,13 +464,14 @@ async function resolveSymbolDetails(
   symbol: ExportedSymbol,
   packageEntryPoint: string,
 ): Promise<ExportedSymbol> {
-  const sourcePath = resolveSymbolSourcePath(symbol, packageEntryPoint);
+  const sourcePath = await resolveExportedSymbolSourcePath(symbol, packageEntryPoint);
   if (!sourcePath) return symbol;
 
   const content = await Bun.file(sourcePath).text();
   const { name } = symbol;
-  const description = extractJSDoc(content, name) ?? undefined;
-  const fieldDescriptions = extractZodDescriptions(content, name);
+  const sourceName = symbol.localName ?? name;
+  const description = extractJSDoc(content, sourceName) ?? undefined;
+  const fieldDescriptions = extractZodDescriptions(content, sourceName);
   const detailsBase = {
     ...symbol,
     source: sourcePath,
@@ -407,7 +481,7 @@ async function resolveSymbolDetails(
 
   const fnMatch = content.match(
     new RegExp(
-      `export\\s+(async\\s+)?function\\s+${name}\\s*(<[^>]*>)?\\s*\\(([\\s\\S]*?)\\)\\s*(?::\\s*([\\s\\S]*?))?\\s*\\{`,
+      `export\\s+(async\\s+)?function\\s+${sourceName}\\s*(<[^>]*>)?\\s*\\(([\\s\\S]*?)\\)\\s*(?::\\s*([\\s\\S]*?))?\\s*\\{`,
     ),
   );
   if (fnMatch) {
@@ -422,20 +496,23 @@ async function resolveSymbolDetails(
     };
   }
 
-  if (content.match(new RegExp(`export\\s+interface\\s+${name}\\b`))) {
+  if (content.match(new RegExp(`export\\s+interface\\s+${sourceName}\\b`))) {
     return { ...detailsBase, kind: 'interface' };
   }
 
-  if (content.match(new RegExp(`export\\s+type\\s+${name}\\b`))) {
+  if (content.match(new RegExp(`export\\s+type\\s+${sourceName}\\b`))) {
     return { ...detailsBase, kind: 'type' };
   }
 
-  if (content.match(new RegExp(`export\\s+class\\s+${name}\\b`))) {
+  if (content.match(new RegExp(`export\\s+class\\s+${sourceName}\\b`))) {
     return { ...detailsBase, kind: 'class' };
   }
 
   const constLine = content.match(
-    new RegExp(`export\\s+const\\s+${name}\\b[^]*?=>|export\\s+const\\s+${name}\\b[^;]*;`, 's'),
+    new RegExp(
+      `export\\s+const\\s+${sourceName}\\b[^]*?=>|export\\s+const\\s+${sourceName}\\b[^;]*;`,
+      's',
+    ),
   );
   if (constLine) {
     const snippet = constLine[0];
@@ -444,7 +521,7 @@ async function resolveSymbolDetails(
     if (isArrow) {
       const arrowMatch = content.match(
         new RegExp(
-          `export\\s+const\\s+${name}\\s*=\\s*(async\\s+)?` +
+          `export\\s+const\\s+${sourceName}\\s*=\\s*(async\\s+)?` +
             `(?:<([^>]*)>\\s*)?` +
             `\\(([\\s\\S]*?)\\)` +
             `\\s*(?::\\s*([\\s\\S]*?))?` +
@@ -468,11 +545,11 @@ async function resolveSymbolDetails(
     return { ...detailsBase, kind: 'const' };
   }
 
-  if (content.match(new RegExp(`export\\s+const\\s+${name}\\b`))) {
+  if (content.match(new RegExp(`export\\s+const\\s+${sourceName}\\b`))) {
     return { ...detailsBase, kind: 'const' };
   }
 
-  if (content.match(new RegExp(`export\\s+enum\\s+${name}\\b`))) {
+  if (content.match(new RegExp(`export\\s+enum\\s+${sourceName}\\b`))) {
     return { ...detailsBase, kind: 'enum' };
   }
 

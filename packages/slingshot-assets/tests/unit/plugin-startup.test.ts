@@ -1,4 +1,4 @@
-import { describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import type { PluginSetupContext } from '@lastshotlabs/slingshot-core';
 import { createAssetsPlugin } from '../../src/plugin';
 
@@ -34,21 +34,29 @@ describe('createAssetsPlugin startup orphan-delete guard', () => {
   });
 
   it('warns and proceeds when allowOrphanedStorage: true is set', async () => {
-    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      const plugin = createAssetsPlugin({
+    const warnings: string[] = [];
+    const logger = {
+      debug() {},
+      info() {},
+      warn(msg: string) {
+        warnings.push(msg);
+      },
+      error() {},
+      child() {
+        return logger;
+      },
+    };
+    const plugin = createAssetsPlugin(
+      {
         storage: { adapter: 'memory' },
         allowOrphanedStorage: true,
-      });
-      await expect(plugin.setupPost?.(makeStubContext())).resolves.toBeUndefined();
-      // Confirm the warning was logged.
-      const warnedAboutOrphans = warnSpy.mock.calls.some(call =>
-        String(call[0] ?? '').includes('allowOrphanedStorage'),
-      );
-      expect(warnedAboutOrphans).toBe(true);
-    } finally {
-      warnSpy.mockRestore();
-    }
+      },
+      { logger },
+    );
+    await expect(plugin.setupPost?.(makeStubContext())).resolves.toBeUndefined();
+    // Confirm the warning was logged.
+    const warnedAboutOrphans = warnings.some(m => m.includes('allowOrphanedStorage'));
+    expect(warnedAboutOrphans).toBe(true);
   });
 
   it('plugin construction succeeds with allowOrphanedStorage: true', () => {

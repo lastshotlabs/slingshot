@@ -30,6 +30,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "test": "echo 'Tests run via workspace runner'",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ --cache"
   },
@@ -38,7 +39,7 @@
   },
   "peerDependencies": {
     "@hono/zod-openapi": ">=0.18",
-    "hono": ">=4.12.12 <5",
+    "hono": ">=4.12.14 <5",
     "zod": ">=4.0 <5"
   },
   "engines": {

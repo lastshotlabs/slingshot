@@ -6,6 +6,9 @@ import './events';
 export { createSearchPlugin } from './plugin';
 
 // --- Event-sync manager (used by package tests and operators wiring custom DLQ stores) ---
+/**
+ * Dead-letter queue contracts and event-sync manager health/configuration types.
+ */
 export type {
   DlqStore,
   EventSyncHealth,
@@ -13,22 +16,43 @@ export type {
   EventSyncManagerConfig,
   FlushDeadLetterEntry,
 } from './eventSync';
+/**
+ * Create the event-sync manager used to index entity events and flush dead letters.
+ */
 export { createEventSyncManager } from './eventSync';
 
 // --- Provider factories ---
 /** First-party provider factories for external and hosted search backends. */
 export { createTypesenseProvider, ProviderUnavailableError } from './providers/typesense';
+/**
+ * Circuit-breaker health payload exposed by hosted search providers.
+ */
 export type { CircuitBreakerHealth } from './providers/typesense';
+/**
+ * Create an Elasticsearch-backed search provider.
+ */
 export { createElasticsearchProvider } from './providers/elasticsearch';
+/**
+ * Create an Algolia-backed search provider.
+ */
 export { createAlgoliaProvider } from './providers/algolia';
 
 // --- Route constants ---
 /** Canonical route ids for the HTTP surface mounted by `createSearchPlugin()`. */
 export { SEARCH_ROUTES } from './routes/index';
+/**
+ * Route identifiers mounted by the search plugin.
+ */
 export type { SearchRoute } from './routes/index';
 
 // --- Rate limiting ---
+/**
+ * Create in-memory rate-limit storage and middleware for search routes.
+ */
 export { createInMemoryRateLimitStore, createRateLimitMiddleware } from './routes/rateLimiter';
+/**
+ * Rate-limit options and store contract for search routes.
+ */
 export type { RateLimitOptions, RateLimitStore } from './routes/rateLimiter';
 
 // --- Config types ---

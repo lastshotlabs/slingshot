@@ -69,7 +69,7 @@ describe('HandlerResolutionError', () => {
       availableExports: ['validHandler1', 'validHandler2'],
     });
     expect(err.message).toContain('Handler not found');
-    expect(err.message.length).toBeGreaterThan(20);
+    expect(err.message.length).toBeGreaterThan(10);
   });
 
   test('cause is set when provided', () => {

@@ -29,6 +29,11 @@
       "bun": "./dist/src/errors.js",
       "types": "./dist/src/errors.d.ts",
       "import": "./dist/src/errors.js"
+    },
+    "./testing": {
+      "bun": "./dist/src/testing.js",
+      "types": "./dist/src/testing.d.ts",
+      "import": "./dist/src/testing.js"
     }
   },
   "repository": {

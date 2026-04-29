@@ -204,6 +204,8 @@ describe('connector outbound transforms', () => {
 
     try {
       await connectors.start(bus);
+      // Let connector setup settle before publishing.
+      await flushAsyncWork();
       events.publish('auth:user.created', { userId: 'u-1', email: 'user@example.com' } as never, {
         requestTenantId: null,
       });
@@ -258,6 +260,7 @@ describe('connector outbound transforms', () => {
 
     try {
       await connectors.start(bus);
+      await flushAsyncWork();
       events.publish('auth:user.created', { userId: 'u-1' } as never, {
         requestTenantId: null,
       });
@@ -300,6 +303,7 @@ describe('connector outbound transforms', () => {
 
     try {
       await connectors.start(bus);
+      await flushAsyncWork();
 
       // Publish with missing email — should be blocked by schema
       events.publish('auth:user.created', { userId: 'u-1' } as never, { requestTenantId: null });
@@ -342,6 +346,7 @@ describe('connector outbound transforms', () => {
 
     try {
       await connectors.start(bus);
+      await flushAsyncWork();
       events.publish('auth:user.created', { userId: 'u-1' } as never, { requestTenantId: null });
       await flushAsyncWork();
 

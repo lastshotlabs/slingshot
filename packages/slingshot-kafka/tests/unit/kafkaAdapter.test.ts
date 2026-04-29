@@ -445,18 +445,45 @@ describe('kafkaAdapter', () => {
       bus.on('auth:login', listener, { durable: true, name: 'commit-fail-worker' });
       await flushAsyncWork();
 
-      // Make the first commitOffsets call throw
-      fakeKafkaState.commitOffsetErrors.push(new Error('broker unavailable'));
+      // Double tick to ensure consumer setup (connect → subscribe → run)
+      // fully settles before we inject errors into the fake state.
+      await flushAsyncWork();
 
       const envelope = createRawEventEnvelope('auth:login', {
         userId: 'u-commit-fail',
         sessionId: 's-commit-fail',
       });
       const consumer = fakeKafkaState.consumers[0];
+      if (!consumer?.eachMessage) {
+        throw new Error('Consumer eachMessage was not set up — adapter setup may have failed');
+      }
+
       // P-KAFKA-9: commit failure now re-throws so kafkajs's consumer.run
       // surfaces the error and pauses the partition for redelivery.
+      // Push the error immediately before the eachMessage call so no
+      // internal async work (rebalance hooks, etc.) can drain the queue.
+      // Monkey-patch commitOffsets on the actual consumer object (not the
+      // FakeConsumerRecord) so no shared global queue can be drained by
+      // interleaved async work from other tests.
+      const consumerObj = consumer.consumerObj;
+      if (!consumerObj) {
+        throw new Error('consumerObj was not set — fake kafkajs may be out of date');
+      }
+      const origCommitOffsets = consumerObj.commitOffsets;
+      let patchCalled = false;
+      consumerObj.commitOffsets = async (
+        args: Array<{ topic: string; partition: number; offset: string }>,
+      ) => {
+        if (!patchCalled) {
+          patchCalled = true;
+          consumer.commitOffsetCalls += 1;
+          consumer.commitOffsetCallArgs.push(args ?? []);
+          throw new Error('broker unavailable');
+        }
+        return origCommitOffsets(args);
+      };
       await expect(
-        consumer?.eachMessage?.({
+        consumer.eachMessage({
           topic: 'slingshot.events.auth.login',
           partition: 0,
           message: {
@@ -469,17 +496,19 @@ describe('kafkaAdapter', () => {
         }),
       ).rejects.toThrow('broker unavailable');
 
+      // Restore original so the second message commits normally.
+      consumerObj.commitOffsets = origCommitOffsets;
+
       // Listener still ran despite the eventual commit failure.
       expect(listener).toHaveBeenCalledTimes(1);
       // Partition was paused so the broker stops redelivering until the
       // operator (or rebalance) clears the condition.
-      expect(consumer?.pauseCalls?.length ?? 0).toBeGreaterThanOrEqual(1);
+      expect(consumer.pauseCalls?.length ?? 0).toBeGreaterThanOrEqual(1);
       const captured = errorSpy.mock.calls.map(c => String(c[0])).join(' ');
       expect(captured).toContain('failed to commit offset');
 
       // Second message succeeds end-to-end after the commit error clears.
-      const consumer2 = fakeKafkaState.consumers[0];
-      await consumer2?.eachMessage?.({
+      await consumer.eachMessage({
         topic: 'slingshot.events.auth.login',
         partition: 0,
         message: {

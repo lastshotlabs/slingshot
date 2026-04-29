@@ -16,6 +16,22 @@ export interface FakeCreateTopicsPayload {
   }>;
 }
 
+export interface FakeConsumerObj {
+  events: Record<string, string>;
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
+  subscribe: (payload: { topic: string | RegExp; fromBeginning: boolean }) => Promise<void>;
+  run: (payload: {
+    autoCommit?: boolean;
+    partitionsConsumedConcurrently?: number;
+    eachMessage: (payload: any) => Promise<void>;
+  }) => Promise<void>;
+  commitOffsets: (args: Array<{ topic: string; partition: number; offset: string }>) => Promise<void>;
+  pause: (args: Array<{ topic: string; partitions?: number[] }>) => void;
+  resume: (args: Array<{ topic: string; partitions?: number[] }>) => void;
+  on: (eventName: string, listener: (event: unknown) => void) => () => void;
+}
+
 export interface FakeConsumerRecord {
   groupId: string;
   connectCalls: number;
@@ -28,6 +44,8 @@ export interface FakeConsumerRecord {
   resumeCalls: Array<Array<{ topic: string; partitions?: number[] }>>;
   eventListeners: Map<string, Array<(event: unknown) => void>>;
   eachMessage?: (payload: any) => Promise<void>;
+  /** The consumer object returned by `kafka.consumer()`. Tests can monkey-patch methods on this. */
+  consumerObj?: FakeConsumerObj;
   /** Trigger a registered event listener (e.g. REBALANCING) for testing. */
   emitEvent?: (eventName: string, payload?: unknown) => Promise<void>;
 }
@@ -265,6 +283,10 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
           await Promise.resolve(listener(payload));
         }
       };
+
+      // Store the consumerObj so tests can monkey-patch methods like
+      // commitOffsets directly instead of relying on shared error queues.
+      record.consumerObj = consumerObj as FakeConsumerObj;
 
       return consumerObj;
     }

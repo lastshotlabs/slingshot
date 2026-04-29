@@ -5,6 +5,7 @@ import {
   ScheduleNotFoundError,
   WorkflowFailedError,
 } from '@temporalio/client';
+import { withTimeout } from '@lastshotlabs/slingshot-core';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -126,13 +127,75 @@ function getSearchAttributePriority(
   return undefined;
 }
 
-async function maybeQueryState(handle: ReturnType<Client['workflow']['getHandle']>) {
+/**
+ * Per-workflow concurrency cap for in-flight `maybeQueryState` polls. Two
+ * concurrent callers (e.g. `getRun` and an `onProgress` poll tick) both racing
+ * against a hung Temporal cluster previously stacked 60+ pending queries per
+ * workflow — this Map collapses concurrent calls to a single in-flight query
+ * per runId.
+ */
+const inFlightQueriesByRunId = new Map<
+  string,
+  Promise<{ progress?: Run['progress']; steps?: WorkflowRun['steps'] } | undefined>
+>();
+
+interface AdapterInstrumentation {
+  onQuery?: (event: { runId: string; durationMs: number; error?: unknown }) => void;
+  onSignal?: (event: { runId: string; durationMs: number; error?: unknown }) => void;
+  queryTimeoutMs?: number;
+}
+
+async function maybeQueryState(
+  handle: ReturnType<Client['workflow']['getHandle']>,
+  runId: string,
+  instrumentation: AdapterInstrumentation,
+) {
+  // Single-flight: if a query is already in flight for this runId reuse the
+  // outstanding promise so the next caller awaits the existing query rather
+  // than queuing a parallel one.
+  const existing = inFlightQueriesByRunId.get(runId);
+  if (existing) return existing;
+
+  const queryTimeoutMs = instrumentation.queryTimeoutMs ?? 5_000;
+  const startedAt = Date.now();
+  const queryPromise = (async () => {
+    try {
+      const result = await withTimeout(
+        handle.query<{ progress?: Run['progress']; steps?: WorkflowRun['steps'] }>(
+          STATE_QUERY_NAME,
+        ),
+        queryTimeoutMs,
+        `temporal.query(${STATE_QUERY_NAME})`,
+      );
+      try {
+        instrumentation.onQuery?.({
+          runId,
+          durationMs: Date.now() - startedAt,
+        });
+      } catch {
+        // instrumentation hooks must not break adapter operation
+      }
+      return result;
+    } catch (err) {
+      try {
+        instrumentation.onQuery?.({
+          runId,
+          durationMs: Date.now() - startedAt,
+          error: err,
+        });
+      } catch {
+        /* ignore hook error */
+      }
+      // TimeoutError still maps to undefined so callers can degrade gracefully
+      // rather than failing the read path.
+      return undefined;
+    }
+  })();
+  inFlightQueriesByRunId.set(runId, queryPromise);
   try {
-    return await handle.query<{ progress?: Run['progress']; steps?: WorkflowRun['steps'] }>(
-      STATE_QUERY_NAME,
-    );
-  } catch {
-    return undefined;
+    return await queryPromise;
+  } finally {
+    inFlightQueriesByRunId.delete(runId);
   }
 }
 
@@ -149,6 +212,12 @@ export function createTemporalOrchestrationAdapter(
   // a late-firing tick can run a query against an already-closed connection.
   const progressIntervals = new Set<() => void>();
   let started = false;
+
+  const instrumentation: AdapterInstrumentation = {
+    queryTimeoutMs: (options as { queryTimeoutMs?: number }).queryTimeoutMs,
+    onQuery: (options as { onQuery?: AdapterInstrumentation['onQuery'] }).onQuery,
+    onSignal: (options as { onSignal?: AdapterInstrumentation['onSignal'] }).onSignal,
+  };
 
   function rebuildRegistry(): void {
     // Reserved for future provider-manifest materialization.
@@ -278,7 +347,7 @@ export function createTemporalOrchestrationAdapter(
 
       const memo = getMemo(description);
       const status = mapTemporalStatus(description.status.name);
-      const state = await maybeQueryState(handle);
+      const state = await maybeQueryState(handle, runId, instrumentation);
 
       const run: Run | WorkflowRun = {
         id: runId,
@@ -351,7 +420,29 @@ export function createTemporalOrchestrationAdapter(
           'Temporal task-wrapper runs do not support user-defined signals.',
         );
       }
-      await handle.signal(USER_SIGNAL_NAME, { name, payload });
+      const startedAt = Date.now();
+      try {
+        await handle.signal(USER_SIGNAL_NAME, { name, payload });
+        try {
+          instrumentation.onSignal?.({
+            runId,
+            durationMs: Date.now() - startedAt,
+          });
+        } catch {
+          /* ignore hook error */
+        }
+      } catch (err) {
+        try {
+          instrumentation.onSignal?.({
+            runId,
+            durationMs: Date.now() - startedAt,
+            error: err,
+          });
+        } catch {
+          /* ignore hook error */
+        }
+        throw err;
+      }
     },
     async schedule(target, cron, input) {
       if (target.type === 'task') {
@@ -505,7 +596,7 @@ export function createTemporalOrchestrationAdapter(
           // Re-check after any await — disposal may have happened while the
           // previous tick was queued.
           if (disposed) return;
-          const state = await maybeQueryState(handle);
+          const state = await maybeQueryState(handle, runId, instrumentation);
           if (disposed) return;
           if (state?.progress !== undefined) {
             const serialized = JSON.stringify(state.progress);

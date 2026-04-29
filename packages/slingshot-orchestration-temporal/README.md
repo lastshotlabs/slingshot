@@ -118,3 +118,22 @@ void worker.run();
 - `packages/slingshot-orchestration-temporal/src/adapter.ts`
 - `packages/slingshot-orchestration-temporal/src/worker.ts`
 - `packages/slingshot-orchestration-temporal/src/workflowModuleGenerator.ts`
+
+## Running The Real-Server Integration Tests
+
+The unit and "mocked" suites run by default with `bun test`. The
+integration tests under `tests/integration/` exercise the adapter against a
+real Temporal Test Environment (`@temporalio/testing`), which spins up an
+in-process Java dev server. They are skipped unless `TEMPORAL_TEST_ENV=1`
+is set:
+
+```sh
+TEMPORAL_TEST_ENV=1 bun test packages/slingshot-orchestration-temporal/tests/integration
+```
+
+The integration suite covers `runTask`, `runWorkflow`, `getRun`, `listRuns`,
+`cancel`, `signal`, and the workflow-module bundler path used by the worker
+bootstrap. Without `TEMPORAL_TEST_ENV` the suite is collected but every test
+is reported as `skip`, so the package's default test invocation stays
+hermetic on contributor machines that do not have the Temporal native worker
+bridge available.

@@ -65,6 +65,26 @@ export const temporalAdapterOptionsSchema = z.object({
   interceptors: z
     .custom<object>(value => value === undefined || (typeof value === 'object' && value !== null))
     .optional(),
+  /**
+   * Maximum time (ms) to wait for a single `maybeQueryState(handle)` poll
+   * before considering it hung and giving up. Defaults to 5_000.
+   */
+  queryTimeoutMs: z.number().int().positive().optional(),
+  /**
+   * Optional instrumentation hook fired after every `query()` issued via
+   * the adapter. Receives the runId, duration, and an optional error. Default
+   * is no-op so existing apps observe no behavior change until they opt in.
+   */
+  onQuery: z
+    .custom<object>(value => value === undefined || typeof value === 'function')
+    .optional(),
+  /**
+   * Optional instrumentation hook fired after every `signal()` issued via
+   * the adapter. Same shape as `onQuery`.
+   */
+  onSignal: z
+    .custom<object>(value => value === undefined || typeof value === 'function')
+    .optional(),
 });
 
 /**

@@ -29,7 +29,11 @@
     "lint": "eslint src/ --cache"
   },
   "dependencies": {
+    "@lastshotlabs/slingshot-core": "workspace:*",
     "@lastshotlabs/slingshot-orchestration": "workspace:*"
+  },
+  "devDependencies": {
+    "@temporalio/testing": "^1.16.0"
   },
   "peerDependencies": {
     "@temporalio/activity": "^1.16.0",

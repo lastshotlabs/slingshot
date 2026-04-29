@@ -17,22 +17,32 @@ describe('permissionsAdapterFactories', () => {
     expect(typeof permissionsAdapterFactories.sqlite).toBe('function');
   });
 
-  test('memory factory returns adapter with required methods', async () => {
-    const adapter = await permissionsAdapterFactories.memory({});
-    expect(typeof adapter.getGrants).toBe('function');
-    expect(typeof adapter.close).toBe('function');
+  test('contains mongo adapter factory', () => {
+    expect(permissionsAdapterFactories).toHaveProperty('mongo');
+    expect(typeof permissionsAdapterFactories.mongo).toBe('function');
   });
 
-  test('memory factory works without options', async () => {
-    const adapter = await permissionsAdapterFactories.memory({});
+  test('contains redis adapter factory (throws on call)', () => {
+    expect(permissionsAdapterFactories).toHaveProperty('redis');
+    expect(typeof permissionsAdapterFactories.redis).toBe('function');
+    expect(() => permissionsAdapterFactories.redis({} as any)).toThrow();
+  });
+
+  test('memory factory returns adapter with getGrantsForSubject', async () => {
+    const adapter = await permissionsAdapterFactories.memory({} as any);
+    expect(typeof adapter.getGrantsForSubject).toBe('function');
+    expect(typeof adapter.clear).toBe('function');
+  });
+
+  test('memory factory works without store infra details', async () => {
+    const adapter = await permissionsAdapterFactories.memory({} as any);
     expect(adapter).toBeDefined();
-    await adapter.close();
   });
 
   test('memory adapter starts with empty grants', async () => {
-    const adapter = await permissionsAdapterFactories.memory({});
-    const grants = await adapter.getGrants('any-subject');
+    const adapter = await permissionsAdapterFactories.memory({} as any);
+    const grants = await adapter.getGrantsForSubject({ type: 'user', id: 'any-subject' });
     expect(Array.isArray(grants)).toBe(true);
-    await adapter.close();
+    expect(grants).toEqual([]);
   });
 });

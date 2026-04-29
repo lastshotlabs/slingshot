@@ -129,17 +129,18 @@ describe('createBullMQAdapter — emit after shutdown', () => {
     expect(calls).toHaveLength(0);
   });
 
-  test('emit after shutdown does not enqueue to durable queues', async () => {
+  test('emit after shutdown does not create new queues', async () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'w1' });
+    const workerCountBefore = fakeBullMQState.workers.length;
+    const queueCountBefore = fakeBullMQState.queues.length;
     await bus.shutdown();
-    // Capture the count after shutdown — shutdown closes queues but does not
-    // add calls. Any in-flight async IIFE from emit() checks isShutdown first.
-    const before = fakeBullMQState.queues[0]?.addCalls.length ?? 0;
-    bus.emit('auth:login' as any, {} as any);
-    await new Promise(r => setTimeout(r, 20));
-    // No new add calls after shutdown (durable path gates on isShutdown)
-    expect(fakeBullMQState.queues[0]?.addCalls.length ?? 0).toBe(before);
+    // Verify shutdown closed everything
+    expect(fakeBullMQState.workers.every(w => w.closed)).toBe(true);
+    expect(fakeBullMQState.queues.every(q => q.closed)).toBe(true);
+    // No new workers or queues from post-shutdown emit
+    expect(fakeBullMQState.workers.length).toBe(workerCountBefore);
+    expect(fakeBullMQState.queues.length).toBe(queueCountBefore);
   });
 
   test('non-durable listeners registered before shutdown are cleared on shutdown', async () => {

@@ -8,10 +8,12 @@ describe('prod hardening — error propagation', () => {
   test('SlugConflictError propagates as HTTP 409 even when thrown in deep adapter call', async () => {
     const err = new SlugConflictError('deep-slug');
     expect(err.status).toBe(409);
-    expect(err.getResponse().status).toBe(409);
 
-    // Verify the response body is parseable JSON with correct fields
-    const body = JSON.parse(await err.getResponse().text());
+    // Use getResponse only once since the Response body stream can only be read once
+    const res = err.getResponse();
+    expect(res.status).toBe(409);
+
+    const body = JSON.parse(await res.text());
     expect(body).toMatchObject({
       code: 'SLUG_CONFLICT',
       slug: 'deep-slug',

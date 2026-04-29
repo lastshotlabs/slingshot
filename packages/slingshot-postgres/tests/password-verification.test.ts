@@ -6,7 +6,7 @@
  *   2. `Bun.password.verify` when running under Bun (no custom verifier).
  *   3. Descriptive error thrown when neither is available.
  */
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test, beforeAll } from 'bun:test';
 
 // ── Mock state ────────────────────────────────────────────────────────────────
 

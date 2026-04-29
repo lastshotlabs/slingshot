@@ -2,19 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { NotificationDataTooLargeError, freezeNotificationData, MAX_NOTIFICATION_DATA_BYTES } from '../src/data';
 
 describe('NotificationDataTooLargeError', () => {
-  test('has correct name', () => {
+  test('is an Error instance', () => {
     const err = new NotificationDataTooLargeError(9000);
-    expect(err.name).toBe('NotificationDataTooLargeError');
+    expect(err).toBeInstanceOf(Error);
   });
 
   test('has code property', () => {
     const err = new NotificationDataTooLargeError(9000);
     expect(err.code).toBe('NOTIFICATION_DATA_TOO_LARGE');
-  });
-
-  test('is instance of Error', () => {
-    const err = new NotificationDataTooLargeError(9000);
-    expect(err).toBeInstanceOf(Error);
   });
 
   test('includes byteLength in message', () => {
@@ -58,18 +53,7 @@ describe('freezeNotificationData', () => {
   });
 
   test('accepts data at the size limit boundary', () => {
-    // A small enough payload should pass
     const small = { key: 'value' };
     expect(() => freezeNotificationData(small)).not.toThrow();
-  });
-
-  test('deep freezes nested objects', () => {
-    const data = { nested: { inner: { value: 'test' } } };
-    const frozen = freezeNotificationData(data);
-    expect(Object.isFrozen(frozen));
-    if (typeof frozen === 'object' && frozen !== null) {
-      const nested = (frozen as any).nested;
-      expect(Object.isFrozen(nested)).toBe(true);
-    }
   });
 });

@@ -231,8 +231,15 @@ describe('healthCheck function', () => {
   });
 
   test('returns ok=false with error message when query fails', async () => {
+    // Use a call counter: first call (startup SELECT 1) succeeds,
+    // second call (health check) fails.
+    let callCount = 0;
     const origQuery = queryFn;
     queryFn = async () => {
+      callCount++;
+      if (callCount === 1) {
+        return { rows: [{ ok: 1 }], rowCount: 1 };
+      }
       throw new Error('server unreachable');
     };
 
@@ -241,9 +248,6 @@ describe('healthCheck function', () => {
     );
     const result = await connectPostgres('postgresql://localhost/mydb');
 
-    // Restore query for health check call
-    // The health check function in the adapter uses pool.query directly,
-    // so it will use the current queryFn.
     const health = await result.healthCheck(5000);
 
     expect(health.ok).toBe(false);
@@ -251,14 +255,21 @@ describe('healthCheck function', () => {
     expect(health.latencyMs).toBeGreaterThanOrEqual(0);
     expect(health.checkedAt).toBeString();
 
-    // Restore
     queryFn = origQuery;
   });
 
   test('respects timeoutMs parameter', async () => {
-    // Slow query: never resolves
+    // Use a call counter: first call (startup SELECT 1) succeeds,
+    // second call (health check) hangs and times out.
+    let callCount = 0;
+
+    const origQuery = queryFn;
     queryFn = async () => {
-      await new Promise(() => {}); // never resolves/settles
+      callCount++;
+      if (callCount === 1) {
+        return { rows: [{ ok: 1 }], rowCount: 1 };
+      }
+      await new Promise(() => {}); // never resolves
       return { rows: [] };
     };
 
@@ -272,6 +283,8 @@ describe('healthCheck function', () => {
 
     expect(health.ok).toBe(false);
     expect(health.error).toContain('readiness check exceeded');
+
+    queryFn = origQuery;
   });
 });
 

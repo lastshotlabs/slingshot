@@ -191,7 +191,19 @@ describe('runtime-bun logging', () => {
   });
 
   test('default logger prints stack trace separately when fields contain stack', () => {
-    configureRuntimeBunLogger(null); // ensure default
+    configureRuntimeBunLogger(null); // ensure default runtime logger
+    // Silence the structured logger so it doesn't write JSON to console.error
+    // alongside the default runtime logger's output.
+    configureRuntimeBunStructuredLogger({
+      debug() {},
+      info() {},
+      warn() {},
+      error() {},
+      child() {
+        return this;
+      },
+    });
+
     const errorLines: string[] = [];
     const origError = console.error;
     console.error = (...args: unknown[]) => errorLines.push(args.map(String).join(' '));
@@ -204,9 +216,9 @@ describe('runtime-bun logging', () => {
       // The formatted line should not contain the stack (stack is filtered out by formatLogLine)
       // The stack should be printed as a separate console.error call
       expect(errorLines.length).toBeGreaterThanOrEqual(2);
-      // First line should be formatted without stack
-      expect(errorLines[0]).not.toContain('stack=');
+      // First line should be the formatted event line (without stack)
       expect(errorLines[0]).toContain('message=stack-test');
+      expect(errorLines[0]).not.toContain('stack=');
       // One of the lines should contain the stack trace
       expect(errorLines.some(l => l.includes('Error: stack-test'))).toBe(true);
     } finally {

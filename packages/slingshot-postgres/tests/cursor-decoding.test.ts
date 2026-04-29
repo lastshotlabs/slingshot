@@ -8,7 +8,7 @@
  *   2. Testing the behaviour through the public `listGroups` and
  *      `getGroupMembers` methods, which consume cursors internally.
  */
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { HttpError } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------

@@ -36,8 +36,21 @@ function captureWebSocketLifecycle(): {
       };
     },
   });
+  // Use getters so callers always read the latest captured values
+  // instead of stale values from when this function returned.
   return {
-    ...captured,
+    get open() {
+      return captured.open;
+    },
+    get message() {
+      return captured.message;
+    },
+    get close() {
+      return captured.close;
+    },
+    get pong() {
+      return captured.pong;
+    },
     restore: () => {
       Object.assign(Bun, { serve: originalServe });
     },

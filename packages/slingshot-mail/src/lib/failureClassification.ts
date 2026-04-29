@@ -1,6 +1,6 @@
 import { TemplateNotFoundError } from '@lastshotlabs/slingshot-core';
-import { MailCircuitOpenError } from './circuitBreaker';
 import { MailSendError } from '../types/provider';
+import { MailCircuitOpenError } from './circuitBreaker';
 
 /**
  * Classification result for a mail send failure.
@@ -43,6 +43,7 @@ export function classifyMailFailure(err: unknown): MailFailureClass {
 }
 
 const DEFAULT_RETRY_DELAY_MS = [1_000, 4_000, 16_000];
+const RETRY_MULTIPLIERS = [1, 4, 16];
 
 /**
  * Backoff delay (ms) for the n-th attempt (1-indexed). Defaults to
@@ -65,13 +66,14 @@ export function retryDelayFor(
   if (baseDelayMs !== undefined) {
     if (baseDelayMs <= 0) return 0;
     const idx = Math.max(0, Math.min(attempt - 1, 2));
-    const multiplier = [1, 4, 16][idx]!;
+    const multiplier = RETRY_MULTIPLIERS[idx] ?? RETRY_MULTIPLIERS[RETRY_MULTIPLIERS.length - 1];
     const baseline = Math.min(baseDelayMs * multiplier, 60_000);
     if (retryAfterMs === undefined) return baseline;
     return Math.max(baseline, Math.min(retryAfterMs, 60_000));
   }
   const idx = Math.max(0, Math.min(attempt - 1, DEFAULT_RETRY_DELAY_MS.length - 1));
-  const baseline = DEFAULT_RETRY_DELAY_MS[idx]!;
+  const baseline =
+    DEFAULT_RETRY_DELAY_MS[idx] ?? DEFAULT_RETRY_DELAY_MS[DEFAULT_RETRY_DELAY_MS.length - 1];
   if (retryAfterMs === undefined) return baseline;
   return Math.max(baseline, Math.min(retryAfterMs, 60_000));
 }

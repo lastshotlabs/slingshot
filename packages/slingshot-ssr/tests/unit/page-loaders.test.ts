@@ -1,11 +1,7 @@
 import { describe, expect, it, mock, test } from 'bun:test';
 import type { ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import type { PageDeclaration, ResolvedPageDeclaration } from '../../src/pageDeclarations';
-import {
-  PageNotFoundError,
-  resolvePageLoader,
-  validatePageAdapters,
-} from '../../src/pageLoaders';
+import { PageNotFoundError, resolvePageLoader, validatePageAdapters } from '../../src/pageLoaders';
 
 function makeCustomDeclaration(
   overrides: Partial<{
@@ -655,7 +651,12 @@ describe('resolvePageLoader — entity-dashboard stats failure isolation (P-SSR-
     } as unknown as ResolvedPageDeclaration;
 
     const adapters = {
-      good: makeFlakyAdapter({ items: [{ id: '1', views: 10 }, { id: '2', views: 20 }] }),
+      good: makeFlakyAdapter({
+        items: [
+          { id: '1', views: 10 },
+          { id: '2', views: 20 },
+        ],
+      }),
       bad: makeFlakyAdapter({ fail: true }),
     };
     const entityConfigs = new Map([
@@ -723,7 +724,9 @@ describe('validatePageAdapters (P-SSR-3)', () => {
 
   test('throws naming the page route when an adapter is missing', () => {
     const pages = { list: makeListPage('post', '/posts') };
-    expect(() => validatePageAdapters(pages, {})).toThrow(/no adapter registered for entity "post"/);
+    expect(() => validatePageAdapters(pages, {})).toThrow(
+      /no adapter registered for entity "post"/,
+    );
     expect(() => validatePageAdapters(pages, {})).toThrow(/route \/posts/);
   });
 

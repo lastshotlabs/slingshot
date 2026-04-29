@@ -2,12 +2,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import {
-  type Logger,
-  TimeoutError,
-  noopLogger,
-  withTimeout,
-} from '@lastshotlabs/slingshot-core';
+import { type Logger, TimeoutError, noopLogger, withTimeout } from '@lastshotlabs/slingshot-core';
 import type {
   GenerateStaticParams,
   SsrLoadContext,
@@ -60,6 +55,9 @@ export async function collectSsgRoutes(config: SsgConfig): Promise<string[]> {
     const settled = await Promise.all(batch.map(p => safeReadSourceAsync(p, logger)));
     for (let j = 0; j < batch.length; j += 1) {
       if (settled[j] !== '') sources.set(batch[j], settled[j]);
+    }
+    if (i + COLLECT_CONCURRENCY < routeFiles.length) {
+      await yieldToEventLoop();
     }
   }
 
@@ -135,6 +133,10 @@ const CONVENTION_BASENAMES = new Set([
  * not-found, middleware).
  */
 const COLLECT_CONCURRENCY = 32;
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
 
 /**
  * P-SSG-3: track per-directory read outcomes so we can distinguish a fully

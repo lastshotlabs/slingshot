@@ -6,12 +6,9 @@ import {
   createEventPublisher,
 } from '@lastshotlabs/slingshot-core';
 import { createNotificationBuilder } from '../src/builder.js';
-import {
-  createIntervalDispatcher,
-  type DispatcherAdapter,
-} from '../src/dispatcher.js';
-import { createNotificationsTestAdapters } from '../src/testing.js';
+import { type DispatcherAdapter, createIntervalDispatcher } from '../src/dispatcher.js';
 import { createNotificationSseRoute } from '../src/sse.js';
+import { createNotificationsTestAdapters } from '../src/testing.js';
 
 function createNotificationsTestEvents(bus: InProcessAdapter) {
   return createEventPublisher({

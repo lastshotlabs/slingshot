@@ -33,7 +33,9 @@ export function parseResendWebhook(body: unknown): NormalizedBounce[] {
   const email = pickEmail(data);
   if (!email) return [];
   if (type === 'email.bounced' || type === 'email.bounce') {
-    const bounceType = isObject(data?.bounce) ? (data?.bounce as Record<string, unknown>).type : undefined;
+    const bounceType = isObject(data?.bounce)
+      ? (data?.bounce as Record<string, unknown>).type
+      : undefined;
     return [
       {
         email,
@@ -80,8 +82,7 @@ export function parseSesWebhook(body: unknown): NormalizedBounce[] {
     const recipients = Array.isArray(bounce.bouncedRecipients) ? bounce.bouncedRecipients : [];
     const isPermanent = bounce.bounceType === 'Permanent';
     for (const r of recipients) {
-      const email =
-        isObject(r) && typeof r.emailAddress === 'string' ? r.emailAddress : undefined;
+      const email = isObject(r) && typeof r.emailAddress === 'string' ? r.emailAddress : undefined;
       if (!email) continue;
       out.push({
         email,
@@ -96,8 +97,7 @@ export function parseSesWebhook(body: unknown): NormalizedBounce[] {
       ? complaint.complainedRecipients
       : [];
     for (const r of recipients) {
-      const email =
-        isObject(r) && typeof r.emailAddress === 'string' ? r.emailAddress : undefined;
+      const email = isObject(r) && typeof r.emailAddress === 'string' ? r.emailAddress : undefined;
       if (!email) continue;
       out.push({ email, reason: 'complaint', provider: 'ses', raw: inner });
     }
@@ -113,20 +113,15 @@ export function parseSesWebhook(body: unknown): NormalizedBounce[] {
 export async function fanOutBounce(
   record: NormalizedBounce,
   bus: DynamicEventBus,
-  markEmailUnsubscribed:
-    | ((input: NormalizedBounce) => void | Promise<void>)
-    | undefined,
+  markEmailUnsubscribed: ((input: NormalizedBounce) => void | Promise<void>) | undefined,
   logger: Logger,
 ): Promise<void> {
   try {
-    bus.emit(
-      record.reason === 'complaint' ? 'mail:complaint' : 'mail:bounce',
-      {
-        email: record.email,
-        reason: record.reason,
-        provider: record.provider,
-      },
-    );
+    bus.emit(record.reason === 'complaint' ? 'mail:complaint' : 'mail:bounce', {
+      email: record.email,
+      reason: record.reason,
+      provider: record.provider,
+    });
   } catch (err) {
     logger.warn('mail bus emit failed', {
       provider: record.provider,

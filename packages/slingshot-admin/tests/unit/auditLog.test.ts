@@ -167,7 +167,7 @@ describe('tryLogAuditEntry — audit failures do not propagate to HTTP callers',
   test('audit-log entries respect a 256-char cap on action/resource/resourceId', async () => {
     const captured: Parameters<AuditLogProvider['logEntry']>[0][] = [];
     const auditLog: AuditLogProvider = {
-      logEntry: mock(async (entry) => {
+      logEntry: mock(async entry => {
         captured.push(entry);
       }),
       getLogs: mock(async () => ({ items: [], nextCursor: undefined })),

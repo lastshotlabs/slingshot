@@ -7,16 +7,16 @@ mappings with transforms, validation, DLQ routing, deduplication, and buffered r
 
 ## Key Files
 
-| File                    | What                                                                        |
-| ----------------------- | --------------------------------------------------------------------------- |
-| src/index.ts            | Public API surface: adapter, connectors, topic naming, and types            |
-| src/kafkaAdapter.ts     | `createKafkaAdapter()` durable event bus with producer reconnect buffer,    |
-|                         | consumer lifecycle, DLQ routing, health snapshots, and metrics              |
-| src/kafkaConnectors.ts  | `createKafkaConnectors()` inbound/outbound bridge with dedup store,         |
-|                         | transforms, schema validation, and outbound pending buffer                  |
-| src/kafkaShared.ts      | Shared SASL, SSL, and compression Zod schemas and backoff helper            |
-| src/kafkaTopicNaming.ts | `toTopicName()` and `toGroupId()` stable naming conventions                 |
-| docs/human/index.md     | Package guide synced into the docs site                                     |
+| File                    | What                                                                     |
+| ----------------------- | ------------------------------------------------------------------------ |
+| src/index.ts            | Public API surface: adapter, connectors, topic naming, and types         |
+| src/kafkaAdapter.ts     | `createKafkaAdapter()` durable event bus with producer reconnect buffer, |
+|                         | consumer lifecycle, DLQ routing, health snapshots, and metrics           |
+| src/kafkaConnectors.ts  | `createKafkaConnectors()` inbound/outbound bridge with dedup store,      |
+|                         | transforms, schema validation, and outbound pending buffer               |
+| src/kafkaShared.ts      | Shared SASL, SSL, and compression Zod schemas and backoff helper         |
+| src/kafkaTopicNaming.ts | `toTopicName()` and `toGroupId()` stable naming conventions              |
+| docs/human/index.md     | Package guide synced into the docs site                                  |
 
 ## Connections
 

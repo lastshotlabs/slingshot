@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { Hono } from 'hono';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
-import type {
-  SlingshotEventBus,
-  SlingshotFrameworkConfig,
-} from '@lastshotlabs/slingshot-core';
+import type { SlingshotEventBus, SlingshotFrameworkConfig } from '@lastshotlabs/slingshot-core';
 import { createMailPlugin } from '../../src/plugin.js';
 import { createMemoryQueue } from '../../src/queues/memory.js';
 import { createRawHtmlRenderer } from '../../src/renderers/rawHtml.js';

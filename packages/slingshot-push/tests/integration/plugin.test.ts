@@ -592,13 +592,10 @@ describe('createPushPlugin — delivery ack', () => {
     // P-PUSH-9: ack endpoint emits push:delivery.delivered so apps can
     // observe terminal state without polling. Verify the bus saw the event.
     let observed = false;
-    harness.bus.on(
-      'push:delivery.delivered' as never,
-      (payload: unknown) => {
-        const p = payload as { deliveryId: string };
-        if (p.deliveryId === capturedDeliveryId) observed = true;
-      },
-    );
+    harness.bus.on('push:delivery.delivered' as never, (payload: unknown) => {
+      const p = payload as { deliveryId: string };
+      if (p.deliveryId === capturedDeliveryId) observed = true;
+    });
     // Re-trigger the listener registration check by acking again — second
     // ack returns 404 (transition is single-use), proving the first ack
     // moved the delivery into `delivered` and prevents re-issuance.

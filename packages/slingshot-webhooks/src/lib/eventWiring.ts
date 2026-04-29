@@ -134,16 +134,13 @@ export function wireEventSubscriptions(
             err: err instanceof Error ? err.message : String(err),
           });
           try {
-            (bus as { emit(event: string, payload: unknown): void }).emit(
-              'webhook:enqueueFailed',
-              {
-                deliveryId: resolved.delivery.id,
-                endpointId: resolved.endpoint.id,
-                event: String(key),
-                eventId: envelope.meta.eventId,
-                error: err instanceof Error ? err.message : String(err),
-              },
-            );
+            (bus as { emit(event: string, payload: unknown): void }).emit('webhook:enqueueFailed', {
+              deliveryId: resolved.delivery.id,
+              endpointId: resolved.endpoint.id,
+              event: String(key),
+              eventId: envelope.meta.eventId,
+              error: err instanceof Error ? err.message : String(err),
+            });
           } catch {
             // bus emission must not poison the loop
           }

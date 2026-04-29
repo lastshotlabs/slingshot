@@ -1,6 +1,12 @@
 import { createHash, randomUUID } from 'crypto';
 import { HTTPException } from 'hono/http-exception';
 import type { z } from 'zod';
+import type { OperationIdempotencyAdapter } from '@lastshotlabs/slingshot-core';
+import {
+  createMemoryOperationIdempotencyAdapter,
+  makeIdempotencyKey,
+  withIdempotency,
+} from '@lastshotlabs/slingshot-core';
 import type {
   EntityManifestRuntime,
   EntityPluginAfterAdaptersContext,
@@ -11,14 +17,9 @@ import {
   createEntityPluginHookRegistry,
 } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
-import type { OperationIdempotencyAdapter } from '@lastshotlabs/slingshot-core';
-import {
-  createMemoryOperationIdempotencyAdapter,
-  makeIdempotencyKey,
-  withIdempotency,
-} from '@lastshotlabs/slingshot-core';
 import { SlugConflictError, isUniqueViolationError } from '../errors';
 import type { OrganizationsAuthRuntime } from '../lib/authRuntime';
+import type { ReconcileOrphanedOrgRecordsResult } from '../reconcile';
 
 /**
  * Structured-log helper for the package. Writes a single JSON line tagged
@@ -388,8 +389,6 @@ async function batchFetchOrganizations(
   );
   return settled.map(r => (r.status === 'fulfilled' ? r.value : null));
 }
-
-import type { ReconcileOrphanedOrgRecordsResult } from '../reconcile';
 
 /**
  * Manifest runtime augmented with operator recovery hooks. The

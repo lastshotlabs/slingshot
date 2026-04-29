@@ -16,10 +16,7 @@ const manifestHandlerRefSchema = z
 
 const temporalAdapterManifestConfigSchema = z
   .object({
-    address: z
-      .string()
-      .min(1)
-      .describe('Temporal server gRPC address (e.g. "localhost:7233").'),
+    address: z.string().min(1).describe('Temporal server gRPC address (e.g. "localhost:7233").'),
     namespace: z
       .string()
       .min(1)

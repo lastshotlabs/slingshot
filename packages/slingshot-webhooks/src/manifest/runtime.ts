@@ -996,11 +996,7 @@ function buildRuntimeAdapter(
           throw new HTTPException(404, { message: 'Delivery not found' });
         }
         if ((current.version ?? 1) !== input.expectedVersion) {
-          throw new WebhookDeliveryVersionConflict(
-            id,
-            input.expectedVersion,
-            current.version ?? 1,
-          );
+          throw new WebhookDeliveryVersionConflict(id, input.expectedVersion, current.version ?? 1);
         }
       }
       if (input.status) {

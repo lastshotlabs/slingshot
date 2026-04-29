@@ -110,7 +110,9 @@ describe('memory queue retry classification (P-MAIL-7)', () => {
     expect((provider.send as ReturnType<typeof mock>).mock.calls).toHaveLength(1);
     expect(onDeadLetter.mock.calls).toHaveLength(1);
     expect(events).toHaveLength(1);
-    expect((events[0]!.payload as { error: { message: string } }).error.message).toContain('invalid');
+    expect((events[0]!.payload as { error: { message: string } }).error.message).toContain(
+      'invalid',
+    );
     await queue.stop();
     await bus.shutdown?.();
   });

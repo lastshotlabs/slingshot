@@ -43,10 +43,7 @@ describe('parseSesWebhook (P-MAIL-10)', () => {
       notificationType: 'Bounce',
       bounce: {
         bounceType: 'Permanent',
-        bouncedRecipients: [
-          { emailAddress: 'a@example.com' },
-          { emailAddress: 'b@example.com' },
-        ],
+        bouncedRecipients: [{ emailAddress: 'a@example.com' }, { emailAddress: 'b@example.com' }],
       },
     };
     const records = parseSesWebhook({

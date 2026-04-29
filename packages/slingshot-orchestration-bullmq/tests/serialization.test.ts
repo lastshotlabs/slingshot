@@ -380,7 +380,9 @@ describe('run snapshot deserialization failure handling (P-OBULLMQ-2)', () => {
   function makeAdapterWithCapture(prefix: string) {
     const logs: Array<{ msg: string; fields?: Record<string, unknown> }> = [];
     const events: Array<{ name: string; payload: unknown }> = [];
-    const make = (base: Record<string, unknown> | undefined): import('@lastshotlabs/slingshot-core').Logger => ({
+    const make = (
+      base: Record<string, unknown> | undefined,
+    ): import('@lastshotlabs/slingshot-core').Logger => ({
       debug() {},
       info() {},
       warn() {},

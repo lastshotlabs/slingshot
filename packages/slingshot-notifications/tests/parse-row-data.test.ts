@@ -21,8 +21,8 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
-  __parseNotificationRowDataForTests as parseRowData,
-  __resetNotificationDataParseWarnThrottleForTests as resetWarnThrottle,
+  parseNotificationRowDataForTests as parseRowData,
+  resetNotificationDataParseWarnThrottleForTests as resetWarnThrottle,
 } from '../src/entities/notification';
 
 describe('parseRowData', () => {

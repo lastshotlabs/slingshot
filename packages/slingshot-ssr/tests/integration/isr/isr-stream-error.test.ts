@@ -3,11 +3,7 @@
 // apps can wire metrics/circuit breakers without scraping stderr.
 import { describe, expect, it } from 'bun:test';
 import { Hono } from 'hono';
-import {
-  type Logger,
-  type SlingshotContext,
-  attachContext,
-} from '@lastshotlabs/slingshot-core';
+import { type Logger, type SlingshotContext, attachContext } from '@lastshotlabs/slingshot-core';
 import { buildSsrMiddleware } from '../../../src/middleware';
 import type { SlingshotSsrRenderer, SsrRouteMatch } from '../../../src/types';
 

@@ -71,10 +71,7 @@ export const temporalAdapterOptionsSchema = z.object({
     .min(1)
     .optional()
     .describe('Temporal namespace to target. Defaults to the namespace configured on the client.'),
-  workflowTaskQueue: z
-    .string()
-    .min(1)
-    .describe('Task queue used for dispatching workflow tasks.'),
+  workflowTaskQueue: z.string().min(1).describe('Task queue used for dispatching workflow tasks.'),
   defaultActivityTaskQueue: z
     .string()
     .min(1)
@@ -95,9 +92,7 @@ export const temporalAdapterOptionsSchema = z.object({
   ownsConnection: z
     .boolean()
     .optional()
-    .describe(
-      'When true the adapter will close the underlying connection on shutdown.',
-    ),
+    .describe('When true the adapter will close the underlying connection on shutdown.'),
   /**
    * Optional Temporal `DataConverter` used for serializing and deserializing
    * payloads. Forwarded to both the `Client` and `Worker` so server-side and
@@ -168,15 +163,8 @@ export const temporalWorkerOptionsSchema = z.object({
     .boolean()
     .optional()
     .describe('When true the worker will close the connection on shutdown.'),
-  namespace: z
-    .string()
-    .min(1)
-    .optional()
-    .describe('Temporal namespace the worker connects to.'),
-  workflowTaskQueue: z
-    .string()
-    .min(1)
-    .describe('Task queue the worker polls for workflow tasks.'),
+  namespace: z.string().min(1).optional().describe('Temporal namespace the worker connects to.'),
+  workflowTaskQueue: z.string().min(1).describe('Task queue the worker polls for workflow tasks.'),
   defaultActivityTaskQueue: z
     .string()
     .min(1)
@@ -217,9 +205,7 @@ export const temporalWorkerOptionsSchema = z.object({
     .trim()
     .min(1)
     .optional()
-    .describe(
-      'Human-readable identity string reported to the Temporal server for this worker.',
-    ),
+    .describe('Human-readable identity string reported to the Temporal server for this worker.'),
   maxConcurrentWorkflowTaskExecutions: z
     .number()
     .int()

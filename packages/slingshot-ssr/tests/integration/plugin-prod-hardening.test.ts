@@ -2,13 +2,13 @@
 // - P-SSR-3: validate page adapters at plugin setup, not request time.
 // - P-SSR-7: drain pending fire-and-forget ISR cache writes during teardown.
 import { describe, expect, it } from 'bun:test';
+import { Hono } from 'hono';
 import {
   type AppEnv,
   type EntityRegistry,
   type ResolvedEntityConfig,
   createEntityRegistry,
 } from '@lastshotlabs/slingshot-core';
-import { Hono } from 'hono';
 import type { IsrCacheAdapter, IsrCacheEntry } from '../../src/isr/types';
 import type { PageDeclaration } from '../../src/pageDeclarations';
 import { createSsrPlugin } from '../../src/plugin';
@@ -123,8 +123,20 @@ describe('createSsrPlugin — P-SSR-3 page adapter validation at setup', () => {
 
   it('error message names every offending page route, not just the first', () => {
     const pages: Record<string, PageDeclaration> = {
-      a: { type: 'entity-list', path: '/alpha', title: 'A', entity: 'alpha', fields: ['id'] } as PageDeclaration,
-      b: { type: 'entity-list', path: '/beta', title: 'B', entity: 'beta', fields: ['id'] } as PageDeclaration,
+      a: {
+        type: 'entity-list',
+        path: '/alpha',
+        title: 'A',
+        entity: 'alpha',
+        fields: ['id'],
+      } as PageDeclaration,
+      b: {
+        type: 'entity-list',
+        path: '/beta',
+        title: 'B',
+        entity: 'beta',
+        fields: ['id'],
+      } as PageDeclaration,
     };
     const plugin = createSsrPlugin({
       renderer: makeMockRenderer(),

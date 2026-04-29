@@ -74,7 +74,6 @@ describe('webhooks plugin — metrics emitter', () => {
 
     const { app, events, runtime, teardown } = await createWebhooksTestApp(
       {
-        
         events: ['auth:*'],
       },
       { metricsEmitter: metrics },
@@ -115,7 +114,6 @@ describe('webhooks plugin — metrics emitter', () => {
 
     const { app, events, runtime, teardown } = await createWebhooksTestApp(
       {
-        
         events: ['auth:*'],
         queueConfig: { maxAttempts: 2, retryBaseDelayMs: 1 },
       },

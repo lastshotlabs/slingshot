@@ -210,7 +210,10 @@ export function createSqliteAdapter(options: {
       const logger = options.logger;
       if (logger) {
         logger.error('orchestration.sqlite.closeFailed', {
-          error: err instanceof Error ? { message: err.message, stack: err.stack } : { message: String(err) },
+          error:
+            err instanceof Error
+              ? { message: err.message, stack: err.stack }
+              : { message: String(err) },
         });
       } else {
         console.error('[orchestration] sqlite db close failed', err);
@@ -900,6 +903,7 @@ export function createSqliteAdapter(options: {
         completedAt: new Date().toISOString(),
         progress: row.progress,
       });
+      return undefined;
     },
     async start() {
       await startAdapter();

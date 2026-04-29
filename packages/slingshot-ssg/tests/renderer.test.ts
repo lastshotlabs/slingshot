@@ -296,11 +296,7 @@ describe('renderSsgPages — batch rendering', () => {
 describe('renderSsgPage — path traversal', () => {
   it('rejects URL paths containing parent-directory segments', async () => {
     const config = makeConfig();
-    const result = await renderSsgPage(
-      '/../../../etc/passwd',
-      makeOkRenderer(),
-      config,
-    );
+    const result = await renderSsgPage('/../../../etc/passwd', makeOkRenderer(), config);
     expect(result.error).toBeInstanceOf(Error);
     expect(result.error?.message).toContain('rejected URL path');
     // Crucially, no file is written outside outDir.

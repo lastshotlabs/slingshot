@@ -220,9 +220,7 @@ export async function createWebhooksTestApp(
     ws: null,
     wsEndpoints: {},
     wsPublish: null,
-    ...(frameworkOptions.metricsEmitter
-      ? { metricsEmitter: frameworkOptions.metricsEmitter }
-      : {}),
+    ...(frameworkOptions.metricsEmitter ? { metricsEmitter: frameworkOptions.metricsEmitter } : {}),
   } as unknown as Parameters<typeof attachContext>[1]);
 
   const setupContext: PluginSetupContext = {

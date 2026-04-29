@@ -6,14 +6,8 @@
  * snapshot after running a small mix of queries and a forced flush.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import {
-  InProcessAdapter,
-  createInProcessMetricsEmitter,
-} from '@lastshotlabs/slingshot-core';
-import type {
-  InProcessMetricsEmitter,
-  ResolvedEntityConfig,
-} from '@lastshotlabs/slingshot-core';
+import { InProcessAdapter, createInProcessMetricsEmitter } from '@lastshotlabs/slingshot-core';
+import type { InProcessMetricsEmitter, ResolvedEntityConfig } from '@lastshotlabs/slingshot-core';
 import { createEventSyncManager } from '../src/eventSync';
 import { createSearchManager } from '../src/searchManager';
 import type { SearchManager } from '../src/searchManager';
@@ -218,9 +212,7 @@ describe('search manager — circuit breaker gauge', () => {
     // The default db-native provider has no breaker — sample should be a no-op.
     const client = manager.getSearchClient('docs');
     await client.search({ q: 'x' });
-    const gauge = metrics
-      .snapshot()
-      .gauges.find(g => g.name === 'search.circuitBreaker.state');
+    const gauge = metrics.snapshot().gauges.find(g => g.name === 'search.circuitBreaker.state');
     expect(gauge).toBeUndefined();
   });
 });
@@ -314,9 +306,7 @@ describe('event sync manager — flush + dlq metrics', () => {
     await searchManager.teardown();
 
     // After teardown, the gauge is reset to 0.
-    const finalDlq = metrics
-      .snapshot()
-      .gauges.find(g => g.name === 'search.eventSync.dlq.size');
+    const finalDlq = metrics.snapshot().gauges.find(g => g.name === 'search.eventSync.dlq.size');
     expect(finalDlq?.value).toBe(0);
   });
 });

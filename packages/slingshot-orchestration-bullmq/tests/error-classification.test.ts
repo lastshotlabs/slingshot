@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-
 import { classifyOrchestrationError } from '../src/adapter';
 
 describe('classifyOrchestrationError (P-OBULLMQ-6)', () => {

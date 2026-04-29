@@ -1,8 +1,4 @@
-import type {
-  DynamicEventBus,
-  MetricsEmitter,
-  QueueLifecycle,
-} from '@lastshotlabs/slingshot-core';
+import type { DynamicEventBus, MetricsEmitter, QueueLifecycle } from '@lastshotlabs/slingshot-core';
 import type { MailMessage } from './provider';
 import type { MailProvider } from './provider';
 

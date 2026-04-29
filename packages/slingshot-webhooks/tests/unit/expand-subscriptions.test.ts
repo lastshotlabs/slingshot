@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  defineEvent,
-  createEventDefinitionRegistry,
   type EventDefinitionRegistry,
+  createEventDefinitionRegistry,
+  defineEvent,
 } from '@lastshotlabs/slingshot-core';
 
 /**

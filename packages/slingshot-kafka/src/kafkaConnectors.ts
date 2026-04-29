@@ -312,9 +312,7 @@ export const kafkaConnectorsSchema = z.object({
   sasl: saslSchema
     .optional()
     .describe('SASL authentication configuration for the connector Kafka connection'),
-  ssl: sslSchema
-    .optional()
-    .describe('TLS/SSL configuration for the connector Kafka connection'),
+  ssl: sslSchema.optional().describe('TLS/SSL configuration for the connector Kafka connection'),
   serializer: z
     .custom<EventSerializer>(
       value =>
@@ -325,9 +323,7 @@ export const kafkaConnectorsSchema = z.object({
         'contentType' in value,
     )
     .optional()
-    .describe(
-      'Default serializer used for all connectors unless overridden per connector',
-    ),
+    .describe('Default serializer used for all connectors unless overridden per connector'),
   compression: compressionSchema
     .optional()
     .describe('Default compression codec applied to produced messages across all connectors'),
@@ -348,7 +344,9 @@ export const kafkaConnectorsSchema = z.object({
   outbound: z
     .array(outboundConnectorSchema)
     .optional()
-    .describe('Array of outbound connector definitions publishing Slingshot events to Kafka topics'),
+    .describe(
+      'Array of outbound connector definitions publishing Slingshot events to Kafka topics',
+    ),
   hooks: z
     .custom<ConnectorObservabilityHooks>(value => !!value && typeof value === 'object')
     .optional()
@@ -358,7 +356,9 @@ export const kafkaConnectorsSchema = z.object({
       value => !!value && typeof value === 'object' && 'validate' in value,
     )
     .optional()
-    .describe('Pluggable schema registry for validating message payloads against registered schemas'),
+    .describe(
+      'Pluggable schema registry for validating message payloads against registered schemas',
+    ),
   maxPendingBuffer: z
     .number()
     .int()
@@ -600,10 +600,7 @@ function buildOutboundHeaders(
       envelope.meta.exposure.join(','),
       'slingshot.exposure',
     ),
-    'slingshot.content-type': sanitizeHeaderValue(
-      serializerContentType,
-      'slingshot.content-type',
-    ),
+    'slingshot.content-type': sanitizeHeaderValue(serializerContentType, 'slingshot.content-type'),
     'slingshot.message-id': sanitizeHeaderValue(messageId, 'slingshot.message-id'),
   };
   if (envelope.meta.scope?.tenantId) {

@@ -3,11 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
-  _resetProcessSafetyNetForTest,
   bunRuntime,
   configureRuntimeBunLogger,
   configureRuntimeBunStructuredLogger,
   installProcessSafetyNet,
+  resetProcessSafetyNetForTest,
 } from '../src/index';
 
 let tempDir = '';
@@ -684,7 +684,7 @@ describe('runtime-bun smoke', () => {
 
   // P-BUN-4 — process safety net is on by default.
   test('bunRuntime() installs process safety net by default and routes to structured logger', () => {
-    _resetProcessSafetyNetForTest();
+    resetProcessSafetyNetForTest();
     const errors: Array<{ event: string; fields?: Record<string, unknown> }> = [];
     const previousStructured = configureRuntimeBunStructuredLogger({
       debug() {},
@@ -708,17 +708,17 @@ describe('runtime-bun smoke', () => {
       expect(errors.some(e => e.event === 'uncaught-exception')).toBe(true);
     } finally {
       configureRuntimeBunStructuredLogger(previousStructured);
-      _resetProcessSafetyNetForTest();
+      resetProcessSafetyNetForTest();
     }
   });
 
   test('bunRuntime({ installProcessSafetyNet: false }) does not register handlers', () => {
-    _resetProcessSafetyNetForTest();
+    resetProcessSafetyNetForTest();
     const before = process.listenerCount('unhandledRejection');
     bunRuntime({ installProcessSafetyNet: false });
     const after = process.listenerCount('unhandledRejection');
     expect(after).toBe(before);
-    _resetProcessSafetyNetForTest();
+    resetProcessSafetyNetForTest();
   });
 
   // P-BUN-5 — graceful close timeout.

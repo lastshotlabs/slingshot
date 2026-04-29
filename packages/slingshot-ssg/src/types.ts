@@ -1,5 +1,4 @@
 // packages/slingshot-ssg/src/types.ts
-
 import type { Logger } from '@lastshotlabs/slingshot-core';
 
 // Re-export the static paths function type from slingshot-ssr so consumers of

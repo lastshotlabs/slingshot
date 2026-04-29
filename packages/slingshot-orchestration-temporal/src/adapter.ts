@@ -432,6 +432,7 @@ export function createTemporalOrchestrationAdapter(
       } catch (error) {
         throw wrapTemporalError(`Failed to cancel workflow '${runId}'`, error);
       }
+      return undefined;
     },
     async signal(runId, name, payload) {
       const handle = client.workflow.getHandle(runId);

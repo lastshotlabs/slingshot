@@ -112,6 +112,7 @@ export const productionReadinessPackageNames = new Set([
   'slingshot-orchestration-temporal',
   'slingshot-organizations',
   'slingshot-permissions',
+  'slingshot-postgres',
   'slingshot-push',
   'slingshot-runtime-lambda',
   'slingshot-search',
@@ -160,6 +161,7 @@ const packageCoverageOverrides: Record<string, PackageCoverageOverride> = {
   'runtime-node': {
     coverageTestFiles: [],
     coverageCommand: ['scripts/run-runtime-node-coverage.ts'],
+    coverageIgnoredGlobs: ['packages/runtime-node/vitest.config.ts'],
   },
 };
 

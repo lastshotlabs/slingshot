@@ -6,24 +6,24 @@ run listing, and deterministic workflow execution via Temporal's durable executi
 
 ## Key Files
 
-| File                          | What                                                                      |
-| ----------------------------- | ------------------------------------------------------------------------- |
-| src/index.ts                  | Public API surface: adapter, worker, validation, status map, IDs          |
-| src/adapter.ts                | `createTemporalOrchestrationAdapter()` with signals, schedules, queries   |
-| src/worker.ts                 | `createTemporalOrchestrationWorker()` supervisor for Node.js workers      |
-| src/workflows.ts              | Temporal workflow implementations (task wrapper, multi-step workflow)      |
-| src/activities.ts             | Temporal activity implementations that execute portable task handlers     |
-| src/validation.ts             | Zod schemas for adapter options, worker options, connection config        |
-| src/statusMap.ts              | `mapTemporalStatus()` maps Temporal execution states to portable statuses |
-| src/searchAttributes.ts       | Visibility query builder and search-attribute encoding helpers            |
-| src/ids.ts                    | `deriveTemporalRunId()` deterministic workflow ID derivation              |
-| src/discovery.ts              | Task/workflow definition discovery from handler modules                   |
-| src/workflowModuleGenerator.ts| Code-generates the Temporal workflow module from portable definitions     |
-| src/workerRegistry.ts         | Global worker-scoped task/workflow registry for Temporal sandbox          |
-| src/concurrency.ts            | Concurrency control helpers for adapter operations                        |
-| src/errors.ts                 | `wrapTemporalError()` and `toRunError()` error normalization              |
-| src/runError.ts               | Run error extraction from Temporal failure details                        |
-| docs/human/index.md           | Package guide synced into the docs site                                   |
+| File                           | What                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------- |
+| src/index.ts                   | Public API surface: adapter, worker, validation, status map, IDs          |
+| src/adapter.ts                 | `createTemporalOrchestrationAdapter()` with signals, schedules, queries   |
+| src/worker.ts                  | `createTemporalOrchestrationWorker()` supervisor for Node.js workers      |
+| src/workflows.ts               | Temporal workflow implementations (task wrapper, multi-step workflow)     |
+| src/activities.ts              | Temporal activity implementations that execute portable task handlers     |
+| src/validation.ts              | Zod schemas for adapter options, worker options, connection config        |
+| src/statusMap.ts               | `mapTemporalStatus()` maps Temporal execution states to portable statuses |
+| src/searchAttributes.ts        | Visibility query builder and search-attribute encoding helpers            |
+| src/ids.ts                     | `deriveTemporalRunId()` deterministic workflow ID derivation              |
+| src/discovery.ts               | Task/workflow definition discovery from handler modules                   |
+| src/workflowModuleGenerator.ts | Code-generates the Temporal workflow module from portable definitions     |
+| src/workerRegistry.ts          | Global worker-scoped task/workflow registry for Temporal sandbox          |
+| src/concurrency.ts             | Concurrency control helpers for adapter operations                        |
+| src/errors.ts                  | `wrapTemporalError()` and `toRunError()` error normalization              |
+| src/runError.ts                | Run error extraction from Temporal failure details                        |
+| docs/human/index.md            | Package guide synced into the docs site                                   |
 
 ## Connections
 

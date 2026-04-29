@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-
 import { createWebPushProvider } from '../../src/providers/web.js';
 
 const stubModule = mock();

@@ -14,23 +14,25 @@ import {
   type RunStatus,
   type WorkflowRun,
 } from '@lastshotlabs/slingshot-orchestration';
+import type {
+  OrchestrationRequestContext,
+  OrchestrationRequestContextResolver,
+  OrchestrationRunAuthorizer,
+} from './types';
 
 const DEFAULT_ROUTE_TIMEOUT_MS = 30_000;
 
-function timeoutErrorBody(
-  err: TimeoutError,
-): { error: string; code: 'ROUTE_TIMEOUT'; timeoutMs: number } {
+function timeoutErrorBody(err: TimeoutError): {
+  error: string;
+  code: 'ROUTE_TIMEOUT';
+  timeoutMs: number;
+} {
   return {
     error: `Adapter call exceeded route timeout (${err.timeoutMs}ms)`,
     code: 'ROUTE_TIMEOUT',
     timeoutMs: err.timeoutMs,
   };
 }
-import type {
-  OrchestrationRequestContext,
-  OrchestrationRequestContextResolver,
-  OrchestrationRunAuthorizer,
-} from './types';
 
 // Maximum total records scanned in a single listAuthorizedRuns() call.
 // Prevents a malicious or misconfigured authorizeRun filter from scanning
@@ -375,18 +377,18 @@ function registerAdminRoutes(
   admin.get('/health', async c => {
     const adapter = options.adapter as AdapterWithOps | undefined;
     const adapterName = adapter?.name ?? null;
-    const hasCheckHealth = typeof adapter?.checkHealth === 'function';
-    const hasGetHealth = typeof adapter?.getHealth === 'function';
-    if (!adapter || (!hasCheckHealth && !hasGetHealth)) {
+    const checkHealth = adapter?.checkHealth;
+    const getHealth = adapter?.getHealth;
+    if (!adapter || (typeof checkHealth !== 'function' && typeof getHealth !== 'function')) {
       // Adapter has not opted into health introspection. Still return 200
       // with adapter identity so the route is usable as a basic liveness probe.
       return c.json({ status: 'ok', adapter: adapterName }, 200);
     }
 
-    if (hasCheckHealth) {
+    if (typeof checkHealth === 'function') {
       let report: HealthReport;
       try {
-        report = await adapter.checkHealth!();
+        report = await checkHealth();
       } catch (error) {
         // The probe itself failed — treat as a permanent (non-retryable)
         // adapter contract bug.
@@ -415,7 +417,10 @@ function registerAdminRoutes(
     }
 
     try {
-      const health = await adapter.getHealth!();
+      if (typeof getHealth !== 'function') {
+        return c.json({ status: 'ok', adapter: adapterName }, 200);
+      }
+      const health = await getHealth();
       const payload: Record<string, unknown> = {
         status: typeof health?.status === 'string' ? health.status : 'ok',
         adapter: adapterName,
@@ -588,7 +593,11 @@ export function createOrchestrationRouter(options: {
     try {
       const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const handle = await wrap(
-        options.runtime.runTask(c.req.param('name'), input, parseRunOptions(body, requestContext, c)),
+        options.runtime.runTask(
+          c.req.param('name'),
+          input,
+          parseRunOptions(body, requestContext, c),
+        ),
         'runtime.runTask',
       );
       const run = await wrap(options.runtime.getRun(handle.id), 'runtime.getRun');

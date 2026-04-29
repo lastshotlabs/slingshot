@@ -1,6 +1,6 @@
 // packages/slingshot-core/tests/safePath.test.ts
-import { describe, expect, test } from 'bun:test';
 import path from 'node:path';
+import { describe, expect, test } from 'bun:test';
 import { PathTraversalError, safeJoin } from '../src/lib/safePath';
 
 const BASE = '/var/data/slingshot';

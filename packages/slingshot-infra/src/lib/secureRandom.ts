@@ -105,9 +105,7 @@ export function secureRandomString(length: number, alphabet: string): string {
     throw new RangeError(`length must be a non-negative integer, got ${length}`);
   }
   if (alphabet.length === 0 || alphabet.length > 256) {
-    throw new RangeError(
-      `alphabet must have between 1 and 256 characters, got ${alphabet.length}`,
-    );
+    throw new RangeError(`alphabet must have between 1 and 256 characters, got ${alphabet.length}`);
   }
   if (length === 0) {
     return '';

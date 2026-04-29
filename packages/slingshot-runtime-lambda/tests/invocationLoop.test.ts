@@ -508,9 +508,9 @@ describe('invokeWithAdapter', () => {
     const batchResult = result as { batchItemFailures: unknown[] };
     expect(batchResult.batchItemFailures).toHaveLength(2);
     // Structured event was emitted with the hook name.
-    expect(
-      events.some(e => e.event === 'hook-threw' && e.fields?.hook === 'onRecordError'),
-    ).toBe(true);
+    expect(events.some(e => e.event === 'hook-threw' && e.fields?.hook === 'onRecordError')).toBe(
+      true,
+    );
   });
 
   test('onError hook throwing does not prevent error handling — invocation returns failure (P-LAMBDA-2)', async () => {

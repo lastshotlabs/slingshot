@@ -14,11 +14,7 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { validateSubscriptionTemplates, wireSubscriptions } from './lib/subscriptionWiring';
-import {
-  fanOutBounce,
-  parseResendWebhook,
-  parseSesWebhook,
-} from './lib/webhookHandlers';
+import { fanOutBounce, parseResendWebhook, parseSesWebhook } from './lib/webhookHandlers';
 import { createMemoryQueue } from './queues/memory';
 import type { MailPluginConfig } from './types/config';
 import { mailPluginConfigSchema } from './types/config';
@@ -143,12 +139,11 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
           await config.provider.healthCheck();
         } catch (err) {
           const mode = config.failOnHealthCheck ?? 'error';
-          const message =
-            err instanceof Error ? err.message : String(err);
+          const message = err instanceof Error ? err.message : String(err);
           if (mode === 'error') {
-            throw new Error(
-              `[slingshot-mail] Provider health check failed: ${message}`,
-            );
+            throw new Error(`[slingshot-mail] Provider health check failed: ${message}`, {
+              cause: err,
+            });
           }
           logger.warn('provider health check failed', { err: message });
         }
@@ -205,8 +200,7 @@ export function createMailPlugin(rawConfig: MailPluginConfig): SlingshotPlugin {
           });
           return c.json({ ok: true, action: 'confirm-required' });
         }
-        const records =
-          provider === 'resend' ? parseResendWebhook(body) : parseSesWebhook(body);
+        const records = provider === 'resend' ? parseResendWebhook(body) : parseSesWebhook(body);
         if (!busRef) {
           // Without an active bus we still want a 2xx so the provider stops
           // retrying. Operators see the warning in logs.

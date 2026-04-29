@@ -290,13 +290,7 @@ function sanitizeQueueName(raw: string): string {
  * These errors are safe to retry — the underlying resource (Redis) is
  * temporarily unavailable but should recover.
  */
-const RETRYABLE_CODES = new Set([
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'EPIPE',
-  'ETIMEDOUT',
-  'ENOTFOUND',
-]);
+const RETRYABLE_CODES = new Set(['ECONNREFUSED', 'ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'ENOTFOUND']);
 
 /**
  * Error codes that indicate a permanent, non-retryable failure.
@@ -504,10 +498,7 @@ class PendingBufferWal {
       }
       throw err;
     }
-    const live = new Map<
-      number,
-      { id: number; name: string; event: string; payload: object }
-    >();
+    const live = new Map<number, { id: number; name: string; event: string; payload: object }>();
     for (const line of raw.split('\n')) {
       if (!line) continue;
       let rec: WalRecord;
@@ -1091,28 +1082,22 @@ export function createBullMQAdapter(
                   } catch (dlqErr: unknown) {
                     // DLQ unreachable — log but still complete the job so
                     // it does not retry indefinitely.
-                    logger.error(
-                      'failed to enqueue strict-validation failure to DLQ; dropping',
-                      {
-                        event: event as string,
-                        queue: bullmqQueueName,
-                        dlq: dlq.name,
-                        jobId: job.id,
-                        err: errInfo(dlqErr),
-                        validationErr: errInfo(validationErr),
-                      },
-                    );
-                  }
-                } else {
-                  logger.warn(
-                    'strict-validation failure dropped (no validation DLQ configured)',
-                    {
+                    logger.error('failed to enqueue strict-validation failure to DLQ; dropping', {
                       event: event as string,
                       queue: bullmqQueueName,
+                      dlq: dlq.name,
                       jobId: job.id,
-                      err: errInfo(validationErr),
-                    },
-                  );
+                      err: errInfo(dlqErr),
+                      validationErr: errInfo(validationErr),
+                    });
+                  }
+                } else {
+                  logger.warn('strict-validation failure dropped (no validation DLQ configured)', {
+                    event: event as string,
+                    queue: bullmqQueueName,
+                    jobId: job.id,
+                    err: errInfo(validationErr),
+                  });
                 }
                 return; // mark job complete, no retry
               }
@@ -1126,11 +1111,9 @@ export function createBullMQAdapter(
             // Record the consume duration and release the timer-tracking
             // entry. Failure paths that re-throw still need the map cleared,
             // otherwise repeated failures leak per-job entries forever.
-            metrics.timing(
-              'bullmq.consume.duration',
-              performance.now() - consumeStart,
-              { queue: bullmqQueueName },
-            );
+            metrics.timing('bullmq.consume.duration', performance.now() - consumeStart, {
+              queue: bullmqQueueName,
+            });
             if (job.id) consumeStartByJob.delete(job.id);
           }
         },

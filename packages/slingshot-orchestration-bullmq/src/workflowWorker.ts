@@ -35,6 +35,27 @@ function reportWorkflowHookError(options: {
   console.error(`[orchestration] workflow ${options.hook} hook failed`, options.error);
 }
 
+type WorkflowHookHandler<TPayload> = (payload: TPayload) => Promise<void> | void;
+
+type WorkflowHookConfig<TPayload> =
+  | WorkflowHookHandler<TPayload>
+  | {
+      handler: WorkflowHookHandler<TPayload>;
+      continueOnHookError?: boolean;
+    };
+
+function normalizeWorkflowHook<TPayload>(
+  hook: WorkflowHookConfig<TPayload> | undefined,
+): { handler: WorkflowHookHandler<TPayload>; continueOnHookError: boolean } | undefined {
+  if (hook === undefined) {
+    return undefined;
+  }
+  if (typeof hook === 'function') {
+    return { handler: hook, continueOnHookError: false };
+  }
+  return { handler: hook.handler, continueOnHookError: hook.continueOnHookError ?? false };
+}
+
 function assertSleepDuration(stepName: string, durationMs: number): void {
   if (!Number.isFinite(durationMs) || durationMs < 0) {
     throw new OrchestrationError(
@@ -108,9 +129,10 @@ export function createBullMQWorkflowProcessor(options: {
       tenantId,
     });
 
-    if (def.onStart) {
+    const onStart = normalizeWorkflowHook(def.onStart);
+    if (onStart) {
       try {
-        await def.onStart({
+        await onStart.handler({
           runId,
           input: workflowInput,
           tenantId,
@@ -317,9 +339,10 @@ export function createBullMQWorkflowProcessor(options: {
         durationMs: Date.now() - startedAt,
         tenantId,
       });
-      if (def.onComplete) {
+      const onComplete = normalizeWorkflowHook(def.onComplete);
+      if (onComplete) {
         try {
-          await def.onComplete({
+          await onComplete.handler({
             runId,
             output,
             durationMs: Date.now() - startedAt,
@@ -345,9 +368,10 @@ export function createBullMQWorkflowProcessor(options: {
         failedStep,
         tenantId,
       });
-      if (def.onFail) {
+      const onFail = normalizeWorkflowHook(def.onFail);
+      if (onFail) {
         try {
-          await def.onFail({
+          await onFail.handler({
             runId,
             error: error instanceof Error ? error : new Error(String(error)),
             failedStep,

@@ -102,7 +102,9 @@ export const kafkaAdapterOptionsSchema = z.object({
     .string()
     .optional()
     .describe('Prefix prepended to all consumer group IDs created by this adapter'),
-  sasl: saslSchema.optional().describe('SASL authentication configuration for the Kafka connection'),
+  sasl: saslSchema
+    .optional()
+    .describe('SASL authentication configuration for the Kafka connection'),
   ssl: sslSchema.optional().describe('TLS/SSL configuration for the Kafka connection'),
   maxRetries: z
     .number()
@@ -202,9 +204,10 @@ export const kafkaAdapterOptionsSchema = z.object({
    * Use this to emit metrics / alerts without log scraping.
    */
   onDrop: z
-    .custom<
-      (event: KafkaAdapterDropEvent) => void
-    >(value => typeof value === 'function', 'onDrop must be a function')
+    .custom<(event: KafkaAdapterDropEvent) => void>(
+      value => typeof value === 'function',
+      'onDrop must be a function',
+    )
     .optional()
     .describe(
       'Callback invoked when the adapter drops or skips a message; use for metrics and alerts',
@@ -490,10 +493,7 @@ function buildEnvelopeHeaders(
       envelope.meta.exposure.join(','),
       'slingshot.exposure',
     ),
-    'slingshot.content-type': sanitizeHeaderValue(
-      serializerContentType,
-      'slingshot.content-type',
-    ),
+    'slingshot.content-type': sanitizeHeaderValue(serializerContentType, 'slingshot.content-type'),
   };
   if (envelope.meta.scope?.tenantId) {
     headers['slingshot.tenant-id'] = sanitizeHeaderValue(
@@ -721,11 +721,7 @@ export function createKafkaAdapter(
     const nextProducer = kafka.producer({ idempotent: true, maxInFlightRequests: 5 });
     try {
       // Bound producer.connect() so DNS hangs cannot stall init forever.
-      await withTimeout(
-        nextProducer.connect(),
-        config.connectTimeoutMs,
-        'kafka.producer.connect',
-      );
+      await withTimeout(nextProducer.connect(), config.connectTimeoutMs, 'kafka.producer.connect');
       producer = nextProducer;
       producerConnected = true;
       metrics.gauge('kafka.producer.connected', 1);
@@ -744,11 +740,7 @@ export function createKafkaAdapter(
     try {
       // Same connect bound as the producer — admin DNS hangs would
       // otherwise block ensureTopic at adapter init.
-      await withTimeout(
-        nextAdmin.connect(),
-        config.connectTimeoutMs,
-        'kafka.admin.connect',
-      );
+      await withTimeout(nextAdmin.connect(), config.connectTimeoutMs, 'kafka.admin.connect');
       admin = nextAdmin;
       adminConnected = true;
       return nextAdmin;
@@ -1281,7 +1273,9 @@ export function createKafkaAdapter(
       // `deserializeTimeoutMs` so a stalled custom decoder cannot starve
       // the consumer's heartbeat loop.
       const decoded = await withTimeout(
-        Promise.resolve().then(() => eventSerializer.deserialize(entry.event, message.value as Buffer)),
+        Promise.resolve().then(() =>
+          eventSerializer.deserialize(entry.event, message.value as Buffer),
+        ),
         config.deserializeTimeoutMs,
         `kafka.deserialize[${entry.event}]`,
       );
@@ -1619,7 +1613,10 @@ export function createKafkaAdapter(
       inFlightHandlers.clear();
       rebalancingConsumers.clear();
       for (const entry of consumers) {
-        metrics.gauge('kafka.consumer.connected', 0, { topic: entry.topic, groupId: entry.groupId });
+        metrics.gauge('kafka.consumer.connected', 0, {
+          topic: entry.topic,
+          groupId: entry.groupId,
+        });
         // Wait for the entry's setup chain so we don't race a still-in-
         // flight subscribe with disconnect (P-KAFKA-6).
         try {

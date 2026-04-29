@@ -13,6 +13,7 @@ import type { MailMessage, MailProvider } from '../types/provider';
 import { MailSendError } from '../types/provider';
 import type { MailJob, MailQueue, MailQueueConfig } from '../types/queue';
 import { sendWithTimeout } from './sendWithTimeout';
+
 // MailCircuitOpenError is referenced indirectly through classifyMailFailure.
 
 interface BullMQMailQueueConfig extends MailQueueConfig {

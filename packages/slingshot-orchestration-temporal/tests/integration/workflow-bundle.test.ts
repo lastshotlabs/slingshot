@@ -18,10 +18,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-
 import type { AnyResolvedWorkflow } from '@lastshotlabs/slingshot-orchestration';
 import type { OrchestrationProviderRegistry } from '@lastshotlabs/slingshot-orchestration/provider';
-
 import {
   generateTemporalWorkflowModule,
   resolvePackageWorkflowsPath,
@@ -66,9 +64,7 @@ describe('temporal workflow module bundles compile (P-TEMPORAL-2)', () => {
           generatedWorkflowsDir: join(tempDir, 'generated'),
           definitionsModulePath,
           packageWorkflowsPath: resolvePackageWorkflowsPath(),
-          workflows: [
-            { _tag: 'ResolvedWorkflow', name: 'bundle-flow' } as AnyResolvedWorkflow,
-          ],
+          workflows: [{ _tag: 'ResolvedWorkflow', name: 'bundle-flow' } as AnyResolvedWorkflow],
           registry: createRegistry(),
         });
 

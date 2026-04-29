@@ -67,6 +67,25 @@ function resolvingBuilder(value: unknown): ReturnType<typeof makeBuilder> {
   return makeBuilder(value, null);
 }
 
+function resolvingSequence(...values: unknown[]): () => DrizzleBuilder {
+  let index = 0;
+  return () => {
+    const value = values[Math.min(index, values.length - 1)];
+    index += 1;
+    return resolvingBuilder(value ?? []);
+  };
+}
+
+function makeTransactionMock(selectValues: unknown[] = []): Record<string, unknown> {
+  const nextSelect = selectValues.length > 0 ? resolvingSequence(...selectValues) : undefined;
+  return {
+    select: nextSelect ?? (() => resolvingBuilder([])),
+    insert: () => resolvingBuilder(undefined),
+    update: () => resolvingBuilder(undefined),
+    delete: () => resolvingBuilder(undefined),
+  };
+}
+
 // ── Mock `pg` ─────────────────────────────────────────────────────────────────
 // Pool is used in createPostgresAdapter; we mock it here so the real Pool is
 // never constructed. Migration queries go through pool.query — we stub them to
@@ -655,6 +674,248 @@ describe('slingshot-postgres adapter — error paths', () => {
       await expect(adapter.addGroupMember!('group-id', 'user-id')).rejects.toThrow(
         'Query read timeout',
       );
+    });
+  });
+
+  describe('happy-path adapter surface', () => {
+    test('maps reads, writes, transactions, pagination, and role aggregation', async () => {
+      const now = new Date('2026-01-02T03:04:05.000Z');
+      const passwordHash = await Bun.password.hash('correct-password');
+      const userRow = {
+        id: 'user-1',
+        email: 'USER@example.com',
+        displayName: 'User One',
+        firstName: 'User',
+        lastName: 'One',
+        externalId: 'external-1',
+        emailVerified: true,
+        suspended: false,
+        suspendedReason: null,
+        suspendedAt: null,
+        userMetadata: { plan: 'pro' },
+        appMetadata: { flags: ['beta'] },
+      };
+      const groupRow = {
+        id: 'group-1',
+        name: 'ops',
+        displayName: 'Operations',
+        description: 'Ops team',
+        roles: ['group-role'],
+        tenantId: 'tenant-1',
+        createdAt: now,
+        updatedAt: now,
+      };
+      const secondGroupRow = { ...groupRow, id: 'group-2', name: 'support' };
+      const memberRow = {
+        userId: 'user-1',
+        roles: ['member-role'],
+        createdAt: now,
+      };
+
+      const select = resolvingSequence(
+        [{ id: 'user-1', passwordHash: 'hash' }],
+        [{ passwordHash }],
+        [{ email: 'USER@example.com' }],
+        [userRow],
+        [{ emailVerified: true }],
+        [{ passwordHash: 'hash' }],
+        [{ userMetadata: { plan: 'pro' }, appMetadata: { flags: ['beta'] } }],
+        [],
+        [],
+        [{ mfaSecret: 'base32-secret' }],
+        [{ mfaEnabled: true }],
+        [{ codeHash: 'code-1' }, { codeHash: 'code-2' }],
+        [{ mfaMethods: ['totp', 'webauthn'] }],
+        [
+          {
+            credentialId: 'cred-1',
+            publicKey: 'public-key',
+            signCount: 7,
+            transports: ['usb'],
+            name: 'Security key',
+            createdAt: now,
+          },
+        ],
+        [{ userId: 'user-1' }],
+        [{ role: 'admin' }, { role: 'viewer' }],
+        [{ role: 'tenant-admin' }],
+        [groupRow],
+        [groupRow, secondGroupRow],
+        [{ tenantId: 'tenant-1' }],
+        [memberRow, { ...memberRow, userId: 'user-2' }],
+        [
+          {
+            groupId: 'group-1',
+            groupName: 'ops',
+            groupDisplayName: 'Operations',
+            groupDescription: 'Ops team',
+            groupRoles: ['group-role'],
+            groupTenantId: 'tenant-1',
+            groupCreatedAt: now,
+            groupUpdatedAt: now,
+            memberRoles: ['member-role'],
+          },
+        ],
+        [{ role: 'tenant-admin' }],
+        [{ groupRoles: ['group-role'], memberRoles: ['member-role'] }],
+        [{ role: 'admin' }],
+        [{ groupRoles: ['group-role'], memberRoles: ['admin'] }],
+        [{ suspended: true, suspendedReason: 'policy' }],
+      );
+
+      mockDbImpl = {
+        select,
+        insert: () => resolvingBuilder(undefined),
+        update: () => resolvingBuilder(undefined),
+        delete: () => resolvingBuilder([{ codeHash: 'hashed-code' }]),
+        transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn(makeTransactionMock([[userRow], [{ count: '1' }]])),
+      };
+
+      const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
+
+      expect(await adapter.findByEmail('USER@example.com')).toEqual({
+        id: 'user-1',
+        passwordHash: 'hash',
+      });
+      expect((await adapter.create('USER@example.com', 'hash')).id).toBeString();
+      expect(await adapter.verifyPassword('user-1', 'correct-password')).toBe(true);
+      expect(await adapter.getIdentifier('user-1')).toBe('USER@example.com');
+      expect(await adapter.consumeRecoveryCode('user-1', 'hashed-code')).toBe(true);
+      expect(await adapter.getUser!('user-1')).toMatchObject({
+        email: 'USER@example.com',
+        displayName: 'User One',
+        emailVerified: true,
+        suspended: false,
+      });
+
+      await adapter.setPassword!('user-1', 'new-hash');
+      await adapter.deleteUser!('user-1');
+      await adapter.setEmailVerified!('user-1', true);
+      expect(await adapter.getEmailVerified!('user-1')).toBe(true);
+      expect(await adapter.hasPassword!('user-1')).toBe(true);
+      await adapter.updateProfile!('user-1', {
+        displayName: 'User One',
+        firstName: 'User',
+        lastName: 'One',
+        externalId: 'external-1',
+      });
+      expect(await adapter.getUserMetadata!('user-1')).toEqual({
+        userMetadata: { plan: 'pro' },
+        appMetadata: { flags: ['beta'] },
+      });
+      await adapter.setUserMetadata!('user-1', { plan: 'enterprise' });
+      await adapter.setAppMetadata!('user-1', { flags: ['ga'] });
+
+      expect(
+        await adapter.findOrCreateByProvider!('google', 'google-1', {
+          email: 'New@Example.com',
+          displayName: 'New User',
+          firstName: 'New',
+          lastName: 'User',
+          externalId: 'google-1',
+        }),
+      ).toMatchObject({ created: true });
+      await adapter.linkProvider!('user-1', 'google', 'google-1');
+      await adapter.unlinkProvider!('user-1', 'google');
+
+      await adapter.setMfaSecret!('user-1', 'base32-secret');
+      expect(await adapter.getMfaSecret!('user-1')).toBe('base32-secret');
+      expect(await adapter.isMfaEnabled!('user-1')).toBe(true);
+      await adapter.setMfaEnabled!('user-1', true);
+      await adapter.setRecoveryCodes!('user-1', ['code-1', 'code-2']);
+      expect(await adapter.getRecoveryCodes!('user-1')).toEqual(['code-1', 'code-2']);
+      await adapter.removeRecoveryCode!('user-1', 'code-1');
+      expect(await adapter.getMfaMethods!('user-1')).toEqual(['totp', 'webauthn']);
+      await adapter.setMfaMethods!('user-1', ['totp']);
+
+      expect(await adapter.getWebAuthnCredentials!('user-1')).toEqual([
+        {
+          credentialId: 'cred-1',
+          publicKey: 'public-key',
+          signCount: 7,
+          transports: ['usb'],
+          name: 'Security key',
+          createdAt: now.getTime(),
+        },
+      ]);
+      await adapter.addWebAuthnCredential!('user-1', {
+        credentialId: 'cred-2',
+        publicKey: 'public-key-2',
+        signCount: 0,
+        transports: ['nfc'],
+        name: 'Backup key',
+        createdAt: now.getTime(),
+      });
+      await adapter.removeWebAuthnCredential!('user-1', 'cred-2');
+      await adapter.updateWebAuthnCredentialSignCount!('user-1', 'cred-1', 8);
+      expect(await adapter.findUserByWebAuthnCredentialId!('cred-1')).toBe('user-1');
+
+      expect(await adapter.getRoles!('user-1')).toEqual(['admin', 'viewer']);
+      await adapter.setRoles!('user-1', ['admin']);
+      await adapter.addRole!('user-1', 'editor');
+      await adapter.removeRole!('user-1', 'viewer');
+      expect(await adapter.getTenantRoles!('user-1', 'tenant-1')).toEqual(['tenant-admin']);
+      await adapter.setTenantRoles!('user-1', 'tenant-1', ['tenant-admin']);
+      await adapter.addTenantRole!('user-1', 'tenant-1', 'billing');
+      await adapter.removeTenantRole!('user-1', 'tenant-1', 'billing');
+
+      expect(
+        (await adapter.createGroup!({ name: 'ops', tenantId: 'tenant-1', roles: [] })).id,
+      ).toBeString();
+      await adapter.deleteGroup!('group-1');
+      expect(await adapter.getGroup!('group-1')).toMatchObject({
+        id: 'group-1',
+        tenantId: 'tenant-1',
+        createdAt: now.getTime(),
+      });
+      const groupPage = await adapter.listGroups!('tenant-1', { limit: 1 });
+      expect(groupPage.items).toHaveLength(1);
+      expect(groupPage.hasMore).toBe(true);
+      expect(groupPage.nextCursor).toBeString();
+      await adapter.updateGroup!('group-1', {
+        name: 'ops-renamed',
+        displayName: undefined,
+        description: undefined,
+        roles: ['operator'],
+      });
+      await adapter.addGroupMember!('group-1', 'user-1', ['member-role']);
+      await adapter.updateGroupMembership!('group-1', 'user-1', ['owner']);
+      await adapter.removeGroupMember!('group-1', 'user-1');
+      const membersPage = await adapter.getGroupMembers!('group-1', { limit: 1 });
+      expect(membersPage.items).toEqual([{ userId: 'user-1', roles: ['member-role'] }]);
+      expect(membersPage.hasMore).toBe(true);
+      expect(await adapter.getUserGroups!('user-1', 'tenant-1')).toEqual([
+        {
+          group: {
+            id: 'group-1',
+            name: 'ops',
+            displayName: 'Operations',
+            description: 'Ops team',
+            roles: ['group-role'],
+            tenantId: 'tenant-1',
+            createdAt: now.getTime(),
+            updatedAt: now.getTime(),
+          },
+          membershipRoles: ['member-role'],
+        },
+      ]);
+      expect(await adapter.getEffectiveRoles!('user-1', 'tenant-1')).toEqual([
+        'tenant-admin',
+        'group-role',
+        'member-role',
+      ]);
+      expect(await adapter.getEffectiveRoles!('user-1', null)).toEqual(['admin', 'group-role']);
+
+      await adapter.setSuspended!('user-1', true, 'policy');
+      expect(await adapter.getSuspended!('user-1')).toEqual({
+        suspended: true,
+        suspendedReason: 'policy',
+      });
+      expect(await adapter.listUsers!({ email: 'USER', count: 1 })).toMatchObject({
+        totalResults: 1,
+        users: [{ id: 'user-1', email: 'USER@example.com' }],
+      });
     });
   });
 });

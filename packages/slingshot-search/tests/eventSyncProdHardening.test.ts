@@ -17,16 +17,8 @@ import {
   createEventPublisher,
   defineEvent,
 } from '@lastshotlabs/slingshot-core';
-import type {
-  Logger,
-  ResolvedEntityConfig,
-  SlingshotEvents,
-} from '@lastshotlabs/slingshot-core';
-import {
-  type DlqStore,
-  type FlushDeadLetterEntry,
-  createEventSyncManager,
-} from '../src/eventSync';
+import type { Logger, ResolvedEntityConfig, SlingshotEvents } from '@lastshotlabs/slingshot-core';
+import { type DlqStore, type FlushDeadLetterEntry, createEventSyncManager } from '../src/eventSync';
 import { createDbNativeProvider } from '../src/providers/dbNative';
 import { createSearchManager } from '../src/searchManager';
 import { createSearchTransformRegistry } from '../src/transformRegistry';

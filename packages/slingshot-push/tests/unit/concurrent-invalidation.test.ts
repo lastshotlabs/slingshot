@@ -1,6 +1,6 @@
-import { describe, expect, test, spyOn } from 'bun:test';
-import { createPushRouter } from '../../src/router.js';
+import { describe, expect, spyOn, test } from 'bun:test';
 import type { PushProvider } from '../../src/providers/provider.js';
+import { createPushRouter } from '../../src/router.js';
 
 /**
  * P-PUSH-13: there must be no orphaned delivery / subscription if a delete
@@ -11,7 +11,16 @@ import type { PushProvider } from '../../src/providers/provider.js';
 describe('concurrent subscription invalidation (P-PUSH-13)', () => {
   test('subscription deleted while delivery in flight produces no orphaned delivery', async () => {
     spyOn(console, 'error').mockImplementation(() => {});
-    const subs: Array<{ id: string; userId: string; tenantId: string; deviceId: string; platform: string; platformData: { platform: 'web'; endpoint: string; keys: { auth: string; p256dh: string } }; createdAt: Date; lastSeenAt: Date }> = [
+    const subs: Array<{
+      id: string;
+      userId: string;
+      tenantId: string;
+      deviceId: string;
+      platform: string;
+      platformData: { platform: 'web'; endpoint: string; keys: { auth: string; p256dh: string } };
+      createdAt: Date;
+      lastSeenAt: Date;
+    }> = [
       {
         id: 'sub-1',
         userId: 'user-1',
@@ -27,7 +36,17 @@ describe('concurrent subscription invalidation (P-PUSH-13)', () => {
         lastSeenAt: new Date(),
       },
     ];
-    const deliveries: Array<{ id: string; status: string; failureReason?: string; subscriptionId: string; userId: string; tenantId: string; platform: string; attempts: number; createdAt: Date }> = [];
+    const deliveries: Array<{
+      id: string;
+      status: string;
+      failureReason?: string;
+      subscriptionId: string;
+      userId: string;
+      tenantId: string;
+      platform: string;
+      attempts: number;
+      createdAt: Date;
+    }> = [];
 
     const repos = {
       subscriptions: {
@@ -38,7 +57,8 @@ describe('concurrent subscription invalidation (P-PUSH-13)', () => {
           if (idx >= 0) subs.splice(idx, 1);
           return true;
         },
-        listByUserId: async (params: { userId: string }) => subs.filter(s => s.userId === params.userId),
+        listByUserId: async (params: { userId: string }) =>
+          subs.filter(s => s.userId === params.userId),
         findByDevice: async () => null,
         touchLastSeen: async () => subs[0],
         upsertByDevice: async () => subs[0],
@@ -54,7 +74,12 @@ describe('concurrent subscription invalidation (P-PUSH-13)', () => {
         removeBySubscription: async () => 1,
       },
       deliveries: {
-        create: async (input: { tenantId: string; userId: string; subscriptionId: string; platform: string }) => {
+        create: async (input: {
+          tenantId: string;
+          userId: string;
+          subscriptionId: string;
+          platform: string;
+        }) => {
           const d = {
             id: `del-${deliveries.length}`,
             ...input,

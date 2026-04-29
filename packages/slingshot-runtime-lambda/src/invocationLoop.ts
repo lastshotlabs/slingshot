@@ -273,7 +273,7 @@ export async function invokeWithAdapter(
           output,
         });
       } else if (records.length > 1) {
-        let recordAction: 'retry' | 'drop' = 'retry';
+        let recordAction: 'retry' | 'drop';
         try {
           recordAction =
             (await hooks?.onRecordError?.({

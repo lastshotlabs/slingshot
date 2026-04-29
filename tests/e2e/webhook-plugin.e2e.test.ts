@@ -391,8 +391,23 @@ describe('Webhook plugin — delivery management', () => {
   let handle: E2EServerHandle;
   let endpointId: string;
   let adminHeaders: Record<string, string>;
+  let originalFetch: typeof fetch;
 
   beforeEach(async () => {
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        input instanceof URL
+          ? input
+          : typeof input === 'string'
+            ? new URL(input)
+            : new URL(input.url);
+      if (url.hostname === 'example.com' && url.pathname === '/hook') {
+        return new Response('received', { status: 200 });
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch;
+
     const { plugin } = makeWebhookPlugin();
     ({ handle, headers: adminHeaders } = await createAuthedHandle(
       plugin,
@@ -405,7 +420,7 @@ describe('Webhook plugin — delivery management', () => {
       headers: withJson(adminHeaders),
       body: JSON.stringify(
         endpointInput({
-          url: 'https://receiver.example.com/hook',
+          url: 'https://example.com/hook',
           secret: 'secret',
           events: ['user.*'],
         }),
@@ -415,7 +430,10 @@ describe('Webhook plugin — delivery management', () => {
     endpointId = body.id;
   });
 
-  afterEach(() => handle.stop());
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    return handle.stop();
+  });
 
   test('GET /webhooks/endpoints/:id/deliveries returns empty list initially', async () => {
     const res = await fetch(`${handle.baseUrl}/webhooks/endpoints/${endpointId}/deliveries`, {

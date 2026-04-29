@@ -357,6 +357,14 @@ export interface BullMQOrchestrationMetricsCapability {
   getMetrics(): BullMQOrchestrationAdapterMetrics;
 }
 
+export interface BullMQOrchestrationResetCapability {
+  /**
+   * Reset the lazy-start state machine after a failed initialization so the
+   * next `start()` or lazy operation retries adapter startup.
+   */
+  reset(): void;
+}
+
 /**
  * Create the BullMQ-backed orchestration adapter.
  *
@@ -378,9 +386,15 @@ export function createBullMQOrchestrationAdapter(
 ): OrchestrationAdapter &
   ObservabilityCapability &
   ScheduleCapability &
-  BullMQOrchestrationMetricsCapability {
-  const { eventSink, workflowConcurrency, logger, structuredLogger: rawStructuredLogger, ...parsedInput } =
-    rawOptions;
+  BullMQOrchestrationMetricsCapability &
+  BullMQOrchestrationResetCapability {
+  const {
+    eventSink,
+    workflowConcurrency,
+    logger,
+    structuredLogger: rawStructuredLogger,
+    ...parsedInput
+  } = rawOptions;
   const options = bullmqOrchestrationAdapterOptionsSchema.parse(parsedInput);
   const structuredLogger: Logger = rawStructuredLogger ?? noopLogger;
   const taskRegistry = new Map<string, AnyResolvedTask>();
@@ -500,8 +514,6 @@ export function createBullMQOrchestrationAdapter(
   let startState: StartState = 'idle';
   let startPromise: Promise<void> | null = null;
   let startError: Error | null = null;
-  // started flag retained for legacy in-process code paths that compared booleans.
-  let started = false;
   // disposed is set by shutdown() and is permanent for the lifetime of the
   // instance. A disposed adapter cannot be re-started (the underlying queues
   // and workers have been closed); callers must construct a fresh adapter.
@@ -598,9 +610,7 @@ export function createBullMQOrchestrationAdapter(
           },
         );
         workflowWorker.on('stalled', (jobId: string) => {
-          console.error(
-            `[slingshot-orchestration-bullmq] Job stalled in workflow queue: ${jobId}`,
-          );
+          console.error(`[slingshot-orchestration-bullmq] Job stalled in workflow queue: ${jobId}`);
         });
       }
       for (const task of taskRegistry.values()) {
@@ -631,7 +641,6 @@ export function createBullMQOrchestrationAdapter(
           namedQueues.set(task.queue, new Queue(queueName, queueOptions));
         }
       }
-      started = true;
     })().then(
       () => {
         startState = 'started';
@@ -719,7 +728,10 @@ export function createBullMQOrchestrationAdapter(
     } catch (err) {
       structuredLogger.error('orchestration.bullmq.snapshotQuarantineFailed', {
         runId,
-        error: err instanceof Error ? { message: err.message, stack: err.stack } : { message: String(err) },
+        error:
+          err instanceof Error
+            ? { message: err.message, stack: err.stack }
+            : { message: String(err) },
       });
     }
     structuredLogger.error('orchestration.bullmq.snapshotMalformed', {
@@ -739,9 +751,9 @@ export function createBullMQOrchestrationAdapter(
             parseError instanceof Error
               ? { message: parseError.message }
               : { message: String(parseError) },
-        } as never);
-        if (result && typeof (result as Promise<void>).catch === 'function') {
-          (result as Promise<void>).catch(emitErr => {
+        });
+        if (result) {
+          result.catch(emitErr => {
             structuredLogger.error('orchestration.bullmq.snapshotMalformed.emitError', {
               error:
                 emitErr instanceof Error
@@ -1047,7 +1059,12 @@ export function createBullMQOrchestrationAdapter(
         );
       }
       cancelledRunSignals.set(runId, CANCELLATION_ERROR_MESSAGE);
+      return { cancelStatus: 'confirmed' };
     }
+    return {
+      cancelStatus: 'best-effort',
+      message: `Run '${runId}' is in BullMQ state '${state}' and cannot be cancelled directly.`,
+    };
   }
 
   async function findJobByRunId(
@@ -1235,8 +1252,7 @@ export function createBullMQOrchestrationAdapter(
       return degraded
         ? {
             cancelStatus: 'best-effort',
-            message:
-              outcome.message ?? 'one or more child jobs could not be confirmed cancelled',
+            message: outcome.message ?? 'one or more child jobs could not be confirmed cancelled',
           }
         : { cancelStatus: 'confirmed' };
     },
@@ -1364,11 +1380,6 @@ export function createBullMQOrchestrationAdapter(
         namedQueues.clear();
         await defaultTaskQueue.close();
         await workflowQueue.close();
-        // Reset started so that any reference to this adapter that bypasses
-        // the disposed guard (e.g. internal state inspection) sees a clean
-        // slate. The disposed flag remains set; ensureStarted() will throw
-        // OrchestrationAdapterDisposedError on any further call.
-        started = false;
         startPromise = null;
       };
 

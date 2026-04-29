@@ -33,6 +33,7 @@ bun add @lastshotlabs/slingshot-orchestration-bullmq
 
 ## Dependencies
 
+- `@lastshotlabs/slingshot-core`: `workspace:*`
 - `@lastshotlabs/slingshot-orchestration`: `workspace:*`
 
 ## Peer Dependencies

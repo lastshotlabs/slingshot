@@ -21,16 +21,17 @@ const skipIf = (cond: boolean) => (cond ? test.skip : test);
 const it = skipIf(!KAFKA_BROKERS);
 
 function brokers(): string[] {
-  return (KAFKA_BROKERS ?? '').split(',').map(s => s.trim()).filter(Boolean);
+  return (KAFKA_BROKERS ?? '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
 }
 
 function ssl(): true | undefined {
   return process.env.KAFKA_SSL === 'true' ? true : undefined;
 }
 
-function sasl():
-  | { mechanism: 'plain'; username: string; password: string }
-  | undefined {
+function sasl(): { mechanism: 'plain'; username: string; password: string } | undefined {
   if (!process.env.KAFKA_SASL_USER || !process.env.KAFKA_SASL_PASS) return undefined;
   return {
     mechanism: 'plain',
@@ -146,10 +147,16 @@ describe('createKafkaAdapter — real Kafka', () => {
       await bus2.shutdown();
     };
 
-    bus1.on('auth:login', (p: unknown) => received1.push(p), {
-      durable: true,
-      name: groupName,
-    });
+    bus1.on(
+      'auth:login',
+      (p: unknown) => {
+        received1.push(p);
+      },
+      {
+        durable: true,
+        name: groupName,
+      },
+    );
     // Wait for the first consumer to settle.
     await new Promise(r => setTimeout(r, 4_000));
 
@@ -159,10 +166,16 @@ describe('createKafkaAdapter — real Kafka', () => {
     }
 
     // Add the second consumer to trigger a rebalance.
-    bus2.on('auth:login', (p: unknown) => received2.push(p), {
-      durable: true,
-      name: groupName,
-    });
+    bus2.on(
+      'auth:login',
+      (p: unknown) => {
+        received2.push(p);
+      },
+      {
+        durable: true,
+        name: groupName,
+      },
+    );
 
     // Wait for delivery.
     const start = Date.now();

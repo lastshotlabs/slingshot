@@ -134,10 +134,9 @@ async function setup(args?: { authUser?: { email?: string; suspended?: boolean }
   const adapterTransforms = runtime.adapterTransforms!;
   const stubCtx = {} as Parameters<ReturnType<typeof adapterTransforms.resolve>>[1];
   const transformed = {
-    Organization: (await runtime.adapterTransforms!.resolve('organizations.organization.deleteCascade')(
-      baseAdapters.Organization,
-      stubCtx,
-    )) as BareEntityAdapter,
+    Organization: (await runtime.adapterTransforms!.resolve(
+      'organizations.organization.deleteCascade',
+    )(baseAdapters.Organization, stubCtx)) as BareEntityAdapter,
     OrganizationMember: (await runtime.adapterTransforms!.resolve('organizations.member.identity')(
       baseAdapters.OrganizationMember,
       stubCtx,
@@ -147,10 +146,9 @@ async function setup(args?: { authUser?: { email?: string; suspended?: boolean }
       stubCtx,
     )) as BareEntityAdapter,
     Group: baseAdapters.Group,
-    GroupMembership: (await runtime.adapterTransforms!.resolve('organizations.groupMembership.identity')(
-      baseAdapters.GroupMembership,
-      stubCtx,
-    )) as BareEntityAdapter,
+    GroupMembership: (await runtime.adapterTransforms!.resolve(
+      'organizations.groupMembership.identity',
+    )(baseAdapters.GroupMembership, stubCtx)) as BareEntityAdapter,
   };
 
   // Run the captureAdapters hook so the runtime's internal `refs` point at the

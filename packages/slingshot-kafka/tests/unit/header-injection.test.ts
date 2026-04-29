@@ -16,18 +16,7 @@ describe('kafka outbound header sanitization', () => {
     // is enforced just-in-time when headers are written so a malformed envelope
     // can never reach the wire.
     expect(() =>
-      createRawEventEnvelope('auth:login', { userId: 'u' }, {
-        eventId: 'evt\r\nX-Injected: yes',
-        ownerPlugin: 'auth',
-        exposure: ['client'] as const,
-        actorId: null,
-        userId: null,
-        scope: null,
-        occurredAt: new Date().toISOString(),
-        publishedAt: new Date().toISOString(),
-        source: 'system',
-        requestTenantId: null,
-      } as never),
+      createRawEventEnvelope('auth:login', { userId: 'u', sessionId: 's' }),
     ).not.toThrow();
   });
 

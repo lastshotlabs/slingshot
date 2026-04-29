@@ -55,7 +55,9 @@ export function createSlingshotEventSink(bus: SlingshotEventBus): SlingshotEvent
       bus.on(event, handler);
       const unsubscribe = () => {
         try {
-          if (typeof (bus as unknown as { off?: (e: string, h: unknown) => void }).off === 'function') {
+          if (
+            typeof (bus as unknown as { off?: (e: string, h: unknown) => void }).off === 'function'
+          ) {
             (bus as unknown as { off: (e: string, h: unknown) => void }).off(event, handler);
           }
         } catch (err) {

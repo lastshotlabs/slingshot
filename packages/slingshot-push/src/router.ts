@@ -62,11 +62,12 @@ function cancellableSleep(ms: number, signal?: AbortSignal): Promise<void> {
     }, ms);
     let onAbort: (() => void) | null = null;
     if (signal) {
-      onAbort = (): void => {
+      const handleAbort = (): void => {
         clearTimeout(timer);
-        signal.removeEventListener('abort', onAbort!);
+        signal.removeEventListener('abort', handleAbort);
         reject(new Error('aborted'));
       };
+      onAbort = handleAbort;
       signal.addEventListener('abort', onAbort, { once: true });
     }
   });
@@ -734,12 +735,14 @@ export function createPushRouter(options: {
         totalAttempted += value.attempted;
       }
       const summary = summarize({ delivered: totalDelivered, attempted: totalAttempted });
-      return truncated
-        ? ({ ...summary, truncated: true, totalMembers } as PushSendResultSummary & {
-            truncated: true;
-            totalMembers: number;
-          })
-        : summary;
+      if (!truncated) {
+        return summary;
+      }
+      const truncatedSummary: PushSendResultSummary & {
+        truncated: true;
+        totalMembers: number;
+      } = { ...summary, truncated: true, totalMembers };
+      return truncatedSummary;
     },
     stop(): void {
       lifecycleController.abort();

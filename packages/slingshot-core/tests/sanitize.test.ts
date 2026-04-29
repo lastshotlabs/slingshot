@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  HeaderInjectionError,
-  sanitizeHeaderValue,
-  sanitizeLogValue,
-} from '../src/lib/sanitize';
+import { HeaderInjectionError, sanitizeHeaderValue, sanitizeLogValue } from '../src/lib/sanitize';
 
 describe('sanitizeHeaderValue', () => {
   it('returns the input unchanged when it is safe', () => {

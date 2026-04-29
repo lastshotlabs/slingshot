@@ -58,7 +58,9 @@ const inviteRateLimitSchema = z
           .int()
           .positive()
           .default(60_000)
-          .describe('Sliding window duration in milliseconds for create rate limiting. Default 60000.'),
+          .describe(
+            'Sliding window duration in milliseconds for create rate limiting. Default 60000.',
+          ),
       })
       .partial()
       .optional()
@@ -76,7 +78,9 @@ const inviteRateLimitSchema = z
           .int()
           .positive()
           .default(60_000)
-          .describe('Sliding window duration in milliseconds for lookup rate limiting. Default 60000.'),
+          .describe(
+            'Sliding window duration in milliseconds for lookup rate limiting. Default 60000.',
+          ),
       })
       .partial()
       .optional()
@@ -152,9 +156,7 @@ const organizationsPluginConfigSchema = z.object({
             adminRole: z
               .string()
               .optional()
-              .describe(
-                "Role required to access group management routes. Defaults to 'admin'.",
-              ),
+              .describe("Role required to access group management routes. Defaults to 'admin'."),
           }),
         ])
         .optional()

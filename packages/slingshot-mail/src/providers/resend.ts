@@ -36,10 +36,7 @@ interface ResendBody {
   tags?: Array<{ name: string; value: string }>;
 }
 
-function formatAddresses(
-  addr: MailAddress | MailAddress[],
-  header: string,
-): string | string[] {
+function formatAddresses(addr: MailAddress | MailAddress[], header: string): string | string[] {
   if (Array.isArray(addr)) return addr.map(item => formatSafeAddress(item, header));
   return formatSafeAddress(addr, header);
 }
@@ -113,7 +110,10 @@ export function createResendProvider(config: ResendConfig): MailProvider {
         const timer =
           providerTimeoutMs > 0
             ? setTimeout(
-                () => controller.abort(new Error(`resend provider timed out after ${providerTimeoutMs}ms`)),
+                () =>
+                  controller.abort(
+                    new Error(`resend provider timed out after ${providerTimeoutMs}ms`),
+                  ),
                 providerTimeoutMs,
               )
             : undefined;
@@ -130,10 +130,7 @@ export function createResendProvider(config: ResendConfig): MailProvider {
           });
         } catch (err) {
           if (controller.signal.aborted && !callerSignal?.aborted) {
-            throw new MailSendError(
-              `Resend provider timed out after ${providerTimeoutMs}ms`,
-              true,
-            );
+            throw new MailSendError(`Resend provider timed out after ${providerTimeoutMs}ms`, true);
           }
           throw err;
         } finally {

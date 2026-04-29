@@ -29,7 +29,8 @@ bun add @lastshotlabs/slingshot-runtime-node
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
-- `test`: `bun test`
+- `test`: `bun test && bun run test:vitest`
+- `test:vitest`: `vitest run --config vitest.config.ts`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

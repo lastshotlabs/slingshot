@@ -10,13 +10,12 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-
 import {
+  type AnyResolvedTask,
+  type AnyResolvedWorkflow,
   defineTask,
   defineWorkflow,
   step,
-  type AnyResolvedTask,
-  type AnyResolvedWorkflow,
 } from '@lastshotlabs/slingshot-orchestration';
 
 const REAL_TEMPORAL_ENABLED = process.env['TEMPORAL_TEST_ENV'] === '1';

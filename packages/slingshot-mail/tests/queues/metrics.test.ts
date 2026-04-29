@@ -119,11 +119,7 @@ describe('mail queue — metrics emitter', () => {
     const provider: MailProvider = {
       name: 'sendgrid',
       send: mock(async () => {
-        throw new MailCircuitOpenError(
-          '[slingshot-mail:sendgrid] open',
-          'sendgrid',
-          1_000,
-        );
+        throw new MailCircuitOpenError('[slingshot-mail:sendgrid] open', 'sendgrid', 1_000);
       }),
     };
     const queue = createMemoryQueue({

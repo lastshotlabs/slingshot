@@ -37,6 +37,20 @@ export interface EmitOrchestrationEventArgs {
   payload: OrchestrationEventMap[keyof OrchestrationEventMap];
 }
 
+type WorkflowHookHandler = (payload: never) => Promise<void> | void;
+
+function getWorkflowHookHandler(
+  hook: NonNullable<ReturnType<typeof getRegisteredWorkflowHooks>>[ExecuteWorkflowHookArgs['hook']],
+): WorkflowHookHandler | undefined {
+  if (hook === undefined) {
+    return undefined;
+  }
+  if (typeof hook === 'function') {
+    return hook;
+  }
+  return hook.handler;
+}
+
 export function createTemporalActivities(options: {
   connection: ConnectionLike;
   namespace?: string;
@@ -134,7 +148,7 @@ export function createTemporalActivities(options: {
 
     async executeWorkflowHook(args: ExecuteWorkflowHookArgs): Promise<void> {
       const hooks = getRegisteredWorkflowHooks(args.workflowName);
-      const hook = hooks?.[args.hook];
+      const hook = getWorkflowHookHandler(hooks?.[args.hook]);
       if (!hook) {
         return;
       }

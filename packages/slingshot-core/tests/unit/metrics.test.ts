@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import {
-  createInProcessMetricsEmitter,
-  createNoopMetricsEmitter,
-} from '../../src/metrics';
+import { createInProcessMetricsEmitter, createNoopMetricsEmitter } from '../../src/metrics';
 
 // ---------------------------------------------------------------------------
 // No-op emitter

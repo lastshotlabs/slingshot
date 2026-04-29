@@ -13,8 +13,5 @@ export {
   getOrganizationsReconcile,
   getOrganizationsReconcileOrNull,
 } from './reconcile';
-export type {
-  OrganizationsReconcileService,
-  ReconcileOrphanedOrgRecordsResult,
-} from './reconcile';
+export type { OrganizationsReconcileService, ReconcileOrphanedOrgRecordsResult } from './reconcile';
 export type { GroupsConfig, GroupsManagementConfig } from './types/groups';

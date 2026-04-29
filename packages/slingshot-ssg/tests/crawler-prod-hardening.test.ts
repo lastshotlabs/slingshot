@@ -171,8 +171,8 @@ export async function load() { return { data: {}, revalidate: false } }
 `,
     );
 
-    await expect(
-      collectSsgRoutes(makeConfig({ staticPathsTimeoutMs: 25 })),
-    ).rejects.toThrow(/staticPaths\(\) failed.*Timed out after 25ms/);
+    await expect(collectSsgRoutes(makeConfig({ staticPathsTimeoutMs: 25 }))).rejects.toThrow(
+      /staticPaths\(\) failed.*Timed out after 25ms/,
+    );
   });
 });

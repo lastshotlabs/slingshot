@@ -30,6 +30,7 @@ The webhook entities themselves follow the shared package-first/entity authoring
 - Endpoint records now carry `ownerType`, `ownerId`, optional `tenantId`, and normalized `subscriptions`. Delivery records preserve `eventId`, `occurredAt`, subscriber identity, and source scope.
 - Existing legacy rows are normalized at startup. If stored subscriptions cannot be resolved safely, the endpoint is disabled rather than widened.
 - HTTP delivery timeout is configurable via the plugin-wide `deliveryTimeoutMs` (default 30000) and the per-endpoint `deliveryTimeoutMs` override. Both are bounded to a hard 120000 ms ceiling to keep stuck deliveries from monopolising queue workers.
+- Inbound webhook routes enforce a maximum request body size via `inboundMaxBodyBytes` (default 1 MiB). Oversized requests are rejected with `413 Payload Too Large` before any provider parsing runs. Raise this only when a known provider posts larger payloads.
 
 ## Gotchas
 

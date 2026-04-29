@@ -453,7 +453,7 @@ export function createMemoryAdapter(
         run.status = 'cancelled';
         run.completedAt = new Date();
         run.error = { message: 'Run cancelled' };
-        return;
+        return undefined;
       }
 
       delayedWorkflowStarts.get(runId)?.abort(new Error('Run cancelled'));
@@ -464,6 +464,7 @@ export function createMemoryAdapter(
       run.status = 'cancelled';
       run.completedAt = new Date();
       run.error = { message: 'Run cancelled' };
+      return undefined;
     },
     async start() {
       started = true;

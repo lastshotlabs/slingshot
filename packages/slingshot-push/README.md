@@ -80,6 +80,10 @@ not a failure, just nothing to deliver. Per-subscription failures continue to su
 - Topic fan-out is capped at 10,000 members per publish call. Topics exceeding this threshold
   will log a warning and deliver only to the first 10,000. Use a cursor-paginated delivery loop
   outside the plugin for topics that require full-membership delivery.
+- Each `provider.send()` call is bounded by `providerTimeoutMs` on `createPushRouter`
+  (default 30000). A timed-out send is treated as a transient failure and retried under the
+  configured retry policy, so a slow APNS / FCM endpoint cannot stall the queue worker
+  indefinitely.
 
 ## Key Files
 

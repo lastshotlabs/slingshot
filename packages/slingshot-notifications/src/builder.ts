@@ -74,10 +74,8 @@ export function createNotificationBuilder(
   const logger: Logger =
     options.logger ?? createConsoleLogger({ base: { plugin: 'slingshot-notifications' } });
   const dynamicBus = options.bus as unknown as DynamicEventBus;
-  let publishFailureCount = 0;
 
   function reportPublishError(event: string, payload: unknown, err: Error): void {
-    publishFailureCount += 1;
     logger.error('event publish failed', {
       event,
       err: err.message,
@@ -132,7 +130,7 @@ export function createNotificationBuilder(
     }
 
     if (!isUrgent) {
-      let allowed = false;
+      let allowed: boolean;
       try {
         allowed = await options.rateLimitBackend.check(
           `${options.source}:${input.userId}`,
@@ -214,16 +212,12 @@ export function createNotificationBuilder(
           changes: { count: nextCount },
         };
         try {
-          options.events.publish(
-            'notifications:notification.updated',
-            payload,
-            {
-              userId: input.userId,
-              actorId: input.actorId ?? input.userId,
-              source: 'system',
-              requestTenantId: null,
-            },
-          );
+          options.events.publish('notifications:notification.updated', payload, {
+            userId: input.userId,
+            actorId: input.actorId ?? input.userId,
+            source: 'system',
+            requestTenantId: null,
+          });
         } catch (err: unknown) {
           reportPublishError(
             'notifications:notification.updated',

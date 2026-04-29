@@ -134,9 +134,8 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
         send: async (payload: FakeProducerSendPayload) => {
           state.producerSendAttempts.push(payload);
           const oneShotDelay = state.producerSendDelays.shift();
-          const delay = typeof oneShotDelay === 'number'
-            ? oneShotDelay
-            : state.producerSendStickyDelayMs;
+          const delay =
+            typeof oneShotDelay === 'number' ? oneShotDelay : state.producerSendStickyDelayMs;
           if (delay > 0) {
             await new Promise(r => setTimeout(r, delay));
           }

@@ -68,9 +68,7 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
   // tasks (cap concurrency) and pending fire-and-forget cache writes (drained
   // on teardown). null when ISR is disabled.
   const isrTracker =
-    isrAdapter !== null
-      ? createIsrTracker(config.isr?.maxConcurrentRegenerations ?? 32)
-      : null;
+    isrAdapter !== null ? createIsrTracker(config.isr?.maxConcurrentRegenerations ?? 32) : null;
   const cacheFlushTimeoutMs = config.isr?.cacheFlushTimeoutMs ?? 5_000;
   let isrInvalidators: IsrInvalidators | undefined;
   let entityConfigMap = new Map<string, ResolvedEntityConfig>();

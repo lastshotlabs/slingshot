@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  assertSafeMailHeaders,
-  ensureSafe,
-  formatSafeAddress,
-} from '../../src/lib/headerSanitize';
+import { assertSafeMailHeaders, ensureSafe, formatSafeAddress } from '../../src/lib/headerSanitize';
 import { MailSendError } from '../../src/types/provider';
 
 describe('formatSafeAddress', () => {

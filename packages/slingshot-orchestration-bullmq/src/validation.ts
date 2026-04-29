@@ -86,7 +86,7 @@ export const bullmqOrchestrationAdapterOptionsSchema = z.object({
         .optional()
         .describe(
           'TLS configuration for the Redis connection. Pass a structured object, ' +
-            "true for ioredis defaults, or any ioredis-compatible TLS value.",
+            'true for ioredis defaults, or any ioredis-compatible TLS value.',
         ),
     })
     .loose()

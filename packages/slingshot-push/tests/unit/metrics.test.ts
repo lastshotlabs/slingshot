@@ -182,9 +182,7 @@ function createMockProvider(
   return {
     platform: 'web',
     send: sendImpl as PushProvider['send'],
-    ...(health
-      ? { getHealth: () => health }
-      : {}),
+    ...(health ? { getHealth: () => health } : {}),
   };
 }
 

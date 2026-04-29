@@ -347,9 +347,7 @@ describe('bullmq orchestration adapter', () => {
     await expect(adapter.runTask(task.name, { value: 'ok' })).rejects.toThrow('worker failed');
 
     // reset() is required to allow another initialization attempt.
-    (
-      adapter as unknown as { reset(): void }
-    ).reset();
+    (adapter as unknown as { reset(): void }).reset();
     const handle = await adapter.runTask(task.name, { value: 'ok' });
     await expect(handle.result()).resolves.toEqual({ value: 'ok' });
   });

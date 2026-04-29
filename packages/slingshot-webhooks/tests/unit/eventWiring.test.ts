@@ -304,10 +304,7 @@ describe('eventWiring', () => {
     // Patch bus.emit to throw on the enqueueFailed signal so we exercise
     // the error-swallow guard. The original emit is restored afterward.
     const originalEmit = bus.emit.bind(bus);
-    const emitSpy = spyOn(bus, 'emit').mockImplementation(((
-      event: string,
-      payload: unknown,
-    ) => {
+    const emitSpy = spyOn(bus, 'emit').mockImplementation(((event: string, payload: unknown) => {
       if (event === 'webhook:enqueueFailed') throw new Error('bus down');
       return originalEmit(event as never, payload as never);
     }) as typeof bus.emit);

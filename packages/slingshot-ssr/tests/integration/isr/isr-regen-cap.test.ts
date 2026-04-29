@@ -4,11 +4,7 @@
 // Logger.warn) and the served stale response is unaffected.
 import { describe, expect, it } from 'bun:test';
 import { Hono } from 'hono';
-import {
-  type Logger,
-  type SlingshotContext,
-  attachContext,
-} from '@lastshotlabs/slingshot-core';
+import { type Logger, type SlingshotContext, attachContext } from '@lastshotlabs/slingshot-core';
 import { createMemoryIsrCache } from '../../../src/isr/memory';
 import { buildSsrMiddleware, createIsrTracker } from '../../../src/middleware';
 import type { IsrSink, SlingshotSsrRenderer, SsrRouteMatch } from '../../../src/types';

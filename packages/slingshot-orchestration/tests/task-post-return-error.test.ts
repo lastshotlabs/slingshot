@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-
 import type { Logger } from '@lastshotlabs/slingshot-core';
-
 import { createMemoryAdapter } from '../src/adapters/memory';
 import { defineTask } from '../src/defineTask';
 import { createOrchestrationRuntime } from '../src/runtime';

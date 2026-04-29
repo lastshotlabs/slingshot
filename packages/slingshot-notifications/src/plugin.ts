@@ -82,25 +82,21 @@ function isExpired(record: NotificationRecord, ttlMs: number, nowMs: number): bo
   return nowMs - createdMs > ttlMs;
 }
 
-function filterExpired<T extends { items: NotificationRecord[] }>(
-  result: T,
-  ttlMs: number,
-): T {
+function filterExpired<T extends { items: NotificationRecord[] }>(result: T, ttlMs: number): T {
   if (ttlMs <= 0) return result;
   const nowMs = Date.now();
   const items = result.items.filter(r => !isExpired(r, ttlMs, nowMs));
   return { ...result, items };
 }
 
-function wrapNotificationAdapter(
-  adapter: NotificationAdapter,
-  ttlMs: number,
-): NotificationAdapter {
+function wrapNotificationAdapter(adapter: NotificationAdapter, ttlMs: number): NotificationAdapter {
   const generated = adapter as GeneratedNotificationAdapter;
   return {
     ...adapter,
-    listByUser: async params => filterExpired(await generated.listByUser(toActorParam(params)), ttlMs),
-    listUnread: async params => filterExpired(await generated.listUnread(toActorParam(params)), ttlMs),
+    listByUser: async params =>
+      filterExpired(await generated.listByUser(toActorParam(params)), ttlMs),
+    listUnread: async params =>
+      filterExpired(await generated.listUnread(toActorParam(params)), ttlMs),
     markRead: params =>
       generated.markRead(
         { id: params.id, ...toActorParam(params) },
@@ -246,10 +242,7 @@ export function createNotificationsPlugin(
           '[slingshot-notifications] Entity adapters were not resolved during setupRoutes',
         );
       }
-      const notifications = wrapNotificationAdapter(
-        notificationsAdapter,
-        config.notificationTtlMs,
-      );
+      const notifications = wrapNotificationAdapter(notificationsAdapter, config.notificationTtlMs);
       const preferences = wrapPreferenceAdapter(preferencesAdapter);
 
       // Trigger the entity adapter's lazy ensureTable() before any custom op

@@ -1,10 +1,10 @@
+import webpush from 'web-push';
 import {
   HeaderInjectionError,
   TimeoutError,
   sanitizeHeaderValue,
   withTimeout,
 } from '@lastshotlabs/slingshot-core';
-import webpush from 'web-push';
 import type { PushSendResult } from '../types/models';
 import type { PushProvider, PushProviderHealth } from './provider';
 

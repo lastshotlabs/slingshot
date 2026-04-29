@@ -1431,8 +1431,9 @@ describe('PermissionEvaluator', () => {
 
       // With rate 0.0001 and 100 calls, expected = 0.01. Allow up to 1.
       expect(callbackCount).toBeLessThanOrEqual(1);
-      expect(loggerCalls.filter(c => c.ctx?.event === 'group_expansion_error').length)
-        .toBeLessThanOrEqual(1);
+      expect(
+        loggerCalls.filter(c => c.ctx?.event === 'group_expansion_error').length,
+      ).toBeLessThanOrEqual(1);
       // Counters always update — sampling does not hide truth from health.
       expect(ev.getHealth().groupExpansionErrorCount).toBe(calls);
       expect(ev.getHealth().lastGroupExpansionErrorAt).not.toBeNull();

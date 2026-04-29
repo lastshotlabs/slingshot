@@ -190,9 +190,7 @@ describe('edgeRuntime()', () => {
         256,
       );
       const saltB64 = btoa(Array.from(salt, b => String.fromCharCode(b)).join(''));
-      const hashB64 = btoa(
-        Array.from(new Uint8Array(bits), b => String.fromCharCode(b)).join(''),
-      );
+      const hashB64 = btoa(Array.from(new Uint8Array(bits), b => String.fromCharCode(b)).join(''));
       const legacyHash = `${saltB64}:${hashB64}`;
       expect(await runtime.password.verify('legacy-password', legacyHash)).toBe(true);
       expect(await runtime.password.verify('wrong-password', legacyHash)).toBe(false);

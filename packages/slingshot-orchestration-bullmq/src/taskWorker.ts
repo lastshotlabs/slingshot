@@ -32,6 +32,17 @@ function toRunError(error: unknown): RunError {
   return { message: String(error) };
 }
 
+function shouldShortCircuitRetry(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return (
+    error.name === 'UnrecoverableError' ||
+    error.name === 'ZodError' ||
+    error instanceof OrchestrationError
+  );
+}
+
 /**
  * Create the BullMQ task processor used by task workers and named task queues.
  */
@@ -131,7 +142,11 @@ export function createBullMQTaskProcessor(options: {
       return parsedOutput;
     } catch (error) {
       const runError = toRunError(error);
-      const classification = classifyOrchestrationError(error);
+      const shortCircuitRetry = shouldShortCircuitRetry(error);
+      const rawClassification = classifyOrchestrationError(error);
+      const classification = shortCircuitRetry
+        ? { retryable: false, permanent: true, code: rawClassification.code }
+        : { ...rawClassification, retryable: true, permanent: false };
       void options.eventSink?.emit('orchestration.task.failed', {
         runId,
         task: taskName,
@@ -139,14 +154,13 @@ export function createBullMQTaskProcessor(options: {
         tenantId:
           typeof job.data['tenantId'] === 'string' ? (job.data['tenantId'] as string) : undefined,
         permanent: classification.permanent,
-      } as never);
+      });
       // Permanent (non-retryable) errors must short-circuit BullMQ's retry
       // policy. BullMQ inspects `err.name === 'UnrecoverableError'` to skip
       // remaining attempts; we wrap with a class that carries that name so
       // the worker fails fast without a hard runtime dep on the bullmq export.
-      const isAlreadyPermanent =
-        error instanceof Error && error.name === 'UnrecoverableError';
-      if (classification.permanent && !isAlreadyPermanent) {
+      const isAlreadyPermanent = error instanceof Error && error.name === 'UnrecoverableError';
+      if (shortCircuitRetry && !isAlreadyPermanent) {
         const cause = error instanceof Error ? error : new Error(String(error));
         throw new PermanentTaskError(cause.message, { cause });
       }

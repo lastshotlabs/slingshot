@@ -1,9 +1,5 @@
 import { HTTPException } from 'hono/http-exception';
-import type {
-  Logger,
-  SlingshotEvents,
-  StorageAdapter,
-} from '@lastshotlabs/slingshot-core';
+import type { Logger, SlingshotEvents, StorageAdapter } from '@lastshotlabs/slingshot-core';
 import { noopLogger } from '@lastshotlabs/slingshot-core';
 import type { EntityManifestRuntime } from '@lastshotlabs/slingshot-entity';
 import {

@@ -234,9 +234,7 @@ export function createApnsProvider(config: {
         let safeApnsId: string | undefined;
         try {
           safeBundleId = sanitizeHeaderValue(bundleId, 'apns-topic');
-          safeApnsId = apnsId
-            ? sanitizeHeaderValue(apnsId, 'apns-id')
-            : undefined;
+          safeApnsId = apnsId ? sanitizeHeaderValue(apnsId, 'apns-id') : undefined;
         } catch (err) {
           if (err instanceof HeaderInjectionError) {
             return {

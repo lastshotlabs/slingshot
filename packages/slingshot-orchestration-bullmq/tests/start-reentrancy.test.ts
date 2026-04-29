@@ -301,9 +301,8 @@ describe('bullmq adapter start re-entrancy', () => {
     // lock to 'failed' and replay the same error to every subsequent caller
     // until reset() is invoked.
     const initFailure = new Error('worker boom');
-    (
-      MockWorker as unknown as { failOnConstruction: Error | null }
-    ).failOnConstruction = initFailure;
+    (MockWorker as unknown as { failOnConstruction: Error | null }).failOnConstruction =
+      initFailure;
 
     let firstError: unknown;
     try {
@@ -316,9 +315,7 @@ describe('bullmq adapter start re-entrancy', () => {
     // Second concurrent caller (sequenced for assertion clarity) sees the
     // same retained error even though the underlying failure condition has
     // been removed — the state machine must NOT silently re-enter 'starting'.
-    (
-      MockWorker as unknown as { failOnConstruction: Error | null }
-    ).failOnConstruction = null;
+    (MockWorker as unknown as { failOnConstruction: Error | null }).failOnConstruction = null;
 
     let secondError: unknown;
     try {
@@ -330,9 +327,7 @@ describe('bullmq adapter start re-entrancy', () => {
     expect((secondError as Error).message).toBe('worker boom');
 
     // reset() unlocks the state machine; the next start() retries init.
-    (
-      adapter as unknown as { reset(): void }
-    ).reset();
+    (adapter as unknown as { reset(): void }).reset();
     await adapter.start();
     await adapter.shutdown();
   });

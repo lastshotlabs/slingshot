@@ -1,6 +1,6 @@
-import { describe, expect, test, spyOn } from 'bun:test';
-import { createPushRouter } from '../../src/router.js';
+import { describe, expect, spyOn, test } from 'bun:test';
 import type { PushProvider } from '../../src/providers/provider.js';
+import { createPushRouter } from '../../src/router.js';
 
 interface SubscriptionRecord {
   id: string;
@@ -109,7 +109,12 @@ function makeRepos(): FakeRepos {
   };
   r.deliveriesRepo = {
     create: async (input: unknown) => {
-      const i = input as { tenantId: string; userId: string; subscriptionId: string; platform: string };
+      const i = input as {
+        tenantId: string;
+        userId: string;
+        subscriptionId: string;
+        platform: string;
+      };
       const d: DeliveryRecord = {
         id: `del-${r.deliveries.length}`,
         tenantId: i.tenantId,

@@ -32,6 +32,10 @@ The most important optional controls are:
 
 - `concurrency`, which defaults to `4`
 - `clientEntry`, when the Vite client entry chunk does not match the common defaults
+- `staticPathsTimeoutMs`, which bounds how long any single `staticPaths()` /
+  `generateStaticParams()` call may run before the build fails. Defaults to
+  `60000`. Set this when a route's path resolver fans out to a slow upstream so
+  builds fail fast instead of hanging.
 
 ## What You Get
 
@@ -63,20 +67,6 @@ The main knobs you are likely to tune are:
 - whether dynamic routes use `staticPaths()` or `generateStaticParams()`
 - output concurrency
 - client entry selection for injected asset tags
-
-## Exit Codes
-
-`slingshot ssg` emits one of three exit codes so CI can distinguish "everything
-worked" from "some routes are stale" from "nothing rendered":
-
-- **0** — every page succeeded (or there was nothing to render).
-- **2** — partial failure: at least one page failed but at least one page
-  succeeded. The build still produced output; treat as a degraded state.
-- **1** — total failure: every page failed, the build crashed, or no pages
-  rendered successfully.
-
-The same logic is exposed as `resolveExitCode(succeeded, failed)` for
-programmatic callers.
 
 ## Gotchas
 

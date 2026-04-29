@@ -46,9 +46,7 @@ describe('createIntervalDispatcher — log-line sanitization', () => {
     adapters.notifications.listPendingDispatch = async (...args) => {
       const rows = await originalList(...args);
       return rows.map(row =>
-        row.id === notification.id
-          ? { ...row, id: `${row.id}\r\nX-Injected: yes` }
-          : row,
+        row.id === notification.id ? { ...row, id: `${row.id}\r\nX-Injected: yes` } : row,
       );
     };
 

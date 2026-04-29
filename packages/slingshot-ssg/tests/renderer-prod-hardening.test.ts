@@ -86,7 +86,11 @@ afterEach(() => {
 
 describe('renderSsgPage — structured per-page error details (P-SSG-5)', () => {
   it('attaches errorDetail mirroring the Error fields when render throws', async () => {
-    const result = await renderSsgPage('/explode', makeFailingRenderer('render boom'), makeConfig());
+    const result = await renderSsgPage(
+      '/explode',
+      makeFailingRenderer('render boom'),
+      makeConfig(),
+    );
     expect(result.error).toBeInstanceOf(Error);
     expect(result.error?.message).toBe('render boom');
     expect(result.errorDetail).toBeDefined();

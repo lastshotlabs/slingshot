@@ -270,6 +270,7 @@ export async function loadRscManifest(absRscManifest: string): Promise<unknown> 
         `[slingshot-ssg] --rsc-manifest file not readable: ${absRscManifest}\n` +
           `The file does not exist or is not accessible. ` +
           `Ensure the Vite build ran with rsc: true and the manifest path is correct.`,
+        { cause: err },
       );
     }
     throw new Error(

@@ -124,10 +124,7 @@ describe('createBullMQAdapter — metrics emitter', () => {
 
   test('records bullmq.dlq.count on strict-validation failure', async () => {
     const registry = createEventSchemaRegistry();
-    registry.register(
-      'auth:login',
-      z.object({ userId: z.string(), sessionId: z.string() }),
-    );
+    registry.register('auth:login', z.object({ userId: z.string(), sessionId: z.string() }));
 
     const metrics = createInProcessMetricsEmitter();
     const bus = createBullMQAdapter({
@@ -156,9 +153,7 @@ describe('createBullMQAdapter — metrics emitter', () => {
     const bus = createBullMQAdapter({ connection: {}, metrics });
     bus.on('auth:login' as any, () => {}, { durable: true, name: 'pending-worker' });
 
-    fakeBullMQState.nextAddError(
-      Object.assign(new Error('redis down'), { code: 'ECONNREFUSED' }),
-    );
+    fakeBullMQState.nextAddError(Object.assign(new Error('redis down'), { code: 'ECONNREFUSED' }));
     bus.emit('auth:login' as any, { userId: 'u1' } as any);
     await new Promise(r => setTimeout(r, 10));
 

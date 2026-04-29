@@ -281,6 +281,7 @@ describe('createPushDeliveryAdapter', () => {
         async publishTopic() {
           return { delivered: 0, attempted: 0, allFailed: false };
         },
+        async stop() {},
       },
       formatters: compilePushFormatters({
         'community:reply': {

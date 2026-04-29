@@ -3,7 +3,6 @@
  *
  * Entity-driven asset storage package for Slingshot.
  */
-
 // --- Events (module augmentation — imported for side effects) ---
 import './events';
 

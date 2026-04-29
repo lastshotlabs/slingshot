@@ -114,7 +114,10 @@ export function createSendgridProvider(config: SendgridConfig): MailProvider {
         const timer =
           providerTimeoutMs > 0
             ? setTimeout(
-                () => controller.abort(new Error(`sendgrid provider timed out after ${providerTimeoutMs}ms`)),
+                () =>
+                  controller.abort(
+                    new Error(`sendgrid provider timed out after ${providerTimeoutMs}ms`),
+                  ),
                 providerTimeoutMs,
               )
             : undefined;

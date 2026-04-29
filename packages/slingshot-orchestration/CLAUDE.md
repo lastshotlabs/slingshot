@@ -7,24 +7,24 @@ development; production adapters live in sibling packages (BullMQ, Temporal).
 
 ## Key Files
 
-| File                         | What                                                                    |
-| ---------------------------- | ----------------------------------------------------------------------- |
-| src/index.ts                 | Public API surface for tasks, workflows, runtime, adapters, and types   |
-| src/defineTask.ts            | `defineTask()` factory with validation, kebab-case enforcement, retry   |
-| src/defineWorkflow.ts        | `defineWorkflow()`, `step()`, `parallel()`, `sleep()`, `stepResult()`   |
-| src/runtime.ts               | `createOrchestrationRuntime()` composition root                         |
-| src/adapter.ts               | `generateRunId()`, `createCachedRunHandle()`, capability detection      |
-| src/types.ts                 | Full type catalog: adapter contract, run lifecycle, events, capabilities|
-| src/errors.ts                | `OrchestrationError` with machine-readable error codes                  |
-| src/idempotency.ts           | `createIdempotencyScope()` key derivation for adapter implementations   |
-| src/engine/taskRunner.ts     | In-process task execution engine with retry and abort                   |
-| src/engine/workflowRunner.ts | In-process workflow step walker with hooks, sleep, and parallel support |
-| src/adapters/memory.ts       | `createMemoryAdapter()` for tests and local development                 |
-| src/adapters/sqlite.ts       | `createSqliteAdapter()` for durable single-node execution               |
-| src/provider/index.ts        | Provider registry surface used by Temporal worker code generation       |
-| src/provider/registry.ts     | `createOrchestrationProviderRegistry()` task/workflow manifest builder  |
-| src/validation.ts            | Shared Zod validation helpers                                          |
-| docs/human/index.md          | Package guide synced into the docs site                                 |
+| File                         | What                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| src/index.ts                 | Public API surface for tasks, workflows, runtime, adapters, and types    |
+| src/defineTask.ts            | `defineTask()` factory with validation, kebab-case enforcement, retry    |
+| src/defineWorkflow.ts        | `defineWorkflow()`, `step()`, `parallel()`, `sleep()`, `stepResult()`    |
+| src/runtime.ts               | `createOrchestrationRuntime()` composition root                          |
+| src/adapter.ts               | `generateRunId()`, `createCachedRunHandle()`, capability detection       |
+| src/types.ts                 | Full type catalog: adapter contract, run lifecycle, events, capabilities |
+| src/errors.ts                | `OrchestrationError` with machine-readable error codes                   |
+| src/idempotency.ts           | `createIdempotencyScope()` key derivation for adapter implementations    |
+| src/engine/taskRunner.ts     | In-process task execution engine with retry and abort                    |
+| src/engine/workflowRunner.ts | In-process workflow step walker with hooks, sleep, and parallel support  |
+| src/adapters/memory.ts       | `createMemoryAdapter()` for tests and local development                  |
+| src/adapters/sqlite.ts       | `createSqliteAdapter()` for durable single-node execution                |
+| src/provider/index.ts        | Provider registry surface used by Temporal worker code generation        |
+| src/provider/registry.ts     | `createOrchestrationProviderRegistry()` task/workflow manifest builder   |
+| src/validation.ts            | Shared Zod validation helpers                                            |
+| docs/human/index.md          | Package guide synced into the docs site                                  |
 
 ## Connections
 

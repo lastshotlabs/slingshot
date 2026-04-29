@@ -933,9 +933,7 @@ describe('createBullMQAdapter — WAL', () => {
     const bus = createBullMQAdapter({ connection: {}, walPath });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'wal-write' });
 
-    fakeBullMQState.nextAddError(
-      Object.assign(new Error('Redis down'), { code: 'ECONNREFUSED' }),
-    );
+    fakeBullMQState.nextAddError(Object.assign(new Error('Redis down'), { code: 'ECONNREFUSED' }));
     bus.emit('auth:login' as any, { userId: 'wal-1' } as any);
     await new Promise(r => setTimeout(r, 30));
     await bus.shutdown();
@@ -953,9 +951,7 @@ describe('createBullMQAdapter — WAL', () => {
     // First adapter: buffer an event.
     const bus1 = createBullMQAdapter({ connection: {}, walPath });
     bus1.on('auth:login' as any, async () => {}, { durable: true, name: 'wal-replay' });
-    fakeBullMQState.nextAddError(
-      Object.assign(new Error('Redis down'), { code: 'ECONNREFUSED' }),
-    );
+    fakeBullMQState.nextAddError(Object.assign(new Error('Redis down'), { code: 'ECONNREFUSED' }));
     bus1.emit('auth:login' as any, { userId: 'replayed' } as any);
     await new Promise(r => setTimeout(r, 30));
     expect(bus1.getHealthDetails().pendingBufferSize).toBe(1);

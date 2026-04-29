@@ -7,17 +7,17 @@ routes, and managing adapter startup/shutdown.
 
 ## Key Files
 
-| File               | What                                                                        |
-| ------------------ | --------------------------------------------------------------------------- |
-| src/index.ts       | Public API surface: plugin factory, context helpers, event sink, validation |
-| src/plugin.ts      | `createOrchestrationPlugin()` factory with route mounting and lifecycle     |
-| src/context.ts     | `getOrchestration()`, `getOrchestrationOrNull()`, plugin-state key          |
-| src/routes.ts      | `createOrchestrationRouter()` Hono router with task/workflow/run endpoints  |
-| src/eventSink.ts   | `createSlingshotEventSink()` bridges orchestration events onto the bus      |
-| src/events.ts      | Module augmentation merging `OrchestrationEventMap` into `SlingshotEventMap`|
-| src/types.ts       | Plugin option types, request context, and run authorizer contracts          |
-| src/validation.ts  | `orchestrationPluginConfigSchema` for manifest-mode configuration           |
-| docs/human/index.md| Package guide synced into the docs site                                     |
+| File                | What                                                                         |
+| ------------------- | ---------------------------------------------------------------------------- |
+| src/index.ts        | Public API surface: plugin factory, context helpers, event sink, validation  |
+| src/plugin.ts       | `createOrchestrationPlugin()` factory with route mounting and lifecycle      |
+| src/context.ts      | `getOrchestration()`, `getOrchestrationOrNull()`, plugin-state key           |
+| src/routes.ts       | `createOrchestrationRouter()` Hono router with task/workflow/run endpoints   |
+| src/eventSink.ts    | `createSlingshotEventSink()` bridges orchestration events onto the bus       |
+| src/events.ts       | Module augmentation merging `OrchestrationEventMap` into `SlingshotEventMap` |
+| src/types.ts        | Plugin option types, request context, and run authorizer contracts           |
+| src/validation.ts   | `orchestrationPluginConfigSchema` for manifest-mode configuration            |
+| docs/human/index.md | Package guide synced into the docs site                                      |
 
 ## Connections
 

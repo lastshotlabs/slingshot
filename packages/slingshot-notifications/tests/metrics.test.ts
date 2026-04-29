@@ -15,7 +15,11 @@ import { DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS } from '../src/preferences';
 import { createNoopRateLimitBackend } from '../src/rateLimit';
 import { createNotificationsTestAdapters, createNotificationsTestEvents } from '../src/testing';
 
-function findCounter(metrics: InProcessMetricsEmitter, name: string, labels?: Record<string, string>) {
+function findCounter(
+  metrics: InProcessMetricsEmitter,
+  name: string,
+  labels?: Record<string, string>,
+) {
   const snap = metrics.snapshot();
   return snap.counters.find(c => {
     if (c.name !== name) return false;
@@ -71,7 +75,9 @@ describe('notifications dispatcher — metrics', () => {
     const dispatched = await dispatcher.tick();
     expect(dispatched).toBe(2);
 
-    const successCount = findCounter(metrics, 'notifications.dispatch.count', { result: 'success' });
+    const successCount = findCounter(metrics, 'notifications.dispatch.count', {
+      result: 'success',
+    });
     expect(successCount?.value).toBe(2);
 
     const pending = findGauge(metrics, 'notifications.pending.size');
@@ -127,7 +133,9 @@ describe('notifications dispatcher — metrics', () => {
 
     await dispatcher.tick();
 
-    const failureCount = findCounter(metrics, 'notifications.dispatch.count', { result: 'failure' });
+    const failureCount = findCounter(metrics, 'notifications.dispatch.count', {
+      result: 'failure',
+    });
     expect(failureCount?.value).toBe(1);
 
     // Retries are labelled by attempt number — at minimum the second-attempt

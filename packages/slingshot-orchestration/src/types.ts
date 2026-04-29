@@ -370,7 +370,7 @@ export interface CoreOrchestrationAdapter {
   runTask(name: string, input: unknown, opts?: RunOptions): Promise<RunHandle>;
   runWorkflow(name: string, input: unknown, opts?: RunOptions): Promise<RunHandle>;
   getRun(runId: string): Promise<Run | WorkflowRun | null>;
-  cancelRun(runId: string): Promise<CancelOutcome | void>;
+  cancelRun(runId: string): Promise<CancelOutcome | undefined>;
   start(): Promise<void>;
   shutdown(): Promise<void>;
 }
@@ -441,6 +441,7 @@ export interface OrchestrationEventMap {
     task: string;
     error: RunError;
     tenantId?: string;
+    permanent?: boolean;
   };
   'orchestration.workflow.started': {
     runId: string;
@@ -496,6 +497,13 @@ export interface OrchestrationEventMap {
     error: RunError;
     tenantId?: string;
   };
+  'orchestration.bullmq.snapshotMalformed': {
+    runId: string;
+    malformedKey: string;
+    error: {
+      message: string;
+    };
+  };
 }
 
 /**
@@ -533,7 +541,7 @@ export interface OrchestrationRuntime {
   runWorkflow(name: string, input: unknown, opts?: RunOptions): Promise<RunHandle>;
 
   getRun(runId: string): Promise<Run | WorkflowRun | null>;
-  cancelRun(runId: string): Promise<CancelOutcome | void>;
+  cancelRun(runId: string): Promise<CancelOutcome | undefined>;
   supports(capability: OrchestrationCapability): boolean;
   signal(runId: string, name: string, payload?: unknown): Promise<void>;
   schedule(

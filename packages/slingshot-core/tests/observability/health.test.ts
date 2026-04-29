@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type {
-  HealthCheck,
-  HealthReport,
-  HealthState,
-} from '../../src/observability/health';
+import type { HealthCheck, HealthReport, HealthState } from '../../src/observability/health';
 
 describe('HealthCheck contract', () => {
   test('a minimal implementation satisfies the type and returns the cached state', () => {

@@ -47,7 +47,10 @@ function makeAsset(overrides: Partial<Asset> = {}): Asset {
 
 function makeAssetAdapter(asset: Asset | null): AssetAdapter {
   return {
-    create: mock(async input => ({ ...makeAsset({ id: String(input.id ?? 'asset-new') }), ...input })),
+    create: mock(async input => ({
+      ...makeAsset({ id: String(input.id ?? 'asset-new') }),
+      ...input,
+    })),
     getById: mock(async () => asset),
     list: mock(async () => ({ items: asset ? [asset] : [], hasMore: false })),
     update: mock(async () => asset),

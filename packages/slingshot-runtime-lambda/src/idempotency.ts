@@ -155,10 +155,7 @@ export async function invokeWithRecordIdempotency<T>(
           );
         } catch (err) {
           // Buggy hook must NOT bypass the safety check — fall back to reject.
-          console.error(
-            '[lambda] onIdempotencyConflict hook threw; falling back to reject:',
-            err,
-          );
+          console.error('[lambda] onIdempotencyConflict hook threw; falling back to reject:', err);
           resolution = 'reject';
         }
       }

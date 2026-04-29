@@ -8,12 +8,7 @@ import { createMailCircuitBreaker } from '../lib/circuitBreaker';
 import type { MailCircuitBreakerOptions } from '../lib/circuitBreaker';
 import { assertSafeMailHeaders, ensureSafe, formatSafeAddress } from '../lib/headerSanitize';
 import { extractRetryAfterHeader, parseRetryAfterMs } from '../lib/retryAfter';
-import type {
-  MailMessage,
-  MailProvider,
-  MailSendOptions,
-  SendResult,
-} from '../types/provider';
+import type { MailMessage, MailProvider, MailSendOptions, SendResult } from '../types/provider';
 import { MailSendError } from '../types/provider';
 
 interface SesConfig {
@@ -140,7 +135,10 @@ export function createSesProvider(config: SesConfig): MailProvider {
         const timer =
           providerTimeoutMs > 0
             ? setTimeout(
-                () => controller.abort(new Error(`ses provider timed out after ${providerTimeoutMs}ms`)),
+                () =>
+                  controller.abort(
+                    new Error(`ses provider timed out after ${providerTimeoutMs}ms`),
+                  ),
                 providerTimeoutMs,
               )
             : undefined;
@@ -151,10 +149,7 @@ export function createSesProvider(config: SesConfig): MailProvider {
           return { status: 'sent', messageId: result.MessageId, raw: result };
         } catch (err) {
           if (controller.signal.aborted && !callerSignal?.aborted) {
-            throw new MailSendError(
-              `SES provider timed out after ${providerTimeoutMs}ms`,
-              true,
-            );
+            throw new MailSendError(`SES provider timed out after ${providerTimeoutMs}ms`, true);
           }
           const e = err as {
             $metadata?: { httpStatusCode?: number };

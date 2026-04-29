@@ -86,6 +86,10 @@ The highest-leverage decisions are usually:
 
 - In production mode, startup fails if `assetsManifest` cannot be read or parsed. That is expected
   and should remain fail-closed.
+- `serverRoutesDir` and `serverActionsDir` must be absolute paths. Relative paths are rejected at
+  config validation time so route resolution is reproducible across runtime hosts (Bun / Node /
+  Lambda / Edge). Resolve via `path.resolve(import.meta.dir, ...)` or `path.join(process.cwd(), ...)`
+  before passing them in.
 - `renderChain()` is required for layouts. If the renderer only implements `render()`, nested layout
   routing will not behave correctly.
 - When `pages` and ISR are both enabled, the plugin subscribes to CRUD events for referenced

@@ -123,10 +123,10 @@ export function createLambdaRuntime(
   // before running onShutdown.
   const inflight = new Set<Promise<unknown>>();
   const streamingRequested = (config as LambdaRuntimeOptions).streamingHandler === true;
+  const configuredShutdownDrainMs = (config as LambdaRuntimeOptions).shutdownDrainMs;
   const shutdownDrainMs =
-    typeof (config as LambdaRuntimeOptions).shutdownDrainMs === 'number' &&
-    (config as LambdaRuntimeOptions).shutdownDrainMs! >= 0
-      ? (config as LambdaRuntimeOptions).shutdownDrainMs!
+    typeof configuredShutdownDrainMs === 'number' && configuredShutdownDrainMs >= 0
+      ? configuredShutdownDrainMs
       : DEFAULT_SHUTDOWN_DRAIN_MS;
   // Resolve once at construction time. Logging here makes the deploy-time
   // fallback visible in CloudWatch even before the first invocation.
@@ -216,7 +216,9 @@ export function createLambdaRuntime(
     return cached;
   }
 
-  return {
+  const runtime: LambdaRuntime & {
+    _internals: { coldStart: boolean; bootstrapError: boolean; inflightCount: number };
+  } = {
     wrap(handler, trigger, opts) {
       // Eager trigger validation — surfaces misconfiguration at module init,
       // not on the first invoke. resolveLambdaTrigger throws on unknown kinds.
@@ -290,9 +292,8 @@ export function createLambdaRuntime(
         return inflight.size;
       },
     },
-  } as LambdaRuntime & {
-    _internals: { coldStart: boolean; bootstrapError: boolean; inflightCount: number };
   };
+  return runtime;
 }
 
 export type { LambdaTriggerKind } from './triggers';

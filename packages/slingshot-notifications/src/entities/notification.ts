@@ -66,13 +66,13 @@ function parseRowData(
 // Test-only hook: reset the throttle so suite ordering does not affect the
 // "warning emitted once" assertion. Exported via the package's testing surface
 // to keep production callers from depending on it.
-export function __resetNotificationDataParseWarnThrottleForTests(): void {
+export function resetNotificationDataParseWarnThrottleForTests(): void {
   lastParseWarnAt = 0;
 }
 
 // Test-only re-export of `parseRowData`. Production callers should not import
-// this — the `__` prefix marks it as internal.
-export const __parseNotificationRowDataForTests = parseRowData;
+// this internal test helper from application code.
+export const parseNotificationRowDataForTests = parseRowData;
 
 function extractMemoryRow(value: Record<string, unknown>): Record<string, unknown> {
   const nested = value['record'];

@@ -62,10 +62,7 @@ function closeWs(ws: WsClient): Promise<void> {
   });
 }
 
-async function expectNoMessage(
-  nextMessage: () => Promise<string>,
-  ms = 300,
-): Promise<void> {
+async function expectNoMessage(nextMessage: () => Promise<string>, ms = 300): Promise<void> {
   const result = await Promise.race([
     nextMessage().then(() => 'received' as const),
     new Promise<'nothing'>(r => setTimeout(() => r('nothing'), ms)),

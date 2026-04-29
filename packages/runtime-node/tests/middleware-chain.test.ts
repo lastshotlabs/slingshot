@@ -12,7 +12,7 @@ describe('runtime-node server — request handling edge cases', () => {
       const server = await runtime.server.listen({
         port: 0,
         maxRequestBodySize: 100,
-        fetch: async (req) => {
+        fetch: async req => {
           const text = await req.text();
           return new Response(`received ${text.length} bytes`);
         },
@@ -36,7 +36,7 @@ describe('runtime-node server — request handling edge cases', () => {
       const server = await runtime.server.listen({
         port: 0,
         maxRequestBodySize: 100,
-        fetch: async (req) => {
+        fetch: async req => {
           const text = await req.text();
           return new Response(`received ${text.length} bytes`);
         },
@@ -85,7 +85,7 @@ describe('runtime-node server — request handling edge cases', () => {
         fetch: () => {
           throw new Error('handler-boom');
         },
-        error: (err) => {
+        error: err => {
           errors.push(err);
           return new Response('error-handled', { status: 500 });
         },
@@ -110,7 +110,7 @@ describe('runtime-node server — request handling edge cases', () => {
         fetch: async () => {
           throw new Error('async-boom');
         },
-        error: (err) => {
+        error: err => {
           errors.push(err);
           return new Response('async-caught', { status: 502 });
         },
@@ -154,7 +154,7 @@ describe('runtime-node server — request handling edge cases', () => {
       const runtime = nodeRuntime();
       const server = await runtime.server.listen({
         port: 0,
-        fetch: (req) => {
+        fetch: req => {
           return new Response(`method:${req.method}`);
         },
       });
@@ -175,7 +175,7 @@ describe('runtime-node server — request handling edge cases', () => {
       const runtime = nodeRuntime();
       const server = await runtime.server.listen({
         port: 0,
-        fetch: (req) => {
+        fetch: req => {
           const url = new URL(req.url);
           return new Response(`path:${url.pathname} query:${url.searchParams.get('q')}`);
         },
@@ -193,7 +193,7 @@ describe('runtime-node server — request handling edge cases', () => {
       const runtime = nodeRuntime();
       const server = await runtime.server.listen({
         port: 0,
-        fetch: async (req) => {
+        fetch: async req => {
           const body = await req.text();
           return new Response(`body:${body}`);
         },

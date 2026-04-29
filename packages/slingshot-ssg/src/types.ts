@@ -6,6 +6,58 @@ import type { Logger } from '@lastshotlabs/slingshot-core';
 export type { SsgStaticPathsFn } from '@lastshotlabs/slingshot-ssr';
 
 /**
+ * Retry configuration for transient render failures.
+ *
+ * When a page render fails with a transient error (timeout, renderer throws),
+ * the SSG renderer retries up to `maxAttempts` times with exponential backoff
+ * and jitter before recording the page as failed.
+ *
+ * @example
+ * ```ts
+ * { maxAttempts: 5, baseDelayMs: 500, maxDelayMs: 10_000 }
+ * ```
+ */
+export interface RetryConfig {
+  /**
+   * Maximum number of render attempts per page, including the initial attempt.
+   * Must be at least 1. Default: 3.
+   */
+  readonly maxAttempts?: number;
+  /**
+   * Base delay in milliseconds for exponential backoff.
+   * Each retry waits `baseDelayMs * 2^(attempt-1)` with ±25% jitter.
+   * Default: 1000.
+   */
+  readonly baseDelayMs?: number;
+  /**
+   * Maximum delay in milliseconds for exponential backoff.
+   * The computed delay is clamped to this value. Default: 30000.
+   */
+  readonly maxDelayMs?: number;
+}
+
+/**
+ * Circuit breaker configuration for external HTTP fetches during rendering.
+ *
+ * When the circuit breaker trips (consecutive failures reach `threshold`),
+ * subsequent render attempts fail fast without invoking the renderer, allowing
+ * the build to avoid hammering a degraded upstream service. After `cooldownMs`,
+ * the breaker transitions to half-open and allows a single probe request.
+ */
+export interface CircuitBreakerConfig {
+  /**
+   * Number of consecutive render failures required to trip the breaker.
+   * Default: 5.
+   */
+  readonly threshold?: number;
+  /**
+   * Cooldown duration in milliseconds before the breaker transitions to
+   * half-open and allows a probe request. Default: 30000.
+   */
+  readonly cooldownMs?: number;
+}
+
+/**
  * Configuration for the SSG crawler and renderer.
  *
  * All paths must be absolute. Relative paths will produce incorrect output.
@@ -70,6 +122,16 @@ export interface SsgConfig {
    * errors). Omit to default to a noop logger.
    */
   readonly logger?: Logger;
+  /**
+   * Retry configuration for transient render failures.
+   * When omitted, retry uses defaults (3 attempts, 1s base delay, 30s max).
+   */
+  readonly retry?: RetryConfig;
+  /**
+   * Circuit breaker configuration for external HTTP fetches during rendering.
+   * When omitted, no circuit breaker is active.
+   */
+  readonly circuitBreaker?: CircuitBreakerConfig;
 }
 
 /**

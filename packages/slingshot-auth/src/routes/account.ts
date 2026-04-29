@@ -5,7 +5,11 @@ import { checkPasswordNotReused, recordPasswordChange } from '@auth/lib/password
 import { getSuspended } from '@auth/lib/suspension';
 import { clearCsrfToken } from '@auth/middleware/csrf';
 import { userAuth } from '@auth/middleware/userAuth';
-import { PasswordUpdateResponse, verificationSchema } from '@auth/schemas/auth';
+import {
+  PasswordUpdateResponse,
+  createPasswordSchema,
+  verificationSchema,
+} from '@auth/schemas/auth';
 import { ErrorResponse } from '@auth/schemas/error';
 import { SuccessResponse } from '@auth/schemas/success';
 import * as AuthService from '@auth/services/auth';
@@ -480,20 +484,6 @@ export const createAccountRouter = (
               gracePeriodSeconds: accountDeletion.gracePeriod ?? 0,
             });
           }
-        } else {
-          // No grace period — deletion is immediate via the queue (delay=0).
-          // Emit the same events as the synchronous path so listeners are notified.
-          eventBus.emit('security.auth.account.deleted', { userId: userId });
-          publishAuthEvent(
-            runtime.events,
-            'auth:user.deleted',
-            { userId: userId },
-            {
-              userId: userId,
-              actorId: userId,
-              requestTenantId: getRequestTenantId(c),
-            },
-          );
         }
 
         clearAuthCookie(c, COOKIE_TOKEN, isProd(), runtime.config);
@@ -561,7 +551,9 @@ export const createAccountRouter = (
             content: {
               'application/json': {
                 schema: z.object({
-                  password: z.string().min(8).describe('New password.'),
+                  password: createPasswordSchema(runtime.config.passwordPolicy)
+                    .max(128)
+                    .describe('New password.'),
                   currentPassword: z
                     .string()
                     .optional()

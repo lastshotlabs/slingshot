@@ -199,7 +199,9 @@ describe('websocket-wrapping', () => {
       await lifecycle.open({ data: {} });
       await lifecycle.close({ data: {} }, 1001, 'Server shutting down');
 
-      expect(errors.some(e => e.phase === 'close' && e.message === 'close-deferred-test')).toBe(true);
+      expect(errors.some(e => e.phase === 'close' && e.message === 'close-deferred-test')).toBe(
+        true,
+      );
     } finally {
       configureRuntimeBunLogger(prev);
       lifecycle.restore();

@@ -60,6 +60,7 @@ export { createNotificationBuilder } from './builder';
  */
 export type {
   CreateIntervalDispatcherOptions,
+  DeadLetterEvent,
   DispatcherAdapter,
   DispatcherBreakerOptions,
   DispatcherRetryOptions,
@@ -71,7 +72,13 @@ export { createIntervalDispatcher } from './dispatcher';
 /**
  * Notification data size guard and helper for freezing payload data.
  */
-export { NotificationDataTooLargeError, freezeNotificationData } from './data';
+export {
+  NotificationDataTooLargeError,
+  NotificationDeliveryError,
+  NotificationDispatchTimeoutError,
+  NotificationRateLimitExceededError,
+  freezeNotificationData,
+} from './errors';
 /**
  * Preference resolution helpers for delivery channels, priorities, and quiet hours.
  */

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
 import type { AuthRateLimitConfig } from '@lastshotlabs/slingshot-auth';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
@@ -18,6 +19,11 @@ export type OAuthPluginOptions = {
    */
   postRedirect?: string;
   /**
+   * Absolute URL origins or exact absolute URLs allowed for `postRedirect`.
+   * Relative paths are always allowed. When omitted, absolute redirects are rejected.
+   */
+  allowedRedirectUrls?: string[];
+  /**
    * Rate-limit overrides for OAuth-specific endpoints (e.g. the unlink route).
    * Falls back to sensible built-in defaults when not provided.
    *
@@ -31,6 +37,68 @@ export type OAuthPluginOptions = {
    */
   rateLimit?: AuthRateLimitConfig;
 };
+
+const absoluteHttpUrlSchema = z
+  .string()
+  .url()
+  .refine(value => {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  }, 'Expected an absolute HTTP(S) URL');
+
+const redirectTargetSchema = z
+  .string()
+  .min(1)
+  .refine(value => {
+    if (value.startsWith('/') && !value.startsWith('//')) return true;
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' || url.protocol === 'http:';
+    } catch {
+      return false;
+    }
+  }, 'Expected a relative path or absolute HTTP(S) URL');
+
+export const oauthPluginConfigSchema = z
+  .object({
+    postRedirect: redirectTargetSchema.optional(),
+    allowedRedirectUrls: z.array(absoluteHttpUrlSchema).optional(),
+    rateLimit: z.custom<AuthRateLimitConfig>(v => v == null || typeof v === 'object').optional(),
+  })
+  .loose();
+
+function isRelativeRedirect(value: string): boolean {
+  return value.startsWith('/') && !value.startsWith('//');
+}
+
+function isAllowedAbsoluteRedirect(value: string, allowedRedirectUrls: readonly string[]): boolean {
+  const target = new URL(value);
+  return allowedRedirectUrls.some(entry => {
+    const allowed = new URL(entry);
+    if (allowed.origin !== target.origin) return false;
+    const allowedIsOriginOnly = allowed.pathname === '/' && !allowed.search && !allowed.hash;
+    if (allowedIsOriginOnly) return true;
+    return allowed.href === target.href;
+  });
+}
+
+function validatePostRedirect(postRedirect: string, allowedRedirectUrls: readonly string[]): void {
+  const parsed = redirectTargetSchema.safeParse(postRedirect);
+  if (!parsed.success) {
+    throw new Error(`[slingshot-oauth] Invalid postRedirect: ${parsed.error.issues[0]?.message}`);
+  }
+  if (isRelativeRedirect(postRedirect)) return;
+  if (allowedRedirectUrls.length === 0) {
+    throw new Error(
+      '[slingshot-oauth] Absolute postRedirect values require allowedRedirectUrls to be configured.',
+    );
+  }
+  if (!isAllowedAbsoluteRedirect(postRedirect, allowedRedirectUrls)) {
+    throw new Error(
+      `[slingshot-oauth] postRedirect '${postRedirect}' is not allowed by allowedRedirectUrls.`,
+    );
+  }
+}
 
 /**
  * Creates the Slingshot social OAuth login plugin.
@@ -78,6 +146,8 @@ export type OAuthPluginOptions = {
  * ```
  */
 export function createOAuthPlugin(options?: OAuthPluginOptions): SlingshotPlugin {
+  const resolvedOptions = oauthPluginConfigSchema.parse(options ?? {}) as OAuthPluginOptions;
+
   emitPackageStabilityWarning(
     '@lastshotlabs/slingshot-oauth',
     'experimental',
@@ -93,14 +163,17 @@ export function createOAuthPlugin(options?: OAuthPluginOptions): SlingshotPlugin
       const providers = Object.keys(runtime.oauth.providers);
       if (providers.length === 0) return;
 
-      const postRedirect = options?.postRedirect ?? '/';
+      const postRedirect = resolvedOptions.postRedirect ?? runtime.config.oauthPostRedirect ?? '/';
+      const allowedRedirectUrls =
+        resolvedOptions.allowedRedirectUrls ?? runtime.config.oauthAllowedRedirectUrls;
+      validatePostRedirect(postRedirect, allowedRedirectUrls);
       app.route(
         '/',
         createOAuthRouter(
           providers,
           postRedirect,
           runtime,
-          options?.rateLimit ?? runtime.config.rateLimit,
+          resolvedOptions.rateLimit ?? runtime.config.rateLimit,
         ),
       );
     },

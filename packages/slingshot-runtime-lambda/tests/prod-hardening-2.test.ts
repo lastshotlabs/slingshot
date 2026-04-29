@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import type { SlingshotContext, SlingshotHandler } from '@lastshotlabs/slingshot-core';
-import { createDefaultIdentityResolver, HandlerError } from '@lastshotlabs/slingshot-core';
+import { HandlerError, createDefaultIdentityResolver } from '@lastshotlabs/slingshot-core';
 
 // ---------------------------------------------------------------------------
 // Bootstrap mock
@@ -118,6 +118,10 @@ function apigwEvent(body: unknown, requestId = 'req') {
   };
 }
 
+function lambdaContext(awsRequestId = 'req') {
+  return { awsRequestId };
+}
+
 function parseBody(resp: Record<string, unknown>): unknown {
   return JSON.parse(resp.body as string);
 }
@@ -147,7 +151,7 @@ describe('Lambda runtime — handler timeout', () => {
 
     // Use apigw-v2 so the timeout error surfaces as a structured 504 response
     const wrapped = runtime.wrap(handler, 'apigw-v2');
-    const resp = await wrapped(apigwEvent({}), 'timeout-req');
+    const resp = await wrapped(apigwEvent({}), lambdaContext('timeout-req'));
     expect((resp as Record<string, unknown>).statusCode).toBe(504);
     const body = parseBody(resp as Record<string, unknown>);
     expect(body).toMatchObject({ code: 'handler-timeout' });
@@ -162,7 +166,7 @@ describe('Lambda runtime — handler timeout', () => {
 
     const handler = createHandler(async () => ({ ok: true, value: 42 }));
     const wrapped = runtime.wrap(handler, 'apigw-v2');
-    const resp = await wrapped(apigwEvent({}), 'fast-req');
+    const resp = await wrapped(apigwEvent({}), lambdaContext('fast-req'));
     expect((resp as Record<string, unknown>).statusCode).toBe(200);
     expect(parseBody(resp as Record<string, unknown>)).toEqual({ ok: true, value: 42 });
   });
@@ -182,7 +186,7 @@ describe('Lambda runtime — handler timeout', () => {
     });
 
     const wrapped = runtime.wrap(handler, 'apigw-v2');
-    const resp = await wrapped(apigwEvent({}), 'no-timeout');
+    const resp = await wrapped(apigwEvent({}), lambdaContext('no-timeout'));
     expect((resp as Record<string, unknown>).statusCode).toBe(200);
     expect(resolved).toBe(true);
   });
@@ -199,7 +203,7 @@ describe('Lambda runtime — handler timeout', () => {
     });
 
     const wrapped = runtime.wrap(handler, 'apigw-v2');
-    await wrapped(apigwEvent({}), 'no-timeout');
+    await wrapped(apigwEvent({}), lambdaContext('no-timeout'));
     expect(resolved).toBe(true);
   });
 
@@ -218,7 +222,7 @@ describe('Lambda runtime — handler timeout', () => {
     });
 
     const wrapped = runtime.wrap(handler, 'apigw-v2');
-    await wrapped(apigwEvent({}), 'neg-timeout');
+    await wrapped(apigwEvent({}), lambdaContext('neg-timeout'));
     expect(resolved).toBe(true);
   });
 
@@ -237,13 +241,15 @@ describe('Lambda runtime — handler timeout', () => {
     const wrapped = runtime.wrap(handler, 'apigw-v2');
 
     // Cold invocation — times out
-    const coldResp = await wrapped(apigwEvent({}), 'cold');
+    const coldResp = await wrapped(apigwEvent({}), lambdaContext('cold'));
     expect((coldResp as Record<string, unknown>).statusCode).toBe(504);
 
     // Warm invocation — must also time out (timeout is not cached)
-    const warmResp = await wrapped(apigwEvent({}), 'warm');
+    const warmResp = await wrapped(apigwEvent({}), lambdaContext('warm'));
     expect((warmResp as Record<string, unknown>).statusCode).toBe(504);
-    expect(parseBody(warmResp as Record<string, unknown>)).toMatchObject({ code: 'handler-timeout' });
+    expect(parseBody(warmResp as Record<string, unknown>)).toMatchObject({
+      code: 'handler-timeout',
+    });
   });
 });
 
@@ -269,8 +275,8 @@ describe('Lambda runtime — concurrent invocation isolation', () => {
 
     const wrapped = runtime.wrap(handler, 'apigw-v2');
     const [r1, r2] = await Promise.all([
-      wrapped(apigwEvent({ id: 1 }, 'c1')),
-      wrapped(apigwEvent({ id: 2 }, 'c2')),
+      wrapped(apigwEvent({ id: 1 }, 'c1'), lambdaContext('c1')),
+      wrapped(apigwEvent({ id: 2 }, 'c2'), lambdaContext('c2')),
     ]);
 
     expect((r1 as Record<string, unknown>).statusCode).toBe(200);
@@ -292,16 +298,14 @@ describe('Lambda runtime — concurrent invocation isolation', () => {
     const okWrapped = runtime.wrap(okHandler, 'apigw-v2');
 
     const results = await Promise.allSettled([
-      failWrapped(apigwEvent({}, 'r1')),
-      okWrapped(apigwEvent({}, 'r2')),
+      failWrapped(apigwEvent({}, 'r1'), lambdaContext('r1')),
+      okWrapped(apigwEvent({}, 'r2'), lambdaContext('r2')),
     ]);
 
     // Both apigw-v2 invocations resolve (errors encoded as 500 responses)
     expect(results.every(r => r.status === 'fulfilled')).toBe(true);
 
-    const values = results.map(
-      r => (r as PromiseFulfilledResult<Record<string, unknown>>).value,
-    );
+    const values = results.map(r => (r as PromiseFulfilledResult<Record<string, unknown>>).value);
     const statusCodes = values.map(v => v.statusCode);
     expect(statusCodes).toContain(200);
     expect(statusCodes).toContain(500);
@@ -377,8 +381,8 @@ describe('Lambda runtime — concurrent invocation isolation', () => {
     const wrapped = runtime.wrap(handler, 'apigw-v2');
 
     const results = await Promise.allSettled([
-      wrapped(apigwEvent({}, 'r1')),
-      wrapped(apigwEvent({}, 'r2')),
+      wrapped(apigwEvent({}, 'r1'), lambdaContext('r1')),
+      wrapped(apigwEvent({}, 'r2'), lambdaContext('r2')),
     ]);
 
     expect(results.every(r => r.status === 'fulfilled')).toBe(true);
@@ -389,7 +393,7 @@ describe('Lambda runtime — concurrent invocation isolation', () => {
     // A subsequent invocation with a clean handler should work
     const okHandler = createHandler(async () => ({ recovered: true }));
     const okWrapped = runtime.wrap(okHandler, 'apigw-v2');
-    const resp = await okWrapped(apigwEvent({}, 'recovery'));
+    const resp = await okWrapped(apigwEvent({}, 'recovery'), lambdaContext('recovery'));
     expect((resp as Record<string, unknown>).statusCode).toBe(200);
     expect(parseBody(resp as Record<string, unknown>)).toEqual({ recovered: true });
   });

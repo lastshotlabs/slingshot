@@ -1,0 +1,194 @@
+---
+title: Production Readiness
+description: Preflight checks and release gates for Slingshot production deployments.
+---
+
+import { Aside, CardGrid, LinkCard, Steps } from '@astrojs/starlight/components';
+
+Use the production readiness preflight before every production push. It validates the
+production config without starting the app, then returns blocking errors and review
+warnings for security, storage, observability, runtime, and realtime scaling.
+
+```typescript title="scripts/prod-readiness.ts"
+import { type CreateServerConfig, assertProductionReadiness } from '@lastshotlabs/slingshot';
+
+const config: CreateServerConfig = {
+  port: Number(process.env.PORT ?? 3000),
+  hostname: '0.0.0.0',
+  maxRequestBodySize: 1024 * 1024,
+  security: {
+    cors: { origin: ['https://app.example.com'], credentials: true },
+    csrf: { enabled: true, exemptPaths: ['/webhooks/*'] },
+    trustProxy: 1,
+    signing: {
+      secret: process.env.SIGNING_SECRET,
+      cookies: true,
+      sessionBinding: { fields: ['ip', 'ua'], onMismatch: 'reject' },
+    },
+    rateLimit: { windowMs: 60_000, max: 200, store: 'redis' },
+  },
+  db: {
+    postgres: process.env.DATABASE_URL,
+    postgresMigrations: 'assume-ready',
+    postgresPool: {
+      connectionTimeoutMs: 2_000,
+      queryTimeoutMs: 5_000,
+      statementTimeoutMs: 5_000,
+    },
+    redis: process.env.REDIS_URL,
+    sessions: 'postgres',
+    oauthState: 'postgres',
+    cache: 'postgres',
+    auth: 'postgres',
+    mongo: false,
+  },
+  metrics: { enabled: true, auth: 'userAuth' },
+};
+
+assertProductionReadiness(config, {
+  nodeEnv: 'production',
+  multiInstance: true,
+});
+```
+
+```json title="package.json"
+{
+  "scripts": {
+    "preflight:prod": "NODE_ENV=production bun scripts/prod-readiness.ts"
+  }
+}
+```
+
+## How to read results
+
+`assertProductionReadiness()` throws when any `error` finding is present. Use it in CI
+or before `createServer(config)` in an environment-specific boot script.
+
+`auditProductionReadiness()` returns a report when you want to print findings or fail
+on custom policy:
+
+```typescript
+import { auditProductionReadiness } from '@lastshotlabs/slingshot';
+import type { CreateServerConfig } from '@lastshotlabs/slingshot';
+
+declare const config: CreateServerConfig;
+
+const report = auditProductionReadiness(config, { nodeEnv: 'production' });
+
+for (const finding of report.findings) {
+  console.log(`${finding.severity}: ${finding.id} - ${finding.message}`);
+}
+
+if (!report.ok) process.exit(1);
+```
+
+<Aside type="tip">
+  Pass `multiInstance: false` only for an intentionally single-process production deployment. The
+  default is `true` so WebSocket, SSE, rate-limit, and memory-store findings assume horizontal
+  scaling.
+</Aside>
+
+## Required gates
+
+<Steps>
+
+1. Run `bun audit --json` and resolve every advisory that affects the production path.
+2. Run `bun run hardening:full`. This is the publish gate and includes lint,
+   format check, typecheck, build, unit/package/node tests, dependency rules,
+   Docker tests, E2E tests, coverage gates, docs CI, and example smoke coverage.
+3. Run `NODE_ENV=production bun scripts/prod-readiness.ts` against the exact
+   config and secret shape used by the target environment.
+4. Confirm Docker or platform health checks hit `/health` for liveness and
+   `/health/ready` for readiness.
+5. Confirm the operational runbook covers rollback, migration ownership, secret
+   rotation, backup restore, and incident contact paths.
+   </Steps>
+
+## Security
+
+Blocking findings include wildcard production CORS, missing explicit
+`security.trustProxy`, missing or short signing secrets for enabled signing features,
+public metrics/jobs endpoints, and auth deployments without an explicit session
+binding decision.
+
+Use exact CORS origins in production. If browser clients send cookies, enable CSRF
+for auth routes and keep webhook paths in `security.csrf.exemptPaths`.
+
+Auth production boot also enforces auth-specific controls, including JWT issuer and
+audience and explicit session binding. Treat those boot errors as release blockers,
+not warnings.
+
+## Storage and Postgres
+
+Production stores must not resolve to memory for sessions or auth. Prefer Postgres
+for durable auth/session state and Redis for cross-instance ephemeral coordination
+when a package requires it.
+
+For Postgres-backed production:
+
+- Set `db.postgres` from the production secret provider.
+- Set `db.postgresMigrations` explicitly. Use `assume-ready` when migrations are
+  owned by CI or a deploy job. Use `apply` only when the app process is allowed to
+  run startup DDL.
+- Set bounded pool timeouts: `connectionTimeoutMs`, `queryTimeoutMs`, and
+  `statementTimeoutMs`.
+- Wire `/health/ready` into platform readiness checks. Slingshot reports Postgres
+  readiness through the built-in route when Postgres health checks are available.
+
+## Runtime Reliability
+
+Set `NODE_ENV=production`, bind containers to `0.0.0.0`, and configure
+`maxRequestBodySize` or upload limits. Keep request logging enabled unless another
+middleware or proxy emits equivalent structured request logs.
+
+Use `/health` for liveness and `/health/ready` for readiness. Liveness should stay
+dependency-free. Readiness can fail during database failover so the instance drains
+from the load balancer without being killed.
+
+## Feature Readiness
+
+<CardGrid>
+  <LinkCard
+    title="Permissions"
+    href="/slingshot/guides/permissions/"
+    description="Use a durable adapter, seed grants deterministically, and test tenant/resource boundaries."
+  />
+  <LinkCard
+    title="Jobs and Orchestration"
+    href="/slingshot/orchestration/overview/"
+    description="Run workers separately, use durable queues/providers, and protect status endpoints."
+  />
+  <LinkCard
+    title="Webhooks"
+    href="/slingshot/guides/webhook-governance/"
+    description="Encrypt secrets, sign payloads, configure retries, and verify dead-letter handling."
+  />
+  <LinkCard
+    title="Realtime"
+    href="/slingshot/guides/horizontal-scaling/"
+    description="Use a cross-instance WebSocket transport and shared event bus before scaling horizontally."
+  />
+</CardGrid>
+
+For Kafka, use TLS/SASL in production, pin consumer groups, disable topic
+auto-creation when the broker policy requires pre-provisioned topics, and test
+restart/rebalance behavior. For BullMQ, use Redis TLS where available and keep
+workers, schedulers, and queues observable. For Temporal, deploy workers as their
+own process type and treat workflow/activity registration changes as release
+changes.
+
+## DX and Authoring
+
+Production authoring should be reproducible:
+
+- Keep the app config in code or manifest form, not manual environment notes.
+- Commit generated package surfaces and API docs only when the repo workflow expects
+  them.
+- Add focused tests for every production package path you enable: unit tests for
+  config validation, integration tests for storage adapters, E2E tests for user
+  flows, and Docker tests for Postgres/Redis/Kafka dependencies.
+- Link runbooks from the service README so deployers can find migrations, rollback,
+  and secret rotation steps without reading source.
+
+The preflight does not replace `hardening:full`; it catches environment-specific
+config risks that static tests cannot know.

@@ -22,7 +22,7 @@ export function deriveTemporalRunId(options: {
     .update('\0')
     .update(options.name)
     .update('\0')
-    .update(options.tenantId ?? '')
+    .update(options.tenantId === undefined ? '\x00' : '\x01' + options.tenantId)
     .update('\0')
     .update(options.idempotencyKey)
     .digest('hex')

@@ -5,13 +5,10 @@
 // - Path traversal rejection edge cases
 // - CLI-level error propagation when outDir is unwritable after successful mkdir
 // - Output directory with non-writable contents
-import { existsSync, mkdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it, spyOn } from 'bun:test';
-import type {
-  SlingshotSsrRenderer,
-  SsrRouteMatch,
-} from '@lastshotlabs/slingshot-ssr';
+import type { SlingshotSsrRenderer, SsrRouteMatch } from '@lastshotlabs/slingshot-ssr';
 import { renderSsgPage } from '../src/renderer';
 import type { SsgConfig } from '../src/types';
 

@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { edgeRuntime } from '../../src/index';
 import {
-  EdgeRuntimeError,
-  EdgeUnsupportedError,
   EdgeFileReadError,
   EdgeFileSizeExceededError,
   EdgePasswordConfigError,
+  EdgeRuntimeError,
+  EdgeUnsupportedError,
 } from '../../src/errors';
+import { edgeRuntime } from '../../src/index';
 
 describe('Edge runtime — error classes', () => {
   test('EdgeRuntimeError extends Error', () => {
@@ -66,21 +66,21 @@ describe('Edge runtime — error classes', () => {
 describe('Edge runtime — unsupported feature stubs', () => {
   test('fs.write throws EdgeUnsupportedError', async () => {
     const rt = edgeRuntime({});
-    await expect(rt.fs.writeFile('/tmp/test', 'data')).rejects.toThrow();
+    await expect(rt.fs.write('/tmp/test', 'data')).rejects.toThrow(EdgeUnsupportedError);
   });
 
   test('glob.scan throws EdgeUnsupportedError', async () => {
     const rt = edgeRuntime({});
-    await expect(rt.glob.scan('*.ts')).rejects.toThrow();
+    await expect(rt.glob.scan('*.ts')).rejects.toThrow(EdgeUnsupportedError);
   });
 
   test('sqlite.open throws EdgeUnsupportedError', () => {
     const rt = edgeRuntime({});
-    expect(() => rt.sqlite.open(':memory:')).toThrow();
+    expect(() => rt.sqlite.open(':memory:')).toThrow(EdgeUnsupportedError);
   });
 
-  test('server.listen throws EdgeUnsupportedError', async () => {
+  test('server.listen throws EdgeUnsupportedError', () => {
     const rt = edgeRuntime({});
-    await expect(rt.server.listen({ port: 8080 } as any)).rejects.toThrow();
+    expect(() => rt.server.listen({ port: 8080 } as any)).toThrow(EdgeUnsupportedError);
   });
 });

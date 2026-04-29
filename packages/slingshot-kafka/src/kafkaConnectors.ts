@@ -21,6 +21,13 @@ import {
   sanitizeLogValue,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import {
+  KafkaConnectorError,
+  KafkaConnectorMessageIdError,
+  KafkaConnectorStateError,
+  KafkaConnectorValidationError,
+  KafkaDuplicateConnectorError,
+} from './errors';
 import { getKafkaAdapterIntrospectionOrNull } from './kafkaAdapter';
 import {
   COMPRESSION_CODEC,
@@ -29,13 +36,6 @@ import {
   saslSchema,
   sslSchema,
 } from './kafkaShared';
-import {
-  KafkaConnectorError,
-  KafkaConnectorMessageIdError,
-  KafkaConnectorStateError,
-  KafkaConnectorValidationError,
-  KafkaDuplicateConnectorError,
-} from './errors';
 
 /**
  * Broker metadata attached to one inbound Kafka message after normalization.
@@ -165,6 +165,12 @@ const inboundConnectorSchema = z.object({
     .boolean()
     .optional()
     .describe('Whether to start reading from the earliest available offset for a new group'),
+  deduplicate: z
+    .boolean()
+    .optional()
+    .describe(
+      'Whether this inbound connector applies message-id based deduplication. Defaults to true when global dedup is enabled.',
+    ),
   errorStrategy: z
     .enum(['dlq', 'skip', 'pause'])
     .optional()
@@ -1467,7 +1473,8 @@ export function createKafkaConnectors(
                 // Consumer-side dedup: if the producer attached a stable
                 // `slingshot.message-id`, skip the handler for repeats.
                 const messageId = metadata.headers['slingshot.message-id'];
-                if (dedupEnabled && messageId) {
+                const connectorDedupEnabled = config.deduplicate ?? true;
+                if (dedupEnabled && connectorDedupEnabled && messageId) {
                   let alreadySeen = false;
                   try {
                     alreadySeen = await dedupStore.has(messageId);
@@ -1614,7 +1621,7 @@ export function createKafkaConnectors(
                     );
                     // Mark as processed for dedup AFTER success so retries
                     // are not skipped on a transient handler failure.
-                    if (dedupEnabled && messageId) {
+                    if (dedupEnabled && connectorDedupEnabled && messageId) {
                       try {
                         await dedupStore.set(messageId, dedupTtlMs);
                       } catch (dedupErr) {

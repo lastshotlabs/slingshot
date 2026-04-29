@@ -24,6 +24,7 @@ bun add @lastshotlabs/slingshot-notifications
 ## Export Paths
 
 - `.`
+- `./errors`
 - `./rateLimit`
 - `./testing`
 

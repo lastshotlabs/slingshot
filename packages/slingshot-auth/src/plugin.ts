@@ -155,6 +155,9 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
           getRedis: redis ? () => redis : undefined,
           getMongoAuth: mongo ? () => mongo.auth : undefined,
           getMongoApp: mongo ? () => mongo.app : undefined,
+          getPostgres: frameworkConfig.storeInfra
+            ? () => frameworkConfig.storeInfra.getPostgres()
+            : undefined,
           password: resolvedPassword,
           sqlite: frameworkConfig.sqlite ?? config.runtime?.sqlite,
         });

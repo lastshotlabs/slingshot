@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { getAuthRuntimeFromRequestOrNull } from '@lastshotlabs/slingshot-auth';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { HttpError, getActor } from '@lastshotlabs/slingshot-core';
 
@@ -57,10 +58,33 @@ export const requireScope =
       throw new HttpError(403, 'Insufficient scope', 'INSUFFICIENT_SCOPE');
     }
 
-    const grantedScopes = rawScope.split(' ');
+    const grantedScopes = rawScope.split(' ').filter(scope => scope.length > 0);
     for (const required of requiredScopes) {
       if (!grantedScopes.includes(required)) {
         throw new HttpError(403, 'Insufficient scope', 'INSUFFICIENT_SCOPE');
+      }
+    }
+
+    const runtime = getAuthRuntimeFromRequestOrNull(c);
+    const shouldRecheckClient = runtime?.config.m2m?.recheckClientOnUse !== false;
+    if (shouldRecheckClient) {
+      if (!runtime?.adapter.getM2MClient || !actor.id) {
+        throw new HttpError(403, 'M2M client verification unavailable', 'M2M_CLIENT_UNVERIFIED');
+      }
+      const client = await runtime.adapter.getM2MClient(actor.id);
+      if (!client?.active) {
+        throw new HttpError(401, 'M2M client is disabled', 'M2M_CLIENT_INACTIVE');
+      }
+      const clientScopes = new Set(client.scopes);
+      if (grantedScopes.some(scope => !clientScopes.has(scope))) {
+        throw new HttpError(403, 'Insufficient scope', 'INSUFFICIENT_SCOPE');
+      }
+      const configuredScopes = runtime.config.m2m?.scopes;
+      if (Array.isArray(configuredScopes) && configuredScopes.length > 0) {
+        const serverScopes = new Set(configuredScopes);
+        if (grantedScopes.some(scope => !serverScopes.has(scope))) {
+          throw new HttpError(403, 'Insufficient scope', 'INSUFFICIENT_SCOPE');
+        }
       }
     }
 

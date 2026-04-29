@@ -1243,6 +1243,43 @@ export interface SsrPluginConfig {
     readonly requestId: string | undefined;
   }) => void;
   /**
+   * Circuit breaker configuration for external rendering dependencies.
+   *
+   * When set, the SSR middleware wraps renderer calls in a circuit breaker that
+   * opens after `failureThreshold` consecutive failures. While open, the renderer
+   * is bypassed and the request falls through to the SPA with a warning.
+   *
+   * @default undefined (disabled)
+   */
+  readonly circuitBreaker?: {
+    /**
+     * Consecutive failures before the circuit opens. Default: 5.
+     */
+    readonly failureThreshold?: number;
+    /**
+     * Milliseconds before transitioning from OPEN to HALF_OPEN. Default: 30000.
+     */
+    readonly cooldownMs?: number;
+  };
+  /**
+   * Retry configuration for page load failures.
+   *
+   * When set, renderer calls that fail with retryable errors are retried
+   * with exponential backoff up to `maxAttempts` additional attempts.
+   *
+   * @default undefined (disabled)
+   */
+  readonly pageLoadRetry?: {
+    /**
+     * Maximum retry attempts. Default: 2.
+     */
+    readonly maxAttempts?: number;
+    /**
+     * Base delay in ms for exponential backoff. Default: 200.
+     */
+    readonly baseDelayMs?: number;
+  };
+  /**
    * Strategy for client-side hydration mismatch reporting.
    *
    * Hydration mismatches occur when the SSR-produced HTML differs from the

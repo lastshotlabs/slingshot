@@ -254,12 +254,16 @@ describe('adapter options schema edge cases', () => {
   test('accepts both deserialization error policies', () => {
     const { kafkaAdapterOptionsSchema } = require('../../src/kafkaAdapter');
     expect(
-      kafkaAdapterOptionsSchema.safeParse({ brokers: ['localhost:9092'], deserializationErrorPolicy: 'dlq' })
-        .success,
+      kafkaAdapterOptionsSchema.safeParse({
+        brokers: ['localhost:9092'],
+        deserializationErrorPolicy: 'dlq',
+      }).success,
     ).toBe(true);
     expect(
-      kafkaAdapterOptionsSchema.safeParse({ brokers: ['localhost:9092'], deserializationErrorPolicy: 'skip' })
-        .success,
+      kafkaAdapterOptionsSchema.safeParse({
+        brokers: ['localhost:9092'],
+        deserializationErrorPolicy: 'skip',
+      }).success,
     ).toBe(true);
     expect(
       kafkaAdapterOptionsSchema.safeParse({

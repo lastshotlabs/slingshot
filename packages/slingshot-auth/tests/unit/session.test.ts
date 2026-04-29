@@ -169,6 +169,24 @@ describe('refresh token rotation', () => {
     expect(result).toBeNull();
   });
 
+  test('absolute-expired session cannot be restored by refresh token', async () => {
+    const expiredConfig = createAuthResolvedConfig({
+      sessionPolicy: { absoluteTimeout: 1 },
+      refreshToken: {
+        accessTokenExpiry: 900,
+        refreshTokenExpiry: 86400,
+        rotationGraceSeconds: 10,
+      },
+    });
+    await repo.createSession('user-1', 'jwt-1', 'sess-1', undefined, expiredConfig);
+    await repo.setRefreshToken('sess-1', 'refresh-abc', expiredConfig);
+
+    await new Promise(resolve => setTimeout(resolve, 1100));
+
+    const result = await repo.getSessionByRefreshToken('refresh-abc', expiredConfig);
+    expect(result).toBeNull();
+  });
+
   test('rotateRefreshToken fails if old token does not match (concurrent rotation guard)', async () => {
     await repo.createSession('user-1', 'jwt-1', 'sess-1', undefined, refreshConfig);
     await repo.setRefreshToken('sess-1', 'current-token', refreshConfig);
@@ -222,6 +240,27 @@ describe('sqlite refresh-token storage', () => {
     expect(row).not.toBeNull();
     expect(row!.refreshToken).not.toBe('refresh-next');
     expect(row!.prevRefreshToken).not.toBe('refresh-abc');
+  });
+
+  test('absolute-expired SQLite session cannot be restored by refresh token', async () => {
+    const db = new Database(':memory:');
+    const sqliteRepo = createSqliteSessionRepository(db);
+    const expiredConfig = createAuthResolvedConfig({
+      sessionPolicy: { absoluteTimeout: 1 },
+      refreshToken: {
+        accessTokenExpiry: 900,
+        refreshTokenExpiry: 86400,
+        rotationGraceSeconds: 10,
+      },
+    });
+
+    await sqliteRepo.createSession('user-1', 'jwt-1', 'sess-1', undefined, expiredConfig);
+    await sqliteRepo.setRefreshToken('sess-1', 'refresh-abc', expiredConfig);
+    await new Promise(resolve => setTimeout(resolve, 1100));
+
+    await expect(
+      sqliteRepo.getSessionByRefreshToken('refresh-abc', expiredConfig),
+    ).resolves.toBeNull();
   });
 });
 

@@ -145,7 +145,7 @@ function baseOptions(runtime = createRuntime()) {
     securitySigning: { secret: 'test-secret-key-must-be-at-least-32-chars!!' },
     cors: { origin: ['https://api.example.com'], credentials: true },
     captcha: { provider: 'hcaptcha' as const, secretKey: 'test-secret' },
-    csrf: { exemptPaths: ['/hooks/public'] },
+    csrf: { enabled: true, exemptPaths: ['/hooks/public'] },
     trustProxy: 2 as const,
     registrar: createCoreRegistrar().registrar,
     secrets: {
@@ -231,7 +231,10 @@ describe('createInfrastructure direct', () => {
     });
     expect(infra.frameworkConfig.security.cors).toEqual(['https://api.example.com']);
     expect(Object.isFrozen(infra.frameworkConfig.security.cors)).toBe(true);
-    expect(infra.frameworkConfig.security.csrf).toEqual({ exemptPaths: ['/hooks/public'] });
+    expect(infra.frameworkConfig.security.csrf).toEqual({
+      enabled: true,
+      exemptPaths: ['/hooks/public'],
+    });
     expect(Object.isFrozen(infra.frameworkConfig.security.csrf?.exemptPaths)).toBe(true);
     expect(infra.frameworkConfig.trustProxy).toBe(2);
     expect(infra.frameworkConfig.captcha).toEqual({

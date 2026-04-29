@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import {
   bunRuntime,
   configureRuntimeBunLogger,
   configureRuntimeBunStructuredLogger,
 } from '../src/index';
 import type { RuntimeBunLogger } from '../src/index';
-import type { Logger } from '@lastshotlabs/slingshot-core';
 
 describe('graceful-shutdown', () => {
   test('forced stop without websockets calls server.stop(true) and resolves', async () => {
@@ -293,7 +293,9 @@ describe('graceful-shutdown', () => {
       await server.stop(true);
 
       // The runtime catches the close error and logs it with 'shutdown-close' phase
-      expect(errors.some(e => e.phase === 'shutdown-close' && e.message === 'close-throw')).toBe(true);
+      expect(errors.some(e => e.phase === 'shutdown-close' && e.message === 'close-throw')).toBe(
+        true,
+      );
     } finally {
       configureRuntimeBunLogger(prev);
       Object.assign(Bun, { serve: originalServe });

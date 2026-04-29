@@ -7,6 +7,7 @@ export class NodeRuntimeError extends Error {
   }
 }
 
+/** Raised when the Node runtime HTTP server cannot start or serve requests safely. */
 export class NodeServerError extends NodeRuntimeError {
   constructor(message: string) {
     super(message);
@@ -14,6 +15,7 @@ export class NodeServerError extends NodeRuntimeError {
   }
 }
 
+/** Raised when Node runtime WebSocket setup or delivery fails. */
 export class NodeWebSocketError extends NodeRuntimeError {
   constructor(message: string) {
     super(message);
@@ -21,6 +23,7 @@ export class NodeWebSocketError extends NodeRuntimeError {
   }
 }
 
+/** Raised when an incoming request has an invalid Content-Length header. */
 export class NodeContentLengthError extends NodeRuntimeError {
   readonly rawValue: string;
 
@@ -31,6 +34,7 @@ export class NodeContentLengthError extends NodeRuntimeError {
   }
 }
 
+/** Raised when a Node runtime request body exceeds the configured maximum size. */
 export class NodeRequestBodyTooLargeError extends NodeRuntimeError {
   readonly maxBytes: number;
 
@@ -41,6 +45,7 @@ export class NodeRequestBodyTooLargeError extends NodeRuntimeError {
   }
 }
 
+/** Raised when the Node runtime cannot complete server shutdown cleanly. */
 export class NodeShutdownError extends NodeRuntimeError {
   constructor(message: string) {
     super(message);

@@ -18,18 +18,16 @@ describe('Typesense — filter translation', () => {
   });
 
   test('translates numeric comparison filters', () => {
-    expect(
-      searchFilterToTypesenseFilter({ field: 'price', op: '>', value: 100 }),
-    ).toBe('price:>100');
-    expect(
-      searchFilterToTypesenseFilter({ field: 'price', op: '>=', value: 10 }),
-    ).toBe('price:>=10');
-    expect(
-      searchFilterToTypesenseFilter({ field: 'price', op: '<', value: 50 }),
-    ).toBe('price:<50');
-    expect(
-      searchFilterToTypesenseFilter({ field: 'price', op: '<=', value: 200 }),
-    ).toBe('price:<=200');
+    expect(searchFilterToTypesenseFilter({ field: 'price', op: '>', value: 100 })).toBe(
+      'price:>100',
+    );
+    expect(searchFilterToTypesenseFilter({ field: 'price', op: '>=', value: 10 })).toBe(
+      'price:>=10',
+    );
+    expect(searchFilterToTypesenseFilter({ field: 'price', op: '<', value: 50 })).toBe('price:<50');
+    expect(searchFilterToTypesenseFilter({ field: 'price', op: '<=', value: 200 })).toBe(
+      'price:<=200',
+    );
   });
 
   test('translates IN filter with array of values', () => {
@@ -51,12 +49,12 @@ describe('Typesense — filter translation', () => {
   });
 
   test('translates EXISTS and NOT_EXISTS', () => {
-    expect(
-      searchFilterToTypesenseFilter({ field: 'email', op: 'EXISTS', value: null }),
-    ).toBe('email:!=null');
-    expect(
-      searchFilterToTypesenseFilter({ field: 'email', op: 'NOT_EXISTS', value: null }),
-    ).toBe('email:=null');
+    expect(searchFilterToTypesenseFilter({ field: 'email', op: 'EXISTS', value: null })).toBe(
+      'email:!=null',
+    );
+    expect(searchFilterToTypesenseFilter({ field: 'email', op: 'NOT_EXISTS', value: null })).toBe(
+      'email:=null',
+    );
   });
 
   test('translates $and composite filter', () => {

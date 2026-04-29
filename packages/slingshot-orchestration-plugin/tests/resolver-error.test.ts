@@ -46,15 +46,11 @@ describe('InvalidResolverResultError — class mechanics', () => {
 describe('InvalidResolverResultError — message format', () => {
   test('formats message with standard prefix followed by detail', () => {
     const err = new InvalidResolverResultError('expected an object');
-    expect(err.message).toBe(
-      'Invalid resolveRequestContext result: expected an object',
-    );
+    expect(err.message).toBe('Invalid resolveRequestContext result: expected an object');
   });
 
   test('includes detail when it is a longer description', () => {
-    const err = new InvalidResolverResultError(
-      'tenantId must be a string when provided',
-    );
+    const err = new InvalidResolverResultError('tenantId must be a string when provided');
     expect(err.message).toBe(
       'Invalid resolveRequestContext result: tenantId must be a string when provided',
     );
@@ -77,9 +73,7 @@ describe('InvalidResolverResultError — message format', () => {
 
     for (const [detail, expectedDetail] of detailToExpected) {
       const err = new InvalidResolverResultError(detail);
-      expect(err.message).toBe(
-        `Invalid resolveRequestContext result: ${expectedDetail}`,
-      );
+      expect(err.message).toBe(`Invalid resolveRequestContext result: ${expectedDetail}`);
     }
   });
 });

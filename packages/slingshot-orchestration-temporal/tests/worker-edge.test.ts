@@ -49,7 +49,9 @@ describe('Temporal worker — activity registration', () => {
   });
 
   test('activity errors propagate', async () => {
-    const handler = async () => { throw new Error('provider unavailable'); };
+    const handler = async () => {
+      throw new Error('provider unavailable');
+    };
     await expect(handler()).rejects.toThrow('provider unavailable');
   });
 });

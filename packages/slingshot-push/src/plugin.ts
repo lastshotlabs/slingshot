@@ -59,6 +59,15 @@ export interface PushPluginHealth {
     readonly providers: Readonly<
       Partial<Record<'web' | 'ios' | 'android', PushProviderHealth | null>>
     >;
+    /**
+     * Router-level circuit breaker snapshot. Present when the router has been
+     * created (post `setupMiddleware`). The breaker tracks consecutive
+     * fan-out-level failures across all providers.
+     */
+    readonly routerCircuitBreaker?: {
+      readonly state: 'closed' | 'open' | 'half-open';
+      readonly consecutiveFailures: number;
+    };
   };
 }
 
@@ -178,7 +187,24 @@ export function createPushPlugin(
         }
       }
     }
-    return { status: worst, details: { providers } };
+
+    let routerCircuitBreaker: PushPluginHealth['details']['routerCircuitBreaker'] | undefined;
+    if (routerRef) {
+      const breakerHealth = routerRef.getBreakerHealth?.();
+      if (breakerHealth) {
+        routerCircuitBreaker = {
+          state: breakerHealth.circuitState,
+          consecutiveFailures: breakerHealth.consecutiveFailures,
+        };
+        if (breakerHealth.circuitState === 'open') {
+          worst = 'unhealthy';
+        } else if (worst !== 'unhealthy' && breakerHealth.circuitState === 'half-open') {
+          worst = 'degraded';
+        }
+      }
+    }
+
+    return { status: worst, details: { providers, routerCircuitBreaker } };
   }
 
   return {

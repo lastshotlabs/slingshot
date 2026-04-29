@@ -44,6 +44,13 @@ describe('slingshot-ssg cli internals', () => {
       rendererPath: 'dist/server/entry-server.js',
       clientEntry: undefined,
       rscManifestPath: undefined,
+      watch: false,
+      help: false,
+      retryMaxAttempts: 3,
+      retryBaseDelayMs: 1000,
+      retryMaxDelayMs: 30000,
+      breakerThreshold: undefined,
+      breakerCooldownMs: undefined,
     });
 
     expect(
@@ -71,6 +78,13 @@ describe('slingshot-ssg cli internals', () => {
       rendererPath: 'dist/server/custom.js',
       clientEntry: 'src/client/index.ts',
       rscManifestPath: 'dist/rsc-manifest.json',
+      watch: false,
+      help: false,
+      retryMaxAttempts: 3,
+      retryBaseDelayMs: 1000,
+      retryMaxDelayMs: 30000,
+      breakerThreshold: undefined,
+      breakerCooldownMs: undefined,
     });
   });
 

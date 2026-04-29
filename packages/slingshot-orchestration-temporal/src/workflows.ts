@@ -148,9 +148,15 @@ function recordStepState(
 }
 
 export async function slingshotTaskWorkflowImpl(
-  taskManifestMap: Record<string, ProviderTaskManifest>,
+  taskManifestMap: Record<string, ProviderTaskManifest> | null | undefined,
   args: SlingshotTaskWorkflowArgs,
 ): Promise<TemporalTaskResultEnvelope> {
+  if (!taskManifestMap || typeof taskManifestMap !== 'object') {
+    throw ApplicationFailure.nonRetryable(
+      `Task '${args.taskName}' is not registered.`,
+      'SlingshotTaskFailure',
+    );
+  }
   const taskManifest = taskManifestMap[args.taskName];
   if (!taskManifest) {
     throw ApplicationFailure.nonRetryable(
@@ -197,9 +203,15 @@ export async function slingshotTaskWorkflowImpl(
 }
 
 export async function slingshotWorkflowImpl(
-  workflowManifestMap: WorkflowManifestMap,
+  workflowManifestMap: WorkflowManifestMap | null | undefined,
   args: SlingshotWorkflowArgs,
 ): Promise<TemporalWorkflowResultEnvelope> {
+  if (!workflowManifestMap || typeof workflowManifestMap !== 'object') {
+    throw ApplicationFailure.nonRetryable(
+      `Workflow '${args.workflowName}' is not registered.`,
+      'SlingshotWorkflowFailure',
+    );
+  }
   const registration = workflowManifestMap[args.workflowName];
   if (!registration) {
     throw ApplicationFailure.nonRetryable(

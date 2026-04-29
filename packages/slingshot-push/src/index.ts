@@ -105,3 +105,14 @@ export { createPushDeliveryAdapter } from './deliveryAdapter';
  * Build deterministic provider idempotency keys and UUIDs from stable keys.
  */
 export { buildProviderIdempotencyKey, deriveUuidV4FromKey } from './lib/idempotency';
+
+/**
+ * Typed error classes for push delivery failures and router-level issues.
+ */
+export {
+  ApnsDeliveryError,
+  FcmTokenError,
+  PushRouterError,
+  PushTopicFanoutError,
+  WebPushDeliveryError,
+} from './errors';

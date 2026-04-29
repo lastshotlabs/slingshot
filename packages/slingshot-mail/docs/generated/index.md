@@ -24,6 +24,7 @@ bun add @lastshotlabs/slingshot-mail
 ## Export Paths
 
 - `.`
+- `./errors`
 - `./testing`
 
 ## Package Scripts

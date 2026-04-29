@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { disableRoutesSchema } from '@lastshotlabs/slingshot-core';
+import type { RateLimiter } from '../lib/rateLimit';
 import type { SecretEncryptor } from '../lib/secretCipher';
 import { WEBHOOK_ROUTES } from '../routes/index';
 import type { WebhookAdapter } from './adapter';
@@ -195,6 +196,53 @@ export const webhookPluginConfigSchema = z.object({
     .positive()
     .optional()
     .describe('Maximum body size (bytes) accepted on inbound webhook routes. Defaults to 1 MiB.'),
+  /**
+   * Rate limiting for inbound webhook endpoints.
+   *
+   * When set, each inbound provider (e.g. 'stripe', 'github') is rate-limited
+   * independently using an in-memory sliding window counter. Requests that exceed
+   * the limit receive HTTP 429 with `Retry-After` and `X-RateLimit-*` headers.
+   *
+   * Provide a custom `RateLimiter` instance for distributed deployments (e.g. Redis
+   * sliding window) or use the shorthand object form for the built-in per-process
+   * limiter.
+   *
+   * Omit entirely to disable inbound rate limiting (not recommended in production).
+   */
+  inboundRateLimit: z
+    .union([
+      z
+        .object({
+          maxRequests: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe('Maximum requests per window per provider. Default: 100.'),
+          windowMs: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe('Sliding window duration in milliseconds. Default: 60000 (1 minute).'),
+        })
+        .describe('Built-in sliding window rate limiter options.'),
+      z
+        .custom<RateLimiter>(
+          (value): value is RateLimiter =>
+            typeof value === 'object' &&
+            value !== null &&
+            typeof (value as { check?: unknown }).check === 'function',
+          {
+            message: 'Expected a RateLimiter with a check() method',
+          },
+        )
+        .describe('Custom RateLimiter instance (e.g. Redis-backed).'),
+    ])
+    .optional()
+    .describe(
+      'Rate limiting for inbound webhook endpoints. Omit to disable inbound rate limiting.',
+    ),
   /** Route groups to skip mounting. */
   disableRoutes: disableRoutesSchema(Object.values(WEBHOOK_ROUTES)).describe(
     'Route groups to skip when mounting webhook routes. Omit to mount all webhook routes.',

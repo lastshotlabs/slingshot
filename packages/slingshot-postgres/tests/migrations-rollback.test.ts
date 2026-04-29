@@ -19,7 +19,10 @@ mock.module('pg', () => ({
       return Promise.resolve({
         query(sql: string) {
           if (sql.includes('SELECT COALESCE(MAX(version), 0) AS version')) {
-            return Promise.resolve({ rows: [{ version: queryResults.currentVersion ?? 2 }], rowCount: 1 });
+            return Promise.resolve({
+              rows: [{ version: queryResults.currentVersion ?? 2 }],
+              rowCount: 1,
+            });
           }
           if (sql.includes('SELECT 1')) {
             return Promise.resolve({ rows: [{ ok: 1 }], rowCount: 1 });
@@ -29,7 +32,9 @@ mock.module('pg', () => ({
         release() {},
       });
     }
-    end() { return Promise.resolve(); }
+    end() {
+      return Promise.resolve();
+    }
   },
 }));
 
@@ -45,9 +50,13 @@ mock.module('drizzle-orm/node-postgres', () => ({
             update: () => resolvingBuilder(undefined),
             delete: () => resolvingBuilder([]),
             transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-              fn({ select: () => resolvingBuilder([{ count: '0' }]), insert: () => resolvingBuilder(undefined) }),
+              fn({
+                select: () => resolvingBuilder([{ count: '0' }]),
+                insert: () => resolvingBuilder(undefined),
+              }),
           };
-          if (prop in impl) return impl[prop];
+          const key = String(prop);
+          if (key in impl) return impl[key];
           throw new Error(`missing method: ${String(prop)}`);
         },
       },
@@ -108,15 +117,16 @@ describe('migrations — version detection', () => {
   test('adapter creation fails when schema version is newer than binary', async () => {
     queryResults.currentVersion = 99;
     const { createPostgresAdapter } = await import('../src/adapter.js');
-    await expect(
-      createPostgresAdapter({ pool: new (await import('pg')).Pool() }),
-    ).rejects.toThrow('newer than this binary supports');
+    await expect(createPostgresAdapter({ pool: new (await import('pg')).Pool() })).rejects.toThrow(
+      'newer than this binary supports',
+    );
   });
 
   test('adapter creation in assume-ready mode skips version check', async () => {
     queryResults.currentVersion = 99;
     const { createPostgresAdapter } = await import('../src/adapter.js');
-    const { attachPostgresPoolRuntime, createPostgresPoolRuntime } = await import('@lastshotlabs/slingshot-core');
+    const { attachPostgresPoolRuntime, createPostgresPoolRuntime } =
+      await import('@lastshotlabs/slingshot-core');
 
     const pool = new (await import('pg')).Pool();
     attachPostgresPoolRuntime(pool, createPostgresPoolRuntime({ migrationMode: 'assume-ready' }));
@@ -141,7 +151,8 @@ describe('migrations — connect and migrate', () => {
   test('assume-ready runtime does not call pool.connect for migrations', async () => {
     queryResults.currentVersion = 0;
     const { createPostgresAdapter } = await import('../src/adapter.js');
-    const { attachPostgresPoolRuntime, createPostgresPoolRuntime } = await import('@lastshotlabs/slingshot-core');
+    const { attachPostgresPoolRuntime, createPostgresPoolRuntime } =
+      await import('@lastshotlabs/slingshot-core');
 
     const pool = new (await import('pg')).Pool();
     attachPostgresPoolRuntime(pool, createPostgresPoolRuntime({ migrationMode: 'assume-ready' }));

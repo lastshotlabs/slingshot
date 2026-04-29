@@ -12,7 +12,6 @@
 //   - runWithConcurrency edge cases (0 tasks, concurrency=1)
 //   - Concurrent tag-lock serialization
 //   - Tag index cleanup (empty tag index auto-deleted)
-
 import { afterAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { IsrCacheEntry } from '@lastshotlabs/slingshot-ssr';
 import {
@@ -33,7 +32,10 @@ afterAll(() => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function inMemoryKv(): KvNamespace & { _store: Map<string, string>; _puts: Array<{ key: string; ttl?: number }> } {
+function inMemoryKv(): KvNamespace & {
+  _store: Map<string, string>;
+  _puts: Array<{ key: string; ttl?: number }>;
+} {
   const store = new Map<string, string>();
   const puts: Array<{ key: string; ttl?: number }> = [];
   return {

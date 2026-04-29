@@ -7,6 +7,8 @@
  * errors propagate correctly.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { HttpError } from '@lastshotlabs/slingshot-core';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -46,7 +48,9 @@ function throwingBuilder(error: Error): Builder {
   return makeBuilder(null, error);
 }
 
-function transactionMock(selectValues: unknown[] = []): (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> {
+function transactionMock(
+  selectValues: unknown[] = [],
+): (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> {
   let idx = 0;
   const tx = {
     select: () => {
@@ -74,7 +78,9 @@ mock.module('pg', () => ({
         release() {},
       });
     }
-    end() { return Promise.resolve(); }
+    end() {
+      return Promise.resolve();
+    }
   },
 }));
 
@@ -93,9 +99,6 @@ mock.module('drizzle-orm/node-postgres', () => ({
     ),
 }));
 
-import { createPostgresAdapter } from '../src/adapter.js';
-import { HttpError } from '@lastshotlabs/slingshot-core';
-
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('adapter-transactions — setRoles', () => {
@@ -107,7 +110,7 @@ describe('adapter-transactions — setRoles', () => {
   test('setRoles calls transaction with delete + insert', async () => {
     let txCalled = false;
     mockDbImpl = {
-      transaction: async (fn) => {
+      transaction: async fn => {
         txCalled = true;
         const tx = {
           delete: () => resolvingBuilder(undefined),
@@ -125,7 +128,9 @@ describe('adapter-transactions — setRoles', () => {
 
   test('setRoles throws when transaction fails', async () => {
     mockDbImpl = {
-      transaction: async () => { throw new Error('deadlock'); },
+      transaction: async () => {
+        throw new Error('deadlock');
+      },
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     await expect(adapter.setRoles!('uid', ['admin'])).rejects.toThrow('deadlock');
@@ -141,7 +146,7 @@ describe('adapter-transactions — setTenantRoles', () => {
   test('setTenantRoles calls transaction and resolves', async () => {
     let txCalled = false;
     mockDbImpl = {
-      transaction: async (fn) => {
+      transaction: async fn => {
         txCalled = true;
         const tx = {
           delete: () => resolvingBuilder(undefined),
@@ -159,7 +164,9 @@ describe('adapter-transactions — setTenantRoles', () => {
 
   test('setTenantRoles throws on transaction failure', async () => {
     mockDbImpl = {
-      transaction: async () => { throw new Error('tx aborted'); },
+      transaction: async () => {
+        throw new Error('tx aborted');
+      },
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     await expect(adapter.setTenantRoles!('uid', 't1', ['r1'])).rejects.toThrow('tx aborted');
@@ -175,7 +182,7 @@ describe('adapter-transactions — setRecoveryCodes', () => {
   test('setRecoveryCodes replaces codes atomically', async () => {
     let txCalled = false;
     mockDbImpl = {
-      transaction: async (fn) => {
+      transaction: async fn => {
         txCalled = true;
         const tx = {
           delete: () => resolvingBuilder(undefined),
@@ -193,7 +200,9 @@ describe('adapter-transactions — setRecoveryCodes', () => {
 
   test('setRecoveryCodes throws on transaction failure', async () => {
     mockDbImpl = {
-      transaction: async () => { throw new Error('tx rollback'); },
+      transaction: async () => {
+        throw new Error('tx rollback');
+      },
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     await expect(adapter.setRecoveryCodes!('uid', ['h1'])).rejects.toThrow('tx rollback');
@@ -214,7 +223,7 @@ describe('adapter-transactions — findOrCreateByProvider', () => {
         callCount++;
         return callCount <= 2 ? resolvingBuilder([]) : resolvingBuilder([{ role: 'user' }]);
       },
-      transaction: async (fn) => {
+      transaction: async fn => {
         txCalled = true;
         const tx = {
           select: () => resolvingBuilder([]),
@@ -243,7 +252,7 @@ describe('adapter-transactions — listUsers', () => {
   test('listUsers uses transaction for count + user query', async () => {
     let txCalled = false;
     mockDbImpl = {
-      transaction: async (fn) => {
+      transaction: async fn => {
         txCalled = true;
         const tx = {
           select: () => resolvingBuilder([{ count: '3' }]),
@@ -262,7 +271,7 @@ describe('adapter-transactions — listUsers', () => {
 
   test('listUsers with suspended filter works', async () => {
     mockDbImpl = {
-      transaction: async (fn) => {
+      transaction: async fn => {
         const tx = {
           select: () => resolvingBuilder([{ count: '1' }, { id: 'u1', email: 'u@e.com' }]),
           insert: () => resolvingBuilder(undefined),

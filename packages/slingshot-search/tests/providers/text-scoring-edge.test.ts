@@ -4,9 +4,9 @@
  */
 import { describe, expect, test } from 'bun:test';
 import {
-  computeTextScore,
   computeHighlights,
   computeMatchPositions,
+  computeTextScore,
   matchesQuery,
 } from '../../src/providers/textScoring';
 
@@ -88,13 +88,11 @@ describe('text scoring — matchesQuery', () => {
   test('frequency strategy requires at least half of terms to match', () => {
     expect(matchesQuery(doc, 'alpha beta gamma', ['title', 'body'], 'frequency')).toBe(true);
     // 4/7 terms match (alpha, beta, gamma, delta) which is >= ceil(7/2)=4
-    expect(matchesQuery(doc, 'alpha beta gamma delta epsilon zeta eta', ['title', 'body'], 'frequency')).toBe(
-      true,
-    );
+    expect(
+      matchesQuery(doc, 'alpha beta gamma delta epsilon zeta eta', ['title', 'body'], 'frequency'),
+    ).toBe(true);
     // 1/3 terms match (alpha only) which is < ceil(3/2)=2
-    expect(matchesQuery(doc, 'alpha missing nowhere', ['title', 'body'], 'frequency')).toBe(
-      false,
-    );
+    expect(matchesQuery(doc, 'alpha missing nowhere', ['title', 'body'], 'frequency')).toBe(false);
   });
 
   test('browse mode (empty query) returns true', () => {

@@ -8,19 +8,22 @@ describe('SlugConflictError', () => {
   });
 
   test('carries slug and entity type', () => {
-    const err = new SlugConflictError('my-org-slug', 'organization');
+    const err = new SlugConflictError(
+      'my-org-slug',
+      "organization slug 'my-org-slug' is already in use",
+    );
     expect(err.message).toContain('my-org-slug');
     expect(err.message).toContain('organization');
   });
 
   test('has status 409', () => {
-    const err = new SlugConflictError('test', 'group');
+    const err = new SlugConflictError('test', "group slug 'test' is already in use");
     expect(err.status).toBe(409);
   });
 
   test('different entity types produce different messages', () => {
-    const orgErr = new SlugConflictError('slug', 'organization');
-    const groupErr = new SlugConflictError('slug', 'group');
+    const orgErr = new SlugConflictError('slug', "organization slug 'slug' is already in use");
+    const groupErr = new SlugConflictError('slug', "group slug 'slug' is already in use");
     expect(orgErr.message).not.toBe(groupErr.message);
   });
 });

@@ -6,6 +6,8 @@
  * edge cases not covered in existing test files.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { HttpError } from '@lastshotlabs/slingshot-core';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +60,9 @@ mock.module('pg', () => ({
         release() {},
       });
     }
-    end() { return Promise.resolve(); }
+    end() {
+      return Promise.resolve();
+    }
   },
 }));
 
@@ -77,16 +81,14 @@ mock.module('drizzle-orm/node-postgres', () => ({
     ),
 }));
 
-import { createPostgresAdapter } from '../src/adapter.js';
-import { HttpError } from '@lastshotlabs/slingshot-core';
-
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function makeTransactionMock(selectValues: unknown[] = []): Record<string, unknown> {
   let idx = 0;
-  const select = selectValues.length > 0
-    ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
-    : () => resolvingBuilder([]);
+  const select =
+    selectValues.length > 0
+      ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
+      : () => resolvingBuilder([]);
   return {
     select,
     insert: () => resolvingBuilder(undefined),
@@ -114,8 +116,7 @@ describe('adapter-auth — findOrCreateByProvider', () => {
       insert: () => resolvingBuilder(undefined),
       update: () => resolvingBuilder(undefined),
       delete: () => resolvingBuilder([]),
-      transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-        fn(makeTransactionMock()),
+      transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(makeTransactionMock()),
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const result = await adapter.findOrCreateByProvider!('github', 'gh-123', {
@@ -152,12 +153,18 @@ describe('adapter-auth — findOrCreateByProvider', () => {
     expect((thrown as HttpError).status).toBe(409);
   });
 
-  test('throws HttpError(409) when no email provided and OAuth not found', async () => {
-    mockDbImpl = { select: () => resolvingBuilder([]) };
+  test('creates an OAuth-only user when no email is provided and OAuth is not found', async () => {
+    mockDbImpl = {
+      select: () => resolvingBuilder([]),
+      transaction: async (fn: any) =>
+        fn({
+          insert: () => resolvingBuilder(undefined),
+        }),
+    };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
-    await expect(
-      adapter.findOrCreateByProvider!('github', 'gh-no-email', {}),
-    ).rejects.toThrow(/email/i);
+    const result = await adapter.findOrCreateByProvider!('github', 'gh-no-email', {});
+    expect(result.created).toBe(true);
+    expect(result.id).toBeString();
   });
 });
 
@@ -169,10 +176,12 @@ describe('adapter-auth — setPassword and verifyPassword', () => {
 
   test('setPassword updates the password hash', async () => {
     let updateCalled = false;
-    mockDbImpl = { update: () => {
-      updateCalled = true;
-      return resolvingBuilder(undefined);
-    }};
+    mockDbImpl = {
+      update: () => {
+        updateCalled = true;
+        return resolvingBuilder(undefined);
+      },
+    };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     await adapter.setPassword!('user-id', '$2b$10$newhashvalue');
     expect(updateCalled).toBe(true);

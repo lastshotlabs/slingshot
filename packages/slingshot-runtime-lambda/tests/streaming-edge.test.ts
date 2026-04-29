@@ -59,9 +59,10 @@ describe('streaming edge cases', () => {
       id: i,
       value: `item-${i}-${'x'.repeat(50)}`,
     }));
-    const wrapped = wrapStreamingHandler(
-      (async () => ({ items: largeArray, total: largeArray.length })) as never,
-    );
+    const wrapped = wrapStreamingHandler((async () => ({
+      items: largeArray,
+      total: largeArray.length,
+    })) as never);
     const chunks = (await wrapped({}, {})) as Array<string | Uint8Array>;
     const joined = chunks.join('');
     const parsed = JSON.parse(joined);

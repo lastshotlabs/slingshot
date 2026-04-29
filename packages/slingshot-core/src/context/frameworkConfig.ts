@@ -1,5 +1,6 @@
 import type { CoreRegistrar } from '../coreContracts';
 import type { DataEncryptionKey } from '../crypto';
+import type { CsrfConfig } from '../csrf';
 import type { EntityRegistry } from '../entityRegistry';
 import type { RuntimePassword } from '../runtime';
 import type { SigningConfig } from '../signing';
@@ -53,10 +54,7 @@ export interface SlingshotFrameworkConfig {
   /** CORS configuration (allowed origins for cross-origin requests). */
   security: {
     cors: string | readonly string[];
-    csrf?: {
-      exemptPaths?: readonly string[];
-      disabled?: boolean;
-    };
+    csrf?: Omit<CsrfConfig, 'exemptPaths'> & { exemptPaths?: readonly string[] };
   };
   /** Signing/HMAC configuration, or `null` if not configured. */
   signing: SigningConfig | null;

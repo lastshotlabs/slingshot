@@ -5,11 +5,7 @@
  * rapid stop/start cycles, and event loop health.
  */
 import { describe, expect, test } from 'bun:test';
-import {
-  bunRuntime,
-  configureRuntimeBunLogger,
-  resetProcessSafetyNetForTest,
-} from '../src/index';
+import { bunRuntime, configureRuntimeBunLogger, resetProcessSafetyNetForTest } from '../src/index';
 
 describe('runtime-bun prod hardening 2 — rapid stop/start cycles', () => {
   test('listen then stop then listen again does not throw', () => {
@@ -19,7 +15,10 @@ describe('runtime-bun prod hardening 2 — rapid stop/start cycles', () => {
       serve() {
         return {
           port: 0,
-          stop() { stopCount++; return undefined; },
+          stop() {
+            stopCount++;
+            return undefined;
+          },
           publish: () => {},
           upgrade: () => true,
         };
@@ -47,8 +46,10 @@ describe('runtime-bun prod hardening 2 — rapid stop/start cycles', () => {
     Object.assign(Bun, {
       serve() {
         return {
-          port: 0,
-          stop() { return undefined; },
+          port: 4100,
+          stop() {
+            return undefined;
+          },
           publish: () => {},
           upgrade: () => true,
         };
@@ -102,7 +103,12 @@ describe('runtime-bun prod hardening 2 — rapid stop/start cycles', () => {
     const servers: Array<{ port: number }> = [];
     Object.assign(Bun, {
       serve() {
-        const s = { port: servers.length + 1, stop: () => undefined, publish: () => {}, upgrade: () => true };
+        const s = {
+          port: servers.length + 1,
+          stop: () => undefined,
+          publish: () => {},
+          upgrade: () => true,
+        };
         servers.push(s);
         return s;
       },
@@ -184,7 +190,9 @@ describe('runtime-bun prod hardening 2 — shutdown cleanup', () => {
         return {
           port: 0,
           stop: () => undefined,
-          publish: () => { throw new Error('publish-boom'); },
+          publish: () => {
+            throw new Error('publish-boom');
+          },
           upgrade: () => true,
         };
       },

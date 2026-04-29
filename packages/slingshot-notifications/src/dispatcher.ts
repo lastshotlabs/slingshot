@@ -56,6 +56,11 @@ export interface DispatcherHealth {
    * once-per-minute throttle window. Resets to `false` once the window rolls.
    */
   readonly pendingAlarmActive: boolean;
+  /**
+   * Number of circuit breakers currently in the open state (tripped and
+   * still within cooldown). Updated every tick.
+   */
+  readonly openBreakerCount: number;
 }
 
 /** Configuration for exponential-backoff retries on per-notification publish failures. */
@@ -64,6 +69,8 @@ export interface DispatcherRetryOptions {
   readonly maxAttempts?: number;
   /** Base delay between retries in ms. Default: 100. */
   readonly initialDelayMs?: number;
+  /** Alias for `initialDelayMs` kept for older test helpers and configs. */
+  readonly delayMs?: number;
   /**
    * Upper bound on a single retry-wait, clamped after exponential backoff.
    * Mirrors the push router's `maxDelayMs`. Default: 5 minutes.
@@ -78,11 +85,28 @@ export interface DispatcherBreakerOptions {
    * destination are short-circuited within a tick. Default: 5.
    */
   readonly threshold?: number;
+  /** Alias for `threshold` kept for older test helpers and configs. */
+  readonly failureThreshold?: number;
   /**
    * Cooldown duration after the breaker trips, in ms. Subsequent ticks within
    * the cooldown skip the destination entirely. Default: 5 minutes.
    */
   readonly cooldownMs?: number;
+  /** Alias for `cooldownMs` kept for older test helpers and configs. */
+  readonly resetTimeoutMs?: number;
+}
+
+/**
+ * Payload delivered to the {@link CreateIntervalDispatcherOptions.onDeadLetter}
+ * callback when a notification exhausts all retry attempts within a tick.
+ */
+export interface DeadLetterEvent {
+  /** The notification record that could not be published. */
+  readonly notification: { id: string; userId: string };
+  /** The last error thrown by the publish call. */
+  readonly error: Error;
+  /** Total publish attempts made (initial attempt + retries). */
+  readonly attempts: number;
 }
 
 /** Options for {@link createIntervalDispatcher}, including adapters, bus, polling intervals, retry/breaker tuning, and observability hooks. */
@@ -94,6 +118,8 @@ export interface CreateIntervalDispatcherOptions {
   readonly defaultPreferences?: NotificationPreferenceDefaults;
   readonly intervalMs?: number;
   readonly maxPerTick?: number;
+  /** Alias for `maxPerTick` kept for older test helpers and configs. */
+  readonly batchSize?: number;
   /** Maximum ms to wait for an in-flight tick to complete on stop(). Default: 10000. */
   readonly stopTimeoutMs?: number;
   /** Per-publish retry/backoff configuration. */
@@ -131,6 +157,27 @@ export interface CreateIntervalDispatcherOptions {
   readonly metrics?: MetricsEmitter;
   /** Optional structured logger. Defaults to a console-backed JSON logger. */
   readonly logger?: Logger;
+  /**
+   * Optional callback invoked when a notification exhausts all retry attempts
+   * in a single tick *without* an open circuit breaker (retry budget
+   * exhausted, not short-circuited). This is the dead-letter signal: the
+   * dispatcher has given up on this notification for this tick. Apps can
+   * use this to move the notification to a dead-letter queue, increment an
+   * alert counter, or trigger alternative delivery. The callback is fire-
+   * and-forget (errors are logged but never propagated).
+   *
+   * When the circuit breaker is open for a destination, rows are silently
+   * skipped and do not invoke this callback — they will be retried on a
+   * future tick once the cooldown elapses.
+   *
+   * @example
+   * ```ts
+   * onDeadLetter: async ({ notification, error, attempts }) => {
+   *   await deadLetterQueue.enqueue(notification.id);
+   * }
+   * ```
+   */
+  readonly onDeadLetter?: (event: DeadLetterEvent) => void | Promise<void>;
 }
 
 interface BreakerState {
@@ -180,13 +227,22 @@ export function createIntervalDispatcher(
   options: CreateIntervalDispatcherOptions,
 ): DispatcherAdapter {
   const intervalMs = options.intervalMs ?? 30_000;
-  const maxPerTick = options.maxPerTick ?? 500;
+  const maxPerTick = options.maxPerTick ?? options.batchSize ?? 500;
   const defaultPreferences = options.defaultPreferences ?? DEFAULT_NOTIFICATION_PREFERENCE_DEFAULTS;
   const maxAttempts = Math.max(1, options.retry?.maxAttempts ?? 3);
-  const initialDelayMs = Math.max(0, options.retry?.initialDelayMs ?? 100);
+  const initialDelayMs = Math.max(
+    0,
+    options.retry?.initialDelayMs ?? options.retry?.delayMs ?? 100,
+  );
   const maxDelayMs = Math.max(0, options.retry?.maxDelayMs ?? 5 * 60_000);
-  const breakerThreshold = Math.max(1, options.breaker?.threshold ?? 5);
-  const breakerCooldownMs = Math.max(0, options.breaker?.cooldownMs ?? 5 * 60_000);
+  const breakerThreshold = Math.max(
+    1,
+    options.breaker?.threshold ?? options.breaker?.failureThreshold ?? 5,
+  );
+  const breakerCooldownMs = Math.max(
+    0,
+    options.breaker?.cooldownMs ?? options.breaker?.resetTimeoutMs ?? 5 * 60_000,
+  );
   const maxPendingBeforeAlarm = Math.max(0, options.maxPendingBeforeAlarm ?? 50_000);
   const pendingAlarmThrottleMs = Math.max(0, options.pendingAlarmThrottleMs ?? 60_000);
   const now = options.now ?? (() => Date.now());
@@ -194,6 +250,7 @@ export function createIntervalDispatcher(
   const logger: Logger =
     options.logger ?? createConsoleLogger({ base: { plugin: 'slingshot-notifications' } });
   const dynamicBus = options.bus as unknown as DynamicEventBus;
+  const onDeadLetter = options.onDeadLetter;
 
   // Most-recent observability state. Populated at the start of every tick.
   let lastPendingCount: number | null = null;
@@ -541,6 +598,29 @@ export function createIntervalDispatcher(
               `[slingshot-notifications] Failed to publish notification '${safeRowId}' after marking it dispatched`,
               lastErr,
             );
+            // Fire the dead-letter callback so apps can alert or re-queue.
+            if (onDeadLetter && lastErr instanceof Error) {
+              try {
+                const result = onDeadLetter({
+                  notification: { id: row.id, userId: row.userId },
+                  error: lastErr,
+                  attempts: maxAttempts,
+                });
+                if (result instanceof Promise) {
+                  result.catch((dlErr: unknown) => {
+                    logger.warn('onDeadLetter callback rejected', {
+                      notificationId: row.id,
+                      err: dlErr instanceof Error ? dlErr.message : String(dlErr),
+                    });
+                  });
+                }
+              } catch (dlErr) {
+                logger.warn('onDeadLetter callback threw', {
+                  notificationId: row.id,
+                  err: dlErr instanceof Error ? dlErr.message : String(dlErr),
+                });
+              }
+            }
           }
           if (stopped) break;
         }
@@ -568,12 +648,18 @@ export function createIntervalDispatcher(
       const ts = now();
       const alarmActive =
         lastPendingAlarmAt !== 0 && ts - lastPendingAlarmAt < pendingAlarmThrottleMs;
+      // Count open breakers at health-read time so the snapshot is fresh.
+      let openBreakerCount = 0;
+      for (const state of breakerByDestination.values()) {
+        if (state.openUntil !== 0 && ts < state.openUntil) openBreakerCount += 1;
+      }
       return {
         pendingCount: lastPendingCount,
         pendingCountIsLowerBound: lastPendingCountIsLowerBound,
         lastTickAt,
         lastDispatchedCount,
         pendingAlarmActive: alarmActive,
+        openBreakerCount,
       };
     },
   };

@@ -135,11 +135,11 @@ export interface TestablePermissionsAdapter extends PermissionsAdapter {
  */
 export interface EvaluationScope {
   /** Tenant to scope the evaluation to. Omit for global grants only. */
-  tenantId?: string;
+  tenantId?: string | null;
   /** Resource type to scope the evaluation to. */
-  resourceType?: string;
+  resourceType?: string | null;
   /** Specific resource ID to scope the evaluation to. */
-  resourceId?: string;
+  resourceId?: string | null;
 }
 
 /**
@@ -401,11 +401,7 @@ export interface PermissionEvaluator {
    * );
    * ```
    */
-  can(
-    subject: SubjectRef,
-    action: string,
-    scope?: { tenantId?: string; resourceType?: string; resourceId?: string },
-  ): Promise<boolean>;
+  can(subject: SubjectRef, action: string, scope?: EvaluationScope): Promise<boolean>;
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────

@@ -188,7 +188,7 @@ export const PLUGIN_SCHEMA_ENTRIES = {
     description: 'Social OAuth login plugin for Slingshot.',
     category: 'security',
     requires: ['slingshot-auth'],
-    loadSchema: noSchema,
+    loadSchema: () => loadSchemaExport('@lastshotlabs/slingshot-oauth', 'oauthPluginConfigSchema'),
   },
   'slingshot-oidc': {
     name: 'slingshot-oidc',

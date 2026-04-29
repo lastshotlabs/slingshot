@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { createMemoryAccessProvider, createMemoryManagedUserProvider } from '../../src/testing';
 
+type VerifyRequestInput = Parameters<
+  ReturnType<typeof createMemoryAccessProvider>['verifyRequest']
+>[0];
+
 describe('createMemoryAccessProvider', () => {
   test('returns a provider with verifyRequest method', () => {
     const provider = createMemoryAccessProvider();
@@ -9,14 +13,18 @@ describe('createMemoryAccessProvider', () => {
 
   test('verifyRequest returns a principal by default', async () => {
     const provider = createMemoryAccessProvider();
-    const result = await provider.verifyRequest(new Request('http://localhost'));
+    const result = await provider.verifyRequest(
+      new Request('http://localhost') as unknown as VerifyRequestInput,
+    );
     expect(result).not.toBeNull();
     expect(result?.subject).toBe('test-admin');
   });
 
   test('unauthenticated option returns null', async () => {
     const provider = createMemoryAccessProvider({ unauthenticated: true });
-    const result = await provider.verifyRequest(new Request('http://localhost'));
+    const result = await provider.verifyRequest(
+      new Request('http://localhost') as unknown as VerifyRequestInput,
+    );
     expect(result).toBeNull();
   });
 
@@ -24,7 +32,9 @@ describe('createMemoryAccessProvider', () => {
     const provider = createMemoryAccessProvider({
       principal: { subject: 'custom-user', email: 'custom@test.local', provider: 'test' },
     });
-    const result = await provider.verifyRequest(new Request('http://localhost'));
+    const result = await provider.verifyRequest(
+      new Request('http://localhost') as unknown as VerifyRequestInput,
+    );
     expect(result?.subject).toBe('custom-user');
   });
 });

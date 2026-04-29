@@ -23,24 +23,19 @@ describe('facet calculations', () => {
 
   test('multi-select facets return counts for each value', () => {
     const docs = [
-      { tags: 'a', status: 'active' },
-      { tags: 'b', status: 'active' },
-      { tags: 'a', status: 'inactive' },
-      { tags: 'c', status: 'active' },
-      { tags: 'a', status: 'active' },
+      { tags: ['a', 'b'], status: 'active' },
+      { tags: ['b'], status: 'active' },
+      { tags: ['a', 'c'], status: 'inactive' },
+      { tags: ['c'], status: 'active' },
+      { tags: ['a'], status: 'active' },
     ];
     const result = computeFacets(docs, ['tags', 'status']);
-    expect(result.distribution.tags).toEqual({ a: 3, b: 1, c: 1 });
-    expect(result.distribution.status).toEqual({ active: 3, inactive: 1 });
+    expect(result.distribution.tags).toEqual({ a: 3, b: 2, c: 2 });
+    expect(result.distribution.status).toEqual({ active: 4, inactive: 1 });
   });
 
   test('facet with missing values in some docs counts only present values', () => {
-    const docs = [
-      { category: 'news' },
-      { category: 'tech' },
-      {},
-      { category: 'news' },
-    ];
+    const docs = [{ category: 'news' }, { category: 'tech' }, {}, { category: 'news' }];
     const result = computeFacets(docs, ['category']);
     expect(result.distribution.category).toEqual({ news: 2, tech: 1 });
   });

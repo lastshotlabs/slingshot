@@ -120,6 +120,28 @@ export const orchestrationPluginConfigSchema = z
       .min(1)
       .optional()
       .describe("URL prefix for orchestration routes (e.g. '/orchestration')."),
+    routeTimeoutMs: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Per-request timeout in milliseconds for orchestration HTTP route adapter calls.'),
+    startMaxAttempts: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Maximum number of attempts for adapter.start() in setupPost. Default: 1 (no retry).',
+      ),
+    startBackoffMs: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Base backoff delay (ms) for adapter.start() retries. Each retry doubles. Default: 1000.',
+      ),
     routeMiddleware: z
       .array(manifestHandlerRefSchema)
       .optional()

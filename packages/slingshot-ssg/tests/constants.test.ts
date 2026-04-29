@@ -4,9 +4,9 @@
 // and CLI, and composed consistently so that no drift can occur between the
 // Zod validation layer and the CLI arg parser clamp.
 import { describe, expect, test } from 'bun:test';
-import { MAX_CONCURRENCY } from '../src/constants';
-import { ssgConfigSchema } from '../src/config.schema';
 import { parseArgs } from '../src/cli';
+import { ssgConfigSchema } from '../src/config.schema';
+import { MAX_CONCURRENCY } from '../src/constants';
 
 const minimalValid = {
   serverRoutesDir: '/tmp/routes',
@@ -55,6 +55,4 @@ describe('MAX_CONCURRENCY', () => {
     const result = parseArgs(['--concurrency', String(MAX_CONCURRENCY)]);
     expect(result.concurrency).toBe(MAX_CONCURRENCY);
   });
-
 });
-

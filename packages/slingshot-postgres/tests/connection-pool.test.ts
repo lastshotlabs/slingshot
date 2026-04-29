@@ -25,13 +25,21 @@ class MockPool {
     poolConstructorOpts = opts;
   }
 
-  query(sql: string) { return queryFn(sql); }
-  connect(...args: unknown[]) { return connectFn(...args); }
-  end() { return Promise.resolve(); }
+  query(sql: string) {
+    return queryFn(sql);
+  }
+  connect(...args: unknown[]) {
+    return connectFn(...args);
+  }
+  end() {
+    return Promise.resolve();
+  }
 }
 
 mock.module('pg', () => ({ Pool: MockPool }));
-mock.module('drizzle-orm/node-postgres', () => ({ drizzle: (pool: unknown) => ({ kind: 'drizzle', pool }) }));
+mock.module('drizzle-orm/node-postgres', () => ({
+  drizzle: (pool: unknown) => ({ kind: 'drizzle', pool }),
+}));
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
@@ -65,14 +73,21 @@ describe('connectPostgres — pool options', () => {
 
   test('forwards keepAlive settings to Pool constructor', async () => {
     const { connectPostgres } = await import(`../src/connection.ts?pool-ka=${Date.now()}`);
-    await connectPostgres('postgresql://localhost/db', { pool: { keepAlive: true, keepAliveInitialDelayMillis: 10000 } });
-    expect(poolConstructorOpts).toMatchObject({ keepAlive: true, keepAliveInitialDelayMillis: 10000 });
+    await connectPostgres('postgresql://localhost/db', {
+      pool: { keepAlive: true, keepAliveInitialDelayMillis: 10000 },
+    });
+    expect(poolConstructorOpts).toMatchObject({
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10000,
+    });
   });
 
   test('connection string is passed through', async () => {
     const { connectPostgres } = await import(`../src/connection.ts?pool-cs=${Date.now()}`);
     await connectPostgres('postgresql://user:pass@host:5432/mydb');
-    expect(poolConstructorOpts).toMatchObject({ connectionString: 'postgresql://user:pass@host:5432/mydb' });
+    expect(poolConstructorOpts).toMatchObject({
+      connectionString: 'postgresql://user:pass@host:5432/mydb',
+    });
   });
 
   test('returns a handle with pool, db, healthCheck, and getStats', async () => {
@@ -103,9 +118,13 @@ describe('connectPostgres — connection errors', () => {
   });
 
   test('fails fast when startup SELECT 1 fails', async () => {
-    queryFn = async () => { throw new Error('connection refused'); };
+    queryFn = async () => {
+      throw new Error('connection refused');
+    };
     const { connectPostgres } = await import(`../src/connection.ts?pool-fail=${Date.now()}`);
-    await expect(connectPostgres('postgresql://localhost/db')).rejects.toThrow('connection refused');
+    await expect(connectPostgres('postgresql://localhost/db')).rejects.toThrow(
+      'connection refused',
+    );
   });
 
   test('healthCheck returns ok=true when pool responds', async () => {
@@ -133,7 +152,12 @@ describe('connectPostgres — connection errors', () => {
   });
 
   test('healthCheck respects custom timeout', async () => {
-    queryFn = async () => new Promise(() => {});
+    let callCount = 0;
+    queryFn = async () => {
+      callCount++;
+      if (callCount === 1) return { rows: [{ ok: 1 }], rowCount: 1 };
+      return new Promise(() => {});
+    };
     const { connectPostgres } = await import(`../src/connection.ts?pool-hcto=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/db');
     const health = await result.healthCheck(10);

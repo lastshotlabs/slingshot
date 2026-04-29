@@ -14,7 +14,14 @@ import {
   createEventPublisher,
   createInProcessAdapter,
 } from '@lastshotlabs/slingshot-core';
-import { OrchestrationError, createMemoryAdapter, createOrchestrationRuntime, defineTask, defineWorkflow, sleep } from '@lastshotlabs/slingshot-orchestration';
+import {
+  OrchestrationError,
+  createMemoryAdapter,
+  createOrchestrationRuntime,
+  defineTask,
+  defineWorkflow,
+  sleep,
+} from '@lastshotlabs/slingshot-orchestration';
 import { createOrchestrationPlugin } from '../src/plugin';
 
 const noopTask = defineTask({
@@ -188,7 +195,11 @@ describe('createOrchestrationPlugin — routes option interaction', () => {
       adapter,
       tasks: [noopTask],
       routes: true,
-      routeMiddleware: [async (c, next) => { await next(); }],
+      routeMiddleware: [
+        async (c, next) => {
+          await next();
+        },
+      ],
     });
 
     const app = new Hono();

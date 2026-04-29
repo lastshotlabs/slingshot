@@ -24,6 +24,7 @@ bun add @lastshotlabs/slingshot-postgres
 ## Export Paths
 
 - `.`
+- `./errors`
 - `./testing`
 
 ## Package Scripts

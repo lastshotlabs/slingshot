@@ -112,9 +112,7 @@ describe('searchManager — tenant index LRU eviction observability', () => {
     await client.indexDocument({ id: 'b-1', title: 'two' }, { tenantId: 'B' });
     await client.indexDocument({ id: 'c-1', title: 'three' }, { tenantId: 'C' });
 
-    const evictionRecord = logRecords.find(r =>
-      r.msg.includes('tenant index cache evicted'),
-    );
+    const evictionRecord = logRecords.find(r => r.msg.includes('tenant index cache evicted'));
     expect(evictionRecord).toBeDefined();
     expect(evictionRecord!.fields?.reason).toBe('lru-capacity');
     expect(evictionRecord!.fields?.tenantId).toBe('A');

@@ -45,8 +45,14 @@ describe('createIdempotencyScope', () => {
   });
 
   test('distinguishes task vs workflow with same name', () => {
-    const taskScope = createIdempotencyScope({ type: 'task', name: 'process' }, { idempotencyKey: 'k' });
-    const wfScope = createIdempotencyScope({ type: 'workflow', name: 'process' }, { idempotencyKey: 'k' });
+    const taskScope = createIdempotencyScope(
+      { type: 'task', name: 'process' },
+      { idempotencyKey: 'k' },
+    );
+    const wfScope = createIdempotencyScope(
+      { type: 'workflow', name: 'process' },
+      { idempotencyKey: 'k' },
+    );
     expect(taskScope).not.toBe(wfScope);
     expect(taskScope).toContain(':task:');
     expect(wfScope).toContain(':workflow:');

@@ -85,12 +85,7 @@ describe('facet computation', () => {
   });
 
   test('numeric facet stats compute min/max/avg/sum/count', () => {
-    const docs = [
-      { score: 10 },
-      { score: 20 },
-      { score: 30 },
-      { score: 40 },
-    ];
+    const docs = [{ score: 10 }, { score: 20 }, { score: 30 }, { score: 40 }];
     const { stats } = computeFacets(docs, ['score']);
     expect(stats.score).toBeDefined();
     expect(stats.score!.min).toBe(10);

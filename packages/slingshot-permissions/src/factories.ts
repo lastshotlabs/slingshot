@@ -4,7 +4,7 @@ import { createMongoPermissionsAdapter } from './adapters/mongo';
 import { createPermissionsPostgresAdapter } from './adapters/postgres';
 import { createSqlitePermissionsAdapter } from './adapters/sqlite';
 
-function unsupportedRedisPermissionsAdapter(): never {
+function unsupportedRedisPermissionsAdapter(_infra?: StoreInfra): never {
   throw new Error(
     '[slingshot-permissions] Redis permissions adapter is not implemented. Use memory, sqlite, mongo, or postgres instead.',
   );
@@ -37,13 +37,13 @@ export type PermissionsAdapterFactories = Record<
  * const adapter = await resolveRepo(permissionsAdapterFactories, storeType, infra);
  * ```
  */
-export const permissionsAdapterFactories: PermissionsAdapterFactories = {
-  memory: () => createMemoryPermissionsAdapter(),
-  redis: () => unsupportedRedisPermissionsAdapter(),
+export const permissionsAdapterFactories = {
+  memory: (_infra?: StoreInfra) => createMemoryPermissionsAdapter(),
+  redis: (_infra?: StoreInfra) => unsupportedRedisPermissionsAdapter(_infra),
   sqlite: infra => createSqlitePermissionsAdapter(infra.getSqliteDb()),
   mongo: infra => {
     const { conn } = infra.getMongo();
     return createMongoPermissionsAdapter(conn);
   },
   postgres: infra => createPermissionsPostgresAdapter(infra.getPostgres().pool),
-};
+} satisfies PermissionsAdapterFactories;

@@ -10,7 +10,7 @@ describe('createMemoryPermissionsAdapter', () => {
 
   test('getGrantsForSubject returns empty array for unknown subject', async () => {
     const adapter = createMemoryPermissionsAdapter();
-    const grants = await adapter.getGrantsForSubject({ type: 'user', id: 'unknown' });
+    const grants = await adapter.getGrantsForSubject('unknown', 'user');
     expect(grants).toEqual([]);
   });
 
@@ -32,9 +32,9 @@ describe('createMemoryPermissionsAdapter', () => {
 
   test('clear resets grants', async () => {
     const adapter = createMemoryPermissionsAdapter();
-    await adapter.getGrantsForSubject({ type: 'user', id: 'test' });
+    await adapter.getGrantsForSubject('test', 'user');
     adapter.clear();
-    const grants = await adapter.getGrantsForSubject({ type: 'user', id: 'test' });
+    const grants = await adapter.getGrantsForSubject('test', 'user');
     expect(grants).toEqual([]);
   });
 });

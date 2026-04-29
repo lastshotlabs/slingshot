@@ -424,6 +424,12 @@ export interface M2MConfig {
   tokenExpiry?: number;
   /** Allowed scopes for M2M clients. */
   scopes?: string[];
+  /**
+   * Re-check the client record whenever `requireScope()` authorizes a request.
+   * Defaults to true so disabling/deleting a client or narrowing its scopes takes
+   * effect before issued JWTs naturally expire.
+   */
+  recheckClientOnUse?: boolean;
 }
 
 /**
@@ -932,6 +938,8 @@ export interface AuthResolvedConfig {
   readonly csrfEnabled: boolean;
   readonly jwt: Readonly<JwtConfig> | null;
   readonly breachedPassword: Readonly<BreachedPasswordConfig> | null;
+  readonly oauthPostRedirect: string | null;
+  readonly oauthAllowedRedirectUrls: readonly string[];
   readonly oauthReauth: Readonly<OAuthReauthConfig> | null;
   readonly stepUp: Readonly<StepUpConfig> | null;
   readonly checkSuspensionOnIdentify: boolean;
@@ -982,6 +990,8 @@ export const DEFAULT_AUTH_CONFIG: AuthResolvedConfig = Object.freeze({
   csrfEnabled: false,
   jwt: null,
   breachedPassword: null,
+  oauthPostRedirect: null,
+  oauthAllowedRedirectUrls: [],
   oauthReauth: null,
   stepUp: null,
   checkSuspensionOnIdentify: true,

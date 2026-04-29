@@ -105,6 +105,7 @@ describe('config validation', () => {
           rateLimit: { windowMs: 60_000, max: 100 },
           botProtection: { blockList: ['198.51.100.0/24'], fingerprintRateLimit: true },
           trustProxy: 1,
+          csrf: { enabled: true, exemptPaths: ['/webhooks/*'], checkOrigin: true },
           signing: {
             secret: 'secret',
             cookies: true,
@@ -163,6 +164,7 @@ describe('config validation', () => {
           },
           botProtection: { blockList: ['bad-bot'], fingerprintRateLimit: true },
           trustProxy: 1,
+          csrf: { enabled: true, exemptPaths: ['/hooks/*'], checkOrigin: true },
           signing: {
             secret: 's3cret',
             cookies: true,
@@ -525,6 +527,17 @@ describe('config validation', () => {
       });
       expect(result.warnings).toHaveLength(1);
       expect(result.warnings[0]).toContain('"security.captcha.minscore"');
+    });
+
+    it('warns on typo in security.csrf section', () => {
+      const result = validateAppConfig({
+        routesDir: '/routes',
+        security: {
+          csrf: { enabled: true, exemptPath: ['/hooks/*'] },
+        },
+      });
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings[0]).toContain('"security.csrf.exemptPath"');
     });
 
     it('warns on typo in deeply nested signing.presignedUrls object', () => {

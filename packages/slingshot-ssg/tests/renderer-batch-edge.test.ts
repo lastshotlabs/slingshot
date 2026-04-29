@@ -144,7 +144,11 @@ describe('renderSsgPages — partial failure and aggregation', () => {
       '/ok5',
       '/fail5',
     ];
-    const result = await renderSsgPages(paths, makeSelectiveRenderer(failing), makeConfig({ concurrency: 4 }));
+    const result = await renderSsgPages(
+      paths,
+      makeSelectiveRenderer(failing),
+      makeConfig({ concurrency: 4 }),
+    );
     expect(result.succeeded).toBe(5);
     expect(result.failed).toBe(5);
     expect(result.pages).toHaveLength(10);
@@ -161,7 +165,11 @@ describe('renderSsgPages — partial failure and aggregation', () => {
   it('error collection contains all failure details', async () => {
     const failing = new Set<string>(['/err-a', '/err-b']);
     const paths = ['/err-a', '/ok', '/err-b'];
-    const result = await renderSsgPages(paths, makeSelectiveRenderer(failing), makeConfig({ concurrency: 2 }));
+    const result = await renderSsgPages(
+      paths,
+      makeSelectiveRenderer(failing),
+      makeConfig({ concurrency: 2 }),
+    );
     const failedPages = result.pages.filter(p => p.error);
     expect(failedPages).toHaveLength(2);
     expect(failedPages[0].error?.message).toContain('intentional failure');
@@ -205,8 +213,9 @@ describe('renderSsgPages — asset tags edge cases', () => {
   });
 
   it('works with multiple asset tags', async () => {
-    const manyTags = Array.from({ length: 50 }, (_, i) =>
-      `<link rel="stylesheet" href="/assets/style-${i}.css">`,
+    const manyTags = Array.from(
+      { length: 50 },
+      (_, i) => `<link rel="stylesheet" href="/assets/style-${i}.css">`,
     ).join('\n');
     const result = await renderSsgPages(['/page'], makeOkRenderer(), makeConfig(), manyTags);
     expect(result.succeeded).toBe(1);

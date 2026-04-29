@@ -13,7 +13,6 @@
 //   - fileStoreTimeoutMs=0 disables the timeout
 //   - Combining fileStore with timeout
 //   - Options with only maxFileBytes set (no fileStore)
-
 import { describe, expect, it } from 'bun:test';
 import { edgeRuntime } from '../../src/index';
 
@@ -75,7 +74,8 @@ describe('edgeRuntime() — option parsing edge cases', () => {
     it('fileStoreTimeoutMs=0 passes through a moderately slow store', async () => {
       const runtime = edgeRuntime({
         fileStoreTimeoutMs: 0,
-        fileStore: () => new Promise(resolve => setTimeout(() => resolve('slow-but-no-timeout'), 50)),
+        fileStore: () =>
+          new Promise(resolve => setTimeout(() => resolve('slow-but-no-timeout'), 50)),
       });
       const result = await runtime.readFile('/slow');
       expect(result).toBe('slow-but-no-timeout');

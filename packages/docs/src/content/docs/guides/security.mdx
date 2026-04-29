@@ -131,8 +131,7 @@ Rotating the signing secret invalidates all active sessions — unless you use `
     await createServer({
       security: {
         signing: {
-          secret: process.env.SIGNING_SECRET_V2!,
-          previousSecrets: [process.env.SIGNING_SECRET_V1!],
+          secret: [process.env.SIGNING_SECRET_V2!, process.env.SIGNING_SECRET_V1!],
         },
       },
     });
@@ -144,7 +143,7 @@ New tokens sign with `V2`. Tokens signed with `V1` stay valid until they expire.
 
 ### Issuer and audience
 
-Set `jwt.issuer` and `jwt.audience` so tokens are scoped to your application. Slingshot warns at startup if either is missing.
+Set `jwt.issuer` and `jwt.audience` so tokens are scoped to your application. Slingshot fails production boot when either is missing and warns during development.
 
 ```typescript
 createAuthPlugin({

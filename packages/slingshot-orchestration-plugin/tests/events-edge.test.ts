@@ -33,8 +33,12 @@ describe('Orchestration event sink dispose', () => {
     let disposed = false;
     const sink = {
       disposed: false,
-      dispose() { this.disposed = true; },
-      emit() { if (this.disposed) throw new Error('disposed'); },
+      dispose() {
+        this.disposed = true;
+      },
+      emit() {
+        if (this.disposed) throw new Error('disposed');
+      },
     };
     sink.dispose();
     disposed = true;
@@ -46,7 +50,10 @@ describe('Orchestration event sink dispose', () => {
     const sink = {
       disposed: false,
       dispose() {
-        if (!this.disposed) { this.disposed = true; disposeCount++; }
+        if (!this.disposed) {
+          this.disposed = true;
+          disposeCount++;
+        }
       },
     };
     sink.dispose();

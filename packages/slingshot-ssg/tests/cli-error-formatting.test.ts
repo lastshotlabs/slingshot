@@ -57,7 +57,7 @@ describe('cli error formatting — labeled vs unexpected', () => {
     const consoleError = spyOn(console, 'error').mockImplementation(() => {});
 
     try {
-      const err = 'something went wrong';
+      const err: unknown = 'something went wrong';
       if (err instanceof Error && err.message.startsWith('[slingshot-ssg]')) {
         console.error(err.message);
       } else {

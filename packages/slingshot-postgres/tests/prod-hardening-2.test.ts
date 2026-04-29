@@ -6,6 +6,7 @@
  * scenarios.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +59,9 @@ mock.module('pg', () => ({
         release() {},
       });
     }
-    end() { return Promise.resolve(); }
+    end() {
+      return Promise.resolve();
+    }
   },
 }));
 
@@ -77,16 +80,20 @@ mock.module('drizzle-orm/node-postgres', () => ({
     ),
 }));
 
-import { createPostgresAdapter } from '../src/adapter.js';
-
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function makeTransactionMock(selectValues: unknown[] = []): Record<string, unknown> {
   let idx = 0;
-  const select = selectValues.length > 0
-    ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
-    : () => resolvingBuilder([]);
-  return { select, insert: () => resolvingBuilder(undefined), update: () => resolvingBuilder(undefined), delete: () => resolvingBuilder(undefined) };
+  const select =
+    selectValues.length > 0
+      ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
+      : () => resolvingBuilder([]);
+  return {
+    select,
+    insert: () => resolvingBuilder(undefined),
+    update: () => resolvingBuilder(undefined),
+    delete: () => resolvingBuilder(undefined),
+  };
 }
 
 function selectSequence(first: unknown, ...rest: unknown[]): () => Builder {
@@ -115,7 +122,7 @@ describe('prod-hardening-2 — SQL injection resistance', () => {
   test('findByEmail with SQL injection in email returns null', async () => {
     mockDbImpl = { select: () => resolvingBuilder([]) };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
-    const result = await adapter.findByEmail("test@example.com; DROP TABLE users;");
+    const result = await adapter.findByEmail('test@example.com; DROP TABLE users;');
     expect(result).toBeNull();
   });
 
@@ -141,7 +148,7 @@ describe('prod-hardening-2 — concurrent creation race conditions', () => {
     const { HttpError } = await import('@lastshotlabs/slingshot-core');
     const thrown = await adapter.create('dup@example.com', 'hash').catch(e => e);
     expect(thrown).toBeInstanceOf(HttpError);
-    expect((thrown as HttpError).status).toBe(409);
+    expect((thrown as InstanceType<typeof HttpError>).status).toBe(409);
   });
 
   test('concurrent create calls on same email both handled gracefully', async () => {
@@ -165,7 +172,7 @@ describe('prod-hardening-2 — concurrent creation race conditions', () => {
     // Second creation should fail with 409
     const r2 = await adapter.create('race@example.com', 'hash2').catch(e => e);
     expect(r2).toBeInstanceOf(HttpError);
-    expect((r2 as HttpError).status).toBe(409);
+    expect((r2 as InstanceType<typeof HttpError>).status).toBe(409);
   });
 
   test('findOrCreateByProvider handles concurrent creation', async () => {
@@ -181,8 +188,7 @@ describe('prod-hardening-2 — concurrent creation race conditions', () => {
       insert: () => resolvingBuilder(undefined),
       update: () => resolvingBuilder(undefined),
       delete: () => resolvingBuilder([]),
-      transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-        fn(makeTransactionMock()),
+      transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(makeTransactionMock()),
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const result = await adapter.findOrCreateByProvider!('github', 'gh-concurrent', {
@@ -244,8 +250,7 @@ describe('prod-hardening-2 — adapter method edge cases', () => {
       delete: () => resolvingBuilder([]),
       insert: () => resolvingBuilder(undefined),
       select: () => resolvingBuilder(codes.map(c => ({ codeHash: c }))),
-      transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-        fn(makeTransactionMock()),
+      transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(makeTransactionMock()),
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     await adapter.setRecoveryCodes!('uid', codes);

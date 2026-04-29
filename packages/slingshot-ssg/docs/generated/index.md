@@ -24,6 +24,8 @@ bun add @lastshotlabs/slingshot-ssg
 ## Export Paths
 
 - `.`
+- `./errors`
+- `./testing`
 
 ## Package Scripts
 

@@ -4,6 +4,7 @@
 // inputs, circular references, boundary values for resolveMaxPayloadBytes,
 // and assertPayloadSize behavior.
 import { describe, expect, test } from 'bun:test';
+import { OrchestrationError } from '../src/errors';
 import {
   DEFAULT_MAX_PAYLOAD_BYTES,
   PAYLOAD_BYTES_CEILING,
@@ -11,7 +12,6 @@ import {
   resolveMaxPayloadBytes,
   serializeWithLimit,
 } from '../src/serialization';
-import { OrchestrationError } from '../src/errors';
 
 describe('serializeWithLimit — undefined and non-JSON inputs', () => {
   test('returns empty string for undefined', () => {
@@ -42,17 +42,15 @@ describe('serializeWithLimit — undefined and non-JSON inputs', () => {
 describe('serializeWithLimit — error cases', () => {
   test('throws INVALID_CONFIG for non-JSON-serializable values (BigInt)', () => {
     // BigInt is not JSON-serializable and will cause JSON.stringify to throw
-    expect(() =>
-      serializeWithLimit({ value: BigInt(123) }, 1024, 'test-bigint'),
-    ).toThrow(OrchestrationError);
+    expect(() => serializeWithLimit({ value: BigInt(123) }, 1024, 'test-bigint')).toThrow(
+      OrchestrationError,
+    );
   });
 
   test('throws INVALID_CONFIG with details for circular references', () => {
     const circular: Record<string, unknown> = { name: 'loop' };
     circular.self = circular;
-    expect(() => serializeWithLimit(circular, 1024, 'circular')).toThrow(
-      OrchestrationError,
-    );
+    expect(() => serializeWithLimit(circular, 1024, 'circular')).toThrow(OrchestrationError);
   });
 
   test('error includes the JSON serialization failure message', () => {
@@ -89,9 +87,7 @@ describe('serializeWithLimit — byte boundary accuracy', () => {
   test('multi-byte UTF-8 one byte over the limit fails', () => {
     const value = { m: '\u{1F680}\u{1F680}\u{1F680}' };
     // 19 bytes is insufficient for a 20-byte payload
-    expect(() => serializeWithLimit(value, 19, 'too-small')).toThrow(
-      OrchestrationError,
-    );
+    expect(() => serializeWithLimit(value, 19, 'too-small')).toThrow(OrchestrationError);
   });
 });
 
@@ -105,9 +101,7 @@ describe('resolveMaxPayloadBytes — boundary values', () => {
   });
 
   test('rejects value above ceiling', () => {
-    expect(() => resolveMaxPayloadBytes(PAYLOAD_BYTES_CEILING + 1)).toThrow(
-      OrchestrationError,
-    );
+    expect(() => resolveMaxPayloadBytes(PAYLOAD_BYTES_CEILING + 1)).toThrow(OrchestrationError);
   });
 
   test('rejects zero', () => {

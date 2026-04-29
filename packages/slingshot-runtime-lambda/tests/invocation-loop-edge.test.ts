@@ -15,9 +15,11 @@ import {
   createDefaultIdentityResolver,
 } from '@lastshotlabs/slingshot-core';
 import { invokeWithAdapter } from '../src/invocationLoop';
-import { sqsTrigger } from '../src/triggers/sqs';
-import { kinesisTrigger } from '../src/triggers/kinesis';
 import { apigwTrigger } from '../src/triggers/apigw';
+import { kinesisTrigger } from '../src/triggers/kinesis';
+import { sqsTrigger } from '../src/triggers/sqs';
+
+type BatchResult = { batchItemFailures: Array<{ itemIdentifier: string }> };
 
 function createContextFixture(overrides: Partial<SlingshotContext> = {}): SlingshotContext {
   return {
@@ -107,7 +109,7 @@ describe('invocation loop — batch handling', () => {
       return { ok: true };
     });
 
-    const result = await invokeWithAdapter(
+    const result = (await invokeWithAdapter(
       handler,
       sqsTrigger as TriggerAdapter,
       {
@@ -122,10 +124,10 @@ describe('invocation loop — batch handling', () => {
       undefined,
       undefined,
       true,
-    );
+    )) as BatchResult;
 
     expect(result.batchItemFailures).toHaveLength(2);
-    const failedIds = result.batchItemFailures.map((f: { itemIdentifier: string }) => f.itemIdentifier);
+    const failedIds = result.batchItemFailures.map(f => f.itemIdentifier);
     expect(failedIds).toContain('bad-1');
     expect(failedIds).toContain('bad-2');
   });
@@ -134,7 +136,7 @@ describe('invocation loop — batch handling', () => {
     const ctx = createContextFixture();
     const handler = createHandler(async () => ({ ok: true }));
 
-    const result = await invokeWithAdapter(
+    const result = (await invokeWithAdapter(
       handler,
       sqsTrigger as TriggerAdapter,
       {
@@ -148,7 +150,7 @@ describe('invocation loop — batch handling', () => {
       undefined,
       undefined,
       true,
-    );
+    )) as BatchResult;
 
     expect(result.batchItemFailures).toHaveLength(0);
   });
@@ -205,7 +207,7 @@ describe('invocation loop — batch handling', () => {
       return { ok: true };
     });
 
-    const result = await invokeWithAdapter(
+    const result = (await invokeWithAdapter(
       handler,
       sqsTrigger as TriggerAdapter,
       {
@@ -222,7 +224,7 @@ describe('invocation loop — batch handling', () => {
       },
       undefined,
       true,
-    );
+    )) as BatchResult;
 
     expect(result.batchItemFailures).toHaveLength(0);
   });
@@ -254,7 +256,7 @@ describe('invocation loop — idempotency with batch records', () => {
       throw new Error('should not be called');
     });
 
-    const result = await invokeWithAdapter(
+    const result = (await invokeWithAdapter(
       handler,
       sqsTrigger as TriggerAdapter,
       {
@@ -264,7 +266,7 @@ describe('invocation loop — idempotency with batch records', () => {
       undefined,
       undefined,
       true,
-    );
+    )) as BatchResult;
 
     // Handler should not have run — cache hit
     expect(result.batchItemFailures).toHaveLength(0);
@@ -291,7 +293,7 @@ describe('invocation loop — idempotency with batch records', () => {
 
     const handler = createHandler(async () => ({ processed: true }));
 
-    const result = await invokeWithAdapter(
+    const result = (await invokeWithAdapter(
       handler,
       sqsTrigger as TriggerAdapter,
       {
@@ -301,7 +303,7 @@ describe('invocation loop — idempotency with batch records', () => {
       undefined,
       undefined,
       true,
-    );
+    )) as BatchResult;
 
     expect(result.batchItemFailures).toHaveLength(0);
     expect(set).toHaveBeenCalled();

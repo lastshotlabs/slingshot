@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { defineTask, assertKebab, normalizeRetryPolicy } from '../src/defineTask';
+import { assertKebab, defineTask, normalizeRetryPolicy } from '../src/defineTask';
 import { OrchestrationError } from '../src/errors';
 
 describe('assertKebab', () => {
@@ -56,7 +56,10 @@ describe('normalizeRetryPolicy', () => {
   });
 
   test('preserves explicit values', () => {
-    const result = normalizeRetryPolicy({ maxAttempts: 3, delayMs: 500, backoff: 'exponential' }, 'Test');
+    const result = normalizeRetryPolicy(
+      { maxAttempts: 3, delayMs: 500, backoff: 'exponential' },
+      'Test',
+    );
     expect(result.maxAttempts).toBe(3);
     expect(result.delayMs).toBe(500);
     expect(result.backoff).toBe('exponential');
@@ -68,9 +71,9 @@ describe('normalizeRetryPolicy', () => {
   });
 
   test('rejects maxDelayMs < delayMs', () => {
-    expect(() =>
-      normalizeRetryPolicy({ maxDelayMs: 100, delayMs: 500 }, 'Test'),
-    ).toThrow(OrchestrationError);
+    expect(() => normalizeRetryPolicy({ maxDelayMs: 100, delayMs: 500 }, 'Test')).toThrow(
+      OrchestrationError,
+    );
   });
 
   test('rejects non-positive maxAttempts', () => {

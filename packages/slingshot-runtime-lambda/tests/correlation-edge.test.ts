@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  firstString,
-  readHeader,
-  decodeMaybeJson,
   decodeBase64JsonOrText,
   decodeHttpBody,
+  decodeMaybeJson,
+  firstString,
+  readHeader,
 } from '../src/correlation';
 
 describe('firstString', () => {
@@ -31,7 +31,9 @@ describe('firstString', () => {
 
 describe('readHeader', () => {
   test('reads header case-insensitively', () => {
-    expect(readHeader({ 'Content-Type': 'application/json' }, 'content-type')).toBe('application/json');
+    expect(readHeader({ 'Content-Type': 'application/json' }, 'content-type')).toBe(
+      'application/json',
+    );
   });
 
   test('returns null for missing header', () => {

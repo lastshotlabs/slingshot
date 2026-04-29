@@ -15,6 +15,8 @@ describe('root entrypoints', () => {
     expect(root.createServerFromManifest).toBe(manifest.createServerFromManifest);
     expect(typeof root.createApp).toBe('function');
     expect(typeof root.createMcpFoundation).toBe('function');
+    expect(typeof root.auditProductionReadiness).toBe('function');
+    expect(typeof root.assertProductionReadiness).toBe('function');
   });
 
   test('mongo, redis, and queue entrypoints expose the intended helpers', async () => {

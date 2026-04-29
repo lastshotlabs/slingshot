@@ -91,9 +91,7 @@ describe('memory adapter: grant expiration', () => {
     const adapter = createMemoryPermissionsAdapter();
     const past = new Date(Date.now() - 10_000);
 
-    await expect(
-      adapter.createGrant(baseGrant({ expiresAt: past })),
-    ).rejects.toThrow();
+    await expect(adapter.createGrant(baseGrant({ expiresAt: past }))).rejects.toThrow();
   });
 
   test('expiresAt exactly at the current time boundary may be accepted (adapter validates > now, not >= now)', async () => {
@@ -101,9 +99,7 @@ describe('memory adapter: grant expiration', () => {
     const now = new Date();
 
     // The validation allows expiresAt == now since it uses a > check
-    await expect(
-      adapter.createGrant(baseGrant({ expiresAt: now })),
-    ).resolves.toBeTruthy();
+    await expect(adapter.createGrant(baseGrant({ expiresAt: now }))).resolves.toBeTruthy();
   });
 });
 

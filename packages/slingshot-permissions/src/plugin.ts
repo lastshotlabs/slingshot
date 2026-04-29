@@ -1,5 +1,6 @@
 import type {
   GroupResolver,
+  Logger,
   PluginSeedContext,
   PluginSetupContext,
   PluginStateMap,
@@ -10,7 +11,8 @@ import {
   PERMISSIONS_STATE_KEY,
   SUPER_ADMIN_ROLE,
   getPluginState,
-  resolveRepo,
+  noopLogger,
+  resolveRepoAsync,
 } from '@lastshotlabs/slingshot-core';
 import type { PermissionsState } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from './factories';
@@ -30,7 +32,8 @@ import { createPermissionRegistry } from './lib/registry';
  *     plugin hasn't completed `setupMiddleware`, or another plugin pre-seeded
  *     state without an adapter).
  *   - `'degraded'` when the evaluator has observed any query timeouts or
- *     group-expansion errors since startup.
+ *     group-expansion errors since startup, or when the backing adapter
+ *     reports a disconnected state.
  *   - `'healthy'` otherwise.
  */
 export interface PermissionsHealth {
@@ -42,6 +45,17 @@ export interface PermissionsHealth {
     readonly adapterName: string | null;
     /** Per-evaluator counters surfaced from the most recently created evaluator. */
     readonly evaluator: EvaluatorHealth | null;
+    /**
+     * Adapter-level health snapshot. Present when the backing adapter
+     * exposes a `healthCheck()` method (currently the Postgres adapter).
+     * `undefined` for adapters that do not support health checks (memory,
+     * SQLite).
+     */
+    readonly adapter:
+      | {
+          readonly status: 'connected' | 'disconnected';
+        }
+      | undefined;
   };
 }
 
@@ -88,6 +102,24 @@ export interface PermissionsPluginConfig {
    * Increase this for org models where users can belong to many groups.
    */
   maxGroups?: number;
+  /**
+   * Maximum time in milliseconds to wait for each permissions adapter query.
+   * When omitted, evaluator queries are not timed out.
+   */
+  queryTimeoutMs?: number;
+
+  /**
+   * Set true to keep the previous fail-open group-expansion behavior.
+   * Defaults to false so missing group grants cannot hide deny permissions.
+   */
+  failOpenOnGroupExpansionError?: boolean;
+
+  /**
+   * Injected structured logger for plugin-level operational messages.
+   * When omitted, messages are silently discarded (noop logger).
+   * The logger is also forwarded to the evaluator for permission check warnings.
+   */
+  logger?: Logger;
 }
 
 /**
@@ -142,9 +174,13 @@ export function createPermissionsPlugin(
 ): SlingshotPlugin & { getHealth(): PermissionsHealth } {
   // Captured from setupMiddleware so getHealth() can return a non-trivial
   // snapshot without re-resolving the adapter.
+  const logger: Logger = config?.logger ?? noopLogger;
   let evaluatorRef: EvaluatorWithHealth | undefined;
   let adapterNameRef: string | null = null;
   let adapterAvailable = false;
+  // Adapter-level health detail — populated when the adapter exposes a
+  // healthCheck() method (e.g. the Postgres adapter).
+  let adapterHealth: PermissionsHealth['details']['adapter'] = undefined;
 
   return {
     name: 'slingshot-permissions',
@@ -159,6 +195,8 @@ export function createPermissionsPlugin(
         (evaluatorHealth.queryTimeoutCount > 0 || evaluatorHealth.groupExpansionErrorCount > 0)
       ) {
         status = 'degraded';
+      } else if (adapterHealth && adapterHealth.status !== 'connected') {
+        status = 'degraded';
       }
       return {
         status,
@@ -166,6 +204,7 @@ export function createPermissionsPlugin(
           adapterAvailable,
           adapterName: adapterNameRef,
           evaluator: evaluatorHealth,
+          adapter: adapterHealth,
         },
       };
     },
@@ -197,20 +236,34 @@ export function createPermissionsPlugin(
       const registry = createPermissionRegistry();
       // Some adapter factories are async (e.g. Mongo); await via Promise.resolve
       // so synchronous adapters (SQLite, memory) are handled without special-casing.
-      const adapter = await Promise.resolve(
-        resolveRepo(permissionsAdapterFactories, storeType, infra),
-      );
+      const adapter = await resolveRepoAsync(permissionsAdapterFactories, storeType, infra);
       const groupResolver = config?.groupResolver?.(pluginState);
       const evaluator = createPermissionEvaluator({
         registry,
         adapter,
         groupResolver,
         maxGroups: config?.maxGroups,
+        queryTimeoutMs: config?.queryTimeoutMs,
+        logger,
+        failOpenOnGroupExpansionError: config?.failOpenOnGroupExpansionError,
       });
 
       evaluatorRef = evaluator;
       adapterAvailable = true;
       adapterNameRef = (adapter as { name?: string }).name ?? adapter.constructor?.name ?? null;
+
+      // Capture adapter-level health detail if the adapter exposes a health check.
+      const adapterAny = adapter as unknown as Record<string, unknown>;
+      if (typeof adapterAny.healthCheck === 'function') {
+        try {
+          const aHealth = await (
+            adapterAny as { healthCheck: () => Promise<{ status: 'connected' | 'disconnected' }> }
+          ).healthCheck();
+          adapterHealth = aHealth;
+        } catch {
+          adapterHealth = { status: 'disconnected' as const };
+        }
+      }
 
       pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));
     },
@@ -226,7 +279,10 @@ export function createPermissionsPlugin(
             subjectType: 'user',
           });
         } catch (err) {
-          console.error('[slingshot-permissions] Failed to delete grants for deleted user:', err);
+          logger.error(
+            '[slingshot-permissions] Failed to delete grants for deleted user: ' +
+              (err instanceof Error ? err.message : String(err)),
+          );
         }
       });
     },

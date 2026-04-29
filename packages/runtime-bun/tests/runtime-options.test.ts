@@ -1,3 +1,4 @@
+import { unlink } from 'node:fs/promises';
 import { describe, expect, test } from 'bun:test';
 import { bunRuntime } from '../src/index';
 
@@ -33,9 +34,9 @@ describe('bunRuntime options', () => {
 
   test('capabilities reflect bun environment', () => {
     const rt = bunRuntime();
-    expect(rt.supportsSqlite).toBe(true);
-    expect(rt.supportsFs).toBe(true);
-    expect(rt.supportsGlob).toBe(true);
+    expect(typeof rt.sqlite.open).toBe('function');
+    expect(typeof rt.fs.write).toBe('function');
+    expect(typeof rt.glob.scan).toBe('function');
     expect(rt.supportsAsyncLocalStorage).toBe(true);
   });
 
@@ -58,7 +59,7 @@ describe('bunRuntime options', () => {
     expect(db).toBeDefined();
     db.run('CREATE TABLE test (id INTEGER PRIMARY KEY, value TEXT)');
     db.run("INSERT INTO test VALUES (1, 'hello')");
-    const row = db.get('SELECT * FROM test WHERE id = 1');
+    const row = db.query('SELECT * FROM test WHERE id = 1').get();
     expect(row).toEqual({ id: 1, value: 'hello' });
     db.close();
   });
@@ -66,13 +67,13 @@ describe('bunRuntime options', () => {
   test('fs file operations', async () => {
     const rt = bunRuntime();
     const tmp = `/tmp/bun-test-${Date.now()}.txt`;
-    await rt.fs.writeFile(tmp, 'test content');
-    const exists = await rt.fs.exist(tmp);
+    await rt.fs.write(tmp, 'test content');
+    const exists = await rt.fs.exists(tmp);
     expect(exists).toBe(true);
-    const content = await rt.fs.readFile(tmp);
+    const content = await rt.readFile(tmp);
     expect(content).toBe('test content');
-    await rt.fs.deleteFile(tmp);
-    const after = await rt.fs.exist(tmp);
+    await unlink(tmp);
+    const after = await rt.fs.exists(tmp);
     expect(after).toBe(false);
   });
 });

@@ -8,10 +8,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import type { Context } from 'hono';
-import type {
-  AppEnv,
-  StorageAdapter,
-} from '@lastshotlabs/slingshot-core';
+import type { AppEnv, StorageAdapter } from '@lastshotlabs/slingshot-core';
 import {
   attachContext,
   createDefaultIdentityResolver,

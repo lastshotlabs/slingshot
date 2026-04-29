@@ -6,7 +6,11 @@ import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
-import { createMemoryAdapter, createOrchestrationRuntime, defineTask } from '@lastshotlabs/slingshot-orchestration';
+import {
+  createMemoryAdapter,
+  createOrchestrationRuntime,
+  defineTask,
+} from '@lastshotlabs/slingshot-orchestration';
 import * as pluginExports from '../src/index';
 
 const noopTask = defineTask({
@@ -64,7 +68,11 @@ describe('OrchestrationRequestContext shape — resolved through route resolver'
       runtime,
       tasks: [noopTask],
       routes: true,
-      routeMiddleware: [async (c, next) => { await next(); }],
+      routeMiddleware: [
+        async (c, next) => {
+          await next();
+        },
+      ],
       resolveRequestContext: () => ({}),
     });
 
@@ -88,7 +96,11 @@ describe('OrchestrationRequestContext shape — resolved through route resolver'
       runtime,
       tasks: [noopTask],
       routes: true,
-      routeMiddleware: [async (c, next) => { await next(); }],
+      routeMiddleware: [
+        async (c, next) => {
+          await next();
+        },
+      ],
       resolveRequestContext: () => ({
         tenantId: 'tenant-1',
         actorId: 'actor-1',
@@ -139,8 +151,16 @@ describe('ConfigurableOrchestrationPluginOptions — route options combine with 
       tasks: [noopTask],
       routes: true,
       routePrefix: '/custom',
-      routeMiddleware: [async (c, next) => { await next(); }],
-      adminAuth: [async (c, next) => { await next(); }],
+      routeMiddleware: [
+        async (c, next) => {
+          await next();
+        },
+      ],
+      adminAuth: [
+        async (c, next) => {
+          await next();
+        },
+      ],
       routeTimeoutMs: 5000,
     });
     expect(plugin.name).toBe('slingshot-orchestration');
@@ -154,7 +174,11 @@ describe('ConfigurableOrchestrationPluginOptions — route options combine with 
       tasks: [noopTask],
       routes: true,
       routePrefix: '/jobs',
-      routeMiddleware: [async (c, next) => { await next(); }],
+      routeMiddleware: [
+        async (c, next) => {
+          await next();
+        },
+      ],
       resolveRequestContext: () => ({ tenantId: 't1' }),
       authorizeRun: () => true,
     });

@@ -12,6 +12,7 @@ import {
   attachPostgresPoolRuntime,
   createPostgresPoolRuntime,
 } from '@lastshotlabs/slingshot-core';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Mock state ────────────────────────────────────────────────────────────────
 
@@ -96,8 +97,6 @@ mock.module('drizzle-orm/node-postgres', () => ({
       },
     ),
 }));
-
-import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -344,8 +343,7 @@ describe('adapter-core — provider linking', () => {
       insert: () => resolvingBuilder(undefined),
       update: () => resolvingBuilder(undefined),
       delete: () => resolvingBuilder([]),
-      transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-        fn(makeTransactionMock()),
+      transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(makeTransactionMock()),
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const result = await adapter.findOrCreateByProvider!('github', 'gh-123', {
@@ -368,17 +366,13 @@ describe('adapter-core — provider linking', () => {
   test('linkProvider inserts without throwing', async () => {
     mockDbImpl = { insert: () => resolvingBuilder(undefined) };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
-    await expect(
-      adapter.linkProvider!('user-id', 'google', 'g-789'),
-    ).resolves.toBeUndefined();
+    await expect(adapter.linkProvider!('user-id', 'google', 'g-789')).resolves.toBeUndefined();
   });
 
   test('unlinkProvider deletes without throwing', async () => {
     mockDbImpl = { delete: () => resolvingBuilder([]) };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
-    await expect(
-      adapter.unlinkProvider!('user-id', 'google'),
-    ).resolves.toBeUndefined();
+    await expect(adapter.unlinkProvider!('user-id', 'google')).resolves.toBeUndefined();
   });
 });
 
@@ -433,9 +427,7 @@ describe('adapter-core — metadata operations', () => {
     await expect(
       adapter.setUserMetadata!('user-id', { plan: 'enterprise' }),
     ).resolves.toBeUndefined();
-    await expect(
-      adapter.setAppMetadata!('user-id', { flags: ['ga'] }),
-    ).resolves.toBeUndefined();
+    await expect(adapter.setAppMetadata!('user-id', { flags: ['ga'] })).resolves.toBeUndefined();
   });
 });
 

@@ -413,6 +413,7 @@ export interface CoreAuthAdapter {
    * checks during identify middleware (when `auth.checkSuspensionOnIdentify` is set).
    */
   getUser?(userId: string): Promise<{
+    id?: string;
     email?: string;
     providerIds?: string[];
     emailVerified?: boolean;
@@ -1014,7 +1015,7 @@ export interface SuspensionAdapter {
    * when the user is already active is a no-op. The auth plugin records the
    * suspension timestamp (`suspendedAt`) separately via `CoreAuthAdapter.getUser()`.
    */
-  setSuspended(userId: string, suspended: boolean, reason?: string): Promise<void>;
+  setSuspended(userId: string, suspended: boolean, reason?: string | null): Promise<void>;
   /**
    * Retrieve the suspension state of a user.
    *

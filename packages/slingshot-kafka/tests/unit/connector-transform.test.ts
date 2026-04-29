@@ -7,8 +7,8 @@ import { z } from 'zod';
 import {
   createEventDefinitionRegistry,
   createEventPublisher,
-  defineEvent,
   createInProcessAdapter,
+  defineEvent,
 } from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
@@ -159,7 +159,9 @@ describe('connector inbound transforms', () => {
       // Handler must NOT run — transform threw before reaching handler
       expect(handler).not.toHaveBeenCalled();
       // DLQ should contain the message
-      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic === 'incoming.transform-err.dlq');
+      const dlqSend = fakeKafkaState.producerSendCalls.find(
+        c => c.topic === 'incoming.transform-err.dlq',
+      );
       expect(dlqSend).toBeDefined();
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('validate');
     } finally {
@@ -189,8 +191,12 @@ describe('connector outbound transforms', () => {
         {
           event: 'auth:user.created',
           topic: 'external.users.transformed',
-          transform: (envelope: { payload: Record<string, unknown> }) => {
-            return { ...envelope.payload, masked: true, email: 'redacted@example.com' };
+          transform: envelope => {
+            return {
+              ...(envelope.payload as Record<string, unknown>),
+              masked: true,
+              email: 'redacted@example.com',
+            };
           },
         },
       ],
@@ -205,7 +211,9 @@ describe('connector outbound transforms', () => {
 
       expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
       const sentPayload = JSON.parse(
-        new TextDecoder().decode(fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array),
+        new TextDecoder().decode(
+          fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array,
+        ),
       );
       expect(sentPayload.payload).toEqual({
         userId: 'u-1',

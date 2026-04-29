@@ -89,7 +89,8 @@ export function getAuthCookieOptions(
     sameSite: c.sameSite ?? 'Lax',
     path: c.path ?? '/',
     domain: c.domain,
-    maxAge: maxAge ?? c.maxAge ?? DEFAULT_SESSION_TTL_SECONDS,
+    maxAge:
+      maxAge ?? c.maxAge ?? config.sessionPolicy.absoluteTimeout ?? DEFAULT_SESSION_TTL_SECONDS,
   };
 }
 

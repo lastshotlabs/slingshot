@@ -6,9 +6,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { Hono } from 'hono';
+import type { LogFields, Logger } from '@lastshotlabs/slingshot-core';
 import { createSearchPlugin } from '../src/plugin';
 import { SEARCH_ROUTES } from '../src/routes/index';
-import type { Logger, LogFields } from '@lastshotlabs/slingshot-core';
 import type { SearchAdminGate } from '../src/types/config';
 
 // ---------------------------------------------------------------------------
@@ -66,9 +66,9 @@ describe('createSearchPlugin — adminGate startup warning', () => {
 
     plugin.setupRoutes!(makeSetupContext());
 
-    expect(
-      warnings.some(m => m.includes('[slingshot-search]') && m.includes('adminGate')),
-    ).toBe(true);
+    expect(warnings.some(m => m.includes('[slingshot-search]') && m.includes('adminGate'))).toBe(
+      true,
+    );
   });
 
   it('does not emit a warning when adminGate IS set', () => {

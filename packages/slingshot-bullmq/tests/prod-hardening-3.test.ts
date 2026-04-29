@@ -208,7 +208,10 @@ describe('createBullMQAdapter — queue backpressure', () => {
       const calls = fakeBullMQState.queues[0].addCalls;
       expect(calls).toHaveLength(COUNT);
       for (let i = 0; i < COUNT; i++) {
-        const payload = (calls[i]?.data as Record<string, unknown>)?.payload as Record<string, unknown>;
+        const payload = (calls[i]?.data as Record<string, unknown>)?.payload as Record<
+          string,
+          unknown
+        >;
         expect(payload?.seq).toBe(i);
       }
     } finally {

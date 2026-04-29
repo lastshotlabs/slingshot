@@ -1,12 +1,12 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import {
-  installProcessSafetyNet,
-  resetProcessSafetyNetForTest,
   configureRuntimeBunLogger,
   configureRuntimeBunStructuredLogger,
+  installProcessSafetyNet,
+  resetProcessSafetyNetForTest,
 } from '../src/index';
 import type { RuntimeBunLogger } from '../src/index';
-import type { Logger } from '@lastshotlabs/slingshot-core';
 
 describe('process-safety', () => {
   beforeEach(() => {

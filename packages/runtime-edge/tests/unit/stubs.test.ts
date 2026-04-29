@@ -13,7 +13,6 @@
 //   - sqlite.open() throws with [runtime-edge]
 //   - server.listen() throws with [runtime-edge]
 //   - All stub objects are Object.freeze'd
-
 import { describe, expect, it } from 'bun:test';
 import { edgeRuntime } from '../../src/index';
 
@@ -178,7 +177,7 @@ describe('edge runtime stubs', () => {
       // (in strict mode or bun test they throw). Either way, the original
       // stub stays intact.
       expect(() => {
-        (runtime.fs as Record<string, unknown>).write = 'mutated' as never;
+        (runtime.fs as unknown as Record<string, unknown>).write = 'mutated' as never;
       }).toThrow(); // bun test runs in strict mode
     });
   });

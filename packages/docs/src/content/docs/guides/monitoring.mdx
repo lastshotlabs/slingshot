@@ -180,16 +180,13 @@ Import the community Slingshot dashboard (ID `XXXXX`) or build your own from the
 
 ### Liveness
 
-Returns 200 whenever the process is running. Sufficient for load balancer health checks.
+Slingshot mounts `/health` by default. It returns 200 whenever the process is
+running and is suitable for load balancer liveness checks.
 
-```typescript title="src/routes/health.ts"
-import { createRouter } from '@lastshotlabs/slingshot';
-
-const router = createRouter();
-
-router.get('/health', c => c.json({ status: 'ok' }));
-
-export default router;
+```json
+{
+  "status": "ok"
+}
 ```
 
 <Aside>
@@ -199,42 +196,20 @@ export default router;
 
 ### Readiness
 
-For Kubernetes readiness probes or staged deployments, verify downstream dependencies before the instance accepts traffic:
+Slingshot also mounts `/health/ready`. It returns 200 when configured
+dependencies are ready and 503 when a dependency check fails. Postgres readiness
+is included automatically when `db.postgres` is configured and the Postgres
+bundle exposes its health check.
 
-```typescript title="src/routes/ready.ts"
-import { createRouter, getRedisFromApp } from '@lastshotlabs/slingshot';
-
-const router = createRouter();
-
-declare function getSlingshotApp(c: import('hono').Context): object;
-declare function pingPostgres(app: object): Promise<void>;
-
-router.get('/ready', async c => {
-  const app = getSlingshotApp(c);
-
-  const checks: Record<string, 'ok' | 'error'> = {};
-
-  try {
-    await pingPostgres(app);
-    checks.postgres = 'ok';
-  } catch {
-    checks.postgres = 'error';
+```json
+{
+  "status": "ok",
+  "checks": {
+    "postgres": {
+      "ok": true
+    }
   }
-
-  try {
-    const redis = getRedisFromApp(app);
-    if (!redis) throw new Error('Redis is not configured');
-    await redis.ping();
-    checks.redis = 'ok';
-  } catch {
-    checks.redis = 'error';
-  }
-
-  const healthy = Object.values(checks).every(v => v === 'ok');
-  return c.json({ status: healthy ? 'ok' : 'degraded', checks }, healthy ? 200 : 503);
-});
-
-export default router;
+}
 ```
 
 ### Kubernetes probe config
@@ -249,7 +224,7 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
-    path: /ready
+    path: /health/ready
     port: 3000
   initialDelaySeconds: 10
   periodSeconds: 15

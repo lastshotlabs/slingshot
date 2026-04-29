@@ -150,28 +150,28 @@ describe('createApp config validation', () => {
     expect(res.headers.get('permissions-policy')).toBe('camera=()');
   });
 
-  it('starts with oauth postRedirect configured (allowedRedirectUrls validation moved to runtime)', async () => {
-    // allowedRedirectUrls is no longer validated at startup — the plugin resolves without error
-    const app = await createTestApp(
-      {},
-      {
-        auth: {
-          enabled: true,
-          oauth: {
-            providers: {
-              google: {
-                clientId: 'id',
-                clientSecret: 'secret',
-                redirectUri: 'http://localhost/callback',
+  it('rejects oauth postRedirect outside allowedRedirectUrls', async () => {
+    await expect(
+      createTestApp(
+        {},
+        {
+          auth: {
+            enabled: true,
+            oauth: {
+              providers: {
+                google: {
+                  clientId: 'id',
+                  clientSecret: 'secret',
+                  redirectUri: 'http://localhost/callback',
+                },
               },
+              postRedirect: 'https://evil.com/steal',
+              allowedRedirectUrls: ['https://myapp.com'],
             },
-            postRedirect: 'https://evil.com/steal',
-            allowedRedirectUrls: ['https://myapp.com'],
           },
         },
-      },
-    );
-    expect(app).toBeTruthy();
+      ),
+    ).rejects.toThrow(/postRedirect.*allowedRedirectUrls/);
   });
 
   it('allows relative postRedirect path with allowlist', async () => {

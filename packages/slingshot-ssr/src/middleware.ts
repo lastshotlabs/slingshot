@@ -12,9 +12,13 @@ import {
 import { buildAfterFn, drainAfterCallbacks, withAfterContext } from './after/index';
 import type { ViteManifest } from './assets';
 import { buildDevAssetTags, resolveAssetTags } from './assets';
+import { createCircuitBreaker } from './circuitBreaker';
+import type { CircuitBreaker, CircuitBreakerOptions } from './circuitBreaker';
 import { buildDevErrorOverlay } from './dev/overlay';
 import { isDraftRequest, withDraftContext } from './draft/index';
 import type { IsrCacheAdapter } from './isr/types';
+import { retry } from './retry';
+import type { RetryOptions } from './retry';
 import {
   isRouteParamTooLargeError,
   resolveGlobalMiddlewarePath,
@@ -249,6 +253,33 @@ export function buildSsrMiddleware(
 
   // isrAdapter is injected by the plugin (shared with the action router).
   // Do not create a second instance here — that would break invalidation.
+
+  // Circuit breaker for external rendering dependencies. Created once per
+  // middleware instance so state is shared across requests.
+  let circuitBreaker: CircuitBreaker | undefined;
+  if (config.circuitBreaker) {
+    const cbOptions: Partial<CircuitBreakerOptions> = {
+      failureThreshold: config.circuitBreaker.failureThreshold,
+      cooldownMs: config.circuitBreaker.cooldownMs,
+      onStateChange(from, to, reason) {
+        logger.warn('circuit_breaker.state_change', {
+          from,
+          to,
+          reason,
+        });
+      },
+    };
+    circuitBreaker = createCircuitBreaker(cbOptions);
+  }
+
+  // Retry config for page load failures. Created once and shared.
+  let retryOptions: Partial<RetryOptions> | undefined;
+  if (config.pageLoadRetry) {
+    retryOptions = {
+      maxAttempts: config.pageLoadRetry.maxAttempts,
+      baseDelayMs: config.pageLoadRetry.baseDelayMs,
+    };
+  }
 
   return async (c, next) => {
     // Only intercept GET and HEAD requests
@@ -673,9 +704,40 @@ export function buildSsrMiddleware(
       // intercepted-route metadata that was resolved earlier in the chain.
       // renderChain() handles an empty layouts array correctly and preserves
       // the full chain (slots, intercepted) in all cases.
-      response = await withDraftContext(c, () =>
-        withAfterContext(() => config.renderer.renderChain(resolvedChain, shell, bsCtx)),
-      );
+      const baseRenderFn = () =>
+        withDraftContext(c, () =>
+          withAfterContext(() => config.renderer.renderChain(resolvedChain, shell, bsCtx)),
+        );
+
+      // Compose retry and/or circuit breaker around the render call.
+      // Both are optional — when neither is configured the base function
+      // runs directly.
+      let composedFn = baseRenderFn;
+
+      if (retryOptions) {
+        const opts = { ...retryOptions };
+        const inner = composedFn;
+        composedFn = () => retry(inner, opts);
+      }
+
+      if (circuitBreaker) {
+        const cb = circuitBreaker;
+        const inner = composedFn;
+        composedFn = async () => {
+          const result = await cb.execute(inner);
+          if (!result.ok) {
+            logger.warn('circuit_breaker.render_blocked', {
+              route: pathname,
+              reason: result.reason,
+              error: result.error.message,
+            });
+            throw result.error;
+          }
+          return result.value;
+        };
+      }
+
+      response = await composedFn();
     } catch (err) {
       // Dev mode: return styled error overlay instead of silently falling through
       if (isDevMode) {

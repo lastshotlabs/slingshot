@@ -175,9 +175,9 @@ describe('prod-hardening', () => {
 
       // upgrade() is not wrapped in a try-catch by the runtime, so the error
       // propagates to the caller
-      expect(() =>
-        server.upgrade(new Request('http://localhost/upgrade'), { data: {} }),
-      ).toThrow('upgrade-boom');
+      expect(() => server.upgrade(new Request('http://localhost/upgrade'), { data: {} })).toThrow(
+        'upgrade-boom',
+      );
 
       // No runtime error should have been logged for the upgrade failure
       // (since it's not caught by the runtime)

@@ -5,6 +5,7 @@
  * and related tenant role operations with various edge cases.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -57,7 +58,9 @@ mock.module('pg', () => ({
         release() {},
       });
     }
-    end() { return Promise.resolve(); }
+    end() {
+      return Promise.resolve();
+    }
   },
 }));
 
@@ -76,15 +79,14 @@ mock.module('drizzle-orm/node-postgres', () => ({
     ),
 }));
 
-import { createPostgresAdapter } from '../src/adapter.js';
-
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function makeTransactionMock(selectValues: unknown[] = []): Record<string, unknown> {
   let idx = 0;
-  const select = selectValues.length > 0
-    ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
-    : () => resolvingBuilder([]);
+  const select =
+    selectValues.length > 0
+      ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
+      : () => resolvingBuilder([]);
   return {
     select,
     insert: () => resolvingBuilder(undefined),
@@ -131,10 +133,12 @@ describe('adapter-roles — direct roles', () => {
 
   test('removeRole deletes the role row', async () => {
     let deleteCalled = false;
-    mockDbImpl = { delete: () => {
-      deleteCalled = true;
-      return resolvingBuilder([]);
-    }};
+    mockDbImpl = {
+      delete: () => {
+        deleteCalled = true;
+        return resolvingBuilder([]);
+      },
+    };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     await adapter.removeRole!('user-id', 'admin');
     expect(deleteCalled).toBe(true);

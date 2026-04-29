@@ -12,7 +12,6 @@
 //   - Only verifyPassword provided throws a descriptive error
 //   - Error message contains the specific guidance text
 //   - Various edge cases for the validation (null, undefined, explicit undefined)
-
 import { describe, expect, it } from 'bun:test';
 import { edgeRuntime } from '../../src/index';
 

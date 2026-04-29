@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { SigningConfig } from '@lastshotlabs/slingshot-core';
 import { createAuthResolvedConfig } from '../../src/config/authConfig';
+import { generateAndLoadKeyPair } from '../../src/lib/jwks';
 import { signToken, validateJwtSecrets, verifyToken } from '../../src/lib/jwt';
 
 const SECRET_A = 'test-signing-secret-32-chars-ok!';
@@ -44,6 +45,22 @@ describe('jwt', () => {
       const payloadA = await verifyToken(tokenA, baseConfig, baseSigning);
       const payloadB = await verifyToken(tokenB, baseConfig, baseSigning);
       expect(payloadA.jti).not.toBe(payloadB.jti);
+    });
+
+    test('RS256 protected header uses configured OIDC kid', async () => {
+      const generated = await generateAndLoadKeyPair({ issuer: 'https://auth.example.com' });
+      const config = createAuthResolvedConfig({
+        jwt: { algorithm: 'RS256' },
+        oidc: {
+          ...generated.oidc,
+          signingKey: { ...generated.oidc.signingKey!, kid: 'key-2026' },
+        },
+      });
+
+      const token = await signToken({ sub: 'user-1' }, 300, config, baseSigning);
+      const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf8'));
+
+      expect(header.kid).toBe('key-2026');
     });
   });
 

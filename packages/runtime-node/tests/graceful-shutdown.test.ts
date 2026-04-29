@@ -19,7 +19,9 @@ describe('runtime-node graceful shutdown', () => {
     : never;
 
   // We use a simpler server type since TS inference is tricky here
-  let stop: (opts?: boolean | { timeoutMs?: number; closeActiveConnections?: boolean }) => Promise<void>;
+  let stop: (
+    opts?: boolean | { timeoutMs?: number; closeActiveConnections?: boolean },
+  ) => Promise<void>;
   let port: number;
 
   afterEach(async () => {

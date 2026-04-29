@@ -24,6 +24,8 @@ bun add @lastshotlabs/slingshot-orchestration-plugin
 ## Export Paths
 
 - `.`
+- `./errors`
+- `./testing`
 
 ## Package Scripts
 

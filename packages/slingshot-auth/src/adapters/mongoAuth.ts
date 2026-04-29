@@ -269,6 +269,7 @@ export function createMongoAuthAdapter(
       ).lean()) as MongoUserDoc | null;
       if (!user) return null;
       return {
+        id: String(user._id),
         email: user.email,
         providerIds: user.providerIds,
         emailVerified: user.emailVerified ?? false,
@@ -428,7 +429,7 @@ export function createMongoAuthAdapter(
       await TenantRole.findOneAndUpdate({ userId, tenantId }, { $pull: { roles: role } });
     },
 
-    async setSuspended(userId: string, suspended: boolean, reason?: string) {
+    async setSuspended(userId: string, suspended: boolean, reason?: string | null) {
       const update: Record<string, unknown> = { suspended };
       if (suspended) {
         update.suspendedAt = new Date();

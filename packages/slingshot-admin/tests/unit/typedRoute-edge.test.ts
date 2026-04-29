@@ -50,7 +50,13 @@ describe('createTypedRouter edge cases', () => {
       throw new TypeError('Cannot read properties of null');
     });
     const router = { openapi: openapiMock } as any;
-    expect(() => registerRoute(router, null as any, mock(() => new Response()))).toThrow();
+    expect(() =>
+      registerRoute(
+        router,
+        null as any,
+        mock(() => new Response()),
+      ),
+    ).toThrow();
   });
 });
 
@@ -76,9 +82,21 @@ describe('handler behavior edge cases', () => {
     const openapiSpy = mock((_route: unknown, _handler: unknown) => ({}));
     const testRouter = { openapi: openapiSpy } as any;
 
-    registerRoute(testRouter, { method: 'get', path: '/a' } as any, mock(() => new Response()));
-    registerRoute(testRouter, { method: 'post', path: '/b' } as any, mock(() => new Response()));
-    registerRoute(testRouter, { method: 'delete', path: '/c' } as any, mock(() => new Response()));
+    registerRoute(
+      testRouter,
+      { method: 'get', path: '/a' } as any,
+      mock(() => new Response()),
+    );
+    registerRoute(
+      testRouter,
+      { method: 'post', path: '/b' } as any,
+      mock(() => new Response()),
+    );
+    registerRoute(
+      testRouter,
+      { method: 'delete', path: '/c' } as any,
+      mock(() => new Response()),
+    );
 
     expect(openapiSpy).toHaveBeenCalledTimes(3);
   });

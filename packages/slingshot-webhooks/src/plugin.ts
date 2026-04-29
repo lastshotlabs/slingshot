@@ -494,6 +494,57 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
             return c.json({ error: 'Test delivery failed', message }, 502);
           }
         });
+
+        // Replay endpoint: re-queues a failed delivery for a retry attempt.
+        app.post(
+          `${mountPath}/admin/deliveries/:deliveryId/replay`,
+          requireWebhookAdmin,
+          async c => {
+            const adapter = runtimeAdapter;
+            if (!adapter) {
+              return c.json({ error: 'Webhook runtime is not ready' }, 500);
+            }
+
+            const deliveryId = c.req.param('deliveryId');
+            const delivery = await adapter.getDelivery(deliveryId);
+            if (!delivery) {
+              return c.json({ error: 'Delivery not found' }, 404);
+            }
+            if (delivery.status === 'delivered') {
+              return c.json({ error: 'Cannot replay a delivered webhook' }, 400);
+            }
+
+            const endpoint = await adapter.getEndpoint(delivery.endpointId);
+            if (!endpoint) {
+              return c.json({ error: 'Endpoint not found' }, 404);
+            }
+
+            const job: WebhookJob = {
+              id: crypto.randomUUID(),
+              deliveryId: delivery.id,
+              endpointId: delivery.endpointId,
+              url: endpoint.url,
+              secret: endpoint.secret,
+              event: delivery.event,
+              eventId: delivery.eventId,
+              occurredAt: delivery.occurredAt,
+              subscriber: delivery.subscriber,
+              payload: delivery.projectedPayload,
+              attempts: 0,
+              createdAt: new Date(),
+              deliveryTimeoutMs: endpoint.deliveryTimeoutMs ?? null,
+            };
+
+            await queue.enqueue(job);
+            await adapter.updateDelivery(deliveryId, {
+              status: 'pending',
+              attempts: 0,
+              nextRetryAt: null,
+            });
+
+            return c.json({ replayed: true, deliveryId }, 200);
+          },
+        );
       }
 
       if ((config.inbound?.length ?? 0) > 0 && !disabled.has(WEBHOOK_ROUTES.INBOUND)) {
@@ -501,6 +552,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
           `${mountPath}/inbound`,
           createInboundRouter([...(config.inbound ?? [])], bus, {
             maxBodyBytes: config.inboundMaxBodyBytes,
+            rateLimiter: config.inboundRateLimit,
           }),
         );
       }

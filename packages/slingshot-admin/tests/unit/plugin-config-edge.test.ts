@@ -50,8 +50,8 @@ const permissions = {
 describe('createAdminPlugin: missing required providers', () => {
   test('throws when accessProvider is missing', () => {
     expect(() =>
+      // @ts-expect-error — testing missing required field
       createAdminPlugin({
-        // @ts-expect-error — testing missing required field
         managedUserProvider,
         permissions,
       }),
@@ -60,9 +60,9 @@ describe('createAdminPlugin: missing required providers', () => {
 
   test('throws when managedUserProvider is missing', () => {
     expect(() =>
+      // @ts-expect-error — testing missing required field
       createAdminPlugin({
         accessProvider,
-        // @ts-expect-error — testing missing required field
         permissions,
       }),
     ).toThrow();
@@ -70,10 +70,10 @@ describe('createAdminPlugin: missing required providers', () => {
 
   test('throws when permissions is missing', () => {
     expect(() =>
+      // @ts-expect-error — testing missing required field
       createAdminPlugin({
         accessProvider,
         managedUserProvider,
-        // @ts-expect-error — testing missing required field
       }),
     ).toThrow();
   });
@@ -232,7 +232,12 @@ describe('createAdminPlugin: optional providers', () => {
         return { items: [], nextCursor: undefined };
       },
     };
-    const plugin = createAdminPlugin({ accessProvider, managedUserProvider, permissions, auditLog });
+    const plugin = createAdminPlugin({
+      accessProvider,
+      managedUserProvider,
+      permissions,
+      auditLog,
+    });
     expect(plugin.getHealth().status).toBe('degraded'); // no rateLimitStore
     expect(plugin.getHealth().details.auditLogConfigured).toBe(true);
   });
@@ -244,7 +249,12 @@ describe('createAdminPlugin: optional providers', () => {
         return { items: [], nextCursor: undefined };
       },
     };
-    const plugin = createAdminPlugin({ accessProvider, managedUserProvider, permissions, auditLog });
+    const plugin = createAdminPlugin({
+      accessProvider,
+      managedUserProvider,
+      permissions,
+      auditLog,
+    });
     expect(plugin.getHealth().status).toBe('degraded');
   });
 

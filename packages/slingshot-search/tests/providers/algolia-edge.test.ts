@@ -19,18 +19,16 @@ describe('Algolia — filter translation', () => {
   });
 
   test('translates numeric comparison filters', () => {
-    expect(
-      searchFilterToAlgoliaFilter({ field: 'price', op: '>', value: 100 }),
-    ).toBe('price > 100');
-    expect(
-      searchFilterToAlgoliaFilter({ field: 'price', op: '>=', value: 10 }),
-    ).toBe('price >= 10');
-    expect(
-      searchFilterToAlgoliaFilter({ field: 'price', op: '<', value: 50 }),
-    ).toBe('price < 50');
-    expect(
-      searchFilterToAlgoliaFilter({ field: 'price', op: '<=', value: 200 }),
-    ).toBe('price <= 200');
+    expect(searchFilterToAlgoliaFilter({ field: 'price', op: '>', value: 100 })).toBe(
+      'price > 100',
+    );
+    expect(searchFilterToAlgoliaFilter({ field: 'price', op: '>=', value: 10 })).toBe(
+      'price >= 10',
+    );
+    expect(searchFilterToAlgoliaFilter({ field: 'price', op: '<', value: 50 })).toBe('price < 50');
+    expect(searchFilterToAlgoliaFilter({ field: 'price', op: '<=', value: 200 })).toBe(
+      'price <= 200',
+    );
   });
 
   test('translates IN filter as OR conditions', () => {
@@ -91,12 +89,12 @@ describe('Algolia — filter translation', () => {
   });
 
   test('translates EXISTS and NOT_EXISTS', () => {
-    expect(
-      searchFilterToAlgoliaFilter({ field: 'email', op: 'EXISTS', value: null }),
-    ).toBe('email:*');
-    expect(
-      searchFilterToAlgoliaFilter({ field: 'email', op: 'NOT_EXISTS', value: null }),
-    ).toBe('NOT email:*');
+    expect(searchFilterToAlgoliaFilter({ field: 'email', op: 'EXISTS', value: null })).toBe(
+      'email:*',
+    );
+    expect(searchFilterToAlgoliaFilter({ field: 'email', op: 'NOT_EXISTS', value: null })).toBe(
+      'NOT email:*',
+    );
   });
 
   test('string escaping with double quotes inside values', () => {

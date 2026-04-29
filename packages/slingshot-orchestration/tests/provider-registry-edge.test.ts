@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
-import { createOrchestrationProviderRegistry } from '../src/provider/registry';
 import { defineTask } from '../src/defineTask';
+import { createOrchestrationProviderRegistry } from '../src/provider/registry';
 
 const schema = z.object({ x: z.number() });
 
@@ -10,7 +10,7 @@ function makeTask(name: string) {
     name,
     input: schema,
     output: schema,
-    handler: async (input) => ({ x: input.x + 1 }),
+    handler: async input => ({ x: input.x + 1 }),
   });
 }
 

@@ -79,9 +79,7 @@ describe('createBullMQAdapter — serialization', () => {
 
     // The base64 should decode to the original envelope
     const decoded = JSON.parse(
-      new TextDecoder().decode(
-        Buffer.from(data.__slingshot_serialized as string, 'base64'),
-      ),
+      new TextDecoder().decode(Buffer.from(data.__slingshot_serialized as string, 'base64')),
     );
     expect(decoded.key).toBe('auth:login');
     expect(decoded.payload).toBeDefined();

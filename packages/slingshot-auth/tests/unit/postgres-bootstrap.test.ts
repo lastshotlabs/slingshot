@@ -73,6 +73,20 @@ describe('bootstrapAuth postgres wiring', () => {
     expect(parsed.success).toBe(true);
   });
 
+  test('rejects invalid security-sensitive auth config values at startup validation', () => {
+    expect(
+      authPluginConfigSchema.safeParse({
+        auth: {
+          scim: { bearerTokens: '' },
+          m2m: { tokenExpiry: -1 },
+          refreshTokens: { accessTokenExpiry: 0 },
+          sessionPolicy: { absoluteTimeout: -10 },
+          passwordPolicy: { preventReuse: -1 },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   test('uses the shared postgres connector for standalone auth bootstrap', async () => {
     const bootstrapAuth = await loadBootstrapAuth();
     const bus = makeEventBus();

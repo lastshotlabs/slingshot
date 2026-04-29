@@ -1,12 +1,5 @@
 import { Database } from 'bun:sqlite';
 import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
-export {
-  BunRuntimeError,
-  BunServerError,
-  BunSqliteError,
-  BunWebSocketError,
-  BunPasswordError,
-} from './errors';
 import type {
   RuntimeServerInstance,
   RuntimeSqliteDatabase,
@@ -17,6 +10,18 @@ import type {
   RuntimeWebSocketHandler,
   SlingshotRuntime,
 } from '@lastshotlabs/slingshot-core';
+
+/**
+ * Runtime-specific error classes thrown by the Bun adapter for server,
+ * WebSocket, SQLite, and password-hashing failures.
+ */
+export {
+  BunRuntimeError,
+  BunServerError,
+  BunSqliteError,
+  BunWebSocketError,
+  BunPasswordError,
+} from './errors';
 
 /** Bun's default request body limit when none is supplied (128 MiB). */
 const BUN_DEFAULT_MAX_BODY = 128 * 1024 * 1024;

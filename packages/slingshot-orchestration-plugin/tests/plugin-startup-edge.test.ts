@@ -5,27 +5,34 @@ describe('Plugin startup validation', () => {
   test('memory adapter config is valid', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
       adapter: { type: 'memory' },
+      tasks: ['taskA'],
     });
     expect(result.success).toBe(true);
   });
 
   test('sqlite adapter config is valid', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
-      adapter: { type: 'sqlite', path: ':memory:' },
+      adapter: { type: 'sqlite', config: { path: ':memory:' } },
+      tasks: ['taskA'],
     });
     expect(result.success).toBe(true);
   });
 
   test('bullmq adapter config is valid', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
-      adapter: { type: 'bullmq', connection: { host: 'localhost', port: 6379 } },
+      adapter: { type: 'bullmq', config: { connection: { host: 'localhost', port: 6379 } } },
+      tasks: ['taskA'],
     });
     expect(result.success).toBe(true);
   });
 
   test('temporal adapter config is valid', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
-      adapter: { type: 'temporal', connection: { address: 'localhost:7233' } },
+      adapter: {
+        type: 'temporal',
+        config: { address: 'localhost:7233', workflowTaskQueue: 'workflow-tasks' },
+      },
+      tasks: ['taskA'],
     });
     expect(result.success).toBe(true);
   });
@@ -38,6 +45,7 @@ describe('Plugin startup validation', () => {
   test('route timeout is validated', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
       adapter: { type: 'memory' },
+      tasks: ['taskA'],
       routeTimeoutMs: 60000,
     });
     expect(result.success).toBe(true);
@@ -46,15 +54,17 @@ describe('Plugin startup validation', () => {
   test('negative route timeout is rejected', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
       adapter: { type: 'memory' },
+      tasks: ['taskA'],
       routeTimeoutMs: -1,
     });
     expect(result.success).toBe(false);
   });
 
-  test('mount path is validated', () => {
+  test('route prefix is validated', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
       adapter: { type: 'memory' },
-      mountPath: '/tasks',
+      tasks: ['taskA'],
+      routePrefix: '/tasks',
     });
     expect(result.success).toBe(true);
   });

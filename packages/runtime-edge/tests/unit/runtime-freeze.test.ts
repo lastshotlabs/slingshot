@@ -37,10 +37,8 @@ describe('Edge runtime — frozen surface', () => {
 
   test('fileStore option creates fs with read capability', () => {
     const rt = edgeRuntime({
-      fileStore: {
-        async get(path: string) {
-          return { contents: 'test', size: 4 };
-        },
+      async fileStore(path: string) {
+        return path ? 'test' : null;
       },
     });
     expect(typeof rt.fs.readFile).toBe('function');
@@ -48,6 +46,6 @@ describe('Edge runtime — frozen surface', () => {
 
   test('without fileStore, fs operations return null or throw', () => {
     const rt = edgeRuntime({});
-    expect(rt.fs.exist('any')).resolves.toBe(false);
+    expect(rt.fs.exists('any')).resolves.toBe(false);
   });
 });

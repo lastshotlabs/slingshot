@@ -53,6 +53,11 @@ describe('getAuthCookieOptions', () => {
   test('default maxAge is 7 days', () => {
     expect(getAuthCookieOptions(true, defaultConfig).maxAge).toBe(60 * 60 * 24 * 7);
   });
+
+  test('default maxAge follows absolute session timeout when configured', () => {
+    const config = createAuthResolvedConfig({ sessionPolicy: { absoluteTimeout: 1800 } });
+    expect(getAuthCookieOptions(true, config).maxAge).toBe(1800);
+  });
 });
 
 describe('getCsrfCookieOptions', () => {

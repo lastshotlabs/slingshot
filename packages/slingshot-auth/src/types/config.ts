@@ -231,6 +231,284 @@ export interface AuthConfig {
 
 // --- Zod sub-schemas for top-level sections ---
 
+const positiveIntSchema = z.number().int().positive();
+const nonNegativeIntSchema = z.number().int().min(0);
+const nonEmptyStringSchema = z.string().min(1);
+const httpUrlSchema = z
+  .string()
+  .url()
+  .refine(value => {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  }, 'Expected an HTTP(S) URL');
+const redirectTargetSchema = z
+  .string()
+  .min(1)
+  .refine(value => {
+    if (value.startsWith('/') && !value.startsWith('//')) return true;
+    try {
+      const url = new URL(value);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, 'Expected a relative path or absolute HTTP(S) URL');
+type CredentialStuffingDetectedHandler = NonNullable<
+  NonNullable<AuthRateLimitConfig['credentialStuffing']>['onDetected']
+>;
+type AccountDeletionBeforeHandler = NonNullable<AccountDeletionConfig['onBeforeDelete']>;
+type AccountDeletionAfterHandler = NonNullable<AccountDeletionConfig['onAfterDelete']>;
+type SamlLoginHandler = NonNullable<SamlConfig['onLogin']>;
+type ScimDeprovisionHandler = Extract<
+  NonNullable<ScimConfig['onDeprovision']>,
+  (userId: string) => Promise<void>
+>;
+const credentialStuffingDetectedHandlerSchema = z.custom<CredentialStuffingDetectedHandler>(
+  (v): v is CredentialStuffingDetectedHandler => typeof v === 'function',
+  { message: 'Expected a function' },
+);
+const accountDeletionBeforeHandlerSchema = z.custom<AccountDeletionBeforeHandler>(
+  (v): v is AccountDeletionBeforeHandler => typeof v === 'function',
+  { message: 'Expected a function' },
+);
+const accountDeletionAfterHandlerSchema = z.custom<AccountDeletionAfterHandler>(
+  (v): v is AccountDeletionAfterHandler => typeof v === 'function',
+  { message: 'Expected a function' },
+);
+const samlLoginHandlerSchema = z.custom<SamlLoginHandler>(
+  (v): v is SamlLoginHandler => typeof v === 'function',
+  { message: 'Expected a function' },
+);
+const scimDeprovisionHandlerSchema = z.custom<ScimDeprovisionHandler>(
+  (v): v is ScimDeprovisionHandler => typeof v === 'function',
+  { message: 'Expected a function' },
+);
+const rateLimitBucketSchema = z
+  .object({
+    windowMs: positiveIntSchema.optional(),
+    max: positiveIntSchema.optional(),
+  })
+  .loose();
+const oauthReauthConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    promptType: z.enum(['login', 'consent', 'select_account']).optional(),
+  })
+  .loose();
+const oauthConfigSchema = z
+  .object({
+    providers: z
+      .custom<OAuthProviderConfig>(v => v == null || typeof v === 'object', {
+        message: 'Expected an OAuth provider config object',
+      })
+      .optional(),
+    postRedirect: redirectTargetSchema.optional(),
+    allowedRedirectUrls: z.array(httpUrlSchema).optional(),
+    reauth: oauthReauthConfigSchema.optional(),
+  })
+  .loose();
+const emailVerificationConfigSchema = z
+  .object({
+    required: z.boolean().optional(),
+    tokenExpiry: positiveIntSchema.optional(),
+  })
+  .loose();
+const passwordResetConfigSchema = z.object({ tokenExpiry: positiveIntSchema.optional() }).loose();
+const magicLinkConfigSchema = z
+  .object({
+    ttlSeconds: positiveIntSchema.optional(),
+    linkBaseUrl: httpUrlSchema.optional(),
+    store: z.enum(['memory', 'redis', 'sqlite', 'mongo']).optional(),
+  })
+  .loose();
+const passwordPolicyConfigSchema = z
+  .object({
+    minLength: positiveIntSchema.max(128).optional(),
+    requireLetter: z.boolean().optional(),
+    requireDigit: z.boolean().optional(),
+    requireSpecial: z.boolean().optional(),
+    preventReuse: nonNegativeIntSchema.optional(),
+  })
+  .loose();
+const authRateLimitConfigSchema = z
+  .object({
+    login: rateLimitBucketSchema.optional(),
+    register: rateLimitBucketSchema.optional(),
+    verifyEmail: rateLimitBucketSchema.optional(),
+    resendVerification: rateLimitBucketSchema.optional(),
+    forgotPassword: rateLimitBucketSchema.optional(),
+    resetPassword: rateLimitBucketSchema.optional(),
+    deleteAccount: rateLimitBucketSchema.optional(),
+    mfaVerify: rateLimitBucketSchema.optional(),
+    mfaEmailOtpInitiate: rateLimitBucketSchema.optional(),
+    mfaResend: rateLimitBucketSchema.optional(),
+    setPassword: rateLimitBucketSchema.optional(),
+    mfaDisable: rateLimitBucketSchema.optional(),
+    oauthUnlink: rateLimitBucketSchema.optional(),
+    store: z.enum(['memory', 'redis']).optional(),
+    credentialStuffing: z
+      .object({
+        maxAccountsPerIp: z
+          .object({ count: positiveIntSchema, windowMs: positiveIntSchema })
+          .optional(),
+        maxIpsPerAccount: z
+          .object({ count: positiveIntSchema, windowMs: positiveIntSchema })
+          .optional(),
+        onDetected: credentialStuffingDetectedHandlerSchema.optional(),
+      })
+      .loose()
+      .optional(),
+  })
+  .loose();
+const sessionPolicyConfigSchema = z
+  .object({
+    maxSessions: positiveIntSchema.optional(),
+    persistSessionMetadata: z.boolean().optional(),
+    includeInactiveSessions: z.boolean().optional(),
+    trackLastActive: z.boolean().optional(),
+    absoluteTimeout: positiveIntSchema.optional(),
+    idleTimeout: positiveIntSchema.optional(),
+    onPasswordChange: z.enum(['revoke_others', 'revoke_all_and_reissue', 'none']).optional(),
+  })
+  .loose();
+const accountDeletionConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    onBeforeDelete: accountDeletionBeforeHandlerSchema.optional(),
+    onAfterDelete: accountDeletionAfterHandlerSchema.optional(),
+    queued: z.boolean().optional(),
+    gracePeriod: nonNegativeIntSchema.optional(),
+    requireVerification: z.boolean().optional(),
+    requirePasswordConfirmation: z.boolean().optional(),
+  })
+  .loose();
+const refreshTokenConfigSchema = z
+  .object({
+    accessTokenExpiry: positiveIntSchema.optional(),
+    refreshTokenExpiry: positiveIntSchema.optional(),
+    rotationGraceSeconds: nonNegativeIntSchema.optional(),
+  })
+  .loose();
+const mfaConfigSchema = z
+  .object({
+    issuer: nonEmptyStringSchema.optional(),
+    algorithm: z.enum(['SHA1', 'SHA256', 'SHA512']).optional(),
+    digits: positiveIntSchema.min(6).max(8).optional(),
+    period: positiveIntSchema.optional(),
+    recoveryCodes: positiveIntSchema.optional(),
+    challengeTtlSeconds: positiveIntSchema.optional(),
+    emailOtp: z
+      .object({ codeLength: positiveIntSchema.min(4).max(10).optional() })
+      .loose()
+      .optional(),
+    webauthn: z
+      .object({
+        rpId: nonEmptyStringSchema,
+        rpName: nonEmptyStringSchema.optional(),
+        origin: z.union([httpUrlSchema, z.array(httpUrlSchema).min(1)]),
+        attestationType: z.enum(['none', 'direct', 'enterprise']).optional(),
+        authenticatorAttachment: z.enum(['platform', 'cross-platform']).optional(),
+        userVerification: z.enum(['required', 'preferred', 'discouraged']).optional(),
+        timeout: positiveIntSchema.optional(),
+        strictSignCount: z.boolean().optional(),
+        allowPasswordlessLogin: z.boolean().optional(),
+        passkeyMfaBypass: z.boolean().optional(),
+      })
+      .loose()
+      .optional(),
+    required: z.boolean().optional(),
+  })
+  .loose();
+const jwtConfigSchema = z
+  .object({
+    issuer: nonEmptyStringSchema.optional(),
+    audience: z.union([nonEmptyStringSchema, z.array(nonEmptyStringSchema).min(1)]).optional(),
+    algorithm: z.enum(['HS256', 'RS256']).optional(),
+    clockTolerance: nonNegativeIntSchema.optional(),
+  })
+  .loose();
+const breachedPasswordConfigSchema = z
+  .object({
+    block: z.boolean().optional(),
+    minBreachCount: nonNegativeIntSchema.optional(),
+    timeout: positiveIntSchema.optional(),
+    onApiFailure: z.enum(['allow', 'block']).optional(),
+  })
+  .loose();
+const stepUpConfigSchema = z.object({ maxAge: positiveIntSchema.optional() }).loose();
+const m2mConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    tokenExpiry: positiveIntSchema.optional(),
+    scopes: z.array(nonEmptyStringSchema).optional(),
+    recheckClientOnUse: z.boolean().optional(),
+  })
+  .loose();
+const oidcKeySchema = z
+  .object({
+    privateKey: nonEmptyStringSchema,
+    publicKey: nonEmptyStringSchema,
+    kid: nonEmptyStringSchema.optional(),
+  })
+  .loose();
+const oidcPreviousKeySchema = z
+  .object({ publicKey: nonEmptyStringSchema, kid: nonEmptyStringSchema.optional() })
+  .loose();
+const oidcConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    issuer: httpUrlSchema,
+    signingKey: oidcKeySchema.optional(),
+    previousKeys: z.array(oidcPreviousKeySchema).optional(),
+    scopes: z.array(nonEmptyStringSchema).optional(),
+    tokenEndpoint: httpUrlSchema.optional(),
+    authorizationEndpoint: httpUrlSchema.optional(),
+  })
+  .loose();
+const samlConfigSchema = z
+  .object({
+    entityId: nonEmptyStringSchema,
+    acsUrl: httpUrlSchema,
+    idpMetadata: nonEmptyStringSchema,
+    signingKey: nonEmptyStringSchema.optional(),
+    signingCert: nonEmptyStringSchema.optional(),
+    attributeMapping: z
+      .object({
+        email: nonEmptyStringSchema.optional(),
+        firstName: nonEmptyStringSchema.optional(),
+        lastName: nonEmptyStringSchema.optional(),
+        groups: nonEmptyStringSchema.optional(),
+      })
+      .loose()
+      .optional(),
+    onLogin: samlLoginHandlerSchema.optional(),
+    postLoginRedirect: redirectTargetSchema.optional(),
+  })
+  .loose();
+const scimConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    bearerTokens: z.union([nonEmptyStringSchema, z.array(nonEmptyStringSchema).min(1)]),
+    userMapping: z
+      .object({ userName: z.enum(['email', 'username']).optional() })
+      .loose()
+      .optional(),
+    onDeprovision: z
+      .union([z.enum(['suspend', 'delete']), scimDeprovisionHandlerSchema])
+      .optional(),
+  })
+  .loose();
+const authCookieConfigSchema = z
+  .object({
+    sameSite: z.enum(['Strict', 'Lax', 'None']).optional(),
+    secure: z.boolean().optional(),
+    domain: nonEmptyStringSchema.optional(),
+    path: z.string().startsWith('/').optional(),
+    maxAge: positiveIntSchema.optional(),
+  })
+  .loose();
+const csrfCookieConfigSchema = authCookieConfigSchema;
+
 const authDbConfigSchema = z
   .object({
     sqlite: z
@@ -257,16 +535,16 @@ const authDbConfigSchema = z
       ),
     postgresPool: z
       .object({
-        max: z.number().optional(),
-        min: z.number().optional(),
-        idleTimeoutMs: z.number().optional(),
-        connectionTimeoutMs: z.number().optional(),
-        queryTimeoutMs: z.number().optional(),
-        statementTimeoutMs: z.number().optional(),
-        maxUses: z.number().optional(),
+        max: positiveIntSchema.optional(),
+        min: nonNegativeIntSchema.optional(),
+        idleTimeoutMs: positiveIntSchema.optional(),
+        connectionTimeoutMs: positiveIntSchema.optional(),
+        queryTimeoutMs: positiveIntSchema.optional(),
+        statementTimeoutMs: positiveIntSchema.optional(),
+        maxUses: positiveIntSchema.optional(),
         allowExitOnIdle: z.boolean().optional(),
         keepAlive: z.boolean().optional(),
-        keepAliveInitialDelayMillis: z.number().optional(),
+        keepAliveInitialDelayMillis: nonNegativeIntSchema.optional(),
       })
       .optional()
       .describe('Postgres pool sizing and timeout options passed through to pg.Pool.'),
@@ -309,7 +587,7 @@ const authSecurityConfigSchema = z
         'JWT and request-signing configuration. Omit to use the framework or plugin defaults.',
       ),
     trustProxy: z
-      .union([z.literal(false), z.number()])
+      .union([z.literal(false), nonNegativeIntSchema])
       .optional()
       .describe(
         'Proxy trust setting for auth request handling. Use false or a hop count. Omit to use the app default.',
@@ -342,12 +620,16 @@ const authSecurityConfigSchema = z
       ),
     bearerTokens: z
       .union([
-        z.string(),
-        z.array(z.string()),
+        nonEmptyStringSchema,
+        z.array(nonEmptyStringSchema),
         z.array(
           z.object({
-            clientId: z.string().describe('Client identifier associated with the bearer token.'),
-            token: z.string().describe('Static bearer token value presented by the client.'),
+            clientId: nonEmptyStringSchema.describe(
+              'Client identifier associated with the bearer token.',
+            ),
+            token: nonEmptyStringSchema.describe(
+              'Static bearer token value presented by the client.',
+            ),
             description: z
               .string()
               .optional()
@@ -409,10 +691,7 @@ const authConfigSchema = z.object({
     .describe(
       'Role assigned to newly created users by default. Omit to use the plugin default role assignment.',
     ),
-  oauth: z
-    .custom<OAuthConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an OAuthConfig object',
-    })
+  oauth: oauthConfigSchema
     .optional()
     .describe(
       'OAuth provider configuration for social login flows. Omit to disable OAuth providers.',
@@ -423,74 +702,47 @@ const authConfigSchema = z.object({
     .describe(
       'Primary login identifier field. One of: email, username, phone. Omit to use the plugin default.',
     ),
-  emailVerification: z
-    .custom<EmailVerificationConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an EmailVerificationConfig object',
-    })
+  emailVerification: emailVerificationConfigSchema
     .optional()
     .describe(
       'Email-verification behavior for newly registered users. Omit to use the plugin default verification flow.',
     ),
-  passwordReset: z
-    .custom<PasswordResetConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a PasswordResetConfig object',
-    })
+  passwordReset: passwordResetConfigSchema
     .optional()
     .describe(
       'Password-reset behavior and token settings. Omit to use the plugin default password-reset flow.',
     ),
-  passwordPolicy: z
-    .custom<PasswordPolicyConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a PasswordPolicyConfig object',
-    })
+  passwordPolicy: passwordPolicyConfigSchema
     .optional()
     .describe(
       'Password policy requirements enforced during credential changes. Omit to use the plugin default policy.',
     ),
-  rateLimit: z
-    .custom<AuthRateLimitConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an AuthRateLimitConfig object',
-    })
+  rateLimit: authRateLimitConfigSchema
     .optional()
     .describe(
       'Rate-limiting configuration for auth endpoints. Omit to use the plugin default auth rate limits.',
     ),
-  sessionPolicy: z
-    .custom<AuthSessionPolicyConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an AuthSessionPolicyConfig object',
-    })
+  sessionPolicy: sessionPolicyConfigSchema
     .optional()
     .describe(
       'Session issuance and lifetime policy for authenticated users. Omit to use the plugin default session policy.',
     ),
-  accountDeletion: z
-    .custom<AccountDeletionConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an AccountDeletionConfig object',
-    })
+  accountDeletion: accountDeletionConfigSchema
     .optional()
     .describe(
       'Account-deletion behavior for self-service user deletion flows. Omit to use the plugin default deletion behavior.',
     ),
-  refreshTokens: z
-    .custom<RefreshTokenConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a RefreshTokenConfig object',
-    })
+  refreshTokens: refreshTokenConfigSchema
     .optional()
     .describe(
       'Refresh-token issuance and rotation settings. Omit to use the plugin default refresh-token behavior.',
     ),
-  mfa: z
-    .custom<MfaConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an MfaConfig object',
-    })
+  mfa: mfaConfigSchema
     .optional()
     .describe(
       'Multi-factor authentication configuration. Omit to use the plugin default MFA behavior.',
     ),
-  jwt: z
-    .custom<JwtConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a JwtConfig object',
-    })
+  jwt: jwtConfigSchema
     .optional()
     .describe(
       'JWT issuance and verification configuration. Omit to use the plugin default JWT behavior.',
@@ -501,46 +753,28 @@ const authConfigSchema = z.object({
     .describe(
       'Whether user suspension is checked on every authenticated request. Omit to use the default of true.',
     ),
-  breachedPasswordCheck: z
-    .custom<BreachedPasswordConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a BreachedPasswordConfig object',
-    })
+  breachedPasswordCheck: breachedPasswordConfigSchema
     .optional()
     .describe(
       'Breached-password detection configuration. Omit to use the plugin default breached-password behavior.',
     ),
-  stepUp: z
-    .custom<StepUpConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a StepUpConfig object',
-    })
+  stepUp: stepUpConfigSchema
     .optional()
     .describe(
       'Step-up authentication requirements for sensitive operations. Omit to use the plugin default step-up behavior.',
     ),
-  m2m: z
-    .custom<M2MConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an M2MConfig object',
-    })
+  m2m: m2mConfigSchema
     .optional()
     .describe(
       'Machine-to-machine authentication configuration. Omit to disable M2M auth features.',
     ),
-  oidc: z
-    .custom<OidcConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an OidcConfig object',
-    })
+  oidc: oidcConfigSchema
     .optional()
     .describe('OIDC provider configuration. Omit to disable OIDC support.'),
-  saml: z
-    .custom<SamlConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a SamlConfig object',
-    })
+  saml: samlConfigSchema
     .optional()
     .describe('SAML provider configuration. Omit to disable SAML support.'),
-  scim: z
-    .custom<ScimConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a ScimConfig object',
-    })
+  scim: scimConfigSchema
     .optional()
     .describe('SCIM provisioning configuration. Omit to disable SCIM support.'),
   lockout: z
@@ -551,18 +785,12 @@ const authConfigSchema = z.object({
     .describe(
       'Account lockout policy for repeated authentication failures. Omit to use the plugin default lockout behavior.',
     ),
-  cookieConfig: z
-    .custom<AuthCookieConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected an AuthCookieConfig object',
-    })
+  cookieConfig: authCookieConfigSchema
     .optional()
     .describe(
       'Cookie configuration for auth session cookies. Omit to use the plugin default cookie settings.',
     ),
-  csrfCookieConfig: z
-    .custom<CsrfCookieConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a CsrfCookieConfig object',
-    })
+  csrfCookieConfig: csrfCookieConfigSchema
     .optional()
     .describe(
       'Cookie configuration for CSRF cookies. Omit to use the plugin default CSRF cookie settings.',
@@ -575,10 +803,7 @@ const authConfigSchema = z.object({
     .describe(
       'Registration-concealment behavior for anti-enumeration flows. Omit to use the plugin default concealment behavior.',
     ),
-  magicLink: z
-    .custom<MagicLinkConfig>(v => v == null || typeof v === 'object', {
-      message: 'Expected a MagicLinkConfig object',
-    })
+  magicLink: magicLinkConfigSchema
     .optional()
     .describe('Magic-link authentication configuration. Omit to disable magic-link login.'),
   hooks: z

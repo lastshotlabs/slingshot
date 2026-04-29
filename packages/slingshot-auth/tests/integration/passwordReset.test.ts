@@ -274,6 +274,54 @@ describe('POST /auth/reset-password', () => {
     expect(res.status).toBe(400);
   });
 
+  test('overlong reset password is rejected before hashing', async () => {
+    const hash = await Bun.password.hash('OldPass123!');
+    await runtime.adapter.create('alice@example.com', hash);
+
+    await jsonPost('/auth/forgot-password', { email: 'alice@example.com' });
+    await new Promise(r => setTimeout(r, 200));
+
+    const res = await jsonPost('/auth/reset-password', {
+      token: capturedResetToken!,
+      password: `Password1!${'x'.repeat(129)}`,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('password reuse check uses injected password runtime', async () => {
+    runtime = makeTestRuntime({
+      concealRegistration: null,
+      passwordPolicy: { preventReuse: 1, requireDigit: false },
+    });
+    runtime.password = {
+      hash: async password => `hash:${password}`,
+      verify: async (password, hash) => hash === `hash:${password}`,
+    };
+    runtime.eventBus = {
+      ...makeEventBus(event => emitted.push({ event, payload: null })),
+      emit: ((event: string, payload: unknown) => {
+        emitted.push({ event, payload });
+        if (event === 'auth:delivery.password_reset' && payload && typeof payload === 'object') {
+          capturedResetToken = (payload as any).token;
+        }
+      }) as any,
+    } as any;
+    app = buildApp(runtime);
+
+    const { id: userId } = await runtime.adapter.create('alice@example.com', 'hash:OldPass');
+    await runtime.adapter.addPasswordToHistory?.(userId, 'hash:ReusedPassword', 1);
+    await jsonPost('/auth/forgot-password', { email: 'alice@example.com' });
+    await new Promise(r => setTimeout(r, 200));
+
+    const res = await jsonPost('/auth/reset-password', {
+      token: capturedResetToken!,
+      password: 'ReusedPassword',
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'PASSWORD_PREVIOUSLY_USED' });
+  });
+
   test('rate-limits reset attempts by IP', async () => {
     for (let i = 0; i < 10; i++) {
       await jsonPost('/auth/reset-password', { token: `bogus-${i}`, password: 'NewSecure456!' });

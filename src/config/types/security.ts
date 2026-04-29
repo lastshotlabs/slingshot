@@ -1,5 +1,6 @@
 import type { CaptchaConfig } from '@framework/lib/captcha';
 import type { SigningConfig } from '@lib/signingConfig';
+import type { CsrfConfig } from '@lastshotlabs/slingshot-core';
 
 export interface BotProtectionConfig {
   /**
@@ -63,14 +64,6 @@ export interface SecurityConfig {
    * or enable adaptive mode to auto-require CAPTCHA after rate limit thresholds.
    */
   captcha?: CaptchaConfig;
-  /**
-   * CSRF protection configuration.
-   * When set, enables CSRF token validation middleware.
-   */
-  csrf?: {
-    /** Paths or patterns exempt from CSRF validation (e.g. webhook endpoints). */
-    exemptPaths?: string[];
-    /** When true, disables CSRF protection entirely. Default: false. */
-    disabled?: boolean;
-  };
+  /** CSRF protection configuration for cookie-authenticated auth routes. */
+  csrf?: CsrfConfig;
 }

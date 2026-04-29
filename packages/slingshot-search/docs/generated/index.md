@@ -30,6 +30,7 @@ bun add @lastshotlabs/slingshot-search
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
+- `test`: `echo 'Tests run via workspace runner'`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

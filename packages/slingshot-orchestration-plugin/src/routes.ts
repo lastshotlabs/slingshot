@@ -14,12 +14,12 @@ import {
   type RunStatus,
   type WorkflowRun,
 } from '@lastshotlabs/slingshot-orchestration';
+import { InvalidResolverResultError } from './errors';
 import type {
   OrchestrationRequestContext,
   OrchestrationRequestContextResolver,
   OrchestrationRunAuthorizer,
 } from './types';
-import { InvalidResolverResultError } from './errors';
 
 const DEFAULT_ROUTE_TIMEOUT_MS = 30_000;
 
@@ -584,7 +584,7 @@ export function createOrchestrationRouter(options: {
     ) {
       return c.json({ error: 'metadata exceeds 64KB limit' }, 400);
     }
-    const input = body['input'];
+    const input = body['input'] !== undefined ? body['input'] : {};
     try {
       const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const handle = await wrap(
@@ -639,7 +639,7 @@ export function createOrchestrationRouter(options: {
     ) {
       return c.json({ error: 'metadata exceeds 64KB limit' }, 400);
     }
-    const input = body['input'];
+    const input = body['input'] !== undefined ? body['input'] : {};
     try {
       const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
       const handle = await wrap(
@@ -683,6 +683,37 @@ export function createOrchestrationRouter(options: {
         );
       }
       return c.json(run, 200);
+    } catch (error) {
+      const status = mapErrorToStatus(error);
+      return c.json(buildErrorPayload(error), status);
+    }
+  });
+
+  /**
+   * Polling-based progress endpoint.
+   * Returns only the progress payload for a run, enabling lightweight polling
+   * from clients that do not need the full run representation.
+   */
+  router.get('/runs/:id/progress', async c => {
+    try {
+      const requestContext = await resolveRequestContext(c, options.resolveRequestContext);
+      const run = await options.runtime.getRun(c.req.param('id'));
+      if (!run || !(await canAccessRun(c, run, requestContext, 'read', options.authorizeRun))) {
+        return c.json(
+          { error: `Run '${c.req.param('id')}' not found`, code: 'RUN_NOT_FOUND' },
+          404,
+        );
+      }
+      return c.json(
+        {
+          runId: run.id,
+          status: run.status,
+          progress: run.progress ?? null,
+          type: run.type,
+          name: run.name,
+        },
+        200,
+      );
     } catch (error) {
       const status = mapErrorToStatus(error);
       return c.json(buildErrorPayload(error), status);

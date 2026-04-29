@@ -2,47 +2,20 @@
  * Unit tests for migration version parsing, advisory lock control, rollback
  * behavior, and version detection.
  *
- * The internal functions `parseMigrationVersion` and `runMigrations` are not
- * exported from the adapter module. We test them here by:
- *   1. Re-implementing `parseMigrationVersion` as a local pure function to
- *      exhaustively test its input validation logic.
- *   2. Testing `runMigrations` behaviour through the public `createPostgresAdapter`
- *      factory by controlling what the mock `pg` pool client returns (version,
- *      failure injection, etc.).
+ * `parseMigrationVersion` is now exported from the adapter module so tests
+ * import it directly instead of duplicating the logic. `runMigrations` is
+ * tested through the public `createPostgresAdapter` factory by controlling
+ * what the mock `pg` pool client returns (version, failure injection, etc.).
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { attachPostgresPoolRuntime, createPostgresPoolRuntime } from '@lastshotlabs/slingshot-core';
+import { createPostgresAdapter, parseMigrationVersion } from '../src/adapter.js';
 
 // ---------------------------------------------------------------------------
-// Pure function: parseMigrationVersion (re-implemented for direct unit testing)
+// Pure function: parseMigrationVersion (now imported from the adapter module)
 // ---------------------------------------------------------------------------
 
 const MIGRATION_COUNT = 2; // matches src/adapter.ts MIGRATIONS.length
-
-function parseMigrationVersion(raw: unknown, maxVersion: number): number {
-  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
-    if (raw > maxVersion) {
-      throw new Error(
-        `[slingshot-postgres] Database schema version ${raw} is newer than this binary supports (${maxVersion}).`,
-      );
-    }
-    return raw;
-  }
-  if (typeof raw === 'string') {
-    const parsed = Number.parseInt(raw, 10);
-    if (Number.isInteger(parsed) && parsed >= 0) {
-      if (parsed > maxVersion) {
-        throw new Error(
-          `[slingshot-postgres] Database schema version ${parsed} is newer than this binary supports (${maxVersion}).`,
-        );
-      }
-      return parsed;
-    }
-  }
-  throw new Error(
-    `[slingshot-postgres] Invalid value in _slingshot_auth_schema_version: ${String(raw)}`,
-  );
-}
 
 describe('parseMigrationVersion (pure logic)', () => {
   const maxVersion = 5;
@@ -190,8 +163,6 @@ mock.module('drizzle-orm/node-postgres', () => ({
     ),
 }));
 
-import { createPostgresAdapter } from '../src/adapter.js';
-
 describe('runMigrations (through createPostgresAdapter factory)', () => {
   beforeEach(() => {
     mockDbImpl = null;
@@ -211,7 +182,7 @@ describe('runMigrations (through createPostgresAdapter factory)', () => {
           {},
           {
             get() {
-              return () => mockDbImpl!.select!();
+              return () => (mockDbImpl?.select as () => unknown)();
             },
           },
         ) as unknown,

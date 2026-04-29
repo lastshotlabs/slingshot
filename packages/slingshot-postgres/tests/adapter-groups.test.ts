@@ -7,6 +7,7 @@
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { HttpError } from '@lastshotlabs/slingshot-core';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -59,7 +60,9 @@ mock.module('pg', () => ({
         release() {},
       });
     }
-    end() { return Promise.resolve(); }
+    end() {
+      return Promise.resolve();
+    }
   },
 }));
 
@@ -78,15 +81,14 @@ mock.module('drizzle-orm/node-postgres', () => ({
     ),
 }));
 
-import { createPostgresAdapter } from '../src/adapter.js';
-
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function makeTransactionMock(selectValues: unknown[] = []): Record<string, unknown> {
   let idx = 0;
-  const select = selectValues.length > 0
-    ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
-    : () => resolvingBuilder([]);
+  const select =
+    selectValues.length > 0
+      ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
+      : () => resolvingBuilder([]);
   return {
     select,
     insert: () => resolvingBuilder(undefined),
@@ -114,7 +116,11 @@ describe('adapter-groups — createGroup', () => {
   test('createGroup with roles stores them', async () => {
     mockDbImpl = { insert: () => resolvingBuilder(undefined) };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
-    const group = await adapter.createGroup!({ name: 'admins', tenantId: 'tenant-1', roles: ['admin', 'sudo'] });
+    const group = await adapter.createGroup!({
+      name: 'admins',
+      tenantId: 'tenant-1',
+      roles: ['admin', 'sudo'],
+    });
     expect(group.id).toBeString();
   });
 
@@ -122,7 +128,9 @@ describe('adapter-groups — createGroup', () => {
     const err = Object.assign(new Error('duplicate key'), { code: '23505' });
     mockDbImpl = { insert: () => throwingBuilder(err) };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
-    const thrown = await adapter.createGroup!({ name: 'dup', tenantId: 't1', roles: [] }).catch(e => e);
+    const thrown = await adapter.createGroup!({ name: 'dup', tenantId: 't1', roles: [] }).catch(
+      e => e,
+    );
     expect(thrown).toBeInstanceOf(HttpError);
     expect((thrown as HttpError).status).toBe(409);
   });
@@ -137,16 +145,19 @@ describe('adapter-groups — getGroup and deleteGroup', () => {
   test('getGroup returns group data when found', async () => {
     const now = new Date('2026-01-01T00:00:00.000Z');
     mockDbImpl = {
-      select: () => resolvingBuilder([{
-        id: 'group-1',
-        name: 'ops',
-        displayName: 'Operations',
-        description: 'Ops team',
-        roles: ['admin'],
-        tenantId: 'tenant-1',
-        createdAt: now,
-        updatedAt: now,
-      }]),
+      select: () =>
+        resolvingBuilder([
+          {
+            id: 'group-1',
+            name: 'ops',
+            displayName: 'Operations',
+            description: 'Ops team',
+            roles: ['admin'],
+            tenantId: 'tenant-1',
+            createdAt: now,
+            updatedAt: now,
+          },
+        ]),
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const group = await adapter.getGroup!('group-1');
@@ -216,16 +227,19 @@ describe('adapter-groups — group members', () => {
   test('removeGroupMember is a no-op when membership does not exist', async () => {
     mockDbImpl = { delete: () => resolvingBuilder([]) };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
-    await expect(adapter.removeGroupMember!('group-1', 'nonexistent-user')).resolves.toBeUndefined();
+    await expect(
+      adapter.removeGroupMember!('group-1', 'nonexistent-user'),
+    ).resolves.toBeUndefined();
   });
 
   test('getGroupMembers returns paginated members', async () => {
     const now = new Date();
     mockDbImpl = {
-      select: () => resolvingBuilder([
-        { userId: 'u1', roles: ['admin'], createdAt: now },
-        { userId: 'u2', roles: ['member'], createdAt: now },
-      ]),
+      select: () =>
+        resolvingBuilder([
+          { userId: 'u1', roles: ['admin'], createdAt: now },
+          { userId: 'u2', roles: ['member'], createdAt: now },
+        ]),
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const page = await adapter.getGroupMembers!('group-1', { limit: 10 });
@@ -243,14 +257,20 @@ describe('adapter-groups — getUserGroups', () => {
   test('getUserGroups returns groups with membership roles', async () => {
     const now = new Date();
     mockDbImpl = {
-      select: () => resolvingBuilder([
-        {
-          groupId: 'g1', groupName: 'ops', groupDisplayName: 'Ops',
-          groupDescription: null, groupRoles: ['admin'], groupTenantId: 't1',
-          groupCreatedAt: now, groupUpdatedAt: now,
-          memberRoles: ['owner'],
-        },
-      ]),
+      select: () =>
+        resolvingBuilder([
+          {
+            groupId: 'g1',
+            groupName: 'ops',
+            groupDisplayName: 'Ops',
+            groupDescription: null,
+            groupRoles: ['admin'],
+            groupTenantId: 't1',
+            groupCreatedAt: now,
+            groupUpdatedAt: now,
+            memberRoles: ['owner'],
+          },
+        ]),
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const groups = await adapter.getUserGroups!('user-1', 't1');

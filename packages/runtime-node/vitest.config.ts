@@ -1,4 +1,8 @@
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+
+const packageRoot = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Vitest config for the runtime-node package.
@@ -13,9 +17,13 @@ import { defineConfig } from 'vitest/config';
  * under Bun) and then this vitest pass to fill the SQLite gap.
  */
 export default defineConfig({
+  root: packageRoot,
   test: {
     environment: 'node',
-    include: ['tests/node-runtime/nodeRuntime.test.ts', 'tests/node-runtime/node-sqlite-edge.test.ts'],
+    include: [
+      'tests/node-runtime/nodeRuntime.test.ts',
+      'tests/node-runtime/node-sqlite-edge.test.ts',
+    ],
     globals: true,
   },
 });

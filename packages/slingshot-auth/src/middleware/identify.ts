@@ -15,7 +15,7 @@ import {
   timingSafeEqual,
 } from '@lastshotlabs/slingshot-core';
 import { getClientIp } from '@lastshotlabs/slingshot-core';
-import type { AuthRuntimeContext } from '../runtime';
+import { AUTH_RUNTIME_KEY, type AuthRuntimeContext } from '../runtime';
 
 function computeFingerprint(
   c: Parameters<MiddlewareHandler<AppEnv>>[0],
@@ -107,6 +107,28 @@ function computeFingerprint(
 export const createIdentifyMiddleware =
   (authRuntime: AuthRuntimeContext): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
+    const currentCtx = c.get('slingshotCtx') as unknown as
+      | ({ pluginState?: Map<string, unknown> } & Record<string, unknown>)
+      | undefined;
+    const pluginState =
+      currentCtx?.pluginState instanceof Map ? currentCtx.pluginState : new Map<string, unknown>();
+    if (!pluginState.has(AUTH_RUNTIME_KEY)) {
+      pluginState.set(AUTH_RUNTIME_KEY, authRuntime);
+    }
+    if (!currentCtx || currentCtx.pluginState !== pluginState) {
+      c.set('slingshotCtx', {
+        ...(currentCtx ?? {}),
+        pluginState,
+      } as AppEnv['Variables']['slingshotCtx']);
+    }
+
+    const existingActor = c.get('actor') as Actor | undefined;
+    if (existingActor?.kind === 'api-key') {
+      c.set('tokenPayload', c.get('tokenPayload') ?? null);
+      await next();
+      return;
+    }
+
     const log = authRuntime.logger?.log ?? (() => {});
     const authTrace = authRuntime.logger?.authTrace ?? (() => {});
     const slingshotCtx =

@@ -16,6 +16,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "import": "./dist/errors.js"
     }
   },
   "repository": {
@@ -34,6 +38,7 @@
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src/ --cache",
     "test": "bun test",
+    "coverage": "bun test --coverage",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {

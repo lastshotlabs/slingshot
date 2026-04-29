@@ -1,5 +1,6 @@
 import { readAuthCookie, setAuthCookie } from '@auth/lib/cookieOptions';
 import { isProd } from '@auth/lib/env';
+import { refreshCsrfToken } from '@auth/middleware/csrf';
 import { ErrorResponse } from '@auth/schemas/error';
 import * as AuthService from '@auth/services/auth';
 import { z } from 'zod';
@@ -151,6 +152,7 @@ export const createRefreshRouter = (
         cfg,
         cfg.refreshToken?.refreshTokenExpiry ?? 2_592_000,
       );
+      if (cfg.csrfEnabled) refreshCsrfToken(c);
       return c.json(result, 200);
     },
   );

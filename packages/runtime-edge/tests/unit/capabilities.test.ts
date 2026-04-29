@@ -14,10 +14,9 @@
 //   - Required properties exist and have correct types
 //   - password sub-object methods are functions
 //   - readFile is a function
-
 import { describe, expect, it } from 'bun:test';
-import { edgeRuntime } from '../../src/index';
 import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
+import { edgeRuntime } from '../../src/index';
 
 describe('edgeRuntime() capabilities', () => {
   // -------------------------------------------------------------------------
@@ -34,21 +33,21 @@ describe('edgeRuntime() capabilities', () => {
       const runtime = edgeRuntime();
       // In bun:test (strict mode), assigning to a frozen object's property throws.
       expect(() => {
-        (runtime as Record<string, unknown>).supportsAsyncLocalStorage = true;
+        (runtime as unknown as Record<string, unknown>).supportsAsyncLocalStorage = true;
       }).toThrow();
     });
 
     it('cannot delete runtime properties (strict mode throws)', () => {
       const runtime = edgeRuntime();
       expect(() => {
-        delete (runtime as Record<string, unknown>).supportsAsyncLocalStorage;
+        delete (runtime as unknown as Record<string, unknown>).supportsAsyncLocalStorage;
       }).toThrow();
     });
 
     it('cannot add new properties to the runtime', () => {
       const runtime = edgeRuntime();
       expect(() => {
-        (runtime as Record<string, unknown>).newProp = 'value';
+        (runtime as unknown as Record<string, unknown>).newProp = 'value';
       }).toThrow();
     });
   });

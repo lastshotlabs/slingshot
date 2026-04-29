@@ -314,6 +314,7 @@ function mergeCsrfExemptPaths(
     ...security,
     csrf: {
       ...(security.csrf ?? {}),
+      enabled: security.csrf?.enabled ?? false,
       exemptPaths: [...exemptPaths],
     },
   };
@@ -322,11 +323,11 @@ function mergeCsrfExemptPaths(
 function freezeFrameworkSecurity(
   security: Readonly<{
     cors: string | readonly string[];
-    csrf?: { exemptPaths?: string[]; disabled?: boolean };
+    csrf?: CsrfConfig;
   }>,
 ): Readonly<{
   cors: string | readonly string[];
-  csrf?: { exemptPaths?: readonly string[]; disabled?: boolean };
+  csrf?: Omit<CsrfConfig, 'exemptPaths'> & { exemptPaths?: readonly string[] };
 }> {
   return Object.freeze({
     cors: security.cors,

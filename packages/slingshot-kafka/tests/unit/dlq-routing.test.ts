@@ -103,7 +103,9 @@ describe('DLQ routing — error classification', () => {
       });
 
       expect(handler).not.toHaveBeenCalled();
-      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic === 'incoming.deser-dlq.dlq');
+      const dlqSend = fakeKafkaState.producerSendCalls.find(
+        c => c.topic === 'incoming.deser-dlq.dlq',
+      );
       expect(dlqSend).toBeDefined();
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('deserialize');
     } finally {
@@ -197,7 +199,9 @@ describe('DLQ routing — message format and header propagation', () => {
         pause: () => {},
       });
 
-      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic === 'incoming.header-prop.dlq');
+      const dlqSend = fakeKafkaState.producerSendCalls.find(
+        c => c.topic === 'incoming.header-prop.dlq',
+      );
       expect(dlqSend).toBeDefined();
       const msg = dlqSend!.messages[0];
 
@@ -339,7 +343,7 @@ describe('DLQ routing — connector skip and pause strategies', () => {
       const dlqFound = fakeKafkaState.producerSendCalls.some(c => c.topic.includes('.dlq'));
       expect(dlqFound).toBe(false);
       // Offset was committed (the error was skipped)
-      expect((consumer?.commitOffsetCalls ?? 0)).toBeGreaterThan(beforeCommits);
+      expect(consumer?.commitOffsetCalls ?? 0).toBeGreaterThan(beforeCommits);
     } finally {
       errorSpy.mockRestore();
       await connectors.stop();

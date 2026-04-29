@@ -14,6 +14,11 @@
       "bun": "./dist/src/testing.js",
       "types": "./dist/src/testing.d.ts",
       "import": "./dist/src/testing.js"
+    },
+    "./errors": {
+      "bun": "./dist/src/errors.js",
+      "types": "./dist/src/errors.d.ts",
+      "import": "./dist/src/errors.js"
     }
   },
   "repository": {
@@ -30,6 +35,8 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "test": "bun test",
+    "coverage": "bun test --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ --cache"
   },

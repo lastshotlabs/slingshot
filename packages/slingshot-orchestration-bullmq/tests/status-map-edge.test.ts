@@ -12,13 +12,13 @@ describe('mapBullMQStatus', () => {
     expect(result).toBeDefined();
   });
 
-  test('maps active/delayed/waiting to running', () => {
+  test('maps active to running and queued states to pending', () => {
     const active = mapBullMQStatus('active');
     const delayed = mapBullMQStatus('delayed');
     const waiting = mapBullMQStatus('waiting');
     expect(active).toBe('running');
-    expect(delayed).toBe('running');
-    expect(waiting).toBe('running');
+    expect(delayed).toBe('pending');
+    expect(waiting).toBe('pending');
   });
 
   test('unknown status has fallback', () => {

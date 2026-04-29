@@ -62,12 +62,11 @@ describe('createBullMQAdapter — queue creation', () => {
 // ---------------------------------------------------------------------------
 
 describe('createBullMQAdapter — queue naming with special characters', () => {
-  test('event name with dots is sanitized', () => {
+  test('event name with dots is preserved while colons are sanitized', () => {
     const bus = createBullMQAdapter({ connection: {} });
     bus.on('user.created' as any, async () => {}, { durable: true, name: 'audit' });
     const qName = fakeBullMQState.queues[0].name;
-    // Dots are not colons — check what the sanitization does
-    expect(qName).toBe('slingshot_events_user_created_audit');
+    expect(qName).toBe('slingshot_events_user.created_audit');
   });
 
   test('event name with hyphens is preserved', () => {

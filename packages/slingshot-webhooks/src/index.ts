@@ -92,3 +92,12 @@ export type { SecretEncryptor, SecretCipher } from './lib/secretCipher';
  * Create a secret cipher from the configured encryption provider.
  */
 export { createSecretCipher } from './lib/secretCipher';
+
+/**
+ * Rate limiter contract and built-in sliding window implementation for inbound webhook endpoints.
+ */
+export { createSlidingWindowRateLimiter } from './lib/rateLimit';
+/**
+ * Rate limiter contract and result types.
+ */
+export type { RateLimiter, RateLimitResult, SlidingWindowRateLimiterOptions } from './lib/rateLimit';

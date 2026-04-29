@@ -67,9 +67,7 @@ describe('rate-limit store: concurrent hits', () => {
     const opts = { limit: 5, windowMs: 60_000 };
 
     // All 8 concurrent hits land in the same window
-    const results = await Promise.all(
-      Array.from({ length: 8 }, () => store.hit('race-key', opts)),
-    );
+    const results = await Promise.all(Array.from({ length: 8 }, () => store.hit('race-key', opts)));
 
     const counts = results.map(r => r.count);
     expect(Math.max(...counts)).toBe(8);

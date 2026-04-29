@@ -26,8 +26,8 @@ import {
   withTimeout,
 } from '@lastshotlabs/slingshot-core';
 import {
-  DurableSubscriptionNameRequiredError,
   DuplicateDurableSubscriptionError,
+  DurableSubscriptionNameRequiredError,
   DurableSubscriptionOffError,
 } from './errors';
 
@@ -678,6 +678,19 @@ export function createBullMQAdapter(
   getHealthDetails: () => BullMQAdapterHealth;
   /** Live-probe variant — runs Redis pings + counts. */
   checkHealthDetails: () => Promise<BullMQAdapterHealth>;
+  /**
+   * Replay jobs from a validation DLQ back to their original source queues.
+   * Reads all jobs from the specified DLQ queue, re-enqueues them on the
+   * original source queue using the stored event name and original data,
+   * and removes them from the DLQ after successful re-enqueue.
+   *
+   * Returns the number of jobs successfully replayed.
+   *
+   * @param dlqName - Optional explicit DLQ queue name. When omitted, replays
+   *   from all known validation DLQ queues. When provided, name is treated as
+   *   the sanitized queue name (colons replaced with underscores).
+   */
+  replayFromDlq: (dlqName?: string) => Promise<number>;
 } {
   const {
     serializer,
@@ -694,8 +707,9 @@ export function createBullMQAdapter(
   const enqueueTimeoutMs = opts.enqueueTimeoutMs ?? 10_000;
   const eventSerializer = serializer ?? JSON_SERIALIZER;
   const validationMode = opts.validation ?? 'off';
-  const logger: Logger =
-    rawLogger ?? createConsoleLogger({ base: { component: 'slingshot-bullmq' } });
+  const logger: Logger = (rawLogger ?? createConsoleLogger()).child({
+    component: 'slingshot-bullmq',
+  });
   const drainBaseMs = opts.drainBaseMs ?? DEFAULT_DRAIN_BASE_MS;
   const drainMaxMs = opts.drainMaxMs ?? DEFAULT_DRAIN_MAX_MS;
   const maxEnqueueAttempts = opts.maxEnqueueAttempts ?? DEFAULT_MAX_ENQUEUE_ATTEMPTS;
@@ -995,17 +1009,20 @@ export function createBullMQAdapter(
     listener: (envelope: EventEnvelope<K>) => void | Promise<void>,
     subscriptionOpts?: SubscriptionOpts,
   ): void {
+    if (isShutdown) return;
+
     const key = event as string;
     if (subscriptionOpts?.durable === true) {
       if (!subscriptionOpts.name) {
         throw new DurableSubscriptionNameRequiredError();
       }
 
-      const mapKey = `${prefix}:${event}:${subscriptionOpts.name}`;
+      const subscriptionName = subscriptionOpts.name;
+      const mapKey = `${prefix}:${event}:${subscriptionName}`;
       const bullmqQueueName = sanitizeQueueName(mapKey);
 
       if (durableQueues.has(mapKey)) {
-        throw new DuplicateDurableSubscriptionError(event as string, subscriptionOpts.name!);
+        throw new DuplicateDurableSubscriptionError(event as string, subscriptionName);
       }
 
       const queue = new Queue(bullmqQueueName, {
@@ -1233,6 +1250,8 @@ export function createBullMQAdapter(
 
   return {
     emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
+      if (isShutdown) return;
+
       const envelope = isEventEnvelope(payload, event)
         ? payload
         : createRawEventEnvelope(
@@ -1345,6 +1364,8 @@ export function createBullMQAdapter(
       listener: (payload: SlingshotEventMap[K]) => void | Promise<void>,
       subscriptionOpts?: SubscriptionOpts,
     ): void {
+      if (isShutdown) return;
+
       const key = event as string;
       const wrapper = (envelope: EventEnvelope): void | Promise<void> =>
         listener(envelope.payload as SlingshotEventMap[K]);
@@ -1485,6 +1506,74 @@ export function createBullMQAdapter(
     async checkHealthDetails(): Promise<BullMQAdapterHealth> {
       await this.checkHealth();
       return buildHealthDetails();
+    },
+
+    async replayFromDlq(dlqName?: string): Promise<number> {
+      if (walReplayPromise) await walReplayPromise;
+      const targets =
+        dlqName !== undefined
+          ? validationDlqs.has(dlqName)
+            ? new Map([[dlqName, validationDlqs.get(dlqName)!]])
+            : new Map<string, Queue>()
+          : new Map(validationDlqs);
+
+      let replayed = 0;
+      for (const [name, dlq] of targets) {
+        // Use the getJobs API to fetch all jobs from the DLQ queue.
+        // BullMQ's Queue doesn't expose a typed getJobs on its own,
+        // so we access it through the untyped interface.
+        const dlqJobs = await (dlq as unknown as {
+          getJobs: (states?: string[]) => Promise<Array<{ data: Record<string, unknown>; remove: () => Promise<void>; id?: string }>>;
+        }).getJobs(['waiting', 'delayed', 'prioritized']).catch(() => []);
+
+        for (const job of dlqJobs) {
+          const event = job.data?.event as string | undefined;
+          const originalData = job.data?.originalData;
+          if (!event || originalData === undefined || originalData === null) {
+            logger.warn('skipping DLQ job with missing event or originalData', {
+              dlq: name,
+              jobId: job.id,
+            });
+            continue;
+          }
+
+          // Find the source queue for this event from durable queues
+          const sourceQueue = durableQueues.get(`slingshot:events:${event}:` + name.split(':').pop()) as Queue | undefined;
+          const finalQueue = sourceQueue ?? (durableQueues.size === 1 ? durableQueues.values().next().value as Queue : undefined);
+
+          if (!finalQueue) {
+            logger.warn('cannot replay from DLQ — no source queue found for event', {
+              dlq: name,
+              event,
+              jobId: job.id,
+            });
+            continue;
+          }
+
+          try {
+            await withTimeout(
+              finalQueue.add(event, originalData),
+              enqueueTimeoutMs,
+              `bullmq.replayDlq[${event}]`,
+            );
+            metrics.counter('bullmq.dlq.replay.count', 1, { dlq: name });
+            await job.remove();
+            replayed += 1;
+          } catch (err: unknown) {
+            logger.error('failed to replay DLQ job', {
+              dlq: name,
+              event,
+              jobId: job.id,
+              err: errInfo(err),
+            });
+          }
+        }
+      }
+
+      if (replayed > 0) {
+        logger.info('replayed jobs from validation DLQ', { replayed });
+      }
+      return replayed;
     },
   };
 }

@@ -7,6 +7,7 @@ export class BunRuntimeError extends Error {
   }
 }
 
+/** Raised when the Bun runtime HTTP server cannot start or serve requests safely. */
 export class BunServerError extends BunRuntimeError {
   constructor(message: string) {
     super(message);
@@ -14,6 +15,7 @@ export class BunServerError extends BunRuntimeError {
   }
 }
 
+/** Raised when Bun runtime WebSocket setup or delivery fails. */
 export class BunWebSocketError extends BunRuntimeError {
   constructor(message: string) {
     super(message);
@@ -21,6 +23,7 @@ export class BunWebSocketError extends BunRuntimeError {
   }
 }
 
+/** Raised when Bun SQLite runtime operations fail. */
 export class BunSqliteError extends BunRuntimeError {
   constructor(message: string) {
     super(message);
@@ -28,6 +31,7 @@ export class BunSqliteError extends BunRuntimeError {
   }
 }
 
+/** Raised when Bun password hashing or verification cannot complete safely. */
 export class BunPasswordError extends BunRuntimeError {
   constructor(message: string) {
     super(message);

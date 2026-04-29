@@ -18,3 +18,9 @@ export type {
  * Create a Postgres connection and Drizzle database handle.
  */
 export { connectPostgres } from './connection.js';
+
+/**
+ * Parse and validate a stored migration version against the binary's max version.
+ * Useful for tests and custom migration tooling.
+ */
+export { parseMigrationVersion } from './adapter.js';

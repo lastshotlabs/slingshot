@@ -4,10 +4,10 @@
  * parsing, and EventBridge event detail extraction with edge inputs.
  */
 import { describe, expect, test } from 'bun:test';
-import { s3Trigger } from '../src/triggers/s3';
 import { dynamodbStreamsTrigger } from '../src/triggers/dynamodb-streams';
-import { snsTrigger } from '../src/triggers/sns';
 import { eventbridgeTrigger } from '../src/triggers/eventbridge';
+import { s3Trigger } from '../src/triggers/s3';
+import { snsTrigger } from '../src/triggers/sns';
 
 describe('S3 trigger edge cases', () => {
   test('extracts naturalKey from bucket/object/sequencer', () => {

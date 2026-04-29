@@ -19,6 +19,16 @@
       "bun": "./dist/src/rateLimit/index.js",
       "types": "./dist/src/rateLimit/index.d.ts",
       "import": "./dist/src/rateLimit/index.js"
+    },
+    "./config": {
+      "bun": "./dist/src/types/config.js",
+      "types": "./dist/src/types/config.d.ts",
+      "import": "./dist/src/types/config.js"
+    },
+    "./errors": {
+      "bun": "./dist/src/errors.js",
+      "types": "./dist/src/errors.d.ts",
+      "import": "./dist/src/errors.js"
     }
   },
   "repository": {
@@ -37,6 +47,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
+    "coverage": "bun test --coverage",
     "lint": "eslint src/ --cache"
   },
   "dependencies": {

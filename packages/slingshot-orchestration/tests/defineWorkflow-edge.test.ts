@@ -6,13 +6,7 @@ import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 import { createMemoryAdapter } from '../src/adapters/memory';
 import { defineTask } from '../src/defineTask';
-import {
-  defineWorkflow,
-  parallel,
-  sleep,
-  step,
-  stepResult,
-} from '../src/defineWorkflow';
+import { defineWorkflow, parallel, sleep, step, stepResult } from '../src/defineWorkflow';
 import { OrchestrationError } from '../src/errors';
 import { createOrchestrationRuntime } from '../src/runtime';
 
@@ -90,7 +84,7 @@ describe('defineWorkflow — step condition', () => {
       input: z.object({ skip: z.boolean() }),
       steps: [
         step('s1', noopTask, {
-          condition: (ctx) => !ctx.workflowInput.skip,
+          condition: ctx => !ctx.workflowInput.skip,
         }),
       ],
     });
@@ -152,8 +146,10 @@ describe('defineWorkflow — stepResult', () => {
   });
 
   test('stepResult with typed generic narrows the result', () => {
-    interface MyResult { value: number }
-    const result = stepResult<MyResult>({ 'calc': { value: 42 } }, 'calc');
+    interface MyResult {
+      value: number;
+    }
+    const result = stepResult<MyResult>({ calc: { value: 42 } }, 'calc');
     expect(result?.value).toBe(42);
   });
 });

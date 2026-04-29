@@ -28,18 +28,18 @@ describe('Elasticsearch — filter to query DSL translation', () => {
   });
 
   test('translates numeric comparisons to range queries', () => {
-    expect(
-      searchFilterToElasticsearchQuery({ field: 'price', op: '>', value: 100 }),
-    ).toEqual({ range: { price: { gt: 100 } } });
-    expect(
-      searchFilterToElasticsearchQuery({ field: 'price', op: '>=', value: 10 }),
-    ).toEqual({ range: { price: { gte: 10 } } });
-    expect(
-      searchFilterToElasticsearchQuery({ field: 'price', op: '<', value: 50 }),
-    ).toEqual({ range: { price: { lt: 50 } } });
-    expect(
-      searchFilterToElasticsearchQuery({ field: 'price', op: '<=', value: 200 }),
-    ).toEqual({ range: { price: { lte: 200 } } });
+    expect(searchFilterToElasticsearchQuery({ field: 'price', op: '>', value: 100 })).toEqual({
+      range: { price: { gt: 100 } },
+    });
+    expect(searchFilterToElasticsearchQuery({ field: 'price', op: '>=', value: 10 })).toEqual({
+      range: { price: { gte: 10 } },
+    });
+    expect(searchFilterToElasticsearchQuery({ field: 'price', op: '<', value: 50 })).toEqual({
+      range: { price: { lt: 50 } },
+    });
+    expect(searchFilterToElasticsearchQuery({ field: 'price', op: '<=', value: 200 })).toEqual({
+      range: { price: { lte: 200 } },
+    });
   });
 
   test('translates IN to terms query', () => {
@@ -121,10 +121,7 @@ describe('Elasticsearch — composite filter translation', () => {
     const result = searchFilterToElasticsearchQuery(filter);
     expect(result).toEqual({
       bool: {
-        filter: [
-          { term: { status: 'active' } },
-          { range: { price: { gte: 10 } } },
-        ],
+        filter: [{ term: { status: 'active' } }, { range: { price: { gte: 10 } } }],
       },
     });
   });
@@ -139,10 +136,7 @@ describe('Elasticsearch — composite filter translation', () => {
     const result = searchFilterToElasticsearchQuery(filter);
     expect(result).toEqual({
       bool: {
-        should: [
-          { term: { status: 'draft' } },
-          { term: { status: 'archived' } },
-        ],
+        should: [{ term: { status: 'draft' } }, { term: { status: 'archived' } }],
         minimum_should_match: 1,
       },
     });

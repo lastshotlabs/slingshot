@@ -13,7 +13,6 @@
 //   - Stream cancellation when declared size exceeds cap
 //   - Stream whose reader is already locked
 //   - Stream with multiple chunks under the cap
-
 import { describe, expect, it } from 'bun:test';
 import { edgeRuntime } from '../../src/index';
 

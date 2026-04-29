@@ -58,3 +58,30 @@ export {
   AdminConfigError,
   AdminRateLimitExceededError,
 } from './errors';
+/**
+ * Circuit breaker for admin provider calls.
+ *
+ * Guards outbound calls to external admin providers so the plugin fails fast
+ * during sustained outages rather than thrashing against a degraded upstream.
+ */
+export { createAdminCircuitBreaker, AdminCircuitOpenError } from './lib/circuitBreaker';
+/**
+ * Circuit breaker health snapshot and interface types.
+ */
+export type { AdminCircuitBreaker, AdminCircuitBreakerHealth, AdminCircuitBreakerOptions } from './lib/circuitBreaker';
+/**
+ * Retry-with-backoff helper for transient provider failures.
+ */
+export { withRetry } from './lib/retry';
+/**
+ * Retry configuration options.
+ */
+export type { RetryOptions } from './lib/retry';
+/**
+ * In-memory metrics collector for the admin plugin.
+ */
+export { createAdminMetricsCollector } from './lib/metrics';
+/**
+ * Metrics collector interface and snapshot types.
+ */
+export type { AdminMetricsCollector, AdminMetricsSnapshot } from './lib/metrics';

@@ -2,6 +2,19 @@
 export { createApp } from './app';
 export type { CreateAppResult, PermissionsConfig } from './app';
 export { createServer } from './server';
+export {
+  ProductionReadinessError,
+  assertProductionReadiness,
+  auditProductionReadiness,
+} from './prodReadiness';
+export type {
+  ProductionReadinessAuditOptions,
+  ProductionReadinessCategory,
+  ProductionReadinessConfig,
+  ProductionReadinessFinding,
+  ProductionReadinessReport,
+  ProductionReadinessSeverity,
+} from './prodReadiness';
 
 // SlingshotContext (instance-scoped state)
 export type {

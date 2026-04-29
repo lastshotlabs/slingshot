@@ -59,10 +59,7 @@ function makeSpyRuntime(
 
 function mountRouter(runtime: OrchestrationRuntime): Hono {
   const app = new Hono();
-  app.route(
-    '/orchestration',
-    createOrchestrationRouter({ runtime, tasks: [], workflows: [] }),
-  );
+  app.route('/orchestration', createOrchestrationRouter({ runtime, tasks: [], workflows: [] }));
   return app;
 }
 

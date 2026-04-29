@@ -65,9 +65,7 @@ describe('connectPostgres — pool creation and fail-fast', () => {
   });
 
   test('creates a Pool with the given connection string', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?pool-create=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?pool-create=${Date.now()}`);
     await connectPostgres('postgresql://localhost/mydb');
     expect(poolOptions).toMatchObject({
       connectionString: 'postgresql://localhost/mydb',
@@ -75,9 +73,7 @@ describe('connectPostgres — pool creation and fail-fast', () => {
   });
 
   test('forwards all pool config fields to the Pool constructor', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?pool-config=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?pool-config=${Date.now()}`);
     await connectPostgres('postgresql://localhost/mydb', {
       pool: {
         max: 25,
@@ -115,9 +111,7 @@ describe('connectPostgres — pool creation and fail-fast', () => {
       return origQuery(sql);
     };
 
-    const { connectPostgres } = await import(
-      `../src/connection.ts?select1=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?select1=${Date.now()}`);
     await connectPostgres('postgresql://localhost/mydb');
 
     expect(captured).toContain('SELECT 1');
@@ -128,9 +122,7 @@ describe('connectPostgres — pool creation and fail-fast', () => {
       throw new Error('connection refused');
     };
 
-    const { connectPostgres } = await import(
-      `../src/connection.ts?fail=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?fail=${Date.now()}`);
     await expect(connectPostgres('postgresql://localhost/mydb')).rejects.toThrow(
       'connection refused',
     );
@@ -138,9 +130,7 @@ describe('connectPostgres — pool creation and fail-fast', () => {
   });
 
   test('returns a DrizzlePostgresDb handle with pool, db, healthCheck, and getStats', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?handle=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?handle=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
 
     expect(result).toHaveProperty('pool');
@@ -152,9 +142,7 @@ describe('connectPostgres — pool creation and fail-fast', () => {
   });
 
   test('returns a working getStats snapshot with pool stats', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?stats=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?stats=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
 
     const stats = result.getStats();
@@ -181,17 +169,13 @@ describe('connectPostgres — migration mode and healthcheck config', () => {
   });
 
   test('default migration mode is "apply"', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?mode-default=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?mode-default=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
     expect(result.getStats().migrationMode).toBe('apply');
   });
 
   test('"assume-ready" migration mode is reflected in stats', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?mode-ready=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?mode-ready=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb', {
       migrations: 'assume-ready',
     });
@@ -199,9 +183,7 @@ describe('connectPostgres — migration mode and healthcheck config', () => {
   });
 
   test('healthcheck timeout config is passed through', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?hc-timeout=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?hc-timeout=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb', {
       healthcheckTimeoutMs: 5000,
     });
@@ -218,9 +200,7 @@ describe('healthCheck function', () => {
   });
 
   test('returns ok=true with latency when query succeeds', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?hc-ok=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?hc-ok=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
     const health = await result.healthCheck();
 
@@ -243,9 +223,7 @@ describe('healthCheck function', () => {
       throw new Error('server unreachable');
     };
 
-    const { connectPostgres } = await import(
-      `../src/connection.ts?hc-fail=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?hc-fail=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
 
     const health = await result.healthCheck(5000);
@@ -273,9 +251,7 @@ describe('healthCheck function', () => {
       return { rows: [] };
     };
 
-    const { connectPostgres } = await import(
-      `../src/connection.ts?hc-timeout-param=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?hc-timeout-param=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
 
     // With a very short timeout, it should fail
@@ -295,9 +271,7 @@ describe('getStats query recording', () => {
   });
 
   test('records query counts from SELECT 1', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?stats-q=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?stats-q=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
     const stats = result.getStats();
 
@@ -310,13 +284,9 @@ describe('getStats query recording', () => {
       throw new Error('fail');
     };
 
-    const { connectPostgres } = await import(
-      `../src/connection.ts?stats-err=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?stats-err=${Date.now()}`);
     // We expect the connectPostgres call itself to fail
-    await expect(
-      connectPostgres('postgresql://localhost/mydb'),
-    ).rejects.toThrow('fail');
+    await expect(connectPostgres('postgresql://localhost/mydb')).rejects.toThrow('fail');
   });
 
   test('records query duration in stats', async () => {
@@ -326,9 +296,7 @@ describe('getStats query recording', () => {
       return { rows: [{ ok: 1 }], rowCount: 1 };
     };
 
-    const { connectPostgres } = await import(
-      `../src/connection.ts?stats-dur=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?stats-dur=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
     const stats = result.getStats();
 
@@ -345,9 +313,7 @@ describe('pool instrumentation', () => {
   });
 
   test('instrumented pool.query records calls in runtime stats', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?instr=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?instr=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
 
     // Do an additional query through the pool
@@ -369,9 +335,7 @@ describe('pool instrumentation', () => {
       __slingshotInstrumented: false,
     });
 
-    const { connectPostgres } = await import(
-      `../src/connection.ts?instr-client=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?instr-client=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/mydb');
 
     // Acquire a client and run a query

@@ -282,9 +282,7 @@ describe('createOrchestrationRuntime — onProgress', () => {
       tasks: [noopTask],
     });
 
-    expect(() => runtime.onProgress('run-id', () => {})).toThrow(
-      OrchestrationError,
-    );
+    expect(() => runtime.onProgress('run-id', () => {})).toThrow(OrchestrationError);
   });
 });
 

@@ -9,16 +9,18 @@
 //   - undefined/null handling in fileStore results
 //   - Stress: many concurrent reads with a mix of found/not-found paths
 //   - FileStore that switches between string and FileStoreStream responses
-
 import { describe, expect, it } from 'bun:test';
-import { configureRuntimeEdgeLogger, edgeRuntime } from '../../src/index';
 import type { Logger } from '@lastshotlabs/slingshot-core';
+import { configureRuntimeEdgeLogger, edgeRuntime } from '../../src/index';
 
 // ---------------------------------------------------------------------------
 // Helper: capture logger warnings
 // ---------------------------------------------------------------------------
 
-function captureLogger(): { logger: Logger; warns: Array<{ msg: string; fields?: Record<string, unknown> }> } {
+function captureLogger(): {
+  logger: Logger;
+  warns: Array<{ msg: string; fields?: Record<string, unknown> }>;
+} {
   const warns: Array<{ msg: string; fields?: Record<string, unknown> }> = [];
   const logger: Logger = {
     debug() {},

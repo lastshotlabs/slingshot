@@ -23,6 +23,27 @@ afterEach(async () => {
   }
 });
 
+async function fetchFromRuntimeServer(port: number, timeoutMs = 2_000): Promise<Response> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      const remaining = Math.max(1, deadline - Date.now());
+      return await fetch(`http://127.0.0.1:${port}`, {
+        signal: AbortSignal.timeout(Math.min(remaining, 500)),
+      });
+    } catch (err) {
+      lastError = err;
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`runtime-bun server on port ${port} did not respond`);
+}
+
 describe('runtime-bun smoke', () => {
   test('hashes and verifies passwords', async () => {
     const runtime = bunRuntime();
@@ -121,10 +142,10 @@ describe('runtime-bun smoke', () => {
 
     try {
       expect(server.port).toBeGreaterThan(0);
-      const response = await fetch(`http://127.0.0.1:${server.port}`);
+      const response = await fetchFromRuntimeServer(server.port);
       expect(await response.text()).toBe('ok');
     } finally {
-      server.stop(true);
+      await server.stop(true);
     }
   });
 

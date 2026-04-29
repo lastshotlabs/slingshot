@@ -5,6 +5,7 @@ describe('orchestrationPluginConfigSchema', () => {
   test('accepts minimal valid config', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
       adapter: { type: 'memory' },
+      tasks: ['taskA'],
     });
     expect(result.success).toBe(true);
   });
@@ -23,14 +24,19 @@ describe('orchestrationPluginConfigSchema', () => {
 
   test('accepts bullmq adapter type', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
-      adapter: { type: 'bullmq', connection: { host: 'localhost', port: 6379 } },
+      adapter: { type: 'bullmq', config: { connection: { host: 'localhost', port: 6379 } } },
+      tasks: ['taskA'],
     });
     expect(result.success).toBe(true);
   });
 
   test('accepts temporal adapter type', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
-      adapter: { type: 'temporal', connection: { address: 'localhost:7233' } },
+      adapter: {
+        type: 'temporal',
+        config: { address: 'localhost:7233', workflowTaskQueue: 'workflow-tasks' },
+      },
+      tasks: ['taskA'],
     });
     expect(result.success).toBe(true);
   });
@@ -38,15 +44,17 @@ describe('orchestrationPluginConfigSchema', () => {
   test('accepts route timeout config', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
       adapter: { type: 'memory' },
+      tasks: ['taskA'],
       routeTimeoutMs: 60000,
     });
     expect(result.success).toBe(true);
   });
 
-  test('accepts mount path', () => {
+  test('accepts route prefix', () => {
     const result = orchestrationPluginConfigSchema.safeParse({
       adapter: { type: 'memory' },
-      mountPath: '/orchestration',
+      tasks: ['taskA'],
+      routePrefix: '/orchestration',
     });
     expect(result.success).toBe(true);
   });

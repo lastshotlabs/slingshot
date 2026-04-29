@@ -24,6 +24,7 @@ bun add @lastshotlabs/slingshot-push
 ## Export Paths
 
 - `.`
+- `./errors`
 - `./testing`
 
 ## Package Scripts

@@ -1,14 +1,22 @@
 // packages/slingshot-ssg/src/renderer.ts
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { PathTraversalError, safeJoin } from '@lastshotlabs/slingshot-core';
+import { PathTraversalError, deepFreeze, safeJoin } from '@lastshotlabs/slingshot-core';
 import type { SlingshotSsrRenderer, SsrShell } from '@lastshotlabs/slingshot-ssr';
 import { resolveRouteChain } from '@lastshotlabs/slingshot-ssr';
+import {
+  createSsgCircuitBreaker,
+  SsgCircuitOpenError,
+  type SsgCircuitBreaker,
+} from './circuitBreaker';
 import type { SsgConfig, SsgPageResult, SsgResult } from './types';
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEFAULT_RENDER_PAGE_TIMEOUT_MS = 60_000;
+const DEFAULT_RETRY_MAX_ATTEMPTS = 1;
+const DEFAULT_RETRY_BASE_DELAY_MS = 1_000;
+const DEFAULT_RETRY_MAX_DELAY_MS = 30_000;
 
 function writeFileAtomicSync(filePath: string, contents: string): void {
   mkdirSync(dirname(filePath), { recursive: true });
@@ -26,6 +34,177 @@ function writeFileAtomicSync(filePath: string, contents: string): void {
 }
 
 /**
+ * Internal: execute a single render attempt, wrapping with timeout.
+ *
+ * Returns a `SsgPageResult` regardless of success or failure — the result
+ * carries an `error` field when the attempt failed.
+ */
+async function executeRenderAttempt(
+  urlPath: string,
+  renderer: SlingshotSsrRenderer,
+  config: SsgConfig,
+  assetTagsHtml: string,
+  attemptStart: number,
+  filePath: string,
+): Promise<SsgPageResult> {
+  const renderPromise = renderSsgPageUnchecked(
+    urlPath,
+    renderer,
+    config,
+    assetTagsHtml,
+    attemptStart,
+    filePath,
+  );
+  const timeoutMs = config.renderPageTimeoutMs ?? DEFAULT_RENDER_PAGE_TIMEOUT_MS;
+  if (timeoutMs <= 0) return renderPromise;
+  return withPageTimeout(renderPromise, urlPath, filePath, attemptStart, timeoutMs);
+}
+
+/**
+ * Determine whether an error from the render pipeline is potentially transient
+ * and worth retrying.
+ *
+ * Non-transient errors:
+ * - Non-200 HTTP response (redirect, 404, 500 — semantic decision by renderer)
+ * - No route matched (route doesn't exist, won't exist on retry)
+ * - File write failure (filesystem issue unlikely to resolve in ms)
+ *
+ * Everything else (renderer throws, timeout, circuit open) is considered
+ * transient and eligible for retry.
+ */
+function isTransientError(error: Error): boolean {
+  const msg = error.message;
+  if (msg.includes('Renderer returned HTTP')) return false;
+  if (msg.includes('No route matched')) return false;
+  if (msg.includes('Failed to write')) return false;
+  return true;
+}
+
+/**
+ * Compute exponential backoff delay with jitter.
+ *
+ * delay = min(baseDelayMs * 2^(attempt-1), maxDelayMs)
+ * jitter = delay * (0.75 + random * 0.5)
+ */
+function calculateBackoff(
+  attempt: number,
+  baseDelayMs: number,
+  maxDelayMs: number,
+): number {
+  const delay = Math.min(
+    baseDelayMs * Math.pow(2, attempt - 1),
+    maxDelayMs,
+  );
+  const jitter = delay * (0.75 + Math.random() * 0.5);
+  return Math.round(jitter);
+}
+
+/** Promise-based sleep. */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Internal render function that supports retry and circuit breaker.
+ *
+ * Exposed as the implementation behind both the public `renderSsgPage` and
+ * `renderSsgPages` APIs so the circuit breaker (created once per batch) is
+ * shared across all pages.
+ */
+async function renderSsgPageInternal(
+  urlPath: string,
+  renderer: SlingshotSsrRenderer,
+  config: SsgConfig,
+  assetTagsHtml: string,
+  breaker?: SsgCircuitBreaker,
+): Promise<SsgPageResult> {
+  const start = Date.now();
+  let filePath: string;
+  try {
+    filePath = resolveOutputPath(urlPath, config.outDir);
+  } catch (err) {
+    // Reject malicious or malformed URL paths (path traversal, NUL byte, etc.)
+    // before any rendering occurs. The page is recorded as failed so the build
+    // surfaces it in the summary instead of silently writing outside outDir.
+    if (err instanceof PathTraversalError) {
+      const error = new Error(
+        `[slingshot-ssg] rejected URL path "${urlPath}": ${err.message}`,
+      );
+      console.warn(error.message);
+      return makeFailedResult(urlPath, '', start, error);
+    }
+    throw err;
+  }
+
+  const maxAttempts = config.retry?.maxAttempts ?? DEFAULT_RETRY_MAX_ATTEMPTS;
+  const baseDelayMs = config.retry?.baseDelayMs ?? DEFAULT_RETRY_BASE_DELAY_MS;
+  const maxDelayMs = config.retry?.maxDelayMs ?? DEFAULT_RETRY_MAX_DELAY_MS;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const attemptStart = Date.now();
+
+    try {
+      // Define the render function, optionally guarded by the circuit breaker
+      const attemptFn = async (): Promise<SsgPageResult> =>
+        executeRenderAttempt(urlPath, renderer, config, assetTagsHtml, attemptStart, filePath);
+
+      let result: SsgPageResult;
+      if (breaker) {
+        result = await breaker.guard(attemptFn);
+      } else {
+        result = await attemptFn();
+      }
+
+      // Success
+      if (!result.error) return result;
+
+      // Non-transient error — don't retry
+      if (!isTransientError(result.error) || attempt >= maxAttempts) {
+        return result;
+      }
+
+      // Transient error — backoff and retry
+      const delay = calculateBackoff(attempt, baseDelayMs, maxDelayMs);
+      console.log(
+        `[slingshot-ssg] Retry ${attempt}/${maxAttempts - 1} for "${urlPath}" ` +
+          `in ${delay}ms (${result.error.message})`,
+      );
+      await sleep(delay);
+    } catch (err) {
+      if (err instanceof SsgCircuitOpenError) {
+        if (attempt >= maxAttempts) {
+          const error = new Error(
+            `[slingshot-ssg] Circuit breaker tripped for "${urlPath}" ` +
+              `after ${attempt} attempt(s)`,
+          );
+          return makeFailedResult(urlPath, filePath, attemptStart, error);
+        }
+        // Wait for cooldown then retry
+        const delay = Math.min(err.retryAfterMs + 100, maxDelayMs);
+        console.log(
+          `[slingshot-ssg] Circuit breaker open, waiting ${delay}ms ` +
+            `before retry ${attempt + 1}/${maxAttempts} for "${urlPath}"`,
+        );
+        await sleep(delay);
+        continue;
+      }
+
+      // Infrastructure error (not wrapped in SsgPageResult)
+      if (attempt >= maxAttempts) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        return makeFailedResult(urlPath, filePath, attemptStart, error);
+      }
+
+      const delay = calculateBackoff(attempt, baseDelayMs, maxDelayMs);
+      await sleep(delay);
+    }
+  }
+
+  // TypeScript exhaustiveness guard — the loop always returns.
+  throw new Error('[slingshot-ssg] Retry loop exhausted unexpectedly');
+}
+
+/**
  * Render a single URL path to a static HTML file.
  *
  * Preferred path: resolves the full file-based route chain via
@@ -39,6 +218,9 @@ function writeFileAtomicSync(filePath: string, contents: string): void {
  * renderer returns a non-200 response (redirect, 404, etc.) the page is skipped
  * and a warning is logged. `SsgPageResult.error` will be set.
  *
+ * Transient failures (timeout, renderer throws) are retried automatically
+ * according to `config.retry`.
+ *
  * @param urlPath        - The URL path to render (e.g. `/posts/hello-world`).
  * @param renderer       - An initialised `SlingshotSsrRenderer`.
  * @param config         - Frozen SSG configuration.
@@ -51,32 +233,7 @@ export async function renderSsgPage(
   config: SsgConfig,
   assetTagsHtml: string = '',
 ): Promise<SsgPageResult> {
-  const start = Date.now();
-  let filePath: string;
-  try {
-    filePath = resolveOutputPath(urlPath, config.outDir);
-  } catch (err) {
-    // Reject malicious or malformed URL paths (path traversal, NUL byte, etc.)
-    // before any rendering occurs. The page is recorded as failed so the build
-    // surfaces it in the summary instead of silently writing outside outDir.
-    if (err instanceof PathTraversalError) {
-      const error = new Error(`[slingshot-ssg] rejected URL path "${urlPath}": ${err.message}`);
-      console.warn(error.message);
-      return makeFailedResult(urlPath, '', start, error);
-    }
-    throw err;
-  }
-  const renderPromise = renderSsgPageUnchecked(
-    urlPath,
-    renderer,
-    config,
-    assetTagsHtml,
-    start,
-    filePath,
-  );
-  const timeoutMs = config.renderPageTimeoutMs ?? DEFAULT_RENDER_PAGE_TIMEOUT_MS;
-  if (timeoutMs <= 0) return renderPromise;
-  return withPageTimeout(renderPromise, urlPath, filePath, start, timeoutMs);
+  return renderSsgPageInternal(urlPath, renderer, config, assetTagsHtml);
 }
 
 async function renderSsgPageUnchecked(
@@ -119,10 +276,10 @@ async function renderSsgPageUnchecked(
   if (rawChain) {
     const hydratedPage = { ...rawChain.page, url, query };
     const hydratedLayouts = rawChain.layouts.map(l => ({ ...l, url, query }));
-    const chain = Object.freeze({
+    const chain = deepFreeze({
       ...rawChain,
       page: hydratedPage,
-      layouts: Object.freeze(hydratedLayouts),
+      layouts: hydratedLayouts,
     });
 
     let response: Response;
@@ -215,6 +372,11 @@ async function renderSsgPageUnchecked(
  * Individual page failures do not abort the batch — they are recorded in the
  * returned `SsgResult`.
  *
+ * When `config.circuitBreaker` is set, a single circuit breaker is created for
+ * the entire run and shared across all pages. If the breaker trips (too many
+ * consecutive failures), subsequent pages fail fast without invoking the
+ * renderer, protecting upstream services from being hammered.
+ *
  * @param paths         - URL paths to render.
  * @param renderer      - An initialised `SlingshotSsrRenderer`.
  * @param config        - Frozen SSG configuration.
@@ -228,6 +390,16 @@ export async function renderSsgPages(
   assetTagsHtml: string = '',
 ): Promise<SsgResult> {
   const start = Date.now();
+
+  // Create a shared circuit breaker for the entire run when configured.
+  const breaker =
+    config.circuitBreaker !== undefined
+      ? createSsgCircuitBreaker({
+          threshold: config.circuitBreaker.threshold,
+          cooldownMs: config.circuitBreaker.cooldownMs,
+        })
+      : undefined;
+
   const concurrency = resolveConcurrency(config.concurrency);
   const pages: SsgPageResult[] = [];
 
@@ -235,7 +407,7 @@ export async function renderSsgPages(
   for (let i = 0; i < paths.length; i += concurrency) {
     const batch = paths.slice(i, i + concurrency);
     const results = await Promise.all(
-      batch.map(p => renderSsgPage(p, renderer, config, assetTagsHtml)),
+      batch.map(p => renderSsgPageInternal(p, renderer, config, assetTagsHtml, breaker)),
     );
     pages.push(...results);
   }
@@ -244,8 +416,8 @@ export async function renderSsgPages(
   const succeeded = pages.filter(p => !p.error).length;
   const failed = pages.length - succeeded;
 
-  return Object.freeze({
-    pages: Object.freeze([...pages]),
+  return deepFreeze({
+    pages: [...pages],
     durationMs,
     succeeded,
     failed,
@@ -296,9 +468,27 @@ function resolveOutputPath(urlPath: string, outDir: string): string {
   // Strip leading slashes so safeJoin treats the path as relative to outDir.
   // Without this, a urlPath beginning with `/` would resolve from filesystem
   // root and trigger PathTraversalError for legitimate routes like `/about`.
-  const relative = urlPath.replace(/^\/+/, '');
+  const relative = normalizeOutputRelativePath(urlPath.replace(/^\/+/, ''));
   const dir = safeJoin(outDir, relative);
   return join(dir, 'index.html');
+}
+
+function normalizeOutputRelativePath(relativePath: string): string {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(relativePath);
+  } catch (err) {
+    throw new PathTraversalError(
+      `malformed URL path encoding: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  for (const segment of decoded.split(/[\\/]+/)) {
+    if (/^\.{3,}$/.test(segment)) {
+      throw new PathTraversalError(`suspicious dot segment in path: ${decoded}`);
+    }
+  }
+  return decoded;
 }
 
 /**

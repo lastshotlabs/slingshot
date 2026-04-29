@@ -24,6 +24,8 @@ bun add @lastshotlabs/slingshot-bullmq
 ## Export Paths
 
 - `.`
+- `./errors`
+- `./testing`
 
 ## Package Scripts
 

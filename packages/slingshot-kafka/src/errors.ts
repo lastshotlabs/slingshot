@@ -4,6 +4,7 @@
 // Adapter errors
 // ---------------------------------------------------------------------------
 
+/** Base error for Kafka event bus adapter failures. */
 export class KafkaAdapterError extends Error {
   constructor(message: string) {
     super(message);
@@ -11,6 +12,7 @@ export class KafkaAdapterError extends Error {
   }
 }
 
+/** Raised when Kafka adapter configuration is invalid or incomplete. */
 export class KafkaAdapterConfigError extends KafkaAdapterError {
   constructor(message: string) {
     super(message);
@@ -18,6 +20,7 @@ export class KafkaAdapterConfigError extends KafkaAdapterError {
   }
 }
 
+/** Raised when a durable Kafka subscription is registered without a required name. */
 export class KafkaDurableSubscriptionNameRequiredError extends KafkaAdapterError {
   constructor() {
     super('[KafkaAdapter] durable subscriptions require a name. Pass opts.name.');
@@ -25,6 +28,7 @@ export class KafkaDurableSubscriptionNameRequiredError extends KafkaAdapterError
   }
 }
 
+/** Raised when a Kafka durable subscription name is reused for the same event. */
 export class KafkaDuplicateDurableSubscriptionError extends KafkaAdapterError {
   constructor(event: string, name: string) {
     super(
@@ -34,6 +38,7 @@ export class KafkaDuplicateDurableSubscriptionError extends KafkaAdapterError {
   }
 }
 
+/** Raised when code tries to unregister a durable Kafka subscription with off(). */
 export class KafkaDurableSubscriptionOffError extends KafkaAdapterError {
   constructor() {
     super(
@@ -47,6 +52,7 @@ export class KafkaDurableSubscriptionOffError extends KafkaAdapterError {
 // Connector errors
 // ---------------------------------------------------------------------------
 
+/** Base error for Kafka connector bridge failures. */
 export class KafkaConnectorError extends Error {
   constructor(message: string) {
     super(message);
@@ -54,6 +60,7 @@ export class KafkaConnectorError extends Error {
   }
 }
 
+/** Raised when a Kafka connector definition fails schema validation. */
 export class KafkaConnectorValidationError extends KafkaConnectorError {
   readonly zodError: unknown;
 
@@ -64,6 +71,7 @@ export class KafkaConnectorValidationError extends KafkaConnectorError {
   }
 }
 
+/** Raised when an outbound connector event cannot be assigned a Kafka message ID. */
 export class KafkaConnectorMessageIdError extends KafkaConnectorError {
   constructor(event: string) {
     super(
@@ -73,6 +81,7 @@ export class KafkaConnectorMessageIdError extends KafkaConnectorError {
   }
 }
 
+/** Raised when two Kafka connectors are registered with the same key. */
 export class KafkaDuplicateConnectorError extends KafkaConnectorError {
   constructor(key: string) {
     super(`[slingshot-kafka-connectors] duplicate connector: ${key}`);
@@ -80,11 +89,17 @@ export class KafkaDuplicateConnectorError extends KafkaConnectorError {
   }
 }
 
+/** Raised when a Kafka connector lifecycle method is called from an invalid state. */
 export class KafkaConnectorStateError extends KafkaConnectorError {
   constructor(operation: string, state: string) {
-    super(
-      `[KafkaConnectors] ${operation}() called in state "${state}"; only valid from a compatible state.`,
-    );
+    const validStateHint =
+      operation === 'start'
+        ? 'only valid from "idle" or "stopped"; finish or stop the previous run first'
+        : operation === 'stop'
+          ? 'only valid from "running"'
+          : 'only valid from a compatible state';
+
+    super(`[KafkaConnectors] ${operation}() called in state "${state}"; ${validStateHint}.`);
     this.name = 'KafkaConnectorStateError';
   }
 }

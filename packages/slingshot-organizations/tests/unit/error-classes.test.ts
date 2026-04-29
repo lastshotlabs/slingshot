@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { HTTPException } from 'hono/http-exception';
-import {
-  SLUG_CONFLICT_CODE,
-  SlugConflictError,
-  isUniqueViolationError,
-} from '../../src/errors';
+import { SLUG_CONFLICT_CODE, SlugConflictError, isUniqueViolationError } from '../../src/errors';
 
 describe('SlugConflictError', () => {
   test('extends HTTPException which extends Error', () => {

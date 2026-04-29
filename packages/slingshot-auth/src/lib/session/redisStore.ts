@@ -432,7 +432,13 @@ return evicted
         prevTokenExpiresAt?: number;
         token?: string | null;
         lastActiveAt?: number;
+        expiresAt?: number;
       };
+      if (typeof rec.expiresAt === 'number' && rec.expiresAt <= Date.now()) {
+        await deleteSessionImpl(sessionId, cfg);
+        return null;
+      }
+
       if (typeof rec.lastActiveAt === 'number' && isIdleExpired(rec.lastActiveAt, cfg)) {
         await deleteSessionImpl(sessionId, cfg);
         return null;

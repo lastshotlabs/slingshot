@@ -70,15 +70,15 @@ describe('bullmqAdapterOptionsSchema — connection field', () => {
     expect(result.success).toBe(true);
   });
 
-  test('loose mode tolerates extra unknown connection fields', () => {
+  test('loose mode passes through extra BullMQ/ioredis connection fields', () => {
     const result = bullmqAdapterOptionsSchema.safeParse({
       connection: { host: 'localhost', port: 6379, extraField: 'ignored' },
     });
-    // .loose() on the connection sub-schema means unknown keys are stripped,
-    // not rejected
+    // .loose() on the connection sub-schema means unknown keys are preserved
+    // for BullMQ/ioredis options this package does not model directly.
     expect(result.success).toBe(true);
     if (result.success) {
-      expect((result.data.connection as Record<string, unknown>).extraField).toBeUndefined();
+      expect((result.data.connection as Record<string, unknown>).extraField).toBe('ignored');
     }
   });
 });
@@ -119,8 +119,6 @@ describe('createBullMQAdapter — connection edge cases', () => {
 
   test('createBullMQAdapter throws when connection field is a string (not object)', () => {
     // The schema expects connection to be an object, not a URL string
-    expect(() =>
-      createBullMQAdapter({ connection: 'redis://localhost:6379' as any }),
-    ).toThrow();
+    expect(() => createBullMQAdapter({ connection: 'redis://localhost:6379' as any })).toThrow();
   });
 });

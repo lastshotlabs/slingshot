@@ -32,7 +32,14 @@ describe('Temporal status mapping', () => {
   });
 
   test('all temporal statuses have portable mappings', () => {
-    const supportedStatuses = ['RUNNING', 'COMPLETED', 'FAILED', 'CANCELED', 'TERMINATED', 'TIMED_OUT'];
+    const supportedStatuses = [
+      'RUNNING',
+      'COMPLETED',
+      'FAILED',
+      'CANCELED',
+      'TERMINATED',
+      'TIMED_OUT',
+    ];
     const statusMap: Record<string, string> = {
       RUNNING: 'running',
       COMPLETED: 'completed',

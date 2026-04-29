@@ -272,9 +272,8 @@ describe('KafkaConnectorStateError', () => {
   test('is thrown by the connectors start/stop state machine', async () => {
     // Integration-level verification: the connectors.start/stop methods
     // throw KafkaConnectorStateError on illegal transitions.
-    const { createFakeKafkaJsModule, fakeKafkaState, resetFakeKafkaState } = await import(
-      '../../src/testing/fakeKafkaJs'
-    );
+    const { createFakeKafkaJsModule, fakeKafkaState, resetFakeKafkaState } =
+      await import('../../src/testing/fakeKafkaJs');
     const { mock } = await import('bun:test');
     mock.module('kafkajs', () => createFakeKafkaJsModule());
 

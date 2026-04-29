@@ -148,3 +148,25 @@ export type { PprCacheShape } from './ppr/index';
  * Produced by `scanStaticParams()` in `@lastshotlabs/slingshot-ssr/static-params`.
  */
 export type { StaticRoute } from './static-params/index';
+
+// ─── Circuit breaker ───────────────────────────────────────────────────────────
+
+/**
+ * Circuit breaker for external rendering dependencies.
+ */
+export { createCircuitBreaker } from './circuitBreaker';
+/**
+ * Circuit breaker types.
+ */
+export type { CircuitBreaker, CircuitBreakerOptions, CircuitState, CircuitResult } from './circuitBreaker';
+
+// ─── Retry logic ───────────────────────────────────────────────────────────────
+
+/**
+ * Retry with exponential backoff for page load failures.
+ */
+export { retry } from './retry';
+/**
+ * Retry types.
+ */
+export type { RetryOptions } from './retry';

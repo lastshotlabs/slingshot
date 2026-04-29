@@ -13,6 +13,7 @@
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { HttpError } from '@lastshotlabs/slingshot-core';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ---------------------------------------------------------------------------
 // Pure-function re-implementation (matching src/adapter.ts exactly)
@@ -230,8 +231,6 @@ mock.module('drizzle-orm/node-postgres', () => ({
     ),
 }));
 
-import { createPostgresAdapter } from '../src/adapter.js';
-
 describe('HTTP 409 conversion for 23505', () => {
   beforeEach(() => {
     mockDbImpl = null;
@@ -271,20 +270,23 @@ describe('HTTP 409 conversion for 23505', () => {
     const pgErr = Object.assign(new Error('duplicate key'), { code: '23505' });
     mockDbImpl = { insert: () => throwingBuilder(pgErr) };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
-    const thrown = await adapter
-      .createGroup!({ name: 'dup-group', tenantId: 'default', roles: [] })
-      .catch(e => e);
+    const thrown = await adapter.createGroup!({
+      name: 'dup-group',
+      tenantId: 'default',
+      roles: [],
+    }).catch(e => e);
     expect(thrown).toBeInstanceOf(HttpError);
     expect((thrown as HttpError).status).toBe(409);
-    expect((thrown as HttpError).message).toBe('A group with this name already exists in this scope');
+    expect((thrown as HttpError).message).toBe(
+      'A group with this name already exists in this scope',
+    );
     expect((thrown as HttpError).code).toBe('GROUP_NAME_CONFLICT');
   });
 
   test('addGroupMember: 23505 becomes HttpError(409) with GROUP_MEMBER_CONFLICT code', async () => {
     mockDbImpl = {
       select: () => resolvingBuilder([{ tenantId: null }]),
-      insert: () =>
-        throwingBuilder(Object.assign(new Error('duplicate key'), { code: '23505' })),
+      insert: () => throwingBuilder(Object.assign(new Error('duplicate key'), { code: '23505' })),
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const thrown = await adapter.addGroupMember!('group-id', 'user-id').catch(e => e);

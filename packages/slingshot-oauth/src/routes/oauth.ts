@@ -68,12 +68,10 @@ const requireCodeVerifier = (
   return codeVerifier;
 };
 
-// `postLoginRedirect` is always sourced from server-side config (passed into
-// `createOAuthRouter` at startup) and is never derived from user-supplied input
-// or OAuth callback query parameters. No runtime allowlist validation is required
-// because the value is not attacker-controlled. The `auth.oauth.allowedRedirectUrls`
-// config is available for consuming apps that want to enforce an explicit allowlist
-// at the framework level if they ever pass a dynamic value here.
+// `postLoginRedirect` is sourced from server-side config (passed into
+// `createOAuthRouter` at startup) and is never derived from OAuth callback query
+// parameters. `createOAuthPlugin` validates this value against the configured
+// allowlist before this router is mounted.
 /**
  * Completes an OAuth login flow after the provider callback has been validated.
  *

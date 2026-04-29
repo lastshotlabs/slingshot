@@ -298,7 +298,7 @@ function validateTransition(
     pending: ['delivered', 'failed', 'dead'],
     failed: ['pending', 'delivered', 'dead'],
     delivered: [],
-    dead: [],
+    dead: ['pending'], // P-WEBHOOKS-10: replay endpoint re-queues dead deliveries
   };
   if (!allowed[current].includes(next)) {
     throw new HTTPException(409, {

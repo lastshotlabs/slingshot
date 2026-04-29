@@ -41,7 +41,7 @@ function isTokenResponse(value: unknown): value is { access_token: string; expir
  * HTTP response (vs. a network/parse error) so callers can distinguish
  * permanent auth failures (401/403) from transient ones (5xx, network).
  */
-class FcmTokenError extends Error {
+export class FcmTokenError extends Error {
   readonly statusCode?: number;
   constructor(message: string, statusCode?: number) {
     super(message);

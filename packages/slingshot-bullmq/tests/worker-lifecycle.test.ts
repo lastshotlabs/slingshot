@@ -161,7 +161,11 @@ describe('createBullMQAdapter — concurrent workers', () => {
     };
 
     await fakeBullMQState.dispatchJob(loginQueue!.name, 'auth:login', envelope);
-    await fakeBullMQState.dispatchJob(logoutQueue!.name, 'auth:logout', { ...envelope, key: 'auth:logout', payload: { userId: 'u1' } });
+    await fakeBullMQState.dispatchJob(logoutQueue!.name, 'auth:logout', {
+      ...envelope,
+      key: 'auth:logout',
+      payload: { userId: 'u1' },
+    });
 
     expect(loginCalls).toHaveLength(1);
     expect(logoutCalls).toHaveLength(1);

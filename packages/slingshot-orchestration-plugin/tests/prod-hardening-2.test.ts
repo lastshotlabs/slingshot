@@ -15,7 +15,11 @@ import {
   createEventPublisher,
   createInProcessAdapter,
 } from '@lastshotlabs/slingshot-core';
-import { createMemoryAdapter, createOrchestrationRuntime, defineTask } from '@lastshotlabs/slingshot-orchestration';
+import {
+  createMemoryAdapter,
+  createOrchestrationRuntime,
+  defineTask,
+} from '@lastshotlabs/slingshot-orchestration';
 import { ORCHESTRATION_PLUGIN_KEY } from '../src/context';
 import { createOrchestrationPlugin } from '../src/plugin';
 
@@ -64,9 +68,13 @@ describe('adminAuth — edge cases', () => {
       runtime,
       tasks: [noopTask],
       routes: true,
-      routeMiddleware: [async (c, next) => { await next(); }],
+      routeMiddleware: [
+        async (c, next) => {
+          await next();
+        },
+      ],
       adminAuth: [
-        async (c) => {
+        async c => {
           return c.json({ error: 'custom denied' }, 403);
         },
       ],
@@ -89,9 +97,13 @@ describe('adminAuth — edge cases', () => {
       runtime,
       tasks: [noopTask],
       routes: true,
-      routeMiddleware: [async (c, next) => { await next(); }],
+      routeMiddleware: [
+        async (c, next) => {
+          await next();
+        },
+      ],
       adminAuth: [
-        async (c) => {
+        async c => {
           return c.json({ error: 'admin auth error', code: 'ADMIN_AUTH_FAILED' }, 500);
         },
       ],
@@ -146,8 +158,16 @@ describe('routeMiddleware — ordering and execution', () => {
       tasks: [noopTask],
       routes: true,
       routeMiddleware: [
-        async (_c, next) => { order.push(1); await next(); order.push(4); },
-        async (_c, next) => { order.push(2); await next(); order.push(3); },
+        async (_c, next) => {
+          order.push(1);
+          await next();
+          order.push(4);
+        },
+        async (_c, next) => {
+          order.push(2);
+          await next();
+          order.push(3);
+        },
       ],
     });
 
@@ -173,7 +193,7 @@ describe('routeMiddleware — ordering and execution', () => {
       tasks: [noopTask],
       routes: true,
       routeMiddleware: [
-        async (c) => {
+        async c => {
           return c.json({ blocked: true }, 401);
         },
       ],
@@ -203,7 +223,11 @@ describe('plugin — routePrefix customization', () => {
       tasks: [noopTask],
       routePrefix: '/jobs',
       routes: true,
-      routeMiddleware: [async (c, next) => { await next(); }],
+      routeMiddleware: [
+        async (c, next) => {
+          await next();
+        },
+      ],
     });
 
     const app = new Hono();
@@ -222,7 +246,11 @@ describe('plugin — routePrefix customization', () => {
       tasks: [noopTask],
       routePrefix: '/jobs',
       routes: true,
-      routeMiddleware: [async (c, next) => { await next(); }],
+      routeMiddleware: [
+        async (c, next) => {
+          await next();
+        },
+      ],
     });
 
     const app = new Hono();

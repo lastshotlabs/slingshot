@@ -58,7 +58,7 @@ describe('AdminRateLimitStore (in-memory)', () => {
     const result1 = await store.hit('key', { limit: 5, windowMs: 1 });
     expect(result1.count).toBe(1);
     // Wait for window to expire
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise(r => setTimeout(r, 5));
     const result2 = await store.hit('key', { limit: 5, windowMs: 1 });
     expect(result2.count).toBe(1);
   });

@@ -1,41 +1,40 @@
 import { describe, expect, test } from 'bun:test';
+import { runtimeNodeInternals } from '../src/index';
+
+const { parseContentLength } = runtimeNodeInternals;
 
 describe('Node runtime — content-length parsing', () => {
   test('valid integer content-length', () => {
-    // parseContentLength validates Content-Length headers
-    const result = '1234';
-    expect(Number(result)).toBe(1234);
+    expect(parseContentLength('1234')).toBe(1234);
   });
 
   test('zero content-length is valid', () => {
-    const result = '0';
-    expect(Number(result)).toBe(0);
+    expect(parseContentLength('0')).toBe(0);
   });
 
   test('negative content-length is invalid', () => {
-    expect(Number('-1')).toBe(-1);
-    expect(Number('-1') < 0).toBe(true);
+    expect(parseContentLength('-1')).toBeNull();
   });
 
   test('non-numeric content-length is NaN', () => {
-    expect(Number.isNaN(Number('abc'))).toBe(true);
+    expect(parseContentLength('abc')).toBeNull();
   });
 
   test('empty content-length is NaN', () => {
-    expect(Number.isNaN(Number(''))).toBe(true);
+    expect(parseContentLength('')).toBeNull();
   });
 
   test('float content-length is not an integer', () => {
-    expect(Number.isInteger(3.14)).toBe(false);
+    expect(parseContentLength('3.14')).toBeNull();
   });
 
   test('very large content-length', () => {
     const large = '999999999';
-    expect(Number(large)).toBe(999999999);
+    expect(parseContentLength(large)).toBe(999999999);
   });
 
   test('hex content-length is NaN in base-10', () => {
-    expect(Number.isNaN(Number('0xFF'))).toBe(true);
+    expect(parseContentLength('0xFF')).toBeNull();
   });
 });
 

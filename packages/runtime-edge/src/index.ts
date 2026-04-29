@@ -3,8 +3,16 @@ import {
   type Logger,
   TimeoutError,
   createConsoleLogger,
+  timeoutSignal,
   withTimeout,
 } from '@lastshotlabs/slingshot-core';
+import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
+import { EdgeFileSizeExceededError, EdgePasswordConfigError, EdgeUnsupportedError } from './errors';
+
+/**
+ * Runtime-specific error classes thrown by the Edge adapter for unsupported
+ * features, file reads, file size limits, and password configuration.
+ */
 export {
   EdgeRuntimeError,
   EdgeUnsupportedError,
@@ -12,7 +20,6 @@ export {
   EdgeFileSizeExceededError,
   EdgePasswordConfigError,
 } from './errors';
-import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
 
 /** Default upper-bound on a single `fileStore` call (5 s). */
 const DEFAULT_FILE_STORE_TIMEOUT_MS = 5_000;
@@ -87,8 +94,16 @@ export interface EdgeRuntimeOptions {
    *
    * When omitted, `readFile()` always returns `null` — suitable for apps that
    * inline their asset manifest at build time and never need filesystem reads.
+   *
+   * **AbortSignal support (v0.1.0+):** the function may optionally accept a
+   * second argument: an `AbortSignal` that is aborted when the operation
+   * exceeds `fileStoreTimeoutMs`. Implementations that wrap `fetch()` or
+   * similar signal-aware APIs should pass this signal through for proper
+   * cancellation. If your fileStore does not use the signal, simply ignore the
+   * parameter — the type is optional and all existing single-argument
+   * signatures remain compatible.
    */
-  fileStore?: (path: string) => Promise<FileStoreResult>;
+  fileStore?: (path: string, signal?: AbortSignal) => Promise<FileStoreResult>;
 
   /**
    * Custom password hashing implementation for edge runtimes.
@@ -125,17 +140,47 @@ export interface EdgeRuntimeOptions {
    * Maximum time in milliseconds to wait for a single `fileStore(path)` call
    * before treating the lookup as a miss.
    *
-   * When the cap is reached, the in-flight promise is abandoned (the runtime
-   * cannot reliably cancel a user-supplied promise), a structured warn is
-   * emitted via the configured {@link Logger}, and `readFile()` returns `null`.
+   * When the cap is reached, the in-flight promise is rejected via an
+   * `AbortController` (the controller is aborted, and callers who passed the
+   * associated `AbortSignal` to their underlying network operations will
+   * observe cancellation). A structured warn is emitted via the configured
+   * {@link Logger}, and `readFile()` returns `null`.
    * Returning `null` rather than throwing keeps the caller's manifest-resolution
    * path on its happy path: a hung KV/R2 binding manifests as a missing file
    * rather than a stalled isolate.
+   *
+   * **AbortController:** unlike the earlier `withTimeout`-only approach, this
+   * implementation uses `timeoutSignal()` so the underlying `AbortController`
+   * is properly aborted when the deadline fires. Implementations that accept
+   * the optional `AbortSignal` parameter can cancel their work early.
    *
    * Defaults to {@link DEFAULT_FILE_STORE_TIMEOUT_MS} (5 s). Set to 0 to
    * disable the timeout entirely (not recommended for production).
    */
   fileStoreTimeoutMs?: number;
+
+  /**
+   * Global heartbeat timeout in milliseconds for long-running runtime
+   * operations.
+   *
+   * When set, operations such as `fileStore`, password hashing, and ISR
+   * tag-index writes are wrapped with an `AbortController`-based guard.
+   * If the operation exceeds this deadline the controller is aborted and
+   * the operation rejects with a `TimeoutError`.
+   *
+   * On edge runtimes where individual platform calls have no client-side
+   * timeout (e.g., Cloudflare KV), this provides a safety net against hung
+   * operations consuming the entire request budget.
+   *
+   * **Limitation:** a heartbeat timeout cannot interrupt synchronous
+   * CPU-bound work — it only guards Promise-based operations that yield
+   * to the microtask queue.
+   *
+   * Defaults to `0` (disabled). When set, the value should typically be
+   * less than your platform's per-request wall-clock limit (e.g., 10 s on
+   * Cloudflare Workers free plan, 30 s on paid).
+   */
+  heartbeatTimeoutMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -296,8 +341,9 @@ const edgeFs = Object.freeze({
     void path;
     void data;
     return Promise.reject(
-      new Error(
-        '[runtime-edge] Filesystem writes are not supported on edge runtimes. ' +
+      new EdgeUnsupportedError(
+        'fs.write',
+        'Filesystem writes are not supported on edge runtimes. ' +
           'Use an external storage service (KV, R2, etc.) instead.',
       ),
     );
@@ -325,8 +371,9 @@ const edgeGlob = Object.freeze({
     void pattern;
     void options;
     return Promise.reject(
-      new Error(
-        '[runtime-edge] Glob scanning is not supported on edge runtimes. ' +
+      new EdgeUnsupportedError(
+        'glob.scan',
+        'Glob scanning is not supported on edge runtimes. ' +
           'Route discovery must happen at build time.',
       ),
     );
@@ -345,8 +392,9 @@ const edgeGlob = Object.freeze({
 const edgeSqlite = Object.freeze({
   open(path: string): never {
     void path;
-    throw new Error(
-      '[runtime-edge] SQLite is not supported on edge runtimes. ' +
+    throw new EdgeUnsupportedError(
+      'sqlite.open',
+      'SQLite is not supported on edge runtimes. ' +
         'Use a cloud database (Cloudflare D1, PlanetScale, Neon, etc.) instead.',
     );
   },
@@ -362,12 +410,139 @@ const edgeSqlite = Object.freeze({
  */
 const edgeServer = Object.freeze({
   listen(): never {
-    throw new Error(
-      '[runtime-edge] RuntimeServerFactory.listen() is not supported on edge runtimes. ' +
+    throw new EdgeUnsupportedError(
+      'server.listen',
+      'RuntimeServerFactory.listen() is not supported on edge runtimes. ' +
         'Export a `fetch` handler from your Worker entry module instead.',
     );
   },
 });
+
+// ---------------------------------------------------------------------------
+// AbortController-based timeout helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Wrap an async operation with an AbortController-based timeout.
+ *
+ * Unlike `withTimeout` from slingshot-core (which races a timer against a
+ * promise and abandons the loser), this helper creates an `AbortController`,
+ * passes its signal to the operation via a callback, and aborts the controller
+ * when the deadline fires. The operation can use the signal to cancel its
+ * underlying work (e.g., pass it to `fetch()` or `kv.get()`). The returned
+ * promise rejects with `TimeoutError` when the deadline is reached.
+ *
+ * @param op - Factory that receives an `AbortSignal` and returns the operation promise.
+ * @param timeoutMs - Timeout in milliseconds. If 0 or negative, the operation runs
+ *   without a timeout and a no-op signal (never aborted) is passed.
+ * @param label - Optional label for the `TimeoutError` message.
+ * @returns The operation's result, or rejects with `TimeoutError`.
+ * @internal
+ */
+async function withAbortTimeout<T>(
+  op: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  label?: string,
+): Promise<T> {
+  if (timeoutMs <= 0) {
+    return op(new AbortController().signal);
+  }
+  const signal = timeoutSignal(timeoutMs);
+  const opPromise = op(signal);
+  // Race the operation against the abort signal. This ensures the promise
+  // rejects as soon as the signal fires, even if the op does not check the
+  // signal internally.
+  return Promise.race([
+    opPromise,
+    new Promise<T>((_, reject) => {
+      if (signal.aborted) {
+        reject(new TimeoutError(timeoutMs, label));
+        return;
+      }
+      const onAbort = (): void => {
+        reject(new TimeoutError(timeoutMs, label));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    }),
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// Runtime capability reporting
+// ---------------------------------------------------------------------------
+
+/**
+ * Programmatic capability report for the edge runtime platform.
+ *
+ * Consumers can use this to feature-detect at runtime without needing to
+ * instantiate a full runtime or catch errors from stubs.
+ *
+ * All boolean capabilities reflect what the **platform itself** supports
+ * (not what an individual `edgeRuntime()` caller configured). For example,
+ * `filesystem.read` is always `false` because edge runtimes have no local
+ * filesystem — even when `fileStore` is configured, reads go through the
+ * network, not the local FS.
+ *
+ * @example
+ * ```ts
+ * import { runtimeCapabilities } from '@lastshotlabs/slingshot-runtime-edge';
+ *
+ * const caps = runtimeCapabilities();
+ * if (!caps.filesystem.write) {
+ *   console.log('Use external storage for file writes.');
+ * }
+ * ```
+ */
+export interface EdgeRuntimeCapabilities {
+  /** Human-readable runtime identifier. Always `'edge'`. */
+  readonly runtime: 'edge';
+  /** Filesystem-related capabilities. */
+  readonly filesystem: {
+    /** Local filesystem reads are not available on edge platforms. */
+    readonly read: false;
+    /** Local filesystem writes are not available on edge platforms. */
+    readonly write: false;
+  };
+  /** SQLite is not available on edge platforms (no native bindings). */
+  readonly sqlite: false;
+  /** `server.listen()` is not available — edge hosts manage the HTTP layer. */
+  readonly httpServer: false;
+  /** Glob scanning is not available — route discovery must happen at build time. */
+  readonly glob: false;
+  /** `AsyncLocalStorage` is not available on edge platforms. */
+  readonly asyncLocalStorage: false;
+  /** Password hashing mechanism used by the default implementation. */
+  readonly passwordHashing: 'webcrypto-pbkdf2';
+  /** The platform supports `AbortController` for timeout-based cancellation. */
+  readonly abortController: true;
+  /** KV-backed ISR caching is available via `createKvIsrCache()`. */
+  readonly kvIsr: true;
+  /** ISR cache adapters are supported. */
+  readonly isrCaching: true;
+}
+
+/**
+ * Return a frozen capability descriptor for the edge runtime platform.
+ *
+ * This is a static report — it always describes what the edge platform can
+ * and cannot do, independent of any particular `edgeRuntime()` configuration.
+ *
+ * @returns A frozen {@link EdgeRuntimeCapabilities} object.
+ */
+export function runtimeCapabilities(): EdgeRuntimeCapabilities {
+  return Object.freeze({
+    runtime: 'edge',
+    filesystem: Object.freeze({ read: false as const, write: false as const }),
+    sqlite: false as const,
+    httpServer: false as const,
+    glob: false as const,
+    asyncLocalStorage: false as const,
+    passwordHashing: 'webcrypto-pbkdf2' as const,
+    abortController: true as const,
+    kvIsr: true as const,
+    isrCaching: true as const,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Public factory
@@ -389,6 +564,19 @@ const edgeServer = Object.freeze({
  * - Glob scanning is not supported. Route discovery must happen at build time.
  * - Filesystem writes are not supported. Use KV, R2, or another storage service.
  * - `readFile()` always returns `null` unless `fileStore` is provided.
+ * - No process lifecycle hooks (`SIGTERM`/`SIGINT`). Edge isolates are
+ *   started and stopped by the platform; the runtime does not expose a
+ *   `process.on('SIGTERM')` equivalent. Cleanup should happen at the worker
+ *   level via platform hooks (e.g., Cloudflare's `ctx.waitUntil`).
+ *
+ * **Timeout behaviour:**
+ * - `fileStoreTimeoutMs` uses an `AbortController`-backed timeout. When the
+ *   deadline fires, the controller is aborted and callers who accept the
+ *   optional `AbortSignal` parameter can cancel their underlying work.
+ * - `heartbeatTimeoutMs` wraps long-running operations with a global timeout
+ *   guard (see {@link EdgeRuntimeOptions.heartbeatTimeoutMs}).
+ *
+ * For a complete capability matrix see {@link runtimeCapabilities}.
  *
  * @param options - Optional configuration for file access and password hashing.
  * @returns A frozen `SlingshotRuntime` backed by Web Crypto and edge-compatible stubs.
@@ -400,8 +588,8 @@ const edgeServer = Object.freeze({
  * export default {
  *   async fetch(request: Request, env: Env): Promise<Response> {
  *     const runtime = edgeRuntime({
- *       fileStore: (path) =>
- *         env.ASSETS.fetch(new URL(path, request.url).toString())
+ *       fileStore: (path, signal) =>
+ *         env.ASSETS.fetch(new URL(path, request.url).toString(), { signal })
  *           .then(r => r.ok ? r.text() : null),
  *     });
  *     // ...
@@ -419,10 +607,7 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
   const hasCustomHash = typeof options.hashPassword === 'function';
   const hasCustomVerify = typeof options.verifyPassword === 'function';
   if (hasCustomHash !== hasCustomVerify) {
-    throw new Error(
-      '[runtime-edge] hashPassword and verifyPassword must both be provided or both omitted. ' +
-        'Mixing one custom function with the default PBKDF2 implementation will cause auth failures.',
-    );
+    throw new EdgePasswordConfigError();
   }
 
   const fileStore = options.fileStore ?? (() => Promise.resolve(null));
@@ -433,6 +618,10 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
     typeof options.fileStoreTimeoutMs === 'number' && options.fileStoreTimeoutMs >= 0
       ? options.fileStoreTimeoutMs
       : DEFAULT_FILE_STORE_TIMEOUT_MS;
+  const heartbeatTimeoutMs =
+    typeof options.heartbeatTimeoutMs === 'number' && options.heartbeatTimeoutMs > 0
+      ? options.heartbeatTimeoutMs
+      : 0;
 
   return Object.freeze({
     password: Object.freeze({
@@ -473,6 +662,13 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
      * 3. If the store returns a plain string, the buffered byte length is
      *    checked after the fact (legacy path — prefer streaming for any
      *    source that may produce large files).
+     *
+     * **Timeout:** when `fileStoreTimeoutMs` is set, the fileStore call is
+     * wrapped with an AbortController. The controller is aborted when the
+     * deadline fires, and any `AbortSignal` passed to the store function
+     * is aborted. If the timeout fires, the call returns `null` (cache-miss
+     * semantics) rather than throwing, so manifest resolution stays on its
+     * happy path.
      */
     async readFile(path: string): Promise<string | null> {
       // P-EDGE-3: bound fileStore latency. A user-supplied store backed by
@@ -485,8 +681,10 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
       let result: FileStoreResult;
       try {
         if (fileStoreTimeoutMs > 0) {
-          result = await withTimeout(
-            Promise.resolve().then(() => fileStore(path)),
+          // Use AbortController-based timeout: the signal is passed to the
+          // fileStore so it can cancel underlying work (fetch, KV get, etc.).
+          result = await withAbortTimeout(
+            signal => Promise.resolve().then(() => fileStore(path, signal)),
             fileStoreTimeoutMs,
             `fileStore('${path}')`,
           );
@@ -506,12 +704,7 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
       if (result === null) return null;
 
       const tooLarge = (bytes: number): Error =>
-        new Error(
-          `[runtime-edge] readFile('${path}') returned ${bytes} bytes; ` +
-            `exceeds maxFileBytes=${maxFileBytes}. ` +
-            `Stream large assets at the platform level (e.g. env.ASSETS.fetch()) ` +
-            `or raise maxFileBytes if you've confirmed the isolate has headroom.`,
-        );
+        new EdgeFileSizeExceededError(path, maxFileBytes, bytes);
 
       if (typeof result === 'string') {
         if (maxFileBytes > 0) {

@@ -53,9 +53,13 @@ export type { PermissionsSqliteAdapter } from './adapters/sqlite';
  */
 export { createPermissionsPostgresAdapter } from './adapters/postgres';
 /**
- * Postgres permissions adapter contract.
+ * Postgres permissions adapter contract and health type.
  */
-export type { PermissionsPostgresAdapter } from './adapters/postgres';
+export type {
+  PermissionsPostgresAdapter,
+  PermissionsPostgresAdapterHealth,
+  CreatePermissionsPostgresAdapterOptions,
+} from './adapters/postgres';
 /**
  * Create the MongoDB-backed permissions adapter.
  */

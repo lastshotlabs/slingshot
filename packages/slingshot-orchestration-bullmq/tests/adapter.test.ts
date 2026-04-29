@@ -1,286 +1,19 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import { type ProgressCapability, defineTask } from '@lastshotlabs/slingshot-orchestration';
+import {
+  FakeRedisClient,
+  FakeJob,
+  FakeQueue,
+  FakeQueueEvents,
+  FakeWorker,
+  createFakeBullMQModule,
+  resetFakeBullMQState,
+} from '../src/testing';
 
-type MockJobState =
-  | 'active'
-  | 'completed'
-  | 'failed'
-  | 'waiting'
-  | 'delayed'
-  | 'prioritized'
-  | 'waiting-children';
+const mockRedis = new FakeRedisClient();
 
-class MockRedisClient {
-  private values = new Map<string, string>();
-  private sortedSets = new Map<string, Map<string, number>>();
-
-  async get(key: string) {
-    return this.values.get(key) ?? null;
-  }
-
-  async set(key: string, value: string) {
-    this.values.set(key, value);
-  }
-
-  async mget(...keys: string[]) {
-    return keys.map(key => this.values.get(key) ?? null);
-  }
-
-  async zadd(key: string, score: number | string, member: string) {
-    const set = this.sortedSets.get(key) ?? new Map<string, number>();
-    set.set(member, Number(score));
-    this.sortedSets.set(key, set);
-  }
-
-  async zrange(key: string, start: number, end: number) {
-    const set = this.sortedSets.get(key);
-    if (!set) {
-      return [];
-    }
-    const members = [...set.entries()]
-      .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
-      .map(([member]) => member);
-    const normalizedEnd = end < 0 ? members.length + end : end;
-    return members.slice(start, normalizedEnd + 1);
-  }
-
-  async zrem(key: string, ...members: string[]) {
-    const set = this.sortedSets.get(key);
-    if (!set) {
-      return;
-    }
-    for (const member of members) {
-      set.delete(member);
-    }
-  }
-
-  async del(...keys: string[]) {
-    for (const key of keys) {
-      this.values.delete(key);
-      this.sortedSets.delete(key);
-    }
-  }
-
-  reset() {
-    this.values.clear();
-    this.sortedSets.clear();
-  }
-}
-
-const mockRedis = new MockRedisClient();
-
-class MockJob {
-  queue: MockQueue;
-  id: string;
-  name: string;
-  data: Record<string, unknown>;
-  opts: Record<string, unknown>;
-  progress: unknown;
-  returnvalue: unknown;
-  timestamp: number;
-  finishedOn?: number;
-  processedOn?: number;
-  failedReason = '';
-  state: MockJobState;
-
-  constructor(options: {
-    queue: MockQueue;
-    id: string;
-    name: string;
-    data: Record<string, unknown>;
-    opts?: Record<string, unknown>;
-    state?: MockJobState;
-    returnvalue?: unknown;
-  }) {
-    this.queue = options.queue;
-    this.id = options.id;
-    this.name = options.name;
-    this.data = options.data;
-    this.opts = options.opts ?? {};
-    this.progress = undefined;
-    this.returnvalue = options.returnvalue;
-    this.timestamp = Date.now();
-    this.finishedOn = options.state === 'completed' ? Date.now() : undefined;
-    this.state = options.state ?? 'waiting';
-  }
-
-  async waitUntilFinished(queueEvents: unknown) {
-    if (!queueEvents) {
-      throw new Error('queue events missing');
-    }
-    return this.returnvalue ?? this.data['input'];
-  }
-
-  async getState() {
-    return this.state;
-  }
-
-  async remove() {
-    this.queue.jobs = this.queue.jobs.filter(job => job !== this);
-  }
-
-  async moveToFailed() {
-    this.state = 'failed';
-    this.failedReason = 'Run cancelled';
-    this.finishedOn = Date.now();
-  }
-}
-
-class MockQueue {
-  static instances: MockQueue[] = [];
-
-  name: string;
-  options: Record<string, unknown> | undefined;
-  jobs: MockJob[] = [];
-  schedulers: Array<{ key: string; name: string; pattern?: string; memo?: unknown }> = [];
-
-  constructor(name: string, options?: Record<string, unknown>) {
-    this.name = name;
-    this.options = options;
-    MockQueue.instances.push(this);
-  }
-
-  async add(name: string, data: Record<string, unknown>, opts?: Record<string, unknown>) {
-    const jobId =
-      (opts?.['jobId'] as string | undefined) ??
-      String(data['runId'] ?? `${this.name}-${this.jobs.length + 1}`);
-    const job = new MockJob({
-      queue: this,
-      id: jobId,
-      name,
-      data,
-      opts,
-    });
-    // Track repeatable jobs as schedulers
-    if (
-      opts &&
-      typeof opts['jobId'] === 'string' &&
-      opts['repeat'] &&
-      typeof opts['repeat'] === 'object'
-    ) {
-      const repeat = opts['repeat'] as Record<string, unknown>;
-      this.schedulers.push({
-        key: opts['jobId'] as string,
-        name,
-        pattern: typeof repeat['pattern'] === 'string' ? repeat['pattern'] : undefined,
-        memo: data,
-      });
-    } else {
-      this.jobs.push(job);
-    }
-    return job;
-  }
-
-  async getJobs() {
-    return this.jobs;
-  }
-
-  async getJobSchedulers(_start?: number, _end?: number) {
-    return this.schedulers;
-  }
-
-  async removeJobScheduler(key: string) {
-    this.schedulers = this.schedulers.filter(s => s.key !== key);
-  }
-
-  get client() {
-    return Promise.resolve(mockRedis);
-  }
-
-  async close() {}
-}
-
-class MockQueueEvents {
-  static instances: MockQueueEvents[] = [];
-
-  name: string;
-  listeners = new Map<string, Set<(...args: unknown[]) => void>>();
-
-  constructor(name: string) {
-    this.name = name;
-    MockQueueEvents.instances.push(this);
-  }
-
-  on(event: string, listener: (...args: unknown[]) => void) {
-    const listeners = this.listeners.get(event) ?? new Set();
-    listeners.add(listener);
-    this.listeners.set(event, listeners);
-  }
-
-  off(event: string, listener: (...args: unknown[]) => void) {
-    this.listeners.get(event)?.delete(listener);
-  }
-
-  async close() {}
-}
-
-class MockWorker {
-  static instances: MockWorker[] = [];
-  static failOnConstruction: Error | null = null;
-
-  eventListeners = new Map<string, Set<(...args: unknown[]) => void>>();
-  paused = false;
-  pauseCalls = 0;
-  closed = false;
-  closedForce: boolean | undefined = undefined;
-  // Tests can override this to simulate in-flight jobs during drain.
-  activeCounts: number[] = [0];
-  activeCountCalls = 0;
-
-  constructor(
-    public name: string,
-    public processor: (job: Record<string, unknown>) => Promise<unknown>,
-    public opts: Record<string, unknown>,
-  ) {
-    if (MockWorker.failOnConstruction) {
-      const error = MockWorker.failOnConstruction;
-      MockWorker.failOnConstruction = null;
-      throw error;
-    }
-    MockWorker.instances.push(this);
-  }
-
-  on(event: string, listener: (...args: unknown[]) => void) {
-    const listeners = this.eventListeners.get(event) ?? new Set();
-    listeners.add(listener);
-    this.eventListeners.set(event, listeners);
-  }
-
-  emit(event: string, ...args: unknown[]) {
-    for (const listener of this.eventListeners.get(event) ?? []) {
-      listener(...args);
-    }
-  }
-
-  async pause(_force?: boolean) {
-    this.pauseCalls += 1;
-    this.paused = true;
-  }
-
-  async getActiveCount() {
-    this.activeCountCalls += 1;
-    if (this.activeCounts.length === 1) {
-      return this.activeCounts[0] ?? 0;
-    }
-    return this.activeCounts.shift() ?? 0;
-  }
-
-  async close(force?: boolean) {
-    this.closed = true;
-    this.closedForce = force;
-  }
-}
-
-mock.module('bullmq', () => ({
-  Job: {
-    fromId: async (queue: MockQueue, jobId: string) =>
-      queue.jobs.find(job => job.id === jobId) ?? null,
-  },
-  Queue: MockQueue,
-  QueueEvents: MockQueueEvents,
-  Worker: MockWorker,
-}));
+mock.module('bullmq', () => createFakeBullMQModule(mockRedis));
 
 let createBullMQOrchestrationAdapter: (typeof import('../src/adapter'))['createBullMQOrchestrationAdapter'];
 
@@ -291,11 +24,9 @@ beforeAll(async () => {
 
 describe('bullmq orchestration adapter', () => {
   beforeEach(() => {
-    MockQueue.instances = [];
-    MockQueueEvents.instances = [];
-    MockWorker.instances = [];
-    MockWorker.failOnConstruction = null;
-    mockRedis.reset();
+    resetFakeBullMQState();
+    // Re-establish the custom client so adapter reads from mockRedis
+    FakeQueue.customClient = mockRedis;
   });
 
   test('auto-starts on first task run without explicit start()', async () => {
@@ -313,14 +44,14 @@ describe('bullmq orchestration adapter', () => {
     });
     adapter.registerTask(task);
 
-    const queueEventsBefore = MockQueueEvents.instances.length;
-    const workersBefore = MockWorker.instances.length;
+    const queueEventsBefore = FakeQueueEvents.instances.length;
+    const workersBefore = FakeWorker.instances.length;
 
     const handle = await adapter.runTask(task.name, { value: 'ok' });
     await expect(handle.result()).resolves.toEqual({ value: 'ok' });
 
-    expect(MockQueueEvents.instances.length).toBeGreaterThan(queueEventsBefore);
-    expect(MockWorker.instances.length).toBeGreaterThan(workersBefore);
+    expect(FakeQueueEvents.instances.length).toBeGreaterThan(queueEventsBefore);
+    expect(FakeWorker.instances.length).toBeGreaterThan(workersBefore);
   });
 
   test('retains failure state until reset() then retries startup (P-OBULLMQ-5)', async () => {
@@ -338,12 +69,12 @@ describe('bullmq orchestration adapter', () => {
     });
     adapter.registerTask(task);
 
-    MockWorker.failOnConstruction = new Error('worker failed');
+    FakeWorker.failOnConstruction = new Error('worker failed');
     await expect(adapter.runTask(task.name, { value: 'ok' })).rejects.toThrow('worker failed');
 
     // Failed state is retained: a subsequent call returns the same error,
-    // even after MockWorker.failOnConstruction has been cleared.
-    MockWorker.failOnConstruction = null;
+    // even after FakeWorker.failOnConstruction has been cleared.
+    FakeWorker.failOnConstruction = null;
     await expect(adapter.runTask(task.name, { value: 'ok' })).rejects.toThrow('worker failed');
 
     // reset() is required to allow another initialization attempt.
@@ -358,12 +89,12 @@ describe('bullmq orchestration adapter', () => {
       prefix: 'status-map',
     });
 
-    const taskQueue = MockQueue.instances.find(queue => queue.name === 'status-map_tasks');
-    const workflowQueue = MockQueue.instances.find(queue => queue.name === 'status-map_workflows');
+    const taskQueue = FakeQueue.instances.find(queue => queue.name === 'status-map_tasks');
+    const workflowQueue = FakeQueue.instances.find(queue => queue.name === 'status-map_workflows');
 
     if (taskQueue) {
       taskQueue.jobs.push(
-        new MockJob({
+        new FakeJob({
           queue: taskQueue,
           id: 'run_task',
           name: 'sync-user',
@@ -374,7 +105,7 @@ describe('bullmq orchestration adapter', () => {
     }
     if (workflowQueue) {
       workflowQueue.jobs.push(
-        new MockJob({
+        new FakeJob({
           queue: workflowQueue,
           id: 'run_workflow',
           name: 'onboard-user',
@@ -415,9 +146,9 @@ describe('bullmq orchestration adapter', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(MockQueueEvents.instances.length).toBeGreaterThan(0);
+    expect(FakeQueueEvents.instances.length).toBeGreaterThan(0);
     expect(
-      MockQueueEvents.instances.every(
+      FakeQueueEvents.instances.every(
         queueEvents => (queueEvents.listeners.get('progress')?.size ?? 0) === 0,
       ),
     ).toBe(true);
@@ -440,11 +171,11 @@ describe('bullmq orchestration adapter', () => {
 
     const handle = await adapter.runTask(task.name, { value: 'pending' });
 
-    // Patch MockJob.remove on the live instance so the call resolves but the
+    // Patch FakeJob.remove on the live instance so the call resolves but the
     // job is NOT removed from the queue. This mirrors the production race
     // where job.remove() returns without throwing while the underlying Redis
     // op was a no-op (lock contention, partial delete, etc.).
-    const taskQueue = MockQueue.instances.find(queue => queue.name === 'cancel-best-effort_tasks');
+    const taskQueue = FakeQueue.instances.find(queue => queue.name === 'cancel-best-effort_tasks');
     expect(taskQueue).toBeDefined();
     const job = taskQueue!.jobs[0];
     expect(job).toBeDefined();
@@ -582,7 +313,7 @@ describe('bullmq orchestration adapter', () => {
     adapter.registerTask(task);
 
     const handle = await adapter.runTask(task.name, { value: 'active' });
-    const queue = MockQueue.instances.find(instance => instance.name === 'cancelled-failure_tasks');
+    const queue = FakeQueue.instances.find(instance => instance.name === 'cancelled-failure_tasks');
     const job = queue?.jobs[0];
     expect(job).toBeDefined();
     if (!job) {
@@ -610,11 +341,7 @@ describe('bullmq orchestration adapter', () => {
 
 describe('bullmq orchestration adapter – schedule management', () => {
   beforeEach(() => {
-    MockQueue.instances = [];
-    MockQueueEvents.instances = [];
-    MockWorker.instances = [];
-    MockWorker.failOnConstruction = null;
-    mockRedis.reset();
+    resetFakeBullMQState();
   });
 
   test('schedule() adds a repeatable job with correct cron pattern', async () => {
@@ -640,7 +367,7 @@ describe('bullmq orchestration adapter – schedule management', () => {
     expect(handle.cron).toBe('0 * * * *');
     expect(handle.target).toEqual({ type: 'task', name: task.name });
 
-    const taskQueue = MockQueue.instances.find(q => q.name === 'sched-add_tasks');
+    const taskQueue = FakeQueue.instances.find(q => q.name === 'sched-add_tasks');
     expect(taskQueue).toBeDefined();
     const scheduler = taskQueue!.schedulers[0];
     expect(scheduler).toBeDefined();
@@ -669,7 +396,7 @@ describe('bullmq orchestration adapter – schedule management', () => {
       run: true,
     });
 
-    const taskQueue = MockQueue.instances.find(q => q.name === 'sched-remove_tasks');
+    const taskQueue = FakeQueue.instances.find(q => q.name === 'sched-remove_tasks');
     expect(taskQueue!.schedulers).toHaveLength(1);
 
     await adapter.unschedule(handle.id);
@@ -725,11 +452,7 @@ describe('bullmq orchestration adapter – schedule management', () => {
 
 describe('bullmq orchestration adapter – stalled job logging', () => {
   beforeEach(() => {
-    MockQueue.instances = [];
-    MockQueueEvents.instances = [];
-    MockWorker.instances = [];
-    MockWorker.failOnConstruction = null;
-    mockRedis.reset();
+    resetFakeBullMQState();
   });
 
   test('stalled event on the task worker triggers console.error with the job ID', async () => {
@@ -750,7 +473,7 @@ describe('bullmq orchestration adapter – stalled job logging', () => {
     // Trigger lazy start
     await adapter.start();
 
-    const taskWorker = MockWorker.instances.find(w => w.name === 'stalled-log_tasks');
+    const taskWorker = FakeWorker.instances.find(w => w.name === 'stalled-log_tasks');
     expect(taskWorker).toBeDefined();
 
     let consoleErrorSpy: ReturnType<typeof spyOn> | undefined;
@@ -775,11 +498,7 @@ describe('bullmq orchestration adapter – stalled job logging', () => {
 
 describe('bullmq orchestration adapter – shutdown drain', () => {
   beforeEach(() => {
-    MockQueue.instances = [];
-    MockQueueEvents.instances = [];
-    MockWorker.instances = [];
-    MockWorker.failOnConstruction = null;
-    mockRedis.reset();
+    resetFakeBullMQState();
   });
 
   test('shutdown pauses workers and waits for active jobs to drain to zero', async () => {
@@ -799,7 +518,7 @@ describe('bullmq orchestration adapter – shutdown drain', () => {
     adapter.registerTask(task);
     await adapter.start();
 
-    const taskWorker = MockWorker.instances.find(w => w.name === 'drain-success_tasks');
+    const taskWorker = FakeWorker.instances.find(w => w.name === 'drain-success_tasks');
     expect(taskWorker).toBeDefined();
     // Simulate 2 jobs in flight, then 1, then 0
     taskWorker!.activeCounts = [2, 1, 0];
@@ -832,7 +551,7 @@ describe('bullmq orchestration adapter – shutdown drain', () => {
     adapter.registerTask(task);
     await adapter.start();
 
-    const taskWorker = MockWorker.instances.find(w => w.name === 'drain-timeout_tasks');
+    const taskWorker = FakeWorker.instances.find(w => w.name === 'drain-timeout_tasks');
     expect(taskWorker).toBeDefined();
     // Always reports a non-zero active count → drain never reaches zero
     taskWorker!.activeCounts = [3];
@@ -871,11 +590,7 @@ describe('bullmq orchestration adapter – shutdown drain', () => {
 
 describe('bullmq orchestration adapter – requireTls', () => {
   beforeEach(() => {
-    MockQueue.instances = [];
-    MockQueueEvents.instances = [];
-    MockWorker.instances = [];
-    MockWorker.failOnConstruction = null;
-    mockRedis.reset();
+    resetFakeBullMQState();
   });
 
   test('throws synchronously when requireTls=true and no TLS config provided', () => {
@@ -928,11 +643,7 @@ describe('bullmq orchestration adapter – requireTls', () => {
 
 describe('bullmq orchestration adapter – job retention defaults', () => {
   beforeEach(() => {
-    MockQueue.instances = [];
-    MockQueueEvents.instances = [];
-    MockWorker.instances = [];
-    MockWorker.failOnConstruction = null;
-    mockRedis.reset();
+    resetFakeBullMQState();
   });
 
   test('queues are constructed with sensible default removeOnComplete/removeOnFail', () => {
@@ -941,8 +652,8 @@ describe('bullmq orchestration adapter – job retention defaults', () => {
       prefix: 'retention-default',
     });
 
-    const taskQueue = MockQueue.instances.find(q => q.name === 'retention-default_tasks');
-    const workflowQueue = MockQueue.instances.find(q => q.name === 'retention-default_workflows');
+    const taskQueue = FakeQueue.instances.find(q => q.name === 'retention-default_tasks');
+    const workflowQueue = FakeQueue.instances.find(q => q.name === 'retention-default_workflows');
     expect(taskQueue?.options).toBeDefined();
     expect(workflowQueue?.options).toBeDefined();
 
@@ -973,7 +684,7 @@ describe('bullmq orchestration adapter – job retention defaults', () => {
       },
     });
 
-    const taskQueue = MockQueue.instances.find(q => q.name === 'retention-custom_tasks');
+    const taskQueue = FakeQueue.instances.find(q => q.name === 'retention-custom_tasks');
     expect(taskQueue?.options).toBeDefined();
     const defaultJobOptions = taskQueue!.options!['defaultJobOptions'] as {
       removeOnComplete: { age: number; count: number };

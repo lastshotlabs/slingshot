@@ -183,9 +183,9 @@ export const createPasswordResetRouter = (
             'application/json': {
               schema: z.object({
                 token: z.string().describe('Single-use reset token received via email.'),
-                password: createPasswordSchema(runtime.config.passwordPolicy).describe(
-                  'New password.',
-                ),
+                password: createPasswordSchema(runtime.config.passwordPolicy)
+                  .max(128)
+                  .describe('New password.'),
               }),
             },
           },
@@ -249,6 +249,7 @@ export const createPasswordResetRouter = (
           entry.userId,
           password,
           preventReuseReset,
+          runtime.password,
         );
         if (!isNew) {
           return c.json(

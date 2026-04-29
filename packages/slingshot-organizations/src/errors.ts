@@ -73,9 +73,14 @@ export class SlugConflictError extends HTTPException {
  * "raw driver error".
  */
 export function isUniqueViolationError(err: unknown): boolean {
+  return isUniqueViolationErrorInner(err, 0);
+}
+
+function isUniqueViolationErrorInner(err: unknown, depth: number): boolean {
+  if (depth > 8) return false;
   if (err === null || typeof err !== 'object') return false;
   if (err instanceof SlugConflictError) return false;
-  const e = err as { code?: unknown; status?: unknown; message?: unknown };
+  const e = err as { code?: unknown; status?: unknown; message?: unknown; cause?: unknown };
 
   if (typeof e.code === 'string') {
     if (e.code === 'UNIQUE_VIOLATION') return true;
@@ -89,6 +94,10 @@ export function isUniqueViolationError(err: unknown): boolean {
     // Looser match tolerates vendor variability where the message is shaped
     // differently but still mentions uniqueness or duplication.
     if (m.includes('unique') || m.includes('duplicate')) return true;
+  }
+
+  if (e.cause !== undefined) {
+    return isUniqueViolationErrorInner(e.cause, depth + 1);
   }
 
   return false;

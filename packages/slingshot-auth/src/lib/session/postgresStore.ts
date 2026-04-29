@@ -265,8 +265,8 @@ export function createPostgresSessionRepository(pool: import('pg').Pool): Sessio
         last_active_at: string;
       }>(
         `SELECT session_id, user_id, last_active_at
-         FROM auth_sessions WHERE refresh_token = $1`,
-        [tokenHash],
+         FROM auth_sessions WHERE refresh_token = $1 AND expires_at > $2`,
+        [tokenHash, Date.now()],
       );
       if (rows[0]) {
         if (isIdleExpired(Number(rows[0].last_active_at), cfg)) {
@@ -288,8 +288,8 @@ export function createPostgresSessionRepository(pool: import('pg').Pool): Sessio
         last_active_at: string;
       }>(
         `SELECT session_id, user_id, prev_token_expires_at, last_active_at
-         FROM auth_sessions WHERE prev_refresh_token = $1`,
-        [tokenHash],
+         FROM auth_sessions WHERE prev_refresh_token = $1 AND expires_at > $2`,
+        [tokenHash, Date.now()],
       );
       if (!graceRows[0]) return null;
       const graceRow = graceRows[0];

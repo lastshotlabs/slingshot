@@ -121,6 +121,28 @@ describe('createBullMQAdapter — real Redis', () => {
     expect(received.length).toBeGreaterThanOrEqual(1);
   }, 15_000);
 
+  it('replayFromDlq is defined and returns 0 when no DLQ has been populated', async () => {
+    if (!REDIS_URL) return;
+    const conn = parseRedisUrl(REDIS_URL);
+    const { createBullMQAdapter } = await import('../../src/bullmqAdapter');
+    const bus = createBullMQAdapter({
+      connection: conn,
+      prefix: `slingshot:replay:${Date.now()}`,
+      logger: {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        child(): any { return this; },
+      },
+    });
+    lastShutdown = () => bus.shutdown();
+
+    // With no durable subscriptions, there are no DLQs
+    const replayed = await bus.replayFromDlq();
+    expect(replayed).toBe(0);
+  }, 15_000);
+
   it('drain backoff: sustained failures escalate the retry delay', async () => {
     if (!REDIS_URL) return;
     const { createBullMQAdapter } = await import('../../src/bullmqAdapter');

@@ -1,14 +1,6 @@
 import { createRequire } from 'node:module';
 import type BetterSqlite3 from 'better-sqlite3';
 import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
-export {
-  NodeRuntimeError,
-  NodeServerError,
-  NodeWebSocketError,
-  NodeContentLengthError,
-  NodeRequestBodyTooLargeError,
-  NodeShutdownError,
-} from './errors';
 import type {
   RuntimeFs,
   RuntimeGlob,
@@ -22,6 +14,19 @@ import type {
   RuntimeWebSocket,
   SlingshotRuntime,
 } from '@lastshotlabs/slingshot-core';
+
+/**
+ * Runtime-specific error classes thrown by the Node adapter for server,
+ * WebSocket, request-body, and shutdown failures.
+ */
+export {
+  NodeRuntimeError,
+  NodeServerError,
+  NodeWebSocketError,
+  NodeContentLengthError,
+  NodeRequestBodyTooLargeError,
+  NodeShutdownError,
+} from './errors';
 
 // ---------------------------------------------------------------------------
 // Logger — structured, redirectable, no-op-friendly

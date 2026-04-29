@@ -24,6 +24,8 @@ bun add @lastshotlabs/slingshot-runtime-bun
 ## Export Paths
 
 - `.`
+- `./errors`
+- `./testing`
 
 ## Package Scripts
 

@@ -210,7 +210,15 @@ export function createLambdaRuntime(
           await Promise.race([hookPromise, hookTimeout]);
           if (hookTimer) clearTimeout(hookTimer);
         })();
-        void fullShutdown;
+        void fullShutdown.catch(err => {
+          // Last-resort safety net: if the drain+shutdown sequence itself
+          // throws, log and let the process exit — the Lambda runtime will
+          // freeze the container after the SIGTERM grace period expires.
+          runtimeLogger.error('shutdown-sequence-failed', {
+            message: err instanceof Error ? err.message : String(err),
+            stack: err instanceof Error ? err.stack : undefined,
+          });
+        });
       });
     }
     return cached;

@@ -1,6 +1,7 @@
 import type { MetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { createNoopMetricsEmitter, sanitizeLogValue } from '@lastshotlabs/slingshot-core';
 import { buildProviderIdempotencyKey } from './lib/idempotency';
+import { PushRouterError } from './errors';
 import type { PushProvider } from './providers/provider';
 import type {
   PushMessage,
@@ -224,6 +225,15 @@ export interface PushRouter {
    * instead of running attempts past teardown. P-PUSH-6.
    */
   stop(): void;
+
+  /**
+   * Snapshot of the router-level circuit breaker state. Returns null when the
+   * breaker is disabled (threshold === 0).
+   */
+  getBreakerHealth?(): {
+    readonly circuitState: 'closed' | 'open' | 'half-open';
+    readonly consecutiveFailures: number;
+  } | null;
 }
 
 function asItems<T>(result: { items: T[] } | T[]): T[] {
@@ -277,6 +287,19 @@ export function createPushRouter(options: {
    * stops scheduling further batches. Default: 10000. P-PUSH-11.
    */
   topicMaxRecipients?: number;
+  /**
+   * Router-level circuit breaker threshold — consecutive total-fan-out
+   * failures (every subscription in a sendToUser/sendToUsers/publishTopic
+   * returned allFailed) before the breaker opens and short-circuits
+   * subsequent sends. Default: 10. Set to 0 to disable the router-level
+   * breaker.
+   */
+  routerCircuitBreakerThreshold?: number;
+  /**
+   * Router-level circuit breaker cooldown in ms before admitting a
+   * half-open probe after the breaker opens. Default: 30000.
+   */
+  routerCircuitBreakerCooldownMs?: number;
 }): PushRouter {
   const maxAttempts = options.retries?.maxAttempts ?? 3;
   const initialDelayMs = options.retries?.initialDelayMs ?? 1_000;
@@ -291,6 +314,70 @@ export function createPushRouter(options: {
   // Lifecycle abort signal used to unwind in-flight retry sleeps on stop().
   const lifecycleController = new AbortController();
   const lifecycleSignal = lifecycleController.signal;
+
+  // --- Router-level circuit breaker ---
+  // Tracks consecutive fan-out-level failures across ALL providers. When
+  // every subscription in a sendToUser/sendToUsers/publishTopic returns
+  // allFailed, the router-level counter increments. When it reaches
+  // `routerCircuitBreakerThreshold`, the breaker opens and short-circuits
+  // all subsequent sends until the cooldown elapses.
+  const routerBreakerThreshold = Math.max(0, options.routerCircuitBreakerThreshold ?? 10);
+  const routerBreakerCooldownMs = Math.max(0, options.routerCircuitBreakerCooldownMs ?? 30_000);
+  let routerBreakerState: 'closed' | 'open' | 'half-open' = 'closed';
+  let routerBreakerFailures = 0;
+  let routerBreakerOpenedAt: number | undefined;
+
+  function isRouterBreakerAllowed(now: number): boolean {
+    if (routerBreakerThreshold === 0) return true; // disabled
+    if (routerBreakerState === 'closed') return true;
+    if (routerBreakerState === 'half-open') return true; // probe already in flight
+    // state === 'open'
+    if (routerBreakerOpenedAt === undefined) return true;
+    if (now - routerBreakerOpenedAt >= routerBreakerCooldownMs) {
+      routerBreakerState = 'half-open';
+      return true;
+    }
+    return false;
+  }
+
+  function recordRouterSuccess(): void {
+    if (routerBreakerFailures === 0) return;
+    routerBreakerFailures = 0;
+    routerBreakerState = 'closed';
+    routerBreakerOpenedAt = undefined;
+  }
+
+  function recordRouterFailure(): void {
+    if (routerBreakerThreshold === 0) return;
+    routerBreakerFailures += 1;
+    if (routerBreakerState === 'half-open') {
+      // Half-open probe failed — return to open.
+      routerBreakerState = 'open';
+      routerBreakerOpenedAt = Date.now();
+      return;
+    }
+    if (routerBreakerFailures >= routerBreakerThreshold && routerBreakerState === 'closed') {
+      routerBreakerState = 'open';
+      routerBreakerOpenedAt = Date.now();
+    }
+  }
+
+  function guardRouterSend<T>(fn: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    if (!isRouterBreakerAllowed(now)) {
+      const retryAfterMs =
+        routerBreakerOpenedAt !== undefined
+          ? Math.max(0, routerBreakerOpenedAt + routerBreakerCooldownMs - now)
+          : routerBreakerCooldownMs;
+      return Promise.reject(
+        new PushRouterError(
+          `[slingshot-push] Router circuit breaker open after ${routerBreakerFailures} ` +
+            `consecutive fan-out failures. Retrying in ~${retryAfterMs}ms.`,
+        ),
+      );
+    }
+    return fn();
+  }
 
   const CIRCUIT_STATE_VALUES: Record<'closed' | 'open' | 'half-open', number> = {
     closed: 0,
@@ -630,27 +717,53 @@ export function createPushRouter(options: {
 
   return {
     async sendToUser(userId, message, opts = {}) {
-      return summarize(await sendToUser(userId, message, opts));
+      return guardRouterSend(async () => {
+        const result = summarize(await sendToUser(userId, message, opts));
+        if (result.allFailed) {
+          recordRouterFailure();
+        } else {
+          recordRouterSuccess();
+        }
+        metrics.gauge('push.routerBreaker.state', CIRCUIT_STATE_VALUES[routerBreakerState] ?? 0);
+        metrics.gauge('push.routerBreaker.failures', routerBreakerFailures);
+        return result;
+      });
     },
     async sendToUsers(userIds, message, opts = {}) {
-      const tenantId = opts.tenantId ?? '';
-      let delivered = 0;
-      let attempted = 0;
-      for (const userId of [...new Set(userIds)]) {
-        const r = await sendToUser(userId, message, {
-          tenantId,
-          notificationId: opts.notificationId,
-          providerTimeoutMs: opts.providerTimeoutMs,
-        });
-        delivered += r.delivered;
-        attempted += r.attempted;
-      }
-      return summarize({ delivered, attempted });
+      return guardRouterSend(async () => {
+        const tenantId = opts.tenantId ?? '';
+        let delivered = 0;
+        let attempted = 0;
+        for (const userId of [...new Set(userIds)]) {
+          const r = await sendToUser(userId, message, {
+            tenantId,
+            notificationId: opts.notificationId,
+            providerTimeoutMs: opts.providerTimeoutMs,
+          });
+          delivered += r.delivered;
+          attempted += r.attempted;
+        }
+        const result = summarize({ delivered, attempted });
+        if (result.allFailed) {
+          recordRouterFailure();
+        } else {
+          recordRouterSuccess();
+        }
+        metrics.gauge('push.routerBreaker.state', CIRCUIT_STATE_VALUES[routerBreakerState] ?? 0);
+        metrics.gauge('push.routerBreaker.failures', routerBreakerFailures);
+        return result;
+      });
     },
     async publishTopic(topicName, message, opts = {}) {
+      return guardRouterSend(async () => {
       const tenantId = opts.tenantId ?? '';
       const topic = await options.repos.topics.findByName({ tenantId, name: topicName });
-      if (!topic) return summarize({ delivered: 0, attempted: 0 });
+      if (!topic) {
+        const emptyResult = summarize({ delivered: 0, attempted: 0 });
+        metrics.gauge('push.routerBreaker.state', CIRCUIT_STATE_VALUES[routerBreakerState] ?? 0);
+        metrics.gauge('push.routerBreaker.failures', routerBreakerFailures);
+        return emptyResult;
+      }
 
       const allMemberships = asItems(
         await options.repos.topicMemberships.listByTopic({ topicId: topic.id }),
@@ -735,6 +848,13 @@ export function createPushRouter(options: {
         totalAttempted += value.attempted;
       }
       const summary = summarize({ delivered: totalDelivered, attempted: totalAttempted });
+      if (summary.allFailed) {
+        recordRouterFailure();
+      } else {
+        recordRouterSuccess();
+      }
+      metrics.gauge('push.routerBreaker.state', CIRCUIT_STATE_VALUES[routerBreakerState] ?? 0);
+      metrics.gauge('push.routerBreaker.failures', routerBreakerFailures);
       if (!truncated) {
         return summary;
       }
@@ -743,9 +863,17 @@ export function createPushRouter(options: {
         totalMembers: number;
       } = { ...summary, truncated: true, totalMembers };
       return truncatedSummary;
+      }); // guardRouterSend
     },
     stop(): void {
       lifecycleController.abort();
+    },
+    getBreakerHealth(): {
+      readonly circuitState: 'closed' | 'open' | 'half-open';
+      readonly consecutiveFailures: number;
+    } | null {
+      if (routerBreakerThreshold === 0) return null;
+      return { circuitState: routerBreakerState, consecutiveFailures: routerBreakerFailures };
     },
   };
 }

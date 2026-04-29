@@ -6,7 +6,8 @@
  *   2. `Bun.password.verify` when running under Bun (no custom verifier).
  *   3. Descriptive error thrown when neither is available.
  */
-import { beforeEach, describe, expect, mock, test, beforeAll } from 'bun:test';
+import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Mock state ────────────────────────────────────────────────────────────────
 
@@ -75,8 +76,6 @@ mock.module('drizzle-orm/node-postgres', () => ({
       },
     ),
 }));
-
-import { createPostgresAdapter } from '../src/adapter.js';
 
 const REAL_PASSWORD = 'correct-horse-battery-staple';
 let REAL_HASH: string;
@@ -237,9 +236,7 @@ describe('verifyPassword — edge cases', () => {
       pool: new (await import('pg')).Pool(),
     });
 
-    await expect(adapter.verifyPassword('user-id', 'password')).rejects.toThrow(
-      'connection lost',
-    );
+    await expect(adapter.verifyPassword('user-id', 'password')).rejects.toThrow('connection lost');
   });
 
   test('does not call custom verifier when user is not found', async () => {

@@ -7,13 +7,15 @@ export class EdgeRuntimeError extends Error {
   }
 }
 
+/** Raised when code requests a runtime feature that edge isolates do not support. */
 export class EdgeUnsupportedError extends EdgeRuntimeError {
-  constructor(feature: string) {
-    super(`${feature} is not available in the Edge runtime`);
+  constructor(feature: string, detail?: string) {
+    super(`${feature} is not available in the Edge runtime${detail ? `. ${detail}` : ''}`);
     this.name = 'EdgeUnsupportedError';
   }
 }
 
+/** Raised when the edge runtime cannot read a configured static file. */
 export class EdgeFileReadError extends EdgeRuntimeError {
   readonly filePath: string;
 
@@ -24,13 +26,18 @@ export class EdgeFileReadError extends EdgeRuntimeError {
   }
 }
 
+/** Raised when an edge runtime file read exceeds the configured byte limit. */
 export class EdgeFileSizeExceededError extends EdgeRuntimeError {
   readonly filePath: string;
   readonly maxBytes: number;
   readonly actualBytes: number;
 
   constructor(filePath: string, maxBytes: number, actualBytes: number) {
-    super(`file "${filePath}" exceeds max size (${actualBytes} > ${maxBytes} bytes)`);
+    super(
+      `readFile('${filePath}') returned ${actualBytes} bytes; ` +
+        `exceeds maxFileBytes=${maxBytes}. Stream large assets at the platform level ` +
+        `or raise maxFileBytes after confirming isolate headroom.`,
+    );
     this.name = 'EdgeFileSizeExceededError';
     this.filePath = filePath;
     this.maxBytes = maxBytes;
@@ -38,9 +45,13 @@ export class EdgeFileSizeExceededError extends EdgeRuntimeError {
   }
 }
 
+/** Raised when edge password hashing and verification hooks are configured inconsistently. */
 export class EdgePasswordConfigError extends EdgeRuntimeError {
   constructor() {
-    super('hashPassword and verifyPassword must both be provided or both omitted');
+    super(
+      'hashPassword and verifyPassword must both be provided or both omitted. ' +
+        'Mixing one custom function with the default PBKDF2 implementation will cause auth failures.',
+    );
     this.name = 'EdgePasswordConfigError';
   }
 }

@@ -184,7 +184,11 @@ export async function connectPostgres(
     });
     attachPostgresPoolRuntime(pool, runtime);
     instrumentPool(pool, (durationMs, failed) => runtime.recordQuery(durationMs, failed));
-    await pool.query('SELECT 1'); // verify connectivity eagerly
+    await withTimeout(
+      pool.query('SELECT 1'),
+      runtime.healthcheckTimeoutMs,
+      `[slingshot-postgres] startup verification exceeded ${runtime.healthcheckTimeoutMs}ms`,
+    ); // verify connectivity eagerly
     const db = drizzle(pool);
     return {
       pool,

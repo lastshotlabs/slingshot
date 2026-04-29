@@ -136,10 +136,16 @@ interface EvaluatorConfig {
    */
   onGroupExpansionErrorSampleRate?: number;
   /**
+   * When false (default), any failure while fetching group grants makes the
+   * permission check return `false` instead of evaluating partial grants.
+   * Set true only when availability is more important than hidden deny grants.
+   */
+  failOpenOnGroupExpansionError?: boolean;
+  /**
    * Optional callback invoked when one or more group-grant fetches fail during
-   * group expansion. Receives the full list of failures for the call. The evaluator
-   * still proceeds with whatever grants it managed to collect — this hook gives the
-   * caller visibility, not control. The callback is sampled at
+   * group expansion. Receives the full list of failures for the call. By default the
+   * evaluator fails closed after recording the failure; callers can opt into partial
+   * grant evaluation with `failOpenOnGroupExpansionError`. The callback is sampled at
    * `onGroupExpansionErrorSampleRate` (default `0.05`).
    */
   onGroupExpansionError?: (failures: GroupExpansionFailure[]) => void;
@@ -264,6 +270,7 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
   const logger: EvaluatorLogger = config.logger ?? console;
   const warnSampleRate = config.warnSampleRate ?? 0.01;
   const onGroupExpansionErrorSampleRate = config.onGroupExpansionErrorSampleRate ?? 0.05;
+  const failOpenOnGroupExpansionError = config.failOpenOnGroupExpansionError ?? false;
   const { onGroupExpansionError } = config;
 
   // Health-only counters. Updated from existing operation paths so calling
@@ -400,7 +407,9 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
             logger.warn(
               `[slingshot-permissions] evaluator.can() failed to fetch grants for ${failures.length} group(s) ` +
                 `(user '${subject.subjectId}', first failure on group '${first.groupId}': ${firstReasonMessage}). ` +
-                `Proceeding with partial grants.`,
+                (failOpenOnGroupExpansionError
+                  ? `Proceeding with partial grants.`
+                  : `Failing closed.`),
               {
                 adapter: adapterName,
                 event: 'group_expansion_error',
@@ -428,6 +437,9 @@ export function createPermissionEvaluator(config: EvaluatorConfig): EvaluatorWit
                 );
               }
             }
+          }
+          if (!failOpenOnGroupExpansionError) {
+            return false;
           }
         }
       }

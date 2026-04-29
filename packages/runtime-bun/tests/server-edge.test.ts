@@ -14,7 +14,7 @@ describe('runtime-bun server — port binding', () => {
     Object.assign(Bun, {
       serve() {
         return {
-          port: 0,
+          port: 54321,
           stop: () => undefined,
           publish: () => {},
           upgrade: () => true,
@@ -41,7 +41,7 @@ describe('runtime-bun server — port binding', () => {
       serve(opts: Record<string, unknown>) {
         capturedPort = opts.port as number;
         return {
-          port: 0,
+          port: capturedPort,
           stop: () => undefined,
           publish: () => {},
           upgrade: () => true,
@@ -68,7 +68,7 @@ describe('runtime-bun server — port binding', () => {
       serve(opts: Record<string, unknown>) {
         capturedHostname = opts.hostname as string;
         return {
-          port: 0,
+          port: 3001,
           stop: () => undefined,
           publish: () => {},
           upgrade: () => true,
@@ -98,8 +98,9 @@ describe('runtime-bun server — request routing', () => {
       serve(opts: Record<string, unknown>) {
         const fetch = opts.fetch as (req: Request) => Response | Promise<Response>;
         capturedRequest = new Request('http://localhost/test?q=1');
+        void fetch;
         return {
-          port: 0,
+          port: 3002,
           stop: () => undefined,
           publish: () => {},
           upgrade: () => true,
@@ -128,8 +129,9 @@ describe('runtime-bun server — request routing', () => {
     const originalServe = Bun.serve;
     Object.assign(Bun, {
       serve(opts: Record<string, unknown>) {
+        void opts;
         return {
-          port: 0,
+          port: 3003,
           stop: () => undefined,
           publish: () => {},
           upgrade: () => true,
@@ -221,7 +223,9 @@ describe('runtime-bun server — error handling', () => {
       const errors: Error[] = [];
       runtime.server.listen({
         port: 0,
-        fetch: () => { throw new Error('handler-error'); },
+        fetch: () => {
+          throw new Error('handler-error');
+        },
         error: (err: Error) => {
           errors.push(err);
           return new Response('caught', { status: 500 });

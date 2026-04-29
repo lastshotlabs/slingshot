@@ -110,6 +110,13 @@ const MIGRATIONS: Migration[] = [
 const MIGRATION_LOCK_KEY1 = 5412;
 const MIGRATION_LOCK_KEY2 = 1947;
 
+/**
+ * Default timeout for the entire migration transaction (60 seconds).
+ * A hung migration (e.g. advisory lock contention, deadlock) will be
+ * surfaced as a rejected promise instead of blocking startup indefinitely.
+ */
+const DEFAULT_MIGRATION_TIMEOUT_MS = 60_000;
+
 function parseVersion(raw: PgParam | string[] | undefined, maxVersion: number): number {
   if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
     if (raw > maxVersion) {
@@ -136,13 +143,31 @@ function parseVersion(raw: PgParam | string[] | undefined, maxVersion: number): 
 }
 
 /**
+ * Race a promise against a timeout. Used by `runMigrations` to prevent a hung
+ * migration transaction from blocking startup indefinitely.
+ */
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  }) as Promise<T>;
+}
+
+/**
  * Applies any pending permissions schema migrations against the given pool.
  *
  * Tracks the applied version in `_permission_schema_version`. Each migration
  * is executed sequentially and is immediately followed by a version bump inside
  * a single client transaction protected by a PostgreSQL advisory lock.
  *
+ * The entire migration transaction is guarded by a configurable timeout to
+ * prevent a hung migration from blocking startup indefinitely.
+ *
  * @param pool - A `PoolLike` instance (real `pg.Pool` or compatible mock).
+ * @param options - Optional timeout for the migration transaction.
  * @returns A promise that resolves when all pending migrations have been applied.
  * @throws Re-throws any SQL error from a migration or the version tracking queries.
  *
@@ -153,7 +178,12 @@ function parseVersion(raw: PgParam | string[] | undefined, maxVersion: number): 
  * await runMigrations(pool);
  * ```
  */
-async function runMigrations(pool: PoolLike): Promise<void> {
+async function runMigrations(pool: PoolLike, options?: { timeoutMs?: number }): Promise<void> {
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_MIGRATION_TIMEOUT_MS;
+  return withTimeout(runMigrationsInner(pool), timeoutMs, 'Permission schema migration timed out');
+}
+
+async function runMigrationsInner(pool: PoolLike): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -314,14 +344,38 @@ function rowToGrant(row: PgRow): PermissionGrant {
 export type PermissionsPostgresAdapter = TestablePermissionsAdapter;
 
 /**
+ * Adapter-level health payload returned by `healthCheck()` on the Postgres
+ * permissions adapter.
+ */
+export interface PermissionsPostgresAdapterHealth {
+  /** `'connected'` when `SELECT 1` succeeds, `'disconnected'` otherwise. */
+  readonly status: 'connected' | 'disconnected';
+}
+
+/** Options accepted by `createPermissionsPostgresAdapter`. */
+export interface CreatePermissionsPostgresAdapterOptions {
+  /**
+   * Maximum time in milliseconds to wait for the migration transaction
+   * to complete. Defaults to 60 000 (60 s). Set to `0` to disable the
+   * timeout entirely (not recommended).
+   */
+  readonly migrationTimeoutMs?: number;
+}
+
+/**
  * Creates a PostgreSQL-backed `PermissionsAdapter`.
  *
  * Accepts any `PoolLike` (a `pg.Pool` or compatible mock). Schema migrations run automatically
- * using a separate `_permission_schema_version` table via a locked client transaction.
- * Roles are stored as JSONB.
+ * using a separate `_permission_schema_version` table via a locked client transaction
+ * guarded by a configurable timeout. Roles are stored as JSONB.
+ *
+ * The returned adapter includes a `healthCheck()` method that performs a `SELECT 1`
+ * probe against the pool, useful for observability endpoints and plugin-level health
+ * aggregation.
  *
  * @param pool - A `pg.Pool` instance or compatible object with `query()` and `connect()`.
- * @returns A `PermissionsPostgresAdapter` instance, ready for use.
+ * @param options - Optional migration timeout configuration.
+ * @returns A `PermissionsPostgresAdapter` instance with an additional `healthCheck()` method.
  *
  * @example
  * ```ts
@@ -329,14 +383,20 @@ export type PermissionsPostgresAdapter = TestablePermissionsAdapter;
  * import { connectPostgres } from '@lastshotlabs/slingshot-postgres';
  *
  * const { pool } = await connectPostgres(process.env.DATABASE_URL!);
- * const adapter = await createPermissionsPostgresAdapter(pool);
+ * const adapter = await createPermissionsPostgresAdapter(pool, { migrationTimeoutMs: 30_000 });
  * ```
  */
 export async function createPermissionsPostgresAdapter(
   pool: PoolLike,
-): Promise<PermissionsPostgresAdapter> {
+  options?: CreatePermissionsPostgresAdapterOptions,
+): Promise<PermissionsPostgresAdapter & { healthCheck(): Promise<PermissionsPostgresAdapterHealth> }> {
+  const migrationTimeoutMs =
+    options?.migrationTimeoutMs !== undefined
+      ? options.migrationTimeoutMs
+      : DEFAULT_MIGRATION_TIMEOUT_MS;
+
   if (getPostgresPoolRuntime(pool as object)?.migrationMode !== 'assume-ready') {
-    await runMigrations(pool);
+    await runMigrations(pool, { timeoutMs: migrationTimeoutMs });
   }
 
   return {
@@ -593,6 +653,15 @@ export async function createPermissionsPostgresAdapter(
 
     async clear(): Promise<void> {
       await pool.query('TRUNCATE permission_grants CASCADE');
+    },
+
+    async healthCheck(): Promise<PermissionsPostgresAdapterHealth> {
+      try {
+        await pool.query('SELECT 1');
+        return { status: 'connected' };
+      } catch {
+        return { status: 'disconnected' };
+      }
     },
   };
 }

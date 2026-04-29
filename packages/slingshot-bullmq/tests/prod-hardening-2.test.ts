@@ -217,7 +217,9 @@ describe('createBullMQAdapter — permanent error drop signals', () => {
     });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'wrongtype-err' });
 
-    fakeBullMQState.nextAddError(new Error('WRONGTYPE Operation against a key holding the wrong kind of value'));
+    fakeBullMQState.nextAddError(
+      new Error('WRONGTYPE Operation against a key holding the wrong kind of value'),
+    );
     bus.emit('auth:login' as any, { userId: 'wt' } as any);
     await new Promise(r => setTimeout(r, 20));
 
@@ -285,7 +287,10 @@ describe('createBullMQAdapter — buffer ordering', () => {
     const calls = fakeBullMQState.queues[0]?.addCalls ?? [];
     expect(calls).toHaveLength(5);
     for (let i = 0; i < 5; i++) {
-      const payload = (calls[i]?.data as Record<string, unknown>)?.payload as Record<string, unknown>;
+      const payload = (calls[i]?.data as Record<string, unknown>)?.payload as Record<
+        string,
+        unknown
+      >;
       expect(payload?.seq).toBe(i);
     }
   });

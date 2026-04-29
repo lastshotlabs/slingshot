@@ -90,7 +90,7 @@ function decodeCursor(cursor: string): CursorPayload | null {
  * levels are checked. Other unique-violation adjacent codes (e.g. `'23514'` for check
  * violations) do not match and return `false`.
  */
-function hasCode23505(err: unknown): boolean {
+export function hasCode23505(err: unknown): boolean {
   return (
     typeof err === 'object' &&
     err !== null &&
@@ -99,7 +99,7 @@ function hasCode23505(err: unknown): boolean {
   );
 }
 
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   if (hasCode23505(err)) return true;
   if (typeof err === 'object' && err !== null && 'cause' in err) {
     return hasCode23505((err as { cause: unknown }).cause);
@@ -281,7 +281,7 @@ const MIGRATION_LOCK_KEY1 = 7283;
  */
 const MIGRATION_LOCK_KEY2 = 4829;
 
-function parseMigrationVersion(raw: unknown, maxVersion: number): number {
+export function parseMigrationVersion(raw: unknown, maxVersion: number): number {
   if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
     if (raw > maxVersion) {
       throw new Error(
@@ -493,13 +493,14 @@ export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promi
       const row = await db.select().from(users).where(eq(users.id, userId)).then(firstRowOrNull);
       if (!row) return null;
       return {
+        id: row.id,
         email: row.email ?? undefined,
         displayName: row.displayName ?? undefined,
         firstName: row.firstName ?? undefined,
         lastName: row.lastName ?? undefined,
         externalId: row.externalId ?? undefined,
-        emailVerified: row.emailVerified,
-        suspended: row.suspended,
+        emailVerified: row.emailVerified ?? false,
+        suspended: row.suspended ?? false,
         suspendedReason: row.suspendedReason ?? undefined,
         userMetadata: row.userMetadata ?? undefined,
         appMetadata: row.appMetadata ?? undefined,
@@ -1158,8 +1159,8 @@ export async function createPostgresAdapter(opts: PostgresAdapterOptions): Promi
           firstName: row.firstName ?? undefined,
           lastName: row.lastName ?? undefined,
           externalId: row.externalId ?? undefined,
-          emailVerified: row.emailVerified,
-          suspended: row.suspended,
+          emailVerified: row.emailVerified ?? false,
+          suspended: row.suspended ?? false,
           suspendedAt: row.suspendedAt ?? undefined,
           suspendedReason: row.suspendedReason ?? undefined,
           userMetadata: row.userMetadata ?? undefined,

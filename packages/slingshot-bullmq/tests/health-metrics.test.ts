@@ -151,7 +151,11 @@ describe('createBullMQAdapter — health detail accuracy', () => {
     const registry = createEventSchemaRegistry();
     registry.register('auth:login', z.object({ userId: z.string() }));
 
-    const bus = createBullMQAdapter({ connection: {}, validation: 'strict', schemaRegistry: registry });
+    const bus = createBullMQAdapter({
+      connection: {},
+      validation: 'strict',
+      schemaRegistry: registry,
+    });
     bus.on('auth:login' as any, async () => {}, { durable: true, name: 'health-valid' });
 
     const queueName = fakeBullMQState.queues[0].name;

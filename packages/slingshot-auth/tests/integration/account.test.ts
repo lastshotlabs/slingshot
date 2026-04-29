@@ -318,6 +318,39 @@ describe('POST /auth/set-password', () => {
     expect([400, 422]).toContain(res.status);
   });
 
+  test('enforces configured password policy on set-password', async () => {
+    runtime = makeTestRuntime({
+      passwordPolicy: {
+        minLength: 12,
+        requireLetter: true,
+        requireDigit: true,
+        requireSpecial: true,
+      },
+    });
+    app = buildApp(runtime);
+    const { token } = await seedAndLogin(app, runtime);
+
+    const res = await app.request('/auth/set-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-user-token': token },
+      body: JSON.stringify({ password: 'longpassword', currentPassword: PASSWORD }),
+    });
+
+    expect([400, 422]).toContain(res.status);
+  });
+
+  test('rejects overlong set-password payloads before hashing', async () => {
+    const { token } = await seedAndLogin(app, runtime);
+
+    const res = await app.request('/auth/set-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-user-token': token },
+      body: JSON.stringify({ password: `Password1!${'x'.repeat(129)}`, currentPassword: PASSWORD }),
+    });
+
+    expect([400, 422]).toContain(res.status);
+  });
+
   test('returns 401 without auth', async () => {
     const res = await app.request('/auth/set-password', {
       method: 'POST',

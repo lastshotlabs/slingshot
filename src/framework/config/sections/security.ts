@@ -186,6 +186,8 @@ export const signingSchema = z.object({
 export const rateLimitSchema = z.object({
   windowMs: z.number().optional(),
   max: z.number().optional(),
+  store: z.enum(['memory', 'redis']).optional(),
+  fingerprintLimit: z.boolean().optional(),
   message: z.string().optional(),
   standardHeaders: z.boolean().optional(),
   keyGenerator: fnSchema.optional(),
@@ -282,6 +284,18 @@ export const captchaSchema = z.object({
 });
 
 /**
+ * Zod schema for cookie-authenticated CSRF protection.
+ *
+ * Auth routes mount the CSRF middleware when `enabled` is true. Exemptions are
+ * merged with package/plugin-owned `csrfExemptPaths` before middleware setup.
+ */
+export const csrfSchema = z.object({
+  enabled: z.boolean(),
+  exemptPaths: z.array(z.string()).optional(),
+  checkOrigin: z.boolean().optional(),
+});
+
+/**
  * Zod schema for the `security.botProtection` sub-section of `CreateServerConfig`.
  *
  * Adds lightweight bot-detection heuristics applied globally before route
@@ -366,4 +380,5 @@ export const securitySchema = z.object({
   trustProxy: z.union([z.literal(false), z.number()]).optional(),
   signing: signingSchema.loose().optional(),
   captcha: z.union([captchaSchema.loose(), z.literal(false)]).optional(),
+  csrf: csrfSchema.loose().optional(),
 });

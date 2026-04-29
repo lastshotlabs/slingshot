@@ -749,7 +749,61 @@ describe('PermissionEvaluator', () => {
     clearTimeoutSpy.mockRestore();
   });
 
-  test('can() continues with other group grants when one group grant fetch fails', async () => {
+  test('can() fails closed by default when one group grant fetch fails', async () => {
+    const groupAdapter = createMemoryPermissionsAdapter();
+    await groupAdapter.createGrant({
+      subjectId: 'group-good',
+      subjectType: 'group',
+      tenantId: null,
+      resourceType: null,
+      resourceId: null,
+      roles: ['editor'],
+      effect: 'allow',
+      grantedBy: 'system',
+    });
+
+    const failingAdapter: PermissionsAdapter = {
+      ...noopBatchAdapterMethods,
+      async createGrant() {
+        return '';
+      },
+      async revokeGrant() {
+        return false;
+      },
+      async getGrantsForSubject() {
+        return [];
+      },
+      async getEffectiveGrantsForSubject(subjectId) {
+        if (subjectId === 'group-bad') throw new Error('db connection lost');
+        return groupAdapter.getEffectiveGrantsForSubject(subjectId, 'group');
+      },
+      async listGrantHistory() {
+        return [];
+      },
+      async listGrantsOnResource() {
+        return [];
+      },
+      async deleteAllGrantsForSubject() {},
+    };
+
+    const groupResolver = {
+      async getGroupsForUser(userId: string) {
+        if (userId === 'user-1') return ['group-bad', 'group-good'];
+        return [];
+      },
+    };
+
+    const result = await createPermissionEvaluator({
+      registry,
+      adapter: failingAdapter,
+      groupResolver,
+      onGroupExpansionErrorSampleRate: 1,
+    }).can({ subjectId: 'user-1', subjectType: 'user' }, 'read', { resourceType: 'post' });
+
+    expect(result).toBe(false);
+  });
+
+  test('can() can opt into continuing with other group grants when one group grant fetch fails', async () => {
     // group-good has the required grant; group-bad fails its fetch
     const groupAdapter = createMemoryPermissionsAdapter();
     await groupAdapter.createGrant({
@@ -808,6 +862,7 @@ describe('PermissionEvaluator', () => {
         // The package default samples group-expansion warns at 5%; force-on so the
         // warn message assertion below is deterministic.
         onGroupExpansionErrorSampleRate: 1,
+        failOpenOnGroupExpansionError: true,
       }).can({ subjectId: 'user-1', subjectType: 'user' }, 'read', { resourceType: 'post' });
     } finally {
       console.warn = originalWarn;
@@ -1201,9 +1256,10 @@ describe('PermissionEvaluator', () => {
         logger,
         onGroupExpansionError,
         onGroupExpansionErrorSampleRate: 1,
+        failOpenOnGroupExpansionError: true,
       });
 
-      // group-good still grants editor → allow path returns true, evaluation proceeds
+      // This test opts into partial grants so it can verify callback/log details.
       const result = await ev.can({ subjectId: 'user-1', subjectType: 'user' }, 'read', {
         resourceType: 'post',
       });

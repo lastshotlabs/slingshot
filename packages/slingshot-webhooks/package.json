@@ -24,6 +24,11 @@
       "bun": "./dist/src/queues/bullmq.js",
       "types": "./dist/src/queues/bullmq.d.ts",
       "import": "./dist/src/queues/bullmq.js"
+    },
+    "./errors": {
+      "bun": "./dist/src/errors.js",
+      "types": "./dist/src/errors.d.ts",
+      "import": "./dist/src/errors.js"
     }
   },
   "repository": {
@@ -40,6 +45,10 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "test": "bun test",
+    "coverage": "bun test --coverage",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "bun test tests/integration",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ --cache"
   },

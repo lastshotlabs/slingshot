@@ -19,6 +19,12 @@ import { createDbNativeProvider } from './providers/dbNative';
 import { createElasticsearchProvider } from './providers/elasticsearch';
 import { createMeilisearchProvider } from './providers/meilisearch';
 import { createTypesenseProvider } from './providers/typesense';
+import { withRetry } from './retry';
+import {
+  type SearchCircuitBreaker,
+  type SearchCircuitBreakerHealth,
+  createSearchCircuitBreaker,
+} from './searchCircuitBreaker';
 import type { SearchTransformRegistry } from './transformRegistry';
 import type { SearchPluginConfig } from './types/config';
 import type { SearchProvider } from './types/provider';
@@ -409,6 +415,8 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
   /** Maps entity name (e.g., "Thread") to storage name (e.g., "community_threads"). */
   const entityNameToStorageName = new Map<string, string>();
   const pendingEntityInitializations = new Map<string, Promise<void>>();
+  /** Per-provider circuit breakers for manager-level fail-fast protection. */
+  const providerBreakers = new Map<string, SearchCircuitBreaker>();
   /**
    * Tracks tenant indexes already created for index-per-tenant entities.
    * Key: `baseIndexName__tenant_{tenantId}`. Capped at MAX_TENANT_INDEXES_CACHE
@@ -506,9 +514,30 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
     const providerKeys = Object.keys(pluginConfig.providers);
     for (const key of providerKeys) {
       const provider = resolveProviderInstance(key);
-      await provider.connect();
+      await withProviderProtection(key, () => provider.connect());
     }
     providersConnected = true;
+  }
+
+  /**
+   * Resolve (or create) the circuit breaker for `providerKey` and run `fn`
+   * through it with transient-failure retry.
+   *
+   * The circuit breaker guards the entire retry envelope: a single provider
+   * operation that fails transiently up to N times and succeeds on retry N+1
+   * counts as ONE success for the breaker. Only after retries are exhausted
+   * does the failure count toward tripping the breaker.
+   */
+  async function withProviderProtection<T>(
+    providerKey: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    let breaker = providerBreakers.get(providerKey);
+    if (!breaker) {
+      breaker = createSearchCircuitBreaker({ providerKey });
+      providerBreakers.set(providerKey, breaker);
+    }
+    return breaker.guard(() => withRetry(fn));
   }
 
   async function cleanupAfterInitializationFailure(): Promise<void> {
@@ -552,7 +581,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
     });
 
     if (autoCreate) {
-      await provider.createOrUpdateIndex(indexName, settings);
+      await withProviderProtection(providerKey, () =>
+            provider.createOrUpdateIndex(indexName, settings),
+          );
     }
   }
 
@@ -703,7 +734,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
           }
         }
 
-        await provider.createOrUpdateIndex(targetIndex, settings);
+        await withProviderProtection(providerKey, () =>
+          provider.createOrUpdateIndex(targetIndex, settings),
+        );
         createdTenantIndexes.set(targetIndex, true);
       }
 
@@ -737,7 +770,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
           metrics.counter('search.query.count', 1, metricsLabels);
           const start = performance.now();
           try {
-            const response = await provider.search(targetIndex, decoratedQuery);
+            const response = await withProviderProtection(providerKey, () =>
+              provider.search(targetIndex, decoratedQuery),
+            );
             metrics.timing('search.query.duration', performance.now() - start, metricsLabels);
             sampleCircuitBreaker(provider, providerKey);
             return response;
@@ -756,7 +791,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
           metrics.counter('search.query.count', 1, metricsLabels);
           const start = performance.now();
           try {
-            const response = await provider.suggest(targetIndex, decoratedQuery);
+            const response = await withProviderProtection(providerKey, () =>
+              provider.suggest(targetIndex, decoratedQuery),
+            );
             metrics.timing('search.query.duration', performance.now() - start, metricsLabels);
             sampleCircuitBreaker(provider, providerKey);
             return response;
@@ -781,7 +818,9 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
             return;
           }
           const id = String(entity[pkField]);
-          await provider.indexDocument(targetIndex, doc, id);
+          await withProviderProtection(providerKey, () =>
+            provider.indexDocument(targetIndex, doc, id),
+          );
         },
 
         async indexDocuments(
@@ -803,13 +842,17 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
             }
           }
           if (docs.length > 0) {
-            await provider.indexDocuments(targetIndex, docs, pkField);
+            await withProviderProtection(providerKey, () =>
+              provider.indexDocuments(targetIndex, docs, pkField),
+            );
           }
         },
 
         async removeDocument(id: string | number, opts?: TenantContext): Promise<void> {
           const targetIndex = resolveTargetIndex(opts);
-          await provider.deleteDocument(targetIndex, String(id));
+          await withProviderProtection(providerKey, () =>
+            provider.deleteDocument(targetIndex, String(id)),
+          );
         },
       };
     },
@@ -1035,13 +1078,33 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
 
       for (const [name, provider] of providers) {
         try {
-          results[name] = await provider.healthCheck();
+          const providerResult = await provider.healthCheck();
+          // Attach manager-level circuit breaker state if available
+          const breaker = providerBreakers.get(name);
+          results[name] = breaker
+            ? { ...providerResult, managerBreaker: breaker.getHealth() }
+            : providerResult;
         } catch (err) {
+          const breaker = providerBreakers.get(name);
           results[name] = {
             healthy: false,
             provider: name,
             latencyMs: 0,
             error: err instanceof Error ? err.message : String(err),
+            ...(breaker ? { managerBreaker: breaker.getHealth() } : {}),
+          };
+        }
+      }
+
+      // Include breakers for providers that are registered but not yet connected
+      for (const [key, breaker] of providerBreakers) {
+        if (!results[key]) {
+          results[key] = {
+            healthy: false,
+            provider: key,
+            latencyMs: 0,
+            error: 'Provider not connected',
+            managerBreaker: breaker.getHealth(),
           };
         }
       }
@@ -1088,6 +1151,7 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
       entityNameToStorageName.clear();
       pendingEntityInitializations.clear();
       createdTenantIndexes.clear();
+      providerBreakers.clear();
       providersConnected = false;
       initialized = false;
     },

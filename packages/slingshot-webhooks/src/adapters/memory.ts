@@ -7,7 +7,7 @@ const VALID_TRANSITIONS: Readonly<Record<DeliveryStatus, readonly DeliveryStatus
   pending: ['delivered', 'failed', 'dead'],
   failed: ['pending', 'delivered', 'dead'],
   delivered: [],
-  dead: [],
+  dead: ['pending'], // P-WEBHOOKS-10: replay endpoint re-queues dead deliveries
 };
 
 /** In-memory {@link WebhookAdapter} with synchronous endpoint management helpers for testing. */

@@ -41,7 +41,7 @@ describe('permissionsAdapterFactories', () => {
 
   test('memory adapter starts with empty grants', async () => {
     const adapter = await permissionsAdapterFactories.memory({} as any);
-    const grants = await adapter.getGrantsForSubject({ type: 'user', id: 'any-subject' });
+    const grants = await adapter.getGrantsForSubject('any-subject', 'user');
     expect(Array.isArray(grants)).toBe(true);
     expect(grants).toEqual([]);
   });

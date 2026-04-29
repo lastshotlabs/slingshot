@@ -304,7 +304,10 @@ export function createMongoSessionRepository(
       const Session = getSessionModel(cfg);
       const tokenHash = hashToken(refreshToken);
 
-      let doc = (await Session.findOne({ refreshToken: tokenHash }).lean()) as SessionDoc | null;
+      let doc = (await Session.findOne({
+        refreshToken: tokenHash,
+        expiresAt: { $gt: new Date() },
+      }).lean()) as SessionDoc | null;
       if (doc) {
         if (isIdleExpired(doc.lastActiveAt.getTime(), cfg)) {
           await deleteSessionImpl(doc.sessionId, cfg);
@@ -317,7 +320,10 @@ export function createMongoSessionRepository(
         };
       }
 
-      doc = (await Session.findOne({ prevRefreshToken: tokenHash }).lean()) as SessionDoc | null;
+      doc = (await Session.findOne({
+        prevRefreshToken: tokenHash,
+        expiresAt: { $gt: new Date() },
+      }).lean()) as SessionDoc | null;
       if (!doc) return null;
       if (isIdleExpired(doc.lastActiveAt.getTime(), cfg)) {
         await deleteSessionImpl(doc.sessionId, cfg);

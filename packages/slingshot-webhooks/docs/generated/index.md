@@ -25,6 +25,7 @@ bun add @lastshotlabs/slingshot-webhooks
 
 - `.`
 - `./bullmq`
+- `./errors`
 - `./manifest`
 - `./testing`
 

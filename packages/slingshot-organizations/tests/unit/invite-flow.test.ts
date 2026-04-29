@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
+import type { EntityPluginAfterAdaptersContext } from '@lastshotlabs/slingshot-entity';
 import type { OrganizationsAuthRuntime } from '../../src/lib/authRuntime';
 import { createOrganizationsManifestRuntime } from '../../src/manifest/runtime';
-import type { EntityPluginAfterAdaptersContext } from '@lastshotlabs/slingshot-entity';
 
 /**
  * Minimal adapter-based tests for the invite lifecycle that exercise the
@@ -105,10 +105,9 @@ async function setupInviteEnv() {
 
   const stubCtx = {} as Parameters<ReturnType<typeof runtime.adapterTransforms.resolve>>[1];
   const transformed = {
-    Organization: (await runtime.adapterTransforms.resolve('organizations.organization.deleteCascade')(
-      baseAdapters.Organization,
-      stubCtx,
-    )) as BareEntityAdapter,
+    Organization: (await runtime.adapterTransforms.resolve(
+      'organizations.organization.deleteCascade',
+    )(baseAdapters.Organization, stubCtx)) as BareEntityAdapter,
     OrganizationMember: (await runtime.adapterTransforms.resolve('organizations.member.identity')(
       baseAdapters.OrganizationMember,
       stubCtx,
@@ -116,7 +115,10 @@ async function setupInviteEnv() {
     OrganizationInvite: (await runtime.adapterTransforms.resolve('organizations.invite.runtime')(
       baseAdapters.OrganizationInvite,
       stubCtx,
-    )) as BareEntityAdapter & { findPendingByToken: (t: string) => Promise<InviteRow | null>; reveal: (id: string) => Promise<InviteRow | null> },
+    )) as BareEntityAdapter & {
+      findPendingByToken: (t: string) => Promise<InviteRow | null>;
+      reveal: (id: string) => Promise<InviteRow | null>;
+    },
   };
 
   const captureHook = runtime.hooks.resolve('organizations.captureAdapters');
@@ -149,7 +151,13 @@ async function setupInviteEnv() {
     revoke,
     findByToken,
     async createOrg(id: string) {
-      orgs.push({ id, name: 'Org', slug: id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      orgs.push({
+        id,
+        name: 'Org',
+        slug: id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
     },
     async createInvite(orgId: string, overrides?: Record<string, unknown>) {
       return transformed.OrganizationInvite.create({
@@ -385,7 +393,10 @@ describe('invite findByToken (sanitized lookup)', () => {
 
     const created = (await env.createInvite('org-lookup')) as { token: string };
 
-    const result = (await env.findByToken({ token: created.token })) as Record<string, unknown> | null;
+    const result = (await env.findByToken({ token: created.token })) as Record<
+      string,
+      unknown
+    > | null;
     expect(result).not.toBeNull();
     expect(result!.orgId).toBe('org-lookup');
     expect(result!.role).toBe('member');

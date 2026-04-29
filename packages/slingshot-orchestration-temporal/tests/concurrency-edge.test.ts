@@ -4,10 +4,15 @@ describe('Temporal concurrency control', () => {
   test('semaphore acquires and releases', () => {
     let permits = 3;
     const acquire = () => {
-      if (permits > 0) { permits--; return true; }
+      if (permits > 0) {
+        permits--;
+        return true;
+      }
       return false;
     };
-    const release = () => { permits++; };
+    const release = () => {
+      permits++;
+    };
 
     expect(acquire()).toBe(true);
     expect(permits).toBe(2);
@@ -18,7 +23,10 @@ describe('Temporal concurrency control', () => {
   test('semaphore blocks when no permits', () => {
     let permits = 1;
     const acquire = () => {
-      if (permits > 0) { permits--; return true; }
+      if (permits > 0) {
+        permits--;
+        return true;
+      }
       return false;
     };
 
@@ -32,10 +40,15 @@ describe('Temporal concurrency control', () => {
     const maxConcurrent = 5;
 
     const start = () => {
-      if (running < maxConcurrent) { running++; return true; }
+      if (running < maxConcurrent) {
+        running++;
+        return true;
+      }
       return false;
     };
-    const finish = () => { running--; };
+    const finish = () => {
+      running--;
+    };
 
     expect(start()).toBe(true);
     expect(start()).toBe(true);

@@ -5,11 +5,21 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { attachContext, createEventDefinitionRegistry, createEventPublisher, createInProcessAdapter } from '@lastshotlabs/slingshot-core';
-import { OrchestrationError, createMemoryAdapter, createOrchestrationRuntime, defineTask } from '@lastshotlabs/slingshot-orchestration';
+import {
+  attachContext,
+  createEventDefinitionRegistry,
+  createEventPublisher,
+  createInProcessAdapter,
+} from '@lastshotlabs/slingshot-core';
+import {
+  OrchestrationError,
+  createMemoryAdapter,
+  createOrchestrationRuntime,
+  defineTask,
+} from '@lastshotlabs/slingshot-orchestration';
 import { ORCHESTRATION_PLUGIN_KEY, getOrchestration, getOrchestrationOrNull } from '../src/context';
-import { createOrchestrationPlugin } from '../src/plugin';
 import * as pluginIndex from '../src/index';
+import { createOrchestrationPlugin } from '../src/plugin';
 
 describe('getOrchestrationOrNull — missing plugin state', () => {
   test('returns null when pluginState is empty', () => {
@@ -76,7 +86,15 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
     const app = new Hono<{ Variables: { pluginState: Map<string | symbol, unknown> } }>();
     const pluginState = new Map<string | symbol, unknown>();
     attachContext(app, { app, pluginState } as never);
-    plugin.setupRoutes?.({ app: app as never, bus: createInProcessAdapter(), events: createEventPublisher({ definitions: createEventDefinitionRegistry(), bus: createInProcessAdapter() }), config: {} as never });
+    plugin.setupRoutes?.({
+      app: app as never,
+      bus: createInProcessAdapter(),
+      events: createEventPublisher({
+        definitions: createEventDefinitionRegistry(),
+        bus: createInProcessAdapter(),
+      }),
+      config: {} as never,
+    });
 
     const runtime = getOrchestration({ pluginState } as never);
     expect(runtime).toBeDefined();
@@ -94,7 +112,15 @@ describe('getOrchestration — returns runtime after plugin setup', () => {
     const app = new Hono<{ Variables: { pluginState: Map<string | symbol, unknown> } }>();
     const pluginState = new Map<string | symbol, unknown>();
     attachContext(app, { app, pluginState } as never);
-    plugin.setupRoutes?.({ app: app as never, bus: createInProcessAdapter(), events: createEventPublisher({ definitions: createEventDefinitionRegistry(), bus: createInProcessAdapter() }), config: {} as never });
+    plugin.setupRoutes?.({
+      app: app as never,
+      bus: createInProcessAdapter(),
+      events: createEventPublisher({
+        definitions: createEventDefinitionRegistry(),
+        bus: createInProcessAdapter(),
+      }),
+      config: {} as never,
+    });
 
     const runtime = getOrchestrationOrNull({ pluginState } as never);
     expect(runtime).not.toBeNull();

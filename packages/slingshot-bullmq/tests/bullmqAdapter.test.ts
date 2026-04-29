@@ -1012,4 +1012,67 @@ describe('createBullMQAdapter — WAL', () => {
     await bus.shutdown();
     errorSpy.mockRestore();
   });
+
+  test('replayFromDlq replays jobs from the validation DLQ back to the source queue', async () => {
+    // We need a schema registry with a strict schema so we can trigger a
+    // validation failure that creates the DLQ.
+    const { createEventSchemaRegistry } = await import('@lastshotlabs/slingshot-core');
+    const z = await import('zod');
+    const schemaRegistry = createEventSchemaRegistry();
+    schemaRegistry.register('test:event', z.z.object({ requiredField: z.z.string() }));
+
+    const bus = createBullMQAdapter({
+      connection: {},
+      validation: 'strict',
+      prefix: `replay-test-${Date.now()}`,
+      schemaRegistry,
+    });
+
+    // Create a durable subscription so we have a source queue + worker
+    bus.on('test:event' as any, async () => {}, { durable: true, name: 'replay-test' });
+
+    // Wait for the worker to be registered in the fake state
+    const worker = fakeBullMQState.workers.find(w => !w.closed);
+    expect(worker).toBeDefined();
+
+    // Trigger a validation failure by dispatching invalid job data to the worker.
+    // The payload { userId: 'replay-me' } lacks the required 'requiredField' field,
+    // so strict validation will reject it and route to the DLQ.
+    await fakeBullMQState.dispatchJob(worker!.queueName, 'test:event', { userId: 'replay-me' });
+
+    // Allow microtasks to process (DLQ creation, DLQ add, etc.)
+    await new Promise(r => setTimeout(r, 10));
+
+    // The DLQ should now exist in the queue list
+    const dlqRecord = fakeBullMQState.queues.find(q => q.name.includes('validation-dlq'));
+    expect(dlqRecord).toBeDefined();
+    expect(dlqRecord!.addCalls.length).toBeGreaterThanOrEqual(1);
+
+    // replayFromDlq should re-enqueue the DLQ job back to the source queue
+    const replayed = await bus.replayFromDlq();
+    expect(replayed).toBeGreaterThanOrEqual(1);
+
+    await bus.shutdown();
+  });
+
+  test('replayFromDlq returns 0 when there are no validation DLQ queues', async () => {
+    const bus = createBullMQAdapter({
+      connection: {},
+      prefix: `no-dlq-${Date.now()}`,
+    });
+    // No durable subscriptions = no DLQ
+    const result = await bus.replayFromDlq();
+    expect(result).toBe(0);
+    await bus.shutdown();
+  });
+
+  test('replayFromDlq returns 0 when the specified DLQ does not exist', async () => {
+    const bus = createBullMQAdapter({
+      connection: {},
+      prefix: `missing-dlq-${Date.now()}`,
+    });
+    const result = await bus.replayFromDlq('nonexistent-dlq');
+    expect(result).toBe(0);
+    await bus.shutdown();
+  });
 });

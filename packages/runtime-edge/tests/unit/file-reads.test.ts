@@ -8,7 +8,6 @@
 //       3. Plain string return, buffered byte-length check after the fact
 //   - FileStoreStream interface (optional size, ReadableStream body)
 //   - Boundary conditions (exact cap, zero cap, timeout disabled)
-
 import { describe, expect, it } from 'bun:test';
 import { configureRuntimeEdgeLogger, edgeRuntime } from '../../src/index';
 import type { FileStoreStream } from '../../src/index';

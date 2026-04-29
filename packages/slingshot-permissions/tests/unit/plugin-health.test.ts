@@ -15,6 +15,7 @@ describe('createPermissionsPlugin getHealth()', () => {
     expect(health.details.adapterAvailable).toBe(false);
     expect(health.details.adapterName).toBeNull();
     expect(health.details.evaluator).toBeNull();
+    expect(health.details.adapter).toBeUndefined();
   });
 
   test('returns healthy after setupMiddleware resolves the memory adapter', async () => {
@@ -43,6 +44,7 @@ describe('createPermissionsPlugin getHealth()', () => {
       lastQueryTimeoutAt: null,
       lastGroupExpansionErrorAt: null,
     });
+    expect(health.details.adapter).toBeUndefined();
     expect(ctx.pluginState.has(PERMISSIONS_STATE_KEY)).toBe(true);
   });
 });

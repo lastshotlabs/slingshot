@@ -732,6 +732,7 @@ export function createSqliteAuthAdapter(
     async getUser(userId) {
       const row = db
         .query<{
+          id: string;
           email: string | null;
           providerIds: string;
           emailVerified: number;
@@ -744,13 +745,14 @@ export function createSqliteAuthAdapter(
           user_metadata: string;
           app_metadata: string;
         }>(
-          'SELECT email, providerIds, emailVerified, displayName, firstName, lastName, externalId, suspended, suspendedReason, user_metadata, app_metadata FROM users WHERE id = ?',
+          'SELECT id, email, providerIds, emailVerified, displayName, firstName, lastName, externalId, suspended, suspendedReason, user_metadata, app_metadata FROM users WHERE id = ?',
         )
         .get(userId);
       if (!row) return null;
       const userMeta = JSON.parse(row.user_metadata || '{}') as Record<string, unknown>;
       const appMeta = JSON.parse(row.app_metadata || '{}') as Record<string, unknown>;
       return {
+        id: row.id,
         email: row.email ?? undefined,
         providerIds: parseProviderIds(row.providerIds),
         emailVerified: row.emailVerified === 1,
@@ -990,7 +992,7 @@ export function createSqliteAuthAdapter(
       ]);
     },
 
-    async setSuspended(userId: string, suspended: boolean, reason?: string) {
+    async setSuspended(userId: string, suspended: boolean, reason?: string | null) {
       if (suspended) {
         db.run(
           'UPDATE users SET suspended = 1, suspendedAt = ?, suspendedReason = ? WHERE id = ?',

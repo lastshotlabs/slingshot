@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
+import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { createBearerAuth } from '../../src/middleware/bearerAuth';
+import { createIdentifyMiddleware } from '../../src/middleware/identify';
+import { makeTestRuntime } from '../helpers/runtime';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -148,6 +151,30 @@ describe('createBearerAuth — named clients (BearerAuthClient[])', () => {
   test('missing Authorization header returns 401', async () => {
     const res = await req(app);
     expect(res.status).toBe(401);
+  });
+});
+
+describe('createBearerAuth — identify middleware ordering', () => {
+  test('named client actor survives later identify middleware', async () => {
+    const runtime = makeTestRuntime();
+    const app = new Hono<AppEnv>();
+    app.use(
+      '/protected/*',
+      createBearerAuth([{ clientId: 'service-a', token: 'token-a' }]),
+      createIdentifyMiddleware(runtime),
+    );
+    app.get('/protected/resource', c => {
+      const actor = c.get('actor');
+      if (!actor) return c.json({ error: 'missing actor' }, 500);
+      return c.json({ kind: actor.kind, id: actor.id });
+    });
+
+    const res = await app.request('/protected/resource', {
+      headers: { Authorization: 'Bearer token-a' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ kind: 'api-key', id: 'service-a' });
   });
 });
 

@@ -24,6 +24,8 @@ bun add @lastshotlabs/slingshot-kafka
 ## Export Paths
 
 - `.`
+- `./errors`
+- `./testing`
 
 ## Package Scripts
 

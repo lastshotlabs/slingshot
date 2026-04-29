@@ -24,7 +24,9 @@ bun add @lastshotlabs/slingshot-runtime-edge
 ## Export Paths
 
 - `.`
+- `./errors`
 - `./kv`
+- `./testing`
 
 ## Package Scripts
 

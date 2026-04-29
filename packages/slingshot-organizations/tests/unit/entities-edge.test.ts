@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { Organization } from '../../src/entities/organization';
 import { Group } from '../../src/entities/group';
-import { OrganizationMember } from '../../src/entities/organizationMember';
-import { OrganizationInvite } from '../../src/entities/organizationInvite';
 import { GroupMembership } from '../../src/entities/groupMembership';
+import { Organization } from '../../src/entities/organization';
+import { OrganizationInvite } from '../../src/entities/organizationInvite';
+import { OrganizationMember } from '../../src/entities/organizationMember';
 
 describe('Organization entity', () => {
   test('has required fields', () => {

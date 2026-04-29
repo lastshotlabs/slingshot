@@ -262,6 +262,82 @@ describe('createOrchestrationPlugin — setupPost / teardown with runtime', () =
   });
 });
 
+describe('createOrchestrationPlugin — setupPost retry behavior', () => {
+  test('retries adapter.start() on failure when startMaxAttempts > 1', async () => {
+    let callCount = 0;
+    const failingAdapter = makeMockAdapter();
+    failingAdapter.start = mock(async () => {
+      callCount += 1;
+      if (callCount < 3) {
+        throw new Error('transient failure');
+      }
+    });
+
+    const plugin = createOrchestrationPlugin({
+      adapter: failingAdapter,
+      tasks: [noopTask],
+      routes: false,
+      startMaxAttempts: 3,
+      startBackoffMs: 5,
+    });
+
+    await plugin.setupPost?.({} as never);
+
+    expect(callCount).toBe(3);
+    expect(failingAdapter.start).toHaveBeenCalledTimes(3);
+  });
+
+  test('does not retry when startMaxAttempts is 1 (default)', async () => {
+    let callCount = 0;
+    const adapter = makeMockAdapter();
+    adapter.start = mock(async () => {
+      callCount += 1;
+      throw new Error('start failed');
+    });
+
+    const plugin = createOrchestrationPlugin({
+      adapter,
+      tasks: [noopTask],
+      routes: false,
+      // startMaxAttempts defaults to 1
+    });
+
+    let caught: unknown;
+    try {
+      await plugin.setupPost?.({} as never);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeDefined();
+    expect(callCount).toBe(1);
+  });
+
+  test('throws after exhausting all retries', async () => {
+    const adapter = makeMockAdapter();
+    adapter.start = mock(async () => {
+      throw new Error('persistent failure');
+    });
+
+    const plugin = createOrchestrationPlugin({
+      adapter,
+      tasks: [noopTask],
+      routes: false,
+      startMaxAttempts: 3,
+      startBackoffMs: 5,
+    });
+
+    let caught: unknown;
+    try {
+      await plugin.setupPost?.({} as never);
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeDefined();
+    expect((caught as Error).message).toContain('persistent failure');
+    expect(adapter.start).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('getOrchestration / getOrchestrationOrNull', () => {
   test('getOrchestrationOrNull returns null when plugin not registered', () => {
     const ctx = { pluginState: new Map() } as never;

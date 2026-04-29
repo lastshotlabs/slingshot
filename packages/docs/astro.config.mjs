@@ -175,6 +175,7 @@ export default defineConfig({
           label: 'Guides',
           items: [
             { label: 'Overview', slug: 'guides' },
+            { label: 'Production Readiness', slug: 'guides/production-readiness' },
             { label: 'Security', slug: 'guides/security' },
             { label: 'Testing', slug: 'guides/testing' },
             { label: 'Error Handling', slug: 'guides/error-handling' },

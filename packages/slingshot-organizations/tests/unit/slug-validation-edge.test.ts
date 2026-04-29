@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  assertValidOrgSlug,
-  createOrgSlugSchema,
-} from '../../src/lib/slugValidation';
 import { ZodError } from 'zod';
+import { assertValidOrgSlug, createOrgSlugSchema } from '../../src/lib/slugValidation';
 
 describe('slug validation edge cases', () => {
   const schema = createOrgSlugSchema();

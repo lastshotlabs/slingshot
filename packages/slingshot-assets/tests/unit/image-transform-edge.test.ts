@@ -8,6 +8,7 @@
  */
 import { Buffer } from 'node:buffer';
 import { describe, expect, test } from 'bun:test';
+import { transformImage } from '../../src/image/transform';
 import {
   ImageInputTooLargeError,
   ImageSourceBlockedError,
@@ -15,7 +16,7 @@ import {
   ImageTransformError,
   ImageTransformTimeoutError,
 } from '../../src/image/types';
-import { transformImage } from '../../src/image/transform';
+import type { ImageFormat } from '../../src/image/types';
 
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2ioAAAAASUVORK5CYII=';
@@ -30,7 +31,7 @@ function imageOptions(
   overrides: Partial<{
     width: number;
     height?: number;
-    format: string;
+    format: ImageFormat;
     quality: number;
     maxWidth: number;
     maxHeight: number;
@@ -226,15 +227,11 @@ describe('transformImage timeout', () => {
 describe('transformImage invalid input handling', () => {
   test('completely empty buffer throws rather than crashing', async () => {
     const emptyBuf = new ArrayBuffer(0);
-    await expect(
-      transformImage(emptyBuf, 'image/png', imageOptions()),
-    ).rejects.toThrow();
+    await expect(transformImage(emptyBuf, 'image/png', imageOptions())).rejects.toThrow();
   });
 
   test('garbage bytes produce a sharp error rather than silent wrong output', async () => {
     const garbage = encoder.encode('not-an-image').buffer as ArrayBuffer;
-    await expect(
-      transformImage(garbage, 'image/png', imageOptions()),
-    ).rejects.toThrow();
+    await expect(transformImage(garbage, 'image/png', imageOptions())).rejects.toThrow();
   });
 });

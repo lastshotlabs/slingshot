@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { createRoute, createRouter, errorResponse } from '@lastshotlabs/slingshot-core';
 import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import type { RateLimiter } from '../lib/rateLimit';
+import { createSlidingWindowRateLimiter } from '../lib/rateLimit';
 import type { InboundProvider } from '../types/inbound';
 import { WEBHOOK_ROUTE_TAGS, WebhookErrorResponseSchema } from './_shared';
 
@@ -35,6 +37,10 @@ const inboundRoute = createRoute({
       description: 'Request body exceeds the inbound size limit',
       content: { 'application/json': { schema: WebhookErrorResponseSchema } },
     },
+    429: {
+      description: 'Rate limit exceeded',
+      content: { 'application/json': { schema: WebhookErrorResponseSchema } },
+    },
   },
 });
 
@@ -48,6 +54,20 @@ export interface CreateInboundRouterOptions {
    * this cap; raise it explicitly when a provider sends bigger payloads.
    */
   maxBodyBytes?: number;
+  /**
+   * Rate limiter for inbound webhook endpoints.
+   *
+   * When provided, each provider name is rate-limited independently. Requests
+   * that exceed the limit receive HTTP 429 with `Retry-After` and
+   * `X-RateLimit-*` headers.
+   *
+   * When `RateLimiterOptions` (a plain object with `maxRequests`/`windowMs`) is
+   * provided instead, the built-in per-process sliding window limiter is created
+   * automatically.
+   *
+   * Omit to disable inbound rate limiting entirely.
+   */
+  rateLimiter?: RateLimiter | { maxRequests?: number; windowMs?: number };
 }
 
 /** Default cap for inbound webhook bodies, in bytes (1 MiB). */
@@ -126,10 +146,36 @@ export function createInboundRouter(
   }
   const maxBodyBytes = opts.maxBodyBytes ?? DEFAULT_INBOUND_MAX_BODY_BYTES;
 
+  // Resolve the rate limiter: a custom instance, options for the built-in, or none.
+  let rateLimiter: RateLimiter | undefined;
+  if (opts.rateLimiter) {
+    if ('check' in opts.rateLimiter && typeof opts.rateLimiter.check === 'function') {
+      rateLimiter = opts.rateLimiter as RateLimiter;
+    } else {
+      rateLimiter = createSlidingWindowRateLimiter(
+        opts.rateLimiter as { maxRequests?: number; windowMs?: number },
+      );
+    }
+  }
+
   app.openapi(inboundRoute, async c => {
     const { provider: providerName } = c.req.valid('param');
     const provider = providerMap.get(providerName);
     if (!provider) return errorResponse(c, `Unknown provider: ${providerName}`, 404);
+
+    // Rate limit check — run before body parsing to avoid processing
+    // large payloads on already-throttled requests.
+    if (rateLimiter) {
+      const rateResult = rateLimiter.check(providerName);
+      if (!rateResult.allowed) {
+        const retryAfter = String(Math.ceil(rateResult.resetMs / 1000));
+        c.header('X-RateLimit-Limit', String(rateResult.remaining));
+        c.header('X-RateLimit-Remaining', '0');
+        c.header('X-RateLimit-Reset', retryAfter);
+        c.header('Retry-After', retryAfter);
+        return errorResponse(c, 'Too Many Requests', 429);
+      }
+    }
 
     const bodyResult = await readBoundedBody(c.req.raw, maxBodyBytes);
     if (!bodyResult.ok) {

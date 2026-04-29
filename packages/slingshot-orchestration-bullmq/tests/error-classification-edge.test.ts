@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { classifyOrchestrationError, type ErrorClassification } from '../src/errorClassification';
+import { type ErrorClassification, classifyOrchestrationError } from '../src/errorClassification';
 
 describe('classifyOrchestrationError', () => {
   test('classifies retryable errors', () => {

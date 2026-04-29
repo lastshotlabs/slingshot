@@ -5,9 +5,9 @@
  * provider's filter translator handles geo shapes correctly.
  */
 import { describe, expect, test } from 'bun:test';
-import { searchFilterToTypesenseFilter } from '../src/providers/typesense';
 import { searchFilterToAlgoliaFilter } from '../src/providers/algolia';
 import { searchFilterToElasticsearchQuery } from '../src/providers/elasticsearch';
+import { searchFilterToTypesenseFilter } from '../src/providers/typesense';
 import type { SearchFilter } from '../src/types/query';
 
 describe('geo search — Typesense', () => {

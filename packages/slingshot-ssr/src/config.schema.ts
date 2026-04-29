@@ -244,4 +244,58 @@ export const ssrPluginConfigSchema = z.object({
     .describe(
       'Callback invoked when the response body stream errors during pipeTo. Receives error and request metadata for metrics wiring.',
     ),
+  /**
+   * Circuit breaker for external rendering dependencies.
+   *
+   * When configured, the SSR middleware wraps renderer calls in a circuit breaker
+   * that opens after `failureThreshold` consecutive failures and stays open for
+   * `cooldownMs` milliseconds before allowing a probe. While open, renderer calls
+   * are short-circuited and fall through to the SPA with a logged warning.
+   *
+   * Omit to disable the circuit breaker (default).
+   */
+  circuitBreaker: z
+    .object({
+      failureThreshold: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Consecutive failures before the circuit opens. Default: 5.'),
+      cooldownMs: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Milliseconds before transitioning from OPEN to HALF_OPEN. Default: 30000.'),
+    })
+    .optional()
+    .describe('Circuit breaker configuration for renderer dependency isolation.'),
+  /**
+   * Retry configuration for page load failures.
+   *
+   * When configured, renderer calls that fail with retryable errors are retried
+   * with exponential backoff up to `maxAttempts` additional attempts. Non-retryable
+   * errors (determined by the renderer or by inspecting the error) are thrown
+   * immediately.
+   *
+   * Omit to disable automatic retries (default).
+   */
+  pageLoadRetry: z
+    .object({
+      maxAttempts: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe('Maximum retry attempts for page load failures. Default: 2.'),
+      baseDelayMs: z
+        .number()
+        .int()
+        .nonnegative()
+        .optional()
+        .describe('Base delay in ms for exponential backoff. Default: 200.'),
+    })
+    .optional()
+    .describe('Retry configuration for page load failures.'),
 });

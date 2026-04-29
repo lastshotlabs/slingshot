@@ -64,6 +64,18 @@ type OrchestrationPluginRouteOptions = {
    * Default: 30_000.
    */
   routeTimeoutMs?: number;
+  /**
+   * Maximum number of attempts for adapter.start() in setupPost.
+   * The adapter start is retried with exponential backoff when this is > 1.
+   * Default: 1 (no retry).
+   */
+  startMaxAttempts?: number;
+  /**
+   * Base backoff delay (ms) for adapter.start() retries.
+   * Each retry waits: startBackoffMs * 2^(attempt-1), capped at 30s.
+   * Default: 1_000 (1 second).
+   */
+  startBackoffMs?: number;
 };
 
 /**

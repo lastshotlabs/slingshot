@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { SsgExitCode, resolveExitCode } from '../src/cli';
-import { SsgError, SsgConfigError, SsgCrawlError, SsgRenderError, SsgCliArgError } from '../src/errors';
+import {
+  SsgCliArgError,
+  SsgConfigError,
+  SsgCrawlError,
+  SsgError,
+  SsgRenderError,
+} from '../src/errors';
 
 describe('SsgExitCode', () => {
   test('exit code 0 on success', () => {

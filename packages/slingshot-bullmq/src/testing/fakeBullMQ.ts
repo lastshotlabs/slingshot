@@ -31,6 +31,9 @@ export interface FakeQueueRecord {
 export interface FakeBullMQState {
   queues: FakeQueueRecord[];
   workers: FakeWorkerRecord[];
+  _nextAddErrors: unknown[];
+  _nextAddDelays?: number[];
+  _addDelayMs?: number;
 
   /** Simulate a job arriving in the worker with the given queue name. */
   dispatchJob(queueName: string, event: string, data: unknown): Promise<void>;
@@ -44,11 +47,11 @@ export interface FakeBullMQState {
 export function createFakeBullMQState(): FakeBullMQState {
   const queues: FakeQueueRecord[] = [];
   const workers: FakeWorkerRecord[] = [];
-  let nextAddErrors: unknown[] = [];
 
-  return {
+  const state: FakeBullMQState = {
     queues,
     workers,
+    _nextAddErrors: [],
     async dispatchJob(queueName: string, event: string, data: unknown) {
       const worker = workers.find(w => w.queueName === queueName && !w.closed);
       if (!worker) throw new Error(`No worker for queue "${queueName}"`);
@@ -62,14 +65,17 @@ export function createFakeBullMQState(): FakeBullMQState {
       }
     },
     nextAddError(err: unknown) {
-      nextAddErrors.push(err);
+      state._nextAddErrors.push(err);
     },
     reset() {
       queues.length = 0;
       workers.length = 0;
-      nextAddErrors = [];
+      state._nextAddErrors = [];
+      state._nextAddDelays = [];
+      state._addDelayMs = undefined;
     },
   };
+  return state;
 }
 
 export const fakeBullMQState = createFakeBullMQState();
@@ -81,22 +87,22 @@ export function createFakeBullMQModule(state: FakeBullMQState = fakeBullMQState)
     /** Configurable failed-job count returned by `getJobCounts('failed')`. */
     _failedJobs = 0;
 
-    constructor(name: string, _opts?: unknown) {
+    constructor(name: string) {
       this.name = name;
       this._record = { name, addCalls: [], addErrors: [], closed: false };
       state.queues.push(this._record);
     }
 
     async add(event: string, data: unknown): Promise<void> {
-      const err = (state as any)._nextAddErrors?.shift?.();
+      const err = state._nextAddErrors.shift();
       if (err) {
         throw err;
       }
       // Optional artificial delay (e.g. simulating a hung Redis) — set per
       // test via `state._nextAddDelays.push(ms)` for one-shot or
       // `state._addDelayMs = ms` for sticky.
-      const oneShotDelay = (state as any)._nextAddDelays?.shift?.();
-      const stickyDelay = (state as any)._addDelayMs ?? 0;
+      const oneShotDelay = state._nextAddDelays?.shift();
+      const stickyDelay = state._addDelayMs ?? 0;
       const delayMs = typeof oneShotDelay === 'number' ? oneShotDelay : stickyDelay;
       if (delayMs > 0) {
         await new Promise(r => setTimeout(r, delayMs));
@@ -112,27 +118,27 @@ export function createFakeBullMQModule(state: FakeBullMQState = fakeBullMQState)
       return result;
     }
 
+    async getJobs(
+      _states?: string[],
+    ): Promise<Array<{ data: Record<string, unknown>; remove: () => Promise<void>; id?: string }>> {
+      return this._record.addCalls.map((call, idx) => ({
+        data: call.data as Record<string, unknown>,
+        remove: async () => {
+          this._record.addCalls.splice(idx, 1);
+        },
+        id: `job-${this.name}-${idx}`,
+      }));
+    }
+
     async close(): Promise<void> {
       this._record.closed = true;
     }
   }
 
-  // Patch nextAddError support directly on state internals
-  (state as any)._nextAddErrors = (state as any)._nextAddErrors ?? [];
-  const origNextAddError = state.nextAddError.bind(state);
-  state.nextAddError = (err: unknown) => {
-    (state as any)._nextAddErrors = (state as any)._nextAddErrors ?? [];
-    (state as any)._nextAddErrors.push(err);
-  };
-
   class Worker {
     readonly _record: FakeWorkerRecord;
 
-    constructor(
-      queueName: string,
-      processor: (job: { data: unknown }) => Promise<void>,
-      _opts?: unknown,
-    ) {
+    constructor(queueName: string, processor: (job: { data: unknown }) => Promise<void>) {
       this._record = {
         queueName,
         processor,
@@ -144,10 +150,25 @@ export function createFakeBullMQModule(state: FakeBullMQState = fakeBullMQState)
       state.workers.push(this._record);
     }
 
-    on(event: 'error' | 'failed' | 'completed', handler: (...args: any[]) => void): this {
-      if (event === 'error') this._record.errorHandlers.push(handler);
-      if (event === 'failed') this._record.failedHandlers.push(handler);
-      if (event === 'completed') this._record.completedHandlers.push(handler);
+    on(event: 'error', handler: (err: unknown) => void): this;
+    on(event: 'failed', handler: (job: unknown, err: unknown) => void): this;
+    on(event: 'completed', handler: (job: unknown) => void): this;
+    on(
+      event: 'error' | 'failed' | 'completed',
+      handler:
+        | ((err: unknown) => void)
+        | ((job: unknown, err: unknown) => void)
+        | ((job: unknown) => void),
+    ): this {
+      if (event === 'error') {
+        this._record.errorHandlers.push(handler as (err: unknown) => void);
+      }
+      if (event === 'failed') {
+        this._record.failedHandlers.push(handler as (job: unknown, err: unknown) => void);
+      }
+      if (event === 'completed') {
+        this._record.completedHandlers.push(handler as (job: unknown) => void);
+      }
       return this;
     }
 

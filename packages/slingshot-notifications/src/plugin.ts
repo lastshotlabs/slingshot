@@ -285,6 +285,7 @@ export function createNotificationsPlugin(
                 lastTickAt: null,
                 lastDispatchedCount: null,
                 pendingAlarmActive: false,
+                openBreakerCount: 0,
               };
             },
           };

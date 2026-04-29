@@ -474,6 +474,7 @@ export function createMemoryAuthAdapter(
       const user = _users.get(userId);
       if (!user) return null;
       return {
+        id: userId,
         email: user.email ?? undefined,
         providerIds: [...user.providerIds],
         emailVerified: user.emailVerified,
@@ -676,13 +677,13 @@ export function createMemoryAuthAdapter(
       }
     },
 
-    async setSuspended(userId: string, suspended: boolean, reason?: string) {
+    async setSuspended(userId: string, suspended: boolean, reason?: string | null) {
       const user = _users.get(userId);
       if (!user) return;
       user.suspended = suspended;
       if (suspended) {
         user.suspendedAt = new Date();
-        user.suspendedReason = reason;
+        user.suspendedReason = reason ?? undefined;
       } else {
         user.suspendedAt = undefined;
         user.suspendedReason = undefined;

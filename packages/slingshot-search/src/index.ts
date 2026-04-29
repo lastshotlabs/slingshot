@@ -28,6 +28,21 @@ export { createTypesenseProvider, ProviderUnavailableError } from './providers/t
  * Circuit-breaker health payload exposed by hosted search providers.
  */
 export type { CircuitBreakerHealth } from './providers/typesense';
+
+// --- Manager-level circuit breaker ---
+/**
+ * Manager-level circuit breaker guarding search provider calls.
+ */
+export type {
+  SearchCircuitBreaker,
+  SearchCircuitBreakerHealth,
+  SearchCircuitBreakerOptions,
+} from './searchCircuitBreaker';
+export { SearchCircuitOpenError, createSearchCircuitBreaker } from './searchCircuitBreaker';
+
+// --- Retry ---
+export { withRetry, isTransientError } from './retry';
+export type { RetryOptions } from './retry';
 /**
  * Create an Elasticsearch-backed search provider.
  */

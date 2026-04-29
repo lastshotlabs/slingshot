@@ -11,7 +11,8 @@ import { stringifySearchValue } from './stringify';
  *
  * For each field in `facetFields`, the function:
  * 1. Counts how many documents contain each distinct string-coerced value
- *    (`distribution`).
+ *    (`distribution`). Array-valued fields are treated as multi-select facets
+ *    and each non-null element is counted as its own bucket.
  * 2. Computes `min`, `max`, `avg`, and `sum` for fields whose values are
  *    numbers (`stats`). Fields with no numeric values are absent from `stats`.
  *
@@ -71,14 +72,19 @@ export function computeFacets(
       const value = getNestedValue(doc, field);
       if (value === undefined || value === null) continue;
 
-      const key = stringifySearchValue(value);
-      counts[key] = (counts[key] ?? 0) + 1;
+      const values = Array.isArray(value) ? value : [value];
+      for (const facetValue of values) {
+        if (facetValue === undefined || facetValue === null) continue;
 
-      if (typeof value === 'number') {
-        numericSum += value;
-        numericCount++;
-        numericMin = Math.min(numericMin, value);
-        numericMax = Math.max(numericMax, value);
+        const key = stringifySearchValue(facetValue);
+        counts[key] = (counts[key] ?? 0) + 1;
+
+        if (typeof facetValue === 'number') {
+          numericSum += facetValue;
+          numericCount++;
+          numericMin = Math.min(numericMin, facetValue);
+          numericMax = Math.max(numericMax, facetValue);
+        }
       }
     }
 

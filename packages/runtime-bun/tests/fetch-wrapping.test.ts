@@ -242,9 +242,9 @@ describe('fetch-wrapping', () => {
       const res = await capturedFetch(new Request('http://localhost/'));
       expect(res.status).toBe(500);
       expect(await res.text()).toBe('Internal Server Error');
-      expect(loggedErrors.some(e => e.phase === 'unhandled' && e.message === 'no-error-handler')).toBe(
-        true,
-      );
+      expect(
+        loggedErrors.some(e => e.phase === 'unhandled' && e.message === 'no-error-handler'),
+      ).toBe(true);
     } finally {
       configureRuntimeBunLogger(prev);
       Object.assign(Bun, { serve: originalServe });

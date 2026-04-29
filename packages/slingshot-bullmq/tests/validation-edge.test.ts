@@ -107,7 +107,10 @@ describe('bullmqAdapterOptionsSchema — drain option boundaries', () => {
 
 describe('bullmqAdapterOptionsSchema — validationDlqQueueName', () => {
   test('accepts validationDlqQueueName as a string', () => {
-    const r = bullmqAdapterOptionsSchema.safeParse({ connection: {}, validationDlqQueueName: 'my-dlq' });
+    const r = bullmqAdapterOptionsSchema.safeParse({
+      connection: {},
+      validationDlqQueueName: 'my-dlq',
+    });
     expect(r.success).toBe(true);
   });
 

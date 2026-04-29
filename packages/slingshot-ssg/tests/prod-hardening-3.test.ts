@@ -9,7 +9,7 @@
 //   reports accurate aggregates.
 // - P-SSG-7: resource cleanup on page-render timeout — a timed-out page
 //   should not leak file descriptors or prevent subsequent pages from rendering.
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
@@ -214,11 +214,7 @@ describe('P-SSG-6 — concurrent rendering', () => {
   test('concurrency 1 processes all pages sequentially', async () => {
     const dir = makeTempDir();
     const config = makeConfig(dir, { concurrency: 1 });
-    const result = await renderSsgPages(
-      ['/one', '/two', '/three'],
-      makeOkRenderer(),
-      config,
-    );
+    const result = await renderSsgPages(['/one', '/two', '/three'], makeOkRenderer(), config);
     expect(result.succeeded).toBe(3);
     expect(result.failed).toBe(0);
     expect(result.pages).toHaveLength(3);
@@ -282,11 +278,7 @@ describe('P-SSG-7 — resource cleanup on page-render timeout', () => {
     const config = makeConfig(dir, { concurrency: 2, renderPageTimeoutMs: 50 });
     const renderer = makeSelectiveHangingRenderer();
 
-    const result = await renderSsgPages(
-      ['/fast', '/hang', '/fast2'],
-      renderer,
-      config,
-    );
+    const result = await renderSsgPages(['/fast', '/hang', '/fast2'], renderer, config);
 
     expect(result.pages).toHaveLength(3);
     expect(result.failed).toBe(1);
@@ -323,14 +315,14 @@ describe('P-SSG-7 — resource cleanup on page-render timeout', () => {
               succeeded: 0,
               failed: 0,
             }),
-          5_000,
+          3_000,
         ),
       ),
     ]);
 
     // The race should not have fired (the timeout disable path should still
     // complete). Since /hang never resolves and timeout is 0, the promise
-    // should never settle. The race fallback kicks in after 5s.
+    // should never settle. The race fallback kicks in after 3s.
     // This test validates the internal code path exists; the actual behavior
     // with timeout disabled is documented as "caller beware".
     expect(result.pages).toHaveLength(0);
@@ -340,11 +332,7 @@ describe('P-SSG-7 — resource cleanup on page-render timeout', () => {
     const dir = makeTempDir();
     const config = makeConfig(dir, { concurrency: 1, renderPageTimeoutMs: 1 });
 
-    const result = await renderSsgPage(
-      '/hang-1',
-      makeSelectiveHangingRenderer(),
-      config,
-    );
+    const result = await renderSsgPage('/hang-1', makeSelectiveHangingRenderer(), config);
 
     expect(result.error).toBeDefined();
     expect(result.error?.message).toContain('/hang-1');

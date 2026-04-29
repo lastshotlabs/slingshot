@@ -10,6 +10,7 @@
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { HttpError } from '@lastshotlabs/slingshot-core';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ---------------------------------------------------------------------------
 // Pure-function re-implementation (matching src/adapter.ts exactly)
@@ -205,8 +206,6 @@ mock.module('drizzle-orm/node-postgres', () => ({
       },
     ),
 }));
-
-import { createPostgresAdapter } from '../src/adapter.js';
 
 describe('listGroups — cursor pagination through public API', () => {
   const now = new Date('2026-04-01T12:00:00.000Z');

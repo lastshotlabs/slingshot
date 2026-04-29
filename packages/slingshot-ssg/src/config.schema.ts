@@ -74,6 +74,51 @@ export const ssgConfigSchema = z.object({
     .describe(
       'Maximum milliseconds a single page render may take before being recorded as failed. Omit to use the default (60000); set 0 to disable.',
     ),
+  retry: z
+    .object({
+      maxAttempts: z
+        .number()
+        .int()
+        .positive()
+        .max(10)
+        .optional()
+        .describe('Maximum render attempts per page (including initial). Default: 3.'),
+      baseDelayMs: z
+        .number()
+        .int()
+        .positive()
+        .max(60000)
+        .optional()
+        .describe('Base backoff delay in ms. Default: 1000.'),
+      maxDelayMs: z
+        .number()
+        .int()
+        .positive()
+        .max(120000)
+        .optional()
+        .describe('Maximum backoff delay in ms. Default: 30000.'),
+    })
+    .optional()
+    .describe('Retry configuration for transient render failures.'),
+  circuitBreaker: z
+    .object({
+      threshold: z
+        .number()
+        .int()
+        .positive()
+        .max(100)
+        .optional()
+        .describe('Consecutive failures before breaker trips. Default: 5.'),
+      cooldownMs: z
+        .number()
+        .int()
+        .positive()
+        .max(300000)
+        .optional()
+        .describe('Cooldown in ms before half-open probe. Default: 30000.'),
+    })
+    .optional()
+    .describe('Circuit breaker configuration for external HTTP fetches during rendering.'),
 });
 
 /** Parsed and validated SSG configuration produced by {@link ssgConfigSchema}. */

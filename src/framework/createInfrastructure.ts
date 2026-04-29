@@ -40,6 +40,7 @@ import type { Connection } from 'mongoose';
 import type {
   CaptchaConfig,
   CoreRegistrar,
+  CsrfConfig,
   DataEncryptionKey,
   EntityRegistry,
   ResolvedPersistence,
@@ -168,10 +169,7 @@ export interface InfrastructureOptions {
   /** Opaque WebSocket config draft forwarded into plugin bootstrap context. */
   ws?: unknown;
   /** CSRF settings forwarded to plugin lifecycle config. */
-  csrf?: {
-    exemptPaths?: string[];
-    disabled?: boolean;
-  };
+  csrf?: CsrfConfig;
   /**
    * Number of reverse-proxy hops to trust for `X-Forwarded-For`.
    * Pass `false` to disable trust-proxy entirely. Defaults to `false`.

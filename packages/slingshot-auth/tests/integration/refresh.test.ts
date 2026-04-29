@@ -14,7 +14,7 @@
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import { HttpError } from '@lastshotlabs/slingshot-core';
+import { COOKIE_CSRF_TOKEN, HttpError } from '@lastshotlabs/slingshot-core';
 import { createLoginRouter } from '../../src/routes/login';
 import { createRefreshRouter } from '../../src/routes/refresh';
 import { makeEventBus, makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
@@ -305,6 +305,24 @@ describe('POST /auth/refresh', () => {
     const cookieNames = setCookieHeaders.map(h => h.split('=')[0]);
     expect(cookieNames).toContain('token');
     expect(cookieNames).toContain('refresh_token');
+  });
+
+  test('rotates CSRF cookie when CSRF is enabled', async () => {
+    runtime = makeTestRuntime({
+      concealRegistration: null,
+      refreshToken: REFRESH_CONFIG,
+      csrfEnabled: true,
+    });
+    runtime.eventBus = makeEventBus();
+    app = buildApp(runtime);
+
+    const login = await registerAndLogin(runtime, app);
+    const res = await app.request('/auth/refresh', jsonPost({ refreshToken: login.refreshToken }));
+    expect(res.status).toBe(200);
+
+    const setCookieHeaders = res.headers.getSetCookie();
+    const cookieNames = setCookieHeaders.map(h => h.split('=')[0]);
+    expect(cookieNames).toContain(COOKIE_CSRF_TOKEN);
   });
 
   test('uses __Host- cookie names in production-safe configurations', async () => {

@@ -7,6 +7,7 @@ export class AdminConfigError extends Error {
   }
 }
 
+/** Raised when an admin request is authenticated but not authorized for the requested action. */
 export class AdminAccessDeniedError extends Error {
   constructor(reason: string) {
     super(`[slingshot-admin] access denied: ${reason}`);
@@ -14,6 +15,7 @@ export class AdminAccessDeniedError extends Error {
   }
 }
 
+/** Raised when an admin request exceeds the configured destructive-action rate limit. */
 export class AdminRateLimitExceededError extends Error {
   readonly retryAfterMs: number;
 
@@ -24,9 +26,13 @@ export class AdminRateLimitExceededError extends Error {
   }
 }
 
+/** Raised when an admin audit-log operation fails. */
 export class AdminAuditLogError extends Error {
   constructor(message: string, cause?: unknown) {
-    super(`[slingshot-admin] audit log error: ${message}`, cause !== undefined ? { cause } : undefined);
+    super(
+      `[slingshot-admin] audit log error: ${message}`,
+      cause !== undefined ? { cause } : undefined,
+    );
     this.name = 'AdminAuditLogError';
   }
 }

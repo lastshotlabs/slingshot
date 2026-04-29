@@ -102,6 +102,7 @@ export {
   getAuthRuntimeContext,
   getAuthRuntimeContextOrNull,
   getAuthRuntimeFromRequest,
+  getAuthRuntimeFromRequestOrNull,
 } from './runtime';
 /** Instance-scoped auth runtime shape published by `createAuthPlugin()`. */
 export type { AuthRuntimeContext } from './runtime';

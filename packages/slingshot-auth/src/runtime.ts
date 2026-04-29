@@ -14,7 +14,7 @@ import type {
 } from '@lastshotlabs/slingshot-core';
 import {
   AUTH_PLUGIN_STATE_KEY,
-  getPluginStateFromRequest,
+  getPluginStateFromRequestOrNull,
   getPluginStateOrNull,
 } from '@lastshotlabs/slingshot-core';
 import type { AuthResolvedConfig } from './config/authConfig';
@@ -183,6 +183,24 @@ export function getAuthRuntimeContextOrNull(
  *   return c.json(user);
  * });
  */
+export function getAuthRuntimeFromRequestOrNull(c: {
+  get(key: string): unknown;
+}): AuthRuntimeContext | null {
+  const runtime = getAuthRuntimeContextOrNull(getPluginStateFromRequestOrNull(c));
+  if (runtime) {
+    return runtime;
+  }
+  const direct = c.get(AUTH_RUNTIME_KEY) as (AuthRuntimeContext & AuthRuntimePeer) | undefined;
+  if (!direct?.adapter) {
+    return null;
+  }
+  return direct;
+}
+
 export function getAuthRuntimeFromRequest(c: { get(key: string): unknown }): AuthRuntimeContext {
-  return getAuthRuntimeContext(getPluginStateFromRequest(c));
+  const runtime = getAuthRuntimeFromRequestOrNull(c);
+  if (!runtime) {
+    throw new Error('[slingshot-auth] auth runtime context is not available in pluginState');
+  }
+  return runtime;
 }

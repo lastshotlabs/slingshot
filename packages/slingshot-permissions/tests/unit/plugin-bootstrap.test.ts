@@ -206,6 +206,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
         adapterAvailable: true,
         adapterName: 'preseeded-adapter',
         evaluator: null,
+        adapter: undefined,
       },
     });
   });

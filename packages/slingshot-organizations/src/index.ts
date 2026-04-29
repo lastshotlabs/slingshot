@@ -42,3 +42,10 @@ export type { OrganizationsReconcileService, ReconcileOrphanedOrgRecordsResult }
  * Group-management configuration used by organization integrations.
  */
 export type { GroupsConfig, GroupsManagementConfig } from './types/groups';
+
+/**
+ * Rate limit store contract and implementations.
+ */
+export type { OrganizationsRateLimitStore, OrganizationsRateLimitDecision } from './lib/rateLimit';
+export { createMemoryOrganizationsRateLimitStore } from './lib/rateLimit';
+export { createRedisOrganizationsRateLimitStore, type RedisLike } from './lib/rateLimitRedis';

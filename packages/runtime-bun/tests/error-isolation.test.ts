@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { bunRuntime, resetProcessSafetyNetForTest, BunRuntimeError } from '../src/index';
+import { BunRuntimeError, bunRuntime, resetProcessSafetyNetForTest } from '../src/index';
 
 describe('Bun runtime — error isolation', () => {
   test('BunRuntimeError extends Error', () => {
@@ -52,7 +52,7 @@ describe('Bun runtime — error isolation', () => {
 
   test('file operations handle missing files gracefully', async () => {
     const rt = bunRuntime();
-    const exists = await rt.fs.exist('/nonexistent/path/file.txt');
+    const exists = await rt.fs.exists('/nonexistent/path/file.txt');
     expect(exists).toBe(false);
   });
 });

@@ -20,11 +20,10 @@
 //   - kv-isr logger reset with null restores the default
 //   - kv-isr default logger logs to console.error
 //   - Logger called with and without structured fields
-
 import { afterAll, describe, expect, it, spyOn } from 'bun:test';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import { configureRuntimeEdgeLogger as configureIndexLogger } from '../../src/index';
 import { configureRuntimeEdgeLogger as configureKvIsrLogger } from '../../src/kv-isr';
-import type { Logger } from '@lastshotlabs/slingshot-core';
 
 // Reset both module-level loggers to default after this file completes,
 // so concurrent/sequential test files are not affected by our swaps.
@@ -160,9 +159,10 @@ describe('configureRuntimeEdgeLogger (from src/index.ts)', () => {
       info() {},
       warn() {},
       error() {},
-    } as Logger;
-    // child() is needed for Logger type, but at runtime it's never called
-    minimal.child = () => minimal;
+      child() {
+        return this;
+      },
+    } satisfies Logger;
 
     const prev = configureIndexLogger(minimal);
     expect(prev).toBeDefined();
@@ -223,10 +223,10 @@ describe('configureRuntimeEdgeLogger (from src/kv-isr.ts)', () => {
       const prev = configureKvIsrLogger(custom);
 
       prev.error('test-event', { key: 'value', count: 42 });
-      expect(errorSpy).toHaveBeenCalledWith(
-        '[runtime-edge] test-event',
-        { key: 'value', count: 42 },
-      );
+      expect(errorSpy).toHaveBeenCalledWith('[runtime-edge] test-event', {
+        key: 'value',
+        count: 42,
+      });
 
       configureKvIsrLogger(prev);
     } finally {
@@ -254,7 +254,11 @@ describe('configureRuntimeEdgeLogger (from src/kv-isr.ts)', () => {
   it('round-trips through multiple swaps without leaking state', () => {
     const loggers = [
       { error() {} },
-      { error() { /* noop */ } },
+      {
+        error() {
+          /* noop */
+        },
+      },
     ];
 
     const prev1 = configureKvIsrLogger(loggers[0]);

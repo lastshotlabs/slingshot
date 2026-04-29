@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { HTTPException } from 'hono/http-exception';
-import { type OrgPluginTestHarness, setupOrgPluginHarness } from './helpers/setupOrgPlugin';
-import { createOrganizationsPlugin } from '../../src/plugin';
 import { SlugConflictError, isUniqueViolationError } from '../../src/errors';
+import { createOrganizationsPlugin } from '../../src/plugin';
+import { type OrgPluginTestHarness, setupOrgPluginHarness } from './helpers/setupOrgPlugin';
 
 describe('prod hardening — error propagation', () => {
   test('SlugConflictError propagates as HTTP 409 even when thrown in deep adapter call', async () => {
@@ -23,9 +23,21 @@ describe('prod hardening — error propagation', () => {
   test('isUniqueViolationError correctly classifies adapter-specific errors', () => {
     // Simulate error patterns from different adapters
     const cases: Array<{ error: unknown; expected: boolean; label: string }> = [
-      { error: Object.assign(new Error('unique'), { code: 'UNIQUE_VIOLATION' }), expected: true, label: 'memory adapter' },
-      { error: Object.assign(new Error('duplicate key'), { code: '23505' }), expected: true, label: 'postgres' },
-      { error: Object.assign(new Error('E11000 dup'), { code: 11000 }), expected: true, label: 'mongodb' },
+      {
+        error: Object.assign(new Error('unique'), { code: 'UNIQUE_VIOLATION' }),
+        expected: true,
+        label: 'memory adapter',
+      },
+      {
+        error: Object.assign(new Error('duplicate key'), { code: '23505' }),
+        expected: true,
+        label: 'postgres',
+      },
+      {
+        error: Object.assign(new Error('E11000 dup'), { code: 11000 }),
+        expected: true,
+        label: 'mongodb',
+      },
       { error: new TypeError('not a function'), expected: false, label: 'type error' },
       { error: new RangeError('invalid'), expected: false, label: 'range error' },
       { error: 'string error', expected: false, label: 'string error' },

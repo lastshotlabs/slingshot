@@ -1,14 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  runOptionsSchema,
-  retryPolicySchema,
   memoryAdapterOptionsSchema,
+  retryPolicySchema,
+  runOptionsSchema,
   sqliteAdapterOptionsSchema,
 } from '../src/validation';
 
 describe('retryPolicySchema', () => {
   test('accepts valid retry policy', () => {
-    expect(retryPolicySchema.safeParse({ maxAttempts: 3, backoff: 'exponential', delayMs: 1000 }).success).toBe(true);
+    expect(
+      retryPolicySchema.safeParse({ maxAttempts: 3, backoff: 'exponential', delayMs: 1000 })
+        .success,
+    ).toBe(true);
   });
 
   test('accepts minimal retry policy', () => {
@@ -29,11 +32,15 @@ describe('retryPolicySchema', () => {
   });
 
   test('accepts maxDelayMs >= delayMs', () => {
-    expect(retryPolicySchema.safeParse({ maxAttempts: 3, delayMs: 1000, maxDelayMs: 2000 }).success).toBe(true);
+    expect(
+      retryPolicySchema.safeParse({ maxAttempts: 3, delayMs: 1000, maxDelayMs: 2000 }).success,
+    ).toBe(true);
   });
 
   test('accepts equal maxDelayMs and delayMs', () => {
-    expect(retryPolicySchema.safeParse({ maxAttempts: 3, delayMs: 1000, maxDelayMs: 1000 }).success).toBe(true);
+    expect(
+      retryPolicySchema.safeParse({ maxAttempts: 3, delayMs: 1000, maxDelayMs: 1000 }).success,
+    ).toBe(true);
   });
 
   test('rejects invalid backoff strategy', () => {
@@ -98,7 +105,10 @@ describe('runOptionsSchema', () => {
   });
 
   test('accepts metadata with arbitrary values', () => {
-    expect(runOptionsSchema.safeParse({ metadata: { custom: true, count: 5, nested: { a: 1 } } }).success).toBe(true);
+    expect(
+      runOptionsSchema.safeParse({ metadata: { custom: true, count: 5, nested: { a: 1 } } })
+        .success,
+    ).toBe(true);
   });
 
   test('accepts adapter hints', () => {
@@ -112,7 +122,9 @@ describe('memoryAdapterOptionsSchema', () => {
   });
 
   test('accepts valid options', () => {
-    expect(memoryAdapterOptionsSchema.safeParse({ concurrency: 5, maxPayloadBytes: 2048 }).success).toBe(true);
+    expect(
+      memoryAdapterOptionsSchema.safeParse({ concurrency: 5, maxPayloadBytes: 2048 }).success,
+    ).toBe(true);
   });
 
   test('rejects zero concurrency', () => {

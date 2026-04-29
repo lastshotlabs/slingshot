@@ -31,6 +31,12 @@ import {
   withTimeout,
 } from '@lastshotlabs/slingshot-core';
 import {
+  KafkaAdapterConfigError,
+  KafkaDuplicateDurableSubscriptionError,
+  KafkaDurableSubscriptionNameRequiredError,
+  KafkaDurableSubscriptionOffError,
+} from './errors';
+import {
   COMPRESSION_CODEC,
   backoffMs,
   compressionSchema,
@@ -38,12 +44,6 @@ import {
   sslSchema,
 } from './kafkaShared';
 import { toGroupId, toTopicName } from './kafkaTopicNaming';
-import {
-  KafkaAdapterConfigError,
-  KafkaDurableSubscriptionNameRequiredError,
-  KafkaDuplicateDurableSubscriptionError,
-  KafkaDurableSubscriptionOffError,
-} from './errors';
 
 /**
  * Reasons the adapter may drop or skip an event. Surfaced through `onDrop` so

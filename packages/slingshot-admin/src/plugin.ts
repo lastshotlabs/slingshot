@@ -2,8 +2,14 @@ import type { Context } from 'hono';
 import { Hono } from 'hono';
 import type { AppEnv, PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import { validateAdapterShape, validatePluginConfig } from '@lastshotlabs/slingshot-core';
+import { AdminCircuitOpenError, createAdminCircuitBreaker } from './lib/circuitBreaker';
+import type { AdminCircuitBreaker } from './lib/circuitBreaker';
+import { createAdminMetricsCollector } from './lib/metrics';
+import type { AdminMetricsCollector } from './lib/metrics';
 import { createAdminRouter } from './routes/admin';
+import { createHealthRouter } from './routes/health';
 import { createMailRouter } from './routes/mail';
+import { createMetricsRouter } from './routes/metrics';
 import { createPermissionsRouter } from './routes/permissions';
 import type { AdminPluginConfig } from './types/config';
 import { adminPluginConfigSchema } from './types/config';
@@ -46,6 +52,17 @@ export interface AdminPluginHealth {
  * `config.accessProvider.verifyRequest()`. The resolved principal is stored on
  * the Hono context as `adminPrincipal` for downstream handlers.
  *
+ * **Circuit breaker:** The access provider is wrapped in a circuit breaker
+ * (default: open after 5 consecutive failures, 30 s cooldown). When the breaker
+ * is open, admin requests return 503 immediately instead of timing out against
+ * a degraded upstream.
+ *
+ * **Health & metrics:** `GET <mountPath>/health` and `GET <mountPath>/metrics`
+ * are mounted before the auth guard so monitoring systems can reach them.
+ *
+ * **Teardown:** Calls `teardown()` to reset internal counters and state.
+ * Register this with your server's shutdown handler.
+ *
  * @param rawConfig - Plugin configuration object. Validated with Zod at call
  *   time; invalid configs throw immediately so misconfiguration is caught before
  *   the server starts.
@@ -72,9 +89,13 @@ export interface AdminPluginHealth {
 export function createAdminPlugin(
   rawConfig: AdminPluginConfig,
 ): SlingshotPlugin & { getHealth(): AdminPluginHealth } {
-  const config = validatePluginConfig('slingshot-admin', rawConfig, adminPluginConfigSchema);
+  const config = validatePluginConfig(
+    'slingshot-admin',
+    rawConfig,
+    adminPluginConfigSchema,
+  ) as unknown as AdminPluginConfig;
 
-  // Validate adapter method shapes — Zod's z.custom() only checks non-null object;
+  // Validate adapter method shapes — Zod's per-field schemas check object shape;
   // these calls catch missing required methods at plugin creation time.
   validateAdapterShape('slingshot-admin', 'accessProvider', config.accessProvider, [
     'verifyRequest',
@@ -94,23 +115,74 @@ export function createAdminPlugin(
     'createGrant',
   ]);
 
-  function doSetup({ app, bus }: PluginSetupContext): Promise<void> {
+  // -------------------------------------------------------------------------
+  // Circuit breaker — wraps the access provider so repeated failures trip it
+  // open and requests fail-fast rather than hanging against a degraded upstream.
+  // -------------------------------------------------------------------------
+  const circuitBreaker: AdminCircuitBreaker = createAdminCircuitBreaker({
+    threshold: 5,
+    cooldownMs: 30_000,
+    providerName: config.accessProvider.name ?? 'admin-provider',
+  });
+
+  // -------------------------------------------------------------------------
+  // Metrics collector — in-memory counters for operational observability.
+  // -------------------------------------------------------------------------
+  const metricsCollector: AdminMetricsCollector = createAdminMetricsCollector();
+
+  async function doSetup({ app, bus }: PluginSetupContext): Promise<void> {
     const { accessProvider, managedUserProvider } = config;
     const mountPath = config.mountPath ?? '/admin';
 
-    // Single auth guard protecting all routes under mountPath (admin, permissions, mail).
-    // Placing the guard here rather than inside each sub-router ensures every
-    // independently-mounted router is covered by the same access check.
-    // Double-cast required: Hono<AppEnv> and Hono<AdminEnv> do not overlap in TS's
-    // structural check because the context `set` method is contravariant. Safe because
-    // AdminEnv only adds variables; AppEnv variables remain fully accessible.
+    // -----------------------------------------------------------------------
+    // Health & metrics endpoints — mounted BEFORE the auth guard so monitoring
+    // systems can reach them without admin credentials.
+    // -----------------------------------------------------------------------
     const adminApp = app as unknown as Hono<AdminEnv>;
+
+    const healthRouter = createHealthRouter({
+      getPluginHealth: getHealth,
+      getCircuitBreakerHealth: () => circuitBreaker.getHealth(),
+      accessProviderName: config.accessProvider.name ?? 'unknown',
+      managedUserProviderName: config.managedUserProvider.name ?? 'unknown',
+    });
+    app.route(mountPath, healthRouter as unknown as Hono<AppEnv>);
+
+    const metricsRouter = createMetricsRouter({
+      metricsCollector,
+      getCircuitBreakerHealth: () => circuitBreaker.getHealth(),
+    });
+    app.route(mountPath, metricsRouter as unknown as Hono<AppEnv>);
+
+    // -----------------------------------------------------------------------
+    // Access guard — skip auth for health/metrics endpoints by checking path.
+    // -----------------------------------------------------------------------
     adminApp.use(`${mountPath}/*`, async (c: Context<AdminEnv>, next) => {
-      // verifyRequest only reads HTTP headers — the contravariant context type
-      // narrows AppEnv to AdminEnv at this provider boundary; cast is safe since
-      // verifyRequest only consumes header data.
-      const principal = await accessProvider.verifyRequest(c as unknown as Context<AppEnv>);
-      if (!principal) return c.json({ error: 'Unauthorized' }, 401);
+      const path = c.req.path;
+
+      // Allow health and metrics through without auth
+      if (path.endsWith('/health') || path.endsWith('/metrics')) {
+        await next();
+        return;
+      }
+
+      metricsCollector.incrementRequestCount();
+      let principal;
+      try {
+        principal = await circuitBreaker.guard(() =>
+          accessProvider.verifyRequest(c as unknown as Context<AppEnv>),
+        );
+      } catch (err) {
+        metricsCollector.incrementErrorCount();
+        if (err instanceof AdminCircuitOpenError) {
+          return c.json({ error: 'Service Unavailable' }, 503 as const);
+        }
+        throw err;
+      }
+      if (!principal) {
+        metricsCollector.incrementErrorCount();
+        return c.json({ error: 'Unauthorized' }, 401 as const);
+      }
       c.set('adminPrincipal', principal);
       await next();
     });
@@ -138,8 +210,6 @@ export function createAdminPlugin(
       });
       app.route(mountPath, mailRouter);
     }
-
-    return Promise.resolve();
   }
 
   const auditLogConfigured = config.auditLog != null;
@@ -165,10 +235,15 @@ export function createAdminPlugin(
     };
   }
 
+  async function teardown(): Promise<void> {
+    metricsCollector.reset();
+  }
+
   return {
     name: 'slingshot-admin',
     dependencies: [],
     setupRoutes: doSetup,
     getHealth,
+    teardown,
   };
 }

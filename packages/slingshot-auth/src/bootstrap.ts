@@ -380,6 +380,8 @@ export async function bootstrapAuth(
     csrfEnabled: !!config.security?.csrf?.enabled,
     jwt: authConfig.jwt ?? null,
     breachedPassword: authConfig.breachedPasswordCheck ?? null,
+    oauthPostRedirect: authConfig.oauth?.postRedirect ?? null,
+    oauthAllowedRedirectUrls: authConfig.oauth?.allowedRedirectUrls ?? [],
     oauthReauth: authConfig.oauth?.reauth ?? null,
     stepUp: authConfig.stepUp ?? null,
     checkSuspensionOnIdentify: authConfig.checkSuspensionOnIdentify !== false,

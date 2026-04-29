@@ -10,6 +10,9 @@
  *   - Error propagation across adapter methods
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+// ── Import adapter (after mocks) ──────────────────────────────────────────────
+
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Shared mock state ─────────────────────────────────────────────────────────
 //
@@ -133,10 +136,6 @@ async function raceWithTimeout<T>(
   }) as Promise<T>;
 }
 
-// ── Import adapter (after mocks) ──────────────────────────────────────────────
-
-import { createPostgresAdapter } from '../src/adapter.js';
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('withTimeout', () => {
@@ -185,9 +184,7 @@ describe('pool lifecycle — fail-fast cleanup', () => {
   test('pool.end() is called when startup verification throws', async () => {
     poolState.startupError = new Error('connection refused');
 
-    const { connectPostgres } = await import(
-      `../src/connection.ts?prod-fail=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?prod-fail=${Date.now()}`);
     await expect(connectPostgres('postgresql://localhost/db')).rejects.toThrow(
       'connection refused',
     );
@@ -198,13 +195,9 @@ describe('pool lifecycle — fail-fast cleanup', () => {
     endMockFn.mockRejectedValueOnce(new Error('end also failed'));
     poolState.startupError = new Error('original error');
 
-    const { connectPostgres } = await import(
-      `../src/connection.ts?prod-end-fail=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?prod-end-fail=${Date.now()}`);
 
-    await expect(connectPostgres('postgresql://localhost/db')).rejects.toThrow(
-      'original error',
-    );
+    await expect(connectPostgres('postgresql://localhost/db')).rejects.toThrow('original error');
     expect(endMockFn).toHaveBeenCalled();
   });
 });
@@ -217,18 +210,14 @@ describe('healthCheck', () => {
   });
 
   test('returns ok=true when the pool responds', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?prod-hc-ok=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?prod-hc-ok=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/db');
     const health = await result.healthCheck();
     expect(health.ok).toBe(true);
   });
 
   test('returns ok=false with error when query fails', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?prod-hc-err=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?prod-hc-err=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/db');
 
     // After startup, make pool.query fail
@@ -239,9 +228,7 @@ describe('healthCheck', () => {
   });
 
   test('respects timeoutMs parameter', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?prod-hc-to=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?prod-hc-to=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/db');
 
     // Make health check query hang; it should time out quickly
@@ -260,9 +247,7 @@ describe('query recording', () => {
   });
 
   test('getStats reflects successful startup query', async () => {
-    const { connectPostgres } = await import(
-      `../src/connection.ts?prod-qr=${Date.now()}`
-    );
+    const { connectPostgres } = await import(`../src/connection.ts?prod-qr=${Date.now()}`);
     const result = await connectPostgres('postgresql://localhost/db');
     const stats = result.getStats();
     expect(stats.queryCount).toBe(1);
@@ -306,7 +291,9 @@ describe('adapter error propagation', () => {
   test('getEffectiveRoles: db error propagates from direct role query', async () => {
     mockDbImpl = { select: () => throwingBuilder(new Error('catalog error')) };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
-    await expect(adapter.getEffectiveRoles!('user-id', 'tenant-1')).rejects.toThrow('catalog error');
+    await expect(adapter.getEffectiveRoles!('user-id', 'tenant-1')).rejects.toThrow(
+      'catalog error',
+    );
   });
 
   test('findOrCreateByProvider: db error propagates from oauth account lookup', async () => {

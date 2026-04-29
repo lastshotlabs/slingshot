@@ -7,10 +7,7 @@
  */
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { Hono } from 'hono';
-import {
-  PERMISSIONS_STATE_KEY,
-  attachContext,
-} from '@lastshotlabs/slingshot-core';
+import { PERMISSIONS_STATE_KEY, attachContext } from '@lastshotlabs/slingshot-core';
 import { permissionsAdapterFactories } from '../../src/factories';
 import { createPermissionsPlugin } from '../../src/plugin';
 
@@ -246,9 +243,7 @@ describe('permissions plugin resilience', () => {
     await plugin.seed?.(
       asNever({
         app,
-        seedState: new Map<string, unknown>([
-          ['malformed:key:extra:parts', true],
-        ]),
+        seedState: new Map<string, unknown>([['malformed:key:extra:parts', true]]),
       }),
     );
 

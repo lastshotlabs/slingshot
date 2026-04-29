@@ -6,6 +6,8 @@
  * concurrent operations.
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { HttpError } from '@lastshotlabs/slingshot-core';
+import { createPostgresAdapter } from '../src/adapter.js';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -58,7 +60,9 @@ mock.module('pg', () => ({
         release() {},
       });
     }
-    end() { return Promise.resolve(); }
+    end() {
+      return Promise.resolve();
+    }
   },
 }));
 
@@ -77,17 +81,20 @@ mock.module('drizzle-orm/node-postgres', () => ({
     ),
 }));
 
-import { createPostgresAdapter } from '../src/adapter.js';
-import { HttpError } from '@lastshotlabs/slingshot-core';
-
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function makeTransactionMock(selectValues: unknown[] = []): Record<string, unknown> {
   let idx = 0;
-  const select = selectValues.length > 0
-    ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
-    : () => resolvingBuilder([]);
-  return { select, insert: () => resolvingBuilder(undefined), update: () => resolvingBuilder(undefined), delete: () => resolvingBuilder(undefined) };
+  const select =
+    selectValues.length > 0
+      ? () => resolvingBuilder(selectValues[Math.min(idx++, selectValues.length - 1)])
+      : () => resolvingBuilder([]);
+  return {
+    select,
+    insert: () => resolvingBuilder(undefined),
+    update: () => resolvingBuilder(undefined),
+    delete: () => resolvingBuilder(undefined),
+  };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -131,13 +138,25 @@ describe('adapter-users — getUser', () => {
   test('getUser returns user data when found', async () => {
     const now = new Date();
     mockDbImpl = {
-      select: () => resolvingBuilder([{
-        id: 'user-1', email: 'user@example.com', displayName: 'User',
-        firstName: 'First', lastName: 'Last', externalId: 'ext-1',
-        emailVerified: true, suspended: false, suspendedReason: null,
-        suspendedAt: null, userMetadata: {}, appMetadata: {},
-        createdAt: now, updatedAt: now,
-      }]),
+      select: () =>
+        resolvingBuilder([
+          {
+            id: 'user-1',
+            email: 'user@example.com',
+            displayName: 'User',
+            firstName: 'First',
+            lastName: 'Last',
+            externalId: 'ext-1',
+            emailVerified: true,
+            suspended: false,
+            suspendedReason: null,
+            suspendedAt: null,
+            userMetadata: {},
+            appMetadata: {},
+            createdAt: now,
+            updatedAt: now,
+          },
+        ]),
     };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const user = await adapter.getUser!('user-1');
@@ -183,10 +202,12 @@ describe('adapter-users — deleteUser and suspension', () => {
 
   test('setSuspended marks the user as suspended', async () => {
     let updateCalled = false;
-    mockDbImpl = { update: () => {
-      updateCalled = true;
-      return resolvingBuilder(undefined);
-    }};
+    mockDbImpl = {
+      update: () => {
+        updateCalled = true;
+        return resolvingBuilder(undefined);
+      },
+    };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     await adapter.setSuspended!('user-1', true, 'violation of terms');
     expect(updateCalled).toBe(true);
@@ -199,7 +220,9 @@ describe('adapter-users — deleteUser and suspension', () => {
   });
 
   test('getSuspended returns suspension state', async () => {
-    mockDbImpl = { select: () => resolvingBuilder([{ suspended: true, suspendedReason: 'policy' }]) };
+    mockDbImpl = {
+      select: () => resolvingBuilder([{ suspended: true, suspendedReason: 'policy' }]),
+    };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const result = await adapter.getSuspended!('user-1');
     expect(result).toEqual({ suspended: true, suspendedReason: 'policy' });
@@ -209,7 +232,7 @@ describe('adapter-users — deleteUser and suspension', () => {
     mockDbImpl = { select: () => resolvingBuilder([]) };
     const adapter = await createPostgresAdapter({ pool: new (await import('pg')).Pool() });
     const result = await adapter.getSuspended!('nonexistent');
-    expect(result).toEqual({ suspended: false, suspendedReason: null });
+    expect(result).toBeNull();
   });
 });
 
@@ -226,7 +249,8 @@ describe('adapter-users — listUsers', () => {
           {},
           {
             get() {
-              return () => resolvingBuilder([{ count: '1' }, { id: 'u1', email: 'user@example.com' }]);
+              return () =>
+                resolvingBuilder([{ count: '1' }, { id: 'u1', email: 'user@example.com' }]);
             },
           },
         );

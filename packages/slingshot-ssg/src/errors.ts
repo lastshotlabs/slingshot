@@ -7,6 +7,7 @@ export class SsgError extends Error {
   }
 }
 
+/** Raised when the SSG crawler cannot discover or normalize routes. */
 export class SsgCrawlError extends SsgError {
   constructor(message: string) {
     super(message);
@@ -14,6 +15,7 @@ export class SsgCrawlError extends SsgError {
   }
 }
 
+/** Raised when static rendering fails for a specific URL. */
 export class SsgRenderError extends SsgError {
   readonly url: string;
 
@@ -25,6 +27,7 @@ export class SsgRenderError extends SsgError {
   }
 }
 
+/** Raised when SSG configuration is invalid or incomplete. */
 export class SsgConfigError extends SsgError {
   constructor(message: string) {
     super(message);
@@ -32,6 +35,7 @@ export class SsgConfigError extends SsgError {
   }
 }
 
+/** Raised when an SSG CLI argument fails validation. */
 export class SsgCliArgError extends SsgError {
   constructor(flag: string, raw: string) {
     super(`--${flag} must be a positive integer, got "${raw}"`);

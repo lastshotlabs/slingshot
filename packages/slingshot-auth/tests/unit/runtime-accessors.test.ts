@@ -6,6 +6,7 @@ import {
   getAuthRuntimeContext,
   getAuthRuntimeContextOrNull,
   getAuthRuntimeFromRequest,
+  getAuthRuntimeFromRequestOrNull,
 } from '../../src/runtime';
 import { makeTestRuntime } from '../helpers/runtime';
 
@@ -29,6 +30,24 @@ describe('auth runtime accessors', () => {
     expect(getAuthRuntimeContextOrNull(app)).toBe(runtime);
 
     app.get('/runtime', c => {
+      expect(getAuthRuntimeFromRequest(c)).toBe(runtime);
+      return c.json({ ok: true });
+    });
+
+    const response = await app.request('/runtime');
+    expect(response.status).toBe(200);
+  });
+
+  test('request accessor can resolve runtime published directly on Hono context', async () => {
+    const runtime = makeTestRuntime();
+    const app = new Hono<{ Variables: { [AUTH_RUNTIME_KEY]: typeof runtime } }>();
+
+    app.use('*', async (c, next) => {
+      c.set(AUTH_RUNTIME_KEY, runtime);
+      await next();
+    });
+    app.get('/runtime', c => {
+      expect(getAuthRuntimeFromRequestOrNull(c)).toBe(runtime);
       expect(getAuthRuntimeFromRequest(c)).toBe(runtime);
       return c.json({ ok: true });
     });

@@ -71,12 +71,13 @@ describe('bootstrap edge cases', () => {
 
   test('passes handlersPath to resolveManifestConfig', async () => {
     const { bootstrap } = await import('../src/bootstrap');
-    await bootstrap({ manifest: { manifestVersion: 1, appName: 'test' }, handlersPath: './custom-handlers.ts' });
-    expect(resolveManifestConfigImpl).toHaveBeenCalledWith(
-      expect.anything(),
-      undefined,
-      { handlersPath: './custom-handlers.ts' },
-    );
+    await bootstrap({
+      manifest: { manifestVersion: 1, appName: 'test' },
+      handlersPath: './custom-handlers.ts',
+    });
+    expect(resolveManifestConfigImpl).toHaveBeenCalledWith(expect.anything(), undefined, {
+      handlersPath: './custom-handlers.ts',
+    });
   });
 
   test('teardown calls ctx.destroy and resolves', async () => {

@@ -36,6 +36,8 @@ The runtime provides:
   `server.listen()`
 - `supportsAsyncLocalStorage: false`, which downstream packages can use to disable ALS-dependent
   features safely
+- `runtimeCapabilities()` for programmatic feature detection
+- AbortController-based timeout support for `fileStore` and KV operations
 
 The package also exports `createKvIsrCache()` for ISR storage on Cloudflare KV-compatible bindings.
 
@@ -61,6 +63,42 @@ If you need to inspect behavior, start in:
   different algorithm, provide both custom password functions.
 - The KV ISR adapter is eventually consistent because Cloudflare KV is eventually consistent. That
   is fine for many ISR workloads, but it is not strict transactional invalidation.
+
+## Platform Limitations (vs Bun/Node)
+
+The following limitations are inherent to edge runtimes (Cloudflare Workers, Deno Deploy, etc.)
+and are **not implementation gaps**:
+
+| Feature | Status | Workaround |
+|---------|--------|------------|
+| **Local filesystem** | Not available | Use `fileStore` backed by KV, R2, or `env.ASSETS.fetch()`. |
+| **Filesystem writes** | Not available | Use an external storage service (KV, R2, S3, etc.). |
+| **SQLite** | Not available | Use a cloud database (D1, PlanetScale, Neon) via its HTTP API. |
+| **HTTP server (`listen()`)** | Not available | Export a `fetch` handler — the platform manages the HTTP lifecycle. |
+| **Glob scanning** | Not available | Resolve routes at build time (e.g., via Vite/Rollup import.meta.glob). |
+| **AsyncLocalStorage** | Not available | Pass context explicitly through function parameters. |
+| **Process lifecycle (SIGTERM)** | Not available | Use platform hooks (`ctx.waitUntil` on Cloudflare Workers). |
+| **Native modules (bcrypt, etc.)** | Not available | Use Web Crypto (PBKDF2-SHA256) or delegate to an external service. |
+| **Socket/TCP** | Not available | Use HTTP-based APIs or WebSocket via platform primitives. |
+
+## Programmatic Feature Detection
+
+Use `runtimeCapabilities()` to detect what the edge platform supports at runtime:
+
+```typescript
+import { runtimeCapabilities } from '@lastshotlabs/slingshot-runtime-edge';
+
+const caps = runtimeCapabilities();
+if (!caps.filesystem.write) {
+  // Use external storage
+}
+if (!caps.asyncLocalStorage) {
+  // Use explicit context passing
+}
+```
+
+The returned object is frozen and its boolean fields are typed as literal `false` or `true` so
+TypeScript can narrow them correctly.
 
 ## Key Files
 

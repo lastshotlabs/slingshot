@@ -95,7 +95,8 @@ export type TokenClaims = { sub: string; sid?: string; scope?: string; [key: str
  * parameter is ignored entirely. The private key is read from the OIDC key store loaded
  * by `loadJwksKey()`. All entries in `signing.secret` (including rotated secrets) are
  * irrelevant for RS256 — only the RSA private key matters. The signed token uses
- * `kid: "key-1"` in the protected header for JWKS resolution by relying parties.
+ * the configured OIDC signing-key `kid` in the protected header for JWKS resolution
+ * by relying parties.
  *
  * For HMAC algorithms (`HS256`, `HS384`, `HS512`), `signing.secret[0]` is used as the
  * signing secret. Rotated secrets (indices 1+) are only used for *verification*, never
@@ -123,8 +124,9 @@ export async function signToken(
       throw new Error('RS256 requires OIDC key configuration — call loadJwksKey() first');
     }
     const privateKey = await getSigningPrivateKey(config);
+    const kid = config.oidc?.signingKey?.kid ?? 'key-1';
     const jwt = new SignJWT(claims)
-      .setProtectedHeader({ alg: 'RS256', kid: 'key-1' })
+      .setProtectedHeader({ alg: 'RS256', kid })
       .setIssuedAt()
       .setNotBefore('0s')
       .setJti(crypto.randomUUID())

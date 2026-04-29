@@ -1,5 +1,5 @@
-import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
 import { describe, expect, mock, spyOn, test } from 'bun:test';
+import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
 import { TIMEOUT_CLAMP_MS, clampDeliveryTimeoutMs } from '../../src/plugin.js';
 
 describe('clampDeliveryTimeoutMs (P-WEBHOOKS-9)', () => {

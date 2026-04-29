@@ -166,6 +166,18 @@ export interface SearchHealthResult {
     readonly openedAt?: number;
     readonly nextProbeAt?: number;
   };
+  /**
+   * Manager-level circuit breaker state. Present when the search manager
+   * wraps the provider with a circuit breaker (always true for manager-
+   * managed providers). Mirrors the provider-level `circuitBreaker` shape
+   * for uniform observability.
+   */
+  readonly managerBreaker?: {
+    readonly state: 'closed' | 'open' | 'half-open';
+    readonly consecutiveFailures: number;
+    readonly openedAt?: number;
+    readonly nextProbeAt?: number;
+  };
 }
 
 // ============================================================================

@@ -97,6 +97,9 @@ interface S3ClientModule {
   PutObjectCommand: new (params: Record<string, unknown>) => unknown;
   GetObjectCommand: new (params: Record<string, unknown>) => unknown;
   DeleteObjectCommand: new (params: Record<string, unknown>) => unknown;
+  CreateMultipartUploadCommand: new (params: Record<string, unknown>) => unknown;
+  UploadPartCommand: new (params: Record<string, unknown>) => unknown;
+  CompleteMultipartUploadCommand: new (params: Record<string, unknown>) => unknown;
   AbortMultipartUploadCommand: new (params: Record<string, unknown>) => unknown;
 }
 
@@ -299,6 +302,65 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 500): 
 export interface S3StorageAdapter extends StorageAdapter {
   /** Inspect the circuit breaker — stable observability surface. */
   getCircuitBreakerHealth(): S3CircuitBreakerHealth;
+
+  /**
+   * Initiate a multipart upload and return the upload ID.
+   *
+   * Callers use the returned `uploadId` to generate presigned part URLs,
+   * then complete or abort the upload once all parts have been transferred.
+   *
+   * @param key - The storage key for the final object.
+   * @param opts - Upload options such as MIME type.
+   * @returns The upload ID assigned by S3.
+   */
+  initiateMultipartUpload?(
+    key: string,
+    opts: { mimeType?: string; bucket?: string },
+  ): Promise<{ uploadId: string }>;
+
+  /**
+   * Generate a presigned URL for uploading a single part of a multipart upload.
+   *
+   * The URL is valid for `expirySeconds` from generation. The caller must use
+   * the returned URL to PUT the part body (with the corresponding part number).
+   *
+   * @param key - The storage key of the object being uploaded.
+   * @param uploadId - The upload ID returned by `initiateMultipartUpload`.
+   * @param partNumber - The part number (1-based).
+   * @param opts - Expiry for the presigned URL.
+   * @returns The presigned URL string for uploading the part.
+   */
+  presignUploadPart?(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    opts: { expirySeconds: number },
+  ): Promise<string>;
+
+  /**
+   * Complete a multipart upload by assembling the uploaded parts into the final object.
+   *
+   * @param key - The storage key of the object.
+   * @param uploadId - The upload ID returned by `initiateMultipartUpload`.
+   * @param parts - Array of completed parts with ETags and part numbers.
+   * @returns An optional public URL for the completed object.
+   */
+  completeMultipartUpload?(
+    key: string,
+    uploadId: string,
+    parts: ReadonlyArray<{ ETag: string; PartNumber: number }>,
+  ): Promise<{ url?: string }>;
+
+  /**
+   * Abort a multipart upload and discard any uploaded parts.
+   *
+   * Call this when the upload is no longer needed (e.g. the client disconnected
+   * or the operation timed out) to avoid storage costs for orphaned parts.
+   *
+   * @param key - The storage key of the object.
+   * @param uploadId - The upload ID to abort.
+   */
+  abortMultipartUpload?(key: string, uploadId: string): Promise<void>;
 }
 
 /**
@@ -479,6 +541,74 @@ export function s3Storage(config: S3StorageConfig): S3StorageAdapter {
             retryAttempts,
           ),
         'presignGet',
+      );
+    },
+
+    // --- Multipart upload support ---
+
+    async initiateMultipartUpload(key, opts) {
+      const { CreateMultipartUploadCommand } = requireS3Client();
+      const bucket = opts.bucket ?? config.bucket;
+      const result = await getClient().send(
+        new CreateMultipartUploadCommand({
+          Bucket: bucket,
+          Key: key,
+          ...(opts.mimeType ? { ContentType: opts.mimeType } : {}),
+        }),
+      );
+      const uploadId =
+        typeof result === 'object' &&
+        result !== null &&
+        'UploadId' in result &&
+        typeof (result as Record<string, unknown>).UploadId === 'string'
+          ? (result as Record<string, string>).UploadId
+          : '';
+      return { uploadId };
+    },
+
+    async presignUploadPart(key, uploadId, partNumber, opts) {
+      const { UploadPartCommand } = requireS3Client();
+      const presigner = requirePresigner();
+      return presigner.getSignedUrl(
+        getClient(),
+        new UploadPartCommand({
+          Bucket: config.bucket,
+          Key: key,
+          UploadId: uploadId,
+          PartNumber: partNumber,
+        }),
+        { expiresIn: opts.expirySeconds },
+      );
+    },
+
+    async completeMultipartUpload(key, uploadId, parts) {
+      const { CompleteMultipartUploadCommand } = requireS3Client();
+      const result = await getClient().send(
+        new CompleteMultipartUploadCommand({
+          Bucket: config.bucket,
+          Key: key,
+          UploadId: uploadId,
+          MultipartUpload: { Parts: parts.map(p => ({ ETag: p.ETag, PartNumber: p.PartNumber })) },
+        }),
+      );
+      const location =
+        typeof result === 'object' &&
+        result !== null &&
+        'Location' in result &&
+        typeof (result as Record<string, unknown>).Location === 'string'
+          ? (result as Record<string, string>).Location
+          : undefined;
+      return location ? { url: location } : {};
+    },
+
+    async abortMultipartUpload(key, uploadId) {
+      const { AbortMultipartUploadCommand } = requireS3Client();
+      await getClient().send(
+        new AbortMultipartUploadCommand({
+          Bucket: config.bucket,
+          Key: key,
+          UploadId: uploadId,
+        }),
       );
     },
   };

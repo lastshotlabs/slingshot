@@ -24,6 +24,7 @@ bun add @lastshotlabs/slingshot-permissions
 ## Export Paths
 
 - `.`
+- `./errors`
 - `./testing`
 
 ## Package Scripts

@@ -10,11 +10,14 @@ import type { PermissionRegistry } from '@lastshotlabs/slingshot-core';
 import { registerAdminResourceTypes } from '../../src/lib/resourceTypes';
 
 function createTestRegistry(throwOnDuplicate = true): PermissionRegistry {
-  const defs = new Map<string, {
-    resourceType: string;
-    actions: string[];
-    roles: Record<string, string[]>;
-  }>();
+  const defs = new Map<
+    string,
+    {
+      resourceType: string;
+      actions: string[];
+      roles: Record<string, string[]>;
+    }
+  >();
   return {
     register(def) {
       if (throwOnDuplicate && defs.has(def.resourceType)) {
@@ -97,7 +100,14 @@ describe('registerAdminResourceTypes edge cases', () => {
   test('super-admin gets wildcard for every registered type', () => {
     const registry = createTestRegistry();
     registerAdminResourceTypes(registry);
-    const types = ['admin:user', 'admin:session', 'admin:role', 'admin:audit', 'admin:permission', 'admin:mail'];
+    const types = [
+      'admin:user',
+      'admin:session',
+      'admin:role',
+      'admin:audit',
+      'admin:permission',
+      'admin:mail',
+    ];
     for (const t of types) {
       expect(registry.getActionsForRole(t, 'super-admin')).toEqual(['*']);
     }
@@ -106,7 +116,14 @@ describe('registerAdminResourceTypes edge cases', () => {
   test('unknown role on any type returns empty array', () => {
     const registry = createTestRegistry();
     registerAdminResourceTypes(registry);
-    const types = ['admin:user', 'admin:session', 'admin:role', 'admin:audit', 'admin:permission', 'admin:mail'];
+    const types = [
+      'admin:user',
+      'admin:session',
+      'admin:role',
+      'admin:audit',
+      'admin:permission',
+      'admin:mail',
+    ];
     for (const t of types) {
       expect(registry.getActionsForRole(t, 'nonexistent-role')).toEqual([]);
     }

@@ -26,6 +26,7 @@ bun add @lastshotlabs/slingshot-ssr
 - `.`
 - `./actions`
 - `./draft`
+- `./errors`
 - `./isr`
 
 ## Package Scripts

@@ -24,12 +24,14 @@ bun add @lastshotlabs/slingshot-assets
 ## Export Paths
 
 - `.`
+- `./errors`
 - `./testing`
 
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
 - `lint`: `eslint src/ --cache`
+- `test`: `echo 'Tests run via workspace runner'`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

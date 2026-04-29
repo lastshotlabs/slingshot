@@ -253,6 +253,11 @@ export function createMemorySessionRepository(): SessionRepository {
       const entry = sessions.get(sessionId);
       if (!entry) return null;
 
+      if (entry.expiresAt <= Date.now()) {
+        deleteSessionImpl(sessionId, cfg);
+        return null;
+      }
+
       if (isIdleExpired(entry.lastActiveAt, cfg)) {
         deleteSessionImpl(sessionId, cfg);
         return null;

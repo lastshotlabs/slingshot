@@ -35,9 +35,7 @@ describe('clearPostgresAuthTables', () => {
   });
 
   test('deletes groupMemberships first (deepest child)', async () => {
-    const { clearPostgresAuthTables } = await import(
-      `../src/testing.ts?first-table=${Date.now()}`
-    );
+    const { clearPostgresAuthTables } = await import(`../src/testing.ts?first-table=${Date.now()}`);
     const deleteOrder: string[] = [];
 
     const mockDb = {
@@ -61,9 +59,7 @@ describe('clearPostgresAuthTables', () => {
   });
 
   test('deletes parent tables (groups, users) last', async () => {
-    const { clearPostgresAuthTables } = await import(
-      `../src/testing.ts?last-tables=${Date.now()}`
-    );
+    const { clearPostgresAuthTables } = await import(`../src/testing.ts?last-tables=${Date.now()}`);
     const deleteOrder: string[] = [];
 
     const mockDb = {
@@ -117,9 +113,7 @@ describe('clearPostgresAuthTables', () => {
     //
     // We verify these constraints by checking the delete order against
     // the table names from the schema.
-    const { clearPostgresAuthTables } = await import(
-      `../src/testing.ts?fk-order=${Date.now()}`
-    );
+    const { clearPostgresAuthTables } = await import(`../src/testing.ts?fk-order=${Date.now()}`);
     const schema = await import(`../src/schema.ts?schema-for-fk=${Date.now()}`);
     const deleteOrder: Array<symbol> = [];
 
@@ -152,9 +146,7 @@ describe('clearPostgresAuthTables', () => {
       schema.tenantRoles,
       schema.groups,
       schema.users,
-    ].map(
-      t => (t as Record<symbol, string>)[Symbol.for('drizzle:Name')],
-    );
+    ].map(t => (t as Record<symbol, string>)[Symbol.for('drizzle:Name')]);
 
     expect(nameOrder).toEqual(expectedNames);
   });

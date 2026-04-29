@@ -10,6 +10,45 @@ import { type SlingshotEventSink, createSlingshotEventSink } from './eventSink';
 import { createOrchestrationRouter } from './routes';
 import type { ConfigurableOrchestrationPluginOptions } from './types';
 
+const DEFAULT_START_MAX_ATTEMPTS = 1;
+const DEFAULT_START_BACKOFF_MS = 1_000;
+const MAX_BACKOFF_CAP_MS = 30_000;
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Retry adapter.start() with exponential backoff.
+ *
+ * @param adapter - The orchestration adapter to start.
+ * @param maxAttempts - Maximum number of start attempts (default: 1 = no retry).
+ * @param backoffMs - Base backoff delay in milliseconds.
+ */
+async function startAdapterWithRetry(
+  adapter: { start(): Promise<void> },
+  maxAttempts: number,
+  backoffMs: number,
+): Promise<void> {
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await adapter.start();
+      return; // success
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxAttempts) {
+        const delay = Math.min(backoffMs * 2 ** (attempt - 1), MAX_BACKOFF_CAP_MS);
+        console.warn(
+          `[orchestration] adapter.start() attempt ${attempt}/${maxAttempts} failed, retrying in ${delay}ms: ${lastError.message}`,
+        );
+        await sleep(delay);
+      }
+    }
+  }
+  throw lastError ?? new Error('adapter.start() failed after all retries');
+}
+
 /**
  * Create the Slingshot integration layer for the portable orchestration runtime.
  *
@@ -27,6 +66,8 @@ export function createOrchestrationPlugin(
   const adminAuth = options.adminAuth;
   const providedRuntime = 'runtime' in options ? options.runtime : undefined;
   const providedAdapter = 'adapter' in options ? options.adapter : undefined;
+  const startMaxAttempts = options.startMaxAttempts ?? DEFAULT_START_MAX_ATTEMPTS;
+  const startBackoffMs = options.startBackoffMs ?? DEFAULT_START_BACKOFF_MS;
   let runtime: OrchestrationRuntime | null = providedRuntime ?? null;
   let eventSink: SlingshotEventSink | null = null;
 
@@ -75,7 +116,7 @@ export function createOrchestrationPlugin(
     },
     async setupPost() {
       if (providedAdapter) {
-        await providedAdapter.start();
+        await startAdapterWithRetry(providedAdapter, startMaxAttempts, startBackoffMs);
       }
     },
     async teardown() {

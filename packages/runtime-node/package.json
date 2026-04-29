@@ -12,6 +12,10 @@
     "./testing": {
       "types": "./dist/src/testing.d.ts",
       "import": "./dist/src/testing.js"
+    },
+    "./errors": {
+      "types": "./dist/src/errors.d.ts",
+      "import": "./dist/src/errors.js"
     }
   },
   "repository": {
@@ -29,9 +33,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "lint": "eslint src/ --cache",
-    "test": "bun test && bun run test:vitest",
+    "test": "bun run test:bun && bun run test:vitest",
+    "test:bun": "bun test tests/*.test.ts tests/integration tests/node-runtime/websocket.test.ts tests/node-runtime/internals.test.ts",
+    "coverage": "bun test --coverage",
     "test:vitest": "vitest run --config vitest.config.ts",
+    "test:integration": "bun test tests/integration/",
     "typecheck": "tsc --noEmit"
+  },
+  "doc": {
+    "test-split": "Bun test covers everything except SQLite. Tests using better-sqlite3 (a native Node addon incompatible with Bun) live under tests/node-runtime/ and run via vitest (test:vitest). Integration tests under tests/integration/ run under bun test (test:integration)."
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"

@@ -258,9 +258,9 @@ export function createSqliteSessionRepository(db: RuntimeSqliteDatabase): Sessio
 
       const row = db
         .query(
-          'SELECT sessionId, userId, refreshToken, lastActiveAt FROM sessions WHERE refreshToken = ?',
+          'SELECT sessionId, userId, refreshToken, lastActiveAt FROM sessions WHERE refreshToken = ? AND expiresAt > ?',
         )
-        .get(tokenHash) as {
+        .get(tokenHash, Date.now()) as {
         sessionId: string;
         userId: string;
         refreshToken: string | null;
@@ -286,9 +286,9 @@ export function createSqliteSessionRepository(db: RuntimeSqliteDatabase): Sessio
       }
       const graceRow = db
         .query(
-          'SELECT sessionId, userId, prevTokenExpiresAt, lastActiveAt FROM sessions WHERE prevRefreshToken = ?',
+          'SELECT sessionId, userId, prevTokenExpiresAt, lastActiveAt FROM sessions WHERE prevRefreshToken = ? AND expiresAt > ?',
         )
-        .get(tokenHash) as GraceWindowRow | null;
+        .get(tokenHash, Date.now()) as GraceWindowRow | null;
       if (!graceRow) return null;
       if (isIdleExpired(graceRow.lastActiveAt, cfg)) {
         deleteSessionImpl(graceRow.sessionId, cfg);

@@ -7,8 +7,8 @@
  * and error propagation from presignPut/presignGet rejections.
  */
 import { describe, expect, test } from 'bun:test';
-import { createAssetsTestApp } from '../../src/testing';
 import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
+import { createAssetsTestApp } from '../../src/testing';
 
 // ---------------------------------------------------------------------------
 // Shared helper: storage adapter that tracks calls

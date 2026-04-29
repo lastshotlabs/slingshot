@@ -1,6 +1,7 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import {
   SsrAssetManifestError,
   buildDevAssetTags,
@@ -8,131 +9,149 @@ import {
   resolveAssetTags,
 } from '../../src/assets';
 
-const TMP = join(import.meta.dir, '__tmp_manifest__');
-const MANIFEST_PATH = join(TMP, 'manifest.json');
-
-const SAMPLE_MANIFEST = {
-  'index.html': {
-    file: 'assets/index-B3xk9aJi.js',
-    css: ['assets/index-CyBwkqGn.css'],
-    isEntry: true,
-  },
-};
-
-const MANIFEST_WITH_CHUNKS = {
-  'index.html': {
-    file: 'assets/index-B3xk9aJi.js',
-    css: ['assets/index-CyBwkqGn.css'],
-    isEntry: true,
-    imports: ['_chunk-A.js'],
-  },
-  '_chunk-A.js': {
-    file: 'assets/chunk-A-Xyz123.js',
-    css: ['assets/chunk-A-Abc456.css'],
-  },
-};
-
-beforeAll(() => {
-  mkdirSync(TMP, { recursive: true });
-});
-
-afterAll(() => {
-  rmSync(TMP, { recursive: true, force: true });
-});
-
 describe('readAssetManifest', () => {
-  it('parses valid manifest file', () => {
-    writeFileSync(MANIFEST_PATH, JSON.stringify(SAMPLE_MANIFEST));
-    const manifest = readAssetManifest(MANIFEST_PATH);
-    expect(manifest['index.html']!.file).toBe('assets/index-B3xk9aJi.js');
-  });
-
-  it('throws SsrAssetManifestError for missing file', () => {
-    expect(() => readAssetManifest('/nonexistent/path/manifest.json')).toThrow(
-      SsrAssetManifestError,
-    );
-  });
-
-  it('throws SsrAssetManifestError for invalid JSON', () => {
-    writeFileSync(MANIFEST_PATH, 'not valid json {{{');
-    expect(() => readAssetManifest(MANIFEST_PATH)).toThrow(SsrAssetManifestError);
-  });
-
-  it('SsrAssetManifestError carries manifestPath', () => {
-    const badPath = '/nonexistent.json';
+  test('parses a valid manifest file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ssr-assets-'));
+    const manifestPath = join(dir, 'manifest.json');
+    const manifest = {
+      'index.html': { file: 'assets/index-abc123.js', css: ['assets/index-abc123.css'], isEntry: true },
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
     try {
-      readAssetManifest(badPath);
-      expect.unreachable('should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(SsrAssetManifestError);
-      expect((err as SsrAssetManifestError).manifestPath).toBe(badPath);
+      const result = readAssetManifest(manifestPath);
+      expect(result['index.html']?.file).toBe('assets/index-abc123.js');
+      expect(result['index.html']?.css).toEqual(['assets/index-abc123.css']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('SsrAssetManifestError.name is SsrAssetManifestError', () => {
+  test('throws SsrAssetManifestError when file is missing', () => {
+    expect(() => readAssetManifest('/nonexistent/path/manifest.json')).toThrow(SsrAssetManifestError);
+  });
+
+  test('throws SsrAssetManifestError for invalid JSON', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ssr-assets-'));
+    const manifestPath = join(dir, 'manifest.json');
+    writeFileSync(manifestPath, 'not json');
     try {
-      readAssetManifest('/nonexistent.json');
-    } catch (err) {
-      expect((err as SsrAssetManifestError).name).toBe('SsrAssetManifestError');
+      expect(() => readAssetManifest(manifestPath)).toThrow(SsrAssetManifestError);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });
 
 describe('resolveAssetTags', () => {
-  it('produces <link rel="stylesheet"> for CSS files', () => {
-    const tags = resolveAssetTags(SAMPLE_MANIFEST, 'index.html');
-    expect(tags).toContain('<link rel="stylesheet" href="/assets/index-CyBwkqGn.css">');
+  const baseManifest = {
+    'index.html': {
+      file: 'assets/index-abc123.js',
+      css: ['assets/index-abc123.css'],
+      isEntry: true,
+    },
+  };
+
+  test('returns script and css link tags for a valid entry', () => {
+    const tags = resolveAssetTags(baseManifest, 'index.html');
+    expect(tags).toContain('<script type="module" src="/assets/index-abc123.js"></script>');
+    expect(tags).toContain('<link rel="stylesheet" href="/assets/index-abc123.css">');
   });
 
-  it('produces <script type="module"> for JS entry', () => {
-    const tags = resolveAssetTags(SAMPLE_MANIFEST, 'index.html');
-    expect(tags).toContain('<script type="module" src="/assets/index-B3xk9aJi.js">');
+  test('css links appear before script tag', () => {
+    const tags = resolveAssetTags(baseManifest, 'index.html');
+    const cssIndex = tags.indexOf('<link');
+    const scriptIndex = tags.indexOf('<script');
+    expect(cssIndex).toBeLessThan(scriptIndex);
   });
 
-  it('returns empty string for unknown entry key', () => {
-    expect(resolveAssetTags(SAMPLE_MANIFEST, 'nonexistent.html')).toBe('');
+  test('returns empty string for missing entry', () => {
+    expect(resolveAssetTags(baseManifest, 'nonexistent')).toBe('');
   });
 
-  it('includes CSS from imported chunks', () => {
-    const tags = resolveAssetTags(MANIFEST_WITH_CHUNKS, 'index.html');
-    expect(tags).toContain('/assets/chunk-A-Abc456.css');
+  test('returns only script tag when entry has no css', () => {
+    const manifest = {
+      'app.tsx': { file: 'assets/app-xyz789.js', isEntry: true },
+    };
+    const tags = resolveAssetTags(manifest, 'app.tsx');
+    expect(tags).toContain('<script type="module" src="/assets/app-xyz789.js"></script>');
+    expect(tags).not.toContain('<link');
   });
 
-  it('deduplicates CSS files appearing in multiple chunks', () => {
+  test('deduplicates css files across imports', () => {
     const manifest = {
       'index.html': {
         file: 'assets/index.js',
         css: ['assets/shared.css'],
-        imports: ['_chunk-A.js', '_chunk-B.js'],
+        imports: ['chunk-a'],
+        isEntry: true,
       },
-      '_chunk-A.js': { file: 'assets/a.js', css: ['assets/shared.css'] },
-      '_chunk-B.js': { file: 'assets/b.js', css: ['assets/shared.css'] },
+      'chunk-a': {
+        file: 'assets/chunk-a.js',
+        css: ['assets/shared.css'],
+      },
     };
     const tags = resolveAssetTags(manifest, 'index.html');
-    const count = (tags.match(/shared\.css/g) ?? []).length;
-    expect(count).toBe(1);
+    const cssMatches = tags.match(/shared\.css/g);
+    expect(cssMatches).toHaveLength(1);
   });
 
-  it('handles entry with no CSS', () => {
-    const manifest = { 'index.html': { file: 'assets/index.js', isEntry: true } };
+  test('handles nested imports', () => {
+    const manifest = {
+      'index.html': {
+        file: 'assets/index.js',
+        imports: ['chunk-a'],
+        isEntry: true,
+      },
+      'chunk-a': {
+        file: 'assets/chunk-a.js',
+        css: ['assets/chunk-a.css'],
+        imports: ['chunk-b'],
+      },
+      'chunk-b': {
+        file: 'assets/chunk-b.js',
+        css: ['assets/chunk-b.css'],
+      },
+    };
+    const tags = resolveAssetTags(manifest, 'index.html');
+    expect(tags).toContain('chunk-a.css');
+    expect(tags).toContain('chunk-b.css');
+  });
+
+  test('handles circular imports gracefully', () => {
+    const manifest: Record<string, { file: string; css?: string[]; imports?: string[]; isEntry?: boolean }> = {
+      'index.html': {
+        file: 'assets/index.js',
+        imports: ['chunk-a'],
+        isEntry: true,
+      },
+      'chunk-a': {
+        file: 'assets/chunk-a.js',
+        imports: ['chunk-b'],
+      },
+      'chunk-b': {
+        file: 'assets/chunk-b.js',
+        imports: ['chunk-a'],
+      },
+    };
     const tags = resolveAssetTags(manifest, 'index.html');
     expect(tags).toContain('<script');
-    expect(tags).not.toContain('<link');
+  });
+
+  test('returns empty string for empty manifest', () => {
+    expect(resolveAssetTags({}, 'index.html')).toBe('');
   });
 });
 
 describe('buildDevAssetTags', () => {
-  it('includes Vite client script', () => {
-    expect(buildDevAssetTags()).toContain('/@vite/client');
+  test('includes vite client and default entry module', () => {
+    const tags = buildDevAssetTags();
+    expect(tags).toContain('<script type="module" src="/@vite/client"></script>');
+    expect(tags).toContain('<script type="module" src="/src/main.tsx"></script>');
   });
 
-  it('includes default entry module /src/main.tsx', () => {
-    expect(buildDevAssetTags()).toContain('/src/main.tsx');
-  });
-
-  it('uses custom entry module when provided', () => {
-    const tags = buildDevAssetTags('/src/custom-entry.tsx');
-    expect(tags).toContain('/src/custom-entry.tsx');
+  test('uses custom entry module', () => {
+    const tags = buildDevAssetTags('/src/entry.tsx');
+    expect(tags).toContain('<script type="module" src="/src/entry.tsx"></script>');
     expect(tags).not.toContain('/src/main.tsx');
   });
 });

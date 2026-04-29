@@ -13,7 +13,6 @@
 //   - Runtime from full options is frozen
 //   - Password options are scoped to their runtime instance
 //   - Runtime instances do not share fileStore state
-
 import { describe, expect, it } from 'bun:test';
 import { configureRuntimeEdgeLogger, edgeRuntime } from '../../src/index';
 

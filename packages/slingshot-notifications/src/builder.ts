@@ -26,13 +26,21 @@ function readCount(data: Readonly<Record<string, unknown>> | undefined): number 
 }
 
 export interface CreateNotificationBuilderOptions {
+  /** Notification source identifier (e.g. "community", "push"). Used for preference resolution and rate-limit scoping. */
   readonly source: string;
+  /** Notification persistence adapter. */
   readonly notifications: NotificationAdapter;
+  /** Preference persistence adapter. */
   readonly preferences: NotificationPreferenceAdapter;
+  /** In-process event bus for internal event emission. */
   readonly bus: SlingshotEventBus;
+  /** Typed event publisher for framework-level notification events. */
   readonly events: SlingshotEvents;
+  /** Rate-limit backend for per-source-per-user throttling. */
   readonly rateLimitBackend: RateLimitBackend;
+  /** Default channel preferences when no user preference record exists. */
   readonly defaultPreferences: NotificationPreferenceDefaults;
+  /** Per-source-per-user rate-limit window configuration. */
   readonly rateLimit: {
     readonly limit: number;
     readonly windowMs: number;
@@ -63,6 +71,28 @@ export interface CreateNotificationBuilderOptions {
 
 /**
  * Create a source-scoped notification builder.
+ *
+ * The returned builder provides a fluent API for creating, scheduling, and
+ * managing notifications within a single source scope. All methods
+ * automatically resolve user preferences, enforce rate limits, and handle
+ * dedup key collision.
+ *
+ * @example
+ * ```ts
+ * const builder = createNotificationBuilder({
+ *   source: 'community',
+ *   notifications: myNotificationAdapter,
+ *   preferences: myPreferenceAdapter,
+ *   bus: myBus,
+ *   events: myEvents,
+ *   rateLimitBackend: myRateLimiter,
+ *   defaultPreferences: { pushEnabled: true, emailEnabled: true, inAppEnabled: true },
+ *   rateLimit: { limit: 100, windowMs: 60_000 },
+ * });
+ *
+ * await builder.notify({ userId: 'user-abc', type: 'mention', targetType: 'post', targetId: 'p1' });
+ * await builder.notifyMany({ userIds: ['u1', 'u2'], type: 'announcement' });
+ * ```
  *
  * @param options - Builder dependencies.
  * @returns Source-scoped builder.
@@ -277,7 +307,42 @@ export function createNotificationBuilder(
   }
 
   return {
+    /**
+     * Create and dispatch a single notification. Respects preference
+     * resolution (muted users are silently skipped), rate limits, and
+     * dedup keys. Returns the created notification record, or `null` when
+     * the notification was suppressed (muted, rate-limited, or self-notify
+     * with `allowSelfNotify: false`).
+     *
+     * @example
+     * ```ts
+     * const notification = await builder.notify({
+     *   userId: 'user-abc',
+     *   type: 'comment:reply',
+     *   targetType: 'post',
+     *   targetId: 'post-42',
+     *   data: { replyBody: 'Thanks!' },
+     * });
+     * // notification.id — the created record, or null if suppressed
+     * ```
+     */
     notify,
+    /**
+     * Create and dispatch notifications to multiple users. Each recipient
+     * goes through the same preference and rate-limit logic as a single
+     * `notify()` call. Returns an array of created notification records
+     * (suppressed recipients are omitted).
+     *
+     * @example
+     * ```ts
+     * const results = await builder.notifyMany({
+     *   userIds: ['user-abc', 'user-def'],
+     *   type: 'announcement',
+     *   data: { title: 'Server maintenance at 2am' },
+     * });
+     * console.log(`Delivered to ${results.length} users`);
+     * ```
+     */
     async notifyMany(input) {
       const uniqueUserIds = [...new Set(input.userIds)];
       const created: NotificationRecord[] = [];
@@ -291,6 +356,24 @@ export function createNotificationBuilder(
 
       return created;
     },
+    /**
+     * Schedule a notification for future delivery. The notification is
+     * persisted immediately but will not be dispatched until the dispatcher
+     * tick processes it after `deliverAt`. Returns the created notification
+     * record. Throws if the notification was suppressed (muted or
+     * rate-limited), because scheduling implies a delivery contract.
+     *
+     * @example
+     * ```ts
+     * const reminder = await builder.schedule({
+     *   userId: 'user-abc',
+     *   type: 'reminder',
+     *   data: { task: 'Review PR #123' },
+     *   deliverAt: new Date('2025-01-15T14:00:00Z'),
+     * });
+     * console.log(`Scheduled notification ${reminder.id}`);
+     * ```
+     */
     async schedule(input) {
       const notification = await notify(input);
       if (!notification) {
@@ -298,6 +381,17 @@ export function createNotificationBuilder(
       }
       return notification;
     },
+    /**
+     * Cancel a previously scheduled notification by deleting it. Safe to
+     * call multiple times — a second delete on an already-cancelled or
+     * dispatched notification resolves without error.
+     *
+     * @example
+     * ```ts
+     * await builder.cancel(notification.id);
+     * // The notification is permanently removed from the store
+     * ```
+     */
     async cancel(notificationId) {
       await options.notifications.delete(notificationId);
     },

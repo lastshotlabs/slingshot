@@ -30,10 +30,7 @@ describe('orchestration routes — edge cases', () => {
   });
 
   const app = new Hono();
-  app.route(
-    '/orchestration',
-    createOrchestrationRouter({ runtime, tasks: [task], workflows: [] }),
-  );
+  app.route('/orchestration', createOrchestrationRouter({ runtime, tasks: [task], workflows: [] }));
 
   test('GET /runs with non-existent runId returns 404', async () => {
     const response = await app.request('/orchestration/runs/nonexistent-run-id');
@@ -188,5 +185,69 @@ describe('orchestration routes — edge cases', () => {
       body: JSON.stringify({}),
     });
     expect(response.status).toBe(501);
+  });
+
+  test('GET /runs/:id/progress returns progress for a completed run', async () => {
+    const progressTask = defineTask({
+      name: 'progress-task',
+      input: z.object({}),
+      output: z.object({ done: z.boolean() }),
+      async handler(_input, ctx) {
+        ctx.reportProgress({ percent: 100, message: 'all done' });
+        return { done: true };
+      },
+    });
+
+    const rt = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [progressTask],
+    });
+
+    const testApp = new Hono();
+    testApp.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime: rt, tasks: [progressTask], workflows: [] }),
+    );
+
+    const runResponse = await testApp.request('/orchestration/tasks/progress-task/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const { id } = await runResponse.json();
+
+    // Poll the progress endpoint until the run completes
+    let progress: Record<string, unknown> | null = null;
+    for (let i = 0; i < 20; i++) {
+      const progressResponse = await testApp.request(`/orchestration/runs/${id}/progress`);
+      if (progressResponse.status === 200) {
+        progress = await progressResponse.json();
+        if (progress?.status === 'completed') break;
+      }
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    expect(progress).not.toBeNull();
+    expect(progress?.status).toBe('completed');
+    expect(progress?.runId).toBe(id);
+    expect(progress?.progress).toEqual({ percent: 100, message: 'all done' });
+  });
+
+  test('GET /runs/:id/progress returns 404 for non-existent run', async () => {
+    const rt = createOrchestrationRuntime({
+      adapter: createMemoryAdapter({ concurrency: 1 }),
+      tasks: [],
+    });
+
+    const testApp = new Hono();
+    testApp.route(
+      '/orchestration',
+      createOrchestrationRouter({ runtime: rt, tasks: [], workflows: [] }),
+    );
+
+    const response = await testApp.request('/orchestration/runs/nonexistent-id/progress');
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.code).toBe('RUN_NOT_FOUND');
   });
 });

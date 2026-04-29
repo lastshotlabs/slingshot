@@ -14,6 +14,7 @@ export function mapTemporalStatus(statusName: string | undefined): RunStatus {
     case 'TERMINATED':
       return 'failed';
     case 'CANCELLED':
+    case 'CANCELED':
       return 'cancelled';
     case 'PAUSED':
     case 'CONTINUED_AS_NEW':

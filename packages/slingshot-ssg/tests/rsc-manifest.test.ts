@@ -4,7 +4,7 @@
 // through the CLI integration (cli.test.ts), but this file exhaustively covers
 // every failure mode and edge case at the unit level so the triage path for a
 // broken --rsc-manifest flag is unambiguous.
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';

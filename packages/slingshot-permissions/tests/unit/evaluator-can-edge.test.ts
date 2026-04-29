@@ -267,9 +267,13 @@ describe('can() role inheritance and union', () => {
       grantedBy: 'system',
     });
 
-    const canEditPost = await evaluator.can({ subjectId: 'user-1', subjectType: 'user' }, 'update', {
-      resourceType: 'post',
-    });
+    const canEditPost = await evaluator.can(
+      { subjectId: 'user-1', subjectType: 'user' },
+      'update',
+      {
+        resourceType: 'post',
+      },
+    );
     expect(canEditPost).toBe(true);
 
     // 'comment' is registered but user has no role that maps to it

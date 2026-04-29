@@ -1,13 +1,117 @@
 import { getContextOrNull } from './context/index';
 
+const sealedPluginStates = new WeakSet<ReadonlyMap<string, unknown>>();
+
 /**
- * Instance-scoped map of plugin name → plugin-owned state.
+ * Instance-scoped map of plugin name -> plugin-owned state.
  *
  * Each plugin stores its runtime state under its own {@link SlingshotPlugin.name}
- * key. Values are opaque to the framework — plugins own the shape of their
+ * key. Values are opaque to the framework - plugins own the shape of their
  * own entries and expose typed accessors for dependent plugins.
+ *
+ * The public surface is read-only. Framework-owned contexts use a guarded
+ * writable implementation during bootstrap, then seal it after app finalization.
  */
-export type PluginStateMap = Map<string, unknown>;
+export type PluginStateMap = ReadonlyMap<string, unknown>;
+
+/**
+ * Writable plugin state used internally by the framework bootstrap lifecycle.
+ */
+type WritablePluginStateMap = Map<string, unknown>;
+
+function mutationError(operation: string, key?: string): Error {
+  const target = key === undefined ? '' : ` for key '${key}'`;
+  return new Error(
+    `[slingshot-core] pluginState is sealed after app bootstrap; attempted ${operation}${target}. ` +
+      'Publish plugin state during setupMiddleware/setupRoutes/setupPost or expose an explicit runtime API.',
+  );
+}
+
+function isWritablePluginStateMap(value: PluginStateMap): value is WritablePluginStateMap {
+  return typeof (value as { set?: unknown }).set === 'function';
+}
+
+function assertPluginStateWritable(
+  pluginState: PluginStateMap,
+  operation: string,
+  key?: string,
+): asserts pluginState is WritablePluginStateMap {
+  if (sealedPluginStates.has(pluginState)) {
+    throw mutationError(operation, key);
+  }
+  if (!isWritablePluginStateMap(pluginState)) {
+    throw new Error(
+      `[slingshot-core] pluginState does not support ${operation}. Use the framework-owned plugin state during bootstrap.`,
+    );
+  }
+}
+
+/**
+ * Framework-owned plugin-state map. It behaves like a normal Map during
+ * bootstrap, then rejects mutations after {@link sealPluginState}.
+ */
+class GuardedPluginStateMap extends Map<string, unknown> {
+  constructor(entries?: Iterable<readonly [string, unknown]>) {
+    super();
+    if (entries) {
+      for (const [key, value] of entries) {
+        super.set(key, value);
+      }
+    }
+  }
+
+  set(key: string, value: unknown): this {
+    if (sealedPluginStates.has(this)) {
+      throw mutationError('set', key);
+    }
+    return super.set(key, value);
+  }
+
+  delete(key: string): boolean {
+    if (sealedPluginStates.has(this)) {
+      throw mutationError('delete', key);
+    }
+    return super.delete(key);
+  }
+
+  clear(): void {
+    if (sealedPluginStates.has(this)) {
+      throw mutationError('clear');
+    }
+    super.clear();
+  }
+}
+
+/**
+ * Create the guarded plugin-state map used by framework app contexts.
+ */
+export function createPluginStateMap(
+  entries?: Iterable<readonly [string, unknown]>,
+): PluginStateMap {
+  return new GuardedPluginStateMap(entries);
+}
+
+/**
+ * Publish plugin-owned state during framework bootstrap.
+ */
+export function publishPluginState(pluginState: PluginStateMap, key: string, value: unknown): void {
+  assertPluginStateWritable(pluginState, 'set', key);
+  pluginState.set(key, value);
+}
+
+/**
+ * Seal plugin state after app bootstrap so late mutations fail loudly.
+ */
+export function sealPluginState(pluginState: PluginStateMap): void {
+  sealedPluginStates.add(pluginState);
+}
+
+/**
+ * Returns whether a plugin-state map has been sealed.
+ */
+export function isPluginStateSealed(pluginState: PluginStateMap): boolean {
+  return sealedPluginStates.has(pluginState);
+}
 
 /**
  * Any object that carries a {@link PluginStateMap}.
@@ -222,7 +326,7 @@ export function publishEntityAdaptersState<TAdapter extends object>(
     ...(existingState ?? {}),
     entityAdapters: Object.freeze({ ...mergedAdapters }),
   });
-  pluginState.set(pluginName, nextState);
+  publishPluginState(pluginState, pluginName, nextState);
   return nextState;
 }
 

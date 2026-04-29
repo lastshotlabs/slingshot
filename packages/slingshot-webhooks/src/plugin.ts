@@ -16,8 +16,10 @@ import {
   getContextOrNull,
   getPluginState,
   getRouteAuthOrNull,
+  publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import type { DispatchOptions } from './lib/dispatcher';
 import { deliverWebhook } from './lib/dispatcher';
 import { wireEventSubscriptions } from './lib/eventWiring';
 import { logWebhookEvent } from './lib/log';
@@ -157,6 +159,14 @@ function classifyDeliveryFailure(err: unknown): string {
   return 'failure';
 }
 
+function configuredDispatchOptions(config: Readonly<WebhookPluginConfig>): DispatchOptions {
+  const dispatch = config.dispatch;
+  return {
+    ...(dispatch?.fetchImpl ? { fetchImpl: dispatch.fetchImpl } : {}),
+    ...(dispatch?.safeFetchOverrides ? { safeFetchOverrides: dispatch.safeFetchOverrides } : {}),
+  };
+}
+
 async function activate(
   bus: SlingshotEventBus,
   events: PluginSetupContext['events'],
@@ -192,6 +202,7 @@ async function activate(
         bus,
       );
       await deliverWebhook(job, {
+        ...configuredDispatchOptions(config),
         timeoutMs: resolvedTimeoutMs,
       });
       const durationMs = Date.now() - start;
@@ -335,16 +346,14 @@ async function resolveTestDelivery(
 
   try {
     await deliverWebhook(job, {
+      ...configuredDispatchOptions(config),
       timeoutMs,
-      fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const headers = new Headers(init?.headers ?? {});
-        headers.set('X-Webhook-Test', 'true');
-        const res = await fetch(input as Parameters<typeof fetch>[0], { ...init, headers });
+      extraHeaders: { 'X-Webhook-Test': 'true' },
+      onResponse: async res => {
         status = res.status;
         ok = res.ok;
         body = await res.text().catch(() => '');
-        return new Response(body, { status, headers: res.headers });
-      }) as unknown as typeof fetch,
+      },
     });
     const durationMs = Date.now() - start;
     await runtime.updateDelivery(delivery.id, {
@@ -573,7 +582,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
           events.definitions,
         );
       }
-      getPluginState(app).set(WEBHOOKS_PLUGIN_STATE_KEY, runtimeAdapter);
+      publishPluginState(getPluginState(app), WEBHOOKS_PLUGIN_STATE_KEY, runtimeAdapter);
       // Resolve the framework-owned metrics emitter so the dispatcher
       // pipeline publishes counters/gauges/timings on hot paths.
       const ctx = getContextOrNull(app);

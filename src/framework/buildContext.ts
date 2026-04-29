@@ -28,6 +28,7 @@ import type {
 import {
   createDefaultIdentityResolver,
   createNoopMetricsEmitter,
+  createPluginStateMap,
   deepFreeze,
 } from '@lastshotlabs/slingshot-core';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
@@ -349,7 +350,7 @@ export async function buildContext(params: BuildContextParams): Promise<Slingsho
           }
         | undefined
     )?.endpoints ?? null;
-  const pluginState = new Map<string, unknown>();
+  const pluginState = createPluginStateMap();
   const cacheAdaptersBacking = new Map<unknown, unknown>();
   const emailTemplatesBacking = new Map<string, unknown>();
   const publicPaths = createReadonlySetView(plugins.flatMap(plugin => plugin.publicPaths ?? []));

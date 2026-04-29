@@ -41,6 +41,14 @@ const BASE_USER = {
   status: 'active' as const,
 };
 
+const BASE_SESSION = {
+  sessionId: 's-1',
+  userId: 'u-1',
+  createdAt: Date.now(),
+  lastActiveAt: Date.now(),
+  active: true,
+};
+
 describe('requireAuditEntry — destructive verbs fail-closed when audit log is unavailable', () => {
   test('POST /users/:id/suspend returns 503 when audit log throws synchronously', async () => {
     const auditLog: AuditLogProvider = {
@@ -59,6 +67,8 @@ describe('requireAuditEntry — destructive verbs fail-closed when audit log is 
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('audit-log-unavailable');
+    const user = await managedUserProvider.getUser('u-1', { tenantId: 'tenant-1' });
+    expect(user?.status).toBe('active');
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
@@ -78,10 +88,12 @@ describe('requireAuditEntry — destructive verbs fail-closed when audit log is 
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('audit-log-unavailable');
+    const user = await managedUserProvider.getUser('u-1', { tenantId: 'tenant-1' });
+    expect(user?.status).toBe('suspended');
     errorSpy.mockRestore();
   });
 
-  test('DELETE /users/:id returns 503 when audit log fails after deletion', async () => {
+  test('DELETE /users/:id returns 503 when audit log fails before deletion', async () => {
     const auditLog: AuditLogProvider = {
       logEntry: mock(() => Promise.reject(new Error('audit down'))),
       getLogs: mock(async () => ({ items: [], nextCursor: undefined })),
@@ -94,6 +106,8 @@ describe('requireAuditEntry — destructive verbs fail-closed when audit log is 
     const res = await app.request('/users/u-1', { method: 'DELETE' });
 
     expect(res.status).toBe(503);
+    const user = await managedUserProvider.getUser('u-1', { tenantId: 'tenant-1' });
+    expect(user).not.toBeNull();
     errorSpy.mockRestore();
   });
 
@@ -114,6 +128,9 @@ describe('requireAuditEntry — destructive verbs fail-closed when audit log is 
     });
 
     expect(res.status).toBe(503);
+    await expect(managedUserProvider.getRoles('u-1', { tenantId: 'tenant-1' })).resolves.toEqual(
+      [],
+    );
     errorSpy.mockRestore();
   });
 
@@ -126,10 +143,34 @@ describe('requireAuditEntry — destructive verbs fail-closed when audit log is 
 
     const { app, managedUserProvider } = buildApp(auditLog);
     managedUserProvider.seedUser(BASE_USER);
+    managedUserProvider.seedSession(BASE_SESSION);
 
     const res = await app.request('/users/u-1/sessions', { method: 'DELETE' });
 
     expect(res.status).toBe(503);
+    await expect(
+      managedUserProvider.listSessions('u-1', { tenantId: 'tenant-1' }),
+    ).resolves.toHaveLength(1);
+    errorSpy.mockRestore();
+  });
+
+  test('DELETE /users/:id/sessions/:sessionId returns 503 when audit log fails before revocation', async () => {
+    const auditLog: AuditLogProvider = {
+      logEntry: mock(() => Promise.reject(new Error('audit unavailable'))),
+      getLogs: mock(async () => ({ items: [], nextCursor: undefined })),
+    };
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+
+    const { app, managedUserProvider } = buildApp(auditLog);
+    managedUserProvider.seedUser(BASE_USER);
+    managedUserProvider.seedSession(BASE_SESSION);
+
+    const res = await app.request('/users/u-1/sessions/s-1', { method: 'DELETE' });
+
+    expect(res.status).toBe(503);
+    await expect(
+      managedUserProvider.listSessions('u-1', { tenantId: 'tenant-1' }),
+    ).resolves.toHaveLength(1);
     errorSpy.mockRestore();
   });
 

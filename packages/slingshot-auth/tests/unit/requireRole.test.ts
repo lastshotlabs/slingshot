@@ -39,7 +39,7 @@ function buildApp(opts: {
     const ctxPartial = {
       pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
     };
-    c.set('slingshotCtx', ctxPartial as SlingshotContext);
+    c.set('slingshotCtx', ctxPartial as unknown as SlingshotContext);
     // Simulate auth context via actor
     if (userId) {
       c.set(
@@ -306,7 +306,7 @@ describe('requireRole — adapter missing getEffectiveRoles', () => {
       const ctxPartial = {
         pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
       };
-      c.set('slingshotCtx', ctxPartial as SlingshotContext);
+      c.set('slingshotCtx', ctxPartial as unknown as SlingshotContext);
       c.set(
         'actor',
         Object.freeze({

@@ -28,7 +28,7 @@ function cleanConfig() {
       rateLimit: { windowMs: 60_000, max: 200, store: 'redis' },
     },
     db: {
-      redis: 'redis://cache.example.com:6379',
+      redis: true,
       postgres: 'postgres://slingshot:secret@db.example.com:5432/app',
       postgresMigrations: 'assume-ready',
       postgresPool: {
@@ -51,12 +51,22 @@ describe('production readiness audit', () => {
   test('passes a hardened production server config', () => {
     const report = auditProductionReadiness(cleanConfig(), {
       nodeEnv: 'production',
-      env: {},
+      env: { REDIS_HOST: 'cache.example.com:6379' },
     });
 
     expect(report.ok).toBe(true);
     expect(report.errors).toBe(0);
     expect(report.findings).toEqual([]);
+  });
+
+  test('reports Redis-backed stores without REDIS_HOST', () => {
+    const report = auditProductionReadiness(cleanConfig(), {
+      nodeEnv: 'production',
+      env: {},
+    });
+
+    expect(report.ok).toBe(false);
+    expect(ids(report)).toContain('storage.redis_host_missing');
   });
 
   test('reports blocking security, storage, and observability findings', () => {
@@ -77,7 +87,7 @@ describe('production readiness audit', () => {
         metrics: { enabled: true },
         jobs: { statusEndpoint: true, scopeToUser: true },
       },
-      { nodeEnv: 'production', env: {} },
+      { nodeEnv: 'production', env: { REDIS_HOST: 'cache.example.com:6379' } },
     );
 
     expect(report.ok).toBe(false);
@@ -147,14 +157,14 @@ describe('production readiness audit', () => {
 
     const scaled = auditProductionReadiness(withRealtime, {
       nodeEnv: 'production',
-      env: {},
+      env: { REDIS_HOST: 'cache.example.com:6379' },
     });
     expect(ids(scaled)).toContain('realtime.ws_transport');
     expect(ids(scaled)).toContain('realtime.sse_event_bus');
 
     const single = auditProductionReadiness(withRealtime, {
       nodeEnv: 'production',
-      env: {},
+      env: { REDIS_HOST: 'cache.example.com:6379' },
       multiInstance: false,
     });
     expect(ids(single)).not.toContain('realtime.ws_transport');
@@ -170,7 +180,7 @@ describe('production readiness audit', () => {
 
     const report = auditProductionReadiness(config, {
       nodeEnv: 'production',
-      env: { JWT_SECRET: LONG_SECRET },
+      env: { JWT_SECRET: LONG_SECRET, REDIS_HOST: 'cache.example.com:6379' },
     });
 
     expect(ids(report)).not.toContain('security.signing_secret_missing');

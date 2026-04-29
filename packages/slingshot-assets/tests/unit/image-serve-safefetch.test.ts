@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from 'bun:test';
-import { fetchSourceImage } from '../../src/image/serve';
+import { fetchSourceImage, validateSourceUrl } from '../../src/image/serve';
 import { ImageSourceBlockedError, ImageSourceDnsError } from '../../src/image/types';
 
 function asFetch(m: ReturnType<typeof mock>): typeof fetch {
@@ -101,5 +101,24 @@ describe('fetchSourceImage safeFetch (DNS pinning)', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe('validateSourceUrl origin policy', () => {
+  it('requires exact origin matches including scheme and port', () => {
+    const allowed = ['https://cdn.example.com', 'https://images.example.com:8443'];
+
+    expect(validateSourceUrl('https://cdn.example.com/photo.png', allowed)).toBe(
+      'https://cdn.example.com/photo.png',
+    );
+    expect(validateSourceUrl('http://cdn.example.com/photo.png', allowed)).toBeNull();
+    expect(validateSourceUrl('https://cdn.example.com:8443/photo.png', allowed)).toBeNull();
+    expect(validateSourceUrl('https://images.example.com:8443/photo.png', allowed)).toBe(
+      'https://images.example.com:8443/photo.png',
+    );
+  });
+
+  it('continues to allow relative source paths', () => {
+    expect(validateSourceUrl('/assets/source.png', [])).toBe('/assets/source.png');
   });
 });

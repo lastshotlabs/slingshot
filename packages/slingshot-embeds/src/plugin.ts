@@ -3,6 +3,7 @@ import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingsho
 import {
   EMBEDS_PLUGIN_STATE_KEY,
   getPluginStateOrNull,
+  publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEmbedCache } from './lib/cache';
@@ -79,12 +80,16 @@ export function createEmbedsPlugin(rawConfig?: unknown): SlingshotPlugin {
 
     setupRoutes({ app }: PluginSetupContext) {
       const router = new Hono();
-      getPluginStateOrNull(app)?.set(
-        EMBEDS_PLUGIN_STATE_KEY,
-        Object.freeze({
-          unfurl: unfurlUrls,
-        }),
-      );
+      const pluginState = getPluginStateOrNull(app);
+      if (pluginState) {
+        publishPluginState(
+          pluginState,
+          EMBEDS_PLUGIN_STATE_KEY,
+          Object.freeze({
+            unfurl: unfurlUrls,
+          }),
+        );
+      }
 
       router.post('/unfurl', async c => {
         let body: unknown;

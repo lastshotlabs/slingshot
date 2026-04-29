@@ -2,17 +2,17 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type { KafkaAdapterDropEvent } from '../../src/kafkaAdapter';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
 
 describe('kafkaAdapter pendingBufferSize config', () => {
@@ -39,7 +39,7 @@ describe('kafkaAdapter pendingBufferSize config', () => {
       // Force every send to fail so the events accumulate in the pending buffer.
       const failures = 51;
       for (let i = 0; i < failures; i++) {
-        fakeKafkaState.producerSendErrors.push(new Error(`send failed ${i}`));
+        state.producerSendErrors.push(new Error(`send failed ${i}`));
       }
 
       for (let i = 0; i < failures; i++) {
@@ -91,7 +91,7 @@ describe('kafkaAdapter pendingBufferSize config', () => {
       // Push 1000 failures to fill the default-sized buffer, then 1 more to trigger a drop.
       const failures = 1001;
       for (let i = 0; i < failures; i++) {
-        fakeKafkaState.producerSendErrors.push(new Error(`send failed ${i}`));
+        state.producerSendErrors.push(new Error(`send failed ${i}`));
       }
 
       for (let i = 0; i < failures; i++) {

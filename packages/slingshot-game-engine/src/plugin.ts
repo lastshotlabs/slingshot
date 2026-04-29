@@ -26,6 +26,7 @@ import {
   getActorId,
   getContext,
   getPluginState,
+  publishPluginState,
   resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -940,7 +941,7 @@ export function createGameEnginePlugin(
         gameRegistry: gameRegistry as ReadonlyMap<string, GameDefinition>,
         sessionControls: createSessionControls(activeRuntimes),
       });
-      getPluginState(app).set(GAME_ENGINE_PLUGIN_STATE_KEY, state);
+      publishPluginState(getPluginState(app), GAME_ENGINE_PLUGIN_STATE_KEY, state);
     },
 
     teardown() {

@@ -24,6 +24,7 @@ import {
   getSlingshotCtx,
   hmacSign,
   inspectPackage,
+  publishPluginState,
   requireEntityAdapter,
   resolveRepo,
   sha256,
@@ -516,11 +517,13 @@ async function publishPackageRuntimeState(
     ]),
   );
 
-  appContext.pluginState.set(
+  publishPluginState(
+    appContext.pluginState,
     `${PACKAGE_CAPABILITIES_PREFIX}${pkg.name}`,
     Object.freeze(Object.fromEntries(capabilityEntries)),
   );
-  appContext.pluginState.set(
+  publishPluginState(
+    appContext.pluginState,
     `${PACKAGE_INSPECTION_PREFIX}${pkg.name}`,
     Object.freeze(inspectPackage(pkg)),
   );

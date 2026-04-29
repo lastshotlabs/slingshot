@@ -154,10 +154,11 @@ export function parseImageFormat(raw: unknown): ImageFormat {
  * Validate a URL-backed asset source against allowed origins.
  *
  * Relative URLs are always allowed. Absolute URLs must use `http:` or `https:`
- * and must match one of the configured hostnames.
+ * and must match one of the configured origins exactly, including scheme and
+ * explicit port.
  *
  * @param rawUrl - Source URL to validate.
- * @param allowedOrigins - Allowed remote hostnames.
+ * @param allowedOrigins - Allowed remote origins.
  * @returns The validated URL, or `null` when disallowed.
  */
 export function validateSourceUrl(
@@ -178,7 +179,7 @@ export function validateSourceUrl(
     return null;
   }
 
-  return allowedOrigins.includes(parsed.hostname) ? rawUrl : null;
+  return allowedOrigins.includes(parsed.origin) ? rawUrl : null;
 }
 
 /**

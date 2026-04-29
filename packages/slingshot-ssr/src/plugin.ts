@@ -4,7 +4,7 @@ import type {
   ResolvedEntityConfig,
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
-import { getPluginState } from '@lastshotlabs/slingshot-core';
+import { getPluginState, publishPluginState } from '@lastshotlabs/slingshot-core';
 import { buildActionRouter } from './actions/routes';
 import { SsrAssetManifestError, type ViteManifest, readAssetManifest } from './assets';
 import { ssrPluginConfigSchema } from './config.schema';
@@ -117,7 +117,7 @@ export function createSsrPlugin(rawConfig: SsrPluginConfig): SlingshotPlugin {
 
       if (isrAdapter !== null) {
         isrInvalidators = createIsrInvalidators(isrAdapter);
-        getPluginState(app).set(SSR_ISR_INVALIDATORS_STATE_KEY, isrInvalidators);
+        publishPluginState(getPluginState(app), SSR_ISR_INVALIDATORS_STATE_KEY, isrInvalidators);
       }
 
       const serverActionsDir =

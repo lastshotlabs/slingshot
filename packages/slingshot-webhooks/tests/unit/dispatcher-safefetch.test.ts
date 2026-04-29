@@ -134,4 +134,35 @@ describe('deliverWebhook DNS pinning (safeFetch)', () => {
     expect(allowedCalls).toEqual([{ ip: '203.0.113.5', family: 4 }]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps safeFetch pinning while adding headers and observing responses', async () => {
+    const seen: { testHeader?: string | null; body?: string } = {};
+    const server = Bun.serve({
+      port: 0,
+      fetch: async req => {
+        seen.testHeader = req.headers.get('x-webhook-test');
+        seen.body = await req.text();
+        return new Response('captured', { status: 202 });
+      },
+    });
+    let observed: { status?: number; body?: string } = {};
+
+    try {
+      await deliverWebhook(makeJob({ url: `http://webhook-test.example:${server.port}/hook` }), {
+        safeFetchOverrides: {
+          resolveHost: async () => [{ address: '127.0.0.1', family: 4 }],
+          isIpAllowed: () => true,
+        },
+        extraHeaders: { 'X-Webhook-Test': 'true' },
+        onResponse: async res => {
+          observed = { status: res.status, body: await res.text() };
+        },
+      });
+    } finally {
+      server.stop(true);
+    }
+
+    expect(seen).toEqual({ testHeader: 'true', body: '{"userId":"u1"}' });
+    expect(observed).toEqual({ status: 202, body: 'captured' });
+  });
 });

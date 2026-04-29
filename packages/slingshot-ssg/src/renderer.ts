@@ -5,9 +5,9 @@ import { PathTraversalError, deepFreeze, safeJoin } from '@lastshotlabs/slingsho
 import type { SlingshotSsrRenderer, SsrShell } from '@lastshotlabs/slingshot-ssr';
 import { resolveRouteChain } from '@lastshotlabs/slingshot-ssr';
 import {
-  createSsgCircuitBreaker,
-  SsgCircuitOpenError,
   type SsgCircuitBreaker,
+  SsgCircuitOpenError,
+  createSsgCircuitBreaker,
 } from './circuitBreaker';
 import type { SsgConfig, SsgPageResult, SsgResult } from './types';
 
@@ -17,6 +17,20 @@ const DEFAULT_RENDER_PAGE_TIMEOUT_MS = 60_000;
 const DEFAULT_RETRY_MAX_ATTEMPTS = 1;
 const DEFAULT_RETRY_BASE_DELAY_MS = 1_000;
 const DEFAULT_RETRY_MAX_DELAY_MS = 30_000;
+
+class SsgPluginStateMap extends Map<string, unknown> {
+  set(): this {
+    throw new Error('[slingshot-ssg] pluginState is read-only during static generation');
+  }
+
+  delete(): boolean {
+    throw new Error('[slingshot-ssg] pluginState is read-only during static generation');
+  }
+
+  clear(): void {
+    throw new Error('[slingshot-ssg] pluginState is read-only during static generation');
+  }
+}
 
 function writeFileAtomicSync(filePath: string, contents: string): void {
   mkdirSync(dirname(filePath), { recursive: true });
@@ -86,15 +100,8 @@ function isTransientError(error: Error): boolean {
  * delay = min(baseDelayMs * 2^(attempt-1), maxDelayMs)
  * jitter = delay * (0.75 + random * 0.5)
  */
-function calculateBackoff(
-  attempt: number,
-  baseDelayMs: number,
-  maxDelayMs: number,
-): number {
-  const delay = Math.min(
-    baseDelayMs * Math.pow(2, attempt - 1),
-    maxDelayMs,
-  );
+function calculateBackoff(attempt: number, baseDelayMs: number, maxDelayMs: number): number {
+  const delay = Math.min(baseDelayMs * Math.pow(2, attempt - 1), maxDelayMs);
   const jitter = delay * (0.75 + Math.random() * 0.5);
   return Math.round(jitter);
 }
@@ -127,9 +134,7 @@ async function renderSsgPageInternal(
     // before any rendering occurs. The page is recorded as failed so the build
     // surfaces it in the summary instead of silently writing outside outDir.
     if (err instanceof PathTraversalError) {
-      const error = new Error(
-        `[slingshot-ssg] rejected URL path "${urlPath}": ${err.message}`,
-      );
+      const error = new Error(`[slingshot-ssg] rejected URL path "${urlPath}": ${err.message}`);
       console.warn(error.message);
       return makeFailedResult(urlPath, '', start, error);
     }
@@ -251,9 +256,9 @@ async function renderSsgPageUnchecked(
   // package). Renderers that call bsCtx.db at build time will fail and the page
   // will be recorded as failed rather than producing broken output.
   // The cast boundary is acceptable per Rule 5: opaque peer-dep boundary.
-  const bsCtxStub = Object.freeze({ pluginState: new Map() }) as unknown as Parameters<
-    SlingshotSsrRenderer['resolve']
-  >[1];
+  const bsCtxStub = Object.freeze({
+    pluginState: new SsgPluginStateMap(),
+  }) as unknown as Parameters<SlingshotSsrRenderer['resolve']>[1];
 
   const shell: SsrShell = {
     headTags: '',

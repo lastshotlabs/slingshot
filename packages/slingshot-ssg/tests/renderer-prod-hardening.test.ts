@@ -124,6 +124,28 @@ describe('renderSsgPage — structured per-page error details (P-SSG-5)', () => 
     expect(result.errorDetail).toBeUndefined();
   });
 
+  it('treats pluginState as read-only during static generation', async () => {
+    const renderer: SlingshotSsrRenderer = {
+      async resolve(url, ctx): Promise<SsrRouteMatch> {
+        (ctx.pluginState as unknown as Map<string, unknown>).set('late-write', true);
+        return makeRouteMatch(url);
+      },
+      async render(): Promise<Response> {
+        return new Response('<html>ok</html>', { status: 200 });
+      },
+      async renderChain(): Promise<Response> {
+        return new Response('<html>ok</html>', { status: 200 });
+      },
+    };
+
+    const result = await renderSsgPage('/plugin-state-write', renderer, makeConfig());
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('pluginState is read-only during static generation');
+    expect(result.errorDetail?.message).toContain(
+      'pluginState is read-only during static generation',
+    );
+  });
+
   it('renderSsgPages aggregates structured per-page errors across mixed outcomes', async () => {
     const renderer: SlingshotSsrRenderer = {
       async resolve(url): Promise<SsrRouteMatch> {

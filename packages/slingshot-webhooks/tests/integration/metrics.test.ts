@@ -5,15 +5,25 @@
  * and asserts that the expected webhooks.* counters / gauges / timings appear
  * in the snapshot after running representative success and failure deliveries.
  */
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import { createInProcessMetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { createWebhooksTestApp } from '../../src/testing';
+import type { WebhookPluginConfig } from '../../src/types/config';
 import type { WebhookDelivery } from '../../src/types/models';
 
-const originalFetch = globalThis.fetch;
+const PUBLIC_RESOLVE = async () => [{ address: '93.184.216.34', family: 4 as const }];
 
 function asFetch(value: ReturnType<typeof mock<() => Promise<Response>>>): typeof fetch {
   return value as unknown as typeof fetch;
+}
+
+function dispatchFor(
+  fetchMock: ReturnType<typeof mock<() => Promise<Response>>>,
+): NonNullable<WebhookPluginConfig['dispatch']> {
+  return {
+    fetchImpl: asFetch(fetchMock),
+    safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+  };
 }
 
 function adminHeaders(tenantId = 'tenant-a'): Record<string, string> {
@@ -62,19 +72,15 @@ async function waitForDelivery(
   throw new Error(`Timed out waiting for delivery on endpoint ${endpointId}`);
 }
 
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
-
 describe('webhooks plugin — metrics emitter', () => {
   it('records webhooks.delivery.count success and webhooks.delivery.duration on a clean delivery', async () => {
     const fetchMock = mock(async () => new Response('ok', { status: 200 }));
-    globalThis.fetch = asFetch(fetchMock);
     const metrics = createInProcessMetricsEmitter();
 
     const { app, events, runtime, teardown } = await createWebhooksTestApp(
       {
         events: ['auth:*'],
+        dispatch: dispatchFor(fetchMock),
       },
       { metricsEmitter: metrics },
     );
@@ -109,13 +115,13 @@ describe('webhooks plugin — metrics emitter', () => {
 
   it('records webhooks.dlq.count when delivery exhausts its retries', async () => {
     const fetchMock = mock(async () => new Response('upstream error', { status: 500 }));
-    globalThis.fetch = asFetch(fetchMock);
     const metrics = createInProcessMetricsEmitter();
 
     const { app, events, runtime, teardown } = await createWebhooksTestApp(
       {
         events: ['auth:*'],
         queueConfig: { maxAttempts: 2, retryBaseDelayMs: 1 },
+        dispatch: dispatchFor(fetchMock),
       },
       { metricsEmitter: metrics },
     );

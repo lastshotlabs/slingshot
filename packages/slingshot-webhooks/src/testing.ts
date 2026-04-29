@@ -19,6 +19,7 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  createPluginStateMap,
   defineEvent,
   getActor,
   getActorId,
@@ -158,7 +159,7 @@ export async function createWebhooksTestApp(
   registerWebhooksTestAuthDefinitions(events);
   frameworkOptions.registerDefinitions?.(events);
   const frameworkConfig = createTestFrameworkConfig(frameworkOptions);
-  const pluginState = new Map<string, unknown>();
+  const pluginState = createPluginStateMap();
 
   if (!frameworkOptions.standalone) {
     const { createEntityFactories } = await import('@lastshotlabs/slingshot-entity');

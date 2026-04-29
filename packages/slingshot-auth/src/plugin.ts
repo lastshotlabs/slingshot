@@ -16,6 +16,7 @@ import {
   getClientIpFromRequest,
   getContextOrNull,
   isPublicPath,
+  publishPluginState,
   sha256,
   timingSafeEqual,
   validatePluginConfig,
@@ -166,7 +167,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
 
         const ctx = getContextOrNull(app);
         if (ctx) {
-          ctx.pluginState.set(AUTH_RUNTIME_KEY, result.runtime);
+          publishPluginState(ctx.pluginState, AUTH_RUNTIME_KEY, result.runtime);
         }
         const mutableCtx = ctx as MutableContext | null;
 
@@ -488,7 +489,7 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
       // Register resolved auth config on SlingshotContext (when available)
       const ctx = getContextOrNull(app);
       if (ctx) {
-        ctx.pluginState.set(AUTH_RUNTIME_KEY, result.runtime);
+        publishPluginState(ctx.pluginState, AUTH_RUNTIME_KEY, result.runtime);
       }
 
       // RequestActorResolver — provides resolveActor to framework WS/SSE upgrade

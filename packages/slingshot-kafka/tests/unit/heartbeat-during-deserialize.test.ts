@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
 
 describe('kafkaAdapter heartbeat during deserialize', () => {
@@ -49,7 +49,7 @@ describe('kafkaAdapter heartbeat during deserialize', () => {
     );
     await flushAsyncWork();
 
-    const consumer = fakeKafkaState.consumers[0];
+    const consumer = state.consumers[0];
     expect(consumer).toBeDefined();
 
     await consumer?.eachMessage?.({
@@ -98,7 +98,7 @@ describe('kafkaAdapter heartbeat during deserialize', () => {
       bus.on('auth:login', () => {}, { durable: true, name: 'heartbeat-fail-worker' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
         partition: 0,

@@ -11,6 +11,7 @@ import {
   getPermissionsStateOrNull,
   getPluginState,
   noopLogger,
+  publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -274,7 +275,7 @@ export function createAssetsPlugin(
           storage,
           config,
         });
-        getPluginState(app).set(ASSETS_PLUGIN_STATE_KEY, state);
+        publishPluginState(getPluginState(app), ASSETS_PLUGIN_STATE_KEY, state);
       }
     },
 

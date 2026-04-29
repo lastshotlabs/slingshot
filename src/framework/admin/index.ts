@@ -11,6 +11,7 @@ import {
   type SlingshotPlugin,
   getPermissionsStateOrNull,
   getPluginState,
+  publishPluginState,
 } from '@lastshotlabs/slingshot-core';
 
 /**
@@ -111,7 +112,7 @@ export function createSlingshotAdminPlugin(config: SlingshotAdminPluginConfig): 
 
       // Publish resolved permissions so other plugins can read them.
       if (!getPermissionsStateOrNull(pluginState)) {
-        pluginState.set(PERMISSIONS_STATE_KEY, permissions);
+        publishPluginState(pluginState, PERMISSIONS_STATE_KEY, permissions);
       }
 
       // Register routes in setupPost — all plugins' setupRoutes have completed and

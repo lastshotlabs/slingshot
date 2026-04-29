@@ -14,6 +14,7 @@ import {
   getContextOrNull,
   getNotificationsStateOrNull,
   getPluginState,
+  publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { RouteAuthRegistry } from '@lastshotlabs/slingshot-core';
@@ -457,7 +458,7 @@ export function createPushPlugin(
       };
 
       const pluginState = getPluginState(app);
-      pluginState.set(PUSH_PLUGIN_STATE_KEY, state);
+      publishPluginState(pluginState, PUSH_PLUGIN_STATE_KEY, state);
 
       const notificationsState = getNotificationsStateOrNull(pluginState);
       if (notificationsState) {

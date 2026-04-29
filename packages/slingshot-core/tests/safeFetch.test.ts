@@ -126,10 +126,8 @@ describe('createSafeFetch IP policy', () => {
   });
 });
 
-// Exercise the actual fetch path against a local server. We use a 127.0.0.1
-// URL with the `isIpAllowed` policy overridden to allow loopback, so the test
-// is robust across runtimes (Node honors the undici dispatcher; Bun ships a
-// stub Agent and falls through to native fetch — both reach the local server).
+// Exercise the actual fetch path against a local server. The loopback allow
+// predicate is explicit because the production default blocks 127.0.0.1.
 describe('createSafeFetch live request', () => {
   let server: Server;
   let port: number;
@@ -154,5 +152,19 @@ describe('createSafeFetch live request', () => {
     const res = await safeFetch(`http://127.0.0.1:${port}/`);
     expect(res.status).toBe(200);
     expect(await res.text()).toBe('ok');
+  });
+
+  test('hostname URL uses the pinned resolver address', async () => {
+    const resolveHost = mock(async () => [{ address: '127.0.0.1', family: 4 as const }]);
+    const safeFetch = createSafeFetch({
+      resolveHost,
+      isIpAllowed: () => true,
+    });
+
+    const res = await safeFetch(`http://pinned.example:${port}/`);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+    expect(resolveHost).toHaveBeenCalledWith('pinned.example');
   });
 });

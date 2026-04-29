@@ -1,12 +1,10 @@
 import { promises as dnsPromises } from 'node:dns';
+import type { ClientRequest } from 'node:http';
 import { isIP } from 'node:net';
 
 /**
  * Minimal local type for the subset of the undici `Dispatcher` we use. We
- * avoid a hard import on `undici`/`undici-types` so this module compiles
- * cleanly in workspaces that don't list undici as a direct dependency. At
- * runtime the dispatcher is loaded dynamically from `undici` (provided by
- * Bun's built-in shim or Node's bundled module).
+ * keep this local so callers do not need to import undici types directly.
  */
 interface UndiciDispatcherLike {
   close?: () => Promise<void>;
@@ -28,17 +26,22 @@ interface UndiciAgentOptions {
 }
 
 type UndiciAgentCtor = new (opts?: UndiciAgentOptions) => UndiciDispatcherLike;
+type UndiciFetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit & { dispatcher?: UndiciDispatcherLike },
+) => Promise<Response>;
 
-let agentCtorPromise: Promise<UndiciAgentCtor> | null = null;
-async function loadAgentCtor(): Promise<UndiciAgentCtor> {
-  if (!agentCtorPromise) {
-    // Module specifier hidden from the type system: `undici` is a runtime
-    // dependency provided by Bun and Node, but the workspace does not declare
-    // a direct dep on it (and types are not bundled here).
-    const mod = await (Function('return import("undici")') as () => Promise<unknown>)();
-    agentCtorPromise = Promise.resolve((mod as { Agent: UndiciAgentCtor }).Agent);
+let undiciPromise: Promise<{ Agent: UndiciAgentCtor; fetch: UndiciFetch }> | null = null;
+async function loadUndici(): Promise<{ Agent: UndiciAgentCtor; fetch: UndiciFetch }> {
+  if (!undiciPromise) {
+    const mod = await import('undici');
+    const undici = mod as unknown as { Agent: UndiciAgentCtor; fetch?: UndiciFetch };
+    undiciPromise = Promise.resolve({
+      Agent: undici.Agent,
+      fetch: undici.fetch ?? (globalThis.fetch as UndiciFetch),
+    });
   }
-  return agentCtorPromise;
+  return undiciPromise;
 }
 
 /**
@@ -132,8 +135,19 @@ export function createSafeFetch(opts: SafeFetchOptions = {}): typeof fetch {
     const allowed = await isIpAllowed(resolvedIp, family);
     if (!allowed) throw new SafeFetchBlockedError(resolvedIp, 'ip-blocked');
 
+    if (isBunRuntime()) {
+      return await fetchWithPinnedNodeRequest(
+        input,
+        init,
+        url,
+        resolvedIp,
+        family,
+        Math.max(connectTimeoutMs, headersTimeoutMs, bodyTimeoutMs),
+      );
+    }
+
     // Build a per-request undici Agent that pins the lookup to the validated IP.
-    const Agent = await loadAgentCtor();
+    const { Agent, fetch: undiciFetch } = await loadUndici();
     const dispatcher = new Agent({
       connect: {
         // Custom lookup: always return resolved IP, ignoring the OS resolver.
@@ -151,7 +165,7 @@ export function createSafeFetch(opts: SafeFetchOptions = {}): typeof fetch {
       dispatcher,
     };
     try {
-      return await fetch(input as RequestInfo, undiciInit);
+      return await undiciFetch(input as RequestInfo, undiciInit);
     } finally {
       // Best-effort close to free sockets; non-fatal. In runtimes that ship a
       // stub for `undici.Agent` (e.g. Bun), `close` may be undefined.
@@ -173,6 +187,189 @@ async function defaultResolveHost(hostname: string): Promise<{ address: string; 
 function defaultIpAllowed(ip: string, family: 4 | 6): boolean {
   // Default allow public IPs; reject loopback / link-local / private.
   return !isPrivateOrLoopbackIp(ip, family);
+}
+
+function isBunRuntime(): boolean {
+  return typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+}
+
+function mergeRequestHeaders(input: RequestInfo | URL, init?: RequestInit): Headers {
+  const headers = new Headers();
+  if (typeof input !== 'string' && !(input instanceof URL)) {
+    for (const [name, value] of (input as Request).headers) {
+      headers.set(name, value);
+    }
+  }
+  if (init?.headers) {
+    for (const [name, value] of new Headers(init.headers)) {
+      headers.set(name, value);
+    }
+  }
+  return headers;
+}
+
+function resolveRequestMethod(input: RequestInfo | URL, init?: RequestInit): string {
+  if (init?.method) return init.method;
+  if (typeof input !== 'string' && !(input instanceof URL)) return (input as Request).method;
+  return 'GET';
+}
+
+function resolveRequestBody(input: RequestInfo | URL, init?: RequestInit): BodyInit | null {
+  if (init && 'body' in init) return init.body ?? null;
+  if (typeof input !== 'string' && !(input instanceof URL)) return (input as Request).body;
+  return null;
+}
+
+function resolveRequestSignal(input: RequestInfo | URL, init?: RequestInit): AbortSignal | null {
+  if (init?.signal) return init.signal;
+  if (typeof input !== 'string' && !(input instanceof URL)) return (input as Request).signal;
+  return null;
+}
+
+function toResponseHeaders(headers: Record<string, string | string[] | undefined>): Headers {
+  const out = new Headers();
+  for (const [name, value] of Object.entries(headers)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) out.append(name, item);
+    } else {
+      out.set(name, value);
+    }
+  }
+  return out;
+}
+
+async function writeRequestBody(req: ClientRequest, body: BodyInit | null): Promise<void> {
+  if (body == null) {
+    req.end();
+    return;
+  }
+
+  if (typeof body === 'string' || body instanceof Uint8Array) {
+    req.end(body);
+    return;
+  }
+
+  if (body instanceof ArrayBuffer) {
+    req.end(new Uint8Array(body));
+    return;
+  }
+
+  if (body instanceof URLSearchParams) {
+    req.end(body.toString());
+    return;
+  }
+
+  if (body instanceof Blob) {
+    req.end(new Uint8Array(await body.arrayBuffer()));
+    return;
+  }
+
+  if (body instanceof ReadableStream) {
+    const reader = body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!req.write(value)) {
+          await new Promise<void>((resolve, reject) => {
+            req.once('drain', resolve);
+            req.once('error', reject);
+          });
+        }
+      }
+      req.end();
+    } finally {
+      reader.releaseLock();
+    }
+    return;
+  }
+
+  req.end(String(body));
+}
+
+async function fetchWithPinnedNodeRequest(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  url: URL,
+  resolvedIp: string,
+  family: 4 | 6,
+  connectTimeoutMs: number,
+): Promise<Response> {
+  const transport =
+    url.protocol === 'https:' ? await import('node:https') : await import('node:http');
+  const headers = mergeRequestHeaders(input, init);
+  const signal = resolveRequestSignal(input, init);
+
+  return await new Promise<Response>((resolve, reject) => {
+    let settled = false;
+    let responseBody: ReadableStream<Uint8Array> | undefined;
+    const fail = (err: unknown): void => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+    const request = transport.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: `${url.pathname}${url.search}`,
+        method: resolveRequestMethod(input, init),
+        headers: Object.fromEntries(headers),
+        servername: url.hostname,
+        lookup: (_hostname, _options, callback) => {
+          const cb = callback as (
+            err: NodeJS.ErrnoException | null,
+            address: Array<{ address: string; family: number }>,
+          ) => void;
+          cb(null, [{ address: resolvedIp, family }]);
+        },
+      },
+      res => {
+        responseBody = new ReadableStream<Uint8Array>({
+          start(controller) {
+            res.on('data', chunk => controller.enqueue(new Uint8Array(chunk)));
+            res.on('end', () => controller.close());
+            res.on('error', err => controller.error(err));
+          },
+          cancel() {
+            res.destroy();
+          },
+        });
+        settled = true;
+        resolve(
+          new Response(responseBody, {
+            status: res.statusCode ?? 0,
+            statusText: res.statusMessage,
+            headers: toResponseHeaders(res.headers),
+          }),
+        );
+      },
+    );
+
+    const onAbort = (): void => {
+      request.destroy(new Error('The operation was aborted'));
+      if (responseBody) responseBody.cancel().catch(() => {});
+      fail(new DOMException('The operation was aborted', 'AbortError'));
+    };
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    request.setTimeout(connectTimeoutMs, () => {
+      request.destroy(new Error('safeFetch request timed out'));
+    });
+    request.once('error', fail);
+    request.once('close', () => signal?.removeEventListener('abort', onAbort));
+
+    void writeRequestBody(request, resolveRequestBody(input, init)).catch(err => {
+      request.destroy(err instanceof Error ? err : new Error(String(err)));
+      fail(err);
+    });
+  });
 }
 
 /**

@@ -46,7 +46,8 @@
   "dependencies": {
     "@faker-js/faker": ">=10.0",
     "@hono/zod-openapi": ">=0.18",
-    "@asteasolutions/zod-to-openapi": ">=7.0"
+    "@asteasolutions/zod-to-openapi": ">=7.0",
+    "undici": ">=6.0 <8"
   },
   "peerDependencies": {
     "hono": ">=4.12.14 <5",

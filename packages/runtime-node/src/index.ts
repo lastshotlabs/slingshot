@@ -123,12 +123,30 @@ export function configureRuntimeNodeStructuredLogger(logger: Logger | null): Log
 
 let processHandlersInstalled = false;
 
+function shouldSkipFatalProcessExit(): boolean {
+  const argv = process.argv.join(' ');
+  return (
+    process.env.NODE_ENV === 'test' ||
+    process.env.BUN_ENV === 'test' ||
+    process.env.SLINGSHOT_DISABLE_FATAL_PROCESS_EXIT === '1' ||
+    argv.includes('bun test') ||
+    argv.includes('vitest') ||
+    process.argv.some(arg => /\.test\.[cm]?[jt]s$/.test(arg))
+  );
+}
+
+function scheduleFatalProcessExit(): void {
+  if (shouldSkipFatalProcessExit()) return;
+  process.exitCode = 1;
+  const timer = setTimeout(() => process.exit(1), 0);
+  timer.unref?.();
+}
+
 /**
  * Install once-per-process handlers for `unhandledRejection` and
- * `uncaughtException`. Both are forwarded to the structured logger so they
- * surface alongside other runtime events. Without this hook Node defaults to
- * crashing the process on uncaught exceptions and warning on unhandled
- * rejections — neither outcome is observable without external instrumentation.
+ * `uncaughtException`. Both are forwarded to the structured logger, then a
+ * process exit is scheduled so production does not continue in an undefined
+ * state.
  *
  * Idempotent — safe to call across multiple `nodeRuntime()` invocations in the
  * same process.
@@ -141,9 +159,11 @@ export function installProcessSafetyNet(): void {
       message: reason instanceof Error ? reason.message : String(reason),
       stack: reason instanceof Error ? reason.stack : undefined,
     });
+    scheduleFatalProcessExit();
   });
   process.on('uncaughtException', (err: Error) => {
     activeLogger.error('uncaught-exception', { message: err.message, stack: err.stack });
+    scheduleFatalProcessExit();
   });
 }
 
@@ -235,6 +255,58 @@ function parseContentLength(header: string | null): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+function makePayloadTooLargeResponse(req: Request, received: number, maxBody: number): Response {
+  activeLogger.warn('request-body-too-large', {
+    declared: received,
+    maxBody,
+    method: req.method,
+    url: req.url,
+  });
+  return new Response('Payload Too Large', { status: 413 });
+}
+
+function concatBodyChunks(chunks: Uint8Array[], total: number): Uint8Array {
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
+async function enforceRequestBodyLimit(req: Request, maxBody: number): Promise<Request | Response> {
+  const declared = parseContentLength(req.headers.get('content-length'));
+  if (declared !== null && declared > maxBody) {
+    return makePayloadTooLargeResponse(req, declared, maxBody);
+  }
+
+  if (req.method === 'GET' || req.method === 'HEAD' || !req.body) {
+    return req;
+  }
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBody) {
+        await reader.cancel().catch(() => {});
+        return makePayloadTooLargeResponse(req, total, maxBody);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = concatBodyChunks(chunks, total);
+  return new Request(req, { body, duplex: 'half' } as RequestInit & { duplex: 'half' });
+}
+
 /** @internal Exposes low-level Node runtime helpers for unit-test access. Not part of the public API. */
 export const runtimeNodeInternals = {
   toBufferChunk,
@@ -244,6 +316,7 @@ export const runtimeNodeInternals = {
   attachNodeRequestListener,
   deleteChannelIfEmpty,
   parseContentLength,
+  enforceRequestBodyLimit,
 };
 
 // ---------------------------------------------------------------------------
@@ -462,18 +535,10 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
       const fetchHandler = async (req: Request): Promise<Response> => {
         inFlight += 1;
         try {
-          const declared = parseContentLength(req.headers.get('content-length'));
-          if (declared !== null && declared > maxBody) {
-            activeLogger.warn('request-body-too-large', {
-              declared,
-              maxBody,
-              method: req.method,
-              url: req.url,
-            });
-            return new Response('Payload Too Large', { status: 413 });
-          }
-          const response = await opts.fetch(req);
-          if (upgradedRequests.has(req)) return alreadySentResponse();
+          const limitedReq = await enforceRequestBodyLimit(req, maxBody);
+          if (limitedReq instanceof Response) return limitedReq;
+          const response = await opts.fetch(limitedReq);
+          if (upgradedRequests.has(limitedReq)) return alreadySentResponse();
           return response;
         } catch (err) {
           if (upgradedRequests.has(req)) return alreadySentResponse();

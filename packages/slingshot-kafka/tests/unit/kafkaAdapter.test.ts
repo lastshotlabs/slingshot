@@ -3,18 +3,18 @@ import { z } from 'zod';
 import { createEventSchemaRegistry, createRawEventEnvelope } from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter, getKafkaAdapterIntrospectionOrNull } =
   await import('../../src/kafkaAdapter');
 
 afterEach(async () => {
-  resetFakeKafkaState();
+  reset();
 });
 
 describe('kafkaAdapter', () => {
@@ -41,12 +41,12 @@ describe('kafkaAdapter', () => {
     bus.emit('auth:login', { userId: 'u-1', sessionId: 's-1' });
     await flushAsyncWork();
 
-    expect(fakeKafkaState.createTopicsCalls[0]?.topics[0]?.topic).toBe('custom.events.auth.login');
-    expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
-    expect(fakeKafkaState.producerSendCalls[0]?.topic).toBe('custom.events.auth.login');
-    expect(
-      fakeKafkaState.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.content-type'],
-    ).toBe('application/json');
+    expect(state.createTopicsCalls[0]?.topics[0]?.topic).toBe('custom.events.auth.login');
+    expect(state.producerSendCalls).toHaveLength(1);
+    expect(state.producerSendCalls[0]?.topic).toBe('custom.events.auth.login');
+    expect(state.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.content-type']).toBe(
+      'application/json',
+    );
   });
 
   test('buffers failed durable publishes and drains them later', async () => {
@@ -57,17 +57,17 @@ describe('kafkaAdapter', () => {
     bus.on('auth:login', () => {}, { durable: true, name: 'buffered-worker' });
     await flushAsyncWork();
 
-    fakeKafkaState.producerSendErrors.push(new Error('temporary broker failure'));
+    state.producerSendErrors.push(new Error('temporary broker failure'));
     bus.emit('auth:login', { userId: 'u-2', sessionId: 's-2' });
     await flushAsyncWork();
 
     expect(bus.health().pendingBufferSize).toBe(1);
-    expect(fakeKafkaState.producerSendCalls).toHaveLength(0);
+    expect(state.producerSendCalls).toHaveLength(0);
 
     await bus._drainPendingBuffer();
 
     expect(bus.health().pendingBufferSize).toBe(0);
-    expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
+    expect(state.producerSendCalls).toHaveLength(1);
   });
 
   test('recovers from an initial producer connection failure when draining buffered events', async () => {
@@ -78,17 +78,17 @@ describe('kafkaAdapter', () => {
     bus.on('auth:login', () => {}, { durable: true, name: 'reconnect-worker' });
     await flushAsyncWork();
 
-    fakeKafkaState.producerConnectErrors.push(new Error('connect failed once'));
+    state.producerConnectErrors.push(new Error('connect failed once'));
     bus.emit('auth:login', { userId: 'u-5', sessionId: 's-5' });
     await flushAsyncWork();
 
     expect(bus.health().pendingBufferSize).toBe(1);
-    expect(fakeKafkaState.producerSendCalls).toHaveLength(0);
+    expect(state.producerSendCalls).toHaveLength(0);
 
     await bus._drainPendingBuffer();
 
     expect(bus.health().pendingBufferSize).toBe(0);
-    expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
+    expect(state.producerSendCalls).toHaveLength(1);
   });
 
   test('deserializes durable messages and applies schema validation on consume', async () => {
@@ -128,7 +128,7 @@ describe('kafkaAdapter', () => {
     );
     await flushAsyncWork();
 
-    const consumer = fakeKafkaState.consumers[0];
+    const consumer = state.consumers[0];
     await consumer?.eachMessage?.({
       topic: 'slingshot.events.auth.login',
       partition: 0,
@@ -165,7 +165,7 @@ describe('kafkaAdapter', () => {
     expect(() => {
       bus.emit('auth:login', { userId: 'u-4' } as never);
     }).toThrow('validation failed');
-    expect(fakeKafkaState.producerSendAttempts).toHaveLength(0);
+    expect(state.producerSendAttempts).toHaveLength(0);
   });
 
   test('warns when broker certificate verification is disabled', () => {
@@ -214,7 +214,7 @@ describe('kafkaAdapter', () => {
       brokers: ['localhost:19092'],
     });
 
-    fakeKafkaState.consumerSubscribeErrors.push(new Error('subscribe failed'));
+    state.consumerSubscribeErrors.push(new Error('subscribe failed'));
     const originalError = console.error;
     const errorSpy = mock(() => {});
     console.error = errorSpy;
@@ -223,9 +223,9 @@ describe('kafkaAdapter', () => {
       bus.on('auth:login', () => {}, { durable: true, name: 'broken-worker' });
       await flushAsyncWork();
 
-      expect(fakeKafkaState.consumers).toHaveLength(1);
-      expect(fakeKafkaState.consumers[0]?.connectCalls).toBe(1);
-      expect(fakeKafkaState.consumers[0]?.disconnectCalls).toBe(1);
+      expect(state.consumers).toHaveLength(1);
+      expect(state.consumers[0]?.connectCalls).toBe(1);
+      expect(state.consumers[0]?.disconnectCalls).toBe(1);
       expect(bus.health().consumers).toHaveLength(0);
     } finally {
       console.error = originalError;
@@ -311,7 +311,7 @@ describe('kafkaAdapter', () => {
       bus.on('auth:login', listener, { durable: true, name: 'null-value-worker' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
         partition: 0,
@@ -336,7 +336,7 @@ describe('kafkaAdapter', () => {
       bus.on('auth:login', listener, { durable: true, name: 'deser-err-worker' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
         partition: 0,
@@ -375,7 +375,7 @@ describe('kafkaAdapter', () => {
         userId: 'u-dlq',
         sessionId: 's-dlq',
       });
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
         partition: 0,
@@ -389,7 +389,7 @@ describe('kafkaAdapter', () => {
       });
 
       expect(listener).toHaveBeenCalledTimes(2);
-      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic.endsWith('.dlq'));
+      const dlqSend = state.producerSendCalls.find(c => c.topic.endsWith('.dlq'));
       expect(dlqSend?.topic).toBe('slingshot.events.auth.login.dlq');
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error']).toBe('handler always fails');
     } finally {
@@ -409,13 +409,13 @@ describe('kafkaAdapter', () => {
       bus.on('auth:login', listener, { durable: true, name: 'dlq-fail-worker' });
       await flushAsyncWork();
 
-      fakeKafkaState.producerSendErrors.push(new Error('DLQ broker unavailable'));
+      state.producerSendErrors.push(new Error('DLQ broker unavailable'));
 
       const envelope = createRawEventEnvelope('auth:login', {
         userId: 'u-dlqfail',
         sessionId: 's-dlqfail',
       });
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
         partition: 0,
@@ -453,7 +453,7 @@ describe('kafkaAdapter', () => {
         userId: 'u-commit-fail',
         sessionId: 's-commit-fail',
       });
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       if (!consumer?.eachMessage) {
         throw new Error('Consumer eachMessage was not set up — adapter setup may have failed');
       }
@@ -543,7 +543,7 @@ describe('kafkaAdapter', () => {
       await flushAsyncWork();
 
       expect(listener).not.toHaveBeenCalled();
-      expect(fakeKafkaState.producerSendCalls).toHaveLength(0);
+      expect(state.producerSendCalls).toHaveLength(0);
       const warnMessages = warnSpy.mock.calls.map(c => String(c[0]));
       expect(warnMessages.some(m => m.includes('emit() called after shutdown'))).toBe(true);
       expect(warnMessages.some(m => m.includes('on() called after shutdown'))).toBe(true);
@@ -567,7 +567,7 @@ describe('kafkaAdapter', () => {
 
       bus.on('auth:login', () => {}, { durable: true, name: 'health-worker' });
       await flushAsyncWork();
-      await fakeKafkaState.consumers[0]?.emitEvent?.('consumer.group_join', {
+      await state.consumers[0]?.emitEvent?.('consumer.group_join', {
         payload: { memberId: 'health-member' },
       });
 
@@ -590,7 +590,7 @@ describe('kafkaAdapter', () => {
       bus.on('auth:login', () => {}, { durable: true, name: 'shutdown-buffer-worker' });
       await flushAsyncWork();
 
-      fakeKafkaState.producerSendErrors.push(new Error('broker down'));
+      state.producerSendErrors.push(new Error('broker down'));
       bus.emit('auth:login', { userId: 'u-buf', sessionId: 's-buf' });
       await flushAsyncWork();
 
@@ -626,10 +626,10 @@ describe('kafkaAdapter', () => {
       bus.on('auth:login', listener, { durable: true, name: 'rebalance-worker' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0]!;
+      const consumer = state.consumers[0]!;
       // First commit attempt fails so the offset stays recorded as pending;
       // the rebalance hook must flush it on the next commitOffsets call.
-      fakeKafkaState.commitOffsetErrors.push(new Error('first commit blocked'));
+      state.commitOffsetErrors.push(new Error('first commit blocked'));
 
       const envelope = createRawEventEnvelope('auth:login', {
         userId: 'u-rebal',
@@ -684,7 +684,7 @@ describe('kafkaAdapter', () => {
       bus.on('auth:login', () => {}, { durable: true, name: 'drop-stat-worker' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0]!;
+      const consumer = state.consumers[0]!;
       // Two null-value messages each record a drop with reason 'null-message-value'.
       await consumer.eachMessage?.({
         topic: 'slingshot.events.auth.login',
@@ -730,7 +730,7 @@ describe('kafkaAdapter', () => {
       // Force every send to fail. The first 1000 fill the pending buffer; the
       // rest hit the buffer-full path and call notifyDrop.
       for (let i = 0; i < 1010; i++) {
-        fakeKafkaState.producerSendErrors.push(new Error('broker down'));
+        state.producerSendErrors.push(new Error('broker down'));
       }
       for (let i = 0; i < 1010; i++) {
         bus.emit('auth:login', { userId: `u-${i}`, sessionId: `s-${i}` });

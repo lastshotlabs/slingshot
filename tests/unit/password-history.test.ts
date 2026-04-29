@@ -185,7 +185,7 @@ describe('POST /auth/set-password — password history enforcement', () => {
     const setRes = await app.request('/auth/set-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-user-token': token },
-      body: JSON.stringify({ password: 'brandnewpassword', currentPassword: 'password123' }),
+      body: JSON.stringify({ password: 'brandnewpassword1', currentPassword: 'password123' }),
     });
     expect(setRes.status).toBe(200);
   });

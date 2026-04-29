@@ -29,6 +29,7 @@ import {
   getContextOrNull,
   getPluginState,
   noopLogger,
+  publishPluginState,
   validateAdapterShape,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -258,7 +259,7 @@ export function createSearchPlugin(
           return searchManager.getSearchClient(entityStorageName);
         },
       };
-      getPluginState(app).set(SEARCH_PLUGIN_STATE_KEY, runtime);
+      publishPluginState(getPluginState(app), SEARCH_PLUGIN_STATE_KEY, runtime);
     },
 
     async teardown() {

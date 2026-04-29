@@ -1,12 +1,22 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import { createWebhooksTestApp } from '../../src/testing';
+import type { WebhookPluginConfig } from '../../src/types/config';
 import type { WebhookDelivery } from '../../src/types/models';
 import type { WebhookQueue } from '../../src/types/queue';
 
-const originalFetch = globalThis.fetch;
+const PUBLIC_RESOLVE = async () => [{ address: '93.184.216.34', family: 4 as const }];
 
 function asFetch(value: ReturnType<typeof mock<() => Promise<Response>>>): typeof fetch {
   return value as unknown as typeof fetch;
+}
+
+function dispatchFor(
+  fetchMock: ReturnType<typeof mock<() => Promise<Response>>>,
+): NonNullable<WebhookPluginConfig['dispatch']> {
+  return {
+    fetchImpl: asFetch(fetchMock),
+    safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+  };
 }
 
 function adminHeaders(tenantId = 'tenant-a'): Record<string, string> {
@@ -57,18 +67,14 @@ async function waitForDelivery(
   throw new Error(`Timed out waiting for delivery on endpoint ${endpointId}`);
 }
 
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
-
 describe('webhook plugin delivery lifecycle', () => {
   it('marks non-retryable delivery failures dead after the first attempt', async () => {
     const fetchMock = mock(async () => new Response('bad request', { status: 400 }));
-    globalThis.fetch = asFetch(fetchMock);
 
     const { app, events, runtime, teardown } = await createWebhooksTestApp({
       events: ['auth:*'],
       queueConfig: { maxAttempts: 3, retryBaseDelayMs: 1 },
+      dispatch: dispatchFor(fetchMock),
     });
 
     try {
@@ -91,11 +97,11 @@ describe('webhook plugin delivery lifecycle', () => {
 
   it('retries retryable failures until maxAttempts is exhausted', async () => {
     const fetchMock = mock(async () => new Response('upstream error', { status: 500 }));
-    globalThis.fetch = asFetch(fetchMock);
 
     const { app, events, runtime, teardown } = await createWebhooksTestApp({
       events: ['auth:*'],
       queueConfig: { maxAttempts: 2, retryBaseDelayMs: 1 },
+      dispatch: dispatchFor(fetchMock),
     });
 
     try {

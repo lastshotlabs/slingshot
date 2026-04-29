@@ -60,7 +60,7 @@ export interface IsrInvalidators {
  * ```ts
  * // In plugin setup:
  * const invalidators = createIsrInvalidators(isrAdapter);
- * getContext(app).pluginState.set(SSR_ISR_INVALIDATORS_STATE_KEY, invalidators);
+ * publishPluginState(getContext(app).pluginState, SSR_ISR_INVALIDATORS_STATE_KEY, invalidators);
  *
  * // In a server action or route handler:
  * const { revalidatePath, revalidateTag } = bsCtx.pluginState.get(SSR_ISR_INVALIDATORS_STATE_KEY);

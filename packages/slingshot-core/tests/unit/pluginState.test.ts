@@ -1,14 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import { attachContext } from '../../src/context/index';
 import {
+  createPluginStateMap,
   getPluginState,
   getPluginStateFromRequest,
   getPluginStateFromRequestOrNull,
   getPluginStateOrNull,
+  isPluginStateSealed,
   maybeEntityAdapter,
   publishEntityAdaptersState,
+  publishPluginState,
   requireEntityAdapter,
   resolvePluginState,
+  sealPluginState,
 } from '../../src/pluginState';
 
 describe('resolvePluginState', () => {
@@ -76,6 +80,31 @@ describe('getPluginState', () => {
     const objData = {};
     const obj: never = objData as never;
     expect(() => getPluginState(obj)).toThrow('pluginState is not available for this app');
+  });
+});
+
+describe('guarded plugin state', () => {
+  test('allows bootstrap publication and rejects mutations after sealing', () => {
+    const pluginState = createPluginStateMap();
+
+    publishPluginState(pluginState, 'catalog', { ready: true });
+    expect(pluginState.get('catalog')).toEqual({ ready: true });
+
+    sealPluginState(pluginState);
+    expect(isPluginStateSealed(pluginState)).toBe(true);
+    expect(pluginState.get('catalog')).toEqual({ ready: true });
+    expect(() => publishPluginState(pluginState, 'late', true)).toThrow(
+      'pluginState is sealed after app bootstrap',
+    );
+    expect(() => (pluginState as Map<string, unknown>).set('late', true)).toThrow(
+      'pluginState is sealed after app bootstrap',
+    );
+    expect(() => (pluginState as Map<string, unknown>).delete('catalog')).toThrow(
+      'pluginState is sealed after app bootstrap',
+    );
+    expect(() => (pluginState as Map<string, unknown>).clear()).toThrow(
+      'pluginState is sealed after app bootstrap',
+    );
   });
 });
 

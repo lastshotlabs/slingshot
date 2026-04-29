@@ -7,18 +7,18 @@ import { z } from 'zod';
 import { createInProcessAdapter, createRawEventEnvelope } from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 const { createKafkaConnectors } = await import('../../src/kafkaConnectors');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
 
 describe('DLQ routing — error classification', () => {
@@ -38,7 +38,7 @@ describe('DLQ routing — error classification', () => {
       await flushAsyncWork();
 
       const envelope = createRawEventEnvelope('auth:login', { userId: 'u', sessionId: 's' });
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
         partition: 0,
@@ -51,7 +51,7 @@ describe('DLQ routing — error classification', () => {
         heartbeat: async () => {},
       });
 
-      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic.endsWith('.dlq'));
+      const dlqSend = state.producerSendCalls.find(c => c.topic.endsWith('.dlq'));
       expect(dlqSend).toBeDefined();
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('handler');
       expect(dlqSend?.messages[0]?.headers?.['x-slingshot-dlq-reason']).toBe('handler');
@@ -87,7 +87,7 @@ describe('DLQ routing — error classification', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.deser-dlq',
@@ -103,9 +103,7 @@ describe('DLQ routing — error classification', () => {
       });
 
       expect(handler).not.toHaveBeenCalled();
-      const dlqSend = fakeKafkaState.producerSendCalls.find(
-        c => c.topic === 'incoming.deser-dlq.dlq',
-      );
+      const dlqSend = state.producerSendCalls.find(c => c.topic === 'incoming.deser-dlq.dlq');
       expect(dlqSend).toBeDefined();
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('deserialize');
     } finally {
@@ -133,7 +131,7 @@ describe('DLQ routing — error classification', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.validate-dlq',
@@ -149,9 +147,7 @@ describe('DLQ routing — error classification', () => {
       });
 
       expect(handler).not.toHaveBeenCalled();
-      const dlqSend = fakeKafkaState.producerSendCalls.find(
-        c => c.topic === 'incoming.validate-dlq.dlq',
-      );
+      const dlqSend = state.producerSendCalls.find(c => c.topic === 'incoming.validate-dlq.dlq');
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('validate');
     } finally {
       await connectors.stop();
@@ -180,7 +176,7 @@ describe('DLQ routing — message format and header propagation', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.header-prop',
@@ -199,9 +195,7 @@ describe('DLQ routing — message format and header propagation', () => {
         pause: () => {},
       });
 
-      const dlqSend = fakeKafkaState.producerSendCalls.find(
-        c => c.topic === 'incoming.header-prop.dlq',
-      );
+      const dlqSend = state.producerSendCalls.find(c => c.topic === 'incoming.header-prop.dlq');
       expect(dlqSend).toBeDefined();
       const msg = dlqSend!.messages[0];
 
@@ -234,7 +228,7 @@ describe('DLQ routing — message format and header propagation', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       const originalPayload = { id: 'body-test', name: 'test-item', nested: { key: 'val' } };
       await consumer?.eachMessage?.({
@@ -250,9 +244,7 @@ describe('DLQ routing — message format and header propagation', () => {
         pause: () => {},
       });
 
-      const dlqSend = fakeKafkaState.producerSendCalls.find(
-        c => c.topic === 'incoming.body-preserve.dlq',
-      );
+      const dlqSend = state.producerSendCalls.find(c => c.topic === 'incoming.body-preserve.dlq');
       expect(dlqSend).toBeDefined();
       const sentValue = JSON.parse(
         new TextDecoder().decode(dlqSend!.messages[0]?.value as Uint8Array),
@@ -275,7 +267,7 @@ describe('DLQ routing — message format and header propagation', () => {
       bus.on('auth:login', () => {}, { durable: true, name: 'deser-dlq-route' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
         partition: 0,
@@ -288,7 +280,7 @@ describe('DLQ routing — message format and header propagation', () => {
         heartbeat: async () => {},
       });
 
-      const deserDlq = fakeKafkaState.producerSendCalls.find(c => c.topic.endsWith('.deser-dlq'));
+      const deserDlq = state.producerSendCalls.find(c => c.topic.endsWith('.deser-dlq'));
       expect(deserDlq).toBeDefined();
       expect(deserDlq?.messages[0]?.headers?.['slingshot.error-type']).toBe('deserialize');
       expect(deserDlq?.messages[0]?.headers?.['x-slingshot-dlq-reason']).toBe('deserialize');
@@ -321,7 +313,7 @@ describe('DLQ routing — connector skip and pause strategies', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       const beforeCommits = consumer?.commitOffsetCalls ?? 0;
       await consumer?.eachMessage?.({
@@ -340,7 +332,7 @@ describe('DLQ routing — connector skip and pause strategies', () => {
       // Handler ran (and failed)
       expect(handler).toHaveBeenCalledTimes(1);
       // No DLQ message was produced
-      const dlqFound = fakeKafkaState.producerSendCalls.some(c => c.topic.includes('.dlq'));
+      const dlqFound = state.producerSendCalls.some(c => c.topic.includes('.dlq'));
       expect(dlqFound).toBe(false);
       // Offset was committed (the error was skipped)
       expect(consumer?.commitOffsetCalls ?? 0).toBeGreaterThan(beforeCommits);
@@ -372,7 +364,7 @@ describe('DLQ routing — connector skip and pause strategies', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.pause-strategy',
@@ -390,7 +382,7 @@ describe('DLQ routing — connector skip and pause strategies', () => {
       // The per-message pause callback was invoked by the adapter
       expect(pauseCallback).toHaveBeenCalled();
       // No DLQ message
-      const dlqFound = fakeKafkaState.producerSendCalls.some(c => c.topic.includes('.dlq'));
+      const dlqFound = state.producerSendCalls.some(c => c.topic.includes('.dlq'));
       expect(dlqFound).toBe(false);
     } finally {
       errorSpy.mockRestore();

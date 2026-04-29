@@ -1,6 +1,7 @@
 import type { InfrastructureResult } from '@framework/createInfrastructure';
 import type {
   EntityRegistry,
+  PluginStateMap,
   ResolvedEntityConfig,
   SearchClientLike,
   SearchPluginRuntime,
@@ -25,7 +26,7 @@ interface CreateContextStoreInfraOptions {
   readonly appName: string;
   readonly infra: InfrastructureResult;
   readonly bus: SlingshotEventBus;
-  readonly pluginState: Map<string, unknown>;
+  readonly pluginState: PluginStateMap;
   readonly entityRegistry: EntityRegistry;
 }
 
@@ -34,15 +35,15 @@ interface CreateContextStoreInfraOptions {
  * validating its shape at the optional-dependency boundary.
  *
  * The search plugin stores its runtime under the `'slingshot-search'` key in
- * `SlingshotContext.pluginState`. Because `pluginState` is typed as
- * `Map<string, unknown>`, the shape must be verified before use.
+ * `SlingshotContext.pluginState`. Because values are typed as `unknown`, the
+ * shape must be verified before use.
  *
  * @param pluginState - The per-app plugin state map from `SlingshotContext`.
  * @returns The `SearchPluginRuntime` if the search plugin is active and its
  *   state is well-formed, or `null` if the plugin is absent or the stored
  *   value does not satisfy the expected interface.
  */
-function getSearchPluginRuntime(pluginState: Map<string, unknown>): SearchPluginRuntime | null {
+function getSearchPluginRuntime(pluginState: PluginStateMap): SearchPluginRuntime | null {
   return getSearchPluginRuntimeOrNull(pluginState);
 }
 
@@ -64,7 +65,7 @@ function getSearchPluginRuntime(pluginState: Map<string, unknown>): SearchPlugin
  */
 async function ensureConfigEntityReady(
   config: ResolvedEntityConfig,
-  pluginState: Map<string, unknown>,
+  pluginState: PluginStateMap,
 ): Promise<SearchPluginRuntime | null> {
   const searchRuntime = getSearchPluginRuntime(pluginState);
   if (!searchRuntime) return null;
@@ -90,7 +91,7 @@ async function ensureConfigEntityReady(
  */
 function ensureConfigEntityBestEffort(
   config: ResolvedEntityConfig,
-  pluginState: Map<string, unknown>,
+  pluginState: PluginStateMap,
 ): void {
   if (!config.search) return;
 
@@ -129,7 +130,7 @@ function ensureConfigEntityBestEffort(
 function resolveSearchSync(
   config: ResolvedEntityConfig,
   bus: SlingshotEventBus,
-  pluginState: Map<string, unknown>,
+  pluginState: PluginStateMap,
 ): ResolvedSearchSync | undefined {
   if (!config.search) return undefined;
 

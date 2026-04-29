@@ -65,9 +65,10 @@ export interface PluginSeedContext {
  * @remarks
  * Declare `dependencies` to ensure prerequisite plugins are registered first.
  * The framework resolves dependency order before calling any plugin phases.
- * Plugin runtime state should be stored in `ctx.pluginState.get(plugin.name)` in the
- * earliest lifecycle phase where it becomes canonical, so it stays instance-scoped
- * rather than module-global and dependent plugins can read it in later phases.
+ * Plugin runtime state should be published with `publishPluginState(ctx.pluginState, plugin.name, state)`
+ * in the earliest lifecycle phase where it becomes canonical, so it stays
+ * instance-scoped rather than module-global and dependent plugins can read it
+ * in later phases. The framework seals plugin state after bootstrap.
  *
  * @example
  * ```ts

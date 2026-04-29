@@ -8,18 +8,18 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 const { createKafkaConnectors } = await import('../../src/kafkaConnectors');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
 
 const noopLog = {
@@ -38,7 +38,7 @@ const noopLog = {
 
 describe('kafkaAdapter — subscribe failure (P-KAFKA-6)', () => {
   test('subscribe rejection prevents listener registration and surfaces via setupPromise', async () => {
-    fakeKafkaState.consumerSubscribeErrors.push(new Error('subscribe boom'));
+    state.consumerSubscribeErrors.push(new Error('subscribe boom'));
     const bus = createKafkaAdapter({
       brokers: ['localhost:19092'],
       logger: noopLog,
@@ -71,7 +71,7 @@ describe('kafkaAdapter — producer.send timeout (P-KAFKA-7)', () => {
     await flushAsyncWork(10);
 
     // Configure the fake producer.send to hang far past producerTimeoutMs.
-    fakeKafkaState.producerSendDelays.push(500);
+    state.producerSendDelays.push(500);
 
     bus.emit('auth:login', { userId: 'u-hung', sessionId: 's-hung' });
     // Wait past producerTimeoutMs but well before the simulated hang.
@@ -104,13 +104,13 @@ describe('kafkaAdapter — DLQ failure semantics (P-KAFKA-8)', () => {
     await flushAsyncWork(10);
 
     // Failure: DLQ produce will reject (the producer queue is set to error).
-    fakeKafkaState.producerSendErrors.push(new Error('DLQ broker unavailable'));
+    state.producerSendErrors.push(new Error('DLQ broker unavailable'));
 
     const envelope = createRawEventEnvelope('auth:login', {
       userId: 'u-redeliver',
       sessionId: 's-redeliver',
     });
-    const consumer = fakeKafkaState.consumers[0]!;
+    const consumer = state.consumers[0]!;
     const beforeCommitCalls = consumer.commitOffsetCalls;
     await consumer.eachMessage?.({
       topic: 'slingshot.events.auth.login',
@@ -144,13 +144,13 @@ describe('kafkaAdapter — DLQ failure semantics (P-KAFKA-8)', () => {
     bus.on('auth:login', listener, { durable: true, name: 'dlq-commit-and-log' });
     await flushAsyncWork(10);
 
-    fakeKafkaState.producerSendErrors.push(new Error('DLQ broker unavailable'));
+    state.producerSendErrors.push(new Error('DLQ broker unavailable'));
 
     const envelope = createRawEventEnvelope('auth:login', {
       userId: 'u-cl',
       sessionId: 's-cl',
     });
-    const consumer = fakeKafkaState.consumers[0]!;
+    const consumer = state.consumers[0]!;
     const beforeCommitCalls = consumer.commitOffsetCalls;
     await consumer.eachMessage?.({
       topic: 'slingshot.events.auth.login',
@@ -176,7 +176,7 @@ describe('kafkaAdapter — DLQ failure semantics (P-KAFKA-8)', () => {
 describe('kafkaAdapter — connect timeout (P-KAFKA-11)', () => {
   test('producer.connect() exceeding connectTimeoutMs surfaces as a timeout', async () => {
     // Configure the next connect to hang past the timeout.
-    fakeKafkaState.producerConnectDelays.push(500);
+    state.producerConnectDelays.push(500);
 
     const bus = createKafkaAdapter({
       brokers: ['localhost:19092'],
@@ -220,7 +220,7 @@ describe('kafkaAdapter — deserialize timeout (P-KAFKA-14)', () => {
     bus.on('auth:login', () => {}, { durable: true, name: 'deser-slow' });
     await flushAsyncWork(10);
 
-    const consumer = fakeKafkaState.consumers[0]!;
+    const consumer = state.consumers[0]!;
     await consumer.eachMessage?.({
       topic: 'slingshot.events.auth.login',
       partition: 0,
@@ -266,7 +266,7 @@ describe('kafkaAdapter — handler timeout during rebalance (P-KAFKA-13)', () =>
     );
     await flushAsyncWork(10);
 
-    const consumer = fakeKafkaState.consumers[0]!;
+    const consumer = state.consumers[0]!;
     const envelope = createRawEventEnvelope('auth:login', {
       userId: 'h',
       sessionId: 'h',
@@ -306,7 +306,7 @@ describe('kafkaAdapter — handler timeout during rebalance (P-KAFKA-13)', () =>
 
 describe('kafkaAdapter — connectedConsumers set ordering (P-KAFKA-2)', () => {
   test('GROUP_JOIN before subscribe must not corrupt connected state', async () => {
-    fakeKafkaState.consumerSubscribeErrors.push(new Error('subscribe failed'));
+    state.consumerSubscribeErrors.push(new Error('subscribe failed'));
     const bus = createKafkaAdapter({
       brokers: ['localhost:19092'],
       logger: noopLog,

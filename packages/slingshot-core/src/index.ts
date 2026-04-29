@@ -411,14 +411,18 @@ export { getPublishedInteractionsPeerOrNull } from './publishedInteractionsPeer'
 export type { EntityAdapterLookup, PluginStateCarrier, PluginStateMap } from './pluginState';
 /** Shared `pluginState` helpers for cross-plugin runtime access without full context coupling. */
 export {
+  createPluginStateMap,
   getPluginState,
   getPluginStateOrNull,
   getPluginStateFromRequest,
   getPluginStateFromRequestOrNull,
+  isPluginStateSealed,
   maybeEntityAdapter,
   publishEntityAdaptersState,
+  publishPluginState,
   requireEntityAdapter,
   resolvePluginState,
+  sealPluginState,
 } from './pluginState';
 
 // --- Auth boundary defaults ---

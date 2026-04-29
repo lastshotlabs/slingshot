@@ -120,16 +120,20 @@ When state is too plugin-specific for the registrar, use `ctx.pluginState`:
 
 ```typescript
 import { type AuthRuntimeContext, getAuthRuntimeContext } from '@lastshotlabs/slingshot-auth';
-import { AUTH_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-core';
+import {
+  AUTH_PLUGIN_STATE_KEY,
+  createPluginStateMap,
+  publishPluginState,
+} from '@lastshotlabs/slingshot-core';
 
 const ctx = {
-  pluginState: new Map<string, unknown>(),
+  pluginState: createPluginStateMap(),
 };
 
 const authRuntime = {} as AuthRuntimeContext;
 
 // slingshot-auth stores its runtime state under its package-owned key.
-ctx.pluginState.set(AUTH_PLUGIN_STATE_KEY, authRuntime);
+publishPluginState(ctx.pluginState, AUTH_PLUGIN_STATE_KEY, authRuntime);
 
 // Another plugin reads it through the package-owned accessor.
 const authState = getAuthRuntimeContext(ctx.pluginState);

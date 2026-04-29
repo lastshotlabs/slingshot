@@ -7,17 +7,17 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
 
 const noopLog = {
@@ -38,7 +38,7 @@ describe('broker failover', () => {
     await flushAsyncWork();
 
     // Force the first send to fail (simulating broker failover)
-    fakeKafkaState.producerSendErrors.push(new Error('leader not available'));
+    state.producerSendErrors.push(new Error('leader not available'));
     bus.emit('auth:login', { userId: 'u-failover', sessionId: 's-failover' });
     await flushAsyncWork();
 
@@ -50,7 +50,7 @@ describe('broker failover', () => {
     await flushAsyncWork();
 
     // Producer should have sent the message now
-    expect(fakeKafkaState.producerSendCalls.length).toBeGreaterThanOrEqual(1);
+    expect(state.producerSendCalls.length).toBeGreaterThanOrEqual(1);
     expect(bus.health().pendingBufferSize).toBe(0);
   });
 
@@ -83,7 +83,7 @@ describe('connection loss during produce', () => {
     await flushAsyncWork();
 
     // Simulate connection loss: producer.send hangs (connection lost)
-    fakeKafkaState.producerSendStickyDelayMs = 500;
+    state.producerSendStickyDelayMs = 500;
 
     bus.emit('auth:login', { userId: 'u-connloss', sessionId: 's-connloss' });
     // Wait past the producer timeout
@@ -93,14 +93,14 @@ describe('connection loss during produce', () => {
     expect(bus.health().pendingBufferSize).toBeGreaterThanOrEqual(1);
 
     // Clear the sticky delay so drain succeeds
-    fakeKafkaState.producerSendStickyDelayMs = 0;
+    state.producerSendStickyDelayMs = 0;
 
     // Drain the buffer
     await bus._drainPendingBuffer();
     await flushAsyncWork();
 
     // Eventually the message is sent
-    expect(fakeKafkaState.producerSendCalls.length).toBeGreaterThanOrEqual(1);
+    expect(state.producerSendCalls.length).toBeGreaterThanOrEqual(1);
   });
 
   test('multiple emits during connection loss are all buffered', async () => {
@@ -114,7 +114,7 @@ describe('connection loss during produce', () => {
     await flushAsyncWork();
 
     // Simulate prolonged connection loss
-    fakeKafkaState.producerSendStickyDelayMs = 500;
+    state.producerSendStickyDelayMs = 500;
 
     // Emit multiple events
     bus.emit('auth:login', { userId: 'u-1', sessionId: 's-1' });
@@ -126,18 +126,18 @@ describe('connection loss during produce', () => {
     expect(bus.health().pendingBufferSize).toBe(3);
 
     // Clear delay and drain
-    fakeKafkaState.producerSendStickyDelayMs = 0;
+    state.producerSendStickyDelayMs = 0;
     await bus._drainPendingBuffer();
     await flushAsyncWork();
 
-    expect(fakeKafkaState.producerSendCalls).toHaveLength(3);
+    expect(state.producerSendCalls).toHaveLength(3);
     expect(bus.health().pendingBufferSize).toBe(0);
   });
 });
 
 describe('consumer group coordinator failover', () => {
   test('consumer recovers connect after initial coordinator failure', async () => {
-    fakeKafkaState.consumerConnectErrors.push(new Error('coordinator not available'));
+    state.consumerConnectErrors.push(new Error('coordinator not available'));
 
     const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
     const infoSpy = spyOn(console, 'info').mockImplementation(() => {});
@@ -169,7 +169,7 @@ describe('consumer group coordinator failover', () => {
     expect(bus.health().consumers).toHaveLength(1);
 
     // Simulate CONSUMER CRASH event
-    const consumer = fakeKafkaState.consumers[0];
+    const consumer = state.consumers[0];
     await consumer?.emitEvent?.('consumer.crash', {
       payload: { error: new Error('coordinator disconnected') },
     });

@@ -26,7 +26,9 @@ export interface FakeConsumerObj {
     partitionsConsumedConcurrently?: number;
     eachMessage: (payload: any) => Promise<void>;
   }) => Promise<void>;
-  commitOffsets: (args: Array<{ topic: string; partition: number; offset: string }>) => Promise<void>;
+  commitOffsets: (
+    args: Array<{ topic: string; partition: number; offset: string }>,
+  ) => Promise<void>;
   pause: (args: Array<{ topic: string; partitions?: number[] }>) => void;
   resume: (args: Array<{ topic: string; partitions?: number[] }>) => void;
   on: (eventName: string, listener: (event: unknown) => void) => () => void;
@@ -100,6 +102,32 @@ export const fakeKafkaState: FakeKafkaState = {
   producerConnectDelays: [],
 };
 
+/** Create a fresh, zero-initialized {@link FakeKafkaState}. */
+export function createFakeKafkaState(): FakeKafkaState {
+  return {
+    kafkaConfigs: [],
+    producerSendAttempts: [],
+    producerSendCalls: [],
+    producerSendErrors: [],
+    producerConnectErrors: [],
+    producerConnectCalls: 0,
+    producerDisconnectCalls: 0,
+    adminConnectErrors: [],
+    adminConnectCalls: 0,
+    adminDisconnectCalls: 0,
+    createTopicsErrors: [],
+    createTopicsCalls: [],
+    consumers: [],
+    consumerConnectErrors: [],
+    consumerSubscribeErrors: [],
+    consumerRunErrors: [],
+    commitOffsetErrors: [],
+    producerSendDelays: [],
+    producerSendStickyDelayMs: 0,
+    producerConnectDelays: [],
+  };
+}
+
 export function resetFakeKafkaState(): void {
   fakeKafkaState.kafkaConfigs.length = 0;
   fakeKafkaState.producerSendAttempts.length = 0;
@@ -123,45 +151,81 @@ export function resetFakeKafkaState(): void {
   fakeKafkaState.producerConnectDelays.length = 0;
 }
 
+/**
+ * Create an isolated test state + reset function for use with mock.module.
+ *
+ * Each test file should call this once at module scope so its kafkajs mock
+ * does not share {@link fakeKafkaState} with other files.
+ */
+export function createTestState(): { state: FakeKafkaState; reset: () => void } {
+  const state = createFakeKafkaState();
+  return {
+    state,
+    reset: () => {
+      state.kafkaConfigs.length = 0;
+      state.producerSendAttempts.length = 0;
+      state.producerSendCalls.length = 0;
+      state.producerSendErrors.length = 0;
+      state.producerConnectErrors.length = 0;
+      state.producerConnectCalls = 0;
+      state.producerDisconnectCalls = 0;
+      state.adminConnectErrors.length = 0;
+      state.adminConnectCalls = 0;
+      state.adminDisconnectCalls = 0;
+      state.createTopicsErrors.length = 0;
+      state.createTopicsCalls.length = 0;
+      state.consumers.length = 0;
+      state.consumerConnectErrors.length = 0;
+      state.consumerSubscribeErrors.length = 0;
+      state.consumerRunErrors.length = 0;
+      state.commitOffsetErrors.length = 0;
+      state.producerSendDelays.length = 0;
+      state.producerSendStickyDelayMs = 0;
+      state.producerConnectDelays.length = 0;
+    },
+  };
+}
+
 export function flushAsyncWork(ms = 0): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) {
+export function createFakeKafkaJsModule(state?: FakeKafkaState) {
+  const s = state ?? createFakeKafkaState();
   class Kafka {
     constructor(config: unknown) {
-      state.kafkaConfigs.push(config);
+      s.kafkaConfigs.push(config);
     }
 
     producer() {
       return {
         connect: async () => {
-          const delay = state.producerConnectDelays.shift();
+          const delay = s.producerConnectDelays.shift();
           if (typeof delay === 'number' && delay > 0) {
             await new Promise(r => setTimeout(r, delay));
           }
-          const nextError = state.producerConnectErrors.shift();
+          const nextError = s.producerConnectErrors.shift();
           if (nextError) {
             throw nextError;
           }
-          state.producerConnectCalls += 1;
+          s.producerConnectCalls += 1;
         },
         disconnect: async () => {
-          state.producerDisconnectCalls += 1;
+          s.producerDisconnectCalls += 1;
         },
         send: async (payload: FakeProducerSendPayload) => {
-          state.producerSendAttempts.push(payload);
-          const oneShotDelay = state.producerSendDelays.shift();
+          s.producerSendAttempts.push(payload);
+          const oneShotDelay = s.producerSendDelays.shift();
           const delay =
-            typeof oneShotDelay === 'number' ? oneShotDelay : state.producerSendStickyDelayMs;
+            typeof oneShotDelay === 'number' ? oneShotDelay : s.producerSendStickyDelayMs;
           if (delay > 0) {
             await new Promise(r => setTimeout(r, delay));
           }
-          const nextError = state.producerSendErrors.shift();
+          const nextError = s.producerSendErrors.shift();
           if (nextError) {
             throw nextError;
           }
-          state.producerSendCalls.push(payload);
+          s.producerSendCalls.push(payload);
           return [];
         },
       };
@@ -170,21 +234,21 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
     admin() {
       return {
         connect: async () => {
-          const nextError = state.adminConnectErrors.shift();
+          const nextError = s.adminConnectErrors.shift();
           if (nextError) {
             throw nextError;
           }
-          state.adminConnectCalls += 1;
+          s.adminConnectCalls += 1;
         },
         disconnect: async () => {
-          state.adminDisconnectCalls += 1;
+          s.adminDisconnectCalls += 1;
         },
         createTopics: async (payload: FakeCreateTopicsPayload) => {
-          const nextError = state.createTopicsErrors.shift();
+          const nextError = s.createTopicsErrors.shift();
           if (nextError) {
             throw nextError;
           }
-          state.createTopicsCalls.push(payload);
+          s.createTopicsCalls.push(payload);
           return true;
         },
       };
@@ -203,7 +267,7 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
         resumeCalls: [],
         eventListeners: new Map(),
       };
-      state.consumers.push(record);
+      s.consumers.push(record);
 
       const consumerObj = {
         events: {
@@ -216,7 +280,7 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
           CRASH: 'consumer.crash',
         },
         connect: async () => {
-          const nextError = state.consumerConnectErrors.shift();
+          const nextError = s.consumerConnectErrors.shift();
           if (nextError) {
             throw nextError;
           }
@@ -226,7 +290,7 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
           record.disconnectCalls += 1;
         },
         subscribe: async (payload: { topic: string | RegExp; fromBeginning: boolean }) => {
-          const nextError = state.consumerSubscribeErrors.shift();
+          const nextError = s.consumerSubscribeErrors.shift();
           if (nextError) {
             throw nextError;
           }
@@ -241,7 +305,7 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
           partitionsConsumedConcurrently?: number;
           eachMessage: (payload: any) => Promise<void>;
         }) => {
-          const nextError = state.consumerRunErrors.shift();
+          const nextError = s.consumerRunErrors.shift();
           if (nextError) {
             throw nextError;
           }
@@ -253,7 +317,7 @@ export function createFakeKafkaJsModule(state: FakeKafkaState = fakeKafkaState) 
         ) => {
           record.commitOffsetCalls += 1;
           record.commitOffsetCallArgs.push(args ?? []);
-          const nextError = state.commitOffsetErrors.shift();
+          const nextError = s.commitOffsetErrors.shift();
           if (nextError) throw nextError;
         },
         pause: (args: Array<{ topic: string; partitions?: number[] }>) => {

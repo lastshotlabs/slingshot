@@ -3,18 +3,18 @@ import { z } from 'zod';
 import { createInProcessAdapter, createRawEventEnvelope } from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 const { createKafkaConnectors } = await import('../../src/kafkaConnectors');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
 
 describe('kafkaConnectors DLQ semantic split', () => {
@@ -44,7 +44,7 @@ describe('kafkaConnectors DLQ semantic split', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.bad',
@@ -62,7 +62,7 @@ describe('kafkaConnectors DLQ semantic split', () => {
       // Handler must NEVER run for a deserialization failure.
       expect(handler).not.toHaveBeenCalled();
 
-      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic === 'incoming.bad.dlq');
+      const dlqSend = state.producerSendCalls.find(c => c.topic === 'incoming.bad.dlq');
       expect(dlqSend).toBeDefined();
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('deserialize');
       expect(dlqSend?.messages[0]?.headers?.['x-slingshot-dlq-reason']).toBe('deserialize');
@@ -96,7 +96,7 @@ describe('kafkaConnectors DLQ semantic split', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.invalid',
@@ -112,9 +112,7 @@ describe('kafkaConnectors DLQ semantic split', () => {
       });
 
       expect(handler).not.toHaveBeenCalled();
-      const dlqSend = fakeKafkaState.producerSendCalls.find(
-        c => c.topic === 'incoming.invalid.dlq',
-      );
+      const dlqSend = state.producerSendCalls.find(c => c.topic === 'incoming.invalid.dlq');
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('validate');
       expect(dlqSend?.messages[0]?.headers?.['x-slingshot-dlq-reason']).toBe('validate');
     } finally {
@@ -142,7 +140,7 @@ describe('kafkaConnectors DLQ semantic split', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.flaky',
@@ -158,7 +156,7 @@ describe('kafkaConnectors DLQ semantic split', () => {
       });
 
       expect(handler).toHaveBeenCalledTimes(1);
-      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic === 'incoming.flaky.dlq');
+      const dlqSend = state.producerSendCalls.find(c => c.topic === 'incoming.flaky.dlq');
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('handler');
       expect(dlqSend?.messages[0]?.headers?.['x-slingshot-dlq-reason']).toBe('handler');
     } finally {
@@ -187,10 +185,10 @@ describe('kafkaConnectors DLQ semantic split', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0]!;
+      const consumer = state.consumers[0]!;
 
       // Make the DLQ produce throw.
-      fakeKafkaState.producerSendErrors.push(new Error('dlq broker down'));
+      state.producerSendErrors.push(new Error('dlq broker down'));
 
       // Snapshot commits before so we can assert nothing was added.
       const commitsBefore = consumer.commitOffsetCalls;
@@ -252,7 +250,7 @@ describe('kafkaConnectors DLQ semantic split', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'incoming.slow',
         partition: 0,
@@ -296,7 +294,7 @@ describe('kafkaAdapter DLQ semantic split', () => {
       await flushAsyncWork();
 
       const envelope = createRawEventEnvelope('auth:login', { userId: 'u', sessionId: 's' });
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
         partition: 0,
@@ -309,7 +307,7 @@ describe('kafkaAdapter DLQ semantic split', () => {
         heartbeat: async () => {},
       });
 
-      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic.endsWith('.dlq'));
+      const dlqSend = state.producerSendCalls.find(c => c.topic.endsWith('.dlq'));
       expect(dlqSend?.topic).toBe('slingshot.events.auth.login.dlq');
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('handler');
       expect(dlqSend?.messages[0]?.headers?.['x-slingshot-dlq-reason']).toBe('handler');
@@ -331,7 +329,7 @@ describe('kafkaAdapter DLQ semantic split', () => {
       bus.on('auth:login', () => {}, { durable: true, name: 'deser-dlq-worker' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'slingshot.events.auth.login',
         partition: 0,
@@ -344,7 +342,7 @@ describe('kafkaAdapter DLQ semantic split', () => {
         heartbeat: async () => {},
       });
 
-      const dlqSend = fakeKafkaState.producerSendCalls.find(c => c.topic.endsWith('.deser-dlq'));
+      const dlqSend = state.producerSendCalls.find(c => c.topic.endsWith('.deser-dlq'));
       expect(dlqSend?.topic).toBe('slingshot.events.auth.login.deser-dlq');
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('deserialize');
       expect(dlqSend?.messages[0]?.headers?.['x-slingshot-dlq-reason']).toBe('deserialize');
@@ -372,10 +370,10 @@ describe('kafkaAdapter DLQ semantic split', () => {
       bus.on('auth:login', listener, { durable: true, name: 'rebalance-mid-flight' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0]!;
+      const consumer = state.consumers[0]!;
       // Force the inline commit to fail so the offset is recorded as pending
       // and only flushes via the rebalance hook.
-      fakeKafkaState.commitOffsetErrors.push(new Error('inline commit blocked'));
+      state.commitOffsetErrors.push(new Error('inline commit blocked'));
 
       const envelope = createRawEventEnvelope('auth:login', { userId: 'rb', sessionId: 'rb' });
       const inflight = consumer.eachMessage?.({

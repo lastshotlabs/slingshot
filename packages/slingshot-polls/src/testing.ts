@@ -23,6 +23,8 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  createPluginStateMap,
+  publishPluginState,
 } from '@lastshotlabs/slingshot-core';
 import { pollFactories, pollVoteFactories } from './entities/factories';
 import { createPollsPlugin } from './plugin';
@@ -202,10 +204,10 @@ export async function createPollsTestApp(
   const frameworkConfig = createTestFrameworkConfig();
 
   // Attach minimal SlingshotContext so getContext(app) works in plugin lifecycle
-  const pluginState = new Map<string, unknown>();
+  const pluginState = createPluginStateMap();
 
   // Set up allow-all permissions for testing (no slingshot-permissions dependency needed)
-  pluginState.set(PERMISSIONS_STATE_KEY, {
+  publishPluginState(pluginState, PERMISSIONS_STATE_KEY, {
     evaluator: {
       can() {
         return Promise.resolve(true);

@@ -21,6 +21,8 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  createPluginStateMap,
+  publishPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
@@ -162,8 +164,8 @@ export async function createAssetsTestApp(
     bus,
   });
   const frameworkConfig = createTestFrameworkConfig();
-  const pluginState = new Map<string, unknown>();
-  pluginState.set(PERMISSIONS_STATE_KEY, createOwnerOnlyPermissionsState());
+  const pluginState = createPluginStateMap();
+  publishPluginState(pluginState, PERMISSIONS_STATE_KEY, createOwnerOnlyPermissionsState());
 
   attachContext(app, {
     pluginState,

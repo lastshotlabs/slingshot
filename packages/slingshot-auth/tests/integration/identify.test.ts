@@ -33,7 +33,7 @@ function buildApp(signingOverride?: Record<string, unknown>) {
       signing,
       pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
     };
-    c.set('slingshotCtx', ctxPartial as SlingshotContext);
+    c.set('slingshotCtx', ctxPartial as unknown as SlingshotContext);
     await next();
   });
   app.use('*', createIdentifyMiddleware(runtime));

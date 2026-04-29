@@ -14,7 +14,7 @@ import type {
   ProcessHandlerContext,
 } from './models';
 
-/** Stable key used for `pluginState.get()` / `pluginState.set()`. */
+/** Stable key used for reading or publishing the game-engine plugin state. */
 export const GAME_ENGINE_PLUGIN_STATE_KEY = 'slingshot-game-engine';
 
 /**

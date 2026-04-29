@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { disableRoutesSchema } from '@lastshotlabs/slingshot-core';
+import type { DispatchOptions } from '../lib/dispatcher';
 import type { RateLimiter } from '../lib/rateLimit';
 import type { SecretEncryptor } from '../lib/secretCipher';
 import { WEBHOOK_ROUTES } from '../routes/index';
@@ -138,6 +139,51 @@ export const webhookPluginConfigSchema = z.object({
     .optional()
     .describe(
       'Default timeout in milliseconds for outbound webhook HTTP delivery requests. Per-endpoint overrides win when set. Maximum 120000 (2 minutes). Omit to use the default of 30000.',
+    ),
+  /**
+   * Advanced outbound dispatch overrides. Production traffic should normally
+   * use the default safeFetch transport; tests can inject `fetchImpl` and a
+   * deterministic resolver without weakening SSRF validation.
+   */
+  dispatch: z
+    .object({
+      fetchImpl: z
+        .custom<NonNullable<DispatchOptions['fetchImpl']>>(value => typeof value === 'function', {
+          message: 'Expected a fetch-compatible function',
+        })
+        .optional()
+        .describe(
+          'Fetch-compatible transport override for outbound deliveries. Intended for tests or custom runtimes; SSRF validation still runs unless allowPrivateIps is passed per delivery.',
+        ),
+      safeFetchOverrides: z
+        .object({
+          isIpAllowed: z
+            .custom<NonNullable<NonNullable<DispatchOptions['safeFetchOverrides']>['isIpAllowed']>>(
+              value => typeof value === 'function',
+              {
+                message: 'Expected an IP allow predicate',
+              },
+            )
+            .optional()
+            .describe('Optional IP allow predicate override for outbound delivery validation.'),
+          resolveHost: z
+            .custom<NonNullable<NonNullable<DispatchOptions['safeFetchOverrides']>['resolveHost']>>(
+              value => typeof value === 'function',
+              {
+                message: 'Expected a host resolver function',
+              },
+            )
+            .optional()
+            .describe('Optional host resolver override for outbound delivery validation.'),
+        })
+        .optional()
+        .describe(
+          'safeFetch resolver/IP-policy overrides shared by pre-fetch validation and the safe transport.',
+        ),
+    })
+    .optional()
+    .describe(
+      'Advanced outbound delivery transport overrides. Omit to use the default safeFetch transport.',
     ),
   /**
    * Base64-encoded 32-byte AES-256-GCM key used to encrypt webhook endpoint

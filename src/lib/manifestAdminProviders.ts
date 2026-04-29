@@ -28,6 +28,7 @@ import type {
   PermissionRegistry,
   PermissionsAdapter,
   PermissionsState,
+  PluginStateMap,
   SubjectRef,
 } from '@lastshotlabs/slingshot-core';
 import {
@@ -56,7 +57,7 @@ export function createDeferredAdminProviders(config: Record<string, unknown>): {
     adapter: PermissionsAdapter;
   };
   auditLog?: AuditLogProvider;
-  bind: (pluginState: Map<string, unknown>) => void;
+  bind: (pluginState: PluginStateMap) => void;
   deps: string[];
 } {
   let authRuntime: AuthRuntimeContext | null = null;
@@ -65,7 +66,7 @@ export function createDeferredAdminProviders(config: Record<string, unknown>): {
   const deps: string[] = [];
   const result: ReturnType<typeof createDeferredAdminProviders> = {
     deps,
-    bind(pluginState: Map<string, unknown>) {
+    bind(pluginState: PluginStateMap) {
       if (
         config['accessProvider'] === 'slingshot-auth' ||
         config['managedUserProvider'] === 'slingshot-auth'

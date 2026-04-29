@@ -16,6 +16,7 @@ import type { IdempotencyAdapter } from '../idempotencyAdapter';
 import type { IdentityResolver } from '../identity';
 import type { KafkaConnectorHandle } from '../kafkaConnectors';
 import type { MetricsEmitter } from '../metrics';
+import type { PluginStateMap } from '../pluginState';
 import type { RuntimeSqliteDatabase } from '../runtime';
 import type { SecretRepository } from '../secrets';
 import type { SigningConfig } from '../signing';
@@ -620,8 +621,8 @@ export interface SlingshotContext {
    *    so there is no risk of a plugin name colliding with inherited `Object` properties
    *    (`'constructor'`, `'toString'`, etc.).
    * 2. **Dynamic registration** — plugins are registered at runtime, not at type-definition
-   *    time. A `Map` makes dynamic `get` / `set` access natural without needing index
-   *    signatures that would weaken the type of unrelated keys.
+   *    time. A `Map` makes dynamic reads natural without needing index signatures that
+   *    would weaken the type of unrelated keys.
    * 3. **Cross-plugin communication** — plugins that depend on each other can publish
    *    runtime state under stable plugin keys and read it back through package-level
    *    accessors during `setupPost()`, after the peer has already stored its state.
@@ -629,9 +630,10 @@ export interface SlingshotContext {
    *    when plugins are optional.
    *
    * Values are `unknown` — each plugin is responsible for casting or validating its own
-   * state when reading from the map.
+   * state when reading from the map. Writes must go through `publishPluginState()` during
+   * bootstrap; the map is sealed after app finalization.
    */
-  readonly pluginState: Map<string, unknown>;
+  readonly pluginState: PluginStateMap;
 
   /**
    * The sorted list of framework plugins registered with this app instance.

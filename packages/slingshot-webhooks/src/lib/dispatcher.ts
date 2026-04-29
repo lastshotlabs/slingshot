@@ -44,6 +44,17 @@ export interface DispatchOptions {
    */
   safeFetchOverrides?: Pick<SafeFetchOptions, 'isIpAllowed' | 'resolveHost'>;
   /**
+   * Additional outbound headers to merge into the signed webhook request.
+   * Values are sanitized at the same sink as framework-derived headers.
+   */
+  extraHeaders?: HeadersInit;
+  /**
+   * Optional response observer. Receives a clone before delivery success or
+   * retryability is evaluated, so callers can capture status/body without
+   * replacing the safe transport.
+   */
+  onResponse?: (response: Response) => void | Promise<void>;
+  /**
    * Optional fetch override (typically used in tests). When provided, this
    * fetch is used instead of the safeFetch-built one. Pre-fetch IP
    * validation still runs unless `allowPrivateIps` is explicitly true.
@@ -212,6 +223,11 @@ export async function deliverWebhook(
       'X-Webhook-Occurred-At': sanitizeHeaderValue(job.occurredAt, 'X-Webhook-Occurred-At'),
       'X-Webhook-Delivery': sanitizeHeaderValue(job.deliveryId, 'X-Webhook-Delivery'),
     };
+    if (opts.extraHeaders) {
+      for (const [name, value] of new Headers(opts.extraHeaders)) {
+        outboundHeaders[name] = sanitizeHeaderValue(value, name);
+      }
+    }
   } catch (err) {
     if (err instanceof HeaderInjectionError) {
       throw new WebhookDeliveryError(
@@ -241,6 +257,10 @@ export async function deliverWebhook(
       throw new WebhookDeliveryError(`Webhook DNS lookup failed: ${err.hostname}`, true);
     }
     throw err;
+  }
+
+  if (opts.onResponse) {
+    await opts.onResponse(res.clone());
   }
 
   if (!res.ok) {

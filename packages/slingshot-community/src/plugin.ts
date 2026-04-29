@@ -15,6 +15,7 @@ import {
   getNotificationsStateOrNull,
   getPermissionsStateOrNull,
   getPluginStateOrNull,
+  publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -333,9 +334,9 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
 
       if (pluginState) {
         if (!pluginState.has(PERMISSIONS_STATE_KEY)) {
-          pluginState.set(PERMISSIONS_STATE_KEY, permissions);
+          publishPluginState(pluginState, PERMISSIONS_STATE_KEY, permissions);
         }
-        pluginState.set(COMMUNITY_PLUGIN_STATE_KEY, {
+        publishPluginState(pluginState, COMMUNITY_PLUGIN_STATE_KEY, {
           config,
           evaluator: permissions.evaluator,
           interactionsPeer,
@@ -501,9 +502,9 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
 
       if (permissionsRef && pluginState) {
         if (!pluginState.has(PERMISSIONS_STATE_KEY)) {
-          pluginState.set(PERMISSIONS_STATE_KEY, permissionsRef);
+          publishPluginState(pluginState, PERMISSIONS_STATE_KEY, permissionsRef);
         }
-        pluginState.set(COMMUNITY_PLUGIN_STATE_KEY, {
+        publishPluginState(pluginState, COMMUNITY_PLUGIN_STATE_KEY, {
           config,
           evaluator: permissionsRef.evaluator,
           interactionsPeer,

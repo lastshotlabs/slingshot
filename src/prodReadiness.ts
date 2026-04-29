@@ -104,7 +104,7 @@ export function auditProductionReadiness(
   }
 
   auditSecurity(config, add, env, options);
-  auditStorage(config, add);
+  auditStorage(config, add, env);
   auditObservability(config, add);
   auditRuntime(config, add);
   auditRealtime(config, add, multiInstance);
@@ -258,6 +258,7 @@ function auditSecurity(
 function auditStorage(
   config: AuditConfig,
   add: (finding: ProductionReadinessFinding) => void,
+  env: Record<string, string | undefined>,
 ): void {
   const db = asRecord(config.db) ?? {};
   const effective = resolveEffectiveStores(db);
@@ -310,6 +311,16 @@ function auditStorage(
       category: 'storage',
       message: 'A store selects Redis but db.redis is false.',
       fix: 'Enable db.redis or move the store to another configured backend.',
+    });
+  }
+
+  if (db.redis !== false && !isNonEmptyString(env.REDIS_HOST)) {
+    add({
+      id: 'storage.redis_host_missing',
+      severity: 'error',
+      category: 'storage',
+      message: 'A store selects Redis but REDIS_HOST is not configured.',
+      fix: 'Set REDIS_HOST in the audited environment, or move Redis-backed stores to another configured backend.',
     });
   }
 

@@ -4,7 +4,7 @@ import { SearchCircuitOpenError } from '../src/searchCircuitBreaker';
 
 describe('isTransientError', () => {
   it('returns false for SearchCircuitOpenError', () => {
-    const err = new SearchCircuitOpenError('circuit is open');
+    const err = new SearchCircuitOpenError('circuit is open', 'test-provider', 1_000);
     expect(isTransientError(err)).toBe(false);
   });
 
@@ -95,7 +95,7 @@ describe('withRetry', () => {
     await expect(
       withRetry(async () => {
         calls++;
-        throw new SearchCircuitOpenError('circuit open');
+        throw new SearchCircuitOpenError('circuit open', 'test-provider', 1_000);
       }),
     ).rejects.toThrow(SearchCircuitOpenError);
     expect(calls).toBe(1);

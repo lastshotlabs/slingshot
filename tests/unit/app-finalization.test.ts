@@ -3,6 +3,8 @@ import {
   type SlingshotPlugin,
   createInProcessAdapter,
   getContext,
+  isPluginStateSealed,
+  publishPluginState,
 } from '@lastshotlabs/slingshot-core';
 import { createApp } from '../../src/app';
 import { getTenantCacheFromApp } from '../../src/framework/middleware/tenant';
@@ -166,6 +168,30 @@ describe('app finalization', () => {
     const cacheFromContext = result.ctx.pluginState.get('tenantResolutionCache');
     expect(cacheFromContext).toBeDefined();
     expect(getTenantCacheFromApp(result.app)).toBe(cacheFromContext as any);
+  });
+
+  test('seals pluginState after finalization while preserving lifecycle publications', async () => {
+    const plugin: SlingshotPlugin = {
+      name: 'state-publisher',
+      async setupPost({ app }) {
+        publishPluginState(getContext(app).pluginState, 'state-publisher', { ready: true });
+      },
+    };
+
+    const result = await createApp({
+      ...baseConfig,
+      plugins: [plugin],
+    });
+    createdContexts.push(result.ctx);
+
+    expect(result.ctx.pluginState.get('state-publisher')).toEqual({ ready: true });
+    expect(isPluginStateSealed(result.ctx.pluginState)).toBe(true);
+    expect(() => publishPluginState(result.ctx.pluginState, 'late-plugin', true)).toThrow(
+      'pluginState is sealed after app bootstrap',
+    );
+    expect(() =>
+      (result.ctx.pluginState as unknown as Map<string, unknown>).set('late-plugin', true),
+    ).toThrow('pluginState is sealed after app bootstrap');
   });
 
   test('does not attach a tenant cache when no resolver is configured', async () => {

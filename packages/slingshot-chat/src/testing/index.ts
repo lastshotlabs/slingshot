@@ -35,7 +35,9 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  createPluginStateMap,
   deepFreeze,
+  publishPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityFactories } from '@lastshotlabs/slingshot-entity';
@@ -382,16 +384,16 @@ export async function createChatTestApp(
   const frameworkConfig = createTestFrameworkConfig();
 
   // Attach minimal SlingshotContext so getContext(app) works in plugin lifecycle
-  const pluginState = new Map<string, unknown>();
+  const pluginState = createPluginStateMap();
   // Inject optional peer plugin state before the plugin lifecycle so `setupPost`
   // closures (e.g. slingshot-embeds embed listener) see the mocked peers.
   if (options?.peersPluginState) {
     for (const [key, value] of options.peersPluginState) {
-      pluginState.set(key, value);
+      publishPluginState(pluginState, key, value);
     }
   }
-  pluginState.set(PERMISSIONS_STATE_KEY, permsState);
-  pluginState.set(NOTIFICATIONS_PLUGIN_STATE_KEY, {
+  publishPluginState(pluginState, PERMISSIONS_STATE_KEY, permsState);
+  publishPluginState(pluginState, NOTIFICATIONS_PLUGIN_STATE_KEY, {
     config: deepFreeze({
       mountPath: '/notifications',
       sseEnabled: true,

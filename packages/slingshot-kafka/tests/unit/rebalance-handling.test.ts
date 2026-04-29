@@ -6,18 +6,18 @@ import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { createInProcessAdapter, createRawEventEnvelope } from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 const { createKafkaConnectors } = await import('../../src/kafkaConnectors');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
 
 describe('adapter rebalance handling', () => {
@@ -30,7 +30,7 @@ describe('adapter rebalance handling', () => {
       bus.on('auth:login', listener, { durable: true, name: 'rebalance-cycle' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0]!;
+      const consumer = state.consumers[0]!;
       expect(bus.health().consumers).toHaveLength(1);
 
       // Trigger REBALANCING — consumer stays in the health list
@@ -66,7 +66,7 @@ describe('adapter rebalance handling', () => {
       bus.on('auth:login', listener, { durable: true, name: 'rebalance-offset-flush' });
       await flushAsyncWork();
 
-      const consumer = fakeKafkaState.consumers[0]!;
+      const consumer = state.consumers[0]!;
 
       const envelope = createRawEventEnvelope('auth:login', { userId: 'rb', sessionId: 'rb' });
       const inflight = consumer.eachMessage?.({
@@ -114,7 +114,7 @@ describe('adapter rebalance handling', () => {
     bus.on('auth:login', listener, { durable: true, name: 'rebalance-heartbeat' });
     await flushAsyncWork();
 
-    const consumer = fakeKafkaState.consumers[0]!;
+    const consumer = state.consumers[0]!;
     const envelope = createRawEventEnvelope('auth:login', { userId: 'hb', sessionId: 'hb' });
     const inflight = consumer.eachMessage?.({
       topic: 'slingshot.events.auth.login',
@@ -153,7 +153,7 @@ describe('connector rebalance handling', () => {
       await connectors.start(bus);
       expect(connectors.health().started).toBe(true);
 
-      const consumer = fakeKafkaState.consumers[0]!;
+      const consumer = state.consumers[0]!;
 
       // Send a message first
       await consumer.eachMessage?.({
@@ -210,7 +210,7 @@ describe('connector rebalance handling', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0]!;
+      const consumer = state.consumers[0]!;
 
       // Process a message so there's a pending offset
       await consumer.eachMessage?.({

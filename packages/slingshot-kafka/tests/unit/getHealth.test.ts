@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
 
 describe('kafkaAdapter.getHealth() / getHealthSnapshot()', () => {
@@ -56,7 +56,7 @@ describe('kafkaAdapter.getHealth() / getHealthSnapshot()', () => {
 
     // Force the producer's `connect()` to throw — producerConnected stays false
     // and the emit's serialized payload lands in the in-memory pending buffer.
-    fakeKafkaState.producerConnectErrors.push(new Error('connect failed'));
+    state.producerConnectErrors.push(new Error('connect failed'));
     bus.emit('auth:login', { userId: 'u-1', sessionId: 's-1' });
     await flushAsyncWork();
 

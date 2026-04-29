@@ -65,6 +65,8 @@ import {
   createEventSchemaRegistry,
   defaultValidationErrorFormatter,
   defineEvent,
+  publishPluginState,
+  sealPluginState,
 } from '@lastshotlabs/slingshot-core';
 import type {
   AppEnv,
@@ -752,8 +754,9 @@ async function finalizeApp(assembly: AppAssembly): Promise<CreateAppResult> {
     finalizeContext(ctx, drain());
 
     if (tenantCacheCarrier.cache) {
-      ctx.pluginState.set('tenantResolutionCache', tenantCacheCarrier.cache);
+      publishPluginState(ctx.pluginState, 'tenantResolutionCache', tenantCacheCarrier.cache);
     }
+    sealPluginState(ctx.pluginState);
     if (activeFrameworkPlugins.length > 0) {
       ctx.events.publish(
         'app:ready',

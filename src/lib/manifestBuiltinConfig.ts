@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import type { Context, MiddlewareHandler } from 'hono';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
+import type { AppEnv, PluginStateMap } from '@lastshotlabs/slingshot-core';
 import { getActor, getActorId } from '@lastshotlabs/slingshot-core';
 import type { AppManifestHandlerRef } from './manifest';
 import { createDeferredAdminProviders } from './manifestAdminProviders';
@@ -451,7 +451,7 @@ function resolveSearchAdminGateStrategy(strategy: string): {
  */
 export function resolveAdminManifestConfig(config: Record<string, unknown>): {
   config: Record<string, unknown>;
-  bind: ((pluginState: Map<string, unknown>) => void) | null;
+  bind: ((pluginState: PluginStateMap) => void) | null;
   deps: string[];
 } {
   const hasStringStrategies =

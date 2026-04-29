@@ -12,6 +12,7 @@ import {
   SUPER_ADMIN_ROLE,
   getPluginState,
   noopLogger,
+  publishPluginState,
   resolveRepoAsync,
 } from '@lastshotlabs/slingshot-core';
 import type { PermissionsState } from '@lastshotlabs/slingshot-core';
@@ -265,7 +266,11 @@ export function createPermissionsPlugin(
         }
       }
 
-      pluginState.set(PERMISSIONS_STATE_KEY, Object.freeze({ evaluator, registry, adapter }));
+      publishPluginState(
+        pluginState,
+        PERMISSIONS_STATE_KEY,
+        Object.freeze({ evaluator, registry, adapter }),
+      );
     },
 
     setupPost({ app, bus }: PluginSetupContext) {

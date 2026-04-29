@@ -13,6 +13,7 @@ import {
   getNotificationsState,
   getPermissionsState,
   getPluginState,
+  publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -153,7 +154,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
       notificationsStateRef = getNotificationsState(app) as NotificationsPeerState;
       permissionsRef = permissions;
 
-      getPluginState(app).set(CHAT_PLUGIN_STATE_KEY, {
+      publishPluginState(getPluginState(app), CHAT_PLUGIN_STATE_KEY, {
         interactionsPeer: {
           peerKind: 'chat',
           async resolveMessageByKindAndId(kind, id) {
@@ -449,7 +450,7 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
           },
           evaluator: permissionsRef.evaluator,
         };
-        getPluginState(app).set(CHAT_PLUGIN_STATE_KEY, chatState);
+        publishPluginState(getPluginState(app), CHAT_PLUGIN_STATE_KEY, chatState);
         app.route(`${mountPath}/encryption`, buildEncryptionRouter(chatState));
       }
     },

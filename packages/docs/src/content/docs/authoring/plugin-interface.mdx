@@ -39,6 +39,7 @@ import {
   defineEvent,
   getActor,
   getContext,
+  publishPluginState,
 } from '@lastshotlabs/slingshot-core';
 
 type Note = {
@@ -86,7 +87,7 @@ export function createNotesPlugin(config: NotesPluginConfig): SlingshotPlugin {
       const ctx = getContext(app);
       const adapter = ctx.pluginState.get('notes.adapter') as NotesAdapter | undefined;
 
-      ctx.pluginState.set('notes.config', config);
+      publishPluginState(ctx.pluginState, 'notes.config', config);
 
       bus.on('auth:user.deleted', async ({ userId }) => {
         if (adapter) {
@@ -196,8 +197,8 @@ declare const config: { maxNotesPerUser: number };
 setupRoutes({ app }) {
   const ctx = getContext(app);
 
-  ctx.pluginState.set('notes.adapter', createNotesAdapter());
-  ctx.pluginState.set('notes.config', config);
+  publishPluginState(ctx.pluginState, 'notes.adapter', createNotesAdapter());
+  publishPluginState(ctx.pluginState, 'notes.config', config);
 }
 ```
 

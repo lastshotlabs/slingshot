@@ -11,6 +11,7 @@ import {
   getPluginState,
   getPluginStateOrNull,
   getRouteAuthOrNull,
+  publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -424,7 +425,7 @@ export function createOrganizationsPlugin(
         },
       };
 
-      getPluginState(ctx.app).set(ORGANIZATIONS_ORG_SERVICE_STATE_KEY, orgService);
+      publishPluginState(getPluginState(ctx.app), ORGANIZATIONS_ORG_SERVICE_STATE_KEY, orgService);
 
       // Publish the reconcile service so operator tooling (CLI, admin route)
       // can call `reconcileOrphanedOrgRecords(orgId)` to clean up after a
@@ -434,7 +435,11 @@ export function createOrganizationsPlugin(
         const reconcileService: OrganizationsReconcileService = {
           reconcileOrphanedOrgRecords: orgId => runtime.reconcileOrphanedOrgRecords(orgId),
         };
-        getPluginState(ctx.app).set(ORGANIZATIONS_RECONCILE_STATE_KEY, reconcileService);
+        publishPluginState(
+          getPluginState(ctx.app),
+          ORGANIZATIONS_RECONCILE_STATE_KEY,
+          reconcileService,
+        );
       }
     },
 

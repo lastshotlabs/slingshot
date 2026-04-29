@@ -11,6 +11,7 @@ import {
   defineEvent,
   getContextOrNull,
   getPluginState,
+  publishPluginState,
   resolveRepo,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
@@ -333,7 +334,7 @@ export function createNotificationsPlugin(
         },
       });
 
-      getPluginState(app).set(NOTIFICATIONS_PLUGIN_STATE_KEY, state);
+      publishPluginState(getPluginState(app), NOTIFICATIONS_PLUGIN_STATE_KEY, state);
       dispatcher.start();
 
       // P-NOTIF-8: optional periodic sweep that deletes expired notifications.

@@ -10,7 +10,10 @@ import {
   COOKIE_TOKEN,
   HEADER_USER_TOKEN,
   HttpError,
+  type PluginStateMap,
+  createPluginStateMap,
   isPublicPath,
+  publishPluginState,
   sha256,
   timingSafeEqual,
 } from '@lastshotlabs/slingshot-core';
@@ -108,18 +111,18 @@ export const createIdentifyMiddleware =
   (authRuntime: AuthRuntimeContext): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
     const currentCtx = c.get('slingshotCtx') as unknown as
-      | ({ pluginState?: Map<string, unknown> } & Record<string, unknown>)
+      | ({ pluginState?: PluginStateMap } & Record<string, unknown>)
       | undefined;
     const pluginState =
-      currentCtx?.pluginState instanceof Map ? currentCtx.pluginState : new Map<string, unknown>();
+      currentCtx?.pluginState instanceof Map ? currentCtx.pluginState : createPluginStateMap();
     if (!pluginState.has(AUTH_RUNTIME_KEY)) {
-      pluginState.set(AUTH_RUNTIME_KEY, authRuntime);
+      publishPluginState(pluginState, AUTH_RUNTIME_KEY, authRuntime);
     }
     if (!currentCtx || currentCtx.pluginState !== pluginState) {
       c.set('slingshotCtx', {
         ...(currentCtx ?? {}),
         pluginState,
-      } as AppEnv['Variables']['slingshotCtx']);
+      } as unknown as AppEnv['Variables']['slingshotCtx']);
     }
 
     const existingActor = c.get('actor') as Actor | undefined;

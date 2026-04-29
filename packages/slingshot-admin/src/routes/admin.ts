@@ -718,6 +718,13 @@ export function createAdminRouter(config: AdminRouterConfig) {
           );
           return errorResponse(c, 'User not found', 404);
         }
+        await requireAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.user.suspend', 'user', userId, 202, {
+            target: userId,
+            phase: 'before-mutation',
+          }),
+        );
         try {
           await managedUserProvider.suspendUser({
             userId,
@@ -745,9 +752,10 @@ export function createAdminRouter(config: AdminRouterConfig) {
             requestId: c.get('requestId'),
           },
         });
-        await requireAuditEntry(config.auditLog, {
-          ...auditEntry(c, 'admin.user.suspend', 'user', userId, 200, { target: userId }),
-        });
+        await tryLogAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.user.suspend', 'user', userId, 200, { target: userId }),
+        );
         return c.json({ message: 'User suspended' }, 200);
       }),
   );
@@ -828,6 +836,13 @@ export function createAdminRouter(config: AdminRouterConfig) {
           );
           return errorResponse(c, 'User not found', 404);
         }
+        await requireAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.user.unsuspend', 'user', userId, 202, {
+            target: userId,
+            phase: 'before-mutation',
+          }),
+        );
         try {
           await managedUserProvider.unsuspendUser({
             userId,
@@ -853,9 +868,10 @@ export function createAdminRouter(config: AdminRouterConfig) {
             requestId: c.get('requestId'),
           },
         });
-        await requireAuditEntry(config.auditLog, {
-          ...auditEntry(c, 'admin.user.unsuspend', 'user', userId, 200, { target: userId }),
-        });
+        await tryLogAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.user.unsuspend', 'user', userId, 200, { target: userId }),
+        );
         return c.json({ message: 'User unsuspended' }, 200);
       }),
   );
@@ -997,6 +1013,13 @@ export function createAdminRouter(config: AdminRouterConfig) {
           );
           return errorResponse(c, 'User not found', 404);
         }
+        await requireAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.role.set', 'user', userId, 202, {
+            target: userId,
+            phase: 'before-mutation',
+          }),
+        );
         try {
           await managedUserProvider.setRoles(userId, roles, getManagedUserScope(c));
         } catch (err) {
@@ -1019,9 +1042,10 @@ export function createAdminRouter(config: AdminRouterConfig) {
             requestId: c.get('requestId'),
           },
         });
-        await requireAuditEntry(config.auditLog, {
-          ...auditEntry(c, 'admin.role.set', 'user', userId, 200, { target: userId }),
-        });
+        await tryLogAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.role.set', 'user', userId, 200, { target: userId }),
+        );
         return c.json({ roles }, 200);
       }),
   );
@@ -1101,6 +1125,13 @@ export function createAdminRouter(config: AdminRouterConfig) {
           );
           return errorResponse(c, 'User not found', 404);
         }
+        await requireAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.user.delete', 'user', userId, 202, {
+            target: userId,
+            phase: 'before-mutation',
+          }),
+        );
         try {
           await managedUserProvider.deleteUser(userId, getManagedUserScope(c));
         } catch (err) {
@@ -1121,9 +1152,10 @@ export function createAdminRouter(config: AdminRouterConfig) {
             requestId: c.get('requestId'),
           },
         });
-        await requireAuditEntry(config.auditLog, {
-          ...auditEntry(c, 'admin.user.delete', 'user', userId, 200, { target: userId }),
-        });
+        await tryLogAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.user.delete', 'user', userId, 200, { target: userId }),
+        );
         return c.json({ message: 'User deleted' }, 200);
       }),
   );
@@ -1250,6 +1282,13 @@ export function createAdminRouter(config: AdminRouterConfig) {
           );
           return errorResponse(c, 'User not found', 404);
         }
+        await requireAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.session.revoke_all', 'user', userId, 202, {
+            target: userId,
+            phase: 'before-mutation',
+          }),
+        );
         try {
           await managedUserProvider.revokeAllSessions(userId, getManagedUserScope(c));
         } catch (err) {
@@ -1262,9 +1301,10 @@ export function createAdminRouter(config: AdminRouterConfig) {
           );
           throw err;
         }
-        await requireAuditEntry(config.auditLog, {
-          ...auditEntry(c, 'admin.session.revoke_all', 'user', userId, 200, { target: userId }),
-        });
+        await tryLogAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.session.revoke_all', 'user', userId, 200, { target: userId }),
+        );
         return c.json({ message: 'Sessions revoked' }, 200);
       }),
   );
@@ -1356,6 +1396,13 @@ export function createAdminRouter(config: AdminRouterConfig) {
             return errorResponse(c, 'Session not found', 404);
           }
         }
+        await requireAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.session.revoke', 'session', sessionId, 202, {
+            target: userId,
+            phase: 'before-mutation',
+          }),
+        );
         try {
           await managedUserProvider.revokeSession(sessionId, getManagedUserScope(c));
         } catch (err) {
@@ -1368,9 +1415,10 @@ export function createAdminRouter(config: AdminRouterConfig) {
           );
           throw err;
         }
-        await requireAuditEntry(config.auditLog, {
-          ...auditEntry(c, 'admin.session.revoke', 'session', sessionId, 200, { target: userId }),
-        });
+        await tryLogAuditEntry(
+          config.auditLog,
+          auditEntry(c, 'admin.session.revoke', 'session', sessionId, 200, { target: userId }),
+        );
         return c.json({ message: 'Session revoked' }, 200);
       }),
   );

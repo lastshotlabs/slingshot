@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { applyGeoTransform, applyGeoTransformDetailed } from '../src/geoTransform';
 import type { GeoSearchConfig } from '@lastshotlabs/slingshot-core';
+import { applyGeoTransform, applyGeoTransformDetailed } from '../src/geoTransform';
 
 const geoConfig: GeoSearchConfig = {
   latField: 'latitude',
@@ -81,6 +81,7 @@ describe('applyGeoTransformDetailed', () => {
     const doc = { id: 'b', latitude: null, longitude: 2 };
     const result = applyGeoTransformDetailed(doc, geoConfig);
     expect(result.applied).toBe(false);
+    if (result.applied) throw new Error('Expected geo transform to be skipped');
     expect(result.reason).toBe('missingLat');
     expect(result.document).toBe(doc);
   });
@@ -89,6 +90,7 @@ describe('applyGeoTransformDetailed', () => {
     const doc = { id: 'c', latitude: 1 };
     const result = applyGeoTransformDetailed(doc, geoConfig);
     expect(result.applied).toBe(false);
+    if (result.applied) throw new Error('Expected geo transform to be skipped');
     expect(result.reason).toBe('missingLng');
     expect(result.document).toBe(doc);
   });
@@ -97,6 +99,7 @@ describe('applyGeoTransformDetailed', () => {
     const doc = { id: 'd' };
     const result = applyGeoTransformDetailed(doc, geoConfig);
     expect(result.applied).toBe(false);
+    if (result.applied) throw new Error('Expected geo transform to be skipped');
     expect(result.reason).toBe('missingBoth');
     expect(result.document).toBe(doc);
   });

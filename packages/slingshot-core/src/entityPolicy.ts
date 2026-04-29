@@ -3,7 +3,7 @@ import type { AppEnv } from './context';
 import { getContext, getContextOrNull } from './context/index';
 import type { PolicyResolver } from './entityRouteConfig';
 import type { PluginStateCarrier, PluginStateMap } from './pluginState';
-import { resolvePluginState } from './pluginState';
+import { publishPluginState, resolvePluginState } from './pluginState';
 
 /**
  * Plugin-state key owned by `slingshot-entity`.
@@ -41,7 +41,7 @@ function ensureMutableEntityPluginState(
 ): SlingshotEntityPluginState {
   if (!state) {
     const nextState: SlingshotEntityPluginState = {};
-    pluginState.set(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+    publishPluginState(pluginState, SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
     return nextState;
   }
 
@@ -50,7 +50,7 @@ function ensureMutableEntityPluginState(
   }
 
   const nextState: SlingshotEntityPluginState = { ...state };
-  pluginState.set(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+  publishPluginState(pluginState, SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
   return nextState;
 }
 

@@ -1,3 +1,4 @@
+import { request } from 'node:http';
 import { describe, expect, test } from 'bun:test';
 import { nodeRuntime, runtimeNodeInternals } from '../src/index';
 
@@ -107,6 +108,50 @@ describe('maxRequestBodySize enforcement', () => {
       // GET request with no body
       const res = await fetch(`http://127.0.0.1:${server.port}/`);
       expect(res.status).toBe(200);
+    } finally {
+      await server.stop(true);
+    }
+  });
+
+  test('server rejects chunked requests exceeding maxRequestBodySize', async () => {
+    const runtime = nodeRuntime();
+    let handlerCalled = false;
+    const server = await runtime.server.listen({
+      port: 0,
+      maxRequestBodySize: 100,
+      fetch: async req => {
+        handlerCalled = true;
+        return new Response(await req.text());
+      },
+    });
+    try {
+      const res = await new Promise<{ statusCode?: number; body: string }>((resolve, reject) => {
+        const req = request(
+          {
+            hostname: '127.0.0.1',
+            port: server.port,
+            path: '/',
+            method: 'POST',
+            headers: { 'content-type': 'text/plain' },
+          },
+          response => {
+            let body = '';
+            response.setEncoding('utf8');
+            response.on('data', chunk => {
+              body += chunk;
+            });
+            response.on('end', () => resolve({ statusCode: response.statusCode, body }));
+          },
+        );
+        req.on('error', reject);
+        req.write('x'.repeat(60));
+        req.write('x'.repeat(60));
+        req.end();
+      });
+
+      expect(res.statusCode).toBe(413);
+      expect(res.body).toBe('Payload Too Large');
+      expect(handlerCalled).toBe(false);
     } finally {
       await server.stop(true);
     }

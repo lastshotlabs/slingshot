@@ -328,7 +328,7 @@ describe('cross-plugin state via pluginState', () => {
 Plugin order matters here. Plugins that read from `pluginState` must run after the plugins that write to it. Use `dependencies` in your plugin definition and the framework handles the ordering automatically:
 
 ```typescript
-import { getContext } from '@lastshotlabs/slingshot-core';
+import { getContext, publishPluginState } from '@lastshotlabs/slingshot-core';
 import type { SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 
 export function createDependentPlugin(): SlingshotPlugin {
@@ -338,7 +338,7 @@ export function createDependentPlugin(): SlingshotPlugin {
     async setupPost({ app }) {
       const ctx = getContext(app);
       const myRuntime = ctx.pluginState.get('my-plugin');
-      ctx.pluginState.set('dependent-plugin', {
+      publishPluginState(ctx.pluginState, 'dependent-plugin', {
         myPluginFeatureEnabled: (myRuntime as any)?.featureFlag ?? false,
       });
     },

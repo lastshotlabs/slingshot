@@ -301,11 +301,31 @@ async function awaitWebSocketCloseHandlers(
 
 let processHandlersInstalled = false;
 
+function shouldSkipFatalProcessExit(): boolean {
+  const argv = process.argv.join(' ');
+  return (
+    process.env.NODE_ENV === 'test' ||
+    process.env.BUN_ENV === 'test' ||
+    process.env.SLINGSHOT_DISABLE_FATAL_PROCESS_EXIT === '1' ||
+    argv.includes('bun test') ||
+    argv.includes('vitest') ||
+    process.argv.some(arg => /\.test\.[cm]?[jt]s$/.test(arg))
+  );
+}
+
+function scheduleFatalProcessExit(): void {
+  if (shouldSkipFatalProcessExit()) return;
+  process.exitCode = 1;
+  const timer = setTimeout(() => process.exit(1), 0);
+  timer.unref?.();
+}
+
 /**
  * Install once-per-process handlers for `unhandledRejection` and
  * `uncaughtException`. Both are forwarded to the new structured `Logger` (and
  * also surfaced via the legacy `RuntimeBunLogger` for tests that watch the
- * older text-format hook). Idempotent.
+ * older text-format hook). Fatal process events schedule a process exit after
+ * logging so production does not continue in an undefined state. Idempotent.
  *
  * `bunRuntime()` calls this automatically by default — pass
  * `installProcessSafetyNet: false` to opt out.
@@ -320,11 +340,13 @@ export function installProcessSafetyNet(): void {
     };
     structuredLogger.error('unhandled-rejection', fields);
     activeLogger.error('unhandled-rejection', fields);
+    scheduleFatalProcessExit();
   });
   process.on('uncaughtException', (err: Error) => {
     const fields = { message: err.message, stack: err.stack };
     structuredLogger.error('uncaught-exception', fields);
     activeLogger.error('uncaught-exception', fields);
+    scheduleFatalProcessExit();
   });
 }
 

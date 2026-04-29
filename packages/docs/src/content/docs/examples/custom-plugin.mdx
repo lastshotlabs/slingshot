@@ -195,7 +195,12 @@ export function createCatalogRouter(store: ProductStore, events: SlingshotEvents
 A plugin runs in four phases. `setupMiddleware` fires first (before tenant middleware). `setupRoutes` fires after tenant middleware — handlers can read the resolved `actor` and other request context values. `setupPost` fires last, after all routes register — use it for subscriptions and other true post-assembly work. `pluginState` is not a `setupPost`-only concept: publish it in the earliest phase where the state is actually canonical.
 
 ```typescript title="src/plugins/catalog/index.ts"
-import { type SlingshotPlugin, defineEvent, getContext } from '@lastshotlabs/slingshot-core';
+import {
+  type SlingshotPlugin,
+  defineEvent,
+  getContext,
+  publishPluginState,
+} from '@lastshotlabs/slingshot-core';
 import { createCatalogRouter } from './router';
 import { createProductStore } from './store';
 
@@ -223,7 +228,7 @@ export function createCatalogPlugin(): SlingshotPlugin {
     async setupRoutes({ app, events }) {
       // Routes are mounted after tenant middleware — they get the resolved actor on context
       const ctx = getContext(app);
-      ctx.pluginState.set('catalog', { store });
+      publishPluginState(ctx.pluginState, 'catalog', { store });
 
       app.route('/', createCatalogRouter(store, events));
     },

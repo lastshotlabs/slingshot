@@ -39,6 +39,7 @@ import {
   defineEvent,
   getContextOrNull,
   publishEntityAdaptersState,
+  publishPluginState,
   requireEntityAdapter,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
@@ -1054,7 +1055,8 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
         // deterministic across plugin ordering. Frozen at the boundary per
         // CLAUDE.md rule 12.
         if (pluginCtx?.pluginState && !pluginCtx.pluginState.has(PERMISSIONS_STATE_KEY)) {
-          pluginCtx.pluginState.set(
+          publishPluginState(
+            pluginCtx.pluginState,
             PERMISSIONS_STATE_KEY,
             Object.freeze({
               evaluator: resolvedPermissions.evaluator,

@@ -2,67 +2,21 @@ import { describe, expect, it } from 'bun:test';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { ssrPluginConfigSchema } from '../../src/config.schema';
 import { createSsrPlugin } from '../../src/plugin';
-import type { SlingshotSsrRenderer, SsrRouteChain, SsrRouteMatch } from '../../src/types';
-
-function makeRouteMatch(url: URL): SsrRouteMatch {
-  return {
-    filePath: '/fake/route.ts',
-    metaFilePath: null,
-    params: {},
-    query: {},
-    url,
-    loadingFilePath: null,
-    errorFilePath: null,
-    notFoundFilePath: null,
-    forbiddenFilePath: null,
-    unauthorizedFilePath: null,
-    templateFilePath: null,
-  };
-}
-
-function makeMockRenderer(overrides: Partial<SlingshotSsrRenderer> = {}): SlingshotSsrRenderer {
-  return {
-    resolve: async (url): Promise<SsrRouteMatch> => makeRouteMatch(url),
-    render: async () =>
-      new Response('<html>SSR</html>', {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      }),
-    renderChain: async (chain: SsrRouteChain) =>
-      new Response(`<html>SSR chain ${chain.page.url.pathname}</html>`, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      }),
-    ...overrides,
-  };
-}
+import { createTestSsrConfig } from '../../src/testing';
 
 describe('createSsrPlugin', () => {
   it('returns a SlingshotPlugin with name slingshot-ssr', () => {
-    const plugin = createSsrPlugin({
-      renderer: makeMockRenderer(),
-      serverRoutesDir: '/fake/routes',
-      assetsManifest: '/fake/manifest.json',
-      devMode: true,
-    });
+    const plugin = createSsrPlugin(createTestSsrConfig());
     expect(plugin.name).toBe('slingshot-ssr');
   });
 
   it('has setupMiddleware lifecycle method', () => {
-    const plugin = createSsrPlugin({
-      renderer: makeMockRenderer(),
-      serverRoutesDir: '/fake/routes',
-      assetsManifest: '/fake/manifest.json',
-      devMode: true,
-    });
+    const plugin = createSsrPlugin(createTestSsrConfig());
     expect(typeof plugin.setupMiddleware).toBe('function');
   });
 
   it('registers route and middleware lifecycle methods', () => {
-    const plugin = createSsrPlugin({
-      renderer: makeMockRenderer(),
-      serverRoutesDir: '/fake/routes',
-      assetsManifest: '/fake/manifest.json',
-      devMode: true,
-    });
+    const plugin = createSsrPlugin(createTestSsrConfig());
     expect(typeof plugin.setupRoutes).toBe('function');
     expect(typeof plugin.setupPost).toBe('function');
   });
@@ -71,23 +25,13 @@ describe('createSsrPlugin', () => {
 describe('createSsrPlugin — config validation', () => {
   it('throws ZodError when serverRoutesDir is missing', () => {
     expect(() =>
-      createSsrPlugin({
-        renderer: makeMockRenderer(),
-        serverRoutesDir: '',
-        assetsManifest: '/fake/manifest.json',
-        devMode: true,
-      }),
+      createSsrPlugin(createTestSsrConfig({ serverRoutesDir: '' })),
     ).toThrow();
   });
 
   it('throws ZodError when assetsManifest is missing', () => {
     expect(() =>
-      createSsrPlugin({
-        renderer: makeMockRenderer(),
-        serverRoutesDir: '/fake/routes',
-        assetsManifest: '',
-        devMode: true,
-      }),
+      createSsrPlugin(createTestSsrConfig({ assetsManifest: '' })),
     ).toThrow();
   });
 
@@ -181,12 +125,12 @@ describe('ssrPluginConfigSchema', () => {
 
 describe('createSsrPlugin — production mode manifest check', () => {
   it('throws at setupMiddleware time when manifest is missing in production', async () => {
-    const plugin = createSsrPlugin({
-      renderer: makeMockRenderer(),
-      serverRoutesDir: '/fake/routes',
-      assetsManifest: '/nonexistent/manifest.json',
-      devMode: false, // production mode — manifest is required
-    });
+    const plugin = createSsrPlugin(
+      createTestSsrConfig({
+        assetsManifest: '/nonexistent/manifest.json',
+        devMode: false,
+      }),
+    );
 
     const { Hono } = await import('hono');
     const app = new Hono() as unknown as import('hono').Hono<AppEnv>;
@@ -208,12 +152,12 @@ describe('createSsrPlugin — production mode manifest check', () => {
   });
 
   it('does NOT throw at setupMiddleware time in dev mode', async () => {
-    const plugin = createSsrPlugin({
-      renderer: makeMockRenderer(),
-      serverRoutesDir: '/fake/routes',
-      assetsManifest: '/nonexistent/manifest.json',
-      devMode: true, // dev mode — manifest is optional
-    });
+    const plugin = createSsrPlugin(
+      createTestSsrConfig({
+        assetsManifest: '/nonexistent/manifest.json',
+        devMode: true,
+      }),
+    );
 
     const { Hono } = await import('hono');
     const app = new Hono() as unknown as import('hono').Hono<AppEnv>;

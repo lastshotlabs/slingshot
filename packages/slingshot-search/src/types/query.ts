@@ -112,7 +112,7 @@ export type SearchFilterValue =
   | boolean
   | null
   | Date
-  | ReadonlyArray<string | number | boolean>
+  | ReadonlyArray<string | number | boolean | null>
   | readonly [number, number]; // BETWEEN
 
 /**

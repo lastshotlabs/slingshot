@@ -195,7 +195,7 @@ export function wrapWithRuntime(runtime: AuthRuntimeContext): Hono<AppEnv> {
       signing: runtime.signing,
       pluginState: new Map([[AUTH_RUNTIME_KEY, runtime]]),
     };
-    c.set('slingshotCtx', ctxPartial as SlingshotContext);
+    c.set('slingshotCtx', ctxPartial as unknown as SlingshotContext);
     await next();
   });
   return app;

@@ -4,18 +4,15 @@
  */
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
-import {
-  createFakeKafkaJsModule,
-  fakeKafkaState,
-  resetFakeKafkaState,
-} from '../../src/testing/fakeKafkaJs';
+import { createFakeKafkaJsModule, createTestState } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaConnectors } = await import('../../src/kafkaConnectors');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
 
 describe('connector dedup — messageId resolution', () => {
@@ -29,7 +26,7 @@ describe('connector dedup — messageId resolution', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       const baseMessage = {
         offset: '0',
@@ -86,7 +83,7 @@ describe('connector dedup — messageId resolution', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       const msg = {
         offset: '0',
@@ -147,7 +144,7 @@ describe('connector dedup — no message-id fallback', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       const msg = {
         offset: '0',
@@ -199,7 +196,7 @@ describe('connector dedup — no message-id fallback', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.dedup-diff',
@@ -252,7 +249,7 @@ describe('connector dedup — idempotency key collisions', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       // Two messages with same message-id header
       const msg = {
@@ -307,7 +304,7 @@ describe('connector dedup — custom dedup store with failure paths', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.dedup-fail',

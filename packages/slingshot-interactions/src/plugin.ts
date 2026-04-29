@@ -9,6 +9,7 @@ import {
   getPermissionsStateOrNull,
   getPluginState,
   getRateLimitAdapter,
+  publishPluginState,
   resolveRepo,
 } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
@@ -174,7 +175,7 @@ export function createInteractionsPlugin(rawConfig: unknown): SlingshotPlugin {
       };
 
       stateRef = state;
-      pluginState.set(INTERACTIONS_PLUGIN_STATE_KEY, state);
+      publishPluginState(pluginState, INTERACTIONS_PLUGIN_STATE_KEY, state);
 
       innerPlugin = createEntityPlugin({
         name: INTERACTIONS_PLUGIN_STATE_KEY,

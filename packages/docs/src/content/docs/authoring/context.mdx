@@ -96,8 +96,10 @@ through `createApp()` while preserving the live behavior when a real server star
 Plugins publish their runtime via `pluginState`. Read it in `setupPost` after dependencies have run:
 
 ```typescript
+import { publishPluginState } from '@lastshotlabs/slingshot-core';
+
 // Publishing (in the auth plugin's setupRoutes)
-ctx.pluginState.set('auth.runtime', {
+publishPluginState(ctx.pluginState, 'auth.runtime', {
   verifyToken,
   getUserById,
   config: authConfig,
@@ -126,14 +128,14 @@ setupRoutes(app, config) {
   if (!sqliteDb) throw new Error('This plugin requires SQLite (config.db.sqlite)');
 
   const adapter = createMyAdapter(sqliteDb);
-  ctx.pluginState.set('myplugin.adapter', adapter);
+  publishPluginState(ctx.pluginState, 'myplugin.adapter', adapter);
 }
 ```
 
 Avoid reaching for DB handles directly in most cases. Use `resolveRepo` from `slingshot-core` to dispatch to the right adapter based on the configured `storeType`:
 
 ```typescript
-import { resolveRepo } from '@lastshotlabs/slingshot-core';
+import { publishPluginState, resolveRepo } from '@lastshotlabs/slingshot-core';
 import type { RepoFactories, StoreInfra, StoreType } from '@lastshotlabs/slingshot-core';
 
 interface NotesRepo {

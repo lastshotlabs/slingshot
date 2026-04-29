@@ -101,11 +101,13 @@ Slingshot validates that all declared dependencies are present and topologically
 Plugins store runtime state in `getContext(app).pluginState`, keyed by a plugin-owned constant, usually one that equals the plugin name. Cross-plugin communication goes through this map:
 
 ```typescript
+import { getContext, publishPluginState } from '@lastshotlabs/slingshot-core';
+
 const MY_PLUGIN_STATE_KEY = 'my-plugin' as const;
 
 // Plugin A publishes canonical state in the earliest safe phase.
 // Entity adapters are one framework-owned example published during setupRoutes.
-getContext(app).pluginState.set(MY_PLUGIN_STATE_KEY, { someCapability: ... });
+publishPluginState(getContext(app).pluginState, MY_PLUGIN_STATE_KEY, { someCapability: ... });
 
 // Plugin B reads it in a later phase or request handler.
 const pluginAState = getContext(app).pluginState.get(MY_PLUGIN_STATE_KEY);

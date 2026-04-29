@@ -3,7 +3,7 @@ import type {
   PluginStateMap,
   PolicyResolver,
 } from '@lastshotlabs/slingshot-core';
-import { resolvePluginState } from '@lastshotlabs/slingshot-core';
+import { publishPluginState, resolvePluginState } from '@lastshotlabs/slingshot-core';
 
 /**
  * Plugin state key under which the policy registry lives on
@@ -44,7 +44,7 @@ function ensureMutableEntityPluginState(
 ): SlingshotEntityPluginState {
   if (!state) {
     const nextState: SlingshotEntityPluginState = {};
-    pluginState.set(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+    publishPluginState(pluginState, SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
     return nextState;
   }
 
@@ -53,7 +53,7 @@ function ensureMutableEntityPluginState(
   }
 
   const nextState: SlingshotEntityPluginState = { ...state };
-  pluginState.set(SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
+  publishPluginState(pluginState, SLINGSHOT_ENTITY_PLUGIN_STATE_KEY, nextState);
   return nextState;
 }
 

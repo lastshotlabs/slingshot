@@ -1,11 +1,21 @@
-import { afterEach, describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import { createWebhooksTestApp } from '../../src/testing';
+import type { WebhookPluginConfig } from '../../src/types/config';
 import type { WebhookDelivery } from '../../src/types/models';
 
-const originalFetch = globalThis.fetch;
+const PUBLIC_RESOLVE = async () => [{ address: '93.184.216.34', family: 4 as const }];
 
 function asFetch(value: ReturnType<typeof mock<() => Promise<Response>>>): typeof fetch {
   return value as unknown as typeof fetch;
+}
+
+function dispatchFor(
+  fetchMock: ReturnType<typeof mock<() => Promise<Response>>>,
+): NonNullable<WebhookPluginConfig['dispatch']> {
+  return {
+    fetchImpl: asFetch(fetchMock),
+    safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+  };
 }
 
 function adminHeaders(tenantId = 'tenant-a'): Record<string, string> {
@@ -53,10 +63,6 @@ async function waitForDelivery(
   throw new Error(`Timed out waiting for delivery on endpoint ${endpointId}`);
 }
 
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
-
 describe('webhook replay endpoint', () => {
   /**
    * P-WEBHOOKS-10: The replay endpoint (POST /webhooks/admin/deliveries/:id/replay)
@@ -66,11 +72,11 @@ describe('webhook replay endpoint', () => {
   it('re-queues a failed delivery and resets its status to pending', async () => {
     // Return 400 so the delivery fails immediately (non-retryable).
     const fetchMock = mock(async () => new Response('bad request', { status: 400 }));
-    globalThis.fetch = asFetch(fetchMock);
 
     const { app, events, runtime, teardown } = await createWebhooksTestApp({
       events: ['auth:*'],
       queueConfig: { maxAttempts: 1, retryBaseDelayMs: 1 },
+      dispatch: dispatchFor(fetchMock),
     });
 
     try {
@@ -127,10 +133,10 @@ describe('webhook replay endpoint', () => {
   it('returns 400 when the delivery was already delivered', async () => {
     // Use a URL that returns 200 so the delivery succeeds.
     const fetchMock = mock(async () => new Response('ok', { status: 200 }));
-    globalThis.fetch = asFetch(fetchMock);
 
     const { app, events, runtime, teardown } = await createWebhooksTestApp({
       events: ['auth:*'],
+      dispatch: dispatchFor(fetchMock),
     });
 
     try {

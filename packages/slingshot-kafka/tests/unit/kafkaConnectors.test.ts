@@ -9,18 +9,18 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 const { createKafkaConnectors } = await import('../../src/kafkaConnectors');
 
 afterEach(async () => {
-  resetFakeKafkaState();
+  reset();
   mock.restore();
 });
 
@@ -147,10 +147,10 @@ describe('kafkaConnectors', () => {
       ],
     });
 
-    fakeKafkaState.createTopicsErrors.push(new Error('createTopics failed'));
+    state.createTopicsErrors.push(new Error('createTopics failed'));
 
     await expect(connectors.start(bus)).rejects.toThrow('createTopics failed');
-    expect(fakeKafkaState.adminDisconnectCalls).toBe(1);
+    expect(state.adminDisconnectCalls).toBe(1);
     expect(connectors.health().started).toBe(false);
   });
 
@@ -172,15 +172,15 @@ describe('kafkaConnectors', () => {
       ],
     });
 
-    fakeKafkaState.consumerConnectErrors.push(new Error('connect failed once'));
+    state.consumerConnectErrors.push(new Error('connect failed once'));
 
     await expect(connectors.start(bus)).rejects.toThrow('connect failed once');
     expect(connectors.health().started).toBe(false);
-    expect(fakeKafkaState.consumers[0]?.disconnectCalls).toBe(1);
+    expect(state.consumers[0]?.disconnectCalls).toBe(1);
 
     await expect(connectors.start(bus)).resolves.toBeUndefined();
     expect(connectors.health().started).toBe(true);
-    expect(fakeKafkaState.consumers).toHaveLength(3);
+    expect(state.consumers).toHaveLength(3);
 
     await connectors.stop();
   });
@@ -202,18 +202,16 @@ describe('kafkaConnectors', () => {
     events.publish('auth:user.created', { userId: 42 } as never, { requestTenantId: null });
     await flushAsyncWork();
 
-    expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
-    expect(fakeKafkaState.producerSendCalls[0]?.topic).toBe('external.users.created');
-    expect(
-      fakeKafkaState.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.owner-plugin'],
-    ).toBe('test-auth');
-    expect(fakeKafkaState.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.exposure']).toBe(
+    expect(state.producerSendCalls).toHaveLength(1);
+    expect(state.producerSendCalls[0]?.topic).toBe('external.users.created');
+    expect(state.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.owner-plugin']).toBe(
+      'test-auth',
+    );
+    expect(state.producerSendCalls[0]?.messages[0]?.headers?.['slingshot.exposure']).toBe(
       'connector',
     );
     expect(
-      new TextDecoder().decode(
-        fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array,
-      ),
+      new TextDecoder().decode(state.producerSendCalls[0]?.messages[0]?.value as Uint8Array),
     ).toContain('"payload":{"userId":"42"}');
 
     await connectors.stop();
@@ -230,7 +228,7 @@ describe('kafkaConnectors', () => {
     bus.emit('auth:user.created', { userId: 'raw-only' } as never);
     await flushAsyncWork();
 
-    expect(fakeKafkaState.producerSendCalls).toHaveLength(0);
+    expect(state.producerSendCalls).toHaveLength(0);
 
     await connectors.stop();
   });
@@ -255,7 +253,7 @@ describe('kafkaConnectors', () => {
 
     await connectors.start(bus);
 
-    const consumer = fakeKafkaState.consumers[0];
+    const consumer = state.consumers[0];
     await consumer?.eachMessage?.({
       topic: 'incoming.users',
       partition: 0,
@@ -270,7 +268,7 @@ describe('kafkaConnectors', () => {
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(fakeKafkaState.producerSendCalls.at(-1)?.topic).toBe('incoming.users.dlq');
+    expect(state.producerSendCalls.at(-1)?.topic).toBe('incoming.users.dlq');
     expect(connectors.health().inbound[0]?.messagesDLQ).toBe(1);
 
     await connectors.stop();
@@ -298,9 +296,9 @@ describe('kafkaConnectors', () => {
 
     await connectors.start(bus);
 
-    expect(fakeKafkaState.consumers[0]?.runCalls[0]?.partitionsConsumedConcurrently).toBe(4);
+    expect(state.consumers[0]?.runCalls[0]?.partitionsConsumedConcurrently).toBe(4);
 
-    const consumer = fakeKafkaState.consumers[0];
+    const consumer = state.consumers[0];
     await consumer?.eachMessage?.({
       topic: 'incoming.billing',
       partition: 0,
@@ -314,8 +312,8 @@ describe('kafkaConnectors', () => {
       pause: () => {},
     });
 
-    expect(fakeKafkaState.createTopicsCalls.at(-1)?.topics[0]?.topic).toBe('incoming.billing.dlq');
-    expect(fakeKafkaState.producerSendCalls.at(-1)?.topic).toBe('incoming.billing.dlq');
+    expect(state.createTopicsCalls.at(-1)?.topics[0]?.topic).toBe('incoming.billing.dlq');
+    expect(state.producerSendCalls.at(-1)?.topic).toBe('incoming.billing.dlq');
 
     await connectors.stop();
   });
@@ -340,7 +338,7 @@ describe('kafkaConnectors', () => {
 
     await connectors.start(bus);
 
-    const consumer = fakeKafkaState.consumers[0];
+    const consumer = state.consumers[0];
     await consumer?.eachMessage?.({
       topic: 'incoming.once',
       partition: 0,
@@ -355,7 +353,7 @@ describe('kafkaConnectors', () => {
     });
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(fakeKafkaState.producerSendCalls.at(-1)?.topic).toBe('incoming.once.dlq');
+    expect(state.producerSendCalls.at(-1)?.topic).toBe('incoming.once.dlq');
 
     await connectors.stop();
   });
@@ -390,9 +388,9 @@ describe('kafkaConnectors', () => {
       await connectors.start(bus);
 
       // Make the next commitOffsets throw
-      fakeKafkaState.commitOffsetErrors.push(new Error('broker gone'));
+      state.commitOffsetErrors.push(new Error('broker gone'));
 
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       await consumer?.eachMessage?.({
         topic: 'commit-fail.topic',
         partition: 0,
@@ -453,7 +451,7 @@ describe('kafkaConnectors', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       // Message that fails schema validation (empty userId)
       await consumer?.eachMessage?.({
@@ -472,7 +470,7 @@ describe('kafkaConnectors', () => {
       // Handler must NOT be called for an invalid payload
       expect(handler).not.toHaveBeenCalled();
       // Offset must still be committed (so the bad message is not reprocessed)
-      expect(fakeKafkaState.consumers[0]?.commitOffsetCalls).toBeGreaterThan(0);
+      expect(state.consumers[0]?.commitOffsetCalls).toBeGreaterThan(0);
     } finally {
       errorSpy.mockRestore();
       await connectors.stop();
@@ -500,9 +498,7 @@ describe('kafkaConnectors', () => {
     await flushAsyncWork();
 
     expect(
-      new TextDecoder().decode(
-        fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array,
-      ),
+      new TextDecoder().decode(state.producerSendCalls[0]?.messages[0]?.value as Uint8Array),
     ).toContain('"user:abc"');
 
     await connectors.stop();
@@ -518,7 +514,7 @@ describe('kafkaConnectors', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       const message = {
         offset: '0',
@@ -571,7 +567,7 @@ describe('kafkaConnectors', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
       const message = {
         offset: '0',
         key: null,
@@ -628,7 +624,7 @@ describe('kafkaConnectors', () => {
       // Make every produce attempt fail; the first two should land in the
       // buffer (size 2), the rest should be dropped with reason buffer-full.
       for (let i = 0; i < 10; i++) {
-        fakeKafkaState.producerSendErrors.push(new Error('broker down'));
+        state.producerSendErrors.push(new Error('broker down'));
       }
       for (let i = 0; i < 5; i++) {
         events.publish('auth:user.created', { userId: `u-${i}` } as never, {
@@ -667,7 +663,7 @@ describe('kafkaConnectors', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0]!;
+      const consumer = state.consumers[0]!;
 
       const inflight = consumer.eachMessage?.({
         topic: 'incoming.rebal',

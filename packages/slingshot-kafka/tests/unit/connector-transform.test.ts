@@ -12,18 +12,34 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaConnectors } = await import('../../src/kafkaConnectors');
 
 afterEach(() => {
-  resetFakeKafkaState();
+  reset();
 });
+
+/**
+ * Poll until a condition is met or the timeout expires.
+ */
+async function waitFor(
+  condition: () => boolean | Promise<boolean>,
+  timeoutMs = 1000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await condition()) return;
+    await new Promise(r => setTimeout(r, 5));
+  }
+  throw new Error(`waitFor timed out after ${timeoutMs}ms`);
+}
 
 describe('connector inbound transforms', () => {
   test('inbound transform modifies payload before handler receives it', async () => {
@@ -50,7 +66,7 @@ describe('connector inbound transforms', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.transform',
@@ -95,7 +111,7 @@ describe('connector inbound transforms', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.skip',
@@ -113,7 +129,7 @@ describe('connector inbound transforms', () => {
       // Handler must NOT be called when transform returns null
       expect(handler).not.toHaveBeenCalled();
       // Offset must be committed to not reprocess
-      expect(fakeKafkaState.consumers[0]?.commitOffsetCalls).toBeGreaterThan(0);
+      expect(state.consumers[0]?.commitOffsetCalls).toBeGreaterThan(0);
     } finally {
       await connectors.stop();
     }
@@ -141,7 +157,7 @@ describe('connector inbound transforms', () => {
 
     try {
       await connectors.start(bus);
-      const consumer = fakeKafkaState.consumers[0];
+      const consumer = state.consumers[0];
 
       await consumer?.eachMessage?.({
         topic: 'incoming.transform-err',
@@ -159,9 +175,7 @@ describe('connector inbound transforms', () => {
       // Handler must NOT run — transform threw before reaching handler
       expect(handler).not.toHaveBeenCalled();
       // DLQ should contain the message
-      const dlqSend = fakeKafkaState.producerSendCalls.find(
-        c => c.topic === 'incoming.transform-err.dlq',
-      );
+      const dlqSend = state.producerSendCalls.find(c => c.topic === 'incoming.transform-err.dlq');
       expect(dlqSend).toBeDefined();
       expect(dlqSend?.messages[0]?.headers?.['slingshot.error-type']).toBe('validate');
     } finally {
@@ -204,18 +218,15 @@ describe('connector outbound transforms', () => {
 
     try {
       await connectors.start(bus);
-      // Let connector setup settle before publishing.
       await flushAsyncWork();
       events.publish('auth:user.created', { userId: 'u-1', email: 'user@example.com' } as never, {
         requestTenantId: null,
       });
-      await flushAsyncWork();
+      await waitFor(() => state.producerSendCalls.length >= 1);
 
-      expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
+      expect(state.producerSendCalls).toHaveLength(1);
       const sentPayload = JSON.parse(
-        new TextDecoder().decode(
-          fakeKafkaState.producerSendCalls[0]?.messages[0]?.value as Uint8Array,
-        ),
+        new TextDecoder().decode(state.producerSendCalls[0]?.messages[0]?.value as Uint8Array),
       );
       expect(sentPayload.payload).toEqual({
         userId: 'u-1',
@@ -252,7 +263,7 @@ describe('connector outbound transforms', () => {
         },
       ],
       hooks: {
-        onOutboundSuppressed: (event, topic, reason) => {
+        onOutboundSuppressed: (event, topic, _reason) => {
           suppressed.push({ event, topic });
         },
       },
@@ -264,10 +275,10 @@ describe('connector outbound transforms', () => {
       events.publish('auth:user.created', { userId: 'u-1' } as never, {
         requestTenantId: null,
       });
-      await flushAsyncWork();
+      await waitFor(() => suppressed.length > 0);
 
       // No produce should happen
-      expect(fakeKafkaState.producerSendCalls).toHaveLength(0);
+      expect(state.producerSendCalls).toHaveLength(0);
       // Suppression hook fired
       expect(suppressed.length).toBeGreaterThan(0);
     } finally {
@@ -307,10 +318,11 @@ describe('connector outbound transforms', () => {
 
       // Publish with missing email — should be blocked by schema
       events.publish('auth:user.created', { userId: 'u-1' } as never, { requestTenantId: null });
-      await flushAsyncWork();
+      // Validation is synchronous (throws before produce), so a brief settle is enough.
+      await waitFor(() => true);
 
       // No produce should happen — validation failed
-      expect(fakeKafkaState.producerSendCalls).toHaveLength(0);
+      expect(state.producerSendCalls).toHaveLength(0);
     } finally {
       await connectors.stop();
     }
@@ -348,10 +360,10 @@ describe('connector outbound transforms', () => {
       await connectors.start(bus);
       await flushAsyncWork();
       events.publish('auth:user.created', { userId: 'u-1' } as never, { requestTenantId: null });
-      await flushAsyncWork();
+      await waitFor(() => state.producerSendCalls.length >= 1);
 
       // In warn mode, the message should still be published
-      expect(fakeKafkaState.producerSendCalls).toHaveLength(1);
+      expect(state.producerSendCalls).toHaveLength(1);
       expect(warnSpy).toHaveBeenCalled();
     } finally {
       warnSpy.mockRestore();

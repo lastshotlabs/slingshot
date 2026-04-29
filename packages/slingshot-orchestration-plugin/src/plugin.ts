@@ -1,4 +1,4 @@
-import { getContext } from '@lastshotlabs/slingshot-core';
+import { getContext, publishPluginState } from '@lastshotlabs/slingshot-core';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   OrchestrationError,
@@ -91,7 +91,7 @@ export function createOrchestrationPlugin(
         });
       }
 
-      getContext(app).pluginState.set(ORCHESTRATION_PLUGIN_KEY, runtime);
+      publishPluginState(getContext(app).pluginState, ORCHESTRATION_PLUGIN_KEY, runtime);
 
       if (!routes) return;
       if (routeMiddleware.length === 0) {

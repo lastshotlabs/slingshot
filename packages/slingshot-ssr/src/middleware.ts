@@ -5,6 +5,7 @@ import type { MiddlewareHandler } from 'hono';
 import {
   type Logger,
   PathTraversalError,
+  type PluginStateMap,
   getContext,
   noopLogger,
   safeJoin,
@@ -17,13 +18,13 @@ import type { CircuitBreaker, CircuitBreakerOptions } from './circuitBreaker';
 import { buildDevErrorOverlay } from './dev/overlay';
 import { isDraftRequest, withDraftContext } from './draft/index';
 import type { IsrCacheAdapter } from './isr/types';
-import { retry } from './retry';
-import type { RetryOptions } from './retry';
 import {
   isRouteParamTooLargeError,
   resolveGlobalMiddlewarePath,
   resolveRouteChain,
 } from './resolver';
+import { retry } from './retry';
+import type { RetryOptions } from './retry';
 import type {
   IsrSink,
   SsrCacheControl,
@@ -603,7 +604,7 @@ export function buildSsrMiddleware(
             params: chain.page.params,
             getUser: () => {
               const ctx = bsCtx as {
-                pluginState?: Map<string, unknown>;
+                pluginState?: PluginStateMap;
                 auth?: { getUser: (c: unknown) => Promise<{ id: string; roles: string[] } | null> };
               };
               if (ctx.auth?.getUser) return ctx.auth.getUser(c);

@@ -4,6 +4,7 @@ import {
   attachContext,
   createEventDefinitionRegistry,
   createEventPublisher,
+  createPluginStateMap,
   defineEvent,
 } from '@lastshotlabs/slingshot-core';
 import type { SlingshotEventBus, SlingshotEvents } from '@lastshotlabs/slingshot-core';
@@ -387,7 +388,7 @@ export function createNotificationsTestBootstrap() {
 
   attachContext(app, {
     app,
-    pluginState: new Map([
+    pluginState: createPluginStateMap([
       [
         NOTIFICATIONS_PLUGIN_STATE_KEY,
         {

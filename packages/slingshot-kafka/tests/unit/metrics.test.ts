@@ -9,26 +9,26 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { createInProcessMetricsEmitter } from '@lastshotlabs/slingshot-core';
 import {
   createFakeKafkaJsModule,
-  fakeKafkaState,
+  createTestState,
   flushAsyncWork,
-  resetFakeKafkaState,
 } from '../../src/testing/fakeKafkaJs';
 
-mock.module('kafkajs', () => createFakeKafkaJsModule());
+const { state, reset } = createTestState();
+mock.module('kafkajs', () => createFakeKafkaJsModule(state));
 
 const { createKafkaAdapter } = await import('../../src/kafkaAdapter');
 
 async function waitForConsumerEachMessage(timeoutMs = 1000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (fakeKafkaState.consumers[0]?.eachMessage) return;
+    if (state.consumers[0]?.eachMessage) return;
     await flushAsyncWork(5);
   }
   throw new Error('timed out waiting for durable consumer registration');
 }
 
 afterEach(async () => {
-  resetFakeKafkaState();
+  reset();
 });
 
 describe('kafkaAdapter — metrics emitter', () => {
@@ -75,7 +75,7 @@ describe('kafkaAdapter — metrics emitter', () => {
     bus.on('auth:login', () => {}, { durable: true, name: 'failure-worker' });
     await flushAsyncWork();
 
-    fakeKafkaState.producerSendErrors.push(new Error('temporary broker failure'));
+    state.producerSendErrors.push(new Error('temporary broker failure'));
     bus.emit('auth:login', { userId: 'u-2', sessionId: 's-2' });
     await flushAsyncWork();
 
@@ -112,7 +112,7 @@ describe('kafkaAdapter — metrics emitter', () => {
     );
     await waitForConsumerEachMessage();
 
-    const consumer = fakeKafkaState.consumers[0];
+    const consumer = state.consumers[0];
     await consumer?.eachMessage?.({
       topic: 'm.events.auth.login',
       partition: 0,
@@ -150,7 +150,7 @@ describe('kafkaAdapter — metrics emitter', () => {
     bus.on('auth:login', () => {}, { durable: true, name: 'dlq-worker' });
     await waitForConsumerEachMessage();
 
-    const consumer = fakeKafkaState.consumers[0];
+    const consumer = state.consumers[0];
     // Use a non-JSON payload so the default JSON serializer rejects it.
     await consumer?.eachMessage?.({
       topic: 'm.events.auth.login',
@@ -185,7 +185,7 @@ describe('kafkaAdapter — metrics emitter', () => {
     await waitForConsumerEachMessage();
 
     // Simulate the consumer joining the group so the GROUP_JOIN listener fires.
-    const consumer = fakeKafkaState.consumers[0];
+    const consumer = state.consumers[0];
     await consumer?.emitEvent?.('consumer.group_join', { payload: { memberId: 'member-1' } });
 
     let snap = metrics.snapshot();

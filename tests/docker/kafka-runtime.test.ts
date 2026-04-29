@@ -565,6 +565,7 @@ describe('Kafka runtime paths (Docker)', () => {
             topic,
             groupId: uniqueName('concurrency'),
             concurrency: 3,
+            fromBeginning: true,
             handler: async payload => {
               const id = String((payload as { id: string }).id);
               started.add(id);
@@ -580,13 +581,6 @@ describe('Kafka runtime paths (Docker)', () => {
         ],
       });
       cleanup.push(() => connectors.stop());
-
-      await connectors.start(createInProcessAdapter());
-      await waitFor(
-        () => connectors.health().inbound[0]?.status === 'active',
-        15_000,
-        'Inbound connector did not become active',
-      );
 
       const producer = await createProducer();
       const messages: Message[] = [
@@ -608,14 +602,23 @@ describe('Kafka runtime paths (Docker)', () => {
       ];
       await producer.send({ topic, messages });
 
+      await connectors.start(createInProcessAdapter());
       await waitFor(
-        () => started.size >= 2 && maxInFlight > 1,
+        () => connectors.health().inbound[0]?.status === 'active',
         15_000,
-        'Inbound connector did not process partitions concurrently',
+        'Inbound connector did not become active',
       );
-      expect(maxInFlight).toBeGreaterThan(1);
 
-      releaseHandlers();
+      try {
+        await waitFor(
+          () => started.size >= 2 && maxInFlight > 1,
+          15_000,
+          'Inbound connector did not process partitions concurrently',
+        );
+        expect(maxInFlight).toBeGreaterThan(1);
+      } finally {
+        releaseHandlers();
+      }
 
       await waitFor(
         () => connectors.health().inbound[0]?.messagesProcessed === 3,

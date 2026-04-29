@@ -2,13 +2,12 @@
  * BullMQ adapter surface for Slingshot orchestration.
  */
 export {
-  classifyOrchestrationError,
   createBullMQOrchestrationAdapter,
   OrchestrationAdapterDisposedError,
   type BullMQOrchestrationAdapterMetrics,
   type BullMQOrchestrationMetricsCapability,
-  type ErrorClassification,
 } from './adapter';
+export { classifyOrchestrationError, type ErrorClassification } from './errorClassification';
 /**
  * Map BullMQ run states into portable Slingshot orchestration statuses.
  */

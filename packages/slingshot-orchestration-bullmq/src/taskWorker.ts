@@ -6,7 +6,7 @@ import type {
   TaskContext,
 } from '@lastshotlabs/slingshot-orchestration';
 import { OrchestrationError } from '@lastshotlabs/slingshot-orchestration';
-import { classifyOrchestrationError } from './adapter';
+import { classifyOrchestrationError } from './errorClassification';
 import { readTaskRuntimeConfig, resolveTaskRuntimeConfig } from './taskRuntime';
 
 /**

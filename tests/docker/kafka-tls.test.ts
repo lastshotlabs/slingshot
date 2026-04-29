@@ -3,13 +3,19 @@ import { describe, expect, test } from 'bun:test';
 
 const TLS_CA_PATH = resolve(process.cwd(), 'tests/fixtures/redpanda-tls/ca.crt');
 const RUNNER_PATH = resolve(process.cwd(), 'tests/docker/kafka-tls.runner.ts');
-const TLS_TEST_TIMEOUT_MS = 30_000;
+const TLS_TEST_TIMEOUT_MS = 90_000;
+const TRANSIENT_DOCKER_KAFKA_FAILURE =
+  /ECONNREFUSED|Client network socket disconnected before secure TLS connection was established/;
 
 function decode(bytes: Uint8Array): string {
   return new TextDecoder().decode(bytes);
 }
 
-function runTlsScenario(
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function runTlsScenarioOnce(
   scenario:
     | 'plaintext-rejected'
     | 'adapter-roundtrip'
@@ -23,7 +29,7 @@ function runTlsScenario(
     | 'manifest-bootstrap'
     | 'manifest-bootstrap-mtls',
   opts?: { trustCa?: boolean },
-): string {
+): { exitCode: number | null; stdout: string; stderr: string } {
   const proc = Bun.spawnSync({
     cmd: [process.execPath, RUNNER_PATH, scenario],
     cwd: process.cwd(),
@@ -42,12 +48,43 @@ function runTlsScenario(
     stderr: 'pipe',
   });
 
-  const stdout = decode(proc.stdout);
-  const stderr = decode(proc.stderr);
-  if (proc.exitCode !== 0) {
+  return {
+    exitCode: proc.exitCode,
+    stdout: decode(proc.stdout),
+    stderr: decode(proc.stderr),
+  };
+}
+
+function runTlsScenario(
+  scenario:
+    | 'plaintext-rejected'
+    | 'adapter-roundtrip'
+    | 'adapter-roundtrip-explicit-ca'
+    | 'adapter-roundtrip-mtls'
+    | 'connectors-bridge'
+    | 'connectors-bridge-explicit-ca'
+    | 'connectors-bridge-mtls'
+    | 'bad-ca-rejected'
+    | 'mtls-rejected-without-client-cert'
+    | 'manifest-bootstrap'
+    | 'manifest-bootstrap-mtls',
+  opts?: { trustCa?: boolean },
+): string {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { exitCode, stdout, stderr } = runTlsScenarioOnce(scenario, opts);
+    if (exitCode === 0) {
+      return stdout;
+    }
+
+    const combinedOutput = `${stdout}\n${stderr}`;
+    if (attempt === 0 && TRANSIENT_DOCKER_KAFKA_FAILURE.test(combinedOutput)) {
+      sleepSync(1_000);
+      continue;
+    }
+
     throw new Error(
       [
-        `TLS scenario "${scenario}" failed with exit code ${proc.exitCode}.`,
+        `TLS scenario "${scenario}" failed with exit code ${exitCode}.`,
         stdout ? `stdout:\n${stdout}` : '',
         stderr ? `stderr:\n${stderr}` : '',
       ]
@@ -56,7 +93,7 @@ function runTlsScenario(
     );
   }
 
-  return stdout;
+  throw new Error(`TLS scenario "${scenario}" did not complete`);
 }
 
 describe('Kafka TLS runtime paths (Docker)', () => {

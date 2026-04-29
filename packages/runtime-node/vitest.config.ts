@@ -15,7 +15,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['tests/node-runtime/nodeRuntime.test.ts'],
+    include: ['tests/node-runtime/nodeRuntime.test.ts', 'tests/node-runtime/node-sqlite-edge.test.ts'],
     globals: true,
   },
 });

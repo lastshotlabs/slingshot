@@ -5,6 +5,13 @@ import {
   createConsoleLogger,
   withTimeout,
 } from '@lastshotlabs/slingshot-core';
+export {
+  EdgeRuntimeError,
+  EdgeUnsupportedError,
+  EdgeFileReadError,
+  EdgeFileSizeExceededError,
+  EdgePasswordConfigError,
+} from './errors';
 import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
 
 /** Default upper-bound on a single `fileStore` call (5 s). */

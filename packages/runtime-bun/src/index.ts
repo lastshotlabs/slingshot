@@ -1,5 +1,12 @@
 import { Database } from 'bun:sqlite';
 import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+export {
+  BunRuntimeError,
+  BunServerError,
+  BunSqliteError,
+  BunWebSocketError,
+  BunPasswordError,
+} from './errors';
 import type {
   RuntimeServerInstance,
   RuntimeSqliteDatabase,

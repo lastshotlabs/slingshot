@@ -25,3 +25,13 @@ export { collectSsgRoutes } from './crawler';
  * Render one or more SSG pages through the configured application renderer.
  */
 export { renderSsgPage, renderSsgPages } from './renderer';
+/**
+ * Typed error classes thrown by the SSG package.
+ */
+export {
+  SsgCliArgError,
+  SsgConfigError,
+  SsgCrawlError,
+  SsgError,
+  SsgRenderError,
+} from './errors';

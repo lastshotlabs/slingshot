@@ -73,3 +73,7 @@ export { memoryStorage } from './adapters/memory';
  * Resolve a manifest-compatible storage adapter reference.
  */
 export { resolveStorageAdapter } from './adapters/index';
+/**
+ * Typed error classes thrown by image transform operations.
+ */
+export { ImageTransformError, ImageTransformTimeoutError } from './image/types';

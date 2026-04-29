@@ -49,3 +49,12 @@ export type {
   RedisRateLimitClientLike,
   RedisRateLimitMultiLike,
 } from './lib/rateLimitStore';
+/**
+ * Typed error classes thrown by the admin plugin.
+ */
+export {
+  AdminAccessDeniedError,
+  AdminAuditLogError,
+  AdminConfigError,
+  AdminRateLimitExceededError,
+} from './errors';

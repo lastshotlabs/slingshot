@@ -265,18 +265,22 @@ describe('runtime-node publish fan-out', () => {
       port: 0,
       websocket: {
         open(ws) {
-          const ch = (ws.data as { ch: string }).ch;
-          ws.subscribe(ch);
-          ws.send(`sub:${ch}`);
+          ws.send('ready');
         },
-        message() {},
+        message(ws, msg) {
+          if (msg === 'subA') {
+            ws.subscribe('channelA');
+            ws.send('subbed:A');
+          } else if (msg === 'subB') {
+            ws.subscribe('channelB');
+            ws.send('subbed:B');
+          }
+        },
         close() {},
       },
       fetch(req) {
         if (req.headers.get('upgrade') === 'websocket') {
-          const url = new URL(req.url);
-          const ch = url.searchParams.get('ch') ?? 'default';
-          inst.upgrade(req, { data: { ch } });
+          inst.upgrade(req, { data: null });
           return ALREADY_SENT;
         }
         return new Response('ok');
@@ -284,28 +288,35 @@ describe('runtime-node publish fan-out', () => {
     });
     inst = server;
 
-    // Connect clients sequentially. Client A connects first to channelA,
-    // then client B connects to channelB.
-    const chA = await createBufferedClient(`ws://127.0.0.1:${server.port}/?ch=channelB`);
-    expect(await chA.nextMessage()).toBe('sub:channelB');
+    const chA = await createBufferedClient(`ws://127.0.0.1:${server.port}/`);
+    expect(await chA.nextMessage()).toBe('ready');
 
-    const chB = await createBufferedClient(`ws://127.0.0.1:${server.port}/?ch=channelA`);
-    expect(await chB.nextMessage()).toBe('sub:channelA');
+    const chB = await createBufferedClient(`ws://127.0.0.1:${server.port}/`);
+    expect(await chB.nextMessage()).toBe('ready');
+
+    // chA subscribes to channelA; chB subscribes to channelB
+    chA.ws.send('subA');
+    expect(await chA.nextMessage()).toBe('subbed:A');
+
+    chB.ws.send('subB');
+    expect(await chB.nextMessage()).toBe('subbed:B');
 
     try {
-      // Publish to channelA — only chA receives
+      // Publish to both channels. Each message is delivered synchronously
+      // on the server side, so by the time the next line runs both clients
+      // have been sent their respective messages.
       server.publish('channelA', 'message-for-A');
-      expect(await chA.nextMessage()).toBe('message-for-A');
-
-      // chB should NOT receive channelA's publish
-      await expectNoMessage(chB.nextMessage, 200);
-
-      // Publish to channelB — only chB receives
       server.publish('channelB', 'message-for-B');
-      expect(await chB.nextMessage()).toBe('message-for-B');
 
-      // chA should NOT receive channelB's publish
+      // chA should receive channelA's message but NOT channelB's
+      expect(await chA.nextMessage()).toBe('message-for-A');
+      // expectNoMessage here is safe because it's the LAST read from chA
       await expectNoMessage(chA.nextMessage, 200);
+
+      // chB should receive channelB's message but NOT channelA's
+      expect(await chB.nextMessage()).toBe('message-for-B');
+      // expectNoMessage here is safe because it's the LAST read from chB
+      await expectNoMessage(chB.nextMessage, 200);
     } finally {
       await closeWs(chA.ws);
       await closeWs(chB.ws);

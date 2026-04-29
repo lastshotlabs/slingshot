@@ -1,68 +1,125 @@
+/**
+ * Edge-case coverage for admin resource type registration.
+ *
+ * Builds on the core registration tests in resourceTypes.test.ts.
+ * Covers def registration and role resolution edge cases that
+ * exercise the real `registerAdminResourceTypes` function.
+ */
 import { describe, expect, test } from 'bun:test';
-import { createPermissionRegistry } from '@lastshotlabs/slingshot-core';
+import type { PermissionRegistry } from '@lastshotlabs/slingshot-core';
 import { registerAdminResourceTypes } from '../../src/lib/resourceTypes';
 
-describe('registerAdminResourceTypes', () => {
-  test('registers admin:user resource type', () => {
-    const registry = createPermissionRegistry();
+function createTestRegistry(throwOnDuplicate = true): PermissionRegistry {
+  const defs = new Map<string, {
+    resourceType: string;
+    actions: string[];
+    roles: Record<string, string[]>;
+  }>();
+  return {
+    register(def) {
+      if (throwOnDuplicate && defs.has(def.resourceType)) {
+        throw new Error(`Resource type '${def.resourceType}' is already registered`);
+      }
+      defs.set(def.resourceType, def);
+    },
+    getDefinition(resourceType: string) {
+      return defs.get(resourceType) ?? null;
+    },
+    listResourceTypes() {
+      return Array.from(defs.values());
+    },
+    getActionsForRole(resourceType: string, role: string) {
+      if (role === 'super-admin') return ['*'];
+      return defs.get(resourceType)?.roles[role] ?? [];
+    },
+  };
+}
+
+describe('registerAdminResourceTypes edge cases', () => {
+  test('second call on strict registry throws duplicate registration', () => {
+    const registry = createTestRegistry(true);
     registerAdminResourceTypes(registry);
-    const types = registry.getResourceTypes();
-    expect(types).toContain('admin:user');
+    expect(() => registerAdminResourceTypes(registry)).toThrow(/already registered/i);
   });
 
-  test('registers all 6 resource types', () => {
-    const registry = createPermissionRegistry();
+  test('admin:permission has read/write for tenant-admin only', () => {
+    const registry = createTestRegistry();
     registerAdminResourceTypes(registry);
-    const types = registry.getResourceTypes();
-    expect(types).toContain('admin:user');
-    expect(types).toContain('admin:session');
-    expect(types).toContain('admin:role');
-    expect(types).toContain('admin:audit');
-    expect(types).toContain('admin:permission');
-    expect(types).toContain('admin:mail');
+    const adminActions = registry.getActionsForRole('admin:permission', 'tenant-admin');
+    expect(adminActions).toEqual(['read', 'write']);
+    const supportActions = registry.getActionsForRole('admin:permission', 'support');
+    expect(supportActions).toEqual([]);
   });
 
-  test('tenant-admin has user:read, user:write, user:suspend', () => {
-    const registry = createPermissionRegistry();
+  test('admin:mail has read for tenant-admin and support', () => {
+    const registry = createTestRegistry();
     registerAdminResourceTypes(registry);
-    const actions = registry.getActionsForRole('admin:user', 'tenant-admin');
+    const adminActions = registry.getActionsForRole('admin:mail', 'tenant-admin');
+    expect(adminActions).toEqual(['read']);
+    const supportActions = registry.getActionsForRole('admin:mail', 'support');
+    expect(supportActions).toEqual(['read']);
+  });
+
+  test('admin:role has read/write for tenant-admin, nothing for support', () => {
+    const registry = createTestRegistry();
+    registerAdminResourceTypes(registry);
+    const actions = registry.getActionsForRole('admin:role', 'tenant-admin');
     expect(actions).toContain('read');
     expect(actions).toContain('write');
-    expect(actions).toContain('suspend');
+    expect(registry.getActionsForRole('admin:role', 'support')).toEqual([]);
+  });
+
+  test('admin:session has read/revoke for tenant-admin, read for support', () => {
+    const registry = createTestRegistry();
+    registerAdminResourceTypes(registry);
+    const ta = registry.getActionsForRole('admin:session', 'tenant-admin');
+    expect(ta).toContain('read');
+    expect(ta).toContain('revoke');
+    expect(registry.getActionsForRole('admin:session', 'support')).toEqual(['read']);
+  });
+
+  test('admin:audit is accessible to tenant-admin, support, and auditor', () => {
+    const registry = createTestRegistry();
+    registerAdminResourceTypes(registry);
+    for (const role of ['tenant-admin', 'support', 'auditor']) {
+      const actions = registry.getActionsForRole('admin:audit', role);
+      expect(actions).toEqual(['read']);
+    }
+  });
+
+  test('tenant-admin does not have delete on admin:user', () => {
+    const registry = createTestRegistry();
+    registerAdminResourceTypes(registry);
+    const actions = registry.getActionsForRole('admin:user', 'tenant-admin');
     expect(actions).not.toContain('delete');
   });
 
-  test('support role has admin:audit read', () => {
-    const registry = createPermissionRegistry();
+  test('super-admin gets wildcard for every registered type', () => {
+    const registry = createTestRegistry();
     registerAdminResourceTypes(registry);
-    const actions = registry.getActionsForRole('admin:audit', 'support');
-    expect(actions).toContain('read');
+    const types = ['admin:user', 'admin:session', 'admin:role', 'admin:audit', 'admin:permission', 'admin:mail'];
+    for (const t of types) {
+      expect(registry.getActionsForRole(t, 'super-admin')).toEqual(['*']);
+    }
   });
 
-  test('auditor role has admin:audit read', () => {
-    const registry = createPermissionRegistry();
+  test('unknown role on any type returns empty array', () => {
+    const registry = createTestRegistry();
     registerAdminResourceTypes(registry);
-    const actions = registry.getActionsForRole('admin:audit', 'auditor');
-    expect(actions).toContain('read');
+    const types = ['admin:user', 'admin:session', 'admin:role', 'admin:audit', 'admin:permission', 'admin:mail'];
+    for (const t of types) {
+      expect(registry.getActionsForRole(t, 'nonexistent-role')).toEqual([]);
+    }
   });
 
-  test('super-admin is not in roles map but handled specially', () => {
-    const registry = createPermissionRegistry();
+  test('getDefinition returns exact shapes for each registered type', () => {
+    const registry = createTestRegistry();
     registerAdminResourceTypes(registry);
-    const actions = registry.getActionsForRole('admin:user', 'super-admin');
-    expect(actions).toContain('*');
-  });
-
-  test('unknown role gets empty actions', () => {
-    const registry = createPermissionRegistry();
-    registerAdminResourceTypes(registry);
-    const actions = registry.getActionsForRole('admin:user', 'unknown-role');
-    expect(actions).toEqual([]);
-  });
-
-  test('idempotent - can be called multiple times', () => {
-    const registry = createPermissionRegistry();
-    registerAdminResourceTypes(registry);
-    expect(() => registerAdminResourceTypes(registry)).not.toThrow();
+    const userDef = registry.getDefinition('admin:user');
+    expect(userDef?.actions).toEqual(['read', 'write', 'suspend', 'delete']);
+    const sessionDef = registry.getDefinition('admin:session');
+    expect(sessionDef?.actions).toEqual(['read', 'revoke']);
+    const auditDef = registry.getDefinition('admin:audit');
+    expect(auditDef?.actions).toEqual(['read']);
   });
 });

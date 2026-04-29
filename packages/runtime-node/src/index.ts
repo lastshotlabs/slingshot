@@ -1,6 +1,14 @@
 import { createRequire } from 'node:module';
 import type BetterSqlite3 from 'better-sqlite3';
 import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+export {
+  NodeRuntimeError,
+  NodeServerError,
+  NodeWebSocketError,
+  NodeContentLengthError,
+  NodeRequestBodyTooLargeError,
+  NodeShutdownError,
+} from './errors';
 import type {
   RuntimeFs,
   RuntimeGlob,

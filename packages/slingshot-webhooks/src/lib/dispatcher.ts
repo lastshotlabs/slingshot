@@ -28,13 +28,14 @@ export interface DispatchOptions {
    */
   timeoutMs?: number;
   /**
-   * Resolve the hostname and validate every resolved IP against the SSRF
-   * blocklist before issuing the request. Default: `true`.
-   *
-   * Disable only when you are certain registration-time validation is
-   * sufficient (e.g. a closed test environment).
+   * Per-delivery opt-in to private/loopback IPs. SSRF protection cannot be
+   * disabled by default — every dispatcher run validates resolved IPs
+   * against the blocklist. Setting this to `true` allows private IPs for
+   * one specific delivery (e.g. a closed test environment) and emits a
+   * loud `console.warn` on every use so the bypass cannot drift unnoticed
+   * into production. P-WEBHOOKS-5.
    */
-  validateResolvedIp?: boolean;
+  allowPrivateIps?: boolean;
   /**
    * Optional safeFetch overrides (typically used in tests to inject a
    * deterministic resolver / IP-allow predicate without hitting real DNS).
@@ -45,7 +46,7 @@ export interface DispatchOptions {
   /**
    * Optional fetch override (typically used in tests). When provided, this
    * fetch is used instead of the safeFetch-built one. Pre-fetch IP
-   * validation still runs when `validateResolvedIp` is true.
+   * validation still runs unless `allowPrivateIps` is explicitly true.
    */
   fetchImpl?: typeof fetch;
 }
@@ -127,10 +128,11 @@ async function resolveAndValidate(
  *
  * Performs a defense-in-depth SSRF check via {@link validateWebhookUrl} before
  * making the outbound request, guarding against private/loopback targets that
- * may have bypassed registration-time validation. When `validateResolvedIp` is
- * true (default), additionally resolves the hostname, validates every resolved
- * IP, and pins the TCP connection to the validated IP via `createSafeFetch` —
- * eliminating the DNS-rebinding TOCTOU window.
+ * may have bypassed registration-time validation. By default the dispatcher
+ * also resolves the hostname, validates every resolved IP, and pins the TCP
+ * connection to the validated IP via `createSafeFetch` — eliminating the
+ * DNS-rebinding TOCTOU window. Pass `allowPrivateIps: true` to skip both
+ * checks for one specific delivery; a `console.warn` records every use.
  *
  * @param job - The webhook job containing URL, secret, event, and payload.
  * @param optsOrTimeout - Dispatch options object, or a legacy timeout-in-ms number.
@@ -146,18 +148,30 @@ export async function deliverWebhook(
   const opts: DispatchOptions =
     typeof optsOrTimeout === 'number' ? { timeoutMs: optsOrTimeout } : optsOrTimeout;
   const timeoutMs = opts.timeoutMs ?? 30_000;
-  const validateResolvedIp = opts.validateResolvedIp ?? true;
+  // P-WEBHOOKS-5: SSRF protection is on by default and can only be relaxed
+  // per-delivery via the explicit `allowPrivateIps: true` opt-in. Even then
+  // we log a loud warning so production deployments cannot quietly bypass
+  // the resolved-IP check.
+  const allowPrivateIps = opts.allowPrivateIps === true;
 
-  // Defense-in-depth: reject private/loopback targets even if validation was
-  // bypassed at registration time (e.g. direct adapter writes, migrated rows).
-  validateWebhookUrl(job.url);
+  // Defense-in-depth: reject private/loopback targets at registration
+  // time. When the caller has opted in via `allowPrivateIps`, skip the URL
+  // host check (host-level validation would block the request before
+  // resolution).
+  if (!allowPrivateIps) {
+    validateWebhookUrl(job.url);
+  } else {
+    console.warn(
+      `[slingshot-webhooks] allowPrivateIps=true bypassed SSRF protection for delivery="${job.deliveryId}" url="${job.url}". This must never happen in production.`,
+    );
+  }
 
   const isIpAllowed = opts.safeFetchOverrides?.isIpAllowed ?? defaultIsIpAllowed;
   const resolveHost = opts.safeFetchOverrides?.resolveHost ?? defaultResolveHost;
 
-  // Run pre-fetch DNS + IP validation. This also yields the resolved IP we
-  // can pin our underlying connection to.
-  if (validateResolvedIp) {
+  // Run pre-fetch DNS + IP validation unless the caller opted into
+  // private IPs for this one delivery.
+  if (!allowPrivateIps) {
     await resolveAndValidate(job.url, isIpAllowed, resolveHost);
   }
 
@@ -167,7 +181,7 @@ export async function deliverWebhook(
   let fetchImpl: typeof fetch;
   if (opts.fetchImpl) {
     fetchImpl = opts.fetchImpl;
-  } else if (validateResolvedIp) {
+  } else if (!allowPrivateIps) {
     const safeFetchOptions: SafeFetchOptions = {
       isIpAllowed,
       resolveHost,

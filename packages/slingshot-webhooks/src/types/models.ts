@@ -58,6 +58,12 @@ export interface WebhookAttempt {
 
 /**
  * Persisted outbound delivery record.
+ *
+ * The `version` field carries the optimistic concurrency token used by the
+ * dispatcher to coordinate concurrent updates against the same delivery row
+ * (P-WEBHOOKS-6). Adapters bump it on every successful update; callers pass
+ * the value they read alongside their write so a stale write becomes a
+ * conflict instead of clobbering newer state.
  */
 export interface WebhookDelivery {
   id: string;
@@ -72,6 +78,26 @@ export interface WebhookDelivery {
   attempts: number;
   nextRetryAt?: string | null;
   lastAttempt?: WebhookAttempt;
+  /** Monotonically increasing optimistic-concurrency token. Starts at 1. */
+  version: number;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Thrown by `WebhookAdapter.updateDelivery` when the caller-supplied
+ * `expectedVersion` does not match the current row version. The caller is
+ * expected to refetch and reapply the update.
+ */
+export class WebhookDeliveryVersionConflict extends Error {
+  constructor(
+    public readonly id: string,
+    public readonly expectedVersion: number,
+    public readonly actualVersion: number,
+  ) {
+    super(
+      `Webhook delivery '${id}' version conflict: expected=${expectedVersion} actual=${actualVersion}`,
+    );
+    this.name = 'WebhookDeliveryVersionConflict';
+  }
 }

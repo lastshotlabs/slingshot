@@ -181,16 +181,11 @@ export const webhookPluginConfigSchema = z.object({
     .describe(
       'Explicitly allow plaintext webhook endpoint secrets when encryption is not configured. Do not enable in production unless a custom adapter encrypts at rest.',
     ),
-  /**
-   * When true, the dispatcher resolves the target hostname and validates each
-   * resolved IP against the SSRF blocklist before issuing the request. Default: true.
-   */
-  validateResolvedIp: z
-    .boolean()
-    .optional()
-    .describe(
-      'Resolve target hostnames and validate every resolved IP against the SSRF blocklist before delivery. Defends against DNS rebinding. Default true.',
-    ),
+  // P-WEBHOOKS-5: removed plugin-wide `validateResolvedIp` opt-out. SSRF
+  // protection now defaults on with no global escape hatch. Apps that
+  // intentionally need to deliver to a private IP for a specific endpoint
+  // (closed test environment) must pass `allowPrivateIps: true` per call
+  // through `deliverWebhook` and accept the loud per-call warning.
   /**
    * Maximum body size accepted on inbound webhook routes, in bytes. Default: 1 MiB.
    */

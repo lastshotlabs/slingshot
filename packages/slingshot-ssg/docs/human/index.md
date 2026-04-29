@@ -32,6 +32,10 @@ The most important optional controls are:
 
 - `concurrency`, which defaults to `4`
 - `clientEntry`, when the Vite client entry chunk does not match the common defaults
+- `staticPathsTimeoutMs`, which bounds how long any single `staticPaths()` /
+  `generateStaticParams()` call may run before the build fails. Defaults to
+  `60000`. Set this when a route's path resolver fans out to a slow upstream so
+  builds fail fast instead of hanging.
 
 ## What You Get
 

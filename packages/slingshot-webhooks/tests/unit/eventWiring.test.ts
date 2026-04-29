@@ -251,7 +251,7 @@ describe('eventWiring', () => {
     await queue.stop();
   });
 
-  it('compensates delivery to dead when enqueue fails', async () => {
+  it('emits webhook:enqueueFailed and leaves delivery pending when enqueue fails (P-WEBHOOKS-8)', async () => {
     const bus = createInProcessAdapter();
     const events = createEvents(bus);
     const adapter = createAdapter([createEndpoint()]);
@@ -265,6 +265,11 @@ describe('eventWiring', () => {
       stop: mock(async () => {}),
       depth: mock(async () => 0),
     };
+
+    const enqueueFailedEvents: unknown[] = [];
+    bus.on('webhook:enqueueFailed' as never, (payload: unknown) => {
+      enqueueFailedEvents.push(payload);
+    });
 
     const config: WebhookPluginConfig = { events: ['test:webhook.*'] };
     const unsubs = wireEventSubscriptions(bus, events, config, failingQueue, adapter);
@@ -281,21 +286,30 @@ describe('eventWiring', () => {
 
     const deliveries = await adapter.listDeliveries();
     expect(deliveries.items.length).toBe(1);
-    expect(deliveries.items[0].status).toBe('dead');
-    expect(deliveries.items[0].lastAttempt?.error).toContain('enqueue failed');
+    // P-WEBHOOKS-8: leave delivery in pending so a sweep can re-enqueue.
+    expect(deliveries.items[0].status).toBe('pending');
+    expect(enqueueFailedEvents.length).toBe(1);
+    const evt = enqueueFailedEvents[0] as { error: string };
+    expect(evt.error).toContain('queue unavailable');
 
     for (const unsub of unsubs) unsub();
   });
 
-  it('logs both errors and does not crash when enqueue fails and updateDelivery also throws', async () => {
+  it('does not crash when enqueue fails — bus emit failure is swallowed (P-WEBHOOKS-8)', async () => {
     const bus = createInProcessAdapter();
     const events = createEvents(bus);
     const adapter = createAdapter([createEndpoint()]);
 
-    // Make updateDelivery throw too
-    const updateSpy = spyOn(adapter, 'updateDelivery').mockRejectedValueOnce(
-      new Error('adapter unavailable'),
-    );
+    // Patch bus.emit to throw on the enqueueFailed signal so we exercise
+    // the error-swallow guard. The original emit is restored afterward.
+    const originalEmit = bus.emit.bind(bus);
+    const emitSpy = spyOn(bus, 'emit').mockImplementation(((
+      event: string,
+      payload: unknown,
+    ) => {
+      if (event === 'webhook:enqueueFailed') throw new Error('bus down');
+      return originalEmit(event as never, payload as never);
+    }) as typeof bus.emit);
 
     const failingQueue = {
       name: 'failing',
@@ -318,13 +332,11 @@ describe('eventWiring', () => {
     );
     await new Promise(resolve => setTimeout(resolve, 30));
 
-    // Both enqueue failure and updateDelivery failure should be logged
     const calls = errorSpy.mock.calls.map(c => String(c[0]));
     expect(calls.some(m => m.includes('failed to enqueue webhook delivery'))).toBe(true);
-    expect(calls.some(m => m.includes('failed to mark delivery dead'))).toBe(true);
 
     errorSpy.mockRestore();
-    updateSpy.mockRestore();
+    emitSpy.mockRestore();
     for (const unsub of unsubs) unsub();
   });
 

@@ -1,6 +1,7 @@
 import type { PaginatedResult } from '@lastshotlabs/slingshot-core';
 import type { WebhookAdapter } from '../types/adapter';
 import type { DeliveryStatus, WebhookDelivery, WebhookEndpoint } from '../types/models';
+import { WebhookDeliveryVersionConflict } from '../types/models';
 
 const VALID_TRANSITIONS: Readonly<Record<DeliveryStatus, readonly DeliveryStatus[]>> = {
   pending: ['delivered', 'failed', 'dead'],
@@ -62,6 +63,7 @@ export function createMemoryWebhookAdapter(): MemoryWebhookAdapter {
         status: 'pending',
         attempts: 0,
         nextRetryAt: null,
+        version: 1,
         createdAt: now,
         updatedAt: now,
       };
@@ -73,6 +75,12 @@ export function createMemoryWebhookAdapter(): MemoryWebhookAdapter {
       const existing = deliveries.get(id);
       if (!existing) {
         throw new Error(`Delivery ${id} not found`);
+      }
+      // P-WEBHOOKS-6: optimistic concurrency control. When the caller
+      // supplied an `expectedVersion`, refuse the update on mismatch so a
+      // stale write becomes a refetch-and-retry instead of clobbering.
+      if (input.expectedVersion !== undefined && input.expectedVersion !== existing.version) {
+        throw new WebhookDeliveryVersionConflict(id, input.expectedVersion, existing.version);
       }
       if (input.status && input.status !== existing.status) {
         if (!VALID_TRANSITIONS[existing.status].includes(input.status)) {
@@ -87,6 +95,7 @@ export function createMemoryWebhookAdapter(): MemoryWebhookAdapter {
         ...(input.attempts !== undefined ? { attempts: input.attempts } : {}),
         ...(input.nextRetryAt !== undefined ? { nextRetryAt: input.nextRetryAt } : {}),
         ...(input.lastAttempt !== undefined ? { lastAttempt: input.lastAttempt } : {}),
+        version: existing.version + 1,
         updatedAt: new Date().toISOString(),
       };
       deliveries.set(id, updated);

@@ -22,6 +22,12 @@ export const WebhookDeliveryEntity = defineEntity('WebhookDelivery', {
     attempts: field.integer({ default: 0 }),
     nextRetryAt: field.date({ optional: true }),
     lastAttempt: field.json({ optional: true }),
+    /**
+     * Optimistic-concurrency token. Bumped on every successful update by
+     * the dispatcher's CAS path so concurrent writes detect conflicts
+     * instead of clobbering each other (P-WEBHOOKS-6).
+     */
+    version: field.integer({ default: 1 }),
     createdAt: field.date({ default: 'now', immutable: true }),
     updatedAt: field.date({ default: 'now', onUpdate: 'now' }),
   },

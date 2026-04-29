@@ -120,6 +120,11 @@ export function wireEventSubscriptions(
         try {
           await queue.enqueue(resolved.job);
         } catch (err) {
+          // P-WEBHOOKS-8: enqueue failure is operationally distinct from
+          // the queue running and exhausting attempts. Do NOT mark `dead`
+          // — emit `webhook:enqueueFailed` so apps can retry with a
+          // different queue or persist for manual reconciliation. Leave
+          // the delivery in `pending` so a sweep can re-enqueue.
           log('error', 'failed to enqueue webhook delivery', {
             event: String(key),
             eventId: envelope.meta.eventId,
@@ -129,20 +134,18 @@ export function wireEventSubscriptions(
             err: err instanceof Error ? err.message : String(err),
           });
           try {
-            await adapter.updateDelivery(resolved.delivery.id, {
-              status: 'dead',
-              lastAttempt: {
-                attemptedAt: new Date().toISOString(),
-                error: 'enqueue failed: ' + String(err),
+            (bus as { emit(event: string, payload: unknown): void }).emit(
+              'webhook:enqueueFailed',
+              {
+                deliveryId: resolved.delivery.id,
+                endpointId: resolved.endpoint.id,
+                event: String(key),
+                eventId: envelope.meta.eventId,
+                error: err instanceof Error ? err.message : String(err),
               },
-            });
-          } catch (updateErr) {
-            log('error', 'failed to mark delivery dead after enqueue failure', {
-              event: String(key),
-              endpointId: resolved.endpoint.id,
-              deliveryId: resolved.delivery.id,
-              err: updateErr instanceof Error ? updateErr.message : String(updateErr),
-            });
+            );
+          } catch {
+            // bus emission must not poison the loop
           }
         }
       }

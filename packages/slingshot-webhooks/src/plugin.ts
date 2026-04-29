@@ -150,10 +150,36 @@ async function activate(
     try {
       // Resolution order: per-endpoint override (job.deliveryTimeoutMs) >
       // plugin-wide default (config.deliveryTimeoutMs) > 30s baseline.
-      const resolvedTimeoutMs = job.deliveryTimeoutMs ?? config.deliveryTimeoutMs ?? 30_000;
+      const requestedTimeoutMs = job.deliveryTimeoutMs ?? config.deliveryTimeoutMs ?? 30_000;
+      // P-WEBHOOKS-9: warn loudly when a caller-requested timeout exceeds
+      // the 120s clamp so operators can see the bypass instead of having
+      // the value silently downgraded.
+      const TIMEOUT_CLAMP_MS = 120_000;
+      let resolvedTimeoutMs = requestedTimeoutMs;
+      if (requestedTimeoutMs > TIMEOUT_CLAMP_MS) {
+        resolvedTimeoutMs = TIMEOUT_CLAMP_MS;
+        logWebhookEvent('warn', 'webhook timeout clamped', {
+          deliveryId: job.deliveryId,
+          endpointId: job.endpointId,
+          requestedTimeoutMs,
+          clampedTimeoutMs: TIMEOUT_CLAMP_MS,
+        });
+        try {
+          (bus as { emit(event: string, payload: unknown): void }).emit(
+            'webhook:timeoutClamped',
+            {
+              deliveryId: job.deliveryId,
+              endpointId: job.endpointId,
+              requestedTimeoutMs,
+              clampedTimeoutMs: TIMEOUT_CLAMP_MS,
+            },
+          );
+        } catch {
+          // bus emission must never break delivery
+        }
+      }
       await deliverWebhook(job, {
         timeoutMs: resolvedTimeoutMs,
-        validateResolvedIp: config.validateResolvedIp ?? true,
       });
       const durationMs = Date.now() - start;
       // Cardinality discipline: timing has no labels — endpointId would
@@ -228,6 +254,74 @@ async function activate(
   return wireEventSubscriptions(bus, events, config, queue, runtime);
 }
 
+/**
+ * P-WEBHOOKS-7: synchronous test-delivery driver. Sends a synthetic event
+ * directly through the dispatcher (no queue) and returns the upstream
+ * response status + body so admins see the endpoint's actual answer.
+ */
+async function runTestDelivery(
+  runtime: WebhookAdapter,
+  endpointId: string,
+  config: Readonly<WebhookPluginConfig>,
+): Promise<{ status: number; ok: boolean; body: string; durationMs: number }> {
+  const endpoint = await runtime.getEndpoint(endpointId);
+  if (!endpoint) {
+    throw new Error('Not found');
+  }
+  const eventId = crypto.randomUUID();
+  const occurredAt = new Date().toISOString();
+  const payload = JSON.stringify({
+    test: true,
+    endpointId,
+    timestamp: occurredAt,
+  });
+  const deliveryTimeoutMs =
+    endpoint.deliveryTimeoutMs ?? config.deliveryTimeoutMs ?? 30_000;
+  const start = Date.now();
+  let status = 0;
+  let body = '';
+  let ok = false;
+  await deliverWebhook(
+    {
+      deliveryId: 'test-' + eventId,
+      endpointId,
+      url: endpoint.url,
+      secret: endpoint.secret,
+      event: 'webhook:test' as never,
+      eventId,
+      occurredAt,
+      subscriber: {
+        ownerType: endpoint.ownerType,
+        ownerId: endpoint.ownerId,
+        tenantId: endpoint.tenantId ?? null,
+      },
+      payload,
+      attempts: 0,
+    },
+    {
+      timeoutMs: deliveryTimeoutMs,
+      // Add the test marker to outbound headers via a fetch interceptor:
+      // tag the synthetic delivery so receivers can branch on header alone.
+      fetchImpl: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const headers = new Headers(init?.headers ?? {});
+        headers.set('X-Webhook-Test', 'true');
+        const res = await fetch(input as Parameters<typeof fetch>[0], { ...init, headers });
+        status = res.status;
+        ok = res.ok;
+        body = await res.text().catch(() => '');
+        // Return a clone so deliverWebhook can read the body if needed.
+        return new Response(body, { status, headers: res.headers });
+      },
+    },
+  ).catch(err => {
+    // deliverWebhook throws on non-2xx; we still want to return whatever
+    // status / body the upstream produced, not "Test delivery failed".
+    if (status > 0) return; // we have a real upstream answer
+    throw err;
+  });
+  return { status, ok, body: body.slice(0, 4096), durationMs: Date.now() - start };
+}
+
 async function resolveTestDelivery(
   runtime: WebhookAdapter,
   queue: WebhookQueue,
@@ -278,13 +372,10 @@ async function resolveTestDelivery(
       deliveryTimeoutMs: endpoint.deliveryTimeoutMs ?? null,
     });
   } catch (err) {
-    await runtime.updateDelivery(delivery.id, {
-      status: 'dead',
-      lastAttempt: {
-        attemptedAt: new Date().toISOString(),
-        error: 'enqueue failed: ' + String(err),
-      },
-    });
+    // P-WEBHOOKS-8: enqueue failure is not a permanent delivery failure.
+    // Leave the delivery `pending` and surface the enqueue error to the
+    // caller so they can retry; do NOT mark the row `dead` and silently
+    // discard the work.
     throw err;
   }
 
@@ -400,14 +491,19 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
             );
           }
           const endpointId = endpointIdResult.data;
+          // P-WEBHOOKS-7: send a synthetic event synchronously to the
+          // endpoint and return the upstream response status + body. Bypass
+          // the queue so callers see the upstream answer immediately;
+          // enqueueing for retry is a separate workflow.
           try {
-            const result = await resolveTestDelivery(adapter, queue, config, endpointId);
+            const result = await runTestDelivery(adapter, endpointId, config);
             return c.json(result, 200);
           } catch (err) {
             if (err instanceof Error && err.message === 'Not found') {
               return c.json({ error: 'Not found' }, 404);
             }
-            return c.json({ error: 'Failed to enqueue test delivery' }, 500);
+            const message = err instanceof Error ? err.message : String(err);
+            return c.json({ error: 'Test delivery failed', message }, 502);
           }
         });
       }

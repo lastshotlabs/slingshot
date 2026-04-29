@@ -34,6 +34,7 @@ import type {
   WebhookSubscriber,
   WebhookSubscriptionExposure,
 } from '../types/models';
+import { WebhookDeliveryVersionConflict } from '../types/models';
 import type { WebhookJob } from '../types/queue';
 import { WebhookSecretDecryptError } from '../types/queue';
 
@@ -77,6 +78,7 @@ type DeliveryRecord = {
   attempts: number;
   nextRetryAt?: string | null;
   lastAttempt?: WebhookAttempt;
+  version?: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -137,6 +139,16 @@ type DeliveryRuntimeAdapter = BareEntityAdapter & {
 export interface GovernedWebhookRuntime {
   initializeGovernance(definitions: EventDefinitionRegistry): Promise<void>;
   listSubscribableDefinitions(subscriber: WebhookSubscriber): readonly EventDefinition[];
+  /**
+   * P-WEBHOOKS-10: re-evaluate which events an endpoint should subscribe
+   * to based on the current event registry. Endpoint subscriptions are
+   * frozen at creation time; this method is a manual hook apps call when
+   * they register a new event and want existing pattern-based endpoints
+   * to expand automatically.
+   *
+   * Returns the updated endpoint with the expanded subscription set.
+   */
+  expandSubscriptions(endpointId: string): Promise<WebhookEndpoint>;
 }
 
 export type WebhookRuntimeAdapter = WebhookAdapter & GovernedWebhookRuntime;
@@ -202,6 +214,7 @@ function sanitizeDelivery(record: DeliveryRecord): WebhookDelivery {
     attempts: record.attempts,
     nextRetryAt: record.nextRetryAt ?? null,
     lastAttempt: record.lastAttempt,
+    version: record.version ?? 1,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   };
@@ -810,6 +823,78 @@ function buildRuntimeAdapter(
       return listDefinitionsForOwner(definitionsRef, subscriber.ownerType);
     },
 
+    /**
+     * P-WEBHOOKS-10: re-evaluate the endpoint's subscriptions against the
+     * current event registry. For each pattern-based subscription stored
+     * on the endpoint, expand it into the concrete event keys allowed for
+     * the endpoint's owner type, dedup, and persist the merged set.
+     *
+     * Apps must call this manually after registering new events that
+     * existing pattern-based endpoints should pick up — there is no
+     * automatic re-expansion on event registration to avoid surprise
+     * widening of consent.
+     */
+    async expandSubscriptions(endpointId: string): Promise<WebhookEndpoint> {
+      if (!definitionsRef) {
+        throw new HTTPException(409, {
+          message: 'expandSubscriptions called before initializeGovernance',
+        });
+      }
+      const record = await endpoints.reveal(endpointId);
+      if (!record) {
+        throw new HTTPException(404, { message: 'Endpoint not found' });
+      }
+      const stored = normalizeStoredSubscriptions(record.subscriptions);
+      const owner: WebhookOwnerType = record.ownerType ?? 'tenant';
+      const allowed = listDefinitionsForOwner(definitionsRef, owner);
+      const allowedKeys = new Set(allowed.map(def => def.key as string));
+      // Union the existing concrete event keys with every event key the
+      // owner is allowed to subscribe to. Pattern preservation: when the
+      // stored subscription was a pattern, the runtime expanded it to a
+      // concrete set at create-time but recorded the pattern in
+      // `sourcePattern`. We treat any subscription with `sourcePattern`
+      // as eligible for expansion against the current registry.
+      const merged = new Map<string, WebhookEndpointSubscription>();
+      for (const sub of stored) {
+        merged.set(sub.event as string, sub);
+      }
+      for (const sub of stored) {
+        if (!sub.sourcePattern) continue;
+        for (const key of allowedKeys) {
+          if (merged.has(key)) continue;
+          merged.set(key, {
+            event: key as EventKey,
+            exposure: sub.exposure,
+            sourcePattern: sub.sourcePattern,
+          });
+        }
+      }
+      const finalSubscriptions = [...merged.values()];
+      const updated = await endpoints.applyRawUpdate(endpointId, {
+        subscriptions: finalSubscriptions.map(s => ({
+          event: s.event,
+          exposure: s.exposure,
+          ...(s.sourcePattern ? { sourcePattern: s.sourcePattern } : {}),
+        })),
+      });
+      if (!updated) {
+        throw new HTTPException(404, { message: 'Endpoint not found' });
+      }
+      return {
+        id: updated.id,
+        ownerType: updated.ownerType ?? 'tenant',
+        ownerId: updated.ownerId ?? updated.tenantId ?? '',
+        tenantId: updated.tenantId ?? null,
+        url: updated.url,
+        secret: await decryptSecret(updated.secret, updated.id),
+        subscriptions: normalizeStoredSubscriptions(updated.subscriptions),
+        enabled: updated.enabled,
+        deliveryTimeoutMs: updated.deliveryTimeoutMs ?? null,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      };
+    },
+
     async getEndpoint(id) {
       const record = await endpoints.reveal(id);
       if (!record) return null;
@@ -899,6 +984,25 @@ function buildRuntimeAdapter(
     },
 
     async updateDelivery(id, input) {
+      // P-WEBHOOKS-6: optimistic concurrency. The manifest entity adapter
+      // does not yet expose a CAS primitive, so we approximate by
+      // comparing-and-fetching: read current version, refuse if mismatch,
+      // then apply. This narrows the race window to the
+      // read-then-write interval; production callers should still expect
+      // refetch-on-conflict semantics.
+      if (input.expectedVersion !== undefined) {
+        const current = (await deliveries.getById(id)) as DeliveryRecord | null;
+        if (!current) {
+          throw new HTTPException(404, { message: 'Delivery not found' });
+        }
+        if ((current.version ?? 1) !== input.expectedVersion) {
+          throw new WebhookDeliveryVersionConflict(
+            id,
+            input.expectedVersion,
+            current.version ?? 1,
+          );
+        }
+      }
       if (input.status) {
         const transitioned = await deliveries.transition({
           id,
@@ -907,12 +1011,19 @@ function buildRuntimeAdapter(
           nextRetryAt: input.nextRetryAt ?? null,
           lastAttempt: normalizeLastAttempt(input.lastAttempt),
         });
-        return sanitizeDelivery(transitioned);
+        // Bump version explicitly (entity transition does not touch it).
+        const bumped = (await deliveries.update(id, {
+          version: ((transitioned.version ?? 1) as number) + 1,
+        })) as DeliveryRecord | null;
+        return sanitizeDelivery(bumped ?? transitioned);
       }
+      const existingVersion =
+        ((await deliveries.getById(id)) as DeliveryRecord | null)?.version ?? 1;
       const updated = (await deliveries.update(id, {
         attempts: input.attempts,
         nextRetryAt: input.nextRetryAt ?? null,
         lastAttempt: normalizeLastAttempt(input.lastAttempt),
+        version: existingVersion + 1,
       })) as DeliveryRecord | null;
       if (!updated) {
         throw new HTTPException(404, { message: 'Delivery not found' });

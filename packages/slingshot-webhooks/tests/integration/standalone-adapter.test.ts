@@ -99,8 +99,17 @@ describe('standalone adapter mode', () => {
     }
   });
 
-  test('test endpoint works in standalone mode', async () => {
-    const fetchMock = mock(async () => new Response(null, { status: 200 }));
+  test('test endpoint sends synthetic event synchronously and returns upstream status (P-WEBHOOKS-7)', async () => {
+    // P-WEBHOOKS-7: the test endpoint sends synchronously and surfaces the
+    // upstream response. The fetch mock returns 200 OK with a body, and we
+    // expect the route to forward both the status and body.
+    const fetchMock = mock(
+      async () =>
+        new Response(JSON.stringify({ received: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
     globalThis.fetch = asFetch(fetchMock);
 
     const adapter = createMemoryWebhookAdapter();
@@ -115,7 +124,7 @@ describe('standalone adapter mode', () => {
       enabled: true,
     });
 
-    const { app, runtime, teardown } = await createWebhooksTestApp({
+    const { app, teardown } = await createWebhooksTestApp({
       adapter,
       events: ['auth:*'],
     });
@@ -126,13 +135,19 @@ describe('standalone adapter mode', () => {
         headers: adminHeaders(),
       });
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { deliveryId: string };
-      expect(typeof body.deliveryId).toBe('string');
-
-      await new Promise(resolve => setTimeout(resolve, 100));
-      const delivery = await runtime.getDelivery(body.deliveryId);
-      expect(delivery).not.toBeNull();
-      expect(String(delivery!.event)).toBe('webhook:test');
+      const body = (await res.json()) as {
+        status: number;
+        ok: boolean;
+        body: string;
+        durationMs: number;
+      };
+      expect(body.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.body).toContain('received');
+      // Verify the X-Webhook-Test header was on the outbound request.
+      const fetchArgs = fetchMock.mock.calls[0] as [string, RequestInit];
+      const sentHeaders = new Headers(fetchArgs[1]?.headers ?? {});
+      expect(sentHeaders.get('X-Webhook-Test')).toBe('true');
     } finally {
       await teardown();
     }

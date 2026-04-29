@@ -18,6 +18,15 @@ export interface WebhookAdapter {
     payload: string;
     maxAttempts: number;
   }): Promise<WebhookDelivery>;
+  /**
+   * Update a delivery with optimistic concurrency control.
+   *
+   * When `expectedVersion` is supplied, the adapter compares-and-swaps on
+   * the row's current `version`. A mismatch must throw
+   * `WebhookDeliveryVersionConflict` so the caller can refetch and retry.
+   * When `expectedVersion` is omitted, the update is unconditional —
+   * preserved for adapters that do not yet support CAS.
+   */
   updateDelivery(
     id: string,
     input: {
@@ -25,6 +34,7 @@ export interface WebhookAdapter {
       attempts?: number;
       nextRetryAt?: string | null;
       lastAttempt?: WebhookAttempt;
+      expectedVersion?: number;
     },
   ): Promise<WebhookDelivery>;
   getDelivery(id: string): Promise<WebhookDelivery | null>;

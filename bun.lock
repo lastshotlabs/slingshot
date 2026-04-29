@@ -540,6 +540,7 @@
       "name": "@lastshotlabs/slingshot-orchestration-bullmq",
       "version": "0.0.2",
       "dependencies": {
+        "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-orchestration": "workspace:*",
       },
       "peerDependencies": {
@@ -564,7 +565,11 @@
       "name": "@lastshotlabs/slingshot-orchestration-temporal",
       "version": "0.0.2",
       "dependencies": {
+        "@lastshotlabs/slingshot-core": "workspace:*",
         "@lastshotlabs/slingshot-orchestration": "workspace:*",
+      },
+      "devDependencies": {
+        "@temporalio/testing": "^1.16.0",
       },
       "peerDependencies": {
         "@temporalio/activity": "^1.16.0",

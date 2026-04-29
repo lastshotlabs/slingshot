@@ -61,8 +61,11 @@ const AdminUpdateUserBody = z.object({
   externalId: z.string().max(255).optional(),
 });
 
+// `.max(1000)` caps the field that lands in the audit log. Without this an
+// attacker can post a 100MB string and inflate audit storage on every
+// suspension event.
 const AdminSuspendBody = z.object({
-  reason: z.string().optional(),
+  reason: z.string().max(1000).optional(),
 });
 
 const AdminSetRolesBody = z.object({
@@ -320,6 +323,26 @@ async function withRequiredAudit<E extends AdminEnv>(
   }
 }
 
+/**
+ * Maximum byte length for free-form audit-log strings emitted by this package.
+ *
+ * P-ADMIN-6: every `auditEntry()` caller passes `action` and `resource` that
+ * can flow into a database-backed audit store. We cap them at write time so
+ * a misbehaving caller cannot inflate the audit row with a multi-megabyte
+ * string. 256 is comfortably larger than any action verb the admin plugin
+ * emits today and matches the order-of-magnitude limits used by typical
+ * audit-log adapters (Postgres `varchar(256)`, etc.).
+ */
+const AUDIT_FIELD_MAX_LENGTH = 256;
+
+function clampAuditField(value: string, fieldName: string): string {
+  if (value.length <= AUDIT_FIELD_MAX_LENGTH) return value;
+  console.warn(
+    `[slingshot-admin] audit ${fieldName} truncated from ${value.length} to ${AUDIT_FIELD_MAX_LENGTH} chars`,
+  );
+  return value.slice(0, AUDIT_FIELD_MAX_LENGTH);
+}
+
 function auditEntry(
   c: Context<AdminEnv>,
   action: string,
@@ -339,9 +362,9 @@ function auditEntry(
     status,
     ip: getClientIp(c),
     userAgent: c.req.header('user-agent') ?? null,
-    action,
-    resource,
-    resourceId,
+    action: clampAuditField(action, 'action'),
+    resource: clampAuditField(resource, 'resource'),
+    resourceId: resourceId !== undefined ? clampAuditField(resourceId, 'resourceId') : resourceId,
     meta,
     requestId: c.get('requestId'),
     createdAt: new Date().toISOString(),
@@ -423,6 +446,10 @@ export function createAdminRouter(config: AdminRouterConfig) {
       if (!(await checkPermission(c, evaluator, 'read', { type: 'admin:user' })))
         return errorResponse(c, 'Forbidden', 403);
       const query = c.req.query();
+      // P-ADMIN-5: parseCursorParams already clamps the request limit to
+      // [1, 200]. We additionally slice the provider response below so that
+      // a buggy or malicious adapter that ignores the requested limit cannot
+      // ship 100k rows back to the client (DoS via substring search on 'a').
       const { limit, cursor } = parseCursorParams(query, { limit: 50, maxLimit: 200 });
 
       const result = await managedUserProvider.listUsers({
@@ -438,9 +465,10 @@ export function createAdminRouter(config: AdminRouterConfig) {
         sortDir: query.sortDir as 'asc' | 'desc' | undefined,
       });
 
+      const cappedItems = result.items.length > limit ? result.items.slice(0, limit) : result.items;
       return c.json(
         {
-          users: result.items.map(toAdminUser),
+          users: cappedItems.map(toAdminUser),
           nextCursor: result.nextCursor,
         },
         200,

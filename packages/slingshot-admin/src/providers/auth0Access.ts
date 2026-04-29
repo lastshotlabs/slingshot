@@ -1,5 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { z } from 'zod';
 import type { AdminAccessProvider, AdminPrincipal } from '@lastshotlabs/slingshot-core';
+import { type Logger, createConsoleLogger } from '@lastshotlabs/slingshot-core';
 
 /**
  * Configuration for the Auth0-backed `AdminAccessProvider`.
@@ -19,15 +21,30 @@ export interface Auth0AccessProviderConfig {
   audience: string;
   /** Maximum milliseconds for JWT verification (JWKS fetch + signature check). Default: 5000. */
   verifyTimeoutMs?: number;
+  /**
+   * Structured logger used to surface claim-validation failures. When omitted,
+   * a console-backed logger is used so the failures are at least observable.
+   * Provide your application logger to route them through your aggregation
+   * pipeline.
+   */
+  logger?: Logger;
 }
 
-/** Auth0 JWT payload fields beyond the standard JWTPayload that we read. */
-interface Auth0JwtPayload {
-  sub?: string;
-  email?: string;
-  name?: string;
-  [key: string]: unknown;
-}
+/**
+ * Zod schema enforcing the shape of the claims this package consumes from an
+ * Auth0 JWT.
+ *
+ * P-ADMIN-7: prior to this validation we passed the raw `payload` to
+ * downstream consumers via `rawClaims`. A token whose `email` was an array or
+ * `name` was a number would silently produce a malformed `AdminPrincipal`.
+ * The schema rejects those tokens (returning `null` from `verifyRequest`) and
+ * a structured warning so operators see the failure mode.
+ */
+const Auth0JwtClaimsSchema = z.object({
+  sub: z.string().min(1),
+  email: z.string().optional(),
+  name: z.string().optional(),
+});
 
 /**
  * Dependency injection surface for `createAuth0AccessProvider`.
@@ -116,6 +133,7 @@ export function createAuth0AccessProvider(
 ): AdminAccessProvider {
   const jwksUrl = new URL(`https://${config.domain}/.well-known/jwks.json`);
   const JWKS = deps.createRemoteJWKSet(jwksUrl);
+  const logger: Logger = config.logger ?? createConsoleLogger({ level: 'warn' });
 
   return {
     name: 'auth0',
@@ -141,14 +159,29 @@ export function createAuth0AccessProvider(
           ),
         ]);
 
-        const auth0Payload = payload as Auth0JwtPayload;
-        if (!auth0Payload.sub) return null;
+        // P-ADMIN-7: validate the claim shape before we propagate it to
+        // downstream consumers. Returning a partial principal — e.g. one whose
+        // `email` is an array — is worse than returning null and forcing a
+        // 401, because the caller has no way to know the principal is broken.
+        const parsed = Auth0JwtClaimsSchema.safeParse(payload);
+        if (!parsed.success) {
+          logger.warn('[slingshot-admin] auth0 jwt claim shape rejected', {
+            event: 'auth0_claim_validation_failed',
+            issues: parsed.error.issues.map(i => ({
+              path: i.path.join('.'),
+              code: i.code,
+              message: i.message,
+            })),
+          });
+          return null;
+        }
+        const claims = parsed.data;
 
         return {
-          subject: auth0Payload.sub,
+          subject: claims.sub,
           provider: 'auth0',
-          email: auth0Payload.email ?? undefined,
-          displayName: auth0Payload.name ?? undefined,
+          email: claims.email,
+          displayName: claims.name,
           rawClaims: payload as Record<string, unknown>,
         };
       } catch {

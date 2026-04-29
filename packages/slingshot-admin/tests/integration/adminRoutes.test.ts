@@ -113,6 +113,67 @@ describe('GET /users', () => {
     const res = await app.request('/users');
     expect(res.status).toBe(403);
   });
+
+  // P-ADMIN-5: limit query is clamped to 200; if the underlying adapter
+  // returns more, the route slices the response.
+  test('clamps result size to 200 even when adapter returns more', async () => {
+    const { app, managedUserProvider } = buildApp('tenant-a');
+    for (let i = 0; i < 250; i++) {
+      managedUserProvider.seedUser({
+        ...BASE_USER,
+        id: `user-${i}`,
+        email: `user${i}@example.com`,
+      });
+    }
+    // Caller asks for 500; route should clamp to 200 before reaching the
+    // provider, and the response contains at most 200 items.
+    const res = await app.request('/users?limit=500');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { users: Array<{ id: string }> };
+    expect(body.users.length).toBeLessThanOrEqual(200);
+  });
+
+  test('slices oversized adapter responses defensively', async () => {
+    // Provider that ignores the requested limit and returns 250 rows. The
+    // route must clamp to the requested limit before serializing.
+    const oversizedProvider = createMemoryManagedUserProvider();
+    for (let i = 0; i < 250; i++) {
+      oversizedProvider.seedUser({
+        ...BASE_USER,
+        id: `oversized-${i}`,
+        email: `oversized${i}@example.com`,
+      });
+    }
+    const wrapped = {
+      ...oversizedProvider,
+      async listUsers() {
+        // Ignore the requested limit; return everything.
+        return {
+          items: await oversizedProvider
+            .listUsers({ tenantId: 'tenant-a', limit: 1000 })
+            .then(r => r.items),
+        };
+      },
+    };
+    const app = new Hono<AdminEnv>();
+    app.use('*', async (c, next) => {
+      c.set('adminPrincipal', { subject: 'actor', provider: 'memory', tenantId: 'tenant-a' });
+      await next();
+    });
+    app.route(
+      '/',
+      createAdminRouter({
+        managedUserProvider: wrapped,
+        bus: createInProcessAdapter(),
+        evaluator: { can: async () => true },
+      }),
+    );
+    const res = await app.request('/users?limit=50');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { users: Array<{ id: string }> };
+    // Even though the adapter returned 250 items, the route serializes <= 50.
+    expect(body.users.length).toBeLessThanOrEqual(50);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -221,6 +282,32 @@ describe('POST /users/:userId/suspend', () => {
     const { app } = buildApp('tenant-a');
     const res = await app.request('/users/nonexistent/suspend', { method: 'POST' });
     expect(res.status).toBe(404);
+  });
+
+  // P-ADMIN-4: reason length is capped at 1000 chars to prevent unbounded
+  // strings landing in the audit log.
+  test('rejects reason longer than 1000 characters with 400', async () => {
+    const { app, managedUserProvider } = buildApp('tenant-a');
+    managedUserProvider.seedUser(BASE_USER);
+    const longReason = 'x'.repeat(1001);
+    const res = await app.request('/users/user-1/suspend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: longReason }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('accepts reason of exactly 1000 characters', async () => {
+    const { app, managedUserProvider } = buildApp('tenant-a');
+    managedUserProvider.seedUser(BASE_USER);
+    const exactReason = 'x'.repeat(1000);
+    const res = await app.request('/users/user-1/suspend', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: exactReason }),
+    });
+    expect(res.status).toBe(200);
   });
 });
 

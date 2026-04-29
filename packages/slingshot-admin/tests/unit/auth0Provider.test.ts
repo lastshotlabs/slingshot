@@ -168,6 +168,82 @@ describe('createAuth0AccessProvider', () => {
     expect(principal?.subject).toBe('auth0|user-123');
   });
 
+  // P-ADMIN-7: claim shape validation rejects malformed payloads.
+  test('returns null and logs when sub claim is non-string (number)', async () => {
+    const calls: Array<{ msg: string; fields?: Record<string, unknown> }> = [];
+    const logger = {
+      debug: () => {},
+      info: () => {},
+      warn(msg: string, fields?: Record<string, unknown>) {
+        calls.push({ msg, fields });
+      },
+      error: () => {},
+      child: () => logger,
+    };
+    const deps = makeStubDeps({
+      jwtVerify: mock(async () => {
+        const rawKey = {};
+        const key = rawKey as unknown as CryptoKey;
+        return {
+          payload: { sub: 12345, aud: AUDIENCE, iss: `https://${DOMAIN}/` },
+          protectedHeader: { alg: 'RS256' },
+          key,
+        };
+      }) as Auth0Deps['jwtVerify'],
+    });
+    const provider = createAuth0AccessProvider(
+      { domain: DOMAIN, audience: AUDIENCE, logger },
+      deps,
+    );
+    const principal = await provider.verifyRequest(makeContext('bad-shape.token'));
+    expect(principal).toBeNull();
+    expect(calls.some(c => c.fields?.event === 'auth0_claim_validation_failed')).toBe(true);
+  });
+
+  test('returns null when email claim is the wrong type (array)', async () => {
+    const deps = makeStubDeps({
+      jwtVerify: mock(async () => {
+        const rawKey = {};
+        const key = rawKey as unknown as CryptoKey;
+        return {
+          payload: {
+            sub: 'auth0|user-1',
+            email: ['alice@example.com'],
+            aud: AUDIENCE,
+            iss: `https://${DOMAIN}/`,
+          },
+          protectedHeader: { alg: 'RS256' },
+          key,
+        };
+      }) as Auth0Deps['jwtVerify'],
+    });
+    const provider = createAuth0AccessProvider({ domain: DOMAIN, audience: AUDIENCE }, deps);
+    const principal = await provider.verifyRequest(makeContext('bad-email.token'));
+    expect(principal).toBeNull();
+  });
+
+  test('returns null when name claim is the wrong type (number)', async () => {
+    const deps = makeStubDeps({
+      jwtVerify: mock(async () => {
+        const rawKey = {};
+        const key = rawKey as unknown as CryptoKey;
+        return {
+          payload: {
+            sub: 'auth0|user-1',
+            name: 12345,
+            aud: AUDIENCE,
+            iss: `https://${DOMAIN}/`,
+          },
+          protectedHeader: { alg: 'RS256' },
+          key,
+        };
+      }) as Auth0Deps['jwtVerify'],
+    });
+    const provider = createAuth0AccessProvider({ domain: DOMAIN, audience: AUDIENCE }, deps);
+    const principal = await provider.verifyRequest(makeContext('bad-name.token'));
+    expect(principal).toBeNull();
+  });
+
   test('restricts JWT verification to the RS256 algorithm', async () => {
     // Auth0 issues RS256 by default. Pinning the alg list rejects `alg: none`
     // and any algorithm-substitution attempt that swaps to a weaker algorithm

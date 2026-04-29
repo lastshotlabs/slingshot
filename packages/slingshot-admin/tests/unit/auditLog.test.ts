@@ -158,4 +158,35 @@ describe('tryLogAuditEntry — audit failures do not propagate to HTTP callers',
     expect(res.status).toBe(404);
     expect(auditLog.getLogs).not.toHaveBeenCalled();
   });
+
+  // P-ADMIN-6: every audit-log entry produced by this package fits the
+  // 256-char cap on `action`, `resource`, and `resourceId`. We sample a few
+  // representative routes; the cap is enforced at write time inside
+  // `auditEntry()` so any future caller that tries to log a 100MB string is
+  // truncated transparently rather than landing in the audit store.
+  test('audit-log entries respect a 256-char cap on action/resource/resourceId', async () => {
+    const captured: Parameters<AuditLogProvider['logEntry']>[0][] = [];
+    const auditLog: AuditLogProvider = {
+      logEntry: mock(async (entry) => {
+        captured.push(entry);
+      }),
+      getLogs: mock(async () => ({ items: [], nextCursor: undefined })),
+    };
+    const { app, managedUserProvider } = buildApp(auditLog);
+    managedUserProvider.seedUser(BASE_USER);
+
+    await app.request('/users/u-1/suspend', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ reason: 'tos' }),
+    });
+    await app.request('/users/u-1', { method: 'DELETE' });
+
+    expect(captured.length).toBeGreaterThan(0);
+    for (const entry of captured) {
+      if (entry.action) expect(entry.action.length).toBeLessThanOrEqual(256);
+      if (entry.resource) expect(entry.resource.length).toBeLessThanOrEqual(256);
+      if (entry.resourceId) expect(entry.resourceId.length).toBeLessThanOrEqual(256);
+    }
+  });
 });

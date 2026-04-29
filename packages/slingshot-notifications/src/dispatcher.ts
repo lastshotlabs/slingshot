@@ -18,6 +18,7 @@ import type {
   NotificationPreferenceDefaults,
 } from './types';
 
+/** Control surface for the notification dispatcher, providing start/stop lifecycle and per-tick dispatch execution. */
 export interface DispatcherAdapter {
   start(): void;
   stop(): Promise<void>;
@@ -57,6 +58,7 @@ export interface DispatcherHealth {
   readonly pendingAlarmActive: boolean;
 }
 
+/** Configuration for exponential-backoff retries on per-notification publish failures. */
 export interface DispatcherRetryOptions {
   /** Max attempts per publish call (initial + retries). Default: 3. */
   readonly maxAttempts?: number;
@@ -69,6 +71,7 @@ export interface DispatcherRetryOptions {
   readonly maxDelayMs?: number;
 }
 
+/** Configuration for the per-destination circuit breaker that short-circuits delivery after consecutive failures. */
 export interface DispatcherBreakerOptions {
   /**
    * Consecutive failures-per-destination before further sends to that
@@ -82,6 +85,7 @@ export interface DispatcherBreakerOptions {
   readonly cooldownMs?: number;
 }
 
+/** Options for {@link createIntervalDispatcher}, including adapters, bus, polling intervals, retry/breaker tuning, and observability hooks. */
 export interface CreateIntervalDispatcherOptions {
   readonly notifications: NotificationAdapter;
   readonly preferences: NotificationPreferenceAdapter;

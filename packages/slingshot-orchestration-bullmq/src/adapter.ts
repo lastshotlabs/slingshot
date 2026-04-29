@@ -74,6 +74,11 @@ export interface ErrorClassification {
   code?: string;
 }
 
+/**
+ * Classify an error as transient (retryable) or permanent (fail-fast) based on
+ * known OS-level and Redis-level error codes. Used by the BullMQ adapter to decide
+ * whether a failed job should be retried or surfaced immediately.
+ */
 export function classifyOrchestrationError(err: unknown): ErrorClassification {
   if (err === null || err === undefined) {
     return { retryable: false, permanent: true };

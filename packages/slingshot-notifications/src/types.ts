@@ -11,6 +11,7 @@ import type {
 
 export type NotificationPreferenceScope = 'global' | 'source' | 'type';
 
+/** Persisted notification preference record controlling per-user, per-source, or per-type delivery channel settings. */
 export interface NotificationPreferenceRecord {
   readonly id: string;
   readonly userId: string;

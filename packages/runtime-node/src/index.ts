@@ -222,6 +222,7 @@ function parseContentLength(header: string | null): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/** @internal Exposes low-level Node runtime helpers for unit-test access. Not part of the public API. */
 export const runtimeNodeInternals = {
   toBufferChunk,
   stringifyWsPayload,

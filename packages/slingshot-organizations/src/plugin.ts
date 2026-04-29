@@ -47,18 +47,40 @@ const inviteRateLimitSchema = z
   .object({
     create: z
       .object({
-        limit: z.number().int().positive().default(10),
-        windowMs: z.number().int().positive().default(60_000),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .default(10)
+          .describe('Maximum invitation-create requests per window. Default 10.'),
+        windowMs: z
+          .number()
+          .int()
+          .positive()
+          .default(60_000)
+          .describe('Sliding window duration in milliseconds for create rate limiting. Default 60000.'),
       })
       .partial()
-      .optional(),
+      .optional()
+      .describe('Rate limit for invitation creation endpoints.'),
     lookup: z
       .object({
-        limit: z.number().int().positive().default(30),
-        windowMs: z.number().int().positive().default(60_000),
+        limit: z
+          .number()
+          .int()
+          .positive()
+          .default(30)
+          .describe('Maximum invitation-lookup requests per window. Default 30.'),
+        windowMs: z
+          .number()
+          .int()
+          .positive()
+          .default(60_000)
+          .describe('Sliding window duration in milliseconds for lookup rate limiting. Default 60000.'),
       })
       .partial()
-      .optional(),
+      .optional()
+      .describe('Rate limit for invitation lookup endpoints.'),
   })
   .optional();
 
@@ -72,9 +94,24 @@ const organizationsPluginConfigSchema = z.object({
     ),
   organizations: z
     .object({
-      enabled: z.boolean().default(true),
-      invitationTtlSeconds: z.number().int().positive().optional(),
-      defaultMemberRole: memberRoleSchema.optional(),
+      enabled: z
+        .boolean()
+        .default(true)
+        .describe('Enable the organizations entity and its routes. Default true.'),
+      invitationTtlSeconds: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe(
+          'Lifetime of an organization invitation in seconds before it expires. ' +
+            'Defaults to 7 days (604800).',
+        ),
+      defaultMemberRole: memberRoleSchema
+        .optional()
+        .describe(
+          "Role assigned to new members when no explicit role is provided. Must be present in 'knownRoles'. Defaults to 'member'.",
+        ),
       knownRoles: z
         .array(z.string().min(1))
         .nonempty()
@@ -104,19 +141,29 @@ const organizationsPluginConfigSchema = z.object({
         path: ['defaultMemberRole'],
       },
     )
-    .optional(),
+    .optional()
+    .describe('Organization entity settings: invitations, roles, and slug rules.'),
   groups: z
     .object({
       managementRoutes: z
         .union([
           z.literal(true),
           z.object({
-            adminRole: z.string().optional(),
+            adminRole: z
+              .string()
+              .optional()
+              .describe(
+                "Role required to access group management routes. Defaults to 'admin'.",
+              ),
           }),
         ])
-        .optional(),
+        .optional()
+        .describe(
+          "Enable group management HTTP routes. Pass true for defaults or an object with 'adminRole' to customize the required role.",
+        ),
     })
-    .optional(),
+    .optional()
+    .describe('Group entity settings and management route configuration.'),
 });
 
 /**

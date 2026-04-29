@@ -26,6 +26,10 @@ export type OrganizationsOrgService = {
   ): Promise<unknown>;
 };
 
+/**
+ * Plugin-state key used to store and retrieve the {@link OrganizationsOrgService}
+ * instance from the shared Slingshot plugin state map.
+ */
 export const ORGANIZATIONS_ORG_SERVICE_STATE_KEY = 'slingshot-organizations.orgService' as const;
 
 function isOrganizationsOrgService(value: unknown): value is OrganizationsOrgService {
@@ -38,6 +42,11 @@ function isOrganizationsOrgService(value: unknown): value is OrganizationsOrgSer
   );
 }
 
+/**
+ * Retrieve the {@link OrganizationsOrgService} from plugin state, throwing if it
+ * is not available. Use this when the organizations plugin is a required dependency
+ * and its absence is a configuration error.
+ */
 export function getOrganizationsOrgService(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): OrganizationsOrgService {
@@ -50,6 +59,11 @@ export function getOrganizationsOrgService(
   return service;
 }
 
+/**
+ * Retrieve the {@link OrganizationsOrgService} from plugin state, returning `null`
+ * when the organizations plugin has not been registered or has not yet completed
+ * its `setupPost` lifecycle phase.
+ */
 export function getOrganizationsOrgServiceOrNull(
   input: PluginStateMap | PluginStateCarrier | object | null | undefined,
 ): OrganizationsOrgService | null {

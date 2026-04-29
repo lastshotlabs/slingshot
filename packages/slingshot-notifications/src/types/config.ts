@@ -141,4 +141,5 @@ export const notificationsPluginConfigSchema = z.object({
     ),
 });
 
+/** Resolved configuration object for the notifications plugin, inferred from {@link notificationsPluginConfigSchema}. */
 export type NotificationsPluginConfig = z.infer<typeof notificationsPluginConfigSchema>;

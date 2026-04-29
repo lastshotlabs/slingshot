@@ -87,6 +87,11 @@ export type OrchestrationPluginOptions =
       runtime?: never;
     };
 
+/**
+ * Fully resolved orchestration plugin options after manifest or code-first
+ * configuration has been normalized. Combines the adapter/runtime choice with
+ * the optional HTTP route hooks for the orchestration API surface.
+ */
 export type ResolvedOrchestrationPluginOptions = (
   | {
       runtime: OrchestrationRuntime;

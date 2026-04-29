@@ -7,10 +7,22 @@ import { z } from 'zod';
  */
 export const bullmqTlsOptionsSchema = z
   .object({
-    rejectUnauthorized: z.boolean().optional(),
-    ca: z.string().optional(),
-    cert: z.string().optional(),
-    key: z.string().optional(),
+    rejectUnauthorized: z
+      .boolean()
+      .optional()
+      .describe('Whether to reject connections with unverified TLS certificates. Default true.'),
+    ca: z
+      .string()
+      .optional()
+      .describe('PEM-encoded CA certificate used to verify the Redis server certificate.'),
+    cert: z
+      .string()
+      .optional()
+      .describe('PEM-encoded client certificate for mTLS authentication with Redis.'),
+    key: z
+      .string()
+      .optional()
+      .describe('PEM-encoded client private key for mTLS authentication with Redis.'),
   })
   .describe('TLS options forwarded to ioredis when connecting to Redis over TLS.');
 
@@ -54,14 +66,28 @@ export const bullmqJobRetentionSchema = z
 export const bullmqOrchestrationAdapterOptionsSchema = z.object({
   connection: z
     .object({
-      host: z.string().optional(),
-      port: z.number().int().positive().optional(),
+      host: z
+        .string()
+        .optional()
+        .describe("Redis server hostname or IP address. Defaults to 'localhost'."),
+      port: z
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe('Redis server port number. Defaults to 6379.'),
       // tls accepts either:
       //   • the structured object form (rejectUnauthorized/ca/cert/key) — preferred
       //   • a plain boolean (ioredis's "use TLS with defaults" shorthand)
       //   • any other value passed straight through to ioredis (loose)
       // The `requireTls` option enforces *some* TLS config when true.
-      tls: z.union([bullmqTlsOptionsSchema, z.boolean(), z.unknown()]).optional(),
+      tls: z
+        .union([bullmqTlsOptionsSchema, z.boolean(), z.unknown()])
+        .optional()
+        .describe(
+          'TLS configuration for the Redis connection. Pass a structured object, ' +
+            "true for ioredis defaults, or any ioredis-compatible TLS value.",
+        ),
     })
     .loose()
     .describe('BullMQ/ioredis connection options or a compatible connection object.'),
@@ -88,7 +114,12 @@ export const bullmqOrchestrationAdapterOptionsSchema = z.object({
       'Maximum time (ms) to wait for in-flight jobs to finish before forcing worker close. ' +
         'Default 30000.',
     ),
-  jobRetention: bullmqJobRetentionSchema.optional(),
+  jobRetention: bullmqJobRetentionSchema
+    .optional()
+    .describe(
+      'Job retention defaults applied to every queue. Without these, completed and failed ' +
+        'jobs accumulate in Redis unbounded.',
+    ),
 });
 
 /**
@@ -98,5 +129,7 @@ export type BullMQOrchestrationAdapterOptions = z.infer<
   typeof bullmqOrchestrationAdapterOptionsSchema
 >;
 
+/** TLS options forwarded to the ioredis connection when connecting to Redis over TLS. */
 export type BullMQTlsOptions = z.infer<typeof bullmqTlsOptionsSchema>;
+/** Job retention defaults controlling how long completed and failed jobs are kept in Redis. */
 export type BullMQJobRetentionOptions = z.infer<typeof bullmqJobRetentionSchema>;

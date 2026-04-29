@@ -26,6 +26,7 @@ export interface DrizzlePostgresDb {
   readonly getStats: () => PostgresPoolStatsSnapshot;
 }
 
+/** Tunable pool-level settings forwarded to the underlying `pg.Pool` constructor. */
 export interface PostgresPoolConfig {
   readonly max?: number;
   readonly min?: number;
@@ -39,6 +40,7 @@ export interface PostgresPoolConfig {
   readonly keepAliveInitialDelayMillis?: number;
 }
 
+/** Options for {@link connectPostgres} controlling pool sizing, migrations, and health checks. */
 export interface PostgresConnectionOptions {
   readonly pool?: PostgresPoolConfig;
   readonly migrations?: PostgresMigrationMode;

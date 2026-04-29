@@ -89,21 +89,71 @@ export type KafkaAdapterDeserErrorPolicy = 'dlq' | 'skip';
  * Zod schema for the programmatic Kafka event-bus adapter configuration.
  */
 export const kafkaAdapterOptionsSchema = z.object({
-  brokers: z.array(z.string()).min(1, 'At least one broker address is required'),
-  clientId: z.string().optional(),
-  topicPrefix: z.string().optional(),
-  groupPrefix: z.string().optional(),
-  sasl: saslSchema.optional(),
-  ssl: sslSchema.optional(),
-  maxRetries: z.number().int().min(1).optional(),
-  autoCreateTopics: z.boolean().optional(),
-  defaultPartitions: z.number().int().min(1).optional(),
-  replicationFactor: z.number().int().min(1).optional(),
-  connectionTimeout: z.number().int().min(1000).optional(),
-  requestTimeout: z.number().int().min(1000).optional(),
-  sessionTimeout: z.number().int().min(6000).optional(),
-  heartbeatInterval: z.number().int().min(1000).optional(),
-  startFromBeginning: z.boolean().optional(),
+  brokers: z
+    .array(z.string())
+    .min(1, 'At least one broker address is required')
+    .describe('List of Kafka broker addresses to connect to'),
+  clientId: z.string().optional().describe('Kafka client identifier for this adapter instance'),
+  topicPrefix: z
+    .string()
+    .optional()
+    .describe('Prefix prepended to all topic names produced or consumed by this adapter'),
+  groupPrefix: z
+    .string()
+    .optional()
+    .describe('Prefix prepended to all consumer group IDs created by this adapter'),
+  sasl: saslSchema.optional().describe('SASL authentication configuration for the Kafka connection'),
+  ssl: sslSchema.optional().describe('TLS/SSL configuration for the Kafka connection'),
+  maxRetries: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe('Maximum number of retries for failed produce or consume operations'),
+  autoCreateTopics: z
+    .boolean()
+    .optional()
+    .describe('Whether to automatically create topics that do not yet exist on the broker'),
+  defaultPartitions: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe('Default number of partitions when auto-creating topics'),
+  replicationFactor: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe('Replication factor used when auto-creating topics'),
+  connectionTimeout: z
+    .number()
+    .int()
+    .min(1000)
+    .optional()
+    .describe('Milliseconds to wait for the initial broker connection before timing out'),
+  requestTimeout: z
+    .number()
+    .int()
+    .min(1000)
+    .optional()
+    .describe('Milliseconds to wait for a broker request response before timing out'),
+  sessionTimeout: z
+    .number()
+    .int()
+    .min(6000)
+    .optional()
+    .describe('Consumer session timeout in milliseconds; triggers a rebalance if exceeded'),
+  heartbeatInterval: z
+    .number()
+    .int()
+    .min(1000)
+    .optional()
+    .describe('Interval in milliseconds between consumer heartbeats to the group coordinator'),
+  startFromBeginning: z
+    .boolean()
+    .optional()
+    .describe('Whether new consumer groups start reading from the earliest available offset'),
   partitionKey: z
     .union([
       z.string(),
@@ -112,21 +162,41 @@ export const kafkaAdapterOptionsSchema = z.object({
         'partitionKey function must be (event: string, payload: unknown) => string | null',
       ),
     ])
-    .optional(),
-  compression: compressionSchema.optional(),
-  validation: z.enum(['strict', 'warn', 'off']).optional(),
+    .optional()
+    .describe(
+      'Static string or function returning the Kafka partition key for each produced message',
+    ),
+  compression: compressionSchema
+    .optional()
+    .describe('Compression codec applied to produced messages (e.g. gzip, snappy, lz4)'),
+  validation: z
+    .enum(['strict', 'warn', 'off'])
+    .optional()
+    .describe('Event payload validation mode: strict rejects, warn logs, off skips validation'),
   /**
    * Policy for messages that fail to deserialize on the consumer.
    * `dlq` (default) sends the raw bytes to `${topic}.deser-dlq` before
    * committing the offset. `skip` commits without forwarding.
    */
-  deserializationErrorPolicy: z.enum(['dlq', 'skip']).optional(),
+  deserializationErrorPolicy: z
+    .enum(['dlq', 'skip'])
+    .optional()
+    .describe(
+      'Policy for messages that fail to deserialize: dlq routes raw bytes to a dead-letter topic, skip commits the offset',
+    ),
   /**
    * Maximum number of failed-publish events held in the in-memory reconnect
    * buffer before new events are dropped with reason `pending-buffer-full`.
    * Defaults to 1000.
    */
-  pendingBufferSize: z.number().int().min(1).optional(),
+  pendingBufferSize: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      'Maximum number of failed-publish events held in the in-memory reconnect buffer before new events are dropped',
+    ),
   /**
    * Optional callback invoked when the adapter drops or skips a message.
    * Use this to emit metrics / alerts without log scraping.
@@ -135,26 +205,50 @@ export const kafkaAdapterOptionsSchema = z.object({
     .custom<
       (event: KafkaAdapterDropEvent) => void
     >(value => typeof value === 'function', 'onDrop must be a function')
-    .optional(),
+    .optional()
+    .describe(
+      'Callback invoked when the adapter drops or skips a message; use for metrics and alerts',
+    ),
   /**
    * Maximum milliseconds to wait for `producer.send()` before rejecting.
    * A hung broker would otherwise block emit() forever and overflow the
    * pending buffer to OOM. Default: 30_000 (30 seconds).
    */
-  producerTimeoutMs: z.number().int().positive().optional(),
+  producerTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum milliseconds to wait for producer.send() before rejecting; prevents OOM from hung brokers (default 30000)',
+    ),
   /**
    * Maximum milliseconds to wait for `producer.connect()` /
    * `admin.connect()` before rejecting. Guards against DNS hangs at
    * adapter init. Default: 30_000.
    */
-  connectTimeoutMs: z.number().int().positive().optional(),
+  connectTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum milliseconds to wait for producer/admin connect before rejecting; guards against DNS hangs (default 30000)',
+    ),
   /**
    * Maximum milliseconds a custom deserializer may take per message before
    * the consumer treats the message as undecodable and routes it to the
    * deserialization DLQ (or skips, per `deserializationErrorPolicy`).
    * Default: 5_000.
    */
-  deserializeTimeoutMs: z.number().int().positive().optional(),
+  deserializeTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum milliseconds a custom deserializer may take per message before routing to DLQ or skipping (default 5000)',
+    ),
   /**
    * Maximum milliseconds a single in-flight handler may take to settle
    * during a rebalance. Handlers exceeding this limit are abandoned (the
@@ -162,7 +256,14 @@ export const kafkaAdapterOptionsSchema = z.object({
    * continues running but its outcome no longer blocks the rebalance.
    * Default: 60_000.
    */
-  handlerTimeoutMs: z.number().int().positive().optional(),
+  handlerTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum milliseconds a handler may take during a rebalance before being abandoned (default 60000)',
+    ),
   /**
    * Behavior when a downstream DLQ produce fails for an exhausted handler
    * message. `redeliver` (default) leaves the offset uncommitted so the
@@ -170,7 +271,12 @@ export const kafkaAdapterOptionsSchema = z.object({
    * the legacy behavior — log the failure and commit, accepting the lost
    * message in exchange for forward progress.
    */
-  onDlqFailure: z.enum(['redeliver', 'commit-and-log']).optional(),
+  onDlqFailure: z
+    .enum(['redeliver', 'commit-and-log'])
+    .optional()
+    .describe(
+      'Behavior when a downstream DLQ produce fails: redeliver leaves offset uncommitted, commit-and-log accepts message loss',
+    ),
   /**
    * How to derive a stable message id when an inbound message lacks the
    * `slingshot.message-id` header. `fingerprint` (default) hashes the
@@ -178,7 +284,12 @@ export const kafkaAdapterOptionsSchema = z.object({
    * behavior with a warning. `reject` throws — useful for callers that
    * require strict provenance.
    */
-  onIdMissing: z.enum(['fingerprint', 'random', 'reject']).optional(),
+  onIdMissing: z
+    .enum(['fingerprint', 'random', 'reject'])
+    .optional()
+    .describe(
+      'How to derive a stable message id when the slingshot.message-id header is missing: fingerprint hashes the body, random uses UUID, reject throws',
+    ),
 });
 
 /**

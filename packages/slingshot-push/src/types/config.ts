@@ -271,6 +271,7 @@ export const pushPluginConfigSchema = z
     }
   });
 
+/** Validated and transformed push plugin configuration produced by {@link pushPluginConfigSchema}. */
 export type PushPluginConfig = z.output<typeof pushPluginConfigSchema>;
 /** Bespoke routes owned by the push plugin. */
 export type PushRouteKey =

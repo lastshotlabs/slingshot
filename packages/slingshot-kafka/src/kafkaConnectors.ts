@@ -145,21 +145,69 @@ export interface ConnectorObservabilityHooks {
 }
 
 const inboundConnectorSchema = z.object({
-  topic: z.string().optional(),
-  topicPattern: z.string().optional(),
-  handler: z.custom<InboundMessageHandler>(value => typeof value === 'function'),
-  groupId: z.string(),
-  fromBeginning: z.boolean().optional(),
-  errorStrategy: z.enum(['dlq', 'skip', 'pause']).optional(),
-  dlqTopic: z.string().optional(),
-  maxRetries: z.number().int().min(0).optional(),
-  sessionTimeout: z.number().int().min(6000).optional(),
-  heartbeatInterval: z.number().int().min(1000).optional(),
-  validationMode: z.enum(['strict', 'warn', 'off']).optional(),
-  concurrency: z.number().int().min(1).optional(),
-  schema: z.custom<ZodType>(value => !!value && typeof value === 'object').optional(),
-  autoCreateDLQ: z.boolean().optional(),
-  transform: z.custom<InboundTransform>(value => typeof value === 'function').optional(),
+  topic: z.string().optional().describe('Exact Kafka topic name to consume from'),
+  topicPattern: z
+    .string()
+    .optional()
+    .describe('Regex pattern matching one or more Kafka topics to consume from'),
+  handler: z
+    .custom<InboundMessageHandler>(value => typeof value === 'function')
+    .describe('Callback invoked for each normalized inbound Kafka message'),
+  groupId: z.string().describe('Kafka consumer group ID for this inbound connector'),
+  fromBeginning: z
+    .boolean()
+    .optional()
+    .describe('Whether to start reading from the earliest available offset for a new group'),
+  errorStrategy: z
+    .enum(['dlq', 'skip', 'pause'])
+    .optional()
+    .describe(
+      'How to handle handler errors: dlq routes to a dead-letter topic, skip commits and continues, pause stops the consumer',
+    ),
+  dlqTopic: z
+    .string()
+    .optional()
+    .describe('Custom dead-letter topic name; defaults to ${topic}.dlq when errorStrategy is dlq'),
+  maxRetries: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe('Maximum handler retry attempts before applying the error strategy'),
+  sessionTimeout: z
+    .number()
+    .int()
+    .min(6000)
+    .optional()
+    .describe('Consumer session timeout in milliseconds for this connector'),
+  heartbeatInterval: z
+    .number()
+    .int()
+    .min(1000)
+    .optional()
+    .describe('Heartbeat interval in milliseconds for this connector consumer'),
+  validationMode: z
+    .enum(['strict', 'warn', 'off'])
+    .optional()
+    .describe('Payload validation mode for inbound messages against the provided schema'),
+  concurrency: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe('Number of messages processed concurrently within this consumer'),
+  schema: z
+    .custom<ZodType>(value => !!value && typeof value === 'object')
+    .optional()
+    .describe('Zod schema used to validate inbound message payloads'),
+  autoCreateDLQ: z
+    .boolean()
+    .optional()
+    .describe('Whether to automatically create the dead-letter topic if it does not exist'),
+  transform: z
+    .custom<InboundTransform>(value => typeof value === 'function')
+    .optional()
+    .describe('Transform applied to inbound message payloads before reaching the handler'),
   serializer: z
     .custom<EventSerializer>(
       value =>
@@ -169,16 +217,29 @@ const inboundConnectorSchema = z.object({
         'deserialize' in value &&
         'contentType' in value,
     )
-    .optional(),
+    .optional()
+    .describe('Custom serializer for deserializing inbound message payloads'),
 });
 
 const outboundConnectorSchema = z.object({
-  event: z.string(),
-  topic: z.string(),
-  durable: z.boolean().optional(),
-  name: z.string().optional(),
-  filter: z.custom<OutboundFilter>(value => typeof value === 'function').optional(),
-  transform: z.custom<OutboundTransform>(value => typeof value === 'function').optional(),
+  event: z.string().describe('Slingshot event name that triggers this outbound publish'),
+  topic: z.string().describe('Kafka topic to publish the event to'),
+  durable: z
+    .boolean()
+    .optional()
+    .describe('Whether to use a durable event bus subscription for this connector'),
+  name: z
+    .string()
+    .optional()
+    .describe('Unique name for this outbound connector, used in metrics and logs'),
+  filter: z
+    .custom<OutboundFilter>(value => typeof value === 'function')
+    .optional()
+    .describe('Predicate that decides whether an outbound event should be published'),
+  transform: z
+    .custom<OutboundTransform>(value => typeof value === 'function')
+    .optional()
+    .describe('Transform applied to the outbound event payload before serialization'),
   serializer: z
     .custom<EventSerializer>(
       value =>
@@ -188,33 +249,72 @@ const outboundConnectorSchema = z.object({
         'deserialize' in value &&
         'contentType' in value,
     )
-    .optional(),
-  headers: z.custom<OutboundHeaderEnricher>(value => typeof value === 'function').optional(),
-  schema: z.custom<ZodType>(value => !!value && typeof value === 'object').optional(),
-  validationMode: z.enum(['strict', 'warn', 'off']).optional(),
+    .optional()
+    .describe('Custom serializer for encoding outbound message payloads'),
+  headers: z
+    .custom<OutboundHeaderEnricher>(value => typeof value === 'function')
+    .optional()
+    .describe('Hook that can add or replace Kafka headers for outbound publishes'),
+  schema: z
+    .custom<ZodType>(value => !!value && typeof value === 'object')
+    .optional()
+    .describe('Zod schema used to validate outbound event payloads before publishing'),
+  validationMode: z
+    .enum(['strict', 'warn', 'off'])
+    .optional()
+    .describe('Payload validation mode for outbound messages against the provided schema'),
   partitionKey: z
     .union([
       z.string(),
       z.custom<OutboundPartitionKeyExtractor>(value => typeof value === 'function'),
     ])
-    .optional(),
+    .optional()
+    .describe('Static string or function resolving the Kafka partition key for outbound messages'),
   messageId: z
     .union([z.string(), z.custom<OutboundMessageIdExtractor>(value => typeof value === 'function')])
-    .optional(),
-  compression: compressionSchema.optional(),
-  autoCreateTopic: z.boolean().optional(),
-  partitions: z.number().int().min(1).optional(),
-  replicationFactor: z.number().int().min(1).optional(),
+    .optional()
+    .describe(
+      'Static string or function resolving a stable message identifier for dedup or trace correlation',
+    ),
+  compression: compressionSchema
+    .optional()
+    .describe('Compression codec applied to outbound messages'),
+  autoCreateTopic: z
+    .boolean()
+    .optional()
+    .describe('Whether to automatically create the target topic if it does not exist'),
+  partitions: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe('Number of partitions when auto-creating the target topic'),
+  replicationFactor: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe('Replication factor when auto-creating the target topic'),
 });
 
 /**
  * Zod schema for the programmatic Kafka connector bridge configuration.
  */
 export const kafkaConnectorsSchema = z.object({
-  brokers: z.array(z.string()).min(1),
-  clientId: z.string().optional(),
-  sasl: saslSchema.optional(),
-  ssl: sslSchema.optional(),
+  brokers: z
+    .array(z.string())
+    .min(1)
+    .describe('List of Kafka broker addresses for the connector bridge'),
+  clientId: z
+    .string()
+    .optional()
+    .describe('Kafka client identifier for this connector bridge instance'),
+  sasl: saslSchema
+    .optional()
+    .describe('SASL authentication configuration for the connector Kafka connection'),
+  ssl: sslSchema
+    .optional()
+    .describe('TLS/SSL configuration for the connector Kafka connection'),
   serializer: z
     .custom<EventSerializer>(
       value =>
@@ -224,23 +324,61 @@ export const kafkaConnectorsSchema = z.object({
         'deserialize' in value &&
         'contentType' in value,
     )
-    .optional(),
-  compression: compressionSchema.optional(),
-  validationMode: z.enum(['strict', 'warn', 'off']).optional(),
-  duplicatePublishPolicy: z.enum(['off', 'warn', 'error']).optional(),
-  inbound: z.array(inboundConnectorSchema).optional(),
-  outbound: z.array(outboundConnectorSchema).optional(),
+    .optional()
+    .describe(
+      'Default serializer used for all connectors unless overridden per connector',
+    ),
+  compression: compressionSchema
+    .optional()
+    .describe('Default compression codec applied to produced messages across all connectors'),
+  validationMode: z
+    .enum(['strict', 'warn', 'off'])
+    .optional()
+    .describe('Default payload validation mode applied to all connectors unless overridden'),
+  duplicatePublishPolicy: z
+    .enum(['off', 'warn', 'error'])
+    .optional()
+    .describe(
+      'Policy when multiple outbound connectors publish the same event: off allows it, warn logs, error throws',
+    ),
+  inbound: z
+    .array(inboundConnectorSchema)
+    .optional()
+    .describe('Array of inbound connector definitions consuming from Kafka topics'),
+  outbound: z
+    .array(outboundConnectorSchema)
+    .optional()
+    .describe('Array of outbound connector definitions publishing Slingshot events to Kafka topics'),
   hooks: z
     .custom<ConnectorObservabilityHooks>(value => !!value && typeof value === 'object')
-    .optional(),
+    .optional()
+    .describe('Observability hooks for monitoring inbound and outbound connector activity'),
   schemaRegistry: z
     .custom<EventSchemaRegistry>(
       value => !!value && typeof value === 'object' && 'validate' in value,
     )
-    .optional(),
-  maxPendingBuffer: z.number().int().min(0).optional(),
-  maxProduceAttempts: z.number().int().min(1).optional(),
-  drainIntervalMs: z.number().int().min(500).optional(),
+    .optional()
+    .describe('Pluggable schema registry for validating message payloads against registered schemas'),
+  maxPendingBuffer: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe(
+      'Maximum number of outbound messages held in the in-memory pending buffer before dropping',
+    ),
+  maxProduceAttempts: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe('Maximum number of produce attempts before a buffered outbound message is dropped'),
+  drainIntervalMs: z
+    .number()
+    .int()
+    .min(500)
+    .optional()
+    .describe('Interval in milliseconds between pending buffer drain attempts'),
   /**
    * Optional consumer-side dedup store for inbound messages keyed by their
    * `slingshot.message-id` header. When omitted, an in-memory LRU is used
@@ -252,9 +390,17 @@ export const kafkaConnectorsSchema = z.object({
       value => !!value && typeof value === 'object' && 'has' in value && 'set' in value,
       'dedupStore must implement { has(id), set(id, ttlMs) }',
     )
-    .optional(),
+    .optional()
+    .describe(
+      'Consumer-side dedup store for inbound messages keyed by slingshot.message-id header; defaults to in-memory LRU',
+    ),
   /** Override the default inbound dedup TTL (1h). Set to 0 to disable dedup. */
-  dedupTtlMs: z.number().int().min(0).optional(),
+  dedupTtlMs: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe('Override the default inbound dedup TTL (1h); set to 0 to disable dedup'),
   /**
    * Strategy when an outbound envelope lacks a configured `messageId`
    * extractor / field AND `envelope.meta.eventId` is empty.
@@ -266,7 +412,12 @@ export const kafkaConnectorsSchema = z.object({
    * - `'reject'`: throws — useful when callers require strict provenance
    *   and would rather fail produce than emit a non-deduplicable id.
    */
-  onIdMissing: z.enum(['fingerprint', 'random', 'reject']).optional(),
+  onIdMissing: z
+    .enum(['fingerprint', 'random', 'reject'])
+    .optional()
+    .describe(
+      'How to derive a message id when the outbound envelope lacks one: fingerprint hashes the payload, random uses UUID, reject throws',
+    ),
 });
 
 /**

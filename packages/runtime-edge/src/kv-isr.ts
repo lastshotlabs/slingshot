@@ -342,6 +342,26 @@ function removeFromTagIndex(
 // ---------------------------------------------------------------------------
 
 /**
+ * Tunable knobs for {@link createKvIsrCache}.
+ */
+export interface KvIsrCacheOptions {
+  /**
+   * Maximum concurrent KV subrequests during fan-out (set/invalidateTag).
+   *
+   * Cloudflare Workers cap subrequests at 50 (free) / 1000 (paid) per request.
+   * The default of 25 stays well under both ceilings; increase only if you've
+   * confirmed your plan tier and request budget allow it.
+   */
+  maxConcurrency?: number;
+  /**
+   * Per-KV-operation timeout in milliseconds. Cloudflare KV has no client-side
+   * timeout; without one a hung KV call can consume the full 30 s request
+   * budget. Defaults to 5 000 ms. Set to 0 to disable.
+   */
+  operationTimeoutMs?: number;
+}
+
+/**
  * Create an ISR cache adapter backed by Cloudflare KV.
  *
  * Suitable for multi-instance Cloudflare Workers deployments. Each Worker
@@ -371,6 +391,7 @@ function removeFromTagIndex(
  * once they settle, preventing unbounded memory growth.
  *
  * @param kv - A Cloudflare KV namespace binding. Satisfies `KvNamespace` structurally.
+ * @param options - Optional tuning for concurrency and operation timeouts.
  * @returns An `IsrCacheAdapter` backed by the given KV namespace.
  *
  * @example
@@ -396,26 +417,6 @@ function removeFromTagIndex(
  * };
  * ```
  */
-/**
- * Tunable knobs for {@link createKvIsrCache}.
- */
-export interface KvIsrCacheOptions {
-  /**
-   * Maximum concurrent KV subrequests during fan-out (set/invalidateTag).
-   *
-   * Cloudflare Workers cap subrequests at 50 (free) / 1000 (paid) per request.
-   * The default of 25 stays well under both ceilings; increase only if you've
-   * confirmed your plan tier and request budget allow it.
-   */
-  maxConcurrency?: number;
-  /**
-   * Per-KV-operation timeout in milliseconds. Cloudflare KV has no client-side
-   * timeout; without one a hung KV call can consume the full 30 s request
-   * budget. Defaults to 5 000 ms. Set to 0 to disable.
-   */
-  operationTimeoutMs?: number;
-}
-
 export function createKvIsrCache(
   kv: KvNamespace,
   options: KvIsrCacheOptions = {},

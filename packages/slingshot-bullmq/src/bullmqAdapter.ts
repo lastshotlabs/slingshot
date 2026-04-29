@@ -48,32 +48,51 @@ export const bullmqAdapterOptionsSchema = z.object({
    * BullMQ/ioredis connection options. Must be a plain object (not a URL string).
    * `host` must be a string and `port` must be a number when provided.
    */
-  connection: z
-    .object({
-      host: z.string().optional(),
-      port: z
-        .number({ error: 'connection.port must be a number, not a string' })
-        .int()
-        .positive()
-        .optional(),
-    })
-    .loose() as z.ZodType<ConnectionOptions>,
+  connection: (
+    z
+      .object({
+        host: z.string().optional(),
+        port: z
+          .number({ error: 'connection.port must be a number, not a string' })
+          .int()
+          .positive()
+          .optional(),
+      })
+      .loose() as z.ZodType<ConnectionOptions>
+  ).describe('BullMQ/ioredis connection options; must be a plain object (not a URL string)'),
   /** Queue name prefix. Default: "slingshot:events" */
-  prefix: z.string().optional(),
+  prefix: z.string().optional().describe('Queue name prefix (default: "slingshot:events")'),
   /**
    * Number of attempts BullMQ will make before moving a job to the failed set.
    * Applies to all durable subscriptions created by this adapter.
    * Default: 3
    */
-  attempts: z.number().int().min(1).optional(),
+  attempts: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      'Number of attempts BullMQ will make before moving a job to the failed set (default: 3)',
+    ),
   /** Event payload validation mode. Default: "off". */
-  validation: z.enum(['strict', 'warn', 'off']).optional(),
+  validation: z
+    .enum(['strict', 'warn', 'off'])
+    .optional()
+    .describe('Event payload validation mode (default: "off")'),
   /**
    * Maximum milliseconds to wait for `queue.add()` before rejecting with a
    * timeout error. Guards against indefinite hangs when Redis is unresponsive.
    * Default: 10_000 (10 seconds).
    */
-  enqueueTimeoutMs: z.number().int().positive().optional(),
+  enqueueTimeoutMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum milliseconds to wait for queue.add() before rejecting with a timeout error (default: 10000)',
+    ),
   /**
    * Name of the validation dead-letter queue. When a strict-mode validation
    * failure occurs inside a durable worker processor, the offending job
@@ -82,24 +101,50 @@ export const bullmqAdapterOptionsSchema = z.object({
    * `${queueName}:validation-dlq` is derived per source queue. Set to an empty
    * string to disable the DLQ entirely (failures are logged and skipped).
    */
-  validationDlqQueueName: z.string().optional(),
+  validationDlqQueueName: z
+    .string()
+    .optional()
+    .describe(
+      'Name of the validation dead-letter queue; defaults to ${queueName}:validation-dlq. Set to empty string to disable',
+    ),
   /**
    * Base delay in milliseconds for the first drain retry after an enqueue failure.
    * Subsequent retries use exponential backoff: `drainBaseMs * 2^drainBackoffCount`,
    * capped at `drainMaxMs`. Resets to zero when the buffer drains completely.
    * Default: 2_000.
    */
-  drainBaseMs: z.number().int().positive().optional(),
+  drainBaseMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Base delay in milliseconds for the first drain retry after an enqueue failure; subsequent retries use exponential backoff (default: 2000)',
+    ),
   /**
    * Maximum delay in milliseconds between drain retries (caps the exponential
    * backoff). Default: 30_000.
    */
-  drainMaxMs: z.number().int().positive().optional(),
+  drainMaxMs: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Maximum delay in milliseconds between drain retries, capping the exponential backoff (default: 30000)',
+    ),
   /**
    * Maximum number of enqueue attempts before a buffered event is permanently
    * dropped from the in-memory pending buffer. Default: 5.
    */
-  maxEnqueueAttempts: z.number().int().min(1).optional(),
+  maxEnqueueAttempts: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe(
+      'Maximum number of enqueue attempts before a buffered event is permanently dropped (default: 5)',
+    ),
   /**
    * Optional path to a JSON-lines write-ahead log used to persist buffered
    * events across process restarts. When set, every entry appended to the
@@ -111,12 +156,24 @@ export const bullmqAdapterOptionsSchema = z.object({
    * append-only; a compaction pass runs whenever the live entry count exceeds
    * `walCompactThreshold` (default 1024).
    */
-  walPath: z.string().optional(),
+  walPath: z
+    .string()
+    .optional()
+    .describe(
+      'Path to a JSON-lines write-ahead log for persisting buffered events across process restarts; disabled by default',
+    ),
   /**
    * Number of live entries above which the WAL file is rewritten to discard
    * tombstones for already-consumed events. Default: 1024.
    */
-  walCompactThreshold: z.number().int().positive().optional(),
+  walCompactThreshold: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Number of live WAL entries above which the file is rewritten to discard tombstones (default: 1024)',
+    ),
 });
 
 /**

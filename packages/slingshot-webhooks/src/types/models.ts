@@ -5,18 +5,23 @@ import type { EventKey, EventScope } from '@lastshotlabs/slingshot-core';
  */
 export type DeliveryStatus = 'pending' | 'delivered' | 'failed' | 'dead';
 
+/** Discriminator indicating who owns a webhook endpoint or subscription. */
 export type WebhookOwnerType = 'tenant' | 'user' | 'app' | 'system';
 
+/** Visibility scope that determines which callers may manage a subscription. */
 export type WebhookSubscriptionExposure = 'tenant-webhook' | 'user-webhook' | 'app-webhook';
 
+/** A single event subscription attached to a webhook endpoint. */
 export interface WebhookEndpointSubscription {
   event: EventKey;
   exposure: WebhookSubscriptionExposure;
   sourcePattern?: string;
 }
 
+/** Input union for subscribing an endpoint to a specific event key or a glob pattern. */
 export type WebhookEndpointSubscriptionInput = { event: EventKey } | { pattern: string };
 
+/** Identity of the entity that owns or receives a webhook delivery. */
 export interface WebhookSubscriber {
   ownerType: WebhookOwnerType;
   ownerId: string;

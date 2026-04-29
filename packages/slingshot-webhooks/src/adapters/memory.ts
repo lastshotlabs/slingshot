@@ -10,12 +10,14 @@ const VALID_TRANSITIONS: Readonly<Record<DeliveryStatus, readonly DeliveryStatus
   dead: [],
 };
 
+/** In-memory {@link WebhookAdapter} with synchronous endpoint management helpers for testing. */
 export interface MemoryWebhookAdapter extends WebhookAdapter {
   addEndpoint(endpoint: Omit<WebhookEndpoint, 'createdAt' | 'updatedAt'>): WebhookEndpoint;
   removeEndpoint(id: string): boolean;
   listEndpoints(): WebhookEndpoint[];
 }
 
+/** Creates an ephemeral in-memory webhook adapter suitable for tests and local development. */
 export function createMemoryWebhookAdapter(): MemoryWebhookAdapter {
   const endpoints = new Map<string, WebhookEndpoint>();
   const deliveries = new Map<string, WebhookDelivery>();

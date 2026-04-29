@@ -316,8 +316,7 @@ export function installProcessSafetyNet(): void {
   });
 }
 
-// Test-only escape hatch — re-arm `installProcessSafetyNet` so a later test
-// can verify the install path again. Not part of the public surface.
+/** @internal Resets process safety-net state for test isolation. */
 export function _resetProcessSafetyNetForTest(): void {
   processHandlersInstalled = false;
   process.removeAllListeners('unhandledRejection');

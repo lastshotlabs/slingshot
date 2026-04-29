@@ -76,6 +76,7 @@ export const ssgConfigSchema = z.object({
     ),
 });
 
+/** Parsed and validated SSG configuration produced by {@link ssgConfigSchema}. */
 export type SsgConfigParsed = z.infer<typeof ssgConfigSchema>;
 
 /**

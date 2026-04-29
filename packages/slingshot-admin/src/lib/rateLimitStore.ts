@@ -117,6 +117,7 @@ export interface RedisRateLimitClientLike {
   multi(): RedisRateLimitMultiLike;
 }
 
+/** Options for creating a Redis-backed rate-limit store used by admin endpoints. */
 export interface CreateRedisRateLimitStoreOptions {
   /** Redis client instance. Any client matching {@link RedisRateLimitClientLike}. */
   client: RedisRateLimitClientLike;

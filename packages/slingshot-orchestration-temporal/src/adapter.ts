@@ -199,6 +199,29 @@ async function maybeQueryState(
   }
 }
 
+/**
+ * Creates a Temporal-backed {@link OrchestrationAdapter} that translates the
+ * framework's task/workflow operations into Temporal Client calls.
+ *
+ * The adapter validates the supplied options, then returns an
+ * `OrchestrationAdapter` whose methods map to Temporal primitives:
+ *
+ * - **registerTask / registerWorkflow** -- record definitions (immutable after `start()`).
+ * - **runTask / runWorkflow** -- start a Temporal workflow execution with
+ *   idempotent `workflowId` derivation and `USE_EXISTING` conflict policy.
+ * - **getRun** -- describe + query a workflow to build a unified `Run` view
+ *   including progress, steps, and terminal output/error.
+ * - **cancelRun / signal** -- cancel or deliver a user-defined signal.
+ * - **schedule / unschedule / listSchedules** -- manage cron-based schedules.
+ * - **listRuns** -- paginated visibility query with offset/limit support.
+ * - **onProgress** -- poll-based progress subscription with automatic cleanup.
+ * - **start** -- verify connectivity and search-attribute availability.
+ * - **shutdown** -- dispose progress pollers, close the client and (if owned)
+ *   the underlying connection.
+ *
+ * @param rawOptions - Adapter configuration validated against {@link temporalAdapterOptionsSchema}.
+ * @returns A fully wired {@link OrchestrationAdapter}.
+ */
 export function createTemporalOrchestrationAdapter(
   rawOptions: TemporalOrchestrationAdapterOptions,
 ): OrchestrationAdapter {

@@ -19,6 +19,7 @@ import type {
   OrchestrationRequestContextResolver,
   OrchestrationRunAuthorizer,
 } from './types';
+import { InvalidResolverResultError } from './errors';
 
 const DEFAULT_ROUTE_TIMEOUT_MS = 30_000;
 
@@ -165,13 +166,7 @@ function parseListRunsQuery(url: URL, tenantId?: string): RunFilter {
 // resolver's identity to callers. Routes catch this and translate it into an
 // HTTP 500 with a stable error code so observability tooling can flag the
 // misconfiguration distinctly from generic adapter/internal errors.
-class InvalidResolverResultError extends Error {
-  readonly code = 'INVALID_RESOLVER_RESULT';
-  constructor(detail: string) {
-    super(`Invalid resolveRequestContext result: ${detail}`);
-    this.name = 'InvalidResolverResultError';
-  }
-}
+// (InvalidResolverResultError is imported from './errors')
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

@@ -38,6 +38,12 @@ import {
   sslSchema,
 } from './kafkaShared';
 import { toGroupId, toTopicName } from './kafkaTopicNaming';
+import {
+  KafkaAdapterConfigError,
+  KafkaDurableSubscriptionNameRequiredError,
+  KafkaDuplicateDurableSubscriptionError,
+  KafkaDurableSubscriptionOffError,
+} from './errors';
 
 /**
  * Reasons the adapter may drop or skip an event. Surfaced through `onDrop` so
@@ -626,7 +632,7 @@ export function createKafkaAdapter(
   }
 
   if (config.heartbeatInterval >= config.sessionTimeout) {
-    throw new Error(
+    throw new KafkaAdapterConfigError(
       `[KafkaAdapter] heartbeatInterval must be less than sessionTimeout ` +
         `(got heartbeat=${config.heartbeatInterval}ms, session=${config.sessionTimeout}ms)`,
     );
@@ -874,9 +880,7 @@ export function createKafkaAdapter(
         .get(event as string)
         ?.has(listener as (envelope: EventEnvelope) => void | Promise<void>)
     ) {
-      throw new Error(
-        '[KafkaAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all consumers.',
-      );
+      throw new KafkaDurableSubscriptionOffError();
     }
     envelopeListeners
       .get(event as string)
@@ -896,16 +900,14 @@ export function createKafkaAdapter(
 
     if (opts?.durable) {
       if (!opts.name) {
-        throw new Error('[KafkaAdapter] durable subscriptions require a name. Pass opts.name.');
+        throw new KafkaDurableSubscriptionNameRequiredError();
       }
 
       const topic = toTopicName(config.topicPrefix, event as string);
       const groupId = toGroupId(config.groupPrefix, topic, opts.name);
       const entryKey = `${topic}:${opts.name}`;
       if (durableConsumers.has(entryKey)) {
-        throw new Error(
-          `[KafkaAdapter] a durable subscription named "${opts.name}" for event "${event}" already exists.`,
-        );
+        throw new KafkaDuplicateDurableSubscriptionError(event as string, opts.name);
       }
 
       const consumer = kafka.consumer({

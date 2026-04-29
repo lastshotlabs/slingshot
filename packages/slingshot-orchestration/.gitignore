@@ -1,0 +1,3 @@
+# Build artifacts should never be committed alongside sources
+src/**/*.js
+src/**/*.d.ts

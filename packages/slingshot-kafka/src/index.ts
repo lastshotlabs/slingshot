@@ -31,3 +31,16 @@ export type {
 } from './kafkaConnectors';
 /** Convert Slingshot event names into stable Kafka topic and consumer-group names. */
 export { toGroupId, toTopicName } from './kafkaTopicNaming';
+/** Typed error classes thrown by the Kafka adapter and connector bridge. */
+export {
+  KafkaAdapterError,
+  KafkaAdapterConfigError,
+  KafkaDurableSubscriptionNameRequiredError,
+  KafkaDuplicateDurableSubscriptionError,
+  KafkaDurableSubscriptionOffError,
+  KafkaConnectorError,
+  KafkaConnectorMessageIdError,
+  KafkaConnectorStateError,
+  KafkaConnectorValidationError,
+  KafkaDuplicateConnectorError,
+} from './errors';

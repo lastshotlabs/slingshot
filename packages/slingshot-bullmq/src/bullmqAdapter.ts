@@ -25,6 +25,11 @@ import {
   validatePluginConfig,
   withTimeout,
 } from '@lastshotlabs/slingshot-core';
+import {
+  DurableSubscriptionNameRequiredError,
+  DuplicateDurableSubscriptionError,
+  DurableSubscriptionOffError,
+} from './errors';
 
 /**
  * Zod schema for `BullMQAdapterOptions`. Validated at adapter-creation time.
@@ -993,16 +998,14 @@ export function createBullMQAdapter(
     const key = event as string;
     if (subscriptionOpts?.durable === true) {
       if (!subscriptionOpts.name) {
-        throw new Error('[BullMQAdapter] durable subscriptions require a name. Pass opts.name.');
+        throw new DurableSubscriptionNameRequiredError();
       }
 
       const mapKey = `${prefix}:${event}:${subscriptionOpts.name}`;
       const bullmqQueueName = sanitizeQueueName(mapKey);
 
       if (durableQueues.has(mapKey)) {
-        throw new Error(
-          `[BullMQAdapter] a durable subscription named "${subscriptionOpts.name}" for event "${event}" already exists. Names must be unique per event.`,
-        );
+        throw new DuplicateDurableSubscriptionError(event as string, subscriptionOpts.name!);
       }
 
       const queue = new Queue(bullmqQueueName, {
@@ -1175,9 +1178,7 @@ export function createBullMQAdapter(
     const key = event as string;
     const dl = durableListeners.get(key);
     if (dl?.has(listener as (envelope: EventEnvelope) => void | Promise<void>)) {
-      throw new Error(
-        `[BullMQAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all workers.`,
-      );
+      throw new DurableSubscriptionOffError();
     }
     envelopeListeners
       .get(key)
@@ -1389,9 +1390,7 @@ export function createBullMQAdapter(
       }
       const dl = durableListeners.get(event as string);
       if (dl?.has(wrapper as (envelope: EventEnvelope) => void | Promise<void>)) {
-        throw new Error(
-          `[BullMQAdapter] cannot remove a durable subscription via off(). Use shutdown() to close all workers.`,
-        );
+        throw new DurableSubscriptionOffError();
       }
       wrappers?.delete(listener as (payload: unknown) => void | Promise<void>);
       if (wrappers?.size === 0) {

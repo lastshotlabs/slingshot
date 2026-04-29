@@ -16,6 +16,8 @@ export { createSlingshotEventSink } from './eventSink';
  * Validate manifest and code-first orchestration plugin options.
  */
 export { orchestrationPluginConfigSchema } from './validation';
+/** Typed error classes thrown by the orchestration plugin integration layer. */
+export { InvalidResolverResultError } from './errors';
 /**
  * Public plugin option types for Slingshot orchestration composition.
  */

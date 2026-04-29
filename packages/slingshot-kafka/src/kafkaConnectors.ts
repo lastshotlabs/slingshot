@@ -29,6 +29,13 @@ import {
   saslSchema,
   sslSchema,
 } from './kafkaShared';
+import {
+  KafkaConnectorError,
+  KafkaConnectorMessageIdError,
+  KafkaConnectorStateError,
+  KafkaConnectorValidationError,
+  KafkaDuplicateConnectorError,
+} from './errors';
 
 /**
  * Broker metadata attached to one inbound Kafka message after normalization.
@@ -509,7 +516,7 @@ function validatePayload(
 
   const message = `[KafkaConnectors] validation failed for "${event}": ${formatZodIssues(result.error)}`;
   if (mode === 'strict') {
-    throw new Error(message, { cause: result.error });
+    throw new KafkaConnectorValidationError(message, result.error);
   }
   console.warn(message);
   return payload;
@@ -550,9 +557,7 @@ function resolveMessageId(
   // consumer-side store because every produce produces a fresh id, so the
   // default switches to a stable SHA-256 fingerprint of the payload bytes.
   if (onIdMissing === 'reject') {
-    throw new Error(
-      `[KafkaConnectors] outbound event "${envelope.key}" has no messageId, no eventId, and onIdMissing='reject'.`,
-    );
+    throw new KafkaConnectorMessageIdError(envelope.key);
   }
   if (onIdMissing === 'random') {
     console.warn(
@@ -691,14 +696,14 @@ export function createKafkaConnectors(
     const hasTopic = !!conn.topic;
     const hasPattern = !!conn.topicPattern;
     if (hasTopic === hasPattern) {
-      throw new Error(
+      throw new KafkaConnectorError(
         `[slingshot-kafka-connectors] inbound[${i}]: exactly one of "topic" or "topicPattern" is required`,
       );
     }
     const session = conn.sessionTimeout ?? 30_000;
     const heartbeat = conn.heartbeatInterval ?? 3_000;
     if (heartbeat >= session) {
-      throw new Error(
+      throw new KafkaConnectorError(
         `[slingshot-kafka-connectors] inbound[${i}]: heartbeatInterval must be less than sessionTimeout`,
       );
     }
@@ -706,12 +711,12 @@ export function createKafkaConnectors(
       new RegExp(conn.topicPattern);
     }
     if (conn.dlqTopic && (conn.errorStrategy ?? 'dlq') !== 'dlq') {
-      throw new Error(
+      throw new KafkaConnectorError(
         `[slingshot-kafka-connectors] inbound[${i}]: dlqTopic requires errorStrategy "dlq"`,
       );
     }
     if (conn.autoCreateDLQ && (conn.errorStrategy ?? 'dlq') !== 'dlq') {
-      throw new Error(
+      throw new KafkaConnectorError(
         `[slingshot-kafka-connectors] inbound[${i}]: autoCreateDLQ is only meaningful when errorStrategy is "dlq"`,
       );
     }
@@ -719,7 +724,7 @@ export function createKafkaConnectors(
 
   opts.outbound?.forEach((conn, i) => {
     if (conn.durable && !conn.name) {
-      throw new Error(
+      throw new KafkaConnectorError(
         `[slingshot-kafka-connectors] outbound[${i}]: durable: true requires a "name"`,
       );
     }
@@ -729,7 +734,7 @@ export function createKafkaConnectors(
   for (const conn of opts.inbound ?? []) {
     const key = `${conn.topic ?? `pattern:${conn.topicPattern}`}:${conn.groupId}`;
     if (inboundKeys.has(key)) {
-      throw new Error(`[slingshot-kafka-connectors] duplicate inbound connector: ${key}`);
+      throw new KafkaDuplicateConnectorError(`inbound: ${key}`);
     }
     inboundKeys.add(key);
   }
@@ -738,7 +743,7 @@ export function createKafkaConnectors(
   for (const conn of opts.outbound ?? []) {
     const key = `${conn.event}:${conn.topic}`;
     if (outboundKeys.has(key)) {
-      throw new Error(`[slingshot-kafka-connectors] duplicate outbound connector: ${key}`);
+      throw new KafkaDuplicateConnectorError(`outbound: ${key}`);
     }
     outboundKeys.add(key);
   }
@@ -865,7 +870,7 @@ export function createKafkaConnectors(
         `[slingshot-kafka-connectors] outbound connector for event "${conn.event}" targets ` +
         `topic "${conn.topic}", which is also produced by the internal Kafka event bus adapter.`;
       if (duplicatePublishPolicy === 'error') {
-        throw new Error(message);
+        throw new KafkaConnectorError(message);
       }
       console.warn(message);
     }
@@ -1189,9 +1194,7 @@ export function createKafkaConnectors(
     // caller sees a real signal rather than racing teardown with start.
     if (state === 'stopped' || state === 'stopping') return;
     if (state !== 'running') {
-      throw new Error(
-        `[KafkaConnectors] stop() called in state "${state}"; only valid from "running".`,
-      );
+      throw new KafkaConnectorStateError('stop', state);
     }
     state = 'stopping';
 
@@ -1283,14 +1286,10 @@ export function createKafkaConnectors(
       // this guard a second start() leaves duplicate listeners attached to
       // the bus and duplicate consumers attached to broker.
       if (state === 'starting' || state === 'running') {
-        throw new Error(
-          `[KafkaConnectors] start() called in state "${state}"; finish or stop the previous run first.`,
-        );
+        throw new KafkaConnectorStateError('start', state);
       }
       if (state === 'stopping') {
-        throw new Error(
-          `[KafkaConnectors] start() called while a previous stop() is still in progress.`,
-        );
+        throw new KafkaConnectorStateError('start', 'stopping');
       }
       state = 'starting';
 

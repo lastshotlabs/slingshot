@@ -11,7 +11,7 @@ import {
   createEventSchemaRegistry,
   createInProcessMetricsEmitter,
 } from '@lastshotlabs/slingshot-core';
-import { createFakeBullMQModule, fakeBullMQState } from './helpers/fakeBullMQ';
+import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 

@@ -11,7 +11,7 @@ import {
   fakeKafkaState,
   flushAsyncWork,
   resetFakeKafkaState,
-} from '../helpers/fakeKafkaJs';
+} from '../../src/testing/fakeKafkaJs';
 
 mock.module('kafkajs', () => createFakeKafkaJsModule());
 

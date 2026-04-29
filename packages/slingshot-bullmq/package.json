@@ -6,8 +6,14 @@
   "type": "module",
   "exports": {
     ".": {
+      "bun": "./dist/src/index.js",
       "import": "./dist/src/index.js",
       "types": "./dist/src/index.d.ts"
+    },
+    "./testing": {
+      "bun": "./dist/src/testing.js",
+      "import": "./dist/src/testing.js",
+      "types": "./dist/src/testing.d.ts"
     }
   },
   "repository": {

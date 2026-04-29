@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { z } from 'zod';
 import { createEventSchemaRegistry } from '@lastshotlabs/slingshot-core';
-import { createFakeBullMQModule, fakeBullMQState } from './helpers/fakeBullMQ';
+import { createFakeBullMQModule, fakeBullMQState } from '../src/testing/fakeBullMQ';
 
 mock.module('bullmq', () => createFakeBullMQModule());
 

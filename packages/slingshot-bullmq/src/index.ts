@@ -11,3 +11,10 @@ export type {
   BullMQAdapterHealth,
   BullMQAdapterOptions,
 } from './bullmqAdapter';
+/** Typed error classes thrown by the BullMQ adapter. */
+export {
+  BullMQAdapterError,
+  DurableSubscriptionNameRequiredError,
+  DuplicateDurableSubscriptionError,
+  DurableSubscriptionOffError,
+} from './errors';

@@ -91,6 +91,7 @@ function createAdapter(seedEndpoints: WebhookEndpoint[] = []): WebhookAdapter {
         projectedPayload: input.payload,
         status: 'pending',
         attempts: 0,
+        version: 1,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

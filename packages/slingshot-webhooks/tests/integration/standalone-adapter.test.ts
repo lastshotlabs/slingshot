@@ -145,7 +145,7 @@ describe('standalone adapter mode', () => {
       expect(body.ok).toBe(true);
       expect(body.body).toContain('received');
       // Verify the X-Webhook-Test header was on the outbound request.
-      const fetchArgs = fetchMock.mock.calls[0] as [string, RequestInit];
+      const fetchArgs = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
       const sentHeaders = new Headers(fetchArgs[1]?.headers ?? {});
       expect(sentHeaders.get('X-Webhook-Test')).toBe('true');
     } finally {

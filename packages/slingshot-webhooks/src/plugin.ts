@@ -108,6 +108,38 @@ function buildInboundPublicPaths(
   return [`${mountPath}/inbound/*`];
 }
 
+/**
+ * P-WEBHOOKS-9: clamp a caller-requested delivery timeout at 120s with a
+ * loud warning + `webhook:timeoutClamped` event. Exported so unit tests can
+ * exercise the clamp without standing up the full plugin lifecycle.
+ */
+export const TIMEOUT_CLAMP_MS = 120_000;
+
+export function clampDeliveryTimeoutMs(
+  requestedMs: number,
+  ctx: { deliveryId: string; endpointId: string },
+  bus: { emit?(event: string, payload: unknown): void } | undefined,
+): number {
+  if (requestedMs <= TIMEOUT_CLAMP_MS) return requestedMs;
+  logWebhookEvent('warn', 'webhook timeout clamped', {
+    deliveryId: ctx.deliveryId,
+    endpointId: ctx.endpointId,
+    requestedTimeoutMs: requestedMs,
+    clampedTimeoutMs: TIMEOUT_CLAMP_MS,
+  });
+  try {
+    bus?.emit?.('webhook:timeoutClamped', {
+      deliveryId: ctx.deliveryId,
+      endpointId: ctx.endpointId,
+      requestedTimeoutMs: requestedMs,
+      clampedTimeoutMs: TIMEOUT_CLAMP_MS,
+    });
+  } catch {
+    // bus emission must never break delivery
+  }
+  return TIMEOUT_CLAMP_MS;
+}
+
 function classifyDeliveryFailure(err: unknown): string {
   if (err instanceof HeaderInjectionError) return 'injection';
   if (err instanceof SafeFetchBlockedError) return 'sslError';
@@ -151,33 +183,14 @@ async function activate(
       // Resolution order: per-endpoint override (job.deliveryTimeoutMs) >
       // plugin-wide default (config.deliveryTimeoutMs) > 30s baseline.
       const requestedTimeoutMs = job.deliveryTimeoutMs ?? config.deliveryTimeoutMs ?? 30_000;
-      // P-WEBHOOKS-9: warn loudly when a caller-requested timeout exceeds
-      // the 120s clamp so operators can see the bypass instead of having
-      // the value silently downgraded.
-      const TIMEOUT_CLAMP_MS = 120_000;
-      let resolvedTimeoutMs = requestedTimeoutMs;
-      if (requestedTimeoutMs > TIMEOUT_CLAMP_MS) {
-        resolvedTimeoutMs = TIMEOUT_CLAMP_MS;
-        logWebhookEvent('warn', 'webhook timeout clamped', {
+      const resolvedTimeoutMs = clampDeliveryTimeoutMs(
+        requestedTimeoutMs,
+        {
           deliveryId: job.deliveryId,
           endpointId: job.endpointId,
-          requestedTimeoutMs,
-          clampedTimeoutMs: TIMEOUT_CLAMP_MS,
-        });
-        try {
-          (bus as { emit(event: string, payload: unknown): void }).emit(
-            'webhook:timeoutClamped',
-            {
-              deliveryId: job.deliveryId,
-              endpointId: job.endpointId,
-              requestedTimeoutMs,
-              clampedTimeoutMs: TIMEOUT_CLAMP_MS,
-            },
-          );
-        } catch {
-          // bus emission must never break delivery
-        }
-      }
+        },
+        bus,
+      );
       await deliverWebhook(job, {
         timeoutMs: resolvedTimeoutMs,
       });
@@ -283,6 +296,7 @@ async function runTestDelivery(
   let ok = false;
   await deliverWebhook(
     {
+      id: 'test-' + eventId,
       deliveryId: 'test-' + eventId,
       endpointId,
       url: endpoint.url,
@@ -297,12 +311,13 @@ async function runTestDelivery(
       },
       payload,
       attempts: 0,
+      createdAt: new Date(),
     },
     {
       timeoutMs: deliveryTimeoutMs,
       // Add the test marker to outbound headers via a fetch interceptor:
       // tag the synthetic delivery so receivers can branch on header alone.
-      fetchImpl: async (input: RequestInfo | URL, init?: RequestInit) => {
+      fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
         const headers = new Headers(init?.headers ?? {});
         headers.set('X-Webhook-Test', 'true');
         const res = await fetch(input as Parameters<typeof fetch>[0], { ...init, headers });
@@ -311,7 +326,7 @@ async function runTestDelivery(
         body = await res.text().catch(() => '');
         // Return a clone so deliverWebhook can read the body if needed.
         return new Response(body, { status, headers: res.headers });
-      },
+      }) as unknown as typeof fetch,
     },
   ).catch(err => {
     // deliverWebhook throws on non-2xx; we still want to return whatever

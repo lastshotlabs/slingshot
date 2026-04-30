@@ -230,7 +230,7 @@ export interface SessionRepository {
    * @remarks
    * **Grace-window slot**: during token rotation (`rotateRefreshToken`) the outgoing
    * token is moved to the `prevRefreshToken` slot with a short TTL controlled by
-   * `cfg.refreshTokens.rotationGraceSeconds` (default: 10 s). This method checks
+   * `cfg.refreshToken.rotationGraceSeconds` (default: 10 s). This method checks
    * the current slot first, then the grace-window slot, so that clients with
    * concurrent requests during a rotation period can still exchange either token.
    *

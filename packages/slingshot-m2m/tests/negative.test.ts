@@ -20,6 +20,7 @@ function buildApp(overrides: Partial<Record<string, unknown>> = {}) {
       hash: async () => 'unused',
       verify: async () => false,
     },
+    getDummyHash: async () => 'dummy-hash',
     signing: {},
     ...overrides,
   };
@@ -62,7 +63,30 @@ describe('slingshot-m2m negative branches', () => {
   });
 
   test('returns invalid_client when the client does not exist', async () => {
+    const verify = mock(async () => false);
     const app = buildApp();
+    const runtime = {
+      adapter: {
+        getM2MClient: async () => null,
+      },
+      config: {
+        m2m: {
+          tokenExpiry: 3600,
+          scopes: ['read'],
+        },
+      },
+      rateLimit: {
+        trackAttempt: async () => false,
+      },
+      password: {
+        hash: async () => 'unused',
+        verify,
+      },
+      getDummyHash: async () => 'dummy-hash',
+      signing: {},
+    };
+    const appWithDummy = new Hono();
+    appWithDummy.route('/', createM2MRouter(runtime as never));
     const response = await app.request('/oauth/token', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -78,6 +102,18 @@ describe('slingshot-m2m negative branches', () => {
       error: 'invalid_client',
       error_description: 'Invalid client credentials',
     });
+
+    const dummyResponse = await appWithDummy.request('/oauth/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'client_credentials',
+        client_id: 'missing-client',
+        client_secret: 'secret-1',
+      }),
+    });
+    expect(dummyResponse.status).toBe(401);
+    expect(verify).toHaveBeenCalledWith('secret-1', 'dummy-hash');
   });
 
   test('uses runtime.password.verify for client secret validation', async () => {
@@ -110,6 +146,66 @@ describe('slingshot-m2m negative branches', () => {
 
     expect(response.status).toBe(401);
     expect(verify).toHaveBeenCalledWith('secret-1', 'stored-hash');
+  });
+
+  test('disabled clients return generic invalid_client after secret verification', async () => {
+    const verify = mock(async () => true);
+    const app = buildApp({
+      adapter: {
+        getM2MClient: async () => ({
+          id: 'client-1',
+          clientId: 'client-1',
+          clientSecretHash: 'stored-hash',
+          name: 'Client One',
+          scopes: ['read'],
+          active: false,
+        }),
+      },
+      password: {
+        hash: async () => 'unused',
+        verify,
+      },
+    });
+    const response = await app.request('/oauth/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'client_credentials',
+        client_id: 'client-1',
+        client_secret: 'secret-1',
+      }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: 'invalid_client',
+      error_description: 'Invalid client credentials',
+    });
+    expect(verify).toHaveBeenCalledWith('secret-1', 'stored-hash');
+  });
+
+  test('applies a validated client/IP rate limit after parsing', async () => {
+    const attempts: string[] = [];
+    const app = buildApp({
+      rateLimit: {
+        trackAttempt: async (key: string) => {
+          attempts.push(key);
+          return key.includes(':client-1');
+        },
+      },
+    });
+    const response = await app.request('/oauth/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'client_credentials',
+        client_id: 'client-1',
+        client_secret: 'secret-1',
+      }),
+    });
+
+    expect(response.status).toBe(429);
+    expect(attempts.some(key => key.endsWith(':client-1'))).toBe(true);
   });
 
   test('returns rate_limit_exceeded before parsing the request body when throttled', async () => {

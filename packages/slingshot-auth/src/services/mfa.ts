@@ -4,12 +4,17 @@ import { HttpError } from '@lastshotlabs/slingshot-core';
 import {
   decryptField,
   encryptField,
+  hmacSign,
   isEncryptedField,
   sha256,
   timingSafeEqual,
 } from '@lastshotlabs/slingshot-core';
 import { publishAuthEvent } from '../eventGovernance';
+import { getSigningSecret } from '../infra/signing';
 import type { AuthRuntimeContext } from '../runtime';
+
+const RECOVERY_CODE_HASH_PREFIX = 'mfa-recovery:v2:';
+const RECOVERY_CODE_LENGTH = 12;
 
 /**
  * Lazily imports the `otpauth` package.
@@ -62,19 +67,19 @@ function generateRandomCode(length: number): string {
  * Generates a set of one-time MFA recovery codes.
  *
  * The count is determined by `config.mfa.recoveryCodes` (defaults to 10).
- * Each plain code is 8 characters from the unambiguous alphabet (see
- * `generateRandomCode`).  The function returns both the plain codes (shown
- * once to the user) and their SHA-256 hashes (stored in the adapter).
+ * Each plain code is 12 characters from the unambiguous alphabet (see
+ * `generateRandomCode`). The function returns both the plain codes (shown
+ * once to the user) and versioned HMAC-SHA256 hashes (stored in the adapter).
  *
  * @param runtime - The active auth runtime context (provides config and encryption keys).
  * @returns An object containing `plainCodes` (show to user once) and
  *   `hashedCodes` (store in the adapter).
  *
  * @remarks
- * Recovery codes are hashed with SHA-256 before storage so a database breach
- * does not expose working codes.  The plain codes are never persisted and
- * cannot be recovered after this function returns — the user must store them
- * immediately.
+ * Recovery codes are hashed with a server-side pepper before storage so a
+ * database-only breach cannot brute-force the short human-entered codes offline.
+ * The plain codes are never persisted and cannot be recovered after this function
+ * returns — the user must store them immediately.
  */
 function generateRecoveryCodes(runtime: AuthRuntimeContext): {
   plainCodes: string[];
@@ -84,11 +89,41 @@ function generateRecoveryCodes(runtime: AuthRuntimeContext): {
   const plainCodes: string[] = [];
   const hashedCodes: string[] = [];
   for (let i = 0; i < count; i++) {
-    const plain = generateRandomCode(8);
+    const plain = generateRandomCode(RECOVERY_CODE_LENGTH);
     plainCodes.push(plain);
-    hashedCodes.push(sha256(plain));
+    hashedCodes.push(hashRecoveryCode(plain, runtime));
   }
   return { plainCodes, hashedCodes };
+}
+
+function normalizeRecoveryCode(code: string): string {
+  return code.toUpperCase().replace(/[\s-]/g, '');
+}
+
+function getRecoveryCodePepper(runtime: AuthRuntimeContext): string | null {
+  const signingSecret = getSigningSecret(runtime.signing);
+  if (signingSecret) return Array.isArray(signingSecret) ? signingSecret[0] : signingSecret;
+  const [dek] = runtime.dataEncryptionKeys;
+  return dek ? dek.key.toString('base64url') : null;
+}
+
+function hashRecoveryCode(code: string, runtime: AuthRuntimeContext): string {
+  const pepper = getRecoveryCodePepper(runtime);
+  if (!pepper) {
+    throw new HttpError(
+      500,
+      'MFA recovery code hashing requires a signing secret or data encryption key',
+    );
+  }
+  return `${RECOVERY_CODE_HASH_PREFIX}${hmacSign(normalizeRecoveryCode(code), pepper)}`;
+}
+
+function recoveryCodeHashCandidates(code: string, runtime: AuthRuntimeContext): string[] {
+  const normalized = normalizeRecoveryCode(code);
+  const candidates = [sha256(normalized)];
+  const pepper = getRecoveryCodePepper(runtime);
+  if (pepper) candidates.unshift(`${RECOVERY_CODE_HASH_PREFIX}${hmacSign(normalized, pepper)}`);
+  return candidates;
 }
 
 // ---------------------------------------------------------------------------
@@ -272,23 +307,29 @@ export const verifyRecoveryCode = async (
   runtime: AuthRuntimeContext,
 ): Promise<boolean> => {
   const { adapter } = runtime;
-  const hashedInput = sha256(code.toUpperCase());
+  const candidates = recoveryCodeHashCandidates(code, runtime);
 
   // Fetch stored hashes and perform timing-safe comparison at the application level
   // before consuming, adding defense-in-depth against hash enumeration timing.
   if (adapter.getRecoveryCodes) {
     const storedHashes = await adapter.getRecoveryCodes(userId);
-    let matched = false;
+    let matchedHash: string | null = null;
     // Iterate all codes to maintain constant time regardless of match position
     for (const stored of storedHashes) {
-      if (timingSafeEqual(stored, hashedInput)) {
-        matched = true;
+      for (const candidate of candidates) {
+        if (timingSafeEqual(stored, candidate)) {
+          matchedHash = stored;
+        }
       }
     }
-    if (!matched) return false;
+    if (!matchedHash) return false;
+    return adapter.consumeRecoveryCode(userId, matchedHash);
   }
 
-  return adapter.consumeRecoveryCode(userId, hashedInput);
+  for (const candidate of candidates) {
+    if (await adapter.consumeRecoveryCode(userId, candidate)) return true;
+  }
+  return false;
 };
 
 export const disableMfa = async (

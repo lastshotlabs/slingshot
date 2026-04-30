@@ -4,6 +4,10 @@
  * Evaluates filter AST nodes against in-memory documents.
  */
 import type { SearchFilter, SearchFilterCondition } from '../types/query';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-search:filterEval' } });
 
 /**
  * Retrieve a possibly-nested value from a plain object using dot-notation.
@@ -195,7 +199,7 @@ export function evaluateFilter(doc: Record<string, unknown>, filter: SearchFilte
   // Unknown node type — return false (matches nothing) rather than true.
   // Over-inclusion is more dangerous than under-inclusion for security-relevant
   // filter evaluation. Log a warning so misconfigured filters are discoverable.
-  console.warn(
+  logger.warn(
     '[slingshot-search] evaluateFilter: unknown filter node type encountered — returning false (no match). Node keys:',
     Object.keys(filter),
   );

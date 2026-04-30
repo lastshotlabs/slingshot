@@ -20,6 +20,11 @@ const scimReadOpts = { windowMs: 60_000, max: 100 };
  */
 const scimWriteOpts = { windowMs: 60_000, max: 30 };
 
+async function revokeUserSessions(runtime: AuthRuntimeContext, userId: string): Promise<void> {
+  const sessions = await runtime.repos.session.getUserSessions(userId, runtime.config);
+  await Promise.all(sessions.map(session => runtime.repos.session.deleteSession(session.sessionId, runtime.config)));
+}
+
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
 /**
@@ -713,7 +718,9 @@ export function createScimRouter(runtime: AuthRuntimeContext) {
       }
 
       if (adapter.setSuspended && body.active !== undefined) {
-        await adapter.setSuspended(userId, !body.active);
+        const suspended = !body.active;
+        await adapter.setSuspended(userId, suspended);
+        if (suspended) await revokeUserSessions(runtime, userId);
       }
 
       // Re-read user after modifications to return current state
@@ -768,6 +775,7 @@ export function createScimRouter(runtime: AuthRuntimeContext) {
       const existingUser = await adapter.getUser?.(userId);
       if (!existingUser) return c.json(scimErrorBody(404, 'User not found'), 404);
 
+      let shouldRevokeSessions = false;
       for (const op of operations) {
         const opType = op.op.toLowerCase();
 
@@ -780,6 +788,7 @@ export function createScimRouter(runtime: AuthRuntimeContext) {
               return c.json(scimErrorBody(400, 'active must be a boolean'), 400);
             }
             await adapter.setSuspended(userId, !active);
+            if (!active) shouldRevokeSessions = true;
           } else if (
             !op.path &&
             typeof value === 'object' &&
@@ -799,13 +808,16 @@ export function createScimRouter(runtime: AuthRuntimeContext) {
                 return c.json(scimErrorBody(400, 'active must be a boolean'), 400);
               }
               await adapter.setSuspended(userId, !bulkActive);
+              if (!bulkActive) shouldRevokeSessions = true;
             }
             if (Object.keys(fields).length > 0) await adapter.updateProfile(userId, fields);
           }
         } else if (opType === 'remove' && op.path === 'active' && adapter.setSuspended) {
           await adapter.setSuspended(userId, true);
+          shouldRevokeSessions = true;
         }
       }
+      if (shouldRevokeSessions) await revokeUserSessions(runtime, userId);
 
       const user = (await adapter.getUser?.(userId)) ?? existingUser;
 
@@ -859,6 +871,7 @@ export function createScimRouter(runtime: AuthRuntimeContext) {
 
       if (typeof onDeprovision === 'function') {
         await onDeprovision(userId);
+        await revokeUserSessions(runtime, userId);
       } else if (onDeprovision === 'delete') {
         if (!adapter.deleteUser) {
           return c.json(
@@ -881,6 +894,7 @@ export function createScimRouter(runtime: AuthRuntimeContext) {
           );
         }
         await adapter.setSuspended(userId, true, 'SCIM deprovisioned');
+        await revokeUserSessions(runtime, userId);
       }
 
       return c.body(null, 204);

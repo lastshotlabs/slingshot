@@ -1,9 +1,8 @@
-import { getSecureCookieName } from '@auth/lib/cookieOptions';
+import { readAuthCookie } from '@auth/lib/cookieOptions';
 import { isProd } from '@auth/lib/env';
 import { verifyToken } from '@auth/lib/jwt';
 import { getSuspended } from '@auth/lib/suspension';
 import type { MiddlewareHandler } from 'hono';
-import { getCookie } from 'hono/cookie';
 import type { Actor, AppEnv } from '@lastshotlabs/slingshot-core';
 import {
   ANONYMOUS_ACTOR,
@@ -19,6 +18,10 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import { getClientIp } from '@lastshotlabs/slingshot-core';
 import { AUTH_RUNTIME_KEY, type AuthRuntimeContext } from '../runtime';
+
+function readBearerToken(header: string | undefined): string | null {
+  return header?.startsWith('Bearer ') ? header.slice(7) : null;
+}
 
 function computeFingerprint(
   c: Parameters<MiddlewareHandler<AppEnv>>[0],
@@ -42,7 +45,8 @@ function computeFingerprint(
  * `@lastshotlabs/slingshot-core`.
  *
  * Processing steps (in order):
- * 1. **Token extraction** — checks `COOKIE_TOKEN` first, falls back to `HEADER_USER_TOKEN`.
+ * 1. **Token extraction** — checks the auth cookie first, then `x-user-token`, then
+ *    `Authorization: Bearer <token>`.
  *    Initialises all identity context variables to `null` before processing.
  * 2. **JWT verification** — verifies the token's signature and expiry using the configured
  *    signing secret (supports rotating secrets via `string[]`).
@@ -160,13 +164,11 @@ export const createIdentifyMiddleware =
     let resolvedClientId: string | null = null;
     let resolvedTokenPayload: Record<string, unknown> | null = null;
 
-    // cookie for browsers, x-user-token header for non-browser clients
-    // Try the __Host- prefixed name first (production), then fall back to the plain name
-    const cookieName = getSecureCookieName(COOKIE_TOKEN, isProd(), authConfig);
+    // cookie for browsers, x-user-token/Authorization headers for non-browser clients
     const token =
-      getCookie(c, cookieName) ??
-      getCookie(c, COOKIE_TOKEN) ??
+      readAuthCookie(c, COOKIE_TOKEN, isProd(), authConfig) ??
       c.req.header(HEADER_USER_TOKEN) ??
+      readBearerToken(c.req.header('Authorization')) ??
       null;
     log(`[identify] token=${token ? 'present' : 'absent'}`);
 
@@ -181,9 +183,16 @@ export const createIdentifyMiddleware =
         const sessionId = payload.sid as string | undefined;
         if (!sessionId) {
           // Check for M2M token (scope present, no sid)
-          if (payload.scope && payload.sub) {
-            resolvedClientId = payload.sub;
-            log(`[identify] M2M token for clientId=${payload.sub}`);
+          if (payload.scope && typeof payload.sub === 'string' && payload.sub.length > 0) {
+            const client = authConfig.m2m
+              ? await authRuntime.adapter.getM2MClient?.(payload.sub)
+              : null;
+            if (client?.active) {
+              resolvedClientId = payload.sub;
+              log(`[identify] M2M token for clientId=${payload.sub}`);
+            } else {
+              log('[identify] M2M token rejected — client missing, disabled, or M2M disabled');
+            }
           } else {
             log('[identify] token missing sid claim — unauthenticated');
           }

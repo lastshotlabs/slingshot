@@ -20,6 +20,10 @@ import type {
 import type { SearchFilter, SearchQuery, SearchSort, SuggestQuery } from '../types/query';
 import type { SearchHit, SearchResponse, SuggestResponse } from '../types/response';
 import { stringifySearchValue } from './stringify';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
+const logger: Logger = createConsoleLogger({ base: { provider: 'slingshot-search:meilisearch' } });
 
 // ============================================================================
 // Internal HTTP client
@@ -349,7 +353,7 @@ export function searchFilterToMeilisearchFilter(filter: SearchFilter): string {
       case 'STARTS_WITH':
         // Not natively supported in Meilisearch filters.
         // Cannot be translated — log a warning and return a no-op filter.
-        console.warn(
+        logger.warn(
           `[slingshot-search:meilisearch] STARTS_WITH filter is not supported by Meilisearch. Skipping filter on field '${field}'.`,
         );
         return `${field} EXISTS`;

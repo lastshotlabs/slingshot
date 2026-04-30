@@ -260,13 +260,20 @@ describe('passkey login — snapshot ApiClient ↔ slingshot', () => {
   });
 
   test('login-options returns same shape for unknown email (enumeration prevention)', async () => {
-    const known = await api.post<any>('/auth/passkey/login-options', {});
+    await setupUserWithPasskey('known-passkey@example.com');
+    tokenStore.value = null;
+
+    const known = await api.post<any>('/auth/passkey/login-options', {
+      identifier: 'known-passkey@example.com',
+    });
     const ghost = await api.post<any>('/auth/passkey/login-options', {
-      email: 'ghost@example.com',
+      identifier: 'ghost@example.com',
     });
     expect(known.passkeyToken).toBeString();
     expect(ghost.passkeyToken).toBeString();
     expect(known.passkeyToken).not.toBe(ghost.passkeyToken);
+    expect(known.options.allowCredentials).toEqual([]);
+    expect(ghost.options.allowCredentials).toEqual([]);
   });
 
   test('full flow: login-options → login → /auth/me', async () => {

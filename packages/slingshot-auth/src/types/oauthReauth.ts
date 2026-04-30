@@ -10,5 +10,6 @@ export interface OAuthReauthState {
 
 export interface OAuthReauthConfirmation {
   userId: string;
+  sessionId: string;
   purpose: string;
 }

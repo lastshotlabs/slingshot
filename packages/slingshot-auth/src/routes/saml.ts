@@ -239,11 +239,8 @@ export function createSamlRouter(
       throw new HttpError(400, 'SAML response missing required InResponseTo attribute');
     }
 
-    // Validate the stored request ID was actually issued by us (anti-replay).
     if (!runtime.repos.samlRequestId)
       throw new HttpError(500, 'SAML request ID store not configured');
-    const valid = await consumeSamlRequestId(runtime.repos.samlRequestId, inResponseTo);
-    if (!valid) throw new HttpError(401, 'Invalid or replayed SAML response');
 
     let samlProfile;
     try {
@@ -252,6 +249,11 @@ export function createSamlRouter(
       if (err instanceof HttpError) throw err;
       throw new HttpError(401, 'Invalid SAML assertion');
     }
+
+    // Consume the request ID only after assertion validation. Invalid forged
+    // callbacks must not burn a legitimate pending login attempt.
+    const valid = await consumeSamlRequestId(runtime.repos.samlRequestId, inResponseTo);
+    if (!valid) throw new HttpError(401, 'Invalid or replayed SAML response');
 
     const loginContext = hookCtx(c);
     await runPreLoginHook(samlProfile.email ?? samlProfile.nameId, runtime, loginContext);

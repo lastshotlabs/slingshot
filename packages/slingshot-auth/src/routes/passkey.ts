@@ -13,19 +13,6 @@ import { COOKIE_REFRESH_TOKEN, COOKIE_TOKEN } from '@lastshotlabs/slingshot-core
 import type { HookContext } from '../config/authConfig';
 import type { AuthRuntimeContext } from '../runtime';
 
-/**
- * Subset of WebAuthn authenticator transport identifiers understood by
- * `@simplewebauthn/server`. Matches the W3C WebAuthn Level 2 `AuthenticatorTransport`
- * enum values supported by the library.
- *
- * - `'usb'`      — USB security key (e.g. YubiKey).
- * - `'ble'`      — Bluetooth Low Energy authenticator.
- * - `'nfc'`      — NFC tap-to-sign authenticator.
- * - `'internal'` — Platform authenticator (Touch ID, Face ID, Windows Hello).
- * - `'hybrid'`   — Cross-device authenticator via QR code / caBLE.
- */
-type AuthenticatorTransport = 'usb' | 'ble' | 'nfc' | 'internal' | 'hybrid';
-
 const tags = ['Passkey'];
 
 const hookCtx = (c: Context): HookContext => ({
@@ -55,10 +42,10 @@ const hookCtx = (c: Context): HookContext => ({
  * @remarks
  * `POST /auth/passkey/login-options` is enumeration-safe: it always returns valid-looking
  * authentication options regardless of whether the provided `identifier` maps to a real
- * account. When a matching account is found its registered credential IDs are included in
- * `allowCredentials` to give the authenticator a hint, which makes the native prompt
- * faster. The returned `passkeyToken` is a single-use challenge token (120s TTL) that
- * must be passed to `POST /auth/passkey/login` along with the assertion response.
+ * account. It deliberately does not return account-specific `allowCredentials` hints,
+ * because those hints reveal whether an identifier has registered credentials. The returned
+ * `passkeyToken` is a single-use challenge token (120s TTL) that must be passed to
+ * `POST /auth/passkey/login` along with the assertion response.
  * Passkey login still honors `emailVerification.required` for email-primary apps; a user
  * whose email address is not verified cannot bypass that policy by authenticating with
  * WebAuthn.
@@ -68,7 +55,6 @@ const hookCtx = (c: Context): HookContext => ({
  * app.route('/', router);
  */
 export const createPasskeyRouter = (runtime: AuthRuntimeContext) => {
-  const { adapter } = runtime;
   const getConfig = () => runtime.config;
   const router = createRouter();
 
@@ -91,7 +77,7 @@ export const createPasskeyRouter = (runtime: AuthRuntimeContext) => {
                   .string()
                   .optional()
                   .describe(
-                    'Optional primary identifier hint (email, username, or phone). When provided and found, restricts the credential list for a faster prompt. Never reveals whether the account exists.',
+                    'Optional primary identifier hint accepted for client compatibility. The response never includes account-specific credential hints.',
                   ),
               }),
             },
@@ -139,42 +125,10 @@ export const createPasskeyRouter = (runtime: AuthRuntimeContext) => {
       const mfaConfig = getConfig().mfa;
       if (!mfaConfig?.webauthn) throw new Error('WebAuthn is not configured');
       const webauthnConfig = mfaConfig.webauthn;
-      // Resolve credential hints for the email (enumeration-safe: ignore all errors/misses)
-      let allowCredentials: { id: string; transports?: string[] }[] = [];
-      try {
-        let body: { identifier?: string } = {};
-        try {
-          body = c.req.valid('json');
-        } catch {
-          /* body is optional */
-        }
-        const email = body.identifier;
-        if (email && adapter.getWebAuthnCredentials) {
-          const findFn = (id: string) =>
-            adapter.findByIdentifier ? adapter.findByIdentifier(id) : adapter.findByEmail(id);
-          const user = await findFn(email);
-          if (user) {
-            const creds = await adapter.getWebAuthnCredentials(user.id);
-            allowCredentials = creds.map(cr => ({
-              id: cr.credentialId,
-              transports: cr.transports as string[],
-            }));
-          }
-        }
-      } catch {
-        // Enumeration protection: swallow all errors, proceed with empty credential list
-      }
 
       const { generateAuthenticationOptions } = await import('@simplewebauthn/server');
       const options = await generateAuthenticationOptions({
         rpID: webauthnConfig.rpId,
-        allowCredentials:
-          allowCredentials.length > 0
-            ? allowCredentials.map(ac => ({
-                id: ac.id,
-                transports: ac.transports as AuthenticatorTransport[],
-              }))
-            : undefined,
         userVerification: webauthnConfig.userVerification ?? 'required',
         timeout: webauthnConfig.timeout ?? 60000,
       });

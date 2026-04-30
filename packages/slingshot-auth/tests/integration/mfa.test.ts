@@ -248,8 +248,10 @@ describe('MFA routes', () => {
       expect(body.recoveryCodes.length).toBe(10); // default count
       for (const rc of body.recoveryCodes) {
         expect(rc).toBeString();
-        expect(rc.length).toBe(8);
+        expect(rc.length).toBe(12);
       }
+      const stored = await runtime.adapter.getRecoveryCodes?.(userId);
+      expect(stored?.every(hash => hash.startsWith('mfa-recovery:v2:'))).toBe(true);
     });
 
     test('returns 401 for invalid TOTP code', async () => {

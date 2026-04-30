@@ -245,7 +245,7 @@ function isEndpointRuntimeAdapter(value: unknown): value is EndpointRuntimeAdapt
 
 function requireEndpointRuntimeAdapter(value: BareEntityAdapter): EndpointRuntimeAdapter {
   if (!isEndpointRuntimeAdapter(value)) {
-    throw new Error('[slingshot-webhooks] endpoint adapter runtime hooks are missing');
+    throw new WebhookRuntimeError('endpoint adapter runtime hooks are missing');
   }
   return value;
 }
@@ -285,7 +285,7 @@ function requireNextCursor(
 
 function requireDeliveryRuntimeAdapter(value: BareEntityAdapter): DeliveryRuntimeAdapter {
   if (!isDeliveryRuntimeAdapter(value)) {
-    throw new Error('[slingshot-webhooks] delivery adapter runtime hooks are missing');
+    throw new WebhookRuntimeError('delivery adapter runtime hooks are missing');
   }
   return value;
 }
@@ -1340,7 +1340,7 @@ export function createWebhooksManifestRuntime(
     const params = (input ?? {}) as Record<string, unknown>;
     const deliveryAdapter = deliveryAdapterRef;
     if (!deliveryAdapter) {
-      throw new Error('[slingshot-webhooks] delivery adapter not ready');
+      throw new WebhookRuntimeError('delivery adapter not ready');
     }
     const id = typeof params.id === 'string' ? params.id : '';
     const status = params.status;

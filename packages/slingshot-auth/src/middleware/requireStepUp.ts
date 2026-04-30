@@ -1,7 +1,8 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { HttpError, getActor } from '@lastshotlabs/slingshot-core';
+import { HttpError } from '@lastshotlabs/slingshot-core';
 import { getAuthRuntimeFromRequest } from '../runtime';
+import { getAuthenticatedUserActor } from './userAuth';
 
 /**
  * Options for the step-up MFA middleware.
@@ -58,7 +59,7 @@ export interface StepUpOptions {
 export const requireStepUp =
   (opts?: StepUpOptions): MiddlewareHandler<AppEnv> =>
   async (c, next) => {
-    const sessionId = getActor(c).sessionId;
+    const sessionId = getAuthenticatedUserActor(c)?.sessionId;
     if (!sessionId) {
       throw new HttpError(401, 'Authentication required');
     }

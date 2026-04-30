@@ -12,6 +12,7 @@ const tags = ['M2M'];
  * 30 requests per minute per client IP.
  */
 const m2mTokenOpts = { windowMs: 60_000, max: 30 };
+const m2mTokenClientOpts = { windowMs: 60_000, max: 10 };
 
 /**
  * Validates the request body for `POST /oauth/token` (OAuth 2.0 client credentials grant).
@@ -176,6 +177,16 @@ export function createM2MRouter(runtime: AuthRuntimeContext) {
         scope,
       } = validated.data;
 
+      if (await runtime.rateLimit.trackAttempt(`m2m-token:${ip}:${clientId}`, m2mTokenClientOpts)) {
+        return c.json(
+          {
+            error: 'rate_limit_exceeded',
+            error_description: 'Too many token requests. Try again later.',
+          },
+          429,
+        );
+      }
+
       if (grantType !== 'client_credentials') {
         return c.json(
           { error: 'unsupported_grant_type', error_description: 'Unsupported grant type' },
@@ -194,23 +205,13 @@ export function createM2MRouter(runtime: AuthRuntimeContext) {
       }
 
       const client = await adapter.getM2MClient(clientId);
-      if (!client) {
+      const hashToVerify = client?.clientSecretHash ?? (await runtime.getDummyHash());
+      const secretValid = await runtime.password.verify(clientSecret, hashToVerify);
+      if (!client || !secretValid || !client.active) {
         return c.json(
           { error: 'invalid_client', error_description: 'Invalid client credentials' },
           401,
         );
-      }
-
-      const secretValid = await runtime.password.verify(clientSecret, client.clientSecretHash);
-      if (!secretValid) {
-        return c.json(
-          { error: 'invalid_client', error_description: 'Invalid client credentials' },
-          401,
-        );
-      }
-
-      if (!client.active) {
-        return c.json({ error: 'invalid_client', error_description: 'Client is disabled' }, 401);
       }
 
       const configuredScopes = config.m2m?.scopes;

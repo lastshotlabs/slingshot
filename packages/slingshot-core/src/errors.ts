@@ -1,6 +1,33 @@
 import type { z } from 'zod';
 
 /**
+ * Base error class for all Slingshot errors.
+ *
+ * Carries a machine-readable `code` string for programmatic discrimination
+ * and an optional `cause` for error chaining. Feature packages should extend
+ * this class (or one of the HTTP-aware subclasses) rather than throwing
+ * generic `Error` instances.
+ *
+ * @example
+ * ```ts
+ * import { SlingshotError } from '@lastshotlabs/slingshot-core';
+ *
+ * throw new SlingshotError('CONFIG_INVALID', 'mountPath must start with /');
+ * ```
+ */
+export class SlingshotError extends Error {
+  readonly code: string;
+  override readonly cause?: Error;
+
+  constructor(code: string, message: string, cause?: Error) {
+    super(message);
+    this.name = 'SlingshotError';
+    this.code = code;
+    this.cause = cause;
+  }
+}
+
+/**
  * A typed HTTP error that carries a status code and optional machine-readable error code.
  *
  * Thrown from route handlers or middleware when a request cannot be fulfilled.

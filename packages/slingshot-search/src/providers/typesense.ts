@@ -21,6 +21,10 @@ import type {
 import type { SearchFilter, SearchQuery, SearchSort, SuggestQuery } from '../types/query';
 import type { SearchHit, SearchResponse, SuggestResponse } from '../types/response';
 import { stringifyDocumentId, stringifySearchValue } from './stringify';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
+const logger: Logger = createConsoleLogger({ base: { provider: 'slingshot-search:typesense' } });
 
 // ============================================================================
 // Internal HTTP client
@@ -453,7 +457,7 @@ export function searchFilterToTypesenseFilter(filter: SearchFilter): string {
         return `${field}:!=''`;
 
       case 'STARTS_WITH':
-        console.warn(
+        logger.warn(
           `[slingshot-search:typesense] STARTS_WITH filter is not natively supported. Using equality as approximation for field '${field}'.`,
         );
         return `${field}:=${formatTypesenseValue(value)}`;

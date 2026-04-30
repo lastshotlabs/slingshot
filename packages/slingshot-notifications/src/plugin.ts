@@ -14,7 +14,9 @@ import {
   publishPluginState,
   resolveRepo,
   validatePluginConfig,
+  createConsoleLogger,
 } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import type { EntityPluginEntry } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity/routing';
@@ -36,6 +38,8 @@ import type {
 } from './types';
 import type { NotificationsPluginConfig } from './types/config';
 import { notificationsPluginConfigSchema } from './types/config';
+
+const pluginLogger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-notifications' } });
 
 type AdapterResult = BareEntityAdapter;
 type ActorParam = { 'actor.id': string };
@@ -253,7 +257,7 @@ export function createNotificationsPlugin(
       try {
         await notifications.list({ limit: 1 });
       } catch (err) {
-        console.error(
+        pluginLogger.error(
           '[slingshot-notifications] Failed to pre-warm notifications storage; first dedupOrCreate may fail',
           err,
         );
@@ -298,7 +302,7 @@ export function createNotificationsPlugin(
           try {
             await adapter.deliver(event);
           } catch (err) {
-            console.error(
+            pluginLogger.error(
               `[slingshot-notifications] Delivery adapter [${adapterIndex}] threw for notification "${event.notification.id}"`,
               err,
             );
@@ -359,14 +363,14 @@ export function createNotificationsPlugin(
               try {
                 await notifications.delete(row.id);
               } catch (err) {
-                console.error(
+                pluginLogger.error(
                   `[slingshot-notifications] expiry sweep delete failed for id=${row.id}`,
                   err,
                 );
               }
             }
           } catch (err) {
-            console.error('[slingshot-notifications] expiry sweep failed', err);
+            pluginLogger.error('[slingshot-notifications] expiry sweep failed', err);
           }
         };
         // Fire-and-forget initial sweep so apps that just enabled TTL get

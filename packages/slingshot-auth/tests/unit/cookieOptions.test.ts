@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { Hono } from 'hono';
 import { createAuthResolvedConfig } from '../../src/config/authConfig';
 import {
   getAuthCookieOptions,
   getCsrfCookieOptions,
   getSecureCookieName,
+  readAuthCookie,
 } from '../../src/lib/cookieOptions';
 
 const defaultConfig = createAuthResolvedConfig({});
@@ -25,6 +27,28 @@ describe('getSecureCookieName', () => {
   test('no prefix when path is not /', () => {
     const config = createAuthResolvedConfig({ authCookie: { path: '/api' } });
     expect(getSecureCookieName('session', true, config)).toBe('session');
+  });
+});
+
+describe('readAuthCookie', () => {
+  test('production __Host cookie does not fall back to legacy plain cookie', async () => {
+    const app = new Hono();
+    app.get('/', c => c.json({ value: readAuthCookie(c, 'session', true, defaultConfig) }));
+
+    const res = await app.request('/', {
+      headers: { cookie: 'session=legacy-token' },
+    });
+    expect(await res.json()).toEqual({ value: null });
+  });
+
+  test('development reads the plain cookie name', async () => {
+    const app = new Hono();
+    app.get('/', c => c.json({ value: readAuthCookie(c, 'session', false, defaultConfig) }));
+
+    const res = await app.request('/', {
+      headers: { cookie: 'session=dev-token' },
+    });
+    expect(await res.json()).toEqual({ value: 'dev-token' });
   });
 });
 

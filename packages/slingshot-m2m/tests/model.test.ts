@@ -9,7 +9,7 @@ describe('createM2MClientModel', () => {
       model: mock(() => existingModel),
     };
 
-    const model = createM2MClientModel(conn as never, {} as never);
+    const model = createM2MClientModel(conn as never, {} as never) as unknown;
 
     expect(model).toBe(existingModel);
     expect(conn.model).toHaveBeenCalledWith('M2MClient');
@@ -35,11 +35,12 @@ describe('createM2MClientModel', () => {
       model: mock((_name: string, _schema?: unknown) => createdModel),
     };
 
-    const model = createM2MClientModel(conn as never, { Schema: MockSchema } as never);
+    const model = createM2MClientModel(conn as never, { Schema: MockSchema } as never) as unknown;
 
     expect(model).toBe(createdModel);
     expect(conn.model).toHaveBeenCalledTimes(1);
-    expect(conn.model.mock.calls[0]?.[0]).toBe('M2MClient');
+    const [firstCall] = conn.model.mock.calls as unknown as Array<[string, unknown?]>;
+    expect(firstCall[0]).toBe('M2MClient');
     expect(createdSchemas[0]?.options).toEqual({ timestamps: true });
     expect(createdSchemas[0]?.definition).toMatchObject({
       clientId: { type: String, required: true, unique: true },

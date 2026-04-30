@@ -1,18 +1,24 @@
 import type { MiddlewareHandler } from 'hono';
-import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import { getActorId } from '@lastshotlabs/slingshot-core';
+import type { Actor, AppEnv } from '@lastshotlabs/slingshot-core';
+import { getActor } from '@lastshotlabs/slingshot-core';
+
+export function getAuthenticatedUserActor(c: Parameters<typeof getActor>[0]): Actor | null {
+  const actor = getActor(c);
+  return actor.kind === 'user' && actor.id ? actor : null;
+}
 
 /**
  * Hono middleware that enforces authentication on a route.
  *
- * Checks that the current actor has a non-null identity (via `getActorId(c)`) as resolved
- * by the `identify` middleware (which runs globally and resolves the user from the session
- * cookie or bearer token). Returns `401 Unauthorized` when no authenticated user is present.
+ * Checks that the current actor is an interactive user (`actor.kind === 'user'`) with a
+ * non-null ID as resolved by the `identify` middleware. Machine-to-machine service
+ * accounts and static API-key actors are intentionally rejected; use M2M scope guards
+ * or bearer auth for those routes instead.
  *
  * @remarks
  * This middleware does **not** verify the JWT itself — that is done by `identify` during
- * the `setupMiddleware` phase. `userAuth` is a lightweight gate that simply checks whether
- * identification succeeded.
+ * the `setupMiddleware` phase. `userAuth` is a lightweight gate that checks whether
+ * identification succeeded as a user actor.
  *
  * @example
  * import { userAuth } from '@lastshotlabs/slingshot-auth';
@@ -27,7 +33,7 @@ import { getActorId } from '@lastshotlabs/slingshot-core';
  * app.delete('/admin/users/:id', userAuth, requireRole('admin'), handler);
  */
 export const userAuth: MiddlewareHandler<AppEnv> = async (c, next) => {
-  if (!getActorId(c)) {
+  if (!getAuthenticatedUserActor(c)) {
     return c.json({ error: 'Unauthorized' }, 401);
   }
   await next();

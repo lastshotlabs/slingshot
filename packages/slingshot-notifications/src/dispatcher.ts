@@ -267,7 +267,7 @@ export function createIntervalDispatcher(
     const ts = now();
     if (ts - lastPendingAlarmAt < pendingAlarmThrottleMs) return;
     lastPendingAlarmAt = ts;
-    console.warn(
+    logger.warn(
       '[slingshot-notifications] Dispatcher pending saturation: ' +
         `observed ${observed}${isExact ? '' : '+ (lower bound)'} pending notifications, ` +
         `threshold ${maxPendingBeforeAlarm}. ` +
@@ -343,7 +343,7 @@ export function createIntervalDispatcher(
     try {
       await dispatcher.tick();
     } catch (err) {
-      console.error('[slingshot-notifications] Dispatcher tick failed', err);
+      logger.error('[slingshot-notifications] Dispatcher tick failed', err);
     } finally {
       inflightTick = null;
       resolve();
@@ -388,7 +388,7 @@ export function createIntervalDispatcher(
           }),
         ]);
       } catch (err) {
-        console.error(
+        logger.error(
           '[slingshot-notifications] Dispatcher stop(): inflight tick did not settle',
           err,
         );
@@ -431,7 +431,7 @@ export function createIntervalDispatcher(
             maybeWarnPendingSaturation(exact, true);
           } catch (err) {
             // Counting is best-effort — never let it break dispatch.
-            console.error(
+            logger.error(
               '[slingshot-notifications] Dispatcher countPendingDispatch failed (continuing)',
               err,
             );
@@ -530,7 +530,7 @@ export function createIntervalDispatcher(
               // row.id is generated server-side but originates ultimately
               // from a notification create call; sanitize so a hostile
               // identifier cannot split the log line.
-              console.error(
+              logger.error(
                 `[slingshot-notifications] Failed to roll back '${sanitizeLogValue(row.id)}' after stop()`,
                 rollbackErr,
               );
@@ -589,12 +589,12 @@ export function createIntervalDispatcher(
                 dispatchedAt: null,
               });
             } catch (rollbackErr) {
-              console.error(
+              logger.error(
                 `[slingshot-notifications] Failed to roll back dispatched state for notification '${safeRowId}'`,
                 rollbackErr,
               );
             }
-            console.error(
+            logger.error(
               `[slingshot-notifications] Failed to publish notification '${safeRowId}' after marking it dispatched`,
               lastErr,
             );

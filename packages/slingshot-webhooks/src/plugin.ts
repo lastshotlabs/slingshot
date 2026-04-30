@@ -10,6 +10,7 @@ import {
   HeaderInjectionError,
   SafeFetchBlockedError,
   SafeFetchDnsError,
+  createConsoleLogger,
   createNoopMetricsEmitter,
   deepFreeze,
   getActor,
@@ -19,6 +20,7 @@ import {
   publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import type { DispatchOptions } from './lib/dispatcher';
 import { deliverWebhook } from './lib/dispatcher';
 import { wireEventSubscriptions } from './lib/eventWiring';
@@ -435,7 +437,8 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
                 'allowPlaintextSecrets: true if storage encryption is handled externally.',
             );
           }
-          console.warn(
+          const pluginLogger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-webhooks' } });
+          pluginLogger.warn(
             '[slingshot-webhooks] no secret encryption is configured. Endpoint secrets ' +
               'will be stored as plaintext. Set secretEncryptionKey to a base64 32-byte AES key, ' +
               'or supply a custom `encryptor`, before exposing this app to production traffic.',

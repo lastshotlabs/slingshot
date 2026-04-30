@@ -11,6 +11,7 @@ import {
   ANONYMOUS_ACTOR,
   type Actor,
   COOKIE_TOKEN,
+  HEADER_USER_TOKEN,
   HttpError,
   emitPackageStabilityWarning,
   getClientIpFromRequest,
@@ -24,6 +25,7 @@ import {
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { bootstrapAuth } from './bootstrap';
 import type { BootstrapResult } from './bootstrap';
+import type { AuthResolvedConfig } from './config/authConfig';
 import { registerAuthEventDefinitions } from './eventGovernance';
 import { createAccountGuard } from './guards/accountGuard';
 import { createMemoryCacheAdapter } from './lib/cache';
@@ -31,6 +33,7 @@ import { templates } from './lib/emailTemplates';
 import { isProd } from './lib/env';
 import { buildFingerprint } from './lib/fingerprint';
 import { validateJwtSecrets, verifyToken } from './lib/jwt';
+import { getSecureCookieName } from './lib/cookieOptions';
 import { getSuspended } from './lib/suspension';
 import { createBearerAuth } from './middleware/bearerAuth';
 import { csrfProtection } from './middleware/csrf';
@@ -47,6 +50,39 @@ export type { AuthPluginConfig };
 
 type FrameworkRedisClient = ConnectionOptions & Redis;
 type FrameworkMongoConn = { auth: Connection | null; app: Connection | null };
+
+function readCookieHeaderValue(cookieHeader: string | null, name: string): string | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(';')) {
+    const trimmed = part.trim();
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    if (trimmed.slice(0, eq) !== name) continue;
+    const value = trimmed.slice(eq + 1);
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  return null;
+}
+
+function readBearerToken(header: string | null): string | null {
+  return header?.startsWith('Bearer ') ? header.slice(7) : null;
+}
+
+function readAuthCookieHeaderValue(
+  cookieHeader: string | null,
+  baseName: string,
+  production: boolean,
+  config: AuthResolvedConfig,
+): string | null {
+  const secureName = getSecureCookieName(baseName, production, config);
+  const secureValue = readCookieHeaderValue(cookieHeader, secureName);
+  if (secureValue || (production && secureName !== baseName)) return secureValue;
+  return readCookieHeaderValue(cookieHeader, baseName);
+}
 
 /**
  * Creates the slingshot-auth plugin instance for use with `createApp()`, `createServer()`,
@@ -509,18 +545,42 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
       registrar.setRequestActorResolver({
         async resolveActor(req: Request): Promise<Actor> {
           try {
-            const url = new URL(req.url);
+            const production = isProd();
+            const cookieHeader = req.headers.get('cookie');
             const token =
-              req.headers
-                .get('cookie')
-                ?.match(new RegExp(`(?:^|;\\s*)${COOKIE_TOKEN}=([^;]+)`))?.[1] ??
-              url.searchParams.get('token') ??
-              null;
+              readAuthCookieHeaderValue(cookieHeader, COOKIE_TOKEN, production, runtime.config) ??
+              req.headers.get(HEADER_USER_TOKEN) ??
+              readBearerToken(req.headers.get('authorization'));
             if (!token) return ANONYMOUS_ACTOR;
             const payload = await verifyToken(token, runtime.config, runtime.signing);
             const sessionId = payload.sid as string | undefined;
             const userId = payload.sub;
-            if (!sessionId || !userId) return ANONYMOUS_ACTOR;
+            const tenantId =
+              typeof payload['tenantId'] === 'string'
+                ? (payload['tenantId'] as string)
+                : typeof payload['tid'] === 'string'
+                  ? (payload['tid'] as string)
+                  : null;
+            const roles = Array.isArray(payload['roles']) ? (payload['roles'] as string[]) : null;
+
+            if (!sessionId) {
+              if (payload.scope && typeof userId === 'string' && userId.length > 0) {
+                const client = runtime.config.m2m
+                  ? await runtime.adapter.getM2MClient?.(userId)
+                  : null;
+                if (!client?.active) return ANONYMOUS_ACTOR;
+                return {
+                  id: userId,
+                  kind: 'service-account',
+                  tenantId,
+                  sessionId: null,
+                  roles,
+                  claims: {},
+                };
+              }
+              return ANONYMOUS_ACTOR;
+            }
+            if (!userId) return ANONYMOUS_ACTOR;
             const stored = await runtime.repos.session.getSession(sessionId, runtime.config);
             if (!timingSafeEqual(stored ?? '', token)) return ANONYMOUS_ACTOR;
 
@@ -563,14 +623,6 @@ export function createAuthPlugin(rawConfig: AuthPluginConfig): StandalonePlugin 
               }
               throw err;
             }
-
-            const tenantId =
-              typeof payload['tenantId'] === 'string'
-                ? (payload['tenantId'] as string)
-                : typeof payload['tid'] === 'string'
-                  ? (payload['tid'] as string)
-                  : null;
-            const roles = Array.isArray(payload['roles']) ? (payload['roles'] as string[]) : null;
 
             return {
               id: userId,

@@ -5,9 +5,13 @@ import {
   SafeFetchBlockedError,
   SafeFetchDnsError,
   type SafeFetchOptions,
+  createConsoleLogger,
   createSafeFetch,
   sanitizeHeaderValue,
 } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-webhooks' } });
 import { WebhookDeliveryError } from '../types/queue';
 import type { WebhookJob } from '../types/queue';
 import { signPayload } from './signing';
@@ -172,7 +176,7 @@ export async function deliverWebhook(
   if (!allowPrivateIps) {
     validateWebhookUrl(job.url);
   } else {
-    console.warn(
+    logger.warn(
       `[slingshot-webhooks] allowPrivateIps=true bypassed SSRF protection for delivery="${job.deliveryId}" url="${job.url}". This must never happen in production.`,
     );
   }

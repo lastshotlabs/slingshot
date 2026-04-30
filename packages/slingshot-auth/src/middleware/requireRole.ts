@@ -1,8 +1,9 @@
 import type { MiddlewareHandler } from 'hono';
 import type { Actor, AppEnv } from '@lastshotlabs/slingshot-core';
-import { getActor, getActorId, getActorTenantId } from '@lastshotlabs/slingshot-core';
+import { getActor, getActorTenantId } from '@lastshotlabs/slingshot-core';
 import { isProd } from '../lib/env';
 import { getAuthRuntimeFromRequest } from '../runtime';
+import { getAuthenticatedUserActor } from './userAuth';
 
 async function getEffectiveRoles(
   adapter: import('@lastshotlabs/slingshot-core').AuthAdapter,
@@ -47,10 +48,11 @@ async function getEffectiveRoles(
 export const requireRole = Object.assign(
   (...roles: string[]): MiddlewareHandler<AppEnv> =>
     async (c, next) => {
-      const userId = getActorId(c);
-      if (!userId) {
+      const actor = getAuthenticatedUserActor(c);
+      if (!actor) {
         return c.json({ error: 'Unauthorized' }, 401);
       }
+      const userId = actor.id;
 
       const runtime = getAuthRuntimeFromRequest(c);
       // Prefer actor tenantId, but fall back to raw context — tenant can be set
@@ -85,10 +87,11 @@ export const requireRole = Object.assign(
     global:
       (...roles: string[]): MiddlewareHandler<AppEnv> =>
       async (c, next) => {
-        const userId = getActorId(c);
-        if (!userId) {
+        const actor = getAuthenticatedUserActor(c);
+        if (!actor) {
           return c.json({ error: 'Unauthorized' }, 401);
         }
+        const userId = actor.id;
 
         const runtime = getAuthRuntimeFromRequest(c);
         // In development, log when tenant context is present but intentionally ignored.

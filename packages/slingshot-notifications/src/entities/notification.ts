@@ -1,6 +1,9 @@
-import { defineEntity, field, index } from '@lastshotlabs/slingshot-core';
+import { defineEntity, field, index, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
 import type { NotificationRecord } from '../types';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-notifications:entity' } });
 
 function toDate(value: Date | string | null | undefined): Date | null {
   if (value == null) return null;
@@ -20,7 +23,7 @@ function warnCorruptRowData(rowId: unknown, entityHint: string | undefined, err:
   lastParseWarnAt = ts;
   const message = err instanceof Error ? err.message : String(err);
   const id = typeof rowId === 'string' || typeof rowId === 'number' ? String(rowId) : 'unknown';
-  console.warn(
+  logger.warn(
     `[slingshot-notifications] Corrupt notification row.data — ignoring (rowId=${id}` +
       (entityHint ? `, entity=${entityHint}` : '') +
       `): ${message}. Further occurrences within ${PARSE_WARN_THROTTLE_MS}ms suppressed.`,

@@ -88,6 +88,7 @@ describe('storeReauthConfirmation / consumeReauthConfirmation', () => {
   test('round-trip: stores and retrieves confirmation data', async () => {
     const code = await storeReauthConfirmation(repo, {
       userId: 'user-2',
+      sessionId: 'session-2',
       purpose: 'change_password',
     });
     expect(typeof code).toBe('string');
@@ -96,12 +97,14 @@ describe('storeReauthConfirmation / consumeReauthConfirmation', () => {
     const data = await consumeReauthConfirmation(repo, code);
     expect(data).not.toBeNull();
     expect(data!.userId).toBe('user-2');
+    expect(data!.sessionId).toBe('session-2');
     expect(data!.purpose).toBe('change_password');
   });
 
   test('code is single-use: second consume returns null', async () => {
     const code = await storeReauthConfirmation(repo, {
       userId: 'user-3',
+      sessionId: 'session-3',
       purpose: 'delete_account',
     });
     const first = await consumeReauthConfirmation(repo, code);
@@ -117,19 +120,37 @@ describe('storeReauthConfirmation / consumeReauthConfirmation', () => {
   });
 
   test('two separate codes are independent', async () => {
-    const code1 = await storeReauthConfirmation(repo, { userId: 'user-a', purpose: 'op-a' });
-    const code2 = await storeReauthConfirmation(repo, { userId: 'user-b', purpose: 'op-b' });
+    const code1 = await storeReauthConfirmation(repo, {
+      userId: 'user-a',
+      sessionId: 'session-a',
+      purpose: 'op-a',
+    });
+    const code2 = await storeReauthConfirmation(repo, {
+      userId: 'user-b',
+      sessionId: 'session-b',
+      purpose: 'op-b',
+    });
 
     const data1 = await consumeReauthConfirmation(repo, code1);
     const data2 = await consumeReauthConfirmation(repo, code2);
 
     expect(data1!.userId).toBe('user-a');
     expect(data2!.userId).toBe('user-b');
+    expect(data1!.sessionId).toBe('session-a');
+    expect(data2!.sessionId).toBe('session-b');
   });
 
   test('consuming code1 does not affect code2', async () => {
-    const code1 = await storeReauthConfirmation(repo, { userId: 'user-x', purpose: 'x' });
-    const code2 = await storeReauthConfirmation(repo, { userId: 'user-y', purpose: 'y' });
+    const code1 = await storeReauthConfirmation(repo, {
+      userId: 'user-x',
+      sessionId: 'session-x',
+      purpose: 'x',
+    });
+    const code2 = await storeReauthConfirmation(repo, {
+      userId: 'user-y',
+      sessionId: 'session-y',
+      purpose: 'y',
+    });
 
     await consumeReauthConfirmation(repo, code1);
     const data2 = await consumeReauthConfirmation(repo, code2);

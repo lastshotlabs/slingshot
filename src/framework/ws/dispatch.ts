@@ -50,7 +50,12 @@ export async function handleIncomingEvent(
   };
 
   // 3. Auth check
-  if (config.auth === 'userAuth' || config.auth === 'bearer') {
+  if (config.auth === 'userAuth') {
+    if (context.actor.kind !== 'user' || !context.actor.id) {
+      sendAck(ws, ackId, { error: 'unauthenticated' });
+      return true;
+    }
+  } else if (config.auth === 'bearer') {
     if (!context.actor.id) {
       sendAck(ws, ackId, { error: 'unauthenticated' });
       return true;

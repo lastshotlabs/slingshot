@@ -26,21 +26,22 @@ type TestRuntime = ReturnType<typeof makeTestRuntime>;
 function buildApp(
   runtime: TestRuntime,
   userId: string,
-  sessionId: string,
+  sessionId: string | null,
   providers: string[] = ['google'],
   rateLimit?: { oauthUnlink?: { max: number; windowMs: number } },
+  actorKind: 'user' | 'service-account' | 'api-key' = 'user',
 ) {
   const app = wrapWithRuntime(runtime);
   // userAuth reads actor — pre-set it here so it passes.
   app.use('*', async (c, next) => {
     c.set(
       'actor',
-      Object.freeze({
-        id: userId,
-        kind: 'user' as const,
-        tenantId: null,
-        sessionId,
-        roles: null,
+        Object.freeze({
+          id: userId,
+          kind: actorKind,
+          tenantId: null,
+          sessionId,
+          roles: null,
         claims: {},
       }),
     );
@@ -192,7 +193,6 @@ describe('OAuth unlink — rate limiting', () => {
     const { id: userId } = await runtime.adapter.create('cross-rl@example.com', '');
 
     // Mount both google and github unlink routes with max=2.
-    // Apple is intentionally not used here — Apple has no DELETE unlink route.
     const app = buildApp(runtime, userId, 'sess-cross', ['google', 'github'], {
       oauthUnlink: { max: 2, windowMs: 60_000 },
     });
@@ -204,5 +204,29 @@ describe('OAuth unlink — rate limiting', () => {
     // Third attempt via a different provider — same user, same counter → 429
     const res = await app.request('/auth/github/link', { method: 'DELETE' });
     expect(res.status).toBe(429);
+  });
+});
+
+describe('OAuth unlink — provider coverage and actor semantics', () => {
+  test('Apple linked accounts can be unlinked', async () => {
+    const runtime = makeTestRuntime();
+    const { id: userId } = await runtime.adapter.create('apple-unlink@example.com', '');
+    await runtime.adapter.linkProvider!(userId, 'apple', 'apple-sub-1');
+    const app = buildApp(runtime, userId, 'sess-apple', ['apple']);
+
+    const res = await app.request('/auth/apple/link', { method: 'DELETE' });
+    expect(res.status).toBe(204);
+    const user = await runtime.adapter.getUser?.(userId);
+    expect(user?.providerIds).not.toContain('apple:apple-sub-1');
+  });
+
+  test('service-account actors cannot use user OAuth unlink routes', async () => {
+    const runtime = makeTestRuntime();
+    const { id: userId } = await runtime.adapter.create('svc-unlink@example.com', '');
+    await runtime.adapter.linkProvider!(userId, 'google', 'g-sub-svc');
+    const app = buildApp(runtime, userId, null, ['google'], undefined, 'service-account');
+
+    const res = await app.request('/auth/google/link', { method: 'DELETE' });
+    expect(res.status).toBe(401);
   });
 });

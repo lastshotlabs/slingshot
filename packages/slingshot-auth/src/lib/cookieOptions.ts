@@ -38,8 +38,12 @@ export function getSecureCookieName(
 }
 
 /**
- * Reads an auth cookie, preferring the hardened `__Host-` name when applicable and
- * falling back to the plain name for backward-compatible cleanup and migration.
+ * Reads an auth cookie, preferring the hardened `__Host-` name when applicable.
+ *
+ * In production, when the effective cookie name is `__Host-${baseName}`, the
+ * legacy plain name is deliberately ignored. Accepting both names after hardening
+ * re-opens cookie tossing/session fixation paths from sibling or parent domains.
+ * Development and non-`__Host-` configurations still read the base name.
  *
  * @param c - Hono context or compatible cookie source.
  * @param baseName - The base cookie name (e.g. `'token'`, `'refresh_token'`).
@@ -54,7 +58,9 @@ export function readAuthCookie(
   config: AuthResolvedConfig,
 ): string | null {
   const secureName = getSecureCookieName(baseName, isProduction, config);
-  return getCookie(c, secureName) ?? getCookie(c, baseName) ?? null;
+  const secureValue = getCookie(c, secureName);
+  if (secureValue || (isProduction && secureName !== baseName)) return secureValue ?? null;
+  return getCookie(c, baseName) ?? null;
 }
 
 /**

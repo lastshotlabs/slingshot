@@ -247,7 +247,10 @@ export function buildSubscribeGuard(
     // Auth check
     const auth = declaration.auth ?? 'none';
     let actor: Actor | null = null;
-    if (auth === 'userAuth' || auth === 'bearer') {
+    if (auth === 'userAuth') {
+      actor = deps.getActor(ws);
+      if (!actor || actor.kind !== 'user' || !actor.id) return false;
+    } else if (auth === 'bearer') {
       actor = deps.getActor(ws);
       if (!actor || actor.kind === 'anonymous' || !actor.id) return false;
     }

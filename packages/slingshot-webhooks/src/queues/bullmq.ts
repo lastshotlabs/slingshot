@@ -5,9 +5,14 @@ import type {
   Worker as BullWorker,
 } from 'bullmq';
 import type { Redis } from 'ioredis';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+import { WebhookConfigError, WebhookStateError } from '../errors/webhookErrors';
 import { WEBHOOKS_PLUGIN_STATE_KEY } from '../types/public';
 import type { WebhookJob, WebhookQueue } from '../types/queue';
 import { WebhookDeliveryError } from '../types/queue';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-webhooks:bullmq-queue' } });
 
 /**
  * Configuration for `createBullMQWebhookQueue`.
@@ -65,7 +70,7 @@ type WebhookJobData = Omit<WebhookJob, 'id' | 'createdAt' | 'attempts'>;
 
 function requireJobId(id: string | number | undefined | null): string {
   if (id == null) {
-    throw new Error('BullMQ returned a job without an id');
+    throw new WebhookStateError('BullMQ returned a job without an id');
   }
   return String(id);
 }
@@ -115,7 +120,7 @@ async function loadBullMQModule(): Promise<{
     const interop = bullmq as unknown as typeof bullmq & { default?: typeof bullmq };
     namespace = interop.default ?? bullmq;
   } catch {
-    throw new Error('BullMQ webhook queue requires bullmq to be installed. Run: bun add bullmq');
+    throw new WebhookConfigError('BullMQ webhook queue requires bullmq to be installed. Run: bun add bullmq');
   }
 
   const { Queue, Worker, UnrecoverableError } = namespace;
@@ -124,7 +129,7 @@ async function loadBullMQModule(): Promise<{
     typeof Worker !== 'function' ||
     typeof UnrecoverableError !== 'function'
   ) {
-    throw new Error(
+    throw new WebhookConfigError(
       'BullMQ webhook queue requires bullmq Queue, Worker, and UnrecoverableError exports',
     );
   }
@@ -139,12 +144,12 @@ async function loadIORedisModule(): Promise<typeof Redis> {
     const ioredis = await import('ioredis');
     namespace = ioredis as { default?: typeof Redis; Redis?: typeof Redis };
   } catch {
-    throw new Error('BullMQ webhook queue requires ioredis to be installed. Run: bun add ioredis');
+    throw new WebhookConfigError('BullMQ webhook queue requires ioredis to be installed. Run: bun add ioredis');
   }
 
   const IORedis = namespace.default ?? namespace.Redis;
   if (typeof IORedis !== 'function') {
-    throw new Error('BullMQ webhook queue requires ioredis to export a Redis constructor');
+    throw new WebhookConfigError('BullMQ webhook queue requires ioredis to export a Redis constructor');
   }
 
   return IORedis;
@@ -185,7 +190,7 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
   return {
     name: 'bullmq',
     async enqueue(jobInput: Omit<WebhookJob, 'id' | 'createdAt'>): Promise<string> {
-      if (!queue) throw new Error('BullMQ webhook queue not started - call start() first');
+      if (!queue) throw new WebhookStateError('BullMQ webhook queue not started - call start() first');
       const job = await queue.add('deliver', jobInput, {
         attempts: maxAttempts,
         backoff: { type: 'exponential', delay: retryBaseDelayMs },
@@ -194,7 +199,7 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
     },
     async start(processor: (job: WebhookJob) => Promise<void>): Promise<void> {
       if (queue || worker || connection) {
-        throw new Error('BullMQ webhook queue already started');
+        throw new WebhookStateError('BullMQ webhook queue already started');
       }
 
       const { Queue: QueueCtor, Worker: WorkerCtor, UnrecoverableError } = await loadBullMQModule();
@@ -209,9 +214,8 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
           await redis.ping();
           return redis;
         } catch (err) {
-          throw new Error(
+          throw new WebhookConfigError(
             `BullMQ webhook queue: failed to connect to Redis (${redactRedisTarget(config.redis)}): ${err instanceof Error ? err.message : String(err)}`,
-            { cause: err },
           );
         }
       })();
@@ -277,7 +281,7 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
             };
             if (config.onDeadLetter) {
               void Promise.resolve(config.onDeadLetter(webhookJob, err)).catch(callbackErr => {
-                console.error('[slingshot-webhooks] onDeadLetter handler failed', callbackErr);
+                logger.error('[slingshot-webhooks] onDeadLetter handler failed', callbackErr);
               });
             }
           }

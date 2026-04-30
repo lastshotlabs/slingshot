@@ -638,18 +638,18 @@ export function createKafkaAdapter(
     );
   }
   if (config.sasl && !config.ssl) {
-    console.warn(
+    logger.warn(
       '[KafkaAdapter] SASL configured without SSL. Credentials will travel in plaintext.',
     );
   }
   if (config.ssl && config.ssl !== true && config.ssl.rejectUnauthorized === false) {
-    console.warn(
+    logger.warn(
       '[KafkaAdapter] ssl.rejectUnauthorized=false disables broker certificate verification. ' +
         'Use only for local development or controlled test environments.',
     );
   }
   if (config.autoCreateTopics && config.replicationFactor === 1) {
-    console.warn(
+    logger.warn(
       '[KafkaAdapter] autoCreateTopics=true with replicationFactor=1 is convenient for local development ' +
         'but is not a production-safe default. Prefer pre-provisioned topics or replicationFactor >= 3.',
     );
@@ -777,7 +777,7 @@ export function createKafkaAdapter(
     drainTimer = setTimeout(() => {
       drainTimer = null;
       void drainPendingBuffer().catch(err => {
-        console.error('[KafkaAdapter] failed to drain pending buffer:', err);
+        logger.error('[KafkaAdapter] failed to drain pending buffer:', err);
       });
     }, DRAIN_INTERVAL_MS);
   }
@@ -894,7 +894,7 @@ export function createKafkaAdapter(
   ): void {
     const key = event as string;
     if (isShutdown) {
-      console.warn('[KafkaAdapter] onEnvelope() called after shutdown, ignoring.');
+      logger.warn('[KafkaAdapter] onEnvelope() called after shutdown, ignoring.');
       return;
     }
 
@@ -1165,12 +1165,12 @@ export function createKafkaAdapter(
     try {
       await entry.consumer.commitOffsets(toCommit);
       partitionMap.clear();
-      console.info(
+      logger.info(
         `[KafkaAdapter] flushed ${toCommit.length} pending offset(s) for ` +
           `event="${entry.event}" group="${entry.groupId}" before rebalance`,
       );
     } catch (err) {
-      console.error(
+      logger.error(
         `[KafkaAdapter] failed to flush pending offsets during rebalance for "${entry.groupId}":`,
         err,
       );
@@ -1244,7 +1244,7 @@ export function createKafkaAdapter(
     };
 
     if (!message.value) {
-      console.warn(
+      logger.warn(
         `[KafkaAdapter] null message value on topic "${topic}" partition ${partition} ` +
           `offset ${message.offset}; skipping`,
       );
@@ -1399,7 +1399,7 @@ export function createKafkaAdapter(
   } = {
     emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
       if (isShutdown) {
-        console.warn('[KafkaAdapter] emit() called after shutdown, ignoring.');
+        logger.warn('[KafkaAdapter] emit() called after shutdown, ignoring.');
         return;
       }
 
@@ -1422,14 +1422,14 @@ export function createKafkaAdapter(
           try {
             result = listener(envelope as EventEnvelope);
           } catch (err) {
-            console.error(`[KafkaAdapter] listener error on event "${event}":`, err);
+            logger.error(`[KafkaAdapter] listener error on event "${event}":`, err);
             continue;
           }
           const promise = Promise.resolve(result);
           pendingHandlers.add(promise);
           promise
             .catch(err => {
-              console.error(`[KafkaAdapter] listener error on event "${event}":`, err);
+              logger.error(`[KafkaAdapter] listener error on event "${event}":`, err);
             })
             .finally(() => {
               pendingHandlers.delete(promise);
@@ -1543,7 +1543,7 @@ export function createKafkaAdapter(
       opts?: SubscriptionOpts,
     ): void {
       if (isShutdown) {
-        console.warn('[KafkaAdapter] on() called after shutdown, ignoring.');
+        logger.warn('[KafkaAdapter] on() called after shutdown, ignoring.');
         return;
       }
 
@@ -1761,7 +1761,7 @@ export function createKafkaAdapter(
     },
   });
 
-  console.info(
+  logger.info(
     `[KafkaAdapter] Adapter created — broker connectivity will be validated on first connect. Brokers: ${config.brokers.join(', ')}`,
   );
 

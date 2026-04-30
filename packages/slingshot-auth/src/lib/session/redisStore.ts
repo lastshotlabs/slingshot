@@ -5,7 +5,6 @@ import {
   getSessionTtlMs,
   getSessionTtlSeconds,
   isIdleExpired,
-  shouldPersistSessionMetadata,
 } from './policy';
 import type { SessionRepository } from './repository';
 import type { SessionInfo } from './types';
@@ -60,7 +59,7 @@ local key = KEYS[1]
 local field = ARGV[1]
 local value = ARGV[2]
 local valueType = ARGV[3]
-local persist = ARGV[4] == "1"
+local nowMs = tonumber(ARGV[4])
 
 local raw = redis.call('GET', key)
 if not raw then return 0 end
@@ -70,15 +69,15 @@ if valueType == "number" then
 else
   rec[field] = value
 end
-if persist then
-  redis.call('SET', key, cjson.encode(rec))
+local ttl = redis.call('PTTL', key)
+if ttl > 0 then
+  redis.call('SET', key, cjson.encode(rec), 'PX', ttl)
+elseif rec.expiresAt and rec.expiresAt > nowMs then
+  redis.call('SET', key, cjson.encode(rec), 'PX', rec.expiresAt - nowMs)
+elseif rec.expiresAt then
+  redis.call('DEL', key)
 else
-  local ttl = redis.call('PTTL', key)
-  if ttl > 0 then
-    redis.call('SET', key, cjson.encode(rec), 'PX', ttl)
-  else
-    redis.call('SET', key, cjson.encode(rec))
-  end
+  redis.call('SET', key, cjson.encode(rec))
 end
 return 1
 `;
@@ -86,17 +85,18 @@ return 1
   const WRITE_SESSION_LUA = `
 local key = KEYS[1]
 local rawJson = ARGV[1]
-local persist = ARGV[2] == "1"
+local nowMs = tonumber(ARGV[2])
 
-if persist then
-  redis.call('SET', key, rawJson)
+local rec = cjson.decode(rawJson)
+local ttl = redis.call('PTTL', key)
+if ttl > 0 then
+  redis.call('SET', key, rawJson, 'PX', ttl)
+elseif rec.expiresAt and rec.expiresAt > nowMs then
+  redis.call('SET', key, rawJson, 'PX', rec.expiresAt - nowMs)
+elseif rec.expiresAt then
+  redis.call('DEL', key)
 else
-  local ttl = redis.call('PTTL', key)
-  if ttl > 0 then
-    redis.call('SET', key, rawJson, 'PX', ttl)
-  else
-    redis.call('SET', key, rawJson)
-  end
+  redis.call('SET', key, rawJson)
 end
 return 1
 `;
@@ -110,14 +110,13 @@ local sessionId = ARGV[2]
 local sessionJson = ARGV[3]
 local createdAt = tonumber(ARGV[4])
 local ttlSeconds = tonumber(ARGV[5])
-local persist = ARGV[6] == "1"
 
 local members = redis.call('ZRANGE', userSessionsKey, 0, -1)
 
 local activeCount = 0
 local activeSessions = {}
 for i, sid in ipairs(members) do
-  local keyPrefix = ARGV[7]
+  local keyPrefix = ARGV[6]
   local sKey = keyPrefix .. sid
   local raw = redis.call('GET', sKey)
   if raw then
@@ -142,11 +141,7 @@ while activeCount >= maxSessions and evicted < #activeSessions do
   activeCount = activeCount - 1
 end
 
-if persist then
-  redis.call('SET', newSessionKey, sessionJson)
-else
-  redis.call('SET', newSessionKey, sessionJson, 'EX', ttlSeconds)
-end
+redis.call('SET', newSessionKey, sessionJson, 'EX', ttlSeconds)
 redis.call('ZADD', userSessionsKey, createdAt, sessionId)
 
 return evicted
@@ -156,14 +151,10 @@ return evicted
     sessionId: string,
     field: string,
     value: string | number,
-    persist?: boolean,
-    cfg?: AuthResolvedConfig,
   ): Promise<boolean> {
     const redis = getRedis();
     const key = sessionKey(sessionId);
     const valueType = typeof value === 'number' ? 'number' : 'string';
-    const persistFlag =
-      (persist ?? (cfg ?? DEFAULT_AUTH_CONFIG).persistSessionMetadata) ? '1' : '0';
     const result = await redis.eval(
       UPDATE_FIELD_LUA,
       1,
@@ -171,25 +162,14 @@ return evicted
       field,
       String(value),
       valueType,
-      persistFlag,
+      Date.now(),
     );
     return result === 1;
   }
 
-  async function writeSessionRecord(
-    sessionId: string,
-    record: Record<string, unknown>,
-    cfg?: AuthResolvedConfig,
-  ): Promise<void> {
+  async function writeSessionRecord(sessionId: string, record: Record<string, unknown>): Promise<void> {
     const redis = getRedis();
-    const persistFlag = shouldPersistSessionMetadata(cfg) ? '1' : '0';
-    await redis.eval(
-      WRITE_SESSION_LUA,
-      1,
-      sessionKey(sessionId),
-      JSON.stringify(record),
-      persistFlag,
-    );
+    await redis.eval(WRITE_SESSION_LUA, 1, sessionKey(sessionId), JSON.stringify(record), Date.now());
   }
 
   async function deleteSessionImpl(sessionId: string, cfg?: AuthResolvedConfig): Promise<void> {
@@ -216,7 +196,7 @@ return evicted
         prevRefreshToken: null,
         prevTokenExpiresAt: null,
       };
-      await redis.set(sessionKey(sessionId), JSON.stringify(updated));
+      await writeSessionRecord(sessionId, updated);
     } else {
       await redis.del(sessionKey(sessionId));
     }
@@ -292,12 +272,7 @@ return evicted
         userAgent: metadata?.userAgent,
       });
       const redis = getRedis();
-      const persist = c.persistSessionMetadata;
-      if (persist) {
-        await redis.set(sessionKey(sessionId), record);
-      } else {
-        await redis.set(sessionKey(sessionId), record, 'EX', ttlSeconds);
-      }
+      await redis.set(sessionKey(sessionId), record, 'EX', ttlSeconds);
       await redis.zadd(userSessionsKey(userId), now, sessionId);
     },
 
@@ -317,7 +292,6 @@ return evicted
         userAgent: metadata?.userAgent,
       });
       const redis = getRedis();
-      const persist = c.persistSessionMetadata;
       const sessionKeyPrefix = `session:${appName}:`;
 
       await redis.eval(
@@ -330,7 +304,6 @@ return evicted
         record,
         now,
         ttlSeconds,
-        persist ? '1' : '0',
         sessionKeyPrefix,
       );
     },
@@ -386,7 +359,7 @@ return evicted
     async updateSessionLastActive(sessionId, cfg?) {
       const c = cfg ?? DEFAULT_AUTH_CONFIG;
       const now = Date.now();
-      const updated = await updateSessionField(sessionId, 'lastActiveAt', now, undefined, c);
+      const updated = await updateSessionField(sessionId, 'lastActiveAt', now);
       if (!updated) return;
       if (!c.persistSessionMetadata) {
         const redis = getRedis();
@@ -410,7 +383,7 @@ return evicted
       rec.refreshToken = tokenHash;
       const refreshExpiry =
         (cfg ?? DEFAULT_AUTH_CONFIG).refreshToken?.refreshTokenExpiry ?? 2_592_000;
-      await writeSessionRecord(sessionId, rec, cfg);
+      await writeSessionRecord(sessionId, rec);
       if (oldHash && oldHash !== tokenHash) {
         await redis.del(refreshTokenKey(oldHash));
       }
@@ -497,14 +470,13 @@ return evicted
       rec.refreshToken = newHash;
       rec.token = newAccessToken;
 
-      await writeSessionRecord(sessionId, rec, c);
+      await writeSessionRecord(sessionId, rec);
       await redis.set(refreshTokenKey(newHash), sessionId, 'EX', refreshExpiry);
       if (oldPrevHash && oldPrevHash !== oldHash) {
         await redis.del(refreshTokenKey(oldPrevHash));
       }
       if (oldHash) {
-        const oldKeyTtl = Math.max(graceSeconds, 60);
-        await redis.expire(refreshTokenKey(oldHash), oldKeyTtl);
+        await redis.expire(refreshTokenKey(oldHash), Math.max(graceSeconds, 1));
       }
       return true;
     },

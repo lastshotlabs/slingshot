@@ -142,4 +142,31 @@ describe('CSRF double-submit cookie validation', () => {
     );
     expect(res.status).toBe(200);
   });
+
+  test('protected auth endpoints are not bypassed by broad publicPaths', async () => {
+    const runtime2 = makeTestRuntime();
+    const app2 = wrapWithRuntime(runtime2);
+    app2.use('*', async (c, next) => {
+      const ctx = c.get('slingshotCtx') as Record<string, unknown>;
+      c.set('slingshotCtx', { ...ctx, publicPaths: new Set(['/auth/*']) } as never);
+      await next();
+    });
+    app2.use(
+      '*',
+      csrfProtection({
+        signing: { secret: SIGNING_SECRET },
+        protectedUnauthenticatedPaths: ['/auth/login'],
+      }),
+    );
+    app2.post('/auth/login', c => c.json({ ok: true }));
+
+    const res = await app2.fetch(
+      new Request('http://localhost/auth/login', {
+        method: 'POST',
+      }),
+    );
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/missing/i);
+  });
 });

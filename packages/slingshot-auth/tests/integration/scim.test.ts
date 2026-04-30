@@ -65,6 +65,7 @@ describe('SCIM deprovisioning modes', () => {
 
   test('onDeprovision="suspend" suspends the user and returns 204', async () => {
     const userId = await seedUser(runtime, 'alice@example.com');
+    await runtime.repos.session.createSession(userId, 'tok-1', 'sess-1', {}, runtime.config);
     const setSuspended = mock(runtime.adapter.setSuspended!.bind(runtime.adapter));
     runtime = {
       ...runtime,
@@ -77,6 +78,8 @@ describe('SCIM deprovisioning modes', () => {
 
     expect(res.status).toBe(204);
     expect(setSuspended).toHaveBeenCalledWith(userId, true, 'SCIM deprovisioned');
+    const sessions = await runtime.repos.session.getUserSessions(userId, runtime.config);
+    expect(sessions.filter(s => s.isActive)).toHaveLength(0);
   });
 
   test('onDeprovision="delete" deletes the user and revokes sessions, returns 204', async () => {
@@ -105,6 +108,7 @@ describe('SCIM deprovisioning modes', () => {
 
   test('onDeprovision=custom function — custom handler is called with the userId, returns 204', async () => {
     const userId = await seedUser(runtime, 'carol@example.com');
+    await runtime.repos.session.createSession(userId, 'tok-1', 'sess-1', {}, runtime.config);
     const customFn = mock(async () => {});
     runtime = {
       ...runtime,
@@ -119,6 +123,8 @@ describe('SCIM deprovisioning modes', () => {
 
     expect(res.status).toBe(204);
     expect(customFn).toHaveBeenCalledWith(userId);
+    const sessions = await runtime.repos.session.getUserSessions(userId, runtime.config);
+    expect(sessions.filter(s => s.isActive)).toHaveLength(0);
   });
   test('POST /scim/v2/Users with active=false suspends the provisioned user', async () => {
     const setSuspended = mock(runtime.adapter.setSuspended!.bind(runtime.adapter));

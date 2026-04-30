@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { StorageAdapter } from '@lastshotlabs/slingshot-core';
 import type { StorageAdapterRef } from '../types';
 import { type LocalStorageConfig, localStorage } from './local';
@@ -8,68 +9,56 @@ function isStorageAdapter(value: StorageAdapter | StorageAdapterRef): value is S
   return typeof Reflect.get(value, 'put') === 'function';
 }
 
-function readString(record: Readonly<Record<string, unknown>>, key: string): string | undefined {
-  const value = record[key];
-  return typeof value === 'string' ? value : undefined;
-}
+const localStorageConfigSchema = z.object({
+  directory: z.string(),
+  baseUrl: z.string().optional(),
+  fs: z.unknown().optional(),
+});
 
-function readBoolean(record: Readonly<Record<string, unknown>>, key: string): boolean | undefined {
-  const value = record[key];
-  return typeof value === 'boolean' ? value : undefined;
-}
+const s3CredentialsSchema = z.object({
+  accessKeyId: z.string(),
+  secretAccessKey: z.string(),
+});
+
+const s3StorageConfigSchema = z.object({
+  bucket: z.string(),
+  region: z.string().optional(),
+  endpoint: z.string().optional(),
+  publicUrl: z.string().optional(),
+  forcePathStyle: z.boolean().optional(),
+  streaming: z.boolean().optional(),
+  credentials: s3CredentialsSchema.optional(),
+});
 
 function parseLocalStorageConfig(
   config: Readonly<Record<string, unknown>> | undefined,
 ): LocalStorageConfig {
-  const directory = config ? readString(config, 'directory') : undefined;
-  if (!directory) {
-    throw new Error('[slingshot-assets] local storage requires a string `directory` config value');
+  if (!config || typeof config !== 'object') {
+    throw new Error('[slingshot-assets] local storage requires a config object with a string `directory`');
   }
-
-  const baseUrl = config ? readString(config, 'baseUrl') : undefined;
-  const fsValue = config?.['fs'];
-  const fs =
-    fsValue && typeof fsValue === 'object' ? (fsValue as LocalStorageConfig['fs']) : undefined;
-
-  return { directory, ...(baseUrl ? { baseUrl } : {}), ...(fs ? { fs } : {}) };
+  const parsed = localStorageConfigSchema.safeParse(config);
+  if (!parsed.success) {
+    throw new Error(`[slingshot-assets] local storage config invalid: ${parsed.error.message}`);
+  }
+  const { fs: _fs, ...rest } = parsed.data;
+  const result: LocalStorageConfig = { ...rest };
+  if (typeof config['fs'] === 'object' && config['fs'] !== null) {
+    result.fs = config['fs'] as LocalStorageConfig['fs'];
+  }
+  return result;
 }
 
 function parseS3StorageConfig(
   config: Readonly<Record<string, unknown>> | undefined,
 ): S3StorageConfig {
-  const bucket = config ? readString(config, 'bucket') : undefined;
-  if (!bucket) {
-    throw new Error('[slingshot-assets] s3 storage requires a string `bucket` config value');
+  if (!config || typeof config !== 'object') {
+    throw new Error('[slingshot-assets] s3 storage requires a config object with a string `bucket`');
   }
-
-  const region = config ? readString(config, 'region') : undefined;
-  const endpoint = config ? readString(config, 'endpoint') : undefined;
-  const publicUrl = config ? readString(config, 'publicUrl') : undefined;
-  const forcePathStyle = config ? readBoolean(config, 'forcePathStyle') : undefined;
-  const streaming = config ? readBoolean(config, 'streaming') : undefined;
-
-  const credentialsValue = config?.['credentials'];
-  let credentials: S3StorageConfig['credentials'] | undefined;
-  if (typeof credentialsValue === 'object' && credentialsValue !== null) {
-    const accessKeyId = readString(credentialsValue as Record<string, unknown>, 'accessKeyId');
-    const secretAccessKey = readString(
-      credentialsValue as Record<string, unknown>,
-      'secretAccessKey',
-    );
-    if (accessKeyId && secretAccessKey) {
-      credentials = { accessKeyId, secretAccessKey };
-    }
+  const parsed = s3StorageConfigSchema.safeParse(config);
+  if (!parsed.success) {
+    throw new Error(`[slingshot-assets] s3 storage config invalid: ${parsed.error.message}`);
   }
-
-  return {
-    bucket,
-    ...(region ? { region } : {}),
-    ...(endpoint ? { endpoint } : {}),
-    ...(publicUrl ? { publicUrl } : {}),
-    ...(forcePathStyle !== undefined ? { forcePathStyle } : {}),
-    ...(streaming !== undefined ? { streaming } : {}),
-    ...(credentials ? { credentials } : {}),
-  };
+  return parsed.data;
 }
 
 /** Optional override options for built-in adapter resolution. */

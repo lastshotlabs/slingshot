@@ -46,7 +46,7 @@ const tags = ['OAuth'];
 /** Returns the authenticated user's ID, or throws 401 if anonymous. */
 const requireUserId = (c: Context<AppEnv>): string => {
   const actor = getActor(c);
-  if (actor.kind === 'anonymous' || !actor.id)
+  if (actor.kind !== 'user' || !actor.id)
     throw new HttpError(401, 'Authenticated user required');
   return actor.id;
 };
@@ -68,6 +68,34 @@ const requireCodeVerifier = (
   return codeVerifier;
 };
 
+function appendRedirectParams(base: string, params: Record<string, string | undefined>): string {
+  try {
+    const url = new URL(base);
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) url.searchParams.set(key, value);
+    }
+    return url.toString();
+  } catch {
+    const entries = Object.entries(params).filter((entry): entry is [string, string] => {
+      return entry[1] !== undefined;
+    });
+    if (entries.length === 0) return base;
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}${entries
+      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+      .join('&')}`;
+  }
+}
+
+function publicOAuthErrorCode(err: unknown): string {
+  if (err instanceof HttpError) {
+    if (err.status === 401) return 'authentication_required';
+    if (err.status === 403) return 'access_denied';
+    if (err.status >= 500) return 'server_error';
+  }
+  return 'authentication_failed';
+}
+
 // `postLoginRedirect` is sourced from server-side config (passed into
 // `createOAuthRouter` at startup) and is never derived from OAuth callback query
 // parameters. `createOAuthPlugin` validates this value against the configured
@@ -78,7 +106,7 @@ const requireCodeVerifier = (
  * Runs the pre-login hook, finds or creates the user via `findOrCreateByProvider`,
  * creates a session, stores a one-time authorization code in the OAuth code repo,
  * and redirects to `postLoginRedirect?code=<code>`. On any error, redirects to
- * `postLoginRedirect?error=<message>` instead of returning a 4xx/5xx.
+ * `postLoginRedirect?error=<public-code>` instead of returning a 4xx/5xx.
  *
  * @param c - The Hono request context for the callback route.
  * @param runtime - The auth runtime context providing adapter, config, and repos.
@@ -165,14 +193,7 @@ const finishOAuth = async (
       return c.redirect(`${postLoginRedirect}${sep}code=${code}${userParam}`);
     }
   } catch (err) {
-    const message =
-      err instanceof HttpError
-        ? err.message
-        : err instanceof Error
-          ? err.message
-          : 'Authentication failed';
-    const sep = postLoginRedirect.includes('?') ? '&' : '?';
-    return c.redirect(`${postLoginRedirect}${sep}error=${encodeURIComponent(message)}`);
+    return c.redirect(appendRedirectParams(postLoginRedirect, { error: publicOAuthErrorCode(err) }));
   }
 };
 
@@ -361,6 +382,46 @@ export const createOAuthRouter = (
    */
   const consumeOAuthState = (state: string) => oauthStateStore.consume(state);
 
+  const encodeOAuthLinkContext = (userId: string, sessionId: string): string =>
+    `link:${encodeURIComponent(userId)}:${encodeURIComponent(sessionId)}`;
+
+  const parseOAuthLinkContext = (
+    value: string | undefined,
+  ): { userId: string; sessionId: string } | null => {
+    if (!value?.startsWith('link:')) return null;
+    const [encodedUserId, encodedSessionId] = value.slice('link:'.length).split(':');
+    if (!encodedUserId || !encodedSessionId) return null;
+    return {
+      userId: decodeURIComponent(encodedUserId),
+      sessionId: decodeURIComponent(encodedSessionId),
+    };
+  };
+
+  const finishProviderLink = async (
+    c: Context<AppEnv>,
+    storedLinkUserId: string | undefined,
+    provider: string,
+    providerUserId: string,
+  ) => {
+    const link = parseOAuthLinkContext(storedLinkUserId);
+    if (!link) return null;
+    const actor = getActor(c);
+    if (actor.kind !== 'user' || actor.id !== link.userId || actor.sessionId !== link.sessionId) {
+      return errorResponse(c, 'Authenticated session does not match OAuth link request', 401);
+    }
+    const blocked = await assertSensitiveOauthMutationAllowed(c, link.userId);
+    if (blocked) return blocked;
+    if (!adapter.linkProvider)
+      return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
+    await adapter.linkProvider(link.userId, provider, providerUserId);
+    eventBus.emit('security.auth.oauth.linked', {
+      userId: link.userId,
+      meta: { provider },
+    });
+    const sep = postLoginRedirect.includes('?') ? '&' : '?';
+    return c.redirect(`${postLoginRedirect}${sep}linked=${encodeURIComponent(provider)}`);
+  };
+
   /** Returns the Google Arctic provider, throwing if not configured. */
   const getGoogle = () => {
     if (!oauthProviders.google) throw new Error('Google OAuth not configured');
@@ -477,19 +538,9 @@ export const createOAuthRouter = (
           headers: { Authorization: `Bearer ${tokens.accessToken()}` },
         }).then(r => r.json())) as { sub: string; email?: string; name?: string; picture?: string };
 
-        if (stored.linkUserId) {
-          const blocked = await assertSensitiveOauthMutationAllowed(c, stored.linkUserId);
-          if (blocked) return blocked;
-          if (!adapter.linkProvider)
-            return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
-          await adapter.linkProvider(stored.linkUserId, 'google', info.sub);
-          eventBus.emit('security.auth.oauth.linked', {
-            userId: stored.linkUserId,
-            meta: { provider: 'google' },
-          });
-          const sep = postLoginRedirect.includes('?') ? '&' : '?';
-          return c.redirect(`${postLoginRedirect}${sep}linked=google`);
-        }
+        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'google', info.sub);
+        if (linkResponse) return linkResponse;
+        if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
         return finishOAuth(
           c,
@@ -533,9 +584,10 @@ export const createOAuthRouter = (
         const state = generateState();
         const codeVerifier = generateCodeVerifier();
         const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, codeVerifier, userId);
+        await storeOAuthState(state, codeVerifier, encodeOAuthLinkContext(userId, sessionId));
         const url = getGoogle().createAuthorizationURL(state, codeVerifier, [
           'openid',
           'profile',
@@ -671,19 +723,9 @@ export const createOAuthRouter = (
         const tokens = await getApple().validateAuthorizationCode(code);
         const claims = decodeIdToken(tokens.idToken()) as { sub: string; email?: string };
 
-        if (stored.linkUserId) {
-          const blocked = await assertSensitiveOauthMutationAllowed(c, stored.linkUserId);
-          if (blocked) return blocked;
-          if (!adapter.linkProvider)
-            return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
-          await adapter.linkProvider(stored.linkUserId, 'apple', claims.sub);
-          eventBus.emit('security.auth.oauth.linked', {
-            userId: stored.linkUserId,
-            meta: { provider: 'apple' },
-          });
-          const sep = postLoginRedirect.includes('?') ? '&' : '?';
-          return c.redirect(`${postLoginRedirect}${sep}linked=apple`);
-        }
+        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'apple', claims.sub);
+        if (linkResponse) return linkResponse;
+        if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
         // Apple only sends name on the very first sign-in
         const userJSON = form.get('user') as string | null;
@@ -735,11 +777,77 @@ export const createOAuthRouter = (
       async c => {
         const state = generateState();
         const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, undefined, userId);
+        await storeOAuthState(state, undefined, encodeOAuthLinkContext(userId, sessionId));
         const url = getApple().createAuthorizationURL(state, ['name', 'email']);
         return c.redirect(url.toString());
+      },
+    );
+
+    router.openapi(
+      withSecurity(
+        createRoute({
+          method: 'delete',
+          path: '/auth/apple/link',
+          summary: 'Unlink Apple account',
+          description:
+            'Removes the linked Apple OAuth account from the authenticated user. Requires a valid session and factor verification when the account has a password or MFA enabled.',
+          tags,
+          request: {
+            body: {
+              required: false,
+              content: { 'application/json': { schema: unlinkVerificationSchema } },
+              description:
+                'Factor verification (required when the account has a password or MFA enabled).',
+            },
+          },
+          responses: {
+            204: { description: 'Apple account unlinked successfully.' },
+            400: {
+              content: { 'application/json': { schema: OAuthErrorResponse } },
+              description: 'Verification is required but not provided.',
+            },
+            401: {
+              content: { 'application/json': { schema: OAuthErrorResponse } },
+              description: 'No valid session or invalid verification.',
+            },
+            403: {
+              content: { 'application/json': { schema: OAuthErrorResponse } },
+              description:
+                'Account is suspended or must verify its email before provider unlinking is allowed.',
+            },
+            429: {
+              content: { 'application/json': { schema: OAuthErrorResponse } },
+              description: 'Too many unlink attempts. Try again later.',
+            },
+            500: {
+              content: { 'application/json': { schema: OAuthErrorResponse } },
+              description: 'Auth adapter does not support unlinkProvider.',
+            },
+          },
+        }),
+        { cookieAuth: [] },
+        { userToken: [] },
+      ),
+      async c => {
+        if (!adapter.unlinkProvider) {
+          return errorResponse(c, 'Auth adapter does not support unlinkProvider', 500);
+        }
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
+        const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
+        if (blocked) return blocked;
+        if (await runtime.rateLimit.trackAttempt(`oauth-unlink:${userId}`, oauthUnlinkOpts)) {
+          return errorResponse(c, 'Too many unlink attempts. Try again later.', 429);
+        }
+        const body = c.req.valid('json');
+        const unlinkErr = await verifyUnlinkFactor(userId, sessionId, body);
+        if (unlinkErr) return errorResponse(c, unlinkErr.error, unlinkErr.status);
+        await adapter.unlinkProvider(userId, 'apple');
+        eventBus.emit('security.auth.oauth.unlinked', { userId, meta: { provider: 'apple' } });
+        return c.body(null, 204);
       },
     );
   }
@@ -819,19 +927,9 @@ export const createOAuthRouter = (
           userPrincipalName?: string;
         };
 
-        if (stored.linkUserId) {
-          const blocked = await assertSensitiveOauthMutationAllowed(c, stored.linkUserId);
-          if (blocked) return blocked;
-          if (!adapter.linkProvider)
-            return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
-          await adapter.linkProvider(stored.linkUserId, 'microsoft', info.id);
-          eventBus.emit('security.auth.oauth.linked', {
-            userId: stored.linkUserId,
-            meta: { provider: 'microsoft' },
-          });
-          const sep = postLoginRedirect.includes('?') ? '&' : '?';
-          return c.redirect(`${postLoginRedirect}${sep}linked=microsoft`);
-        }
+        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'microsoft', info.id);
+        if (linkResponse) return linkResponse;
+        if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
         return finishOAuth(
           c,
@@ -875,9 +973,10 @@ export const createOAuthRouter = (
         const state = generateState();
         const codeVerifier = generateCodeVerifier();
         const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, codeVerifier, userId);
+        await storeOAuthState(state, codeVerifier, encodeOAuthLinkContext(userId, sessionId));
         const url = getMicrosoft().createAuthorizationURL(state, codeVerifier, [
           'openid',
           'profile',
@@ -1033,19 +1132,9 @@ export const createOAuthRouter = (
             emails.find(e => e.primary && e.verified)?.email ?? emails.find(e => e.verified)?.email;
         }
 
-        if (stored.linkUserId) {
-          const blocked = await assertSensitiveOauthMutationAllowed(c, stored.linkUserId);
-          if (blocked) return blocked;
-          if (!adapter.linkProvider)
-            return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
-          await adapter.linkProvider(stored.linkUserId, 'github', String(info.id));
-          eventBus.emit('security.auth.oauth.linked', {
-            userId: stored.linkUserId,
-            meta: { provider: 'github' },
-          });
-          const sep = postLoginRedirect.includes('?') ? '&' : '?';
-          return c.redirect(`${postLoginRedirect}${sep}linked=github`);
-        }
+        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'github', String(info.id));
+        if (linkResponse) return linkResponse;
+        if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
         return finishOAuth(
           c,
@@ -1088,9 +1177,10 @@ export const createOAuthRouter = (
       async c => {
         const state = generateState();
         const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, undefined, userId);
+        await storeOAuthState(state, undefined, encodeOAuthLinkContext(userId, sessionId));
         const url = getGitHub().createAuthorizationURL(state, ['read:user', 'user:email']);
         return c.redirect(url.toString());
       },
@@ -1227,19 +1317,9 @@ export const createOAuthRouter = (
           headers: { Authorization: `Bearer ${tokens.accessToken()}` },
         }).then(r => r.json())) as { sub: string; email?: string; name?: string; picture?: string };
 
-        if (stored.linkUserId) {
-          const blocked = await assertSensitiveOauthMutationAllowed(c, stored.linkUserId);
-          if (blocked) return blocked;
-          if (!adapter.linkProvider)
-            return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
-          await adapter.linkProvider(stored.linkUserId, 'linkedin', info.sub);
-          eventBus.emit('security.auth.oauth.linked', {
-            userId: stored.linkUserId,
-            meta: { provider: 'linkedin' },
-          });
-          const sep = postLoginRedirect.includes('?') ? '&' : '?';
-          return c.redirect(`${postLoginRedirect}${sep}linked=linkedin`);
-        }
+        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'linkedin', info.sub);
+        if (linkResponse) return linkResponse;
+        if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
         return finishOAuth(
           c,
@@ -1282,9 +1362,10 @@ export const createOAuthRouter = (
       async c => {
         const state = generateState();
         const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, undefined, userId);
+        await storeOAuthState(state, undefined, encodeOAuthLinkContext(userId, sessionId));
         const url = getLinkedIn().createAuthorizationURL(state, ['openid', 'profile', 'email']);
         return c.redirect(url.toString());
       },
@@ -1433,19 +1514,9 @@ export const createOAuthRouter = (
         const user = info.data;
         if (!user?.id) return errorResponse(c, 'Failed to retrieve Twitter user info', 400);
 
-        if (stored.linkUserId) {
-          const blocked = await assertSensitiveOauthMutationAllowed(c, stored.linkUserId);
-          if (blocked) return blocked;
-          if (!adapter.linkProvider)
-            return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
-          await adapter.linkProvider(stored.linkUserId, 'twitter', user.id);
-          eventBus.emit('security.auth.oauth.linked', {
-            userId: stored.linkUserId,
-            meta: { provider: 'twitter' },
-          });
-          const sep = postLoginRedirect.includes('?') ? '&' : '?';
-          return c.redirect(`${postLoginRedirect}${sep}linked=twitter`);
-        }
+        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'twitter', user.id);
+        if (linkResponse) return linkResponse;
+        if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
         return finishOAuth(
           c,
@@ -1489,9 +1560,10 @@ export const createOAuthRouter = (
         const state = generateState();
         const codeVerifier = generateCodeVerifier();
         const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, codeVerifier, userId);
+        await storeOAuthState(state, codeVerifier, encodeOAuthLinkContext(userId, sessionId));
         const url = getTwitter().createAuthorizationURL(state, codeVerifier, [
           'tweet.read',
           'users.read',
@@ -1636,19 +1708,9 @@ export const createOAuthRouter = (
           avatar_url?: string;
         };
 
-        if (stored.linkUserId) {
-          const blocked = await assertSensitiveOauthMutationAllowed(c, stored.linkUserId);
-          if (blocked) return blocked;
-          if (!adapter.linkProvider)
-            return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
-          await adapter.linkProvider(stored.linkUserId, 'gitlab', String(info.id));
-          eventBus.emit('security.auth.oauth.linked', {
-            userId: stored.linkUserId,
-            meta: { provider: 'gitlab' },
-          });
-          const sep = postLoginRedirect.includes('?') ? '&' : '?';
-          return c.redirect(`${postLoginRedirect}${sep}linked=gitlab`);
-        }
+        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'gitlab', String(info.id));
+        if (linkResponse) return linkResponse;
+        if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
         return finishOAuth(
           c,
@@ -1691,9 +1753,10 @@ export const createOAuthRouter = (
       async c => {
         const state = generateState();
         const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, undefined, userId);
+        await storeOAuthState(state, undefined, encodeOAuthLinkContext(userId, sessionId));
         const url = getGitLab().createAuthorizationURL(state, ['read_user']);
         return c.redirect(url.toString());
       },
@@ -1830,19 +1893,9 @@ export const createOAuthRouter = (
           headers: { Authorization: `Bearer ${tokens.accessToken()}` },
         }).then(r => r.json())) as { sub: string; email?: string; name?: string; picture?: string };
 
-        if (stored.linkUserId) {
-          const blocked = await assertSensitiveOauthMutationAllowed(c, stored.linkUserId);
-          if (blocked) return blocked;
-          if (!adapter.linkProvider)
-            return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
-          await adapter.linkProvider(stored.linkUserId, 'slack', info.sub);
-          eventBus.emit('security.auth.oauth.linked', {
-            userId: stored.linkUserId,
-            meta: { provider: 'slack' },
-          });
-          const sep = postLoginRedirect.includes('?') ? '&' : '?';
-          return c.redirect(`${postLoginRedirect}${sep}linked=slack`);
-        }
+        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'slack', info.sub);
+        if (linkResponse) return linkResponse;
+        if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
         return finishOAuth(
           c,
@@ -1885,9 +1938,10 @@ export const createOAuthRouter = (
       async c => {
         const state = generateState();
         const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, undefined, userId);
+        await storeOAuthState(state, undefined, encodeOAuthLinkContext(userId, sessionId));
         const url = getSlack().createAuthorizationURL(state, ['openid', 'profile', 'email']);
         return c.redirect(url.toString());
       },
@@ -2038,19 +2092,9 @@ export const createOAuthRouter = (
           emails.values?.find(e => e.is_primary && e.is_confirmed)?.email ??
           emails.values?.find(e => e.is_confirmed)?.email;
 
-        if (stored.linkUserId) {
-          const blocked = await assertSensitiveOauthMutationAllowed(c, stored.linkUserId);
-          if (blocked) return blocked;
-          if (!adapter.linkProvider)
-            return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
-          await adapter.linkProvider(stored.linkUserId, 'bitbucket', info.account_id);
-          eventBus.emit('security.auth.oauth.linked', {
-            userId: stored.linkUserId,
-            meta: { provider: 'bitbucket' },
-          });
-          const sep = postLoginRedirect.includes('?') ? '&' : '?';
-          return c.redirect(`${postLoginRedirect}${sep}linked=bitbucket`);
-        }
+        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'bitbucket', info.account_id);
+        if (linkResponse) return linkResponse;
+        if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
         return finishOAuth(
           c,
@@ -2093,9 +2137,10 @@ export const createOAuthRouter = (
       async c => {
         const state = generateState();
         const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
         const blocked = await assertSensitiveOauthMutationAllowed(c, userId);
         if (blocked) return blocked;
-        await storeOAuthState(state, undefined, userId);
+        await storeOAuthState(state, undefined, encodeOAuthLinkContext(userId, sessionId));
         const url = getBitbucket().createAuthorizationURL(state);
         return c.redirect(url.toString());
       },
@@ -2372,6 +2417,7 @@ export const createOAuthRouter = (
           // Issue a confirmation code
           const confirmationCode = await storeReauthConfirmation(runtime.repos.oauthReauth, {
             userId,
+            sessionId,
             purpose,
           });
 
@@ -2510,6 +2556,7 @@ export const createOAuthRouter = (
 
   // ─── Re-auth Confirmation Exchange ──────────────────────────────────────
   if (getConfig().oauthReauth?.enabled ?? false) {
+    router.use('/auth/oauth/reauth/exchange', userAuth);
     router.openapi(
       createRoute({
         method: 'post',
@@ -2573,12 +2620,17 @@ export const createOAuthRouter = (
 
         const payload = await consumeReauthConfirmation(runtime.repos.oauthReauth, code);
         if (!payload) return errorResponse(c, 'Invalid or expired code', 401);
+        const userId = requireUserId(c);
+        const sessionId = requireSessionId(c);
+        if (payload.userId !== userId || payload.sessionId !== sessionId) {
+          return errorResponse(c, 'Invalid or expired code', 401);
+        }
 
         return c.json(
           {
             reauthConfirmed: true as const,
             purpose: payload.purpose,
-            userId: payload.userId,
+            userId,
           },
           200,
         );

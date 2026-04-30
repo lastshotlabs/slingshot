@@ -60,6 +60,27 @@ function simulateAuth(userId: string | null, sessionId: string | null = 'test-se
   };
 }
 
+function simulateActor(actor: {
+  id: string | null;
+  kind: 'anonymous' | 'user' | 'service-account' | 'api-key' | 'system';
+  sessionId?: string | null;
+}) {
+  return async (c: { set(key: string, value: unknown): void }, next: () => Promise<void>) => {
+    c.set(
+      'actor',
+      Object.freeze({
+        id: actor.id,
+        kind: actor.kind,
+        tenantId: null,
+        sessionId: actor.sessionId ?? null,
+        roles: null,
+        claims: {},
+      }),
+    );
+    await next();
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 1. userAuth
 // ---------------------------------------------------------------------------
@@ -88,6 +109,24 @@ describe('userAuth', () => {
 
     const res = await app.request('/protected');
     expect(res.status).toBe(401);
+  });
+
+  test('service-account actor receives 401', async () => {
+    app.use('/protected', simulateActor({ id: 'svc-123', kind: 'service-account' }), userAuth);
+    app.get('/protected', c => c.json({ ok: true }));
+
+    const res = await app.request('/protected');
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'Unauthorized' });
+  });
+
+  test('api-key actor receives 401', async () => {
+    app.use('/protected', simulateActor({ id: 'api-123', kind: 'api-key' }), userAuth);
+    app.get('/protected', c => c.json({ ok: true }));
+
+    const res = await app.request('/protected');
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'Unauthorized' });
   });
 
   test('empty string actor id is treated as unauthenticated (401)', async () => {

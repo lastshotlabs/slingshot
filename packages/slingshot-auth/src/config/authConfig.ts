@@ -486,8 +486,9 @@ export interface SamlConfig {
  * at `/.well-known/openid-configuration` and signs JWTs with RS256. Requires `auth.jwt.algorithm`
  * to be set to `"RS256"`.
  *
- * If no `signingKey` is provided, an RSA key pair is auto-generated at startup
- * (not suitable for multi-instance deployments — provide a stable key for production).
+ * If no `signingKey` is provided outside production, an RSA key pair is auto-generated at
+ * startup for local development. Production requires a stable signing key so tokens and
+ * JWKS remain valid across restarts and instances.
  *
  * @example
  * createAuthPlugin({
@@ -505,7 +506,7 @@ export interface OidcConfig {
   enabled?: boolean;
   /** JWT issuer - included in all tokens and OIDC discovery doc. Required. */
   issuer: string;
-  /** RSA signing key. If not provided, a key pair is auto-generated on startup. */
+  /** RSA signing key. Required in production; auto-generated only outside production. */
   signingKey?: { privateKey: string; publicKey: string; kid?: string };
   /** Previous signing keys for rotation (verification only). */
   previousKeys?: Array<{ publicKey: string; kid?: string }>;

@@ -213,6 +213,15 @@ function matchesPath(path: string, patterns: string[]): boolean {
   return false;
 }
 
+function originFromReferer(referer: string | undefined): string | null {
+  if (!referer) return null;
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return null;
+  }
+}
+
 export const csrfProtection = (options: CsrfMiddlewareOptions = {}): MiddlewareHandler<AppEnv> => {
   const {
     exemptPaths = [],
@@ -252,7 +261,10 @@ export const csrfProtection = (options: CsrfMiddlewareOptions = {}): MiddlewareH
             | undefined)
         : undefined;
 
-    if (isPublicPath(c.req.path, slingshotCtx?.publicPaths)) {
+    const path = c.req.path;
+    const protectAnonymous = matchesPath(path, protectedUnauthenticatedPaths);
+
+    if (isPublicPath(path, slingshotCtx?.publicPaths) && !protectAnonymous) {
       return next();
     }
 
@@ -283,8 +295,6 @@ export const csrfProtection = (options: CsrfMiddlewareOptions = {}): MiddlewareH
       return next();
     }
 
-    const path = c.req.path;
-
     // Skip exempt paths
     if (matchesPath(path, exemptPaths)) {
       return next();
@@ -298,23 +308,27 @@ export const csrfProtection = (options: CsrfMiddlewareOptions = {}): MiddlewareH
       isProd(),
       authRuntime?.config ?? DEFAULT_AUTH_CONFIG,
     );
-    const protectAnonymous = matchesPath(path, protectedUnauthenticatedPaths);
     if (!authCookie && !protectAnonymous) {
       return next();
     }
 
     // Origin validation (secondary layer)
     if (checkOrigin && originSet.size > 0) {
-      const origin = c.req.header('origin');
-      if (origin) {
-        const normalized = origin.replace(/\/$/, '');
-        if (!originSet.has(normalized)) {
-          authRuntime?.eventBus.emit('security.csrf.failed', {
-            path: c.req.path,
-            meta: { method: c.req.method, reason: 'origin_mismatch' },
-          });
-          return c.json({ error: 'CSRF origin mismatch' }, 403);
-        }
+      const origin = c.req.header('origin') ?? originFromReferer(c.req.header('referer'));
+      if (!origin) {
+        authRuntime?.eventBus.emit('security.csrf.failed', {
+          path: c.req.path,
+          meta: { method: c.req.method, reason: 'origin_missing' },
+        });
+        return c.json({ error: 'CSRF origin missing' }, 403);
+      }
+      const normalized = origin.replace(/\/$/, '');
+      if (!originSet.has(normalized)) {
+        authRuntime?.eventBus.emit('security.csrf.failed', {
+          path: c.req.path,
+          meta: { method: c.req.method, reason: 'origin_mismatch' },
+        });
+        return c.json({ error: 'CSRF origin mismatch' }, 403);
       }
     }
 

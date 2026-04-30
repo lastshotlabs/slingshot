@@ -10,12 +10,14 @@ import type {
   KafkaConnectorHealth,
   KafkaInboundConnectorHealth,
   KafkaOutboundConnectorHealth,
+  Logger,
   MetricsEmitter,
   SlingshotEventBus,
   ValidationMode,
 } from '@lastshotlabs/slingshot-core';
 import {
   JSON_SERIALIZER,
+  createConsoleLogger,
   createNoopMetricsEmitter,
   sanitizeHeaderValue,
   sanitizeLogValue,
@@ -36,6 +38,8 @@ import {
   saslSchema,
   sslSchema,
 } from './kafkaShared';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-kafka-connectors' } });
 
 /**
  * Broker metadata attached to one inbound Kafka message after normalization.
@@ -524,7 +528,7 @@ function validatePayload(
   if (mode === 'strict') {
     throw new KafkaConnectorValidationError(message, result.error);
   }
-  console.warn(message);
+  logger.warn(message);
   return payload;
 }
 
@@ -566,7 +570,7 @@ function resolveMessageId(
     throw new KafkaConnectorMessageIdError(envelope.key);
   }
   if (onIdMissing === 'random') {
-    console.warn(
+    logger.warn(
       `[KafkaConnectors] outbound event "${envelope.key}" falling back to randomUUID() — consumer-side dedup is effectively disabled for this message. Configure messageId or set onIdMissing='fingerprint'.`,
     );
     return randomUUID();
@@ -814,12 +818,12 @@ export function createKafkaConnectors(
   }
 
   if (opts.sasl && !opts.ssl) {
-    console.warn(
+    logger.warn(
       '[KafkaConnectors] SASL configured without SSL. Credentials will travel in plaintext.',
     );
   }
   if (opts.ssl && opts.ssl !== true && opts.ssl.rejectUnauthorized === false) {
-    console.warn(
+    logger.warn(
       '[KafkaConnectors] ssl.rejectUnauthorized=false disables broker certificate verification. ' +
         'Use only for local development or controlled test environments.',
     );
@@ -878,7 +882,7 @@ export function createKafkaConnectors(
       if (duplicatePublishPolicy === 'error') {
         throw new KafkaConnectorError(message);
       }
-      console.warn(message);
+      logger.warn(message);
     }
   }
 
@@ -965,7 +969,7 @@ export function createKafkaConnectors(
       // continue to redeliver; operators should observe via health() and
       // the `onInboundError` hook, then either fix the DLQ or temporarily
       // switch to errorStrategy: 'skip'.
-      console.error(
+      logger.error(
         '[KafkaConnectors] failed to publish to DLQ; leaving offset uncommitted for redelivery',
         {
           topic,
@@ -1013,7 +1017,7 @@ export function createKafkaConnectors(
           recordDrop('pending-attempts-exhausted');
           hooks?.onOutboundError?.(entry.event, entry.topic, err);
           hooks?.onOutboundDrop?.(entry.event, entry.topic, 'pending-attempts-exhausted', err);
-          console.error(
+          logger.error(
             `[KafkaConnector:outbound] permanently dropping message for topic "${entry.topic}" ` +
               `after ${entry.attempts} attempts:`,
             err,
@@ -1152,7 +1156,7 @@ export function createKafkaConnectors(
       }
       if (pendingBuffer.length >= maxPendingBuffer) {
         recordDrop('pending-buffer-full');
-        console.error(
+        logger.error(
           `[KafkaConnector:outbound] pending buffer full; dropping message for topic "${config.topic}" ` +
             `(buffer=${pendingBuffer.length}/${maxPendingBuffer}, totalDrops=${dropTotal})`,
           err,
@@ -1187,7 +1191,7 @@ export function createKafkaConnectors(
     try {
       await consumer.commitOffsets([{ topic, partition, offset }]);
     } catch (err) {
-      console.error(
+      logger.error(
         `[KafkaConnectors] failed to commit offset for topic "${topic}" partition ${partition} offset ${offset}:`,
         err,
       );
@@ -1310,7 +1314,7 @@ export function createKafkaConnectors(
             replicationFactor: conn.replicationFactor ?? 1,
           }));
         if (outboundAutoCreate.some(topic => topic.replicationFactor === 1)) {
-          console.warn(
+          logger.warn(
             '[KafkaConnectors] outbound autoCreateTopic with replicationFactor=1 is convenient for local development ' +
               'but is not a production-safe default. Prefer pre-provisioned topics or replicationFactor >= 3.',
           );
@@ -1362,7 +1366,7 @@ export function createKafkaConnectors(
             try {
               consumerOn.call(consumer, consumerEvents.REBALANCING, async () => {
                 rebalancingConsumers.add(consumerKey);
-                console.info(
+                logger.info(
                   `[KafkaConnectors] rebalancing inbound topic="${runtime.health.topic}" ` +
                     `group="${config.groupId}"`,
                 );
@@ -1382,12 +1386,12 @@ export function createKafkaConnectors(
                     try {
                       await consumer.commitOffsets(toCommit);
                       partitionMap.clear();
-                      console.info(
+                      logger.info(
                         `[KafkaConnectors] flushed ${toCommit.length} pending offset(s) ` +
                           `before rebalance for group="${config.groupId}"`,
                       );
                     } catch (err) {
-                      console.error(
+                      logger.error(
                         `[KafkaConnectors] failed to flush offsets during rebalance for "${config.groupId}":`,
                         err,
                       );
@@ -1399,13 +1403,13 @@ export function createKafkaConnectors(
               consumerOn.call(consumer, consumerEvents.GROUP_JOIN, () => {
                 rebalancingConsumers.delete(consumerKey);
                 runtime.health.status = 'active';
-                console.info(
+                logger.info(
                   `[KafkaConnectors] group join group="${config.groupId}" ` +
                     `topic="${runtime.health.topic}"`,
                 );
               });
             } catch (instErr) {
-              console.warn(
+              logger.warn(
                 `[KafkaConnectors] failed to register rebalance listeners for "${config.groupId}":`,
                 instErr,
               );
@@ -1479,7 +1483,7 @@ export function createKafkaConnectors(
                   try {
                     alreadySeen = await dedupStore.has(messageId);
                   } catch (dedupErr) {
-                    console.warn(
+                    logger.warn(
                       '[KafkaConnectors] dedupStore.has() threw; treating as miss:',
                       dedupErr,
                     );
@@ -1502,7 +1506,7 @@ export function createKafkaConnectors(
                 try {
                   payload = serializer.deserialize(topic, message.value);
                 } catch (deserErr) {
-                  console.warn('[KafkaConnectors] deserialization failed; routing to DLQ', {
+                  logger.warn('[KafkaConnectors] deserialization failed; routing to DLQ', {
                     topic,
                     groupId: config.groupId,
                     partition,
@@ -1534,7 +1538,7 @@ export function createKafkaConnectors(
                   } catch (transformErr) {
                     // Transform errors are treated like validation failures:
                     // the message is structurally undeliverable to the handler.
-                    console.warn('[KafkaConnectors] transform failed; routing to DLQ', {
+                    logger.warn('[KafkaConnectors] transform failed; routing to DLQ', {
                       topic,
                       groupId: config.groupId,
                       partition,
@@ -1580,7 +1584,7 @@ export function createKafkaConnectors(
                   );
                   await heartbeat();
                 } catch (validateErr) {
-                  console.warn('[KafkaConnectors] validation failed; routing to DLQ', {
+                  logger.warn('[KafkaConnectors] validation failed; routing to DLQ', {
                     topic,
                     groupId: config.groupId,
                     partition,
@@ -1625,7 +1629,7 @@ export function createKafkaConnectors(
                       try {
                         await dedupStore.set(messageId, dedupTtlMs);
                       } catch (dedupErr) {
-                        console.warn(
+                        logger.warn(
                           '[KafkaConnectors] dedupStore.set() threw; continuing:',
                           dedupErr,
                         );
@@ -1635,7 +1639,7 @@ export function createKafkaConnectors(
                     return;
                   } catch (err) {
                     if (attempt >= maxAttempts) {
-                      console.warn('[KafkaConnectors] handler exhausted retries', {
+                      logger.warn('[KafkaConnectors] handler exhausted retries', {
                         topic,
                         groupId: config.groupId,
                         partition,
@@ -1713,7 +1717,7 @@ export function createKafkaConnectors(
           await ensureProducer();
           drainTimer = setInterval(() => {
             void drainPendingBuffer().catch(err => {
-              console.error('[KafkaConnectors] failed to drain pending outbound buffer:', err);
+              logger.error('[KafkaConnectors] failed to drain pending outbound buffer:', err);
             });
           }, opts.drainIntervalMs ?? 2_000);
         }

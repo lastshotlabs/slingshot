@@ -21,6 +21,10 @@ import type {
 import type { SearchFilter, SearchQuery, SuggestQuery } from '../types/query';
 import type { SearchHit, SearchResponse, SuggestResponse } from '../types/response';
 import { stringifyDocumentId, stringifySearchValue } from './stringify';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
+const logger: Logger = createConsoleLogger({ base: { provider: 'slingshot-search:algolia' } });
 
 // ============================================================================
 // Internal HTTP client
@@ -301,7 +305,7 @@ export function searchFilterToAlgoliaFilter(filter: SearchFilter): string {
         return `${field}:${formatAlgoliaValue(value)}`;
 
       case 'STARTS_WITH':
-        console.warn(
+        logger.warn(
           `[slingshot-search:algolia] STARTS_WITH filter is not natively supported. Using equality as approximation for field '${field}'.`,
         );
         return `${field}:${formatAlgoliaValue(value)}`;

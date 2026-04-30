@@ -280,6 +280,7 @@ interface OAuthReauthDoc {
 interface OAuthReauthConfirmationDoc {
   codeHash: string;
   userId: string;
+  sessionId: string;
   purpose: string;
   expiresAt: Date;
 }
@@ -339,6 +340,7 @@ export function createMongoOAuthReauthRepository(
       {
         codeHash: { type: String, required: true, unique: true },
         userId: { type: String, required: true },
+        sessionId: { type: String, required: true },
         purpose: { type: String, required: true },
         expiresAt: { type: Date, required: true, index: { expireAfterSeconds: 0 } },
       },
@@ -377,6 +379,7 @@ export function createMongoOAuthReauthRepository(
       await getConfirmationModel().create({
         codeHash: hash,
         userId: data.userId,
+        sessionId: data.sessionId,
         purpose: data.purpose,
         expiresAt: new Date(Date.now() + ttl * 1000),
       });
@@ -386,7 +389,7 @@ export function createMongoOAuthReauthRepository(
         .findOneAndDelete({ codeHash: hash, expiresAt: { $gt: new Date() } })
         .lean();
       if (!doc) return null;
-      return { userId: doc.userId, purpose: doc.purpose };
+      return { userId: doc.userId, sessionId: doc.sessionId, purpose: doc.purpose };
     },
   };
 }
@@ -531,18 +534,18 @@ export const consumeReauthState = async (
  * Generates and stores a one-time OAuth re-authentication confirmation code.
  *
  * Called by the OAuth callback handler after a successful re-auth to record the
- * confirmation so the original route (step-up, M2M token exchange, etc.) can verify it.
+ * confirmation so the original session can verify it.
  * The raw code is returned for including in the redirect URL; only the SHA-256 hash
  * is persisted with a 5-minute TTL.
  *
  * @param repo - The active `OAuthReauthRepository`.
- * @param data - Confirmation data (user ID and purpose).
+ * @param data - Confirmation data (user ID, session ID, and purpose).
  * @returns The raw confirmation code string.
  *
  * @example
  * import { storeReauthConfirmation } from '@lastshotlabs/slingshot-auth/plugin';
  *
- * const code = await storeReauthConfirmation(runtime.repos.oauthReauth, { userId, purpose: 'step-up' });
+ * const code = await storeReauthConfirmation(runtime.repos.oauthReauth, { userId, sessionId, purpose: 'step-up' });
  * return c.redirect(`/auth/step-up/confirm?code=${code}`);
  */
 export const storeReauthConfirmation = async (
@@ -565,7 +568,7 @@ export const storeReauthConfirmation = async (
  *
  * @param repo - The active `OAuthReauthRepository`.
  * @param code - The raw confirmation code from the redirect URL.
- * @returns The `OAuthReauthConfirmation` payload (user ID, purpose), or `null`.
+ * @returns The `OAuthReauthConfirmation` payload (user ID, session ID, purpose), or `null`.
  *
  * @example
  * import { consumeReauthConfirmation } from '@lastshotlabs/slingshot-auth/plugin';

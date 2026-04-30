@@ -121,6 +121,25 @@ describe('OAuth link initiation CSRF protection', () => {
     expect(res.headers.get('location')).toContain('https://provider.example/authorize');
   });
 
+  test('M2M bearer token cannot initiate user OAuth linking', async () => {
+    const app = buildApp(runtime);
+    const token = await signToken(
+      { sub: 'svc-oauth-link', scope: 'read:data' },
+      3600,
+      runtime.config,
+      runtime.signing,
+    );
+
+    const res = await app.request('/auth/google/link', {
+      method: 'POST',
+      headers: {
+        'x-user-token': token,
+      },
+    });
+
+    expect(res.status).toBe(401);
+  });
+
   test('returns 403 for suspended accounts when route guard is responsible', async () => {
     runtime = makeTestRuntime({ checkSuspensionOnIdentify: false });
     const suspendedProvider = {
@@ -352,6 +371,41 @@ describe('OAuth reauth initiation CSRF protection', () => {
 });
 
 describe('OAuth continuation stale-session protection', () => {
+  test('login callback redirects with a stable public error code instead of raw error text', async () => {
+    const runtime = makeTestRuntime({
+      hooks: {
+        preLogin: async () => {
+          throw new Error('database password leaked in stack text');
+        },
+      },
+    });
+    const callbackProvider = {
+      validateAuthorizationCode() {
+        return Promise.resolve({
+          accessToken: () => 'provider-access-token',
+        });
+      },
+    };
+    runtime.oauth.providers.google = callbackProvider as never;
+
+    const mockFetch = spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ sub: 'google-sub-error', email: 'oauth-error@example.com' }), {
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const app = buildApp(runtime);
+    await runtime.oauth.stateStore.store('state-login-error', 'code-verifier-login-error');
+
+    const res = await app.request('/auth/google/callback?code=oauth-code&state=state-login-error');
+
+    expect(res.status).toBe(302);
+    const location = res.headers.get('location') ?? '';
+    expect(location).toContain('error=authentication_failed');
+    expect(location).not.toContain('database');
+    mockFetch.mockRestore();
+  });
+
   test('google link callback returns 403 for suspended accounts and does not link the provider', async () => {
     const runtime = makeTestRuntime();
     const callbackProvider = {

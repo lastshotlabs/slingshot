@@ -12,7 +12,7 @@ import {
 } from '@auth/lib/session';
 import { Database } from 'bun:sqlite';
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { DEFAULT_MAX_ENTRIES } from '@lastshotlabs/slingshot-core';
+import { DEFAULT_MAX_ENTRIES, hashToken } from '@lastshotlabs/slingshot-core';
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
@@ -301,5 +301,51 @@ describe('Redis session repository', () => {
     const afterTtl = redis.ttlMs(sessionKey);
     expect(afterTtl).not.toBeNull();
     expect(afterTtl!).toBeGreaterThan(0);
+  });
+
+  test('persistent session metadata still has a Redis TTL and tombstones preserve it', async () => {
+    const config = createAuthResolvedConfig({
+      persistSessionMetadata: true,
+      sessionPolicy: { absoluteTimeout: 60 },
+    });
+    const sessionId = 'sid-redis-persistent-ttl';
+    const sessionKey = `session:${appName}:${sessionId}`;
+
+    await createSession(repo, 'user1', 'access-1', sessionId, undefined, config);
+    const createdTtl = redis.ttlMs(sessionKey);
+    expect(createdTtl).not.toBeNull();
+    expect(createdTtl!).toBeGreaterThan(0);
+
+    await repo.deleteSession(sessionId, config);
+
+    const tombstoneTtl = redis.ttlMs(sessionKey);
+    expect(tombstoneTtl).not.toBeNull();
+    expect(tombstoneTtl!).toBeGreaterThan(0);
+    expect(await getSession(repo, sessionId, config)).toBeNull();
+  });
+
+  test('rotated refresh-token lookup survives past grace to revoke replayed old tokens', async () => {
+    const config = createAuthResolvedConfig({
+      refreshToken: { refreshTokenExpiry: 300, rotationGraceSeconds: 1 },
+    });
+    const sessionId = 'sid-redis-refresh-replay';
+    const sessionKey = `session:${appName}:${sessionId}`;
+    const oldRefresh = 'refresh-before-replay';
+
+    await createSession(repo, 'user1', 'access-1', sessionId, undefined, config);
+    await setRefreshToken(repo, sessionId, oldRefresh, config);
+    await rotateRefreshToken(repo, sessionId, oldRefresh, 'refresh-after-replay', 'access-2', config);
+
+    const oldLookupTtl = redis.ttlMs(`refreshtoken:${appName}:${hashToken(oldRefresh)}`);
+    expect(oldLookupTtl).not.toBeNull();
+    expect(oldLookupTtl!).toBeGreaterThan(250_000);
+
+    await redis.replaceJson(sessionKey, record => ({
+      ...record,
+      prevTokenExpiresAt: Date.now() - 1,
+    }));
+
+    expect(await getSessionByRefreshToken(repo, oldRefresh, config)).toBeNull();
+    expect(await getSession(repo, sessionId, config)).toBeNull();
   });
 });

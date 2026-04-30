@@ -1,5 +1,9 @@
 import type { ImageFormat, ImageTransformOptions, ImageTransformResult } from './types';
 import { ImageTransformError, ImageTransformTimeoutError } from './types';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-assets' } });
 
 const FORMAT_CONTENT_TYPE: Record<Exclude<ImageFormat, 'original'>, string> = {
   avif: 'image/avif',
@@ -28,7 +32,7 @@ async function loadSharp(): Promise<SharpConstructor | null> {
     const interop = mod as unknown as SharpModule;
     sharpFn = interop.default ?? interop;
   } catch {
-    console.warn(
+    logger.warn(
       '[slingshot-assets] sharp is not installed. Images will be served without optimization. ' +
         'Install sharp for format conversion and resizing: bun add sharp',
     );

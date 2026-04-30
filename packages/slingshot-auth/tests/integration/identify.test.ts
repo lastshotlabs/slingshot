@@ -89,6 +89,26 @@ describe('token extraction', () => {
     expect(body.sessionId).toBe(sessionId);
   });
 
+  test('valid token in Authorization bearer header resolves identity', async () => {
+    const app = buildApp();
+    const { id: userId } = await runtime.adapter.create('bearer-user@example.com', 'hash');
+    const sessionId = 'sess-bearer-1';
+    const token = await signToken(
+      { sub: userId, sid: sessionId },
+      3600,
+      runtime.config,
+      runtime.signing,
+    );
+    await runtime.repos.session.createSession(userId, token, sessionId, undefined, runtime.config);
+
+    const res = await app.request('/test', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const body = await res.json();
+    expect(body.actorId).toBe(userId);
+    expect(body.sessionId).toBe(sessionId);
+  });
+
   test('invalid JWT — treated as unauthenticated, not error', async () => {
     const app = buildApp();
     const res = await app.request('/test', {
@@ -194,6 +214,13 @@ describe('session mismatch', () => {
 
 describe('M2M token detection', () => {
   test('token with scope but no sid — sets serviceAccountId', async () => {
+    runtime = makeTestRuntime({ m2m: { tokenExpiry: 3600 } });
+    await runtime.adapter.createM2MClient?.({
+      clientId: 'client-123',
+      clientSecretHash: 'hash',
+      name: 'Client 123',
+      scopes: ['read:data', 'write:data'],
+    });
     const app = buildApp();
     const token = await signToken(
       { sub: 'client-123', scope: 'read:data write:data' },
@@ -207,6 +234,41 @@ describe('M2M token detection', () => {
     });
     const body = await res.json();
     expect(body.serviceAccountId).toBe('client-123');
+    expect(body.actorId).toBeNull();
+    expect(body.sessionId).toBeNull();
+  });
+
+  test('M2M token without an active client is unauthenticated', async () => {
+    runtime = makeTestRuntime({ m2m: { tokenExpiry: 3600 } });
+    const app = buildApp();
+    const token = await signToken(
+      { sub: 'missing-client', scope: 'read:data' },
+      3600,
+      runtime.config,
+      runtime.signing,
+    );
+
+    const res = await app.request('/test', {
+      headers: { 'x-user-token': token },
+    });
+    const body = await res.json();
+    expect(body.serviceAccountId).toBeNull();
+  });
+
+  test('M2M token in Authorization bearer header sets serviceAccountId', async () => {
+    const app = buildApp();
+    const token = await signToken(
+      { sub: 'client-bearer-123', scope: 'read:data write:data' },
+      3600,
+      runtime.config,
+      runtime.signing,
+    );
+
+    const res = await app.request('/test', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const body = await res.json();
+    expect(body.serviceAccountId).toBe('client-bearer-123');
     expect(body.actorId).toBeNull();
     expect(body.sessionId).toBeNull();
   });

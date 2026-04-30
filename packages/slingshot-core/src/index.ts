@@ -175,7 +175,7 @@ export type { CsrfConfig } from './csrf';
 
 // --- errors ---
 /** Framework error types used for HTTP, validation, and adapter capability failures. */
-export { HttpError, ValidationError, UnsupportedAdapterFeatureError } from './errors';
+export { SlingshotError, HttpError, ValidationError, UnsupportedAdapterFeatureError } from './errors';
 export { errorResponse } from './errorResponse';
 
 // --- path safety ---

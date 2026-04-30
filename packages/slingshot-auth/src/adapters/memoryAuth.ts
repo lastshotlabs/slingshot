@@ -1440,7 +1440,7 @@ export function createMemoryAuthAdapter(
         return null;
       }
       _oauthReauthConfirmations.delete(hash);
-      return { userId: entry.userId, purpose: entry.purpose };
+      return { userId: entry.userId, sessionId: entry.sessionId, purpose: entry.purpose };
     },
   };
 }

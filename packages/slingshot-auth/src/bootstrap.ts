@@ -172,7 +172,11 @@ export async function bootstrapAuth(
       cache: db.sessions ?? defaultStore,
       authStore:
         db.auth ??
-        (db.postgres ? 'postgres' : db.mongo !== false ? 'mongo' : (db.sessions ?? defaultStore)),
+        (db.postgres
+          ? 'postgres'
+          : db.mongo === 'single' || db.mongo === 'separate'
+            ? 'mongo'
+            : (db.sessions ?? defaultStore)),
       sqlite: db.sqlite,
     };
 
@@ -388,7 +392,7 @@ export async function bootstrapAuth(
     captcha: config.security?.captcha ?? null,
     m2m: authConfig.m2m?.enabled !== false && authConfig.m2m ? authConfig.m2m : null,
     saml: authConfig.saml ?? null,
-    oidc: authConfig.oidc ?? null,
+    oidc: authConfig.oidc?.enabled === false ? null : (authConfig.oidc ?? null),
     scim: authConfig.scim ?? null,
     emailTemplates: config.emailTemplates ?? null,
     hooks: authConfig.hooks ?? {},
@@ -407,7 +411,7 @@ export async function bootstrapAuth(
   }
 
   // Section H: OIDC setup
-  if (authConfig.oidc) {
+  if (authConfig.oidc && authConfig.oidc.enabled !== false) {
     resolvedConfig = {
       ...resolvedConfig,
       jwt: { ...(authConfig.jwt ?? {}), issuer: authConfig.oidc.issuer, algorithm: 'RS256' },
@@ -419,6 +423,12 @@ export async function bootstrapAuth(
     if (oidcConfig.signingKey) {
       oidcConfig = loadJwksKey(oidcConfig, oidcConfig.signingKey);
     } else {
+      if (isProd()) {
+        throw new Error(
+          '[slingshot-auth] auth.oidc.signingKey is required in production. ' +
+            'OIDC tokens and JWKS must use a stable key across restarts and instances.',
+        );
+      }
       oidcConfig = (await generateAndLoadKeyPair(oidcConfig)).oidc;
     }
 

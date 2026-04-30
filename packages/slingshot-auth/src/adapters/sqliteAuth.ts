@@ -278,9 +278,15 @@ const MIGRATIONS: Migration[] = [
     db.run(`CREATE TABLE IF NOT EXISTS oauth_reauth_confirmations (
       codeHash  TEXT PRIMARY KEY,
       userId    TEXT NOT NULL,
+      sessionId TEXT NOT NULL,
       purpose   TEXT NOT NULL,
       expiresAt INTEGER NOT NULL
     )`);
+    try {
+      db.run('ALTER TABLE oauth_reauth_confirmations ADD COLUMN sessionId TEXT');
+    } catch {
+      // Column already exists.
+    }
     db.run(`CREATE TABLE IF NOT EXISTS upload_registry (
       key           TEXT PRIMARY KEY,
       ownerUserId   TEXT,
@@ -1974,8 +1980,8 @@ export function createSqliteAuthAdapter(
     storeOAuthReauthConfirmation(hash, data, ttlSeconds) {
       const expiresAt = Date.now() + ttlSeconds * 1000;
       db.run(
-        'INSERT INTO oauth_reauth_confirmations (codeHash, userId, purpose, expiresAt) VALUES (?, ?, ?, ?)',
-        [hash, data.userId, data.purpose, expiresAt],
+        'INSERT INTO oauth_reauth_confirmations (codeHash, userId, sessionId, purpose, expiresAt) VALUES (?, ?, ?, ?, ?)',
+        [hash, data.userId, data.sessionId, data.purpose, expiresAt],
       );
     },
 
@@ -1983,13 +1989,14 @@ export function createSqliteAuthAdapter(
       const row = db
         .query<{
           userId: string;
+          sessionId: string;
           purpose: string;
         }>(
-          'DELETE FROM oauth_reauth_confirmations WHERE codeHash = ? AND expiresAt > ? RETURNING userId, purpose',
+          'DELETE FROM oauth_reauth_confirmations WHERE codeHash = ? AND expiresAt > ? RETURNING userId, sessionId, purpose',
         )
         .get(hash, Date.now());
       if (!row) return null;
-      return { userId: row.userId, purpose: row.purpose };
+      return { userId: row.userId, sessionId: row.sessionId, purpose: row.purpose };
     },
 
     registerUpload(record) {

@@ -109,7 +109,7 @@ export type { AuthRuntimeContext } from './runtime';
 
 // Middleware (exported for use by dependent plugins)
 /** Request guards for authenticated-user routes and role-gated routes. */
-export { userAuth } from './middleware/userAuth';
+export { getAuthenticatedUserActor, userAuth } from './middleware/userAuth';
 export { requireRole } from './middleware/requireRole';
 /** Shared error-response schema used by built-in auth handlers. */
 export { ErrorResponse } from './schemas/error';

@@ -46,7 +46,7 @@ function buildApp(opts: {
     if (opts.runtime) {
       c.set('slingshotCtx', {
         pluginState: new Map([[AUTH_RUNTIME_KEY, opts.runtime]]),
-      } as SlingshotContext);
+      } as unknown as SlingshotContext);
     }
     const kind = opts.actorKind;
     c.set(

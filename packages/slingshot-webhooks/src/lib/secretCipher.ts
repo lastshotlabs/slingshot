@@ -134,11 +134,11 @@ export function createSecretCipher(keyB64: string | undefined | null): SecretCip
       }
       const parts = stored.slice(PREFIX.length).split(':');
       if (parts.length !== 3) {
-        throw new Error('[slingshot-webhooks] malformed encrypted secret');
+        throw new WebhookCipherError('malformed encrypted secret');
       }
       const [ivB64, ctB64, tagB64] = parts;
       if (!ivB64 || !ctB64 || !tagB64) {
-        throw new Error('[slingshot-webhooks] malformed encrypted secret');
+        throw new WebhookCipherError('malformed encrypted secret');
       }
       const iv = Buffer.from(ivB64, 'base64');
       const ct = Buffer.from(ctB64, 'base64');

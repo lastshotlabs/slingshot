@@ -1,5 +1,6 @@
 import { getAuthRuntimeFromRequest } from '@lastshotlabs/slingshot-auth';
 import { evaluateAuthUserAccess, getActor } from '@lastshotlabs/slingshot-core';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
 function readString(c: { get(key: string): unknown }, key: string): string | null {
   const value = c.get(key);
@@ -38,10 +39,10 @@ export async function getAuthenticatedAccountGuardFailure(c: {
     path?: string;
     header?(name: string): string | undefined;
   };
-}): Promise<{ error: string; status: 403 } | null> {
+}): Promise<{ error: string; status: ContentfulStatusCode } | null> {
   const actor = getActor(c as Parameters<typeof getActor>[0]);
   if (actor.kind !== 'user' || !actor.id) {
-    throw new Error('[security] authenticated route guard requires an authenticated user actor');
+    return { error: 'Unauthorized', status: 401 as ContentfulStatusCode };
   }
 
   const runtime = getAuthRuntimeFromRequest(c);

@@ -88,7 +88,8 @@ describe('createM2MClient', () => {
     expect(result.clientId).toBe('billing');
     expect(result.clientSecret).toBeString();
     expect(createFn).toHaveBeenCalledTimes(1);
-    const call = createFn.mock.calls[0]?.[0] as Record<string, unknown>;
+    const [firstCall] = createFn.mock.calls as unknown as Array<[Record<string, unknown>]>;
+    const call = firstCall[0];
     expect(call.clientSecretHash).toBe(`hashed:${result.clientSecret}`);
     expect(call.scopes).toEqual(['read:invoices']);
   });
@@ -99,7 +100,8 @@ describe('createM2MClient', () => {
 
     await createM2MClient({ clientId: 'svc', name: 'Svc', adapter, password: fakePassword });
 
-    expect((createFn.mock.calls[0]?.[0] as Record<string, unknown>).scopes).toEqual([]);
+    const [firstCall] = createFn.mock.calls as unknown as Array<[Record<string, unknown>]>;
+    expect(firstCall[0].scopes).toEqual([]);
   });
 });
 

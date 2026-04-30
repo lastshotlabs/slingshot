@@ -1,11 +1,10 @@
-import { createHash, randomUUID } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { HTTPException } from 'hono/http-exception';
 import type { z } from 'zod';
 import type { OperationIdempotencyAdapter } from '@lastshotlabs/slingshot-core';
 import {
   createMemoryOperationIdempotencyAdapter,
   makeIdempotencyKey,
-  withIdempotency,
 } from '@lastshotlabs/slingshot-core';
 import type {
   EntityManifestRuntime,
@@ -424,7 +423,8 @@ export function createOrganizationsManifestRuntime(args: {
    * Optional idempotency store used to deduplicate invite creations. Callers
    * pass `idempotencyKey` on the invite-create payload; this adapter caches the
    * sanitized invite response so a retried request returns the same record
-   * (including the original `token`) instead of creating a duplicate.
+   * without creating a duplicate. The raw invite token is returned only on
+   * the first successful create and is never cached in the idempotency store.
    *
    * Defaults to a process-local in-memory adapter. Provide a Redis-backed
    * implementation in multi-instance deployments where the same key may hit
@@ -614,10 +614,8 @@ export function createOrganizationsManifestRuntime(args: {
       create: async (input: unknown) => {
         const record = { ...(input as Record<string, unknown>) };
         // Pull idempotencyKey out of the payload — it's a transport-level
-        // dedupe hint and must never reach the entity row. When present, two
-        // POSTs with the same `(orgId, idempotencyKey)` return the same
-        // sanitized invite (including the original raw token) instead of
-        // creating a duplicate row.
+        // dedupe hint and must never reach the entity row. The raw invite token
+        // is deliberately excluded from the idempotency cache.
         const idempotencyKeyRaw = record.idempotencyKey;
         delete record.idempotencyKey;
         const idempotencyKey =
@@ -626,7 +624,7 @@ export function createOrganizationsManifestRuntime(args: {
             : null;
 
         const doCreate = async (): Promise<Record<string, unknown>> => {
-          const rawToken = randomUUID();
+          const rawToken = randomBytes(32).toString('base64url');
           const persisted = (await inviteAdapter.create({
             ...record,
             tokenHash: sha256(rawToken),
@@ -642,9 +640,11 @@ export function createOrganizationsManifestRuntime(args: {
         if (idempotencyKey !== null) {
           const orgId = typeof record.orgId === 'string' ? record.orgId : 'unknown';
           const key = makeIdempotencyKey(['organizations.invite', orgId, idempotencyKey]);
-          const { result } = await withIdempotency(inviteIdempotencyAdapter, key, doCreate, {
-            ttlMs: inviteIdempotencyTtlMs,
-          });
+          const prior = await inviteIdempotencyAdapter.get(key);
+          if (prior?.payload) return prior.payload as Record<string, unknown>;
+          const result = await doCreate();
+          const { token: _token, ...cached } = result;
+          await inviteIdempotencyAdapter.set(key, cached, inviteIdempotencyTtlMs);
           return result;
         }
         return doCreate();

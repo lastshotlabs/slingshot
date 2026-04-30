@@ -1,7 +1,7 @@
 import { AUTH_RUNTIME_KEY } from '@auth/runtime';
 import type { AuthRuntimeContext } from '@auth/runtime';
-import { describe, expect, test } from 'bun:test';
-import { verifyToken } from '@lastshotlabs/slingshot-auth';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { signToken, verifyToken } from '@lastshotlabs/slingshot-auth';
 import type { RequestActorResolver } from '@lastshotlabs/slingshot-core';
 import { sha256 } from '@lastshotlabs/slingshot-core';
 import { createTestApp } from '../setup';
@@ -21,6 +21,89 @@ function getRequestActorResolver(app: any): RequestActorResolver {
 }
 
 describe('auth RequestActorResolver upgrade security', () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
+  afterEach(() => {
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+  });
+
+  test('accepts production __Host-token cookies during upgrade auth', async () => {
+    process.env.NODE_ENV = 'production';
+    const app = await createTestApp();
+    const registerRes = await app.request(
+      '/auth/register',
+      json({ email: 'resolver-host-cookie@example.com', password: 'password123' }),
+    );
+    const { token, userId } = (await registerRes.json()) as { token: string; userId: string };
+    const resolver = getRequestActorResolver(app);
+
+    const actor = await resolver.resolveActor(
+      new Request('http://localhost/__ws/chat', {
+        headers: { cookie: `__Host-token=${encodeURIComponent(token)}` },
+      }),
+    );
+
+    expect(actor.kind).toBe('user');
+    expect(actor.id).toBe(userId);
+  });
+
+  test('accepts x-user-token and Authorization bearer tokens during upgrade auth', async () => {
+    const app = await createTestApp();
+    const registerRes = await app.request(
+      '/auth/register',
+      json({ email: 'resolver-header-token@example.com', password: 'password123' }),
+    );
+    const { token, userId } = (await registerRes.json()) as { token: string; userId: string };
+    const resolver = getRequestActorResolver(app);
+
+    expect(
+      (
+        await resolver.resolveActor(
+          new Request('http://localhost/__ws/chat', {
+            headers: { 'x-user-token': token },
+          }),
+        )
+      ).id,
+    ).toBe(userId);
+    expect(
+      (
+        await resolver.resolveActor(
+          new Request('http://localhost/__ws/chat', {
+            headers: { authorization: `Bearer ${token}` },
+          }),
+        )
+      ).id,
+    ).toBe(userId);
+  });
+
+  test('resolves M2M bearer tokens as service-account actors during upgrade auth', async () => {
+    const app = await createTestApp();
+    const runtime = getRuntime(app);
+    const token = await signToken(
+      { sub: 'svc-resolver', scope: 'read:data' },
+      3600,
+      runtime.config,
+      runtime.signing,
+    );
+    const resolver = getRequestActorResolver(app);
+
+    const actor = await resolver.resolveActor(
+      new Request('http://localhost/__ws/chat', {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+    );
+
+    expect(actor).toMatchObject({
+      id: 'svc-resolver',
+      kind: 'service-account',
+      sessionId: null,
+    });
+  });
+
   test('rejects stale suspended sessions during upgrade auth', async () => {
     const app = await createTestApp(
       {},

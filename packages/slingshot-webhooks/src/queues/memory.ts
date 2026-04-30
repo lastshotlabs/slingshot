@@ -1,6 +1,9 @@
-import { DEFAULT_MAX_ENTRIES, evictOldestArray } from '@lastshotlabs/slingshot-core';
+import { DEFAULT_MAX_ENTRIES, evictOldestArray, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import type { WebhookJob, WebhookQueue } from '../types/queue';
 import { WebhookDeliveryError } from '../types/queue';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-webhooks:memory-queue' } });
 
 /**
  * Optional configuration for `createWebhookMemoryQueue`.
@@ -49,7 +52,7 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
 
   let pending = 0;
 
-  console.warn(
+  logger.warn(
     `[slingshot] Memory webhook queue is capped at ${DEFAULT_MAX_ENTRIES} jobs, is not durable, and has no eviction guarantees beyond dropping oldest entries — for development/testing only`,
   );
 
@@ -102,7 +105,7 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
             try {
               await onDeadLetter(finalJob, lastErr);
             } catch (err) {
-              console.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+              logger.error('[slingshot-webhooks] onDeadLetter handler failed', err);
             }
           }
           return;
@@ -115,7 +118,7 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
       try {
         await onDeadLetter(job, lastErr);
       } catch (err) {
-        console.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+        logger.error('[slingshot-webhooks] onDeadLetter handler failed', err);
       }
     }
   }
@@ -153,10 +156,10 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
                     new Error('[slingshot-webhooks] Memory queue at capacity — job evicted'),
                   ),
                 ).catch(err => {
-                  console.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+                  logger.error('[slingshot-webhooks] onDeadLetter handler failed', err);
                 });
               } catch (err) {
-                console.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+                logger.error('[slingshot-webhooks] onDeadLetter handler failed', err);
               }
             }
           }

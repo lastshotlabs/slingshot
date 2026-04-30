@@ -7,16 +7,17 @@ import { WEBHOOK_ROUTES } from '../routes/index';
 import type { WebhookAdapter } from './adapter';
 import type { InboundProvider } from './inbound';
 import type { WebhookQueue } from './queue';
+import { WebhookConfigError } from '../errors/webhookErrors';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
   if (!trimmed.startsWith('/')) {
-    throw new Error("mountPath must start with '/'");
+    throw new WebhookConfigError("mountPath must start with '/'");
   }
 
   const normalized = trimmed.replace(/\/+$/, '');
   if (normalized.length === 0) {
-    throw new Error("mountPath must not be '/'");
+    throw new WebhookConfigError("mountPath must not be '/'");
   }
 
   return normalized;

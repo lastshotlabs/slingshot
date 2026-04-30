@@ -1,11 +1,7 @@
 import { hashToken, timingSafeEqual } from '@lastshotlabs/slingshot-core';
 import { type AuthResolvedConfig, DEFAULT_AUTH_CONFIG } from '../../config/authConfig';
 import type { RedisLike } from '../../types/redis';
-import {
-  getSessionTtlMs,
-  getSessionTtlSeconds,
-  isIdleExpired,
-} from './policy';
+import { getSessionTtlMs, getSessionTtlSeconds, isIdleExpired } from './policy';
 import type { SessionRepository } from './repository';
 import type { SessionInfo } from './types';
 
@@ -167,9 +163,18 @@ return evicted
     return result === 1;
   }
 
-  async function writeSessionRecord(sessionId: string, record: Record<string, unknown>): Promise<void> {
+  async function writeSessionRecord(
+    sessionId: string,
+    record: Record<string, unknown>,
+  ): Promise<void> {
     const redis = getRedis();
-    await redis.eval(WRITE_SESSION_LUA, 1, sessionKey(sessionId), JSON.stringify(record), Date.now());
+    await redis.eval(
+      WRITE_SESSION_LUA,
+      1,
+      sessionKey(sessionId),
+      JSON.stringify(record),
+      Date.now(),
+    );
   }
 
   async function deleteSessionImpl(sessionId: string, cfg?: AuthResolvedConfig): Promise<void> {
@@ -476,7 +481,7 @@ return evicted
         await redis.del(refreshTokenKey(oldPrevHash));
       }
       if (oldHash) {
-        await redis.expire(refreshTokenKey(oldHash), Math.max(graceSeconds, 1));
+        await redis.expire(refreshTokenKey(oldHash), refreshExpiry);
       }
       return true;
     },

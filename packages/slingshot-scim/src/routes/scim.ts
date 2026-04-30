@@ -22,7 +22,9 @@ const scimWriteOpts = { windowMs: 60_000, max: 30 };
 
 async function revokeUserSessions(runtime: AuthRuntimeContext, userId: string): Promise<void> {
   const sessions = await runtime.repos.session.getUserSessions(userId, runtime.config);
-  await Promise.all(sessions.map(session => runtime.repos.session.deleteSession(session.sessionId, runtime.config)));
+  await Promise.all(
+    sessions.map(session => runtime.repos.session.deleteSession(session.sessionId, runtime.config)),
+  );
 }
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────

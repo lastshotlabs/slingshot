@@ -1,4 +1,5 @@
 import { HTTPException } from 'hono/http-exception';
+import { WebhookPaginationError, WebhookRuntimeError } from '../errors/webhookErrors';
 import type {
   EventDefinition,
   EventDefinitionRegistry,
@@ -274,10 +275,10 @@ function requireNextCursor(
   seen: Set<string>,
 ): string {
   if (!nextCursor) {
-    throw new Error(`[slingshot-webhooks] ${scope} returned hasMore without nextCursor`);
+    throw new WebhookPaginationError(`${scope} returned hasMore without nextCursor`);
   }
   if (seen.has(nextCursor)) {
-    throw new Error(`[slingshot-webhooks] ${scope} returned a repeated nextCursor`);
+    throw new WebhookPaginationError(`${scope} returned a repeated nextCursor`);
   }
   seen.add(nextCursor);
   return nextCursor;
@@ -1252,8 +1253,8 @@ export function createWebhooksManifestRuntime(
       ...adapter,
       create: async (input: unknown) => {
         if (!definitionsRef) {
-          throw new Error(
-            '[slingshot-webhooks] event definitions are not ready for endpoint writes',
+          throw new WebhookRuntimeError(
+            'event definitions are not ready for endpoint writes',
           );
         }
         const normalized = normalizeEndpointCreateInput(
@@ -1276,8 +1277,8 @@ export function createWebhooksManifestRuntime(
       },
       update: async (id: string, input: unknown, filter?: Record<string, unknown>) => {
         if (!definitionsRef) {
-          throw new Error(
-            '[slingshot-webhooks] event definitions are not ready for endpoint writes',
+          throw new WebhookRuntimeError(
+            'event definitions are not ready for endpoint writes',
           );
         }
         const existing = (await base.getById(id)) as EndpointRecord | null;

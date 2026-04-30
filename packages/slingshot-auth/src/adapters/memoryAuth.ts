@@ -243,7 +243,7 @@ export function createMemoryAuthAdapter(
   >();
   const _oauthReauthConfirmations = new Map<
     string,
-    { userId: string; purpose: string; expiresAt: number }
+    { userId: string; sessionId: string; purpose: string; expiresAt: number }
   >();
   const evictExpired = createEvictExpired();
   const _tenantRoles = new Map<string, string[]>(); // "userId:tenantId" → roles

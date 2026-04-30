@@ -19,8 +19,8 @@ async function getEffectiveRoles(
  * Middleware factory that enforces role-based access control (RBAC).
  *
  * Must be used after `userAuth` (requires an authenticated actor). Resolves the user's
- * effective role set — direct roles ∪ group baseline roles ∪ per-membership roles —
- * via `getActorId(c)` and returns `403 Forbidden` when none of the required roles are present.
+ * effective role set for the authenticated user actor and returns `403 Forbidden` when
+ * none of the required roles are present.
  *
  * Effective roles are written to the actor via `c.set('actor', ...)` for downstream handlers.
  *

@@ -4,6 +4,7 @@ import { HttpError } from '@lastshotlabs/slingshot-core';
 import { verifyToken } from '../../src/lib/jwt';
 import type { SamlProfile, SamlifySpInstance } from '../../src/lib/saml';
 import {
+  consumeSamlRequestId,
   createMemorySamlRequestIdRepository,
   storeSamlRequestId,
 } from '../../src/lib/samlRequestId';
@@ -11,7 +12,16 @@ import { createSamlRouter } from '../../src/routes/saml';
 import { makeEventBus, makeTestRuntime, wrapWithRuntime } from '../helpers/runtime';
 import type { MutableTestRuntime } from '../helpers/runtime';
 
-function buildApp(runtime: MutableTestRuntime) {
+type TestSamlImpl = Pick<
+  typeof import('../../src/lib/saml'),
+  | 'initSaml'
+  | 'createAuthnRequest'
+  | 'validateSamlResponse'
+  | 'samlProfileToIdentityProfile'
+  | 'getSamlSpMetadata'
+>;
+
+function buildApp(runtime: MutableTestRuntime, overrides?: Partial<TestSamlImpl>) {
   const app = wrapWithRuntime(runtime);
   app.onError((err, c) =>
     c.json(
@@ -38,7 +48,7 @@ function buildApp(runtime: MutableTestRuntime) {
     email: 'saml-user@example.com',
     attributes: { email: 'saml-user@example.com' },
   };
-  const samlImpl = {
+  const samlImpl: TestSamlImpl = {
     initSaml: async () => ({ sp, idp: { entityId: 'idp' } }),
     createAuthnRequest: () => ({ redirectUrl: 'https://idp.example.test/login', id: 'req-1' }),
     validateSamlResponse: async () => profile,
@@ -46,14 +56,8 @@ function buildApp(runtime: MutableTestRuntime) {
       email: profile.email,
     }),
     getSamlSpMetadata: () => '<xml />',
-  } satisfies Pick<
-    typeof import('../../src/lib/saml'),
-    | 'initSaml'
-    | 'createAuthnRequest'
-    | 'validateSamlResponse'
-    | 'samlProfileToIdentityProfile'
-    | 'getSamlSpMetadata'
-  >;
+    ...overrides,
+  };
 
   app.route('/', createSamlRouter(runtime, samlImpl));
   return app;
@@ -101,5 +105,28 @@ describe('SAML router', () => {
     const sessionId = payload.sid as string;
     expect(sessionId).toBeString();
     expect(await runtime.repos.session.getMfaVerifiedAt(sessionId)).toBeNull();
+  });
+
+  test('invalid SAML assertion does not consume the pending request ID', async () => {
+    app = buildApp(runtime, {
+      validateSamlResponse: async () => {
+        throw new Error('invalid signature');
+      },
+    });
+
+    const requestId = 'req-1';
+    const encoded = Buffer.from(`<Response InResponseTo="${requestId}" />`, 'utf8').toString(
+      'base64',
+    );
+    await storeSamlRequestId(runtime.repos.samlRequestId!, requestId);
+
+    const res = await app.request('/auth/saml/acs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ SAMLResponse: encoded }).toString(),
+    });
+
+    expect(res.status).toBe(401);
+    expect(await consumeSamlRequestId(runtime.repos.samlRequestId!, requestId)).toBe(true);
   });
 });

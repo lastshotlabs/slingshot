@@ -18,6 +18,11 @@ import type {
   NotificationPreferenceDefaults,
 } from './types';
 
+function errorLogFields(err: unknown): { err: string; name?: string } {
+  if (err instanceof Error) return { err: err.message, name: err.name };
+  return { err: String(err) };
+}
+
 /** Control surface for the notification dispatcher, providing start/stop lifecycle and per-tick dispatch execution. */
 export interface DispatcherAdapter {
   start(): void;
@@ -343,7 +348,7 @@ export function createIntervalDispatcher(
     try {
       await dispatcher.tick();
     } catch (err) {
-      logger.error('[slingshot-notifications] Dispatcher tick failed', err);
+      logger.error('[slingshot-notifications] Dispatcher tick failed', errorLogFields(err));
     } finally {
       inflightTick = null;
       resolve();
@@ -390,7 +395,7 @@ export function createIntervalDispatcher(
       } catch (err) {
         logger.error(
           '[slingshot-notifications] Dispatcher stop(): inflight tick did not settle',
-          err,
+          errorLogFields(err),
         );
       } finally {
         if (timeout) clearTimeout(timeout);
@@ -433,7 +438,7 @@ export function createIntervalDispatcher(
             // Counting is best-effort — never let it break dispatch.
             logger.error(
               '[slingshot-notifications] Dispatcher countPendingDispatch failed (continuing)',
-              err,
+              errorLogFields(err),
             );
             lastPendingCount = rows.length;
             lastPendingCountIsLowerBound = rows.length >= maxPerTick;
@@ -532,7 +537,7 @@ export function createIntervalDispatcher(
               // identifier cannot split the log line.
               logger.error(
                 `[slingshot-notifications] Failed to roll back '${sanitizeLogValue(row.id)}' after stop()`,
-                rollbackErr,
+                errorLogFields(rollbackErr),
               );
             }
             break;
@@ -591,12 +596,12 @@ export function createIntervalDispatcher(
             } catch (rollbackErr) {
               logger.error(
                 `[slingshot-notifications] Failed to roll back dispatched state for notification '${safeRowId}'`,
-                rollbackErr,
+                errorLogFields(rollbackErr),
               );
             }
             logger.error(
               `[slingshot-notifications] Failed to publish notification '${safeRowId}' after marking it dispatched`,
-              lastErr,
+              errorLogFields(lastErr),
             );
             // Fire the dead-letter callback so apps can alert or re-queue.
             if (onDeadLetter && lastErr instanceof Error) {

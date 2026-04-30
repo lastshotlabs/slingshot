@@ -256,6 +256,13 @@ describe('M2M token detection', () => {
   });
 
   test('M2M token in Authorization bearer header sets serviceAccountId', async () => {
+    runtime = makeTestRuntime({ m2m: { tokenExpiry: 3600 } });
+    await runtime.adapter.createM2MClient?.({
+      clientId: 'client-bearer-123',
+      clientSecretHash: 'hash',
+      name: 'Bearer client',
+      scopes: ['read:data', 'write:data'],
+    });
     const app = buildApp();
     const token = await signToken(
       { sub: 'client-bearer-123', scope: 'read:data write:data' },

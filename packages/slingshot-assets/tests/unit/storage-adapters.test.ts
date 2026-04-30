@@ -167,10 +167,10 @@ describe('resolveStorageAdapter', () => {
 
   it('validates built-in adapter configuration before construction', () => {
     expect(() => resolveStorageAdapter({ adapter: 'local', config: {} })).toThrow(
-      'local storage requires',
+      'local storage config invalid',
     );
     expect(() => resolveStorageAdapter({ adapter: 's3', config: {} })).toThrow(
-      's3 storage requires',
+      's3 storage config invalid',
     );
     expect(() =>
       resolveStorageAdapter(

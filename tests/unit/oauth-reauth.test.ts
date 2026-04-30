@@ -191,7 +191,7 @@ describe('memory store expiry enforcement', () => {
     const expiryRepo = createMemoryOAuthReauthRepository();
 
     const hash = sha256('test-conf-expired');
-    await expiryRepo.storeConfirmation(hash, { userId: 'u2', purpose: 'p2' }, 0);
+    await expiryRepo.storeConfirmation(hash, { userId: 'u2', sessionId: 's2', purpose: 'p2' }, 0);
 
     const result = await expiryRepo.consumeConfirmation(hash);
     expect(result).toBeNull();

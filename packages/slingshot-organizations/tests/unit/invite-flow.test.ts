@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { OperationIdempotencyAdapter } from '@lastshotlabs/slingshot-core';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
 import type { EntityPluginAfterAdaptersContext } from '@lastshotlabs/slingshot-entity';
 import type { OrganizationsAuthRuntime } from '../../src/lib/authRuntime';
@@ -75,7 +76,7 @@ function createBareAdapter<T extends AnyRow>(rows: T[]): BareEntityAdapter {
   } as unknown as BareEntityAdapter;
 }
 
-async function setupInviteEnv() {
+async function setupInviteEnv(opts?: { inviteIdempotencyAdapter?: OperationIdempotencyAdapter }) {
   const orgs: OrgRow[] = [];
   const members: MemberRow[] = [];
   const invites: InviteRow[] = [];
@@ -101,6 +102,9 @@ async function setupInviteEnv() {
     authRuntime,
     invitationTtlSeconds: 3600,
     defaultMemberRole: 'member',
+    ...(opts?.inviteIdempotencyAdapter
+      ? { inviteIdempotencyAdapter: opts.inviteIdempotencyAdapter }
+      : {}),
   });
 
   const stubCtx = {} as Parameters<ReturnType<typeof runtime.adapterTransforms.resolve>>[1];
@@ -178,7 +182,7 @@ describe('invite creation', () => {
     const result = (await env.createInvite('org-create-1')) as { id: string; token: string };
     expect(result.id).toBeTruthy();
     expect(typeof result.token).toBe('string');
-    expect(result.token.length).toBeGreaterThan(0);
+    expect(result.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
 
     // The raw token must not be stored in the persisted record
     const persisted = env.state.invites[0];
@@ -186,7 +190,7 @@ describe('invite creation', () => {
     expect(persisted.tokenHash).not.toBe(result.token);
   });
 
-  test('invite creation with idempotencyKey returns the same invite', async () => {
+  test('invite creation with idempotencyKey returns the same invite without replaying token', async () => {
     const env = await setupInviteEnv();
     await env.createOrg('org-idem');
 
@@ -196,10 +200,34 @@ describe('invite creation', () => {
 
     const second = (await env.createInvite('org-idem', {
       idempotencyKey: 'key-1',
-    })) as { id: string; token: string };
+    })) as { id: string; token?: string };
 
     expect(second.id).toBe(first.id);
-    expect(second.token).toBe(first.token);
+    expect(second.token).toBeUndefined();
+  });
+
+  test('invite idempotency cache does not store the raw bearer token', async () => {
+    const writes: unknown[] = [];
+    const idempotencyAdapter: OperationIdempotencyAdapter = {
+      async get() {
+        return undefined;
+      },
+      async set(_key, payload) {
+        writes.push(payload);
+      },
+    };
+    const env = await setupInviteEnv({ inviteIdempotencyAdapter: idempotencyAdapter });
+    await env.createOrg('org-idem-cache');
+
+    const created = (await env.createInvite('org-idem-cache', {
+      idempotencyKey: 'key-cache',
+    })) as { id: string; token: string };
+
+    expect(created.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(writes).toHaveLength(1);
+    const cached = writes[0] as Record<string, unknown>;
+    expect(cached.id).toBe(created.id);
+    expect(cached.token).toBeUndefined();
   });
 
   test('invite creation without idempotencyKey creates distinct rows', async () => {

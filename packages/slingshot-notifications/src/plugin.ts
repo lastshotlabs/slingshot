@@ -43,6 +43,65 @@ const pluginLogger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-no
 
 type AdapterResult = BareEntityAdapter;
 type ActorParam = { 'actor.id': string };
+
+function errorLogFields(err: unknown): { err: string; name?: string } {
+  if (err instanceof Error) return { err: err.message, name: err.name };
+  return { err: String(err) };
+}
+
+function validateNotificationAdapter(adapter: unknown): NotificationAdapter {
+  if (typeof adapter !== 'object' || adapter === null) {
+    throw new Error('Notification adapter is not an object');
+  }
+  const required = [
+    'create',
+    'getById',
+    'update',
+    'delete',
+    'list',
+    'clear',
+    'listByUser',
+    'listUnread',
+    'markRead',
+    'markAllRead',
+    'unreadCount',
+    'unreadCountBySource',
+    'unreadCountByScope',
+    'hasUnreadByDedupKey',
+    'findByDedupKey',
+    'dedupOrCreate',
+    'listPendingDispatch',
+    'markDispatched',
+  ] as const;
+  for (const method of required) {
+    if (typeof (adapter as Record<string, unknown>)[method] !== 'function') {
+      throw new Error(`Notification adapter missing required method: ${method}`);
+    }
+  }
+  return adapter as NotificationAdapter;
+}
+
+function validateNotificationPreferenceAdapter(adapter: unknown): NotificationPreferenceAdapter {
+  if (typeof adapter !== 'object' || adapter === null) {
+    throw new Error('NotificationPreference adapter is not an object');
+  }
+  const required = [
+    'create',
+    'getById',
+    'update',
+    'delete',
+    'list',
+    'clear',
+    'listByUser',
+    'resolveForNotification',
+  ] as const;
+  for (const method of required) {
+    if (typeof (adapter as Record<string, unknown>)[method] !== 'function') {
+      throw new Error(`NotificationPreference adapter missing required method: ${method}`);
+    }
+  }
+  return adapter as NotificationPreferenceAdapter;
+}
 type GeneratedNotificationAdapter = NotificationAdapter & {
   listByUser(params: ActorParam): ReturnType<NotificationAdapter['listByUser']>;
   listUnread(params: ActorParam): ReturnType<NotificationAdapter['listUnread']>;
@@ -177,7 +236,7 @@ export function createNotificationsPlugin(
         // to bridge the boundary. wrapNotificationAdapter() then enforces the
         // actor-param contract at every call site.
         const adapter = resolveRepo(notificationFactories, storeType, infra);
-        notificationsAdapter = adapter as unknown as NotificationAdapter;
+        notificationsAdapter = validateNotificationAdapter(adapter);
         return adapter as unknown as AdapterResult;
       },
     },
@@ -188,7 +247,7 @@ export function createNotificationsPlugin(
         // Same boundary as Notification above: bridge generated entity adapter
         // shape to the typed NotificationPreferenceAdapter contract.
         const adapter = resolveRepo(notificationPreferenceFactories, storeType, infra);
-        preferencesAdapter = adapter as unknown as NotificationPreferenceAdapter;
+        preferencesAdapter = validateNotificationPreferenceAdapter(adapter);
         return adapter as unknown as AdapterResult;
       },
     },
@@ -259,7 +318,7 @@ export function createNotificationsPlugin(
       } catch (err) {
         pluginLogger.error(
           '[slingshot-notifications] Failed to pre-warm notifications storage; first dedupOrCreate may fail',
-          err,
+          errorLogFields(err),
         );
       }
 
@@ -304,7 +363,7 @@ export function createNotificationsPlugin(
           } catch (err) {
             pluginLogger.error(
               `[slingshot-notifications] Delivery adapter [${adapterIndex}] threw for notification "${event.notification.id}"`,
-              err,
+              errorLogFields(err),
             );
           }
           adapterIndex++;
@@ -365,12 +424,15 @@ export function createNotificationsPlugin(
               } catch (err) {
                 pluginLogger.error(
                   `[slingshot-notifications] expiry sweep delete failed for id=${row.id}`,
-                  err,
+                  errorLogFields(err),
                 );
               }
             }
           } catch (err) {
-            pluginLogger.error('[slingshot-notifications] expiry sweep failed', err);
+            pluginLogger.error(
+              '[slingshot-notifications] expiry sweep failed',
+              errorLogFields(err),
+            );
           }
         };
         // Fire-and-forget initial sweep so apps that just enabled TTL get

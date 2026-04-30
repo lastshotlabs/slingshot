@@ -46,8 +46,7 @@ const tags = ['OAuth'];
 /** Returns the authenticated user's ID, or throws 401 if anonymous. */
 const requireUserId = (c: Context<AppEnv>): string => {
   const actor = getActor(c);
-  if (actor.kind !== 'user' || !actor.id)
-    throw new HttpError(401, 'Authenticated user required');
+  if (actor.kind !== 'user' || !actor.id) throw new HttpError(401, 'Authenticated user required');
   return actor.id;
 };
 
@@ -193,7 +192,9 @@ const finishOAuth = async (
       return c.redirect(`${postLoginRedirect}${sep}code=${code}${userParam}`);
     }
   } catch (err) {
-    return c.redirect(appendRedirectParams(postLoginRedirect, { error: publicOAuthErrorCode(err) }));
+    return c.redirect(
+      appendRedirectParams(postLoginRedirect, { error: publicOAuthErrorCode(err) }),
+    );
   }
 };
 
@@ -397,20 +398,45 @@ export const createOAuthRouter = (
     };
   };
 
+  const validateOAuthLinkContext = async (
+    c: Context<AppEnv>,
+    storedLinkUserId: string | undefined,
+  ): Promise<
+    | { link: { userId: string; sessionId: string }; response: null }
+    | { link: null; response: Response | null }
+  > => {
+    if (!storedLinkUserId) return { link: null, response: null };
+
+    const link = parseOAuthLinkContext(storedLinkUserId);
+    if (!link) {
+      const blocked = await assertSensitiveOauthMutationAllowed(c, storedLinkUserId);
+      if (blocked) return { link: null, response: blocked };
+      return { link: null, response: errorResponse(c, 'Invalid or expired state', 400) };
+    }
+
+    const actor = getActor(c);
+    if (actor.kind !== 'user' || actor.id !== link.userId || actor.sessionId !== link.sessionId) {
+      return {
+        link: null,
+        response: errorResponse(c, 'Authenticated session does not match OAuth link request', 401),
+      };
+    }
+
+    const blocked = await assertSensitiveOauthMutationAllowed(c, link.userId);
+    if (blocked) return { link: null, response: blocked };
+
+    return { link, response: null };
+  };
+
   const finishProviderLink = async (
     c: Context<AppEnv>,
     storedLinkUserId: string | undefined,
     provider: string,
     providerUserId: string,
   ) => {
-    const link = parseOAuthLinkContext(storedLinkUserId);
+    const { link, response } = await validateOAuthLinkContext(c, storedLinkUserId);
+    if (response) return response;
     if (!link) return null;
-    const actor = getActor(c);
-    if (actor.kind !== 'user' || actor.id !== link.userId || actor.sessionId !== link.sessionId) {
-      return errorResponse(c, 'Authenticated session does not match OAuth link request', 401);
-    }
-    const blocked = await assertSensitiveOauthMutationAllowed(c, link.userId);
-    if (blocked) return blocked;
     if (!adapter.linkProvider)
       return errorResponse(c, 'Auth adapter does not support linkProvider', 500);
     await adapter.linkProvider(link.userId, provider, providerUserId);
@@ -1132,7 +1158,12 @@ export const createOAuthRouter = (
             emails.find(e => e.primary && e.verified)?.email ?? emails.find(e => e.verified)?.email;
         }
 
-        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'github', String(info.id));
+        const linkResponse = await finishProviderLink(
+          c,
+          stored.linkUserId,
+          'github',
+          String(info.id),
+        );
         if (linkResponse) return linkResponse;
         if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
@@ -1708,7 +1739,12 @@ export const createOAuthRouter = (
           avatar_url?: string;
         };
 
-        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'gitlab', String(info.id));
+        const linkResponse = await finishProviderLink(
+          c,
+          stored.linkUserId,
+          'gitlab',
+          String(info.id),
+        );
         if (linkResponse) return linkResponse;
         if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 
@@ -2092,7 +2128,12 @@ export const createOAuthRouter = (
           emails.values?.find(e => e.is_primary && e.is_confirmed)?.email ??
           emails.values?.find(e => e.is_confirmed)?.email;
 
-        const linkResponse = await finishProviderLink(c, stored.linkUserId, 'bitbucket', info.account_id);
+        const linkResponse = await finishProviderLink(
+          c,
+          stored.linkUserId,
+          'bitbucket',
+          info.account_id,
+        );
         if (linkResponse) return linkResponse;
         if (stored.linkUserId) return errorResponse(c, 'Invalid or expired state', 400);
 

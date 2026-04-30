@@ -105,7 +105,9 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
             try {
               await onDeadLetter(finalJob, lastErr);
             } catch (err) {
-              logger.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+              logger.error('[slingshot-webhooks] onDeadLetter handler failed', {
+                error: err instanceof Error ? err.message : String(err),
+              });
             }
           }
           return;
@@ -118,7 +120,9 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
       try {
         await onDeadLetter(job, lastErr);
       } catch (err) {
-        logger.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+        logger.error('[slingshot-webhooks] onDeadLetter handler failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   }
@@ -156,10 +160,14 @@ export function createWebhookMemoryQueue(config?: MemoryQueueConfig): WebhookQue
                     new Error('[slingshot-webhooks] Memory queue at capacity — job evicted'),
                   ),
                 ).catch(err => {
-                  logger.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+                  logger.error('[slingshot-webhooks] onDeadLetter handler failed', {
+                    error: err instanceof Error ? err.message : String(err),
+                  });
                 });
               } catch (err) {
-                logger.error('[slingshot-webhooks] onDeadLetter handler failed', err);
+                logger.error('[slingshot-webhooks] onDeadLetter handler failed', {
+                  error: err instanceof Error ? err.message : String(err),
+                });
               }
             }
           }

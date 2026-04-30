@@ -5,6 +5,7 @@ import type { RateLimiter } from '../lib/rateLimit';
 import { createSlidingWindowRateLimiter } from '../lib/rateLimit';
 import type { InboundProvider } from '../types/inbound';
 import { WEBHOOK_ROUTE_TAGS, WebhookErrorResponseSchema } from './_shared';
+import { WebhookInboundConfigError } from '../errors/webhookErrors';
 
 const InboundResponse = z.object({ received: z.boolean() });
 
@@ -142,7 +143,7 @@ export function createInboundRouter(
   const app = createRouter();
   const providerMap = new Map(providers.map(p => [p.name, p]));
   if (providerMap.size !== providers.length) {
-    throw new Error('[slingshot-webhooks] Duplicate inbound provider names are not allowed');
+    throw new WebhookInboundConfigError('Duplicate inbound provider names are not allowed');
   }
   const maxBodyBytes = opts.maxBodyBytes ?? DEFAULT_INBOUND_MAX_BODY_BYTES;
 

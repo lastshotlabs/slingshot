@@ -2,9 +2,13 @@ import type { MiddlewareHandler } from 'hono';
 import type { Actor, AppEnv } from '@lastshotlabs/slingshot-core';
 import { getActor } from '@lastshotlabs/slingshot-core';
 
-export function getAuthenticatedUserActor(c: Parameters<typeof getActor>[0]): Actor | null {
+export type AuthenticatedUserActor = Actor & { kind: 'user'; id: string };
+
+export function getAuthenticatedUserActor(
+  c: Parameters<typeof getActor>[0],
+): AuthenticatedUserActor | null {
   const actor = getActor(c);
-  return actor.kind === 'user' && actor.id ? actor : null;
+  return actor.kind === 'user' && actor.id ? (actor as AuthenticatedUserActor) : null;
 }
 
 /**

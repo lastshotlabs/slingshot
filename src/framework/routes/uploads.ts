@@ -233,6 +233,10 @@ export const createUploadsRouter = (config: UploadsRouterConfig) => {
         description: 'File type not allowed',
         content: { 'application/json': { schema: z.object({ error: z.string() }) } },
       },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      },
       413: {
         description: 'Requested upload size exceeds the configured limit',
         content: { 'application/json': { schema: z.object({ error: z.string() }) } },
@@ -368,6 +372,10 @@ export const createUploadsRouter = (config: UploadsRouterConfig) => {
         description: 'Forbidden — not the owner or unauthorized',
         content: { 'application/json': { schema: z.object({ error: z.string() }) } },
       },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      },
       404: {
         description: 'Key not found in upload registry',
         content: { 'application/json': { schema: z.object({ error: z.string() }) } },
@@ -453,6 +461,10 @@ export const createUploadsRouter = (config: UploadsRouterConfig) => {
     },
     responses: {
       204: { description: 'Deleted' },
+      401: {
+        description: 'Unauthorized',
+        content: { 'application/json': { schema: z.object({ error: z.string() }) } },
+      },
       403: {
         description: 'Forbidden — not the owner or unauthorized',
         content: { 'application/json': { schema: z.object({ error: z.string() }) } },

@@ -313,16 +313,25 @@ export function createOrganizationsPlugin(
     tenantExemptPaths,
 
     async setupMiddleware(ctx: PluginSetupContext) {
-      const manifest = structuredClone(organizationsManifest);
-      if (!organizationsEnabled) {
-        delete manifest.entities.Organization;
-        delete manifest.entities.OrganizationMember;
-        delete manifest.entities.OrganizationInvite;
-      }
-      if (!groupsEnabled) {
-        delete manifest.entities.Group;
-        delete manifest.entities.GroupMembership;
-      }
+      const manifest = {
+        ...organizationsManifest,
+        entities: Object.fromEntries(
+          Object.entries(organizationsManifest.entities).filter(([key]) => {
+            if (
+              !organizationsEnabled &&
+              (key === 'Organization' ||
+                key === 'OrganizationMember' ||
+                key === 'OrganizationInvite')
+            ) {
+              return false;
+            }
+            if (!groupsEnabled && (key === 'Group' || key === 'GroupMembership')) {
+              return false;
+            }
+            return true;
+          }),
+        ),
+      };
 
       const authRuntime = getOrganizationsAuthRuntime(getPluginStateOrNull(ctx.app));
       const routeAuth = getRouteAuthOrNull(ctx.app);

@@ -25,13 +25,14 @@ import {
   getActorId,
 } from '@lastshotlabs/slingshot-core';
 import { createMemoryWebhookAdapter } from './adapters/memory';
+import { WebhookRuntimeError } from './errors/webhookErrors';
 import { createWebhookPlugin } from './plugin';
 import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
 import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 
 function unsupportedInfra(name: string): never {
-  throw new Error(`Test store infra does not support ${name}`);
+  throw new WebhookRuntimeError(`Test store infra does not support ${name}`);
 }
 
 const memoryInfra: StoreInfra = {
@@ -237,7 +238,7 @@ export async function createWebhooksTestApp(
 
   const runtime = pluginState.get(WEBHOOKS_PLUGIN_STATE_KEY) as WebhookAdapter | undefined;
   if (!runtime) {
-    throw new Error('Webhook plugin did not register runtime state');
+    throw new WebhookRuntimeError('Webhook plugin did not register runtime state');
   }
   return {
     app,

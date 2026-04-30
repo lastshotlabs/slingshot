@@ -44,6 +44,40 @@ async function createUser(
   );
 }
 
+async function replaceUser(
+  app: Hono<AppEnv>,
+  userId: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  return app.fetch(
+    new Request(`http://localhost/scim/v2/Users/${userId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${SCIM_BEARER}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+async function patchUser(
+  app: Hono<AppEnv>,
+  userId: string,
+  operations: Array<Record<string, unknown>>,
+): Promise<Response> {
+  return app.fetch(
+    new Request(`http://localhost/scim/v2/Users/${userId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${SCIM_BEARER}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ Operations: operations }),
+    }),
+  );
+}
+
 /** Seed a user into the adapter and return the internal user ID. */
 async function seedUser(runtime: AuthRuntimeContext, email: string): Promise<string> {
   const user = await runtime.adapter.create(email, null as unknown as string);
@@ -158,5 +192,32 @@ describe('SCIM deprovisioning modes', () => {
     });
 
     expect(res.status).toBe(501);
+  });
+
+  test('PUT active=false revokes active sessions', async () => {
+    const userId = await seedUser(runtime, 'dana@example.com');
+    await runtime.repos.session.createSession(userId, 'tok-1', 'sess-1', {}, runtime.config);
+    const app = buildApp(runtime);
+
+    const res = await replaceUser(app, userId, {
+      userName: 'dana@example.com',
+      active: false,
+    });
+
+    expect(res.status).toBe(200);
+    const sessions = await runtime.repos.session.getUserSessions(userId, runtime.config);
+    expect(sessions.filter(s => s.isActive)).toHaveLength(0);
+  });
+
+  test('PATCH active=false revokes active sessions', async () => {
+    const userId = await seedUser(runtime, 'erin@example.com');
+    await runtime.repos.session.createSession(userId, 'tok-1', 'sess-1', {}, runtime.config);
+    const app = buildApp(runtime);
+
+    const res = await patchUser(app, userId, [{ op: 'replace', path: 'active', value: false }]);
+
+    expect(res.status).toBe(200);
+    const sessions = await runtime.repos.session.getUserSessions(userId, runtime.config);
+    expect(sessions.filter(s => s.isActive)).toHaveLength(0);
   });
 });

@@ -23,6 +23,7 @@ import type { SearchHit, SearchResponse, SuggestResponse } from '../types/respon
 import { stringifyDocumentId, stringifySearchValue } from './stringify';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
+import { SearchProviderError } from '../errors/searchErrors';
 
 const logger: Logger = createConsoleLogger({ base: { provider: 'slingshot-search:typesense' } });
 
@@ -271,8 +272,8 @@ function createHttpClient(config: HttpClientConfig) {
   ): Promise<{ readonly status: number; readonly data: unknown }> {
     const response = await request(method, path, body, options);
     if (response.data === undefined) {
-      throw new Error(
-        `[slingshot-search:typesense] Expected JSON body but got ${response.status} for ${method} ${path}`,
+      throw new SearchProviderError(
+        `Expected JSON body but got ${response.status} for ${method} ${path}`,
       );
     }
     return { status: response.status, data: response.data };
@@ -959,7 +960,7 @@ export function createTypesenseProvider(config: TypesenseProviderConfig): Search
     async connect(): Promise<void> {
       const { data } = await http.get<{ ok: boolean }>('/health');
       if (!data.ok) {
-        throw new Error(`[slingshot-search:typesense] Health check failed: not ok`);
+        throw new SearchProviderError(`Health check failed: not ok`);
       }
     },
 

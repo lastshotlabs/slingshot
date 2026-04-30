@@ -81,8 +81,14 @@ describe('auth RequestActorResolver upgrade security', () => {
   });
 
   test('resolves M2M bearer tokens as service-account actors during upgrade auth', async () => {
-    const app = await createTestApp();
+    const app = await createTestApp({}, { auth: { m2m: { tokenExpiry: 3600 } } });
     const runtime = getRuntime(app);
+    await runtime.adapter.createM2MClient?.({
+      clientId: 'svc-resolver',
+      clientSecretHash: 'hash',
+      name: 'Resolver service',
+      scopes: ['read:data'],
+    });
     const token = await signToken(
       { sub: 'svc-resolver', scope: 'read:data' },
       3600,
@@ -122,13 +128,29 @@ describe('auth RequestActorResolver upgrade security', () => {
     const runtime = getRuntime(app);
 
     expect(
-      (await resolver.resolveActor(new Request(`http://localhost/__ws/chat?token=${token}`))).id,
+      (
+        await resolver.resolveActor(
+          new Request('http://localhost/__ws/chat', {
+            headers: { 'x-user-token': token },
+          }),
+        )
+      ).id,
     ).toBe(userId);
+
+    expect(
+      (await resolver.resolveActor(new Request(`http://localhost/__ws/chat?token=${token}`))).id,
+    ).toBeNull();
 
     await runtime.adapter.setSuspended?.(userId, true, 'security hold');
 
     expect(
-      (await resolver.resolveActor(new Request(`http://localhost/__ws/chat?token=${token}`))).id,
+      (
+        await resolver.resolveActor(
+          new Request('http://localhost/__ws/chat', {
+            headers: { 'x-user-token': token },
+          }),
+        )
+      ).id,
     ).toBeNull();
   });
 
@@ -158,13 +180,25 @@ describe('auth RequestActorResolver upgrade security', () => {
     const resolver = getRequestActorResolver(app);
 
     expect(
-      (await resolver.resolveActor(new Request(`http://localhost/__sse/feed?token=${token}`))).id,
+      (
+        await resolver.resolveActor(
+          new Request('http://localhost/__sse/feed', {
+            headers: { 'x-user-token': token },
+          }),
+        )
+      ).id,
     ).toBe(userId);
 
     await runtime.adapter.setEmailVerified?.(userId, false);
 
     expect(
-      (await resolver.resolveActor(new Request(`http://localhost/__sse/feed?token=${token}`))).id,
+      (
+        await resolver.resolveActor(
+          new Request('http://localhost/__sse/feed', {
+            headers: { 'x-user-token': token },
+          }),
+        )
+      ).id,
     ).toBeNull();
   });
 
@@ -193,13 +227,13 @@ describe('auth RequestActorResolver upgrade security', () => {
     const payload = await verifyToken(token, runtime.config, runtime.signing);
     await runtime.repos.session.setSessionFingerprint(payload.sid as string, sha256('Browser-A'));
 
-    const matchingReq = new Request(`http://localhost/__ws/chat?token=${token}`, {
-      headers: { 'user-agent': 'Browser-A' },
+    const matchingReq = new Request('http://localhost/__ws/chat', {
+      headers: { 'x-user-token': token, 'user-agent': 'Browser-A' },
     });
     expect((await resolver.resolveActor(matchingReq)).id).toBe(userId);
 
-    const mismatchedReq = new Request(`http://localhost/__ws/chat?token=${token}`, {
-      headers: { 'user-agent': 'Browser-B' },
+    const mismatchedReq = new Request('http://localhost/__ws/chat', {
+      headers: { 'x-user-token': token, 'user-agent': 'Browser-B' },
     });
     expect((await resolver.resolveActor(mismatchedReq)).id).toBeNull();
   });

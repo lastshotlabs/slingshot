@@ -13,6 +13,7 @@ import type { SearchHealthResult, SearchIndexSettings } from '../types/provider'
 import type { SearchQuery, SearchSort, SuggestQuery } from '../types/query';
 import type { FacetStats, SearchHit, SearchResponse, SuggestResponse } from '../types/response';
 import { computeFacets } from './facets';
+import { SearchIndexNotFoundError, SearchPaginationError } from '../errors/searchErrors';
 import { evaluateFilter, getNestedValue, haversineDistance } from './filterEval';
 import { stringifyDocumentId, stringifySearchValue } from './stringify';
 import {
@@ -269,7 +270,7 @@ export function createDbNativeProvider(): SearchProvider {
   function getIndex(indexName: string): IndexState {
     const idx = indexes.get(indexName);
     if (!idx) {
-      throw new Error(`[slingshot-search:db-native] Index '${indexName}' does not exist`);
+      throw new SearchIndexNotFoundError(`Index '${indexName}' does not exist`);
     }
     return idx;
   }
@@ -520,8 +521,8 @@ export function createDbNativeProvider(): SearchProvider {
       }
 
       if (offset > MAX_DB_NATIVE_OFFSET) {
-        throw new Error(
-          `[slingshot-search:db-native] offset ${offset} exceeds the safe maximum ` +
+        throw new SearchPaginationError(
+          `offset ${offset} exceeds the safe maximum ` +
             `${MAX_DB_NATIVE_OFFSET}. Use a more selective filter or a cursor-based scan ` +
             `for deeper pagination.`,
         );

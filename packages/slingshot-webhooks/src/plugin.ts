@@ -28,6 +28,7 @@ import { logWebhookEvent } from './lib/log';
 import type { GovernedWebhookRuntime } from './manifest/runtime';
 import { createWebhookMemoryQueue } from './queues/memory';
 import { createInboundRouter } from './routes/inbound';
+import { WebhookConfigError, WebhookRuntimeError } from './errors/webhookErrors';
 import { WEBHOOK_ROUTES } from './routes/index';
 import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
@@ -288,7 +289,7 @@ async function resolveTestDelivery(
 ): Promise<{ deliveryId: string; status: number; ok: boolean; body: string; durationMs: number }> {
   const endpoint = await runtime.getEndpoint(endpointId);
   if (!endpoint) {
-    throw new Error('Not found');
+    throw new WebhookRuntimeError('Endpoint not found');
   }
 
   const eventId = crypto.randomUUID();
@@ -431,8 +432,8 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
       } else {
         if (!config.secretEncryptionKey && !config.encryptor) {
           if (process.env.NODE_ENV === 'production' && !config.allowPlaintextSecrets) {
-            throw new Error(
-              '[slingshot-webhooks] secret encryption is required in production. ' +
+            throw new WebhookConfigError(
+              'secret encryption is required in production. ' +
                 'Set secretEncryptionKey, supply a custom encryptor, or explicitly set ' +
                 'allowPlaintextSecrets: true if storage encryption is handled externally.',
             );
@@ -499,8 +500,11 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
             const result = await resolveTestDelivery(adapter, config, endpointId, bus);
             return c.json(result, 200);
           } catch (err) {
-            if (err instanceof Error && err.message === 'Not found') {
-              return c.json({ error: 'Not found' }, 404);
+            if (
+              err instanceof WebhookRuntimeError &&
+              err.message === '[slingshot-webhooks] Endpoint not found'
+            ) {
+              return c.json({ error: 'Endpoint not found' }, 404);
             }
             const message = err instanceof Error ? err.message : String(err);
             return c.json({ error: 'Test delivery failed', message }, 502);
@@ -578,7 +582,7 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
     }: PluginSetupContext): Promise<void> {
       await innerPlugin?.setupPost?.({ app, config: frameworkConfig, bus, events });
       if (!runtimeAdapter) {
-        throw new Error('[slingshot-webhooks] Manifest adapters were not resolved during setup');
+        throw new WebhookRuntimeError('Manifest adapters were not resolved during setup');
       }
       if ('initializeGovernance' in runtimeAdapter) {
         await (runtimeAdapter as WebhookAdapter & GovernedWebhookRuntime).initializeGovernance(

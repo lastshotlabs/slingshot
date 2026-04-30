@@ -23,6 +23,7 @@ import type { SearchHit, SearchResponse, SuggestResponse } from '../types/respon
 import { stringifyDocumentId, stringifySearchValue } from './stringify';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
+import { SearchProviderError } from '../errors/searchErrors';
 
 const logger: Logger = createConsoleLogger({ base: { provider: 'slingshot-search:algolia' } });
 
@@ -137,8 +138,8 @@ function createHttpClient(config: HttpClientConfig) {
   ): Promise<{ readonly status: number; readonly data: unknown }> {
     const response = await request(method, path, body);
     if (response.data === undefined) {
-      throw new Error(
-        `[slingshot-search:algolia] Expected JSON body but got ${response.status} for ${method} ${path}`,
+      throw new SearchProviderError(
+        `Expected JSON body but got ${response.status} for ${method} ${path}`,
       );
     }
     return { status: response.status, data: response.data };

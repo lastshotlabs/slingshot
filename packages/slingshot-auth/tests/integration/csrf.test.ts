@@ -121,6 +121,61 @@ describe('CSRF double-submit cookie validation', () => {
     expect(res.status).toBe(200);
   });
 
+  test('configured origin check rejects missing Origin and Referer', async () => {
+    const runtime2 = makeTestRuntime();
+    const app2 = wrapWithRuntime(runtime2);
+    app2.use(
+      '*',
+      csrfProtection({
+        signing: { secret: SIGNING_SECRET },
+        allowedOrigins: ['https://app.example.com'],
+      }),
+    );
+    app2.post('/test', c => c.json({ ok: true }));
+    const validToken = makeValidCsrfToken(SIGNING_SECRET);
+
+    const res = await app2.fetch(
+      new Request('http://localhost/test', {
+        method: 'POST',
+        headers: {
+          Cookie: `${COOKIE_TOKEN}=session; ${COOKIE_CSRF_TOKEN}=${validToken}`,
+          [HEADER_CSRF_TOKEN]: validToken,
+        },
+      }),
+    );
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/origin missing/i);
+  });
+
+  test('configured origin check accepts allowed Referer when Origin is absent', async () => {
+    const runtime2 = makeTestRuntime();
+    const app2 = wrapWithRuntime(runtime2);
+    app2.use(
+      '*',
+      csrfProtection({
+        signing: { secret: SIGNING_SECRET },
+        allowedOrigins: ['https://app.example.com'],
+      }),
+    );
+    app2.post('/test', c => c.json({ ok: true }));
+    const validToken = makeValidCsrfToken(SIGNING_SECRET);
+
+    const res = await app2.fetch(
+      new Request('http://localhost/test', {
+        method: 'POST',
+        headers: {
+          Cookie: `${COOKIE_TOKEN}=session; ${COOKIE_CSRF_TOKEN}=${validToken}`,
+          [HEADER_CSRF_TOKEN]: validToken,
+          Referer: 'https://app.example.com/settings',
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+  });
+
   test('exempt path bypasses CSRF even with an auth cookie', async () => {
     const runtime2 = makeTestRuntime();
     const app2 = wrapWithRuntime(runtime2);
@@ -147,7 +202,7 @@ describe('CSRF double-submit cookie validation', () => {
     const runtime2 = makeTestRuntime();
     const app2 = wrapWithRuntime(runtime2);
     app2.use('*', async (c, next) => {
-      const ctx = c.get('slingshotCtx') as Record<string, unknown>;
+      const ctx = c.get('slingshotCtx') as unknown as Record<string, unknown>;
       c.set('slingshotCtx', { ...ctx, publicPaths: new Set(['/auth/*']) } as never);
       await next();
     });

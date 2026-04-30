@@ -1601,8 +1601,8 @@ describe('organizations manifest conversion', () => {
     expect(typeof reconcile?.reconcileOrphanedOrgRecords).toBe('function');
   });
 
-  // P-ORG-11: invite creation honours `idempotencyKey` for retried POSTs.
-  test('invite creation with the same idempotencyKey returns the same invite', async () => {
+  // P-ORG-11: invite creation honours `idempotencyKey` without caching invite tokens.
+  test('invite creation with the same idempotencyKey returns the same invite without replaying token', async () => {
     const createOrg = await app.request('/orgs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-user-id': adminId },
@@ -1627,11 +1627,12 @@ describe('organizations manifest conversion', () => {
       body: JSON.stringify({ role: 'member', idempotencyKey }),
     });
     expect(second.status).toBe(201);
-    const secondBody = (await second.json()) as { id: string; token: string };
+    const secondBody = (await second.json()) as { id: string; token?: string };
 
-    // The dedupe path returns the previously-created invite verbatim.
+    // The dedupe path returns the previously-created invite metadata, but not
+    // the one-time bearer token from the first create response.
     expect(secondBody.id).toBe(firstBody.id);
-    expect(secondBody.token).toBe(firstBody.token);
+    expect(secondBody.token).toBeUndefined();
 
     // A different key creates a brand-new invite.
     const third = await app.request(`/orgs/${org.id}/invitations`, {

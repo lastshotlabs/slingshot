@@ -2,7 +2,7 @@
  * Unit tests for getAuthenticatedAccountGuardFailure.
  *
  * Targets the uncovered lines:
- * - lines 19-21: throws when actor is missing or anonymous
+ * - lines 19-21: returns 401 when actor is missing or anonymous
  */
 import { AUTH_RUNTIME_KEY } from '@auth/runtime';
 import type { AuthRuntimeContext } from '@auth/runtime';
@@ -69,32 +69,36 @@ function makeContext(actorId: unknown, opts?: { suspended?: boolean; emailVerifi
 }
 
 describe('getAuthenticatedAccountGuardFailure', () => {
-  test('throws when actor is null (lines 19-21)', async () => {
+  test('returns 401 when actor is null (lines 19-21)', async () => {
     const ctx = makeContext(null);
-    await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
-      /authenticated user actor/,
-    );
+    await expect(getAuthenticatedAccountGuardFailure(ctx as any)).resolves.toEqual({
+      error: 'Unauthorized',
+      status: 401,
+    });
   });
 
-  test('throws when actor is undefined (lines 19-21)', async () => {
+  test('returns 401 when actor is undefined (lines 19-21)', async () => {
     const ctx = makeContext(undefined);
-    await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
-      /authenticated user actor/,
-    );
+    await expect(getAuthenticatedAccountGuardFailure(ctx as any)).resolves.toEqual({
+      error: 'Unauthorized',
+      status: 401,
+    });
   });
 
-  test('throws when actor id is empty string (lines 19-21)', async () => {
+  test('returns 401 when actor id is empty string (lines 19-21)', async () => {
     const ctx = makeContext('');
-    await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
-      /authenticated user actor/,
-    );
+    await expect(getAuthenticatedAccountGuardFailure(ctx as any)).resolves.toEqual({
+      error: 'Unauthorized',
+      status: 401,
+    });
   });
 
-  test('throws when actor id is a number', async () => {
+  test('returns 401 when actor id is a number', async () => {
     const ctx = makeContext(42);
-    await expect(getAuthenticatedAccountGuardFailure(ctx as any)).rejects.toThrow(
-      /authenticated user actor/,
-    );
+    await expect(getAuthenticatedAccountGuardFailure(ctx as any)).resolves.toEqual({
+      error: 'Unauthorized',
+      status: 401,
+    });
   });
 
   test('returns null when account is active and email verified', async () => {

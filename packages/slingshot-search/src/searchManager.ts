@@ -12,6 +12,7 @@ import type {
   ResolvedEntityConfig,
 } from '@lastshotlabs/slingshot-core';
 import { createNoopMetricsEmitter, noopLogger } from '@lastshotlabs/slingshot-core';
+import { SearchConfigError } from './errors/searchErrors';
 import { applyGeoTransform } from './geoTransform';
 import { deriveIndexSettings } from './indexSettings';
 import { createAlgoliaProvider } from './providers/algolia';
@@ -468,8 +469,8 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
     if (existing) return existing;
 
     if (!(providerKey in pluginConfig.providers)) {
-      throw new Error(
-        `[slingshot-search] Provider '${providerKey}' not found in config. Available: [${Object.keys(pluginConfig.providers).join(', ')}]`,
+      throw new SearchConfigError(
+        `Provider '${providerKey}' not found in config. Available: [${Object.keys(pluginConfig.providers).join(', ')}]`,
       );
     }
     const providerConfig = pluginConfig.providers[providerKey];
@@ -494,8 +495,8 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
         break;
       default: {
         const _exhaustive: never = providerConfig;
-        throw new Error(
-          `[slingshot-search] Unsupported provider type: '${(_exhaustive as { provider: string }).provider}'`,
+        throw new SearchConfigError(
+          `Unsupported provider type: '${(_exhaustive as { provider: string }).provider}'`,
         );
       }
     }
@@ -653,8 +654,8 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
       const key = resolveEntityKey(entityStorageName);
       const state = key ? entityStates.get(key) : undefined;
       if (!state) {
-        throw new Error(
-          `[slingshot-search] No search config for entity '${entityStorageName}'. ` +
+        throw new SearchConfigError(
+          `No search config for entity '${entityStorageName}'. ` +
             `Registered: [${[...entityStates.keys()].join(', ')}]`,
         );
       }
@@ -858,8 +859,8 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
         // Find entity state by index name (could be entity storage name or index name)
         const state = [...entityStates.values()].find(s => s.indexName === entry.indexName);
         if (!state) {
-          throw new Error(
-            `[slingshot-search] Unknown index '${entry.indexName}' in federated search`,
+          throw new SearchConfigError(
+            `Unknown index '${entry.indexName}' in federated search`,
           );
         }
 
@@ -1005,7 +1006,7 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
       const key = resolveEntityKey(entityStorageName);
       const state = key ? entityStates.get(key) : undefined;
       if (!state) {
-        throw new Error(`[slingshot-search] No search config for entity '${entityStorageName}'`);
+        throw new SearchConfigError(`No search config for entity '${entityStorageName}'`);
       }
 
       const { indexName, provider, pkField, transformName, geoConfig } = state;

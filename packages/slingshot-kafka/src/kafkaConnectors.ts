@@ -511,6 +511,10 @@ function formatZodIssues(error: z.ZodError): string {
     .join(', ');
 }
 
+function errToString(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function validatePayload(
   event: string,
   payload: unknown,
@@ -1020,7 +1024,7 @@ export function createKafkaConnectors(
           logger.error(
             `[KafkaConnector:outbound] permanently dropping message for topic "${entry.topic}" ` +
               `after ${entry.attempts} attempts:`,
-            err,
+            { err: errToString(err) },
           );
         }
       }
@@ -1159,7 +1163,7 @@ export function createKafkaConnectors(
         logger.error(
           `[KafkaConnector:outbound] pending buffer full; dropping message for topic "${config.topic}" ` +
             `(buffer=${pendingBuffer.length}/${maxPendingBuffer}, totalDrops=${dropTotal})`,
-          err,
+          { err: errToString(err) },
         );
         hooks?.onOutboundDrop?.(config.event, config.topic, 'pending-buffer-full', err);
         return;
@@ -1193,7 +1197,7 @@ export function createKafkaConnectors(
     } catch (err) {
       logger.error(
         `[KafkaConnectors] failed to commit offset for topic "${topic}" partition ${partition} offset ${offset}:`,
-        err,
+        { err: errToString(err) },
       );
     }
   }
@@ -1393,7 +1397,7 @@ export function createKafkaConnectors(
                     } catch (err) {
                       logger.error(
                         `[KafkaConnectors] failed to flush offsets during rebalance for "${config.groupId}":`,
-                        err,
+                        { err: errToString(err) },
                       );
                     }
                   }
@@ -1411,7 +1415,7 @@ export function createKafkaConnectors(
             } catch (instErr) {
               logger.warn(
                 `[KafkaConnectors] failed to register rebalance listeners for "${config.groupId}":`,
-                instErr,
+                { err: errToString(instErr) },
               );
             }
           }
@@ -1485,7 +1489,7 @@ export function createKafkaConnectors(
                   } catch (dedupErr) {
                     logger.warn(
                       '[KafkaConnectors] dedupStore.has() threw; treating as miss:',
-                      dedupErr,
+                      { err: errToString(dedupErr) },
                     );
                   }
                   if (alreadySeen) {
@@ -1631,7 +1635,7 @@ export function createKafkaConnectors(
                       } catch (dedupErr) {
                         logger.warn(
                           '[KafkaConnectors] dedupStore.set() threw; continuing:',
-                          dedupErr,
+                          { err: errToString(dedupErr) },
                         );
                       }
                     }

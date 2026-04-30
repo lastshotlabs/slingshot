@@ -1172,7 +1172,7 @@ export function createKafkaAdapter(
     } catch (err) {
       logger.error(
         `[KafkaAdapter] failed to flush pending offsets during rebalance for "${entry.groupId}":`,
-        err,
+        { err: errToString(err) },
       );
     }
   }
@@ -1422,14 +1422,18 @@ export function createKafkaAdapter(
           try {
             result = listener(envelope as EventEnvelope);
           } catch (err) {
-            logger.error(`[KafkaAdapter] listener error on event "${event}":`, err);
+            logger.error(`[KafkaAdapter] listener error on event "${event}":`, {
+              err: errToString(err),
+            });
             continue;
           }
           const promise = Promise.resolve(result);
           pendingHandlers.add(promise);
           promise
             .catch(err => {
-              logger.error(`[KafkaAdapter] listener error on event "${event}":`, err);
+              logger.error(`[KafkaAdapter] listener error on event "${event}":`, {
+                err: errToString(err),
+              });
             })
             .finally(() => {
               pendingHandlers.delete(promise);

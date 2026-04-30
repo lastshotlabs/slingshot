@@ -201,7 +201,7 @@ export function evaluateFilter(doc: Record<string, unknown>, filter: SearchFilte
   // filter evaluation. Log a warning so misconfigured filters are discoverable.
   logger.warn(
     '[slingshot-search] evaluateFilter: unknown filter node type encountered — returning false (no match). Node keys:',
-    Object.keys(filter),
+    { keys: Object.keys(filter) },
   );
   return false;
 }

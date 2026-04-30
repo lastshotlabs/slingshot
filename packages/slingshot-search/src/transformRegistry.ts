@@ -25,6 +25,8 @@
  * ```
  */
 
+import { SearchTransformError } from './errors/searchErrors';
+
 /** Transform function signature: takes a raw document, returns the document to index. */
 export type SearchTransformFn = (doc: Record<string, unknown>) => Record<string, unknown>;
 
@@ -58,7 +60,7 @@ export function createSearchTransformRegistry(): SearchTransformRegistry {
   return {
     register(name, fn) {
       if (handlers.has(name)) {
-        throw new Error(`[slingshot-search] Transform '${name}' is already registered`);
+        throw new SearchTransformError(`Transform '${name}' is already registered`);
       }
       handlers.set(name, fn);
     },
@@ -67,8 +69,8 @@ export function createSearchTransformRegistry(): SearchTransformRegistry {
       if (!name) return identity;
       const fn = handlers.get(name);
       if (!fn) {
-        throw new Error(
-          `[slingshot-search] Unknown transform handler: '${name}'. Registered: [${[...handlers.keys()].join(', ')}]`,
+        throw new SearchTransformError(
+          `Unknown transform handler: '${name}'. Registered: [${[...handlers.keys()].join(', ')}]`,
         );
       }
       return fn;

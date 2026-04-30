@@ -41,11 +41,12 @@ function parseLocalStorageConfig(
     throw new Error(`[slingshot-assets] local storage config invalid: ${parsed.error.message}`);
   }
   const { fs: _fs, ...rest } = parsed.data;
-  const result: LocalStorageConfig = { ...rest };
-  if (typeof config['fs'] === 'object' && config['fs'] !== null) {
-    result.fs = config['fs'] as LocalStorageConfig['fs'];
-  }
-  return result;
+  return {
+    ...rest,
+    ...(typeof config['fs'] === 'object' && config['fs'] !== null
+      ? { fs: config['fs'] as LocalStorageConfig['fs'] }
+      : {}),
+  };
 }
 
 function parseS3StorageConfig(

@@ -22,6 +22,7 @@ import type { SearchHit, SearchResponse, SuggestResponse } from '../types/respon
 import { stringifySearchValue } from './stringify';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
+import { SearchProviderError } from '../errors/searchErrors';
 
 const logger: Logger = createConsoleLogger({ base: { provider: 'slingshot-search:meilisearch' } });
 
@@ -185,8 +186,8 @@ function createHttpClient(config: HttpClientConfig) {
   ): Promise<{ readonly status: number; readonly data: unknown }> {
     const response = await request(method, path, body);
     if (response.data === undefined) {
-      throw new Error(
-        `[slingshot-search:meilisearch] Expected JSON body but got ${response.status} for ${method} ${path}`,
+      throw new SearchProviderError(
+        `Expected JSON body but got ${response.status} for ${method} ${path}`,
       );
     }
     return { status: response.status, data: response.data };
@@ -948,8 +949,8 @@ export function createMeilisearchProvider(config: MeilisearchProviderConfig): Se
     async connect(): Promise<void> {
       const { data } = await http.get<{ status: string }>('/health');
       if (data.status !== 'available') {
-        throw new Error(
-          `[slingshot-search:meilisearch] Health check failed: status = ${data.status}`,
+        throw new SearchProviderError(
+          `Health check failed: status = ${data.status}`,
         );
       }
     },
@@ -1208,8 +1209,8 @@ export function createMeilisearchProvider(config: MeilisearchProviderConfig): Se
 
         if (data.status === 'succeeded' || data.status === 'failed' || data.status === 'canceled') {
           if (data.status === 'failed') {
-            throw new Error(
-              `[slingshot-search:meilisearch] Task ${taskId} failed: ${data.error?.message ?? 'unknown error'}`,
+            throw new SearchProviderError(
+              `Task ${taskId} failed: ${data.error?.message ?? 'unknown error'}`,
             );
           }
           return mapTask(data);
@@ -1218,8 +1219,8 @@ export function createMeilisearchProvider(config: MeilisearchProviderConfig): Se
         await new Promise(resolve => setTimeout(resolve, pollInterval));
       }
 
-      throw new Error(
-        `[slingshot-search:meilisearch] Task ${taskId} timed out after ${timeoutMs}ms`,
+      throw new SearchProviderError(
+        `Task ${taskId} timed out after ${timeoutMs}ms`,
       );
     },
   };

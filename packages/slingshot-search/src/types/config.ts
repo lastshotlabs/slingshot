@@ -8,16 +8,17 @@ import type { Context } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import type { AnySearchProviderConfig } from './provider';
+import { SearchConfigError } from '../errors/searchErrors';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();
   if (!trimmed.startsWith('/')) {
-    throw new Error("mountPath must start with '/'");
+    throw new SearchConfigError("mountPath must start with '/'");
   }
 
   const normalized = trimmed.replace(/\/+$/, '');
   if (normalized.length === 0) {
-    throw new Error("mountPath must not be '/'");
+    throw new SearchConfigError("mountPath must not be '/'");
   }
 
   return normalized;

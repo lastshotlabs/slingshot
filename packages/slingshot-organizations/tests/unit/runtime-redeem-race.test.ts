@@ -451,7 +451,7 @@ describe('organizations runtime — invite redemption', () => {
     expect(env.state.groupMemberships.filter(m => m.groupId === 'g1')).toHaveLength(0);
   });
 
-  test('P-ORG-11: invite creation with the same idempotencyKey returns the same invite', async () => {
+  test('P-ORG-11: invite creation with the same idempotencyKey returns the same invite without replaying token', async () => {
     const env = await setup();
     env.createOrgRow({
       id: 'org-idem',
@@ -473,10 +473,10 @@ describe('organizations runtime — invite redemption', () => {
       invitedBy: 'admin',
       role: 'member',
       idempotencyKey: 'invite-key-1',
-    })) as { id: string; token: string };
+    })) as { id: string; token?: string };
 
     expect(second.id).toBe(first.id);
-    expect(second.token).toBe(first.token);
+    expect(second.token).toBeUndefined();
 
     const third = (await env.createInviteRow({
       orgId: 'org-idem',

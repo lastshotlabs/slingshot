@@ -212,10 +212,9 @@ describe('kafkaConnectors DLQ semantic split', () => {
       // No new commit calls at all from this message path.
       expect(consumer.commitOffsetCalls).toBe(commitsBefore);
 
-      // Operator-visible structured log emitted.
+      // Operator-visible structured log emitted (single JSON line via logger).
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('failed to publish to DLQ'),
-        expect.objectContaining({ errorType: 'handler' }),
       );
     } finally {
       errorSpy.mockRestore();

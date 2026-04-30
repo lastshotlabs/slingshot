@@ -1,4 +1,5 @@
 import { type CipherGCMTypes, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { WebhookCipherError } from '../errors/webhookErrors';
 
 const ALGORITHM: CipherGCMTypes = 'aes-256-gcm';
 const KEY_BYTES = 32;
@@ -61,8 +62,8 @@ function decodeKey(encoded: string): Buffer {
   const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
   const buf = Buffer.from(padded, 'base64');
   if (buf.length !== KEY_BYTES) {
-    throw new Error(
-      `[slingshot-webhooks] secretEncryptionKey must decode to ${KEY_BYTES} bytes (got ${buf.length})`,
+    throw new WebhookCipherError(
+      `secretEncryptionKey must decode to ${KEY_BYTES} bytes (got ${buf.length})`,
     );
   }
   return buf;
@@ -106,8 +107,8 @@ export function createSecretCipher(keyB64: string | undefined | null): SecretCip
       encrypt: plaintext => plaintext,
       decrypt: stored => {
         if (stored.startsWith(PREFIX)) {
-          throw new Error(
-            '[slingshot-webhooks] cannot decrypt: encrypted secret found but no secretEncryptionKey is configured',
+          throw new WebhookCipherError(
+            'cannot decrypt: encrypted secret found but no secretEncryptionKey is configured',
           );
         }
         return stored;
@@ -144,7 +145,7 @@ export function createSecretCipher(keyB64: string | undefined | null): SecretCip
       const ct = Buffer.from(ctB64, 'base64');
       const tag = Buffer.from(tagB64, 'base64');
       if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
-        throw new Error('[slingshot-webhooks] malformed encrypted secret components');
+        throw new WebhookCipherError('malformed encrypted secret components');
       }
       const decipher = createDecipheriv(ALGORITHM, key, iv);
       decipher.setAuthTag(tag);

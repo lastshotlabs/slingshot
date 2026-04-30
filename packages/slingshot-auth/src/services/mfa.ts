@@ -859,7 +859,7 @@ export const disableWebAuthn = async (
  *
  * Supported methods:
  * - `"totp"` — validates a TOTP code against the user's registered TOTP secret.
- * - `"recovery"` — validates a recovery code (SHA-256 hashed comparison).
+ * - `"recovery"` — validates and consumes a recovery code.
  *   Only checked when `method` is explicitly `"recovery"`.
  * - `"password"` — verifies the account password.
  * - `"emailOtp"` — validates a code against an existing reauth challenge bound to `sessionId`.
@@ -909,8 +909,7 @@ export async function verifyAnyFactor(
 
     if (method === 'recovery') {
       if (!code) return false;
-      const hashedInput = sha256(code.toUpperCase());
-      return await adapter.consumeRecoveryCode(userId, hashedInput);
+      return await verifyRecoveryCode(userId, code, runtime);
     }
 
     if (method === 'password') {

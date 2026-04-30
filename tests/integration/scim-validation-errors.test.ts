@@ -42,6 +42,12 @@ function buildApp() {
     lockout: null,
     rateLimit: createAuthRateLimitService(createMemoryAuthRateLimitRepository()),
     credentialStuffing: null,
+    repos: {
+      session: {
+        getUserSessions: async () => [],
+        deleteSession: async () => {},
+      },
+    },
   } as unknown as AuthRuntimeContext;
   app.onError((err, c) => {
     if (err instanceof HttpError) {

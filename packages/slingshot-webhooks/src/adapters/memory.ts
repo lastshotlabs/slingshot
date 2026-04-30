@@ -2,6 +2,7 @@ import type { PaginatedResult } from '@lastshotlabs/slingshot-core';
 import type { WebhookAdapter } from '../types/adapter';
 import type { DeliveryStatus, WebhookDelivery, WebhookEndpoint } from '../types/models';
 import { WebhookDeliveryVersionConflict } from '../types/models';
+import { WebhookDeliveryTransitionError, WebhookRuntimeError } from '../errors/webhookErrors';
 
 const VALID_TRANSITIONS: Readonly<Record<DeliveryStatus, readonly DeliveryStatus[]>> = {
   pending: ['delivered', 'failed', 'dead'],
@@ -76,7 +77,7 @@ export function createMemoryWebhookAdapter(): MemoryWebhookAdapter {
     async updateDelivery(id, input) {
       const existing = deliveries.get(id);
       if (!existing) {
-        throw new Error(`Delivery ${id} not found`);
+        throw new WebhookRuntimeError(`Delivery ${id} not found`);
       }
       // P-WEBHOOKS-6: optimistic concurrency control. When the caller
       // supplied an `expectedVersion`, refuse the update on mismatch so a
@@ -86,7 +87,7 @@ export function createMemoryWebhookAdapter(): MemoryWebhookAdapter {
       }
       if (input.status && input.status !== existing.status) {
         if (!VALID_TRANSITIONS[existing.status].includes(input.status)) {
-          throw new Error(
+          throw new WebhookDeliveryTransitionError(
             `Invalid delivery transition from '${existing.status}' to '${input.status}'`,
           );
         }

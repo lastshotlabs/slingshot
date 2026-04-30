@@ -21,6 +21,7 @@ import type {
 import type { SearchFilter, SearchQuery, SearchSort, SuggestQuery } from '../types/query';
 import type { SearchHit, SearchResponse, SuggestResponse } from '../types/response';
 import { stringifyDocumentId, stringifySearchValue } from './stringify';
+import { SearchProviderError } from '../errors/searchErrors';
 
 // ============================================================================
 // Internal HTTP client
@@ -167,8 +168,8 @@ function createHttpClient(config: HttpClientConfig) {
   ): Promise<{ readonly status: number; readonly data: unknown }> {
     const response = await request(method, path, body, options);
     if (response.data === undefined) {
-      throw new Error(
-        `[slingshot-search:elasticsearch] Expected JSON body but got ${response.status} for ${method} ${path}`,
+      throw new SearchProviderError(
+        `Expected JSON body but got ${response.status} for ${method} ${path}`,
       );
     }
     return { status: response.status, data: response.data };
@@ -860,7 +861,7 @@ export function createElasticsearchProvider(config: ElasticsearchProviderConfig)
     async connect(): Promise<void> {
       const { data } = await http.get<{ status: string }>('/_cluster/health');
       if (data.status === 'red') {
-        throw new Error(`[slingshot-search:elasticsearch] Cluster health is red`);
+        throw new SearchProviderError(`Cluster health is red`);
       }
     },
 

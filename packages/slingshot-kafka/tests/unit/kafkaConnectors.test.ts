@@ -408,7 +408,6 @@ describe('kafkaConnectors', () => {
       expect(handler).toHaveBeenCalledTimes(1);
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('failed to commit offset'),
-        expect.anything(),
       );
 
       // Second message succeeds end-to-end

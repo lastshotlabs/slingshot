@@ -26,11 +26,16 @@ bun add @lastshotlabs/slingshot-orchestration
 - `.`
 - `./errors`
 - `./provider`
+- `./testing`
 
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
+- `test`: `bun test`
+- `test:integration`: `bun test tests/concurrency-stress.test.ts`
+- `test:unit`: `bun test tests/ --ignore tests/concurrency-stress.test.ts`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

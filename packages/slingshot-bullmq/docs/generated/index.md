@@ -30,9 +30,12 @@ bun add @lastshotlabs/slingshot-bullmq
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
-- `test`: `cd ../.. && bun test tests/unit/bullmq-adapter.test.ts && bun test tests/isolated/bullmq-adapter-durable.test.ts`
+- `test`: `bun test`
+- `test:integration`: `bun test tests/integration`
 - `test:redis`: `cd ../.. && BULLMQ_INTEGRATION_REDIS_URL=redis://localhost:6380 bun test tests/docker/bullmq-adapter-redis-integration.test.ts`
+- `test:unit`: `bun test --ignore tests/integration --ignore tests/helpers`
 - `typecheck`: `tsc -p tsconfig.json --noEmit`
 
 ## Dependencies

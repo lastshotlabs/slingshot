@@ -171,7 +171,12 @@ export class FakeQueue {
       opts,
     });
     // Track repeatable jobs as schedulers
-    if (opts && typeof opts['jobId'] === 'string' && opts['repeat'] && typeof opts['repeat'] === 'object') {
+    if (
+      opts &&
+      typeof opts['jobId'] === 'string' &&
+      opts['repeat'] &&
+      typeof opts['repeat'] === 'object'
+    ) {
       const repeat = opts['repeat'] as Record<string, unknown>;
       this.schedulers.push({
         key: opts['jobId'] as string,
@@ -189,7 +194,7 @@ export class FakeQueue {
     return this.jobs;
   }
 
-  async getJobSchedulers(_start?: number, _end?: number) {
+  async getJobSchedulers() {
     return this.schedulers;
   }
 
@@ -288,7 +293,7 @@ export class FakeWorker {
     }
   }
 
-  async pause(_force?: boolean) {
+  async pause() {
     this.pauseCalls += 1;
     this.paused = true;
   }

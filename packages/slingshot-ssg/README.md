@@ -49,22 +49,22 @@ bun run slingshot-ssg -- [options]
 
 ### Options
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--routes-dir <path>` | `server/routes` | Path to the SSR routes directory |
-| `--assets-manifest <path>` | `dist/client/.vite/manifest.json` | Path to the Vite client manifest |
-| `--out <path>` | `dist/static` | Output directory for `.html` files |
-| `--concurrency <n>` | `4` | Parallel page render limit (max: 256) |
-| `--renderer <path>` | `dist/server/entry-server.js` | Path to the SSR renderer module |
-| `--client-entry <key>` | auto-detect | Vite manifest key for client entry |
-| `--rsc-manifest <path>` | — | Path to RSC manifest from `snapshotSsr({ rsc: true })` |
-| `--retry <n>` | `3` | Max render attempts per page for transient failures |
-| `--retry-base-delay <ms>` | `1000` | Base exponential backoff delay |
-| `--retry-max-delay <ms>` | `30000` | Maximum backoff delay |
-| `--breaker-threshold <n>` | disabled | Consecutive failures before circuit breaker trips |
-| `--breaker-cooldown <ms>` | `30000` | Circuit breaker cooldown duration |
-| `--watch` | — | Watch routes directory and re-render on changes |
-| `-h, --help` | — | Show help text and exit |
+| Flag                       | Default                           | Description                                            |
+| -------------------------- | --------------------------------- | ------------------------------------------------------ |
+| `--routes-dir <path>`      | `server/routes`                   | Path to the SSR routes directory                       |
+| `--assets-manifest <path>` | `dist/client/.vite/manifest.json` | Path to the Vite client manifest                       |
+| `--out <path>`             | `dist/static`                     | Output directory for `.html` files                     |
+| `--concurrency <n>`        | `4`                               | Parallel page render limit (max: 256)                  |
+| `--renderer <path>`        | `dist/server/entry-server.js`     | Path to the SSR renderer module                        |
+| `--client-entry <key>`     | auto-detect                       | Vite manifest key for client entry                     |
+| `--rsc-manifest <path>`    | —                                 | Path to RSC manifest from `snapshotSsr({ rsc: true })` |
+| `--retry <n>`              | `3`                               | Max render attempts per page for transient failures    |
+| `--retry-base-delay <ms>`  | `1000`                            | Base exponential backoff delay                         |
+| `--retry-max-delay <ms>`   | `30000`                           | Maximum backoff delay                                  |
+| `--breaker-threshold <n>`  | disabled                          | Consecutive failures before circuit breaker trips      |
+| `--breaker-cooldown <ms>`  | `30000`                           | Circuit breaker cooldown duration                      |
+| `--watch`                  | —                                 | Watch routes directory and re-render on changes        |
+| `-h, --help`               | —                                 | Show help text and exit                                |
 
 ### Examples
 

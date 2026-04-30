@@ -1512,9 +1512,10 @@ export function createBullMQAdapter(
       if (walReplayPromise) await walReplayPromise;
       const targets =
         dlqName !== undefined
-          ? validationDlqs.has(dlqName)
-            ? new Map([[dlqName, validationDlqs.get(dlqName)!]])
-            : new Map<string, Queue>()
+          ? (() => {
+              const dlq = validationDlqs.get(dlqName);
+              return dlq ? new Map([[dlqName, dlq]]) : new Map<string, Queue>();
+            })()
           : new Map(validationDlqs);
 
       let replayed = 0;
@@ -1522,9 +1523,17 @@ export function createBullMQAdapter(
         // Use the getJobs API to fetch all jobs from the DLQ queue.
         // BullMQ's Queue doesn't expose a typed getJobs on its own,
         // so we access it through the untyped interface.
-        const dlqJobs = await (dlq as unknown as {
-          getJobs: (states?: string[]) => Promise<Array<{ data: Record<string, unknown>; remove: () => Promise<void>; id?: string }>>;
-        }).getJobs(['waiting', 'delayed', 'prioritized']).catch(() => []);
+        const dlqJobs = await (
+          dlq as unknown as {
+            getJobs: (
+              states?: string[],
+            ) => Promise<
+              Array<{ data: Record<string, unknown>; remove: () => Promise<void>; id?: string }>
+            >;
+          }
+        )
+          .getJobs(['waiting', 'delayed', 'prioritized'])
+          .catch(() => []);
 
         for (const job of dlqJobs) {
           const event = job.data?.event as string | undefined;
@@ -1538,8 +1547,12 @@ export function createBullMQAdapter(
           }
 
           // Find the source queue for this event from durable queues
-          const sourceQueue = durableQueues.get(`slingshot:events:${event}:` + name.split(':').pop()) as Queue | undefined;
-          const finalQueue = sourceQueue ?? (durableQueues.size === 1 ? durableQueues.values().next().value as Queue : undefined);
+          const sourceQueue = durableQueues.get(
+            `slingshot:events:${event}:` + name.split(':').pop(),
+          ) as Queue | undefined;
+          const finalQueue =
+            sourceQueue ??
+            (durableQueues.size === 1 ? (durableQueues.values().next().value as Queue) : undefined);
 
           if (!finalQueue) {
             logger.warn('cannot replay from DLQ — no source queue found for event', {

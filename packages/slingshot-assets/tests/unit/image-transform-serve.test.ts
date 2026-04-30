@@ -135,12 +135,12 @@ describe('image serve helpers', () => {
     expect(parseImageFormat('original')).toBe('original');
     expect(parseImageFormat('gif')).toBe('original');
 
-    expect(validateSourceUrl('', ['cdn.example'])).toBeNull();
+    expect(validateSourceUrl('', ['https://cdn.example'])).toBeNull();
     expect(validateSourceUrl('/local.png', [])).toBe('/local.png');
-    expect(validateSourceUrl('not a url', ['cdn.example'])).toBeNull();
-    expect(validateSourceUrl('ftp://cdn.example/a.png', ['cdn.example'])).toBeNull();
-    expect(validateSourceUrl('https://evil.example/a.png', ['cdn.example'])).toBeNull();
-    expect(validateSourceUrl('https://cdn.example/a.png', ['cdn.example'])).toBe(
+    expect(validateSourceUrl('not a url', ['https://cdn.example'])).toBeNull();
+    expect(validateSourceUrl('ftp://cdn.example/a.png', ['https://cdn.example'])).toBeNull();
+    expect(validateSourceUrl('https://evil.example/a.png', ['https://cdn.example'])).toBeNull();
+    expect(validateSourceUrl('https://cdn.example/a.png', ['https://cdn.example'])).toBe(
       'https://cdn.example/a.png',
     );
   });

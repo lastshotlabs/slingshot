@@ -5,10 +5,7 @@
  * failure counting, cooldown timing, and error semantics.
  */
 import { describe, expect, test } from 'bun:test';
-import {
-  AdminCircuitOpenError,
-  createAdminCircuitBreaker,
-} from '../../src/lib/circuitBreaker';
+import { AdminCircuitOpenError, createAdminCircuitBreaker } from '../../src/lib/circuitBreaker';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,8 +58,16 @@ describe('createAdminCircuitBreaker', () => {
     });
 
     // Two failures
-    await cb.guard(async () => { throw new Error('fail'); }).catch(() => {});
-    await cb.guard(async () => { throw new Error('fail'); }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('fail');
+      })
+      .catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('fail');
+      })
+      .catch(() => {});
 
     expect(cb.getHealth().consecutiveFailures).toBe(2);
 
@@ -80,7 +85,11 @@ describe('createAdminCircuitBreaker', () => {
     });
 
     for (let i = 0; i < 3; i++) {
-      await cb.guard(async () => { throw new Error('fail'); }).catch(() => {});
+      await cb
+        .guard(async () => {
+          throw new Error('fail');
+        })
+        .catch(() => {});
     }
 
     const health = cb.getHealth();
@@ -100,7 +109,11 @@ describe('createAdminCircuitBreaker', () => {
     });
 
     // Trip the breaker
-    await cb.guard(async () => { throw new Error('boom'); }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('boom');
+      })
+      .catch(() => {});
 
     // Now open — should throw AdminCircuitOpenError
     const err = await cb.guard(async () => 'should-not-run').catch(e => e);
@@ -125,7 +138,11 @@ describe('createAdminCircuitBreaker', () => {
     });
 
     // Trip the breaker
-    await cb.guard(async () => { throw new Error('boom'); }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('boom');
+      })
+      .catch(() => {});
     expect(cb.getHealth().state).toBe('open');
 
     // Advance past cooldown
@@ -150,14 +167,22 @@ describe('createAdminCircuitBreaker', () => {
     });
 
     // Trip the breaker
-    await cb.guard(async () => { throw new Error('boom'); }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('boom');
+      })
+      .catch(() => {});
     expect(cb.getHealth().state).toBe('open');
 
     // Advance past cooldown
     clock.advance(1001);
 
     // Half-open probe fails
-    await cb.guard(async () => { throw new Error('fail-again'); }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('fail-again');
+      })
+      .catch(() => {});
     expect(cb.getHealth().state).toBe('open');
     expect(cb.getHealth().consecutiveFailures).toBe(2);
     expect(cb.getHealth().openedAt).toBe(clock.now());
@@ -177,7 +202,11 @@ describe('createAdminCircuitBreaker', () => {
     });
 
     // Trip the breaker
-    await cb.guard(async () => { throw new Error('boom'); }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('boom');
+      })
+      .catch(() => {});
     clock.advance(1001);
 
     // First probe enters half-open
@@ -215,7 +244,11 @@ describe('createAdminCircuitBreaker', () => {
     expect(cb.getHealth().nextProbeAt).toBeUndefined();
 
     // Trip it — await the guard so state transitions complete
-    await cb.guard(async () => { throw new Error('fail'); }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('fail');
+      })
+      .catch(() => {});
     expect(cb.getHealth().nextProbeAt).toBe(clock.now() + 5000);
   });
 

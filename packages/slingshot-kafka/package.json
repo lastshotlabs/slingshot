@@ -36,7 +36,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "cd ../.. && bun test packages/slingshot-kafka/tests"
+    "test": "bun test",
+    "coverage": "bun test --coverage",
+    "test:unit": "bun test tests/unit tests/kafkaShared.test.ts",
+    "test:integration": "bun test tests/integration"
   },
   "dependencies": {
     "@lastshotlabs/slingshot-core": "workspace:*"

@@ -149,7 +149,13 @@ describe('AbortController-based fileStore timeout', () => {
       const runtime = edgeRuntime({
         fileStoreTimeoutMs: 20,
         fileStore: async (path, signal) => {
-          signal!.addEventListener('abort', () => { abortDetected = true; }, { once: true });
+          signal!.addEventListener(
+            'abort',
+            () => {
+              abortDetected = true;
+            },
+            { once: true },
+          );
           // Never resolve — forces timeout
           return new Promise<never>(() => {});
         },

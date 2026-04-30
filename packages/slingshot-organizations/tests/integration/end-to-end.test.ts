@@ -6,7 +6,6 @@
  * `EntityAdapter` contract as the SQLite adapter, so all plugin-level code paths
  * (middleware, routes, runtime helpers) are exercised identically.
  */
-
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { Hono } from 'hono';
 import {
@@ -223,25 +222,39 @@ function createPersistence(): SlingshotContext['persistence'] {
   return {
     uploadRegistry: {
       async register() {},
-      async get() { return null; },
-      async delete() { return false; },
+      async get() {
+        return null;
+      },
+      async delete() {
+        return false;
+      },
     },
     idempotency: {
-      async get() { return null; },
+      async get() {
+        return null;
+      },
       async set() {},
       async clear() {},
     },
     wsMessages: {
-      async persist(message) { return message; },
-      async getHistory() { return []; },
+      async persist(message) {
+        return message;
+      },
+      async getHistory() {
+        return [];
+      },
       async clear() {},
     },
     auditLog: {
       async logEntry() {},
-      async getLogs() { return { items: [] }; },
+      async getLogs() {
+        return { items: [] };
+      },
     },
     cronRegistry: {
-      async getAll() { return new Set<string>(); },
+      async getAll() {
+        return new Set<string>();
+      },
       async save() {},
     },
     configureRoom(endpoint, room, options) {
@@ -265,8 +278,12 @@ function createPersistence(): SlingshotContext['persistence'] {
 function createSecretsRepository(): SlingshotContext['secrets'] {
   return {
     name: 'test-secrets',
-    async get() { return null; },
-    async getMany() { return new Map<string, string>(); },
+    async get() {
+      return null;
+    },
+    async getMany() {
+      return new Map<string, string>();
+    },
   };
 }
 
@@ -328,8 +345,12 @@ function createTestContext(args: {
     metrics: createMetricsState(),
     secrets: createSecretsRepository(),
     resolvedSecrets: Object.freeze({}),
-    async clear() { args.pluginState.clear(); },
-    async destroy() { args.pluginState.clear(); },
+    async clear() {
+      args.pluginState.clear();
+    },
+    async destroy() {
+      args.pluginState.clear();
+    },
   };
 }
 
@@ -643,7 +664,11 @@ describe('organizations end-to-end integration', () => {
     if (!orgService) throw new Error('org service not available');
 
     // Create an org with a specific tenant scope
-    await orgService.createOrg({ name: 'Tenant Scoped Org', slug: 'scoped-org', tenantId: 'tenant-a' });
+    await orgService.createOrg({
+      name: 'Tenant Scoped Org',
+      slug: 'scoped-org',
+      tenantId: 'tenant-a',
+    });
 
     // Lookup with matching tenantId returns the org
     const found = await orgService.getOrgBySlug('scoped-org', 'tenant-a');

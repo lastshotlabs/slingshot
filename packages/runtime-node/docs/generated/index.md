@@ -30,8 +30,11 @@ bun add @lastshotlabs/slingshot-runtime-node
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
-- `test`: `bun test && bun run test:vitest`
+- `test`: `bun run test:bun && bun run test:vitest`
+- `test:bun`: `bun test tests/*.test.ts tests/integration tests/node-runtime/websocket.test.ts tests/node-runtime/internals.test.ts`
+- `test:integration`: `bun test tests/integration/`
 - `test:vitest`: `vitest run --config vitest.config.ts`
 - `typecheck`: `tsc --noEmit`
 

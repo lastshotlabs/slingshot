@@ -24,6 +24,7 @@ bun add @lastshotlabs/slingshot-notifications
 ## Export Paths
 
 - `.`
+- `./config`
 - `./errors`
 - `./rateLimit`
 - `./testing`
@@ -31,8 +32,11 @@ bun add @lastshotlabs/slingshot-notifications
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
 - `test`: `bun test tests`
+- `test:integration`: `bun test tests/integration`
+- `test:unit`: `bun test tests/unit`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

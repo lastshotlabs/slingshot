@@ -7,10 +7,7 @@ import {
   sleep,
   step,
 } from '@lastshotlabs/slingshot-orchestration';
-import {
-  discoverOrchestrationDefinitions,
-  selectOrchestrationDefinitions,
-} from '../src/discovery';
+import { discoverOrchestrationDefinitions, selectOrchestrationDefinitions } from '../src/discovery';
 
 describe('discoverOrchestrationDefinitions', () => {
   function testTask(name: string) {

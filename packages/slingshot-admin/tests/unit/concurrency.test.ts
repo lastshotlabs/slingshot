@@ -5,10 +5,7 @@
  * concurrent access patterns that approximate real-world traffic.
  */
 import { describe, expect, test } from 'bun:test';
-import {
-  AdminCircuitOpenError,
-  createAdminCircuitBreaker,
-} from '../../src/lib/circuitBreaker';
+import { AdminCircuitOpenError, createAdminCircuitBreaker } from '../../src/lib/circuitBreaker';
 import { createAdminMetricsCollector } from '../../src/lib/metrics';
 import { createMemoryRateLimitStore } from '../../src/lib/rateLimitStore';
 
@@ -58,9 +55,11 @@ describe('simultaneous health checks', () => {
 
     // Trip the breaker
     for (let i = 0; i < 3; i++) {
-      await cb.guard(async () => {
-        throw new Error('fail');
-      }).catch(() => {});
+      await cb
+        .guard(async () => {
+          throw new Error('fail');
+        })
+        .catch(() => {});
     }
 
     expect(cb.getHealth().state).toBe('open');
@@ -91,9 +90,11 @@ describe('simultaneous health checks', () => {
     const ops: Promise<unknown>[] = [];
     for (let i = 0; i < 10; i++) {
       ops.push(
-        cb.guard(async () => {
-          throw new Error('boom');
-        }).catch(() => {}),
+        cb
+          .guard(async () => {
+            throw new Error('boom');
+          })
+          .catch(() => {}),
       );
       ops.push(Promise.resolve(cb.getHealth()));
     }
@@ -107,9 +108,7 @@ describe('simultaneous health checks', () => {
     expect(final.consecutiveFailures).toBeGreaterThanOrEqual(2);
     expect(final.openedAt).toBeDefined();
     expect(final.nextProbeAt).toBeDefined();
-    expect(final.nextProbeAt as number).toBeGreaterThanOrEqual(
-      (final.openedAt as number) + 10_000,
-    );
+    expect(final.nextProbeAt as number).toBeGreaterThanOrEqual((final.openedAt as number) + 10_000);
   });
 });
 
@@ -128,25 +127,23 @@ describe('rapid fire when circuit breaker is open', () => {
     });
 
     // Trip the breaker
-    await cb.guard(async () => {
-      throw new Error('fail');
-    }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('fail');
+      })
+      .catch(() => {});
 
     expect(cb.getHealth().state).toBe('open');
 
     const count = 100;
     const results = await Promise.allSettled(
-      Array.from({ length: count }, () =>
-        cb.guard(async () => 'should-not-run'),
-      ),
+      Array.from({ length: count }, () => cb.guard(async () => 'should-not-run')),
     );
 
     expect(results.length).toBe(count);
     for (const r of results) {
       expect(r.status).toBe('rejected');
-      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(
-        AdminCircuitOpenError,
-      );
+      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(AdminCircuitOpenError);
     }
 
     // State must not have changed — still open at the original failure count
@@ -167,9 +164,11 @@ describe('rapid fire when circuit breaker is open', () => {
     // each failure regardless of timing interleaving.
     await Promise.all(
       Array.from({ length: 5 }, () =>
-        cb.guard(async () => {
-          throw new Error('fail');
-        }).catch(() => {}),
+        cb
+          .guard(async () => {
+            throw new Error('fail');
+          })
+          .catch(() => {}),
       ),
     );
 
@@ -193,9 +192,11 @@ describe('rapid fire when circuit breaker is open', () => {
     });
 
     // Trip
-    await cb.guard(async () => {
-      throw new Error('fail');
-    }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('fail');
+      })
+      .catch(() => {});
 
     clock.advance(1001); // Past cooldown
 
@@ -204,9 +205,7 @@ describe('rapid fire when circuit breaker is open', () => {
     // transitions to half-open and sets halfOpenInFlight=true; every
     // subsequent call sees halfOpenInFlight and rejects immediately.
     const results = await Promise.allSettled(
-      Array.from({ length: 50 }, (_, i) =>
-        cb.guard(async () => `probe-${i}`),
-      ),
+      Array.from({ length: 50 }, (_, i) => cb.guard(async () => `probe-${i}`)),
     );
 
     const succeeded = results.filter(r => r.status === 'fulfilled');
@@ -215,9 +214,7 @@ describe('rapid fire when circuit breaker is open', () => {
     expect(succeeded.length).toBe(1);
     expect(rejected.length).toBe(49);
     for (const r of rejected) {
-      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(
-        AdminCircuitOpenError,
-      );
+      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(AdminCircuitOpenError);
     }
 
     // The successful probe should have closed the breaker
@@ -234,9 +231,11 @@ describe('rapid fire when circuit breaker is open', () => {
     });
 
     // Trip
-    await cb.guard(async () => {
-      throw new Error('fail');
-    }).catch(() => {});
+    await cb
+      .guard(async () => {
+        throw new Error('fail');
+      })
+      .catch(() => {});
 
     clock.advance(1001);
 
@@ -253,16 +252,12 @@ describe('rapid fire when circuit breaker is open', () => {
     // While the probe is in-flight, fire concurrent guards — they must all
     // be rejected because halfOpenInFlight is true.
     const concurrentResults = await Promise.allSettled(
-      Array.from({ length: 20 }, () =>
-        cb.guard(async () => 'should-not-run'),
-      ),
+      Array.from({ length: 20 }, () => cb.guard(async () => 'should-not-run')),
     );
 
     for (const r of concurrentResults) {
       expect(r.status).toBe('rejected');
-      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(
-        AdminCircuitOpenError,
-      );
+      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(AdminCircuitOpenError);
     }
 
     // Complete the probe
@@ -376,9 +371,7 @@ describe('metrics under concurrent access', () => {
     const metrics = createAdminMetricsCollector();
 
     await Promise.all(
-      Array.from({ length: 100 }, () =>
-        Promise.resolve(metrics.incrementRequestCount()),
-      ),
+      Array.from({ length: 100 }, () => Promise.resolve(metrics.incrementRequestCount())),
     );
 
     expect(metrics.getMetrics().requestCount).toBe(100);
@@ -388,9 +381,7 @@ describe('metrics under concurrent access', () => {
     const metrics = createAdminMetricsCollector();
 
     await Promise.all(
-      Array.from({ length: 50 }, () =>
-        Promise.resolve(metrics.incrementErrorCount()),
-      ),
+      Array.from({ length: 50 }, () => Promise.resolve(metrics.incrementErrorCount())),
     );
 
     expect(metrics.getMetrics().errorCount).toBe(50);
@@ -402,9 +393,7 @@ describe('metrics under concurrent access', () => {
     await Promise.all(
       Array.from({ length: 50 }, (_, i) =>
         Promise.resolve(
-          metrics.recordProviderCall(
-            i % 2 === 0 ? 'auth0:verifyRequest' : 'auth0:getUser',
-          ),
+          metrics.recordProviderCall(i % 2 === 0 ? 'auth0:verifyRequest' : 'auth0:getUser'),
         ),
       ),
     );
@@ -419,11 +408,7 @@ describe('metrics under concurrent access', () => {
 
     await Promise.all(
       Array.from({ length: 30 }, (_, i) =>
-        Promise.resolve(
-          metrics.recordProviderFailure(
-            i % 2 === 0 ? 'db:query' : 'redis:fetch',
-          ),
-        ),
+        Promise.resolve(metrics.recordProviderFailure(i % 2 === 0 ? 'db:query' : 'redis:fetch')),
       ),
     );
 
@@ -436,9 +421,7 @@ describe('metrics under concurrent access', () => {
     const metrics = createAdminMetricsCollector();
 
     await Promise.all(
-      Array.from({ length: 25 }, () =>
-        Promise.resolve(metrics.incrementRateLimitHit()),
-      ),
+      Array.from({ length: 25 }, () => Promise.resolve(metrics.incrementRateLimitHit())),
     );
 
     expect(metrics.getMetrics().rateLimitHitCount).toBe(25);
@@ -448,15 +431,9 @@ describe('metrics under concurrent access', () => {
     const metrics = createAdminMetricsCollector();
 
     await Promise.all([
-      ...Array.from({ length: 40 }, () =>
-        Promise.resolve(metrics.incrementRequestCount()),
-      ),
-      ...Array.from({ length: 10 }, () =>
-        Promise.resolve(metrics.incrementErrorCount()),
-      ),
-      ...Array.from({ length: 20 }, () =>
-        Promise.resolve(metrics.incrementRateLimitHit()),
-      ),
+      ...Array.from({ length: 40 }, () => Promise.resolve(metrics.incrementRequestCount())),
+      ...Array.from({ length: 10 }, () => Promise.resolve(metrics.incrementErrorCount())),
+      ...Array.from({ length: 20 }, () => Promise.resolve(metrics.incrementRateLimitHit())),
       ...Array.from({ length: 15 }, () =>
         Promise.resolve(metrics.recordProviderCall('auth0:verifyRequest')),
       ),
@@ -505,9 +482,7 @@ describe('metrics under concurrent access', () => {
     expect(metrics.getMetrics().errorCount).toBe(0);
 
     await Promise.all(
-      Array.from({ length: 10 }, () =>
-        Promise.resolve(metrics.incrementRequestCount()),
-      ),
+      Array.from({ length: 10 }, () => Promise.resolve(metrics.incrementRequestCount())),
     );
 
     expect(metrics.getMetrics().requestCount).toBe(10);

@@ -1,3 +1,4 @@
+import type { RedisLike } from '@lastshotlabs/slingshot-core';
 import type { OrganizationsRateLimitDecision, OrganizationsRateLimitStore } from './rateLimit';
 
 /**
@@ -5,7 +6,6 @@ import type { OrganizationsRateLimitDecision, OrganizationsRateLimitStore } from
  * Re-exported from `@lastshotlabs/slingshot-core` so callers don't need an extra import.
  */
 export type { RedisLike } from '@lastshotlabs/slingshot-core';
-import type { RedisLike } from '@lastshotlabs/slingshot-core';
 
 /**
  * Lua script for atomic sliding-window rate limit check.
@@ -85,7 +85,7 @@ export function createRedisOrganizationsRateLimitStore(
         const remaining = result[2] ?? 0;
 
         return { allowed, retryAfterMs, remaining };
-      } catch (_err) {
+      } catch {
         // If Redis is unreachable, fail open to avoid denying all requests.
         // The caller should monitor Redis health independently.
         return { allowed: true, retryAfterMs: 0, remaining: limit };

@@ -83,4 +83,30 @@ describe('bootstrap', () => {
     await result.teardown();
     expect(fakeDestroy).toHaveBeenCalledTimes(1);
   });
+
+  test('repeated bootstrap calls re-resolve config each time', async () => {
+    let callCount = 0;
+    const tracker = mock(async (_m: unknown, _r?: unknown, _o?: unknown) => {
+      callCount++;
+      return {
+        config: { appName: 'test-bootstrap-app', resolvedStores: {} },
+        manifest: { manifestVersion: 1 },
+        registry: { resolveHandler: () => null, hasHandler: () => false },
+      };
+    });
+    mock.module('@lastshotlabs/slingshot/manifest', () => ({
+      resolveManifestConfig: tracker,
+    }));
+
+    const mod = await import('../src/bootstrap');
+    const b = mod.bootstrap;
+    await b({ manifest: { manifestVersion: 1, appName: 'test' } });
+    await b({ manifest: { manifestVersion: 1, appName: 'test' } });
+    expect(callCount).toBe(2);
+  });
+
+  test('returns ctx with correct appName from resolved config', async () => {
+    const result = await bootstrap({ manifest: { manifestVersion: 1, appName: 'test' } });
+    expect(result.ctx?.appName).toBe('test-bootstrap-app');
+  });
 });

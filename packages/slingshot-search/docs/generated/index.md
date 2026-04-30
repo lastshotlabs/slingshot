@@ -24,13 +24,17 @@ bun add @lastshotlabs/slingshot-search
 ## Export Paths
 
 - `.`
+- `./errors`
 - `./testing`
 
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
-- `test`: `echo 'Tests run via workspace runner'`
+- `test`: `bun test`
+- `test:integration`: `bun test tests/providers tests/routes`
+- `test:unit`: `bun test tests/unit`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

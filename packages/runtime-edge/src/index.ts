@@ -4,7 +4,6 @@ import {
   TimeoutError,
   createConsoleLogger,
   timeoutSignal,
-  withTimeout,
 } from '@lastshotlabs/slingshot-core';
 import type { SlingshotRuntime } from '@lastshotlabs/slingshot-core';
 import { EdgeFileSizeExceededError, EdgePasswordConfigError, EdgeUnsupportedError } from './errors';
@@ -467,6 +466,12 @@ async function withAbortTimeout<T>(
   ]);
 }
 
+function resolveRuntimeTimeoutMs(operationTimeoutMs: number, heartbeatTimeoutMs: number): number {
+  if (heartbeatTimeoutMs <= 0) return operationTimeoutMs;
+  if (operationTimeoutMs <= 0) return heartbeatTimeoutMs;
+  return Math.min(operationTimeoutMs, heartbeatTimeoutMs);
+}
+
 // ---------------------------------------------------------------------------
 // Runtime capability reporting
 // ---------------------------------------------------------------------------
@@ -622,6 +627,8 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
     typeof options.heartbeatTimeoutMs === 'number' && options.heartbeatTimeoutMs > 0
       ? options.heartbeatTimeoutMs
       : 0;
+  const runWithHeartbeat = <T>(label: string, op: () => Promise<T>): Promise<T> =>
+    heartbeatTimeoutMs > 0 ? withAbortTimeout(() => op(), heartbeatTimeoutMs, label) : op();
 
   return Object.freeze({
     password: Object.freeze({
@@ -629,13 +636,13 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
        * Hash a plaintext password using PBKDF2-SHA-256 (or a custom implementation).
        */
       hash(plain: string): Promise<string> {
-        return hashFn(plain);
+        return runWithHeartbeat('password.hash', () => hashFn(plain));
       },
       /**
        * Verify a plaintext password against a stored hash.
        */
       verify(plain: string, hash: string): Promise<boolean> {
-        return verifyFn(plain, hash);
+        return runWithHeartbeat('password.verify', () => verifyFn(plain, hash));
       },
     }),
     sqlite: edgeSqlite,
@@ -680,12 +687,13 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
       // already handles missing files gracefully.
       let result: FileStoreResult;
       try {
-        if (fileStoreTimeoutMs > 0) {
+        const readTimeoutMs = resolveRuntimeTimeoutMs(fileStoreTimeoutMs, heartbeatTimeoutMs);
+        if (readTimeoutMs > 0) {
           // Use AbortController-based timeout: the signal is passed to the
           // fileStore so it can cancel underlying work (fetch, KV get, etc.).
           result = await withAbortTimeout(
             signal => Promise.resolve().then(() => fileStore(path, signal)),
-            fileStoreTimeoutMs,
+            readTimeoutMs,
             `fileStore('${path}')`,
           );
         } else {
@@ -695,7 +703,7 @@ export function edgeRuntime(options: EdgeRuntimeOptions = {}): SlingshotRuntime 
         if (err instanceof TimeoutError) {
           edgeLogger.warn('file-store-timeout', {
             path,
-            timeoutMs: fileStoreTimeoutMs,
+            timeoutMs: resolveRuntimeTimeoutMs(fileStoreTimeoutMs, heartbeatTimeoutMs),
           });
           return null;
         }

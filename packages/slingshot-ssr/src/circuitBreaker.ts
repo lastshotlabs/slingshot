@@ -19,7 +19,7 @@
 /**
  * Circuit breaker state machine states.
  */
-export type CircuitState = 'closed' | 'open' | 'half_open';
+export type CircuitState = 'closed' | 'open' | 'half-open';
 
 /**
  * Result returned by {@link CircuitBreaker.execute}.
@@ -153,7 +153,7 @@ export function createCircuitBreaker(options: Partial<CircuitBreakerOptions> = {
     get state() {
       // Auto-transition from OPEN to HALF_OPEN when the cooldown has expired.
       if (state === 'open' && Date.now() - lastFailureTime >= cooldownMs) {
-        setState('half_open', 'cooldown expired');
+        setState('half-open', 'cooldown expired');
       }
       return state;
     },
@@ -195,7 +195,7 @@ export function createCircuitBreaker(options: Partial<CircuitBreakerOptions> = {
       try {
         const value = await fn();
         // Success — close the circuit if it was half-open, or reset failures
-        if (currentState === 'half_open') {
+        if (currentState === 'half-open') {
           failureCount = 0;
           setState('closed', 'probe succeeded');
         } else {
@@ -210,9 +210,9 @@ export function createCircuitBreaker(options: Partial<CircuitBreakerOptions> = {
         lastFailureTime = Date.now();
         onFailure(error, failureCount);
 
-        if (currentState !== 'half_open' && failureCount >= failureThreshold) {
+        if (currentState !== 'half-open' && failureCount >= failureThreshold) {
           setState('open', `failure threshold reached (${failureCount})`);
-        } else if (currentState === 'half_open') {
+        } else if (currentState === 'half-open') {
           // Probe failed — back to open
           setState('open', 'probe failed');
         }

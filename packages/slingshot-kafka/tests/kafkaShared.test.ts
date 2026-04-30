@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  saslSchema,
-  sslSchema,
-  compressionSchema,
   COMPRESSION_CODEC,
   backoffMs,
+  compressionSchema,
+  saslSchema,
+  sslSchema,
 } from '../src/kafkaShared';
 
 describe('saslSchema', () => {
@@ -14,12 +14,20 @@ describe('saslSchema', () => {
   });
 
   test('validates scram-sha-256 mechanism', () => {
-    const result = saslSchema.safeParse({ mechanism: 'scram-sha-256', username: 'u', password: 'p' });
+    const result = saslSchema.safeParse({
+      mechanism: 'scram-sha-256',
+      username: 'u',
+      password: 'p',
+    });
     expect(result.success).toBe(true);
   });
 
   test('validates scram-sha-512 mechanism', () => {
-    const result = saslSchema.safeParse({ mechanism: 'scram-sha-512', username: 'u', password: 'p' });
+    const result = saslSchema.safeParse({
+      mechanism: 'scram-sha-512',
+      username: 'u',
+      password: 'p',
+    });
     expect(result.success).toBe(true);
   });
 
@@ -56,7 +64,12 @@ describe('sslSchema', () => {
   });
 
   test('accepts full object', () => {
-    const result = sslSchema.safeParse({ ca: 'ca', cert: 'cert', key: 'key', rejectUnauthorized: false });
+    const result = sslSchema.safeParse({
+      ca: 'ca',
+      cert: 'cert',
+      key: 'key',
+      rejectUnauthorized: false,
+    });
     expect(result.success).toBe(true);
   });
 
@@ -72,7 +85,7 @@ describe('sslSchema', () => {
 });
 
 describe('compressionSchema', () => {
-  test.each(['gzip', 'snappy', 'lz4', 'zstd'] as const)('accepts %s', (codec) => {
+  test.each(['gzip', 'snappy', 'lz4', 'zstd'] as const)('accepts %s', codec => {
     const result = compressionSchema.safeParse(codec);
     expect(result.success).toBe(true);
   });

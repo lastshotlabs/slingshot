@@ -30,8 +30,11 @@ bun add @lastshotlabs/slingshot-assets
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
-- `test`: `echo 'Tests run via workspace runner'`
+- `test`: `bun test`
+- `test:integration`: `bun test tests/integration`
+- `test:unit`: `bun test tests/unit`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

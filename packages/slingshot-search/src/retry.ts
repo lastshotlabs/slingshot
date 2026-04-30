@@ -5,7 +5,6 @@
  * automatically. Circuit-open errors and non-transient errors propagate
  * immediately so the circuit breaker can maintain accurate state.
  */
-
 import { SearchCircuitOpenError } from './searchCircuitBreaker';
 
 /** Configuration for the exponential-backoff retry loop. */
@@ -42,7 +41,13 @@ export function isTransientError(err: unknown): boolean {
     if (lower.includes('econnreset') || lower.includes('socket hang up')) return true;
     if (lower.includes('etimedout') || lower.includes('eai_again')) return true;
     if (lower.includes('enotfound') || lower.includes('enxio')) return true;
-    if (lower.includes('429') || lower.includes('503') || lower.includes('502') || lower.includes('504')) return true;
+    if (
+      lower.includes('429') ||
+      lower.includes('503') ||
+      lower.includes('502') ||
+      lower.includes('504')
+    )
+      return true;
     if (lower.includes('service unavailable') || lower.includes('too many requests')) return true;
   }
   return false;
@@ -81,10 +86,7 @@ export async function withRetry<T>(
     } catch (err) {
       lastError = err;
       if (attempt < opts.maxRetries && isTransientError(err)) {
-        const delay = Math.min(
-          opts.baseDelayMs * Math.pow(2, attempt),
-          opts.maxDelayMs,
-        );
+        const delay = Math.min(opts.baseDelayMs * Math.pow(2, attempt), opts.maxDelayMs);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }

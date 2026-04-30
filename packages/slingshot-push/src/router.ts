@@ -1,7 +1,7 @@
 import type { MetricsEmitter } from '@lastshotlabs/slingshot-core';
 import { createNoopMetricsEmitter, sanitizeLogValue } from '@lastshotlabs/slingshot-core';
-import { buildProviderIdempotencyKey } from './lib/idempotency';
 import { PushRouterError } from './errors';
+import { buildProviderIdempotencyKey } from './lib/idempotency';
 import type { PushProvider } from './providers/provider';
 import type {
   PushMessage,
@@ -756,113 +756,113 @@ export function createPushRouter(options: {
     },
     async publishTopic(topicName, message, opts = {}) {
       return guardRouterSend(async () => {
-      const tenantId = opts.tenantId ?? '';
-      const topic = await options.repos.topics.findByName({ tenantId, name: topicName });
-      if (!topic) {
-        const emptyResult = summarize({ delivered: 0, attempted: 0 });
+        const tenantId = opts.tenantId ?? '';
+        const topic = await options.repos.topics.findByName({ tenantId, name: topicName });
+        if (!topic) {
+          const emptyResult = summarize({ delivered: 0, attempted: 0 });
+          metrics.gauge('push.routerBreaker.state', CIRCUIT_STATE_VALUES[routerBreakerState] ?? 0);
+          metrics.gauge('push.routerBreaker.failures', routerBreakerFailures);
+          return emptyResult;
+        }
+
+        const allMemberships = asItems(
+          await options.repos.topicMemberships.listByTopic({ topicId: topic.id }),
+        );
+        // topicName is caller-supplied; sanitize before interpolating into a
+        // log line so a hostile name cannot inject newlines and forge a
+        // separate log record.
+        const safeTopicName = sanitizeLogValue(topicName);
+
+        // P-PUSH-11: hard cap topic fan-out at `topicMaxRecipients`. When
+        // exceeded, emit `push:topic.fanout.truncated` with totals so
+        // operators can see partial delivery without parsing logs, then
+        // proceed with only the first `topicMaxRecipients` members. Callers
+        // observe `truncated=true` on the returned summary.
+        let memberships = allMemberships;
+        let truncated = false;
+        const totalMembers = allMemberships.length;
+        if (memberships.length > topicMaxRecipients) {
+          truncated = true;
+          memberships = allMemberships.slice(0, topicMaxRecipients);
+          console.warn(
+            `[slingshot-push] Topic '${safeTopicName}' has ${totalMembers} members; truncating to topicMaxRecipients=${topicMaxRecipients}.`,
+          );
+          options.bus?.emit('push:topic.fanout.truncated', {
+            topicName,
+            totalMembers,
+            truncatedTo: topicMaxRecipients,
+            dropped: totalMembers - topicMaxRecipients,
+          });
+        }
+        metrics.counter('push.topic.fanout.count', memberships.length, { topic: topicName });
+
+        // Chunk memberships into batches; resolve each batch's subscriptions in
+        // parallel, then dispatch to subscribers. Apply back-pressure when the
+        // number of pending batches exceeds `topicFanoutMaxPending` so a single
+        // huge topic cannot overwhelm downstream providers.
+        const allMembershipsLength = memberships.length;
+        const totalBatches = Math.ceil(allMembershipsLength / topicFanoutBatchSize);
+        const pending: Array<Promise<{ delivered: number; attempted: number }>> = [];
+        let totalDelivered = 0;
+        let totalAttempted = 0;
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+          if (pending.length >= topicFanoutMaxPending) {
+            // Wait for at least one in-flight batch to settle before scheduling more.
+            const settled = await Promise.race(
+              pending.map((p, idx) => p.then(value => ({ value, idx }))),
+            );
+            totalDelivered += settled.value.delivered;
+            totalAttempted += settled.value.attempted;
+            pending.splice(settled.idx, 1);
+          }
+          const start = batchIndex * topicFanoutBatchSize;
+          const end = Math.min(start + topicFanoutBatchSize, allMembershipsLength);
+          const batchMemberships = memberships.slice(start, end);
+          const dispatchPromise = (async () => {
+            const subscriptionResults = await Promise.all(
+              batchMemberships.map(m => options.repos.subscriptions.getById(m.subscriptionId)),
+            );
+            const subscriptions = subscriptionResults.filter(
+              (s): s is RouterSubscriptionRecord => s !== null,
+            );
+            console.info(
+              `[slingshot-push] Topic '${safeTopicName}' batch ${batchIndex + 1}/${totalBatches} dispatched (size=${subscriptions.length}).`,
+            );
+            options.bus?.emit('push:topic.batch.dispatched', {
+              topicName,
+              batchIndex,
+              totalBatches,
+              size: subscriptions.length,
+            });
+            return sendToSubscriptions(subscriptions, message, {
+              tenantId,
+              notificationId: opts.notificationId,
+              providerTimeoutMs: opts.providerTimeoutMs,
+            });
+          })();
+          pending.push(dispatchPromise);
+        }
+        const remaining = await Promise.all(pending);
+        for (const value of remaining) {
+          totalDelivered += value.delivered;
+          totalAttempted += value.attempted;
+        }
+        const summary = summarize({ delivered: totalDelivered, attempted: totalAttempted });
+        if (summary.allFailed) {
+          recordRouterFailure();
+        } else {
+          recordRouterSuccess();
+        }
         metrics.gauge('push.routerBreaker.state', CIRCUIT_STATE_VALUES[routerBreakerState] ?? 0);
         metrics.gauge('push.routerBreaker.failures', routerBreakerFailures);
-        return emptyResult;
-      }
-
-      const allMemberships = asItems(
-        await options.repos.topicMemberships.listByTopic({ topicId: topic.id }),
-      );
-      // topicName is caller-supplied; sanitize before interpolating into a
-      // log line so a hostile name cannot inject newlines and forge a
-      // separate log record.
-      const safeTopicName = sanitizeLogValue(topicName);
-
-      // P-PUSH-11: hard cap topic fan-out at `topicMaxRecipients`. When
-      // exceeded, emit `push:topic.fanout.truncated` with totals so
-      // operators can see partial delivery without parsing logs, then
-      // proceed with only the first `topicMaxRecipients` members. Callers
-      // observe `truncated=true` on the returned summary.
-      let memberships = allMemberships;
-      let truncated = false;
-      const totalMembers = allMemberships.length;
-      if (memberships.length > topicMaxRecipients) {
-        truncated = true;
-        memberships = allMemberships.slice(0, topicMaxRecipients);
-        console.warn(
-          `[slingshot-push] Topic '${safeTopicName}' has ${totalMembers} members; truncating to topicMaxRecipients=${topicMaxRecipients}.`,
-        );
-        options.bus?.emit('push:topic.fanout.truncated', {
-          topicName,
-          totalMembers,
-          truncatedTo: topicMaxRecipients,
-          dropped: totalMembers - topicMaxRecipients,
-        });
-      }
-      metrics.counter('push.topic.fanout.count', memberships.length, { topic: topicName });
-
-      // Chunk memberships into batches; resolve each batch's subscriptions in
-      // parallel, then dispatch to subscribers. Apply back-pressure when the
-      // number of pending batches exceeds `topicFanoutMaxPending` so a single
-      // huge topic cannot overwhelm downstream providers.
-      const allMembershipsLength = memberships.length;
-      const totalBatches = Math.ceil(allMembershipsLength / topicFanoutBatchSize);
-      const pending: Array<Promise<{ delivered: number; attempted: number }>> = [];
-      let totalDelivered = 0;
-      let totalAttempted = 0;
-      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
-        if (pending.length >= topicFanoutMaxPending) {
-          // Wait for at least one in-flight batch to settle before scheduling more.
-          const settled = await Promise.race(
-            pending.map((p, idx) => p.then(value => ({ value, idx }))),
-          );
-          totalDelivered += settled.value.delivered;
-          totalAttempted += settled.value.attempted;
-          pending.splice(settled.idx, 1);
+        if (!truncated) {
+          return summary;
         }
-        const start = batchIndex * topicFanoutBatchSize;
-        const end = Math.min(start + topicFanoutBatchSize, allMembershipsLength);
-        const batchMemberships = memberships.slice(start, end);
-        const dispatchPromise = (async () => {
-          const subscriptionResults = await Promise.all(
-            batchMemberships.map(m => options.repos.subscriptions.getById(m.subscriptionId)),
-          );
-          const subscriptions = subscriptionResults.filter(
-            (s): s is RouterSubscriptionRecord => s !== null,
-          );
-          console.info(
-            `[slingshot-push] Topic '${safeTopicName}' batch ${batchIndex + 1}/${totalBatches} dispatched (size=${subscriptions.length}).`,
-          );
-          options.bus?.emit('push:topic.batch.dispatched', {
-            topicName,
-            batchIndex,
-            totalBatches,
-            size: subscriptions.length,
-          });
-          return sendToSubscriptions(subscriptions, message, {
-            tenantId,
-            notificationId: opts.notificationId,
-            providerTimeoutMs: opts.providerTimeoutMs,
-          });
-        })();
-        pending.push(dispatchPromise);
-      }
-      const remaining = await Promise.all(pending);
-      for (const value of remaining) {
-        totalDelivered += value.delivered;
-        totalAttempted += value.attempted;
-      }
-      const summary = summarize({ delivered: totalDelivered, attempted: totalAttempted });
-      if (summary.allFailed) {
-        recordRouterFailure();
-      } else {
-        recordRouterSuccess();
-      }
-      metrics.gauge('push.routerBreaker.state', CIRCUIT_STATE_VALUES[routerBreakerState] ?? 0);
-      metrics.gauge('push.routerBreaker.failures', routerBreakerFailures);
-      if (!truncated) {
-        return summary;
-      }
-      const truncatedSummary: PushSendResultSummary & {
-        truncated: true;
-        totalMembers: number;
-      } = { ...summary, truncated: true, totalMembers };
-      return truncatedSummary;
+        const truncatedSummary: PushSendResultSummary & {
+          truncated: true;
+          totalMembers: number;
+        } = { ...summary, truncated: true, totalMembers };
+        return truncatedSummary;
       }); // guardRouterSend
     },
     stop(): void {

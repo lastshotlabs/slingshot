@@ -48,6 +48,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
     "coverage": "bun test --coverage",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "bun test tests/integration",
     "lint": "eslint src/ --cache"
   },
   "dependencies": {

@@ -1,16 +1,22 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import { createMemoryWebhookAdapter } from '../../src/adapters/memory';
 import { createWebhooksTestApp } from '../../src/testing';
+import type { WebhookPluginConfig } from '../../src/types/config';
 
-const originalFetch = globalThis.fetch;
+const PUBLIC_RESOLVE = async () => [{ address: '93.184.216.34', family: 4 as const }];
 
 function asFetch(value: ReturnType<typeof mock<() => Promise<Response>>>): typeof fetch {
   return value as unknown as typeof fetch;
 }
 
-afterEach(() => {
-  globalThis.fetch = originalFetch;
-});
+function dispatchFor(
+  fetchMock: ReturnType<typeof mock<() => Promise<Response>>>,
+): NonNullable<WebhookPluginConfig['dispatch']> {
+  return {
+    fetchImpl: asFetch(fetchMock),
+    safeFetchOverrides: { resolveHost: PUBLIC_RESOLVE },
+  };
+}
 
 function adminHeaders(tenantId = 'tenant-a'): Record<string, string> {
   return {
@@ -58,7 +64,6 @@ describe('standalone adapter mode', () => {
 
   test('delivers webhooks end-to-end in standalone mode', async () => {
     const fetchMock = mock(async () => new Response(null, { status: 200 }));
-    globalThis.fetch = asFetch(fetchMock);
 
     const adapter = createMemoryWebhookAdapter();
     adapter.addEndpoint({
@@ -75,6 +80,7 @@ describe('standalone adapter mode', () => {
     const { events, runtime, teardown } = await createWebhooksTestApp({
       adapter,
       events: ['auth:*'],
+      dispatch: dispatchFor(fetchMock),
     });
 
     try {
@@ -110,7 +116,6 @@ describe('standalone adapter mode', () => {
           headers: { 'content-type': 'application/json' },
         }),
     );
-    globalThis.fetch = asFetch(fetchMock);
 
     const adapter = createMemoryWebhookAdapter();
     adapter.addEndpoint({
@@ -127,6 +132,7 @@ describe('standalone adapter mode', () => {
     const { app, teardown } = await createWebhooksTestApp({
       adapter,
       events: ['auth:*'],
+      dispatch: dispatchFor(fetchMock),
     });
 
     try {

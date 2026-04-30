@@ -96,17 +96,31 @@ through `createApp()` while preserving the live behavior when a real server star
 Plugins publish their runtime via `pluginState`. Read it in `setupPost` after dependencies have run:
 
 ```typescript
-import { publishPluginState } from '@lastshotlabs/slingshot-core';
+import { createPluginStateMap, publishPluginState } from '@lastshotlabs/slingshot-core';
+
+type AuthRuntime = {
+  verifyToken(token: string): Promise<unknown>;
+  getUserById(userId: string): Promise<{ id: string } | null>;
+  config: { issuer: string };
+};
+
+const ctx = { pluginState: createPluginStateMap() };
+const authRuntimeForPublish: AuthRuntime = {
+  verifyToken: async () => null,
+  getUserById: async id => ({ id }),
+  config: { issuer: 'https://app.example.com' },
+};
+const userId = 'user_123';
 
 // Publishing (in the auth plugin's setupRoutes)
 publishPluginState(ctx.pluginState, 'auth.runtime', {
-  verifyToken,
-  getUserById,
-  config: authConfig,
+  verifyToken: authRuntimeForPublish.verifyToken,
+  getUserById: authRuntimeForPublish.getUserById,
+  config: authRuntimeForPublish.config,
 });
 
 // Consuming (in your plugin's setupPost — auth is declared as a dependency)
-const authRuntime = ctx.pluginState.get('auth.runtime') as AuthRuntime;
+const authRuntime = ctx.pluginState.get('auth.runtime') as AuthRuntime | undefined;
 if (!authRuntime) throw new Error('auth plugin is required');
 
 const user = await authRuntime.getUserById(userId);

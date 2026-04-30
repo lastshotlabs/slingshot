@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  TEST_ADAPTER_TIMEOUT_MS,
-  classifyOrchestrationError,
-  FakeRedisClient,
   FakeJob,
   FakeQueue,
   FakeQueueEvents,
+  FakeRedisClient,
   FakeWorker,
+  TEST_ADAPTER_TIMEOUT_MS,
+  classifyOrchestrationError,
   createFakeBullMQModule,
   resetFakeBullMQState,
 } from '../src/testing';

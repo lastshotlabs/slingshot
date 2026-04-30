@@ -340,7 +340,7 @@ function updateTagIndex(
   return runUnderTagLock(tag, async () => {
     const raw = await withAbortTimeout(
       'get',
-      signal => kv.get(tagKey(tag), { type: 'text' }),
+      () => kv.get(tagKey(tag), { type: 'text' }),
       timeoutMs,
       heartbeatMs,
     );
@@ -362,7 +362,7 @@ function updateTagIndex(
       paths.push(path);
       await withAbortTimeout(
         'put',
-        signal => kv.put(tagKey(tag), JSON.stringify(paths)),
+        () => kv.put(tagKey(tag), JSON.stringify(paths)),
         timeoutMs,
         heartbeatMs,
       );
@@ -390,7 +390,7 @@ function removeFromTagIndex(
   return runUnderTagLock(tag, async () => {
     const raw = await withAbortTimeout(
       'get',
-      signal => kv.get(tagKey(tag), { type: 'text' }),
+      () => kv.get(tagKey(tag), { type: 'text' }),
       timeoutMs,
       heartbeatMs,
     );
@@ -405,16 +405,11 @@ function removeFromTagIndex(
     const filtered = paths.filter(p => p !== path);
     if (filtered.length === paths.length) return; // path wasn't present
     if (filtered.length === 0) {
-      await withAbortTimeout(
-        'delete',
-        signal => kv.delete(tagKey(tag)),
-        timeoutMs,
-        heartbeatMs,
-      );
+      await withAbortTimeout('delete', () => kv.delete(tagKey(tag)), timeoutMs, heartbeatMs);
     } else {
       await withAbortTimeout(
         'put',
-        signal => kv.put(tagKey(tag), JSON.stringify(filtered)),
+        () => kv.put(tagKey(tag), JSON.stringify(filtered)),
         timeoutMs,
         heartbeatMs,
       );
@@ -544,7 +539,7 @@ export function createKvIsrCache(
     async get(path: string): Promise<IsrCacheEntry | null> {
       const raw = await withAbortTimeout(
         'get',
-        signal => kv.get(pageKey(path), { type: 'text' }),
+        () => kv.get(pageKey(path), { type: 'text' }),
         timeoutMs,
         heartbeatMs,
       );
@@ -563,7 +558,7 @@ export function createKvIsrCache(
     async set(path: string, entry: IsrCacheEntry): Promise<void> {
       const existingRaw = await withAbortTimeout(
         'get',
-        signal => kv.get(pageKey(path), { type: 'text' }),
+        () => kv.get(pageKey(path), { type: 'text' }),
         timeoutMs,
         heartbeatMs,
       );
@@ -594,7 +589,7 @@ export function createKvIsrCache(
       const pageOp = (): Promise<void> =>
         withAbortTimeout(
           'put',
-          signal => kv.put(pageKey(path), JSON.stringify(entry)),
+          () => kv.put(pageKey(path), JSON.stringify(entry)),
           timeoutMs,
           heartbeatMs,
         );
@@ -617,12 +612,7 @@ export function createKvIsrCache(
      * @param path - The URL pathname to invalidate.
      */
     async invalidatePath(path: string): Promise<void> {
-      await withAbortTimeout(
-        'delete',
-        signal => kv.delete(pageKey(path)),
-        timeoutMs,
-        heartbeatMs,
-      );
+      await withAbortTimeout('delete', () => kv.delete(pageKey(path)), timeoutMs, heartbeatMs);
     },
 
     /**
@@ -632,7 +622,7 @@ export function createKvIsrCache(
       const indexKey = tagKey(tag);
       const raw = await withAbortTimeout(
         'get',
-        signal => kv.get(indexKey, { type: 'text' }),
+        () => kv.get(indexKey, { type: 'text' }),
         timeoutMs,
         heartbeatMs,
       );
@@ -642,33 +632,18 @@ export function createKvIsrCache(
       try {
         paths = JSON.parse(raw) as string[];
       } catch {
-        await withAbortTimeout(
-          'delete',
-          signal => kv.delete(indexKey),
-          timeoutMs,
-          heartbeatMs,
-        );
+        await withAbortTimeout('delete', () => kv.delete(indexKey), timeoutMs, heartbeatMs);
         return;
       }
 
       await runWithConcurrency(
         paths.map(
           p => () =>
-            withAbortTimeout(
-              'delete',
-              signal => kv.delete(pageKey(p)),
-              timeoutMs,
-              heartbeatMs,
-            ),
+            withAbortTimeout('delete', () => kv.delete(pageKey(p)), timeoutMs, heartbeatMs),
         ),
         concurrency,
       );
-      await withAbortTimeout(
-        'delete',
-        signal => kv.delete(indexKey),
-        timeoutMs,
-        heartbeatMs,
-      );
+      await withAbortTimeout('delete', () => kv.delete(indexKey), timeoutMs, heartbeatMs);
     },
   };
 }

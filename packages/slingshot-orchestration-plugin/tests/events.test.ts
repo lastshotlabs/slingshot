@@ -595,7 +595,12 @@ describe('createSlingshotEventSink', () => {
       // If the module augmentation were missing, TypeScript would flag
       // these event names as not existing on SlingshotEventMap.
       sink.emit('orchestration.task.started', { runId: 'r', task: 't', input: {} });
-      sink.emit('orchestration.task.completed', { runId: 'r', task: 't', output: {}, durationMs: 1 });
+      sink.emit('orchestration.task.completed', {
+        runId: 'r',
+        task: 't',
+        output: {},
+        durationMs: 1,
+      });
       sink.emit('orchestration.task.failed', {
         runId: 'r',
         task: 't',
@@ -613,7 +618,12 @@ describe('createSlingshotEventSink', () => {
         workflow: 'w',
         error: { message: 'm', name: 'Error' },
       });
-      sink.emit('orchestration.step.completed', { runId: 'r', workflow: 'w', step: 's', output: {} });
+      sink.emit('orchestration.step.completed', {
+        runId: 'r',
+        workflow: 'w',
+        step: 's',
+        output: {},
+      });
       sink.emit('orchestration.step.failed', {
         runId: 'r',
         workflow: 'w',
@@ -654,7 +664,7 @@ describe('createSlingshotEventSink', () => {
       let capturedRunId: string | undefined;
       let capturedTask: string | undefined;
 
-      sink.subscribe('orchestration.task.started', (payload) => {
+      sink.subscribe('orchestration.task.started', payload => {
         // TypeScript infers payload as OrchestrationEventMap['orchestration.task.started']
         capturedRunId = payload.runId;
         capturedTask = payload.task;
@@ -679,7 +689,7 @@ describe('createSlingshotEventSink', () => {
 
       let captured: unknown;
 
-      sink.subscribe('orchestration.task.completed', (payload) => {
+      sink.subscribe('orchestration.task.completed', payload => {
         captured = payload;
       });
 
@@ -709,7 +719,7 @@ describe('createSlingshotEventSink', () => {
 
       let capturedError: unknown;
 
-      sink.subscribe('orchestration.task.failed', (payload) => {
+      sink.subscribe('orchestration.task.failed', payload => {
         capturedError = payload.error;
       });
 

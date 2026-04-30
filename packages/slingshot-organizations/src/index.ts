@@ -47,5 +47,11 @@ export type { GroupsConfig, GroupsManagementConfig } from './types/groups';
  * Rate limit store contract and implementations.
  */
 export type { OrganizationsRateLimitStore, OrganizationsRateLimitDecision } from './lib/rateLimit';
+/**
+ * Create the in-memory rate-limit store used by organizations routes in tests and local apps.
+ */
 export { createMemoryOrganizationsRateLimitStore } from './lib/rateLimit';
+/**
+ * Create the Redis-backed organizations rate-limit store and its minimal Redis client contract.
+ */
 export { createRedisOrganizationsRateLimitStore, type RedisLike } from './lib/rateLimitRedis';

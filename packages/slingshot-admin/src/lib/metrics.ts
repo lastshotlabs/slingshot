@@ -76,8 +76,7 @@ export function createAdminMetricsCollector(): AdminMetricsCollector {
     },
 
     recordProviderFailure(providerMethod: string): void {
-      providerFailures[providerMethod] =
-        (providerFailures[providerMethod] ?? 0) + 1;
+      providerFailures[providerMethod] = (providerFailures[providerMethod] ?? 0) + 1;
     },
 
     incrementRateLimitHit(): void {
@@ -97,9 +96,9 @@ export function createAdminMetricsCollector(): AdminMetricsCollector {
     reset(): void {
       requestCount = 0;
       errorCount = 0;
-      for (const key of Object.keys(providerCalls)) delete providerCalls[key];
+      for (const key of Object.keys(providerCalls)) Reflect.deleteProperty(providerCalls, key);
       for (const key of Object.keys(providerFailures))
-        delete providerFailures[key];
+        Reflect.deleteProperty(providerFailures, key);
       rateLimitHitCount = 0;
     },
   };

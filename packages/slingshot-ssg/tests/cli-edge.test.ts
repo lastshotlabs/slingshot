@@ -74,12 +74,7 @@ describe('missing flags', () => {
   });
 
   test('client-entry and rsc-manifest are undefined when omitted', () => {
-    const opts = parseArgs([
-      '--routes-dir',
-      'routes',
-      '--renderer',
-      'renderer.js',
-    ]);
+    const opts = parseArgs(['--routes-dir', 'routes', '--renderer', 'renderer.js']);
     expect(opts.clientEntry).toBeUndefined();
     expect(opts.rscManifestPath).toBeUndefined();
   });
@@ -105,9 +100,7 @@ describe('invalid concurrency values', () => {
 
   for (const [label, raw] of BAD_VALUES) {
     test(`throws for ${label}: "${raw}"`, () => {
-      expect(() => parseArgs(['--concurrency', raw])).toThrow(
-        /--concurrency.*positive integer/,
-      );
+      expect(() => parseArgs(['--concurrency', raw])).toThrow(/--concurrency.*positive integer/);
     });
   }
 
@@ -134,18 +127,12 @@ describe('invalid concurrency values', () => {
     // Empty string '' is falsy in JS, so the parser treats it as a
     // missing value and sets args['concurrency'] = 'true', which then
     // fails parsePositiveIntArg.
-    expect(() => parseArgs(['--concurrency', ''])).toThrow(
-      /--concurrency.*positive integer/,
-    );
+    expect(() => parseArgs(['--concurrency', ''])).toThrow(/--concurrency.*positive integer/);
   });
 
   test('fractional concurrency throws', () => {
-    expect(() => parseArgs(['--concurrency', '1.5'])).toThrow(
-      /--concurrency.*positive integer/,
-    );
-    expect(() => parseArgs(['--concurrency', '3.14'])).toThrow(
-      /--concurrency.*positive integer/,
-    );
+    expect(() => parseArgs(['--concurrency', '1.5'])).toThrow(/--concurrency.*positive integer/);
+    expect(() => parseArgs(['--concurrency', '3.14'])).toThrow(/--concurrency.*positive integer/);
   });
 
   test('very large concurrency is clamped to MAX_CONCURRENCY (256)', () => {
@@ -164,14 +151,7 @@ describe('invalid concurrency values', () => {
   });
 
   test('concurrency flag repeated — last value wins', () => {
-    expect(
-      parseArgs([
-        '--concurrency',
-        '2',
-        '--concurrency',
-        '8',
-      ]).concurrency,
-    ).toBe(8);
+    expect(parseArgs(['--concurrency', '2', '--concurrency', '8']).concurrency).toBe(8);
   });
 });
 
@@ -188,9 +168,7 @@ describe('invalid retry values', () => {
 
   for (const [label, raw] of BAD_VALUES) {
     test(`throws for ${label}: "${raw}"`, () => {
-      expect(() => parseArgs(['--retry', raw])).toThrow(
-        /--retry.*positive integer/,
-      );
+      expect(() => parseArgs(['--retry', raw])).toThrow(/--retry.*positive integer/);
     });
   }
 
@@ -199,9 +177,7 @@ describe('invalid retry values', () => {
   });
 
   test('empty string retry is treated as missing value and throws', () => {
-    expect(() => parseArgs(['--retry', ''])).toThrow(
-      /--retry.*positive integer/,
-    );
+    expect(() => parseArgs(['--retry', ''])).toThrow(/--retry.*positive integer/);
   });
 
   test('negative retry is clamped to 1', () => {
@@ -389,13 +365,7 @@ describe('help flag', () => {
   });
 
   test('--help with other flags still sets help=true', () => {
-    const opts = parseArgs([
-      '--help',
-      '--routes-dir',
-      'custom/routes',
-      '--concurrency',
-      '8',
-    ]);
+    const opts = parseArgs(['--help', '--routes-dir', 'custom/routes', '--concurrency', '8']);
     expect(opts.help).toBe(true);
     // Other flags should still be parsed
     expect(opts.routesDir).toBe('custom/routes');
@@ -437,9 +407,12 @@ describe('help flag', () => {
 describe('boundary values', () => {
   test('retry at max (10) still allows all flags to be set', () => {
     const opts = parseArgs([
-      '--retry', '10',
-      '--retry-base-delay', '60000',
-      '--retry-max-delay', '120000',
+      '--retry',
+      '10',
+      '--retry-base-delay',
+      '60000',
+      '--retry-max-delay',
+      '120000',
     ]);
     expect(opts.retryMaxAttempts).toBe(10);
     expect(opts.retryBaseDelayMs).toBe(60000);
@@ -456,19 +429,13 @@ describe('boundary values', () => {
   });
 
   test('breaker-threshold=1 and breaker-cooldown=1000 at min', () => {
-    const opts = parseArgs([
-      '--breaker-threshold', '1',
-      '--breaker-cooldown', '1000',
-    ]);
+    const opts = parseArgs(['--breaker-threshold', '1', '--breaker-cooldown', '1000']);
     expect(opts.breakerThreshold).toBe(1);
     expect(opts.breakerCooldownMs).toBe(1000);
   });
 
   test('breaker-threshold=100 and breaker-cooldown=300000 at max', () => {
-    const opts = parseArgs([
-      '--breaker-threshold', '100',
-      '--breaker-cooldown', '300000',
-    ]);
+    const opts = parseArgs(['--breaker-threshold', '100', '--breaker-cooldown', '300000']);
     expect(opts.breakerThreshold).toBe(100);
     expect(opts.breakerCooldownMs).toBe(300000);
   });
@@ -485,12 +452,18 @@ describe('boundary values', () => {
 
   test('all numeric flags set to mid-range values simultaneously', () => {
     const opts = parseArgs([
-      '--concurrency', '16',
-      '--retry', '5',
-      '--retry-base-delay', '2000',
-      '--retry-max-delay', '30000',
-      '--breaker-threshold', '10',
-      '--breaker-cooldown', '15000',
+      '--concurrency',
+      '16',
+      '--retry',
+      '5',
+      '--retry-base-delay',
+      '2000',
+      '--retry-max-delay',
+      '30000',
+      '--breaker-threshold',
+      '10',
+      '--breaker-cooldown',
+      '15000',
     ]);
     expect(opts.concurrency).toBe(16);
     expect(opts.retryMaxAttempts).toBe(5);
@@ -554,13 +527,7 @@ describe('watch flag parsing', () => {
     // early (no routes found) and NOT enter watch mode (since no routes
     // means no watcher is set up).
     await expect(
-      runCli([
-        '--routes-dir',
-        routesDir,
-        '--watch',
-        '--renderer',
-        join(tempDir, 'missing.ts'),
-      ]),
+      runCli(['--routes-dir', routesDir, '--watch', '--renderer', join(tempDir, 'missing.ts')]),
     ).resolves.toBeUndefined();
 
     logSpy.mockRestore();
@@ -574,12 +541,18 @@ describe('watch flag parsing', () => {
 describe('mixed edge combinations', () => {
   test('all flags with pathological values are clamped not thrown', () => {
     const opts = parseArgs([
-      '--concurrency', '-100',
-      '--retry', '0',
-      '--retry-base-delay', '-50',
-      '--retry-max-delay', '0',
-      '--breaker-threshold', '-1',
-      '--breaker-cooldown', '0',
+      '--concurrency',
+      '-100',
+      '--retry',
+      '0',
+      '--retry-base-delay',
+      '-50',
+      '--retry-max-delay',
+      '0',
+      '--breaker-threshold',
+      '-1',
+      '--breaker-cooldown',
+      '0',
     ]);
     expect(opts.concurrency).toBe(1);
     expect(opts.retryMaxAttempts).toBe(1);

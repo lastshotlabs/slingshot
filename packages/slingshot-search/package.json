@@ -37,6 +37,8 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "bun test",
     "coverage": "bun test --coverage",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "bun test tests/providers tests/routes",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ --cache"
   },

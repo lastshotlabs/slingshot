@@ -9,7 +9,7 @@ import { edgeRuntime } from '../../src/index';
 function randomB64(len: number): string {
   const buf = new Uint8Array(len);
   crypto.getRandomValues(buf);
-  return btoa(Array.from(buf, (b) => String.fromCharCode(b)).join(''));
+  return btoa(Array.from(buf, b => String.fromCharCode(b)).join(''));
 }
 
 /** Build a modern-format hash from raw components. */
@@ -94,8 +94,8 @@ describe('Edge runtime -- default password hashing (Web Crypto PBKDF2)', () => {
       256,
     );
     const hashArr = new Uint8Array(bits);
-    const saltB64 = btoa(Array.from(salt, (b) => String.fromCharCode(b)).join(''));
-    const hashB64 = btoa(Array.from(hashArr, (b) => String.fromCharCode(b)).join(''));
+    const saltB64 = btoa(Array.from(salt, b => String.fromCharCode(b)).join(''));
+    const hashB64 = btoa(Array.from(hashArr, b => String.fromCharCode(b)).join(''));
     const legacyHash = `${saltB64}:${hashB64}`;
 
     // Correct password should verify
@@ -159,11 +159,11 @@ describe('Edge runtime -- default password hashing (Web Crypto PBKDF2)', () => {
   test('8. unicode passwords (emoji, accented, CJK)', async () => {
     const passwords = [
       'héllo-wörld',
-      'пароль',         // Cyrillic
-      '密码',            // Chinese
-      '🔑👍héllo',       // Emoji + accented
-      '日本語パスワード',   // Japanese
-      'à́',  // Combining diacritics (a + grave + acute)
+      'пароль', // Cyrillic
+      '密码', // Chinese
+      '🔑👍héllo', // Emoji + accented
+      '日本語パスワード', // Japanese
+      'à́', // Combining diacritics (a + grave + acute)
     ];
 
     for (const pwd of passwords) {
@@ -205,18 +205,18 @@ describe('Edge runtime -- default password hashing (Web Crypto PBKDF2)', () => {
       'garbage!!!',
 
       // --- modern format, wrong number of parts ---
-      'pbkdf2-sha256$1000',              // only 1 part after prefix
-      'pbkdf2-sha256$1000$salt',         // only 2 parts after prefix
+      'pbkdf2-sha256$1000', // only 1 part after prefix
+      'pbkdf2-sha256$1000$salt', // only 2 parts after prefix
 
       // --- modern format, invalid iterations ---
-      'pbkdf2-sha256$abc$salt$hash',     // non-numeric
-      'pbkdf2-sha256$0.5$salt$hash',     // not an integer
-      'pbkdf2-sha256$0$salt$hash',       // zero (not >= 1)
-      'pbkdf2-sha256$-1$salt$hash',      // negative
+      'pbkdf2-sha256$abc$salt$hash', // non-numeric
+      'pbkdf2-sha256$0.5$salt$hash', // not an integer
+      'pbkdf2-sha256$0$salt$hash', // zero (not >= 1)
+      'pbkdf2-sha256$-1$salt$hash', // negative
 
       // --- legacy format, wrong number of colons ---
-      'salthash',                        // no colon
-      'salt:hash:extra',                 // two colons
+      'salthash', // no colon
+      'salt:hash:extra', // two colons
 
       // --- legacy format with invalid base64 (atob will throw) ---
       `${randomB64(16)}:!!!not-base64!!!`,
@@ -241,8 +241,7 @@ describe('Edge runtime -- default password hashing (Web Crypto PBKDF2)', () => {
     const hash2 = await rt.password.hash(password);
 
     // Extract salt portions
-    const extractSalt = (h: string): string =>
-      h.slice('pbkdf2-sha256$'.length).split('$')[1];
+    const extractSalt = (h: string): string => h.slice('pbkdf2-sha256$'.length).split('$')[1];
 
     const salt1 = extractSalt(hash1);
     const salt2 = extractSalt(hash2);
@@ -266,14 +265,12 @@ describe('Edge runtime -- default password hashing (Web Crypto PBKDF2)', () => {
     const [iterStr, saltB64, hashB64] = parts;
 
     // -- Tamper with salt (flip first base64 char) --
-    const tamperedSalt =
-      (saltB64[0] === 'A' ? 'B' : 'A') + saltB64.slice(1);
+    const tamperedSalt = (saltB64[0] === 'A' ? 'B' : 'A') + saltB64.slice(1);
     const hashWithTamperedSalt = modernHash(Number(iterStr), tamperedSalt, hashB64);
     expect(await rt.password.verify(password, hashWithTamperedSalt)).toBe(false);
 
     // -- Tamper with hash output (flip first base64 char) --
-    const tamperedHashB64 =
-      (hashB64[0] === 'A' ? 'B' : 'A') + hashB64.slice(1);
+    const tamperedHashB64 = (hashB64[0] === 'A' ? 'B' : 'A') + hashB64.slice(1);
     const hashWithTamperedHash = modernHash(Number(iterStr), saltB64, tamperedHashB64);
     expect(await rt.password.verify(password, hashWithTamperedHash)).toBe(false);
 

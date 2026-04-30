@@ -69,17 +69,17 @@ If you need to inspect behavior, start in:
 The following limitations are inherent to edge runtimes (Cloudflare Workers, Deno Deploy, etc.)
 and are **not implementation gaps**:
 
-| Feature | Status | Workaround |
-|---------|--------|------------|
-| **Local filesystem** | Not available | Use `fileStore` backed by KV, R2, or `env.ASSETS.fetch()`. |
-| **Filesystem writes** | Not available | Use an external storage service (KV, R2, S3, etc.). |
-| **SQLite** | Not available | Use a cloud database (D1, PlanetScale, Neon) via its HTTP API. |
-| **HTTP server (`listen()`)** | Not available | Export a `fetch` handler — the platform manages the HTTP lifecycle. |
-| **Glob scanning** | Not available | Resolve routes at build time (e.g., via Vite/Rollup import.meta.glob). |
-| **AsyncLocalStorage** | Not available | Pass context explicitly through function parameters. |
-| **Process lifecycle (SIGTERM)** | Not available | Use platform hooks (`ctx.waitUntil` on Cloudflare Workers). |
-| **Native modules (bcrypt, etc.)** | Not available | Use Web Crypto (PBKDF2-SHA256) or delegate to an external service. |
-| **Socket/TCP** | Not available | Use HTTP-based APIs or WebSocket via platform primitives. |
+| Feature                           | Status        | Workaround                                                             |
+| --------------------------------- | ------------- | ---------------------------------------------------------------------- |
+| **Local filesystem**              | Not available | Use `fileStore` backed by KV, R2, or `env.ASSETS.fetch()`.             |
+| **Filesystem writes**             | Not available | Use an external storage service (KV, R2, S3, etc.).                    |
+| **SQLite**                        | Not available | Use a cloud database (D1, PlanetScale, Neon) via its HTTP API.         |
+| **HTTP server (`listen()`)**      | Not available | Export a `fetch` handler — the platform manages the HTTP lifecycle.    |
+| **Glob scanning**                 | Not available | Resolve routes at build time (e.g., via Vite/Rollup import.meta.glob). |
+| **AsyncLocalStorage**             | Not available | Pass context explicitly through function parameters.                   |
+| **Process lifecycle (SIGTERM)**   | Not available | Use platform hooks (`ctx.waitUntil` on Cloudflare Workers).            |
+| **Native modules (bcrypt, etc.)** | Not available | Use Web Crypto (PBKDF2-SHA256) or delegate to an external service.     |
+| **Socket/TCP**                    | Not available | Use HTTP-based APIs or WebSocket via platform primitives.              |
 
 ## Programmatic Feature Detection
 

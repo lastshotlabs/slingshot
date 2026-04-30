@@ -24,15 +24,11 @@ describe('createSsrPlugin', () => {
 
 describe('createSsrPlugin — config validation', () => {
   it('throws ZodError when serverRoutesDir is missing', () => {
-    expect(() =>
-      createSsrPlugin(createTestSsrConfig({ serverRoutesDir: '' })),
-    ).toThrow();
+    expect(() => createSsrPlugin(createTestSsrConfig({ serverRoutesDir: '' }))).toThrow();
   });
 
   it('throws ZodError when assetsManifest is missing', () => {
-    expect(() =>
-      createSsrPlugin(createTestSsrConfig({ assetsManifest: '' })),
-    ).toThrow();
+    expect(() => createSsrPlugin(createTestSsrConfig({ assetsManifest: '' }))).toThrow();
   });
 
   it('throws ZodError when renderer is not an object', () => {

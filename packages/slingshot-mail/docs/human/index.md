@@ -54,24 +54,38 @@ instead of embedding provider SDK calls throughout the codebase.
 ## Provider Setup Examples
 
 **Resend:**
+
 ```ts
-import { createMailPlugin, createResendProvider } from '@lastshotlabs/slingshot-mail';
+import {
+  createMailPlugin,
+  createRawHtmlRenderer,
+  createResendProvider,
+} from '@lastshotlabs/slingshot-mail';
 
 const mail = createMailPlugin({
-  provider: createResendProvider({ apiKey: process.env.RESEND_API_KEY }),
-  renderer: myRenderer,
+  provider: createResendProvider({ apiKey: process.env.RESEND_API_KEY! }),
+  renderer: createRawHtmlRenderer({
+    templates: {
+      welcome: {
+        subject: 'Welcome',
+        html: '<p>Hello {{name}}</p>',
+      },
+    },
+  }),
   from: 'app@example.com',
 });
 ```
 
 **SendGrid:**
-```ts
-import { createSendGridProvider } from '@lastshotlabs/slingshot-mail';
 
-const provider = createSendGridProvider({ apiKey: process.env.SENDGRID_API_KEY });
+```ts
+import { createSendgridProvider } from '@lastshotlabs/slingshot-mail';
+
+const provider = createSendgridProvider({ apiKey: process.env.SENDGRID_API_KEY! });
 ```
 
 **AWS SES:**
+
 ```ts
 import { createSesProvider } from '@lastshotlabs/slingshot-mail';
 
@@ -80,10 +94,11 @@ const provider = createSesProvider({ region: 'us-east-1' });
 ```
 
 **Postmark:**
+
 ```ts
 import { createPostmarkProvider } from '@lastshotlabs/slingshot-mail';
 
-const provider = createPostmarkProvider({ serverToken: process.env.POSTMARK_SERVER_TOKEN });
+const provider = createPostmarkProvider({ serverToken: process.env.POSTMARK_SERVER_TOKEN! });
 ```
 
 All providers implement the same `MailProvider` contract — swap them without changing callers.

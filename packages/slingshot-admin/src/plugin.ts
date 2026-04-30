@@ -193,6 +193,7 @@ export function createAdminPlugin(
       evaluator: config.permissions.evaluator,
       auditLog: config.auditLog,
       rateLimitStore: config.rateLimitStore,
+      logger: config.logger,
     });
     app.route(mountPath, adminRouter);
 

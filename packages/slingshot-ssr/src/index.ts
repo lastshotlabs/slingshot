@@ -158,7 +158,12 @@ export { createCircuitBreaker } from './circuitBreaker';
 /**
  * Circuit breaker types.
  */
-export type { CircuitBreaker, CircuitBreakerOptions, CircuitState, CircuitResult } from './circuitBreaker';
+export type {
+  CircuitBreaker,
+  CircuitBreakerOptions,
+  CircuitState,
+  CircuitResult,
+} from './circuitBreaker';
 
 // ─── Retry logic ───────────────────────────────────────────────────────────────
 

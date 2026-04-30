@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { createRoute } from '@lastshotlabs/slingshot-core';
 import type { AdminCircuitBreakerHealth } from '../lib/circuitBreaker';
-import type { AdminPluginHealth } from '../plugin';
 import { createTypedRouter, registerRoute } from '../lib/typedRoute';
+import type { AdminPluginHealth } from '../plugin';
 
 // ---------------------------------------------------------------------------
 // Response schemas
@@ -77,7 +77,8 @@ export function createHealthRouter(config: HealthRouterConfig) {
       method: 'get',
       path: '/health',
       summary: 'Admin plugin health',
-      description: 'Returns aggregated health status of all admin providers and the circuit breaker.',
+      description:
+        'Returns aggregated health status of all admin providers and the circuit breaker.',
       tags,
       responses: {
         200: {

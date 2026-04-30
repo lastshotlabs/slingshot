@@ -42,7 +42,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@lastshotlabs/slingshot": "file:../..",
+    "@lastshotlabs/slingshot": "workspace:*",
     "@lastshotlabs/slingshot-core": "workspace:*",
     "@lastshotlabs/slingshot-runtime-node": "workspace:*"
   },

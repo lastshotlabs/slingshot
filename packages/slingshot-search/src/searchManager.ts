@@ -20,11 +20,7 @@ import { createElasticsearchProvider } from './providers/elasticsearch';
 import { createMeilisearchProvider } from './providers/meilisearch';
 import { createTypesenseProvider } from './providers/typesense';
 import { withRetry } from './retry';
-import {
-  type SearchCircuitBreaker,
-  type SearchCircuitBreakerHealth,
-  createSearchCircuitBreaker,
-} from './searchCircuitBreaker';
+import { type SearchCircuitBreaker, createSearchCircuitBreaker } from './searchCircuitBreaker';
 import type { SearchTransformRegistry } from './transformRegistry';
 import type { SearchPluginConfig } from './types/config';
 import type { SearchProvider } from './types/provider';
@@ -528,10 +524,7 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
    * counts as ONE success for the breaker. Only after retries are exhausted
    * does the failure count toward tripping the breaker.
    */
-  async function withProviderProtection<T>(
-    providerKey: string,
-    fn: () => Promise<T>,
-  ): Promise<T> {
+  async function withProviderProtection<T>(providerKey: string, fn: () => Promise<T>): Promise<T> {
     let breaker = providerBreakers.get(providerKey);
     if (!breaker) {
       breaker = createSearchCircuitBreaker({ providerKey });
@@ -582,8 +575,8 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
 
     if (autoCreate) {
       await withProviderProtection(providerKey, () =>
-            provider.createOrUpdateIndex(indexName, settings),
-          );
+        provider.createOrUpdateIndex(indexName, settings),
+      );
     }
   }
 

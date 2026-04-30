@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type {
   AuditLogProvider,
+  Logger,
   MailRenderer,
   PermissionEvaluator,
   PermissionRegistry,
@@ -29,6 +30,8 @@ export interface AdminPluginConfig {
   auditLog?: AuditLogProvider;
   rateLimitStore?: AdminRateLimitStore;
   permissions: AdminPermissionsConfig;
+  /** Structured logger for operational warnings and errors. Defaults to console. */
+  logger?: Logger;
 }
 
 // ---------------------------------------------------------------------------

@@ -30,7 +30,11 @@ bun add @lastshotlabs/slingshot-orchestration-bullmq
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
+- `test`: `bun test`
+- `test:integration`: `bun test tests/integration`
+- `test:unit`: `bun test --ignore tests/integration`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

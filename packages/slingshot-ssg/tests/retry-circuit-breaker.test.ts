@@ -8,9 +8,14 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeAll, describe, expect, it, spyOn } from 'bun:test';
-import type { SlingshotSsrRenderer, SsrRouteChain, SsrRouteMatch, SsrShell } from '@lastshotlabs/slingshot-ssr';
+import type {
+  SlingshotSsrRenderer,
+  SsrRouteChain,
+  SsrRouteMatch,
+  SsrShell,
+} from '@lastshotlabs/slingshot-ssr';
+import { SsgCircuitOpenError, createSsgCircuitBreaker } from '../src/circuitBreaker';
 import { renderSsgPage, renderSsgPages } from '../src/renderer';
-import { createSsgCircuitBreaker, SsgCircuitOpenError } from '../src/circuitBreaker';
 import type { SsgConfig } from '../src/types';
 
 const TMP = join(import.meta.dir, '__tmp_retry_cb__');
@@ -274,7 +279,9 @@ describe('circuit breaker — unit', () => {
     expect(breaker.getHealth().consecutiveFailures).toBe(0);
 
     // Two failures should not trip yet
-    expect(() => { throw new SsgCircuitOpenError(0); }).toThrow(); // dummy to catch later
+    expect(() => {
+      throw new SsgCircuitOpenError(0);
+    }).toThrow(); // dummy to catch later
     // Use guard to record failures
   });
 
@@ -287,21 +294,27 @@ describe('circuit breaker — unit', () => {
 
     // First call fails
     await expect(
-      breaker.guard(async () => { throw new Error('fail 1'); }),
+      breaker.guard(async () => {
+        throw new Error('fail 1');
+      }),
     ).rejects.toThrow('fail 1');
     expect(breaker.getHealth().state).toBe('closed');
     expect(breaker.getHealth().consecutiveFailures).toBe(1);
 
     // Second call fails — trips the breaker
     await expect(
-      breaker.guard(async () => { throw new Error('fail 2'); }),
+      breaker.guard(async () => {
+        throw new Error('fail 2');
+      }),
     ).rejects.toThrow('fail 2');
     expect(breaker.getHealth().state).toBe('open');
     expect(breaker.getHealth().consecutiveFailures).toBe(2);
 
     // Third call — breaker is open, throws SsgCircuitOpenError
     await expect(
-      breaker.guard(async () => { return 'success'; }),
+      breaker.guard(async () => {
+        return 'success';
+      }),
     ).rejects.toThrow(SsgCircuitOpenError);
   });
 
@@ -313,8 +326,16 @@ describe('circuit breaker — unit', () => {
     const breaker = createSsgCircuitBreaker({ threshold: 3, cooldownMs: 1000, now: mockNow });
 
     // Two failures
-    await expect(breaker.guard(async () => { throw new Error('f1'); })).rejects.toThrow();
-    await expect(breaker.guard(async () => { throw new Error('f2'); })).rejects.toThrow();
+    await expect(
+      breaker.guard(async () => {
+        throw new Error('f1');
+      }),
+    ).rejects.toThrow();
+    await expect(
+      breaker.guard(async () => {
+        throw new Error('f2');
+      }),
+    ).rejects.toThrow();
     expect(breaker.getHealth().consecutiveFailures).toBe(2);
 
     // Success resets
@@ -329,15 +350,25 @@ describe('circuit breaker — unit', () => {
     const breaker = createSsgCircuitBreaker({ threshold: 2, cooldownMs: 100, now: mockNow });
 
     // Trip the breaker
-    await expect(breaker.guard(async () => { throw new Error('f1'); })).rejects.toThrow();
-    await expect(breaker.guard(async () => { throw new Error('f2'); })).rejects.toThrow();
+    await expect(
+      breaker.guard(async () => {
+        throw new Error('f1');
+      }),
+    ).rejects.toThrow();
+    await expect(
+      breaker.guard(async () => {
+        throw new Error('f2');
+      }),
+    ).rejects.toThrow();
     expect(breaker.getHealth().state).toBe('open');
 
     // Advance time past cooldown
     now = 200;
 
     // Half-open probe: allowed through
-    const probeResult = breaker.guard(async () => { throw new Error('probe fail'); });
+    const probeResult = breaker.guard(async () => {
+      throw new Error('probe fail');
+    });
     await expect(probeResult).rejects.toThrow('probe fail');
 
     // Probe failure should re-open the breaker
@@ -345,9 +376,7 @@ describe('circuit breaker — unit', () => {
     expect(breaker.getHealth().consecutiveFailures).toBe(3);
 
     // Still open — should be blocked
-    await expect(
-      breaker.guard(async () => 'blocked'),
-    ).rejects.toThrow(SsgCircuitOpenError);
+    await expect(breaker.guard(async () => 'blocked')).rejects.toThrow(SsgCircuitOpenError);
   });
 
   it('half-open probe success resets breaker to closed', async () => {
@@ -356,8 +385,16 @@ describe('circuit breaker — unit', () => {
     const breaker = createSsgCircuitBreaker({ threshold: 2, cooldownMs: 100, now: mockNow });
 
     // Trip the breaker
-    await expect(breaker.guard(async () => { throw new Error('f1'); })).rejects.toThrow();
-    await expect(breaker.guard(async () => { throw new Error('f2'); })).rejects.toThrow();
+    await expect(
+      breaker.guard(async () => {
+        throw new Error('f1');
+      }),
+    ).rejects.toThrow();
+    await expect(
+      breaker.guard(async () => {
+        throw new Error('f2');
+      }),
+    ).rejects.toThrow();
     expect(breaker.getHealth().state).toBe('open');
 
     // Advance time past cooldown

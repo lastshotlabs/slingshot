@@ -1,7 +1,7 @@
-import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { describe, expect, test } from 'bun:test';
 import {
   SsrAssetManifestError,
   buildDevAssetTags,
@@ -14,7 +14,11 @@ describe('readAssetManifest', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ssr-assets-'));
     const manifestPath = join(dir, 'manifest.json');
     const manifest = {
-      'index.html': { file: 'assets/index-abc123.js', css: ['assets/index-abc123.css'], isEntry: true },
+      'index.html': {
+        file: 'assets/index-abc123.js',
+        css: ['assets/index-abc123.css'],
+        isEntry: true,
+      },
     };
     writeFileSync(manifestPath, JSON.stringify(manifest));
     try {
@@ -27,7 +31,9 @@ describe('readAssetManifest', () => {
   });
 
   test('throws SsrAssetManifestError when file is missing', () => {
-    expect(() => readAssetManifest('/nonexistent/path/manifest.json')).toThrow(SsrAssetManifestError);
+    expect(() => readAssetManifest('/nonexistent/path/manifest.json')).toThrow(
+      SsrAssetManifestError,
+    );
   });
 
   test('throws SsrAssetManifestError for invalid JSON', () => {
@@ -118,7 +124,10 @@ describe('resolveAssetTags', () => {
   });
 
   test('handles circular imports gracefully', () => {
-    const manifest: Record<string, { file: string; css?: string[]; imports?: string[]; isEntry?: boolean }> = {
+    const manifest: Record<
+      string,
+      { file: string; css?: string[]; imports?: string[]; isEntry?: boolean }
+    > = {
       'index.html': {
         file: 'assets/index.js',
         imports: ['chunk-a'],

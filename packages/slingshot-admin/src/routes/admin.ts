@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { z } from 'zod';
 import {
+  createConsoleLogger,
   createRoute,
   cursorParams,
   errorResponse,
@@ -11,6 +12,7 @@ import {
 } from '@lastshotlabs/slingshot-core';
 import type {
   AuditLogProvider,
+  Logger,
   PermissionEvaluator,
   SlingshotEventBus,
 } from '@lastshotlabs/slingshot-core';
@@ -28,6 +30,8 @@ import type { AdminEnv } from '../types/env';
 // ---------------------------------------------------------------------------
 // Zod schemas
 // ---------------------------------------------------------------------------
+
+const logger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-admin' } });
 
 const ErrorResponse = z.object({ error: z.string() });
 
@@ -233,6 +237,8 @@ export interface AdminRouterConfig {
    * shared (e.g. Redis) store so counters are coordinated across replicas.
    */
   rateLimitStore?: AdminRateLimitStore;
+  /** Structured logger for operational warnings and errors. Defaults to console. */
+  logger?: Logger;
 }
 
 async function checkPermission(
@@ -257,7 +263,9 @@ async function tryLogAuditEntry(
   try {
     await auditLog.logEntry(entry);
   } catch (err) {
-    console.error('[slingshot-admin] Failed to write audit log entry', err);
+    logger.error('[slingshot-admin] Failed to write audit log entry', {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -292,7 +300,7 @@ async function requireAuditEntry(
   try {
     await auditLog.logEntry(entry);
   } catch (err) {
-    console.error('[slingshot-admin] Audit log unavailable for destructive verb — failing closed', {
+    logger.error('[slingshot-admin] Audit log unavailable for destructive verb — failing closed', {
       action: entry.action,
       resource: entry.resource,
       resourceId: entry.resourceId,
@@ -337,7 +345,7 @@ const AUDIT_FIELD_MAX_LENGTH = 256;
 
 function clampAuditField(value: string, fieldName: string): string {
   if (value.length <= AUDIT_FIELD_MAX_LENGTH) return value;
-  console.warn(
+  logger.warn(
     `[slingshot-admin] audit ${fieldName} truncated from ${value.length} to ${AUDIT_FIELD_MAX_LENGTH} chars`,
   );
   return value.slice(0, AUDIT_FIELD_MAX_LENGTH);
@@ -377,6 +385,7 @@ export function createAdminRouter(config: AdminRouterConfig) {
   const destructiveWindowMs = config.destructiveRateLimit?.windowMs ?? 60_000;
   const destructiveMax = config.destructiveRateLimit?.max ?? 30;
   const rateLimitStore: AdminRateLimitStore = config.rateLimitStore ?? createMemoryRateLimitStore();
+  const routeLogger: Logger = config.logger ?? logger;
 
   async function checkDestructiveRateLimit(
     c: Context<AdminEnv>,
@@ -394,7 +403,9 @@ export function createAdminRouter(config: AdminRouterConfig) {
     } catch (err) {
       // Fail-open on store errors so a Redis outage does not freeze admin
       // operations entirely. We still log so the operator notices.
-      console.error('[slingshot-admin] Rate-limit store error — allowing request', err);
+      routeLogger.error('[slingshot-admin] Rate-limit store error — allowing request', {
+        error: err instanceof Error ? err.message : String(err),
+      });
       return null;
     }
     if (!result.exceeded) return null;

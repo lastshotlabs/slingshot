@@ -69,7 +69,9 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
       prefix: `test-orch-redis-${Date.now()}`,
     });
     adapter.registerTask(task);
-    lastShutdown = async () => { await adapter.shutdown(); };
+    lastShutdown = async () => {
+      await adapter.shutdown();
+    };
 
     const handle = await adapter.runTask(task.name, { value: 'real-redis' });
     const result = await handle.result();
@@ -96,7 +98,9 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
       prefix: `test-orch-idem-${Date.now()}`,
     });
     adapter.registerTask(task);
-    lastShutdown = async () => { await adapter.shutdown(); };
+    lastShutdown = async () => {
+      await adapter.shutdown();
+    };
 
     const first = await adapter.runTask(task.name, {}, { idempotencyKey: 'integ-key-1' });
     await first.result();
@@ -125,12 +129,11 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
       prefix: `test-orch-sched-${Date.now()}`,
     });
     adapter.registerTask(task);
-    lastShutdown = async () => { await adapter.shutdown(); };
+    lastShutdown = async () => {
+      await adapter.shutdown();
+    };
 
-    const schedule = await adapter.schedule(
-      { type: 'task', name: task.name },
-      '* * * * *',
-    );
+    const schedule = await adapter.schedule({ type: 'task', name: task.name }, '* * * * *');
     expect(schedule).toBeDefined();
     expect(schedule.id).toBeDefined();
 
@@ -150,7 +153,9 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
       connection: { host: conn.host, port: conn.port, password: conn.password },
       prefix: `test-orch-shutdown-${Date.now()}`,
     });
-    lastShutdown = async () => { await adapter.shutdown(); };
+    lastShutdown = async () => {
+      await adapter.shutdown();
+    };
 
     await expect(adapter.shutdown()).resolves.toBeUndefined();
     // Second shutdown is idempotent
@@ -175,7 +180,9 @@ describe('createBullMQOrchestrationAdapter — real Redis', () => {
       prefix: `test-orch-fail-${Date.now()}`,
     });
     adapter.registerTask(failingTask);
-    lastShutdown = async () => { await adapter.shutdown(); };
+    lastShutdown = async () => {
+      await adapter.shutdown();
+    };
 
     const handle = await adapter.runTask(failingTask.name, {});
     await expect(handle.result()).rejects.toThrow('intentional failure');

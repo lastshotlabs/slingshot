@@ -8,9 +8,6 @@
  * Mirrors the shape of `slingshot-mail`'s circuit breaker so operational
  * behaviour stays uniform across production-track packages.
  */
-
-import type { AdminPluginHealth } from '../plugin';
-
 // ---------------------------------------------------------------------------
 // Error class
 // ---------------------------------------------------------------------------
@@ -89,9 +86,7 @@ export interface AdminCircuitBreakerOptions {
  * @param opts - Configuration options.
  * @returns An `AdminCircuitBreaker` instance.
  */
-export function createAdminCircuitBreaker(
-  opts: AdminCircuitBreakerOptions,
-): AdminCircuitBreaker {
+export function createAdminCircuitBreaker(opts: AdminCircuitBreakerOptions): AdminCircuitBreaker {
   const threshold = opts.threshold ?? 5;
   const cooldownMs = opts.cooldownMs ?? 30_000;
   const now = opts.now ?? (() => Date.now());
@@ -104,9 +99,7 @@ export function createAdminCircuitBreaker(
 
   function getHealth(): AdminCircuitBreakerHealth {
     const nextProbeAt =
-      state === 'open' && openedAt !== undefined
-        ? openedAt + cooldownMs
-        : undefined;
+      state === 'open' && openedAt !== undefined ? openedAt + cooldownMs : undefined;
     return { state, consecutiveFailures, openedAt, nextProbeAt };
   }
 
@@ -149,10 +142,7 @@ export function createAdminCircuitBreaker(
 
   async function guard<T>(fn: () => Promise<T>): Promise<T> {
     if (!tryEnterHalfOpen()) {
-      const retryAfterMs =
-        openedAt !== undefined
-          ? Math.max(0, openedAt + cooldownMs - now())
-          : 0;
+      const retryAfterMs = openedAt !== undefined ? Math.max(0, openedAt + cooldownMs - now()) : 0;
       throw new AdminCircuitOpenError(
         `[slingshot-admin:${providerName}] Circuit breaker open after ` +
           `${consecutiveFailures} consecutive failures. ` +

@@ -172,7 +172,6 @@ describe('e2e build pipeline', () => {
 
     const anotherPostContent = readFileSync(anotherPostHtml, 'utf8');
     expect(anotherPostContent).toContain('/posts/another-post');
-
   });
 
   it('handles an empty route set gracefully', async () => {

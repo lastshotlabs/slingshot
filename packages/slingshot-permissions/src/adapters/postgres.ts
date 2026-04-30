@@ -389,7 +389,9 @@ export interface CreatePermissionsPostgresAdapterOptions {
 export async function createPermissionsPostgresAdapter(
   pool: PoolLike,
   options?: CreatePermissionsPostgresAdapterOptions,
-): Promise<PermissionsPostgresAdapter & { healthCheck(): Promise<PermissionsPostgresAdapterHealth> }> {
+): Promise<
+  PermissionsPostgresAdapter & { healthCheck(): Promise<PermissionsPostgresAdapterHealth> }
+> {
   const migrationTimeoutMs =
     options?.migrationTimeoutMs !== undefined
       ? options.migrationTimeoutMs

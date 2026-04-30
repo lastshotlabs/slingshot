@@ -663,7 +663,7 @@ describe('sqlite adapter — workflow runs', () => {
     await adapter.start();
 
     const handle = await runtime.runWorkflow(workflow, { x: 21 });
-    const result = await handle.result() as Record<string, unknown>;
+    const result = (await handle.result()) as Record<string, unknown>;
     expect(result['double']).toMatchObject({ doubled: 42 });
 
     const run = await adapter.getRun(handle.id);
@@ -706,7 +706,7 @@ describe('sqlite adapter — workflow runs', () => {
     await adapter.start();
 
     const handle = await runtime.runWorkflow(workflow, {});
-    const result = await handle.result() as Record<string, unknown>;
+    const result = (await handle.result()) as Record<string, unknown>;
     expect(result['add-one']).toMatchObject({ sum: 3 });
     expect(result['add-two']).toMatchObject({ sum: 7 });
 
@@ -734,7 +734,7 @@ describe('sqlite adapter — workflow runs', () => {
     await adapter.start();
 
     const handle = await runtime.runWorkflow(workflow, {});
-    const result = await handle.result() as Record<string, unknown>;
+    const result = (await handle.result()) as Record<string, unknown>;
     expect(result['nap']).toMatchObject({ sleptMs: 5 });
 
     await adapter.shutdown();

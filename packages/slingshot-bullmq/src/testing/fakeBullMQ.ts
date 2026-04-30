@@ -118,9 +118,9 @@ export function createFakeBullMQModule(state: FakeBullMQState = fakeBullMQState)
       return result;
     }
 
-    async getJobs(
-      _states?: string[],
-    ): Promise<Array<{ data: Record<string, unknown>; remove: () => Promise<void>; id?: string }>> {
+    async getJobs(): Promise<
+      Array<{ data: Record<string, unknown>; remove: () => Promise<void>; id?: string }>
+    > {
       return this._record.addCalls.map((call, idx) => ({
         data: call.data as Record<string, unknown>,
         remove: async () => {

@@ -114,17 +114,13 @@ describe('KV ISR stress tests', () => {
 
       // Each group-N tag should contain 10 paths
       for (let g = 0; g < 10; g++) {
-        const groupIdx = JSON.parse(
-          kv._store.get(`isr:tag:group-${g}`) ?? '[]',
-        ) as string[];
+        const groupIdx = JSON.parse(kv._store.get(`isr:tag:group-${g}`) ?? '[]') as string[];
         expect(groupIdx.length).toBe(10);
       }
 
       // Each category-N tag should contain 20 paths
       for (let c = 0; c < 5; c++) {
-        const catIdx = JSON.parse(
-          kv._store.get(`isr:tag:category-${c}`) ?? '[]',
-        ) as string[];
+        const catIdx = JSON.parse(kv._store.get(`isr:tag:category-${c}`) ?? '[]') as string[];
         expect(catIdx.length).toBe(20);
       }
     });
@@ -356,9 +352,7 @@ describe('KV ISR stress tests', () => {
       });
 
       // The put should time out due to the heartbeat
-      await expect(c.set('/hb', makeEntry('/hb', ['t']))).rejects.toThrow(
-        'timed out',
-      );
+      await expect(c.set('/hb', makeEntry('/hb', ['t']))).rejects.toThrow('timed out');
     });
 
     it('heartbeatTimeoutMs=0 disables the heartbeat', async () => {

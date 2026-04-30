@@ -133,7 +133,9 @@ describe('createBullMQAdapter — real Redis', () => {
         info: () => {},
         warn: () => {},
         error: () => {},
-        child(): any { return this; },
+        child(): any {
+          return this;
+        },
       },
     });
     lastShutdown = () => bus.shutdown();

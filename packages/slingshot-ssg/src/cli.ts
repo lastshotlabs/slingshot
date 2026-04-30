@@ -160,9 +160,7 @@ export function parseArgs(argv: string[]): {
     ? parsePositiveIntArg(args['concurrency'], 'concurrency', 1, MAX_CONCURRENCY)
     : 4;
 
-  const retryMaxAttempts = args['retry']
-    ? parsePositiveIntArg(args['retry'], 'retry', 1, 10)
-    : 3;
+  const retryMaxAttempts = args['retry'] ? parsePositiveIntArg(args['retry'], 'retry', 1, 10) : 3;
 
   const retryBaseDelayMs = args['retry-base-delay']
     ? parsePositiveIntArg(args['retry-base-delay'], 'retry-base-delay', 100, 60_000)

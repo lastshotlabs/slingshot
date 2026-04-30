@@ -187,9 +187,7 @@ describe('deriveTemporalRunId', () => {
       { kind: 'task' as const, name: 'order-processing', idempotencyKey: 'invoice-999' },
       { kind: 'task' as const, name: 'order-processing', idempotencyKey: 'invoice-999' },
     ];
-    const ids = inputs.map(i =>
-      deriveTemporalRunId({ ...i, tenantId: 't1' }),
-    );
+    const ids = inputs.map(i => deriveTemporalRunId({ ...i, tenantId: 't1' }));
 
     expect(new Set(ids).size).toBe(1);
   });

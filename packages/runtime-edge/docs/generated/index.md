@@ -31,6 +31,7 @@ bun add @lastshotlabs/slingshot-runtime-edge
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
 - `test`: `bun test`
 - `typecheck`: `tsc --noEmit`

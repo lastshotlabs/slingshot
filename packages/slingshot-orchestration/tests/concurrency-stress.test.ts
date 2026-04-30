@@ -75,9 +75,7 @@ describe('memory adapter — concurrent task execution stress', () => {
     });
 
     const handles = await Promise.all(
-      Array.from({ length: 50 }, (_, i) =>
-        runtime.runTask(incrementTask, { start: i }),
-      ),
+      Array.from({ length: 50 }, (_, i) => runtime.runTask(incrementTask, { start: i })),
     );
 
     const results = await Promise.all(handles.map(h => h.result()));
@@ -142,11 +140,7 @@ describe('memory adapter — concurrent task execution stress', () => {
     const CONCURRENCY = 30;
     const handles = await Promise.all(
       Array.from({ length: CONCURRENCY }, (_, i) =>
-        runtime.runTask(
-          identityTask,
-          { value: `msg-${i}` },
-          { idempotencyKey: `key-${i}` },
-        ),
+        runtime.runTask(identityTask, { value: `msg-${i}` }, { idempotencyKey: `key-${i}` }),
       ),
     );
 
@@ -154,7 +148,8 @@ describe('memory adapter — concurrent task execution stress', () => {
     expect(ids.size).toBe(CONCURRENCY);
 
     const results = await Promise.all(handles.map(h => h.result()));
-    const values = results.map(r => (r as { echoed: string }).echoed)
+    const values = results
+      .map(r => (r as { echoed: string }).echoed)
       .sort((a, b) => {
         const numA = parseInt(a.replace('msg-', ''), 10);
         const numB = parseInt(b.replace('msg-', ''), 10);
@@ -193,9 +188,7 @@ describe('memory adapter — concurrent task execution stress', () => {
 
     const CONCURRENCY = 20;
     const handles = await Promise.all(
-      Array.from({ length: CONCURRENCY }, (_, i) =>
-        runtime.runWorkflow(workflow, { id: i }),
-      ),
+      Array.from({ length: CONCURRENCY }, (_, i) => runtime.runWorkflow(workflow, { id: i })),
     );
 
     const results = await Promise.all(handles.map(h => h.result()));
@@ -244,9 +237,7 @@ describe('memory adapter — interleaved task and workflow stress', () => {
     // Launch a mix of tasks and workflows concurrently
     const COUNT = 15;
     const handles = await Promise.all([
-      ...Array.from({ length: COUNT }, (_, i) =>
-        runtime.runTask(task, { value: `task-${i}` }),
-      ),
+      ...Array.from({ length: COUNT }, (_, i) => runtime.runTask(task, { value: `task-${i}` })),
       ...Array.from({ length: COUNT }, (_, i) =>
         runtime.runWorkflow(workflow, { label: `wf-${i}` }),
       ),
@@ -290,9 +281,7 @@ describe('sqlite adapter — concurrent task execution stress', () => {
     await adapter.start();
 
     const handles = await Promise.all(
-      Array.from({ length: 30 }, (_, i) =>
-        runtime.runTask(incrementTask, { start: i }),
-      ),
+      Array.from({ length: 30 }, (_, i) => runtime.runTask(incrementTask, { start: i })),
     );
 
     const results = await Promise.all(handles.map(h => h.result()));
@@ -307,44 +296,47 @@ describe('sqlite adapter — concurrent task execution stress', () => {
     await adapter.shutdown();
   });
 
-  sqliteTest('concurrent idempotent task calls with SQLite produce exactly one execution', async () => {
-    let executions = 0;
-    const expensiveTask = defineTask({
-      name: 'sqlite-stress-expensive',
-      input: z.object({}),
-      output: z.object({ executed: z.boolean() }),
-      async handler() {
-        executions += 1;
-        await new Promise(r => setTimeout(r, 5));
-        return { executed: true };
-      },
-    });
+  sqliteTest(
+    'concurrent idempotent task calls with SQLite produce exactly one execution',
+    async () => {
+      let executions = 0;
+      const expensiveTask = defineTask({
+        name: 'sqlite-stress-expensive',
+        input: z.object({}),
+        output: z.object({ executed: z.boolean() }),
+        async handler() {
+          executions += 1;
+          await new Promise(r => setTimeout(r, 5));
+          return { executed: true };
+        },
+      });
 
-    const dir = mkdtempSync(join(tmpdir(), 'slingshot-orch-stress-sqlite-idem-'));
-    tempDirs.push(dir);
-    const dbPath = join(dir, 'idem.sqlite');
-    const { createSqliteAdapter } = sqliteModule!;
+      const dir = mkdtempSync(join(tmpdir(), 'slingshot-orch-stress-sqlite-idem-'));
+      tempDirs.push(dir);
+      const dbPath = join(dir, 'idem.sqlite');
+      const { createSqliteAdapter } = sqliteModule!;
 
-    const adapter = createSqliteAdapter({ path: dbPath, concurrency: 10 });
-    const runtime = createOrchestrationRuntime({
-      adapter,
-      tasks: [expensiveTask],
-    });
-    await adapter.start();
+      const adapter = createSqliteAdapter({ path: dbPath, concurrency: 10 });
+      const runtime = createOrchestrationRuntime({
+        adapter,
+        tasks: [expensiveTask],
+      });
+      await adapter.start();
 
-    const CONCURRENCY = 15;
-    const handles = await Promise.all(
-      Array.from({ length: CONCURRENCY }, () =>
-        runtime.runTask(expensiveTask, {}, { idempotencyKey: 'stress-single-key' }),
-      ),
-    );
+      const CONCURRENCY = 15;
+      const handles = await Promise.all(
+        Array.from({ length: CONCURRENCY }, () =>
+          runtime.runTask(expensiveTask, {}, { idempotencyKey: 'stress-single-key' }),
+        ),
+      );
 
-    const ids = new Set(handles.map(h => h.id));
-    expect(ids.size).toBe(1);
-    expect(executions).toBe(1);
+      const ids = new Set(handles.map(h => h.id));
+      expect(ids.size).toBe(1);
+      expect(executions).toBe(1);
 
-    await adapter.shutdown();
-  });
+      await adapter.shutdown();
+    },
+  );
 
   sqliteTest('concurrent workflow executions with SQLite run without interference', async () => {
     const task = defineTask({
@@ -378,9 +370,7 @@ describe('sqlite adapter — concurrent task execution stress', () => {
 
     const CONCURRENCY = 10;
     const handles = await Promise.all(
-      Array.from({ length: CONCURRENCY }, (_, i) =>
-        runtime.runWorkflow(workflow, { id: i }),
-      ),
+      Array.from({ length: CONCURRENCY }, (_, i) => runtime.runWorkflow(workflow, { id: i })),
     );
 
     const results = await Promise.all(handles.map(h => h.result()));

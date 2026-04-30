@@ -37,9 +37,7 @@ describe('withRetry', () => {
       throw new Error('persistent');
     });
 
-    const err = await withRetry(fn, { maxRetries: 2, baseDelayMs: 5 }).catch(
-      e => e,
-    );
+    const err = await withRetry(fn, { maxRetries: 2, baseDelayMs: 5 }).catch(e => e);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toBe('persistent');
     expect(fn).toHaveBeenCalledTimes(3); // initial + 2 retries
@@ -53,8 +51,7 @@ describe('withRetry', () => {
     const err = await withRetry(fn, {
       maxRetries: 3,
       baseDelayMs: 5,
-      shouldRetry: (e: unknown) =>
-        e instanceof Error && e.message === 'retryable',
+      shouldRetry: (e: unknown) => e instanceof Error && e.message === 'retryable',
     }).catch(e => e);
 
     expect((err as Error).message).toBe('not-retryable');
@@ -73,8 +70,7 @@ describe('withRetry', () => {
     const err = await withRetry(fn, {
       maxRetries: 3,
       baseDelayMs: 5,
-      shouldRetry: (e: unknown) =>
-        e instanceof Error && e.message === 'retryable',
+      shouldRetry: (e: unknown) => e instanceof Error && e.message === 'retryable',
     }).catch(e => e);
 
     expect((err as Error).message).toBe('not-retryable');

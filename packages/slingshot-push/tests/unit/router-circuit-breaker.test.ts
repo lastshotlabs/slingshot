@@ -40,18 +40,35 @@ function createRepos() {
       upsertByDevice: mock(async () => makeWebSub()),
     },
     topics: {
-      ensureByName: mock(async params => ({ id: 'topic-1', name: params.name, tenantId: params.tenantId })),
+      ensureByName: mock(async params => ({
+        id: 'topic-1',
+        name: params.name,
+        tenantId: params.tenantId,
+      })),
       findByName: mock(async () => null),
     },
     topicMemberships: {
-      ensureMembership: mock(async () => ({ id: 'membership-1', topicId: 'topic-1', subscriptionId: 'sub-1', userId: 'user-1', tenantId: '', createdAt: new Date().toISOString() })),
+      ensureMembership: mock(async () => ({
+        id: 'membership-1',
+        topicId: 'topic-1',
+        subscriptionId: 'sub-1',
+        userId: 'user-1',
+        tenantId: '',
+        createdAt: new Date().toISOString(),
+      })),
       listByTopic: mock(async () => ({ items: [] })),
       removeByTopicAndSub: mock(async () => 1),
       removeBySubscription: mock(async () => 1),
     },
     deliveries: {
       create: mock(async input => {
-        const record = { id: `del-${deliveries.length + 1}`, ...input, status: 'pending' as const, attempts: 0, createdAt: new Date().toISOString() };
+        const record = {
+          id: `del-${deliveries.length + 1}`,
+          ...input,
+          status: 'pending' as const,
+          attempts: 0,
+          createdAt: new Date().toISOString(),
+        };
         deliveries.push(record);
         return record;
       }),

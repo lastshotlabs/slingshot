@@ -30,7 +30,10 @@ bun add @lastshotlabs/slingshot-kafka
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
-- `test`: `cd ../.. && bun test packages/slingshot-kafka/tests`
+- `coverage`: `bun test --coverage`
+- `test`: `bun test`
+- `test:integration`: `bun test tests/integration`
+- `test:unit`: `bun test tests/unit tests/kafkaShared.test.ts`
 - `typecheck`: `tsc -p tsconfig.json --noEmit`
 
 ## Dependencies

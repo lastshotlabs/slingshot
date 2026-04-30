@@ -51,9 +51,7 @@ export function makeRouteMatch(url?: URL): SsrRouteMatch {
  * All methods return successful responses by default. Pass overrides
  * to simulate specific renderer behaviors (errors, redirects, etc.).
  */
-export function makeMockRenderer(
-  overrides?: Partial<SlingshotSsrRenderer>,
-): SlingshotSsrRenderer {
+export function makeMockRenderer(overrides?: Partial<SlingshotSsrRenderer>): SlingshotSsrRenderer {
   return {
     resolve: async (url): Promise<SsrRouteMatch> => makeRouteMatch(url),
     render: async () =>

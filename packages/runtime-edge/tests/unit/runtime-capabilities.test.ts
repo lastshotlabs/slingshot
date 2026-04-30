@@ -58,7 +58,14 @@ describe('runtimeCapabilities()', () => {
     const caps = runtimeCapabilities();
     // TypeScript narrowing — if these are `false` (not `boolean`),
     // they should narrow correctly in conditions
-    const falsyValues = [caps.filesystem.read, caps.filesystem.write, caps.sqlite, caps.httpServer, caps.glob, caps.asyncLocalStorage];
+    const falsyValues = [
+      caps.filesystem.read,
+      caps.filesystem.write,
+      caps.sqlite,
+      caps.httpServer,
+      caps.glob,
+      caps.asyncLocalStorage,
+    ];
     for (const val of falsyValues) {
       expect(val).toBe(false);
       // Ensures that TypeScript sees this as `false`, not `boolean`

@@ -2,10 +2,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, mock, spyOn, test }
 import { z } from 'zod';
 import { type ProgressCapability, defineTask } from '@lastshotlabs/slingshot-orchestration';
 import {
-  FakeRedisClient,
   FakeJob,
   FakeQueue,
   FakeQueueEvents,
+  FakeRedisClient,
   FakeWorker,
   createFakeBullMQModule,
   resetFakeBullMQState,

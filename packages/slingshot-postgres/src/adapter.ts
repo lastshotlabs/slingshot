@@ -281,6 +281,17 @@ const MIGRATION_LOCK_KEY1 = 7283;
  */
 const MIGRATION_LOCK_KEY2 = 4829;
 
+/**
+ * Parse and validate the migration version stored in the Postgres metadata table.
+ *
+ * Accepts numeric values and numeric strings returned by different Postgres clients,
+ * rejects malformed or negative versions, and fails fast when the database schema is
+ * newer than the migrations bundled with the current package version.
+ *
+ * @param raw - The raw version value read from the migration metadata row.
+ * @param maxVersion - The highest migration version supported by this package.
+ * @returns The validated integer migration version.
+ */
 export function parseMigrationVersion(raw: unknown, maxVersion: number): number {
   if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
     if (raw > maxVersion) {

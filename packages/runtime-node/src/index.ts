@@ -304,7 +304,10 @@ async function enforceRequestBodyLimit(req: Request, maxBody: number): Promise<R
   }
 
   const body = concatBodyChunks(chunks, total);
-  return new Request(req, { body, duplex: 'half' } as RequestInit & { duplex: 'half' });
+  const bodyBuffer = new ArrayBuffer(body.byteLength);
+  new Uint8Array(bodyBuffer).set(body);
+  const init: RequestInit & { duplex: 'half' } = { body: bodyBuffer, duplex: 'half' };
+  return new Request(req, init);
 }
 
 /** @internal Exposes low-level Node runtime helpers for unit-test access. Not part of the public API. */

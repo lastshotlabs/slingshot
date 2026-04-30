@@ -39,6 +39,8 @@
     "lint": "eslint src/ --cache",
     "test": "bun test",
     "coverage": "bun test --coverage",
+    "test:unit": "bun test --ignore tests/integration --ignore tests/helpers",
+    "test:integration": "bun test tests/integration",
     "test:redis": "cd ../.. && BULLMQ_INTEGRATION_REDIS_URL=redis://localhost:6380 bun test tests/docker/bullmq-adapter-redis-integration.test.ts"
   },
   "dependencies": {

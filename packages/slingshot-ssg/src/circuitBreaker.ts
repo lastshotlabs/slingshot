@@ -18,9 +18,7 @@ export class SsgCircuitOpenError extends Error {
   readonly retryAfterMs: number;
 
   constructor(retryAfterMs: number) {
-    super(
-      `[slingshot-ssg] Circuit breaker open. Retrying in ~${retryAfterMs}ms.`,
-    );
+    super(`[slingshot-ssg] Circuit breaker open. Retrying in ~${retryAfterMs}ms.`);
     this.name = 'SsgCircuitOpenError';
     this.retryAfterMs = retryAfterMs;
   }
@@ -69,9 +67,7 @@ export interface SsgCircuitBreakerOptions {
  *   half-open — let exactly one probe through; success resets, failure
  *               re-opens.
  */
-export function createSsgCircuitBreaker(
-  opts: SsgCircuitBreakerOptions = {},
-): SsgCircuitBreaker {
+export function createSsgCircuitBreaker(opts: SsgCircuitBreakerOptions = {}): SsgCircuitBreaker {
   const threshold = opts.threshold ?? 5;
   const cooldownMs = opts.cooldownMs ?? 30_000;
   const now = opts.now ?? (() => Date.now());
@@ -83,9 +79,7 @@ export function createSsgCircuitBreaker(
 
   function getHealth(): SsgCircuitBreakerHealth {
     const nextProbeAt =
-      state === 'open' && openedAt !== undefined
-        ? openedAt + cooldownMs
-        : undefined;
+      state === 'open' && openedAt !== undefined ? openedAt + cooldownMs : undefined;
     return { state, consecutiveFailures, openedAt, nextProbeAt };
   }
 
@@ -122,10 +116,7 @@ export function createSsgCircuitBreaker(
 
   async function guard<T>(fn: () => Promise<T>): Promise<T> {
     if (!tryEnterHalfOpen()) {
-      const retryAfterMs =
-        openedAt !== undefined
-          ? Math.max(0, openedAt + cooldownMs - now())
-          : 0;
+      const retryAfterMs = openedAt !== undefined ? Math.max(0, openedAt + cooldownMs - now()) : 0;
       throw new SsgCircuitOpenError(retryAfterMs);
     }
 

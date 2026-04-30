@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  SLINGSHOT_KIND_SEARCH_ATTRIBUTE,
+  SLINGSHOT_NAME_SEARCH_ATTRIBUTE,
+  SLINGSHOT_PRIORITY_SEARCH_ATTRIBUTE,
+  SLINGSHOT_TAGS_SEARCH_ATTRIBUTE,
+  SLINGSHOT_TENANT_ID_SEARCH_ATTRIBUTE,
   buildSearchAttributes,
   buildVisibilityQuery,
   buildVisibilityValidationQueries,
@@ -7,11 +12,6 @@ import {
   decodeTags,
   encodeTag,
   encodeTags,
-  SLINGSHOT_KIND_SEARCH_ATTRIBUTE,
-  SLINGSHOT_NAME_SEARCH_ATTRIBUTE,
-  SLINGSHOT_PRIORITY_SEARCH_ATTRIBUTE,
-  SLINGSHOT_TAGS_SEARCH_ATTRIBUTE,
-  SLINGSHOT_TENANT_ID_SEARCH_ATTRIBUTE,
 } from '../src/searchAttributes';
 
 describe('encodeTag / decodeTag', () => {
@@ -101,9 +101,7 @@ describe('encodeTags / decodeTags', () => {
   });
 
   test('decodeTags decodes multiple entries with the same key (last wins)', () => {
-    expect(
-      decodeTags([encodeTag('color', 'red'), encodeTag('color', 'blue')]),
-    ).toEqual({
+    expect(decodeTags([encodeTag('color', 'red'), encodeTag('color', 'blue')])).toEqual({
       color: 'blue',
     });
   });
@@ -269,9 +267,7 @@ describe('buildVisibilityQuery', () => {
 
   test('handles statuses that map to the same Temporal state (cancelled -> Canceled, skipped -> Completed)', () => {
     const query = buildVisibilityQuery({ status: ['cancelled', 'skipped'] });
-    expect(query).toBe(
-      `(ExecutionStatus = 'Canceled' OR ExecutionStatus = 'Completed')`,
-    );
+    expect(query).toBe(`(ExecutionStatus = 'Canceled' OR ExecutionStatus = 'Completed')`);
   });
 });
 
@@ -280,17 +276,11 @@ describe('buildVisibilityValidationQueries', () => {
     const queries = buildVisibilityValidationQueries();
     expect(queries).toHaveLength(5);
 
-    expect(queries[0]).toBe(
-      `SlingshotKind = 'task' OR SlingshotKind = 'workflow'`,
-    );
+    expect(queries[0]).toBe(`SlingshotKind = 'task' OR SlingshotKind = 'workflow'`);
     expect(queries[1]).toBe(`SlingshotName = 'slingshot'`);
     expect(queries[2]).toBe(`SlingshotTenantId = 'tenant'`);
-    expect(queries[3]).toBe(
-      `SlingshotPriority >= 0 OR SlingshotPriority < 0`,
-    );
-    expect(queries[4]).toBe(
-      `SlingshotTags = '${encodeTag('key', 'value')}'`,
-    );
+    expect(queries[3]).toBe(`SlingshotPriority >= 0 OR SlingshotPriority < 0`);
+    expect(queries[4]).toBe(`SlingshotTags = '${encodeTag('key', 'value')}'`);
   });
 
   test('encoded tag in validation query is internally consistent', () => {

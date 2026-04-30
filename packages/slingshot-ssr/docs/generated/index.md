@@ -28,11 +28,16 @@ bun add @lastshotlabs/slingshot-ssr
 - `./draft`
 - `./errors`
 - `./isr`
+- `./testing`
 
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
+- `test`: `bun test`
+- `test:integration`: `bun test tests/integration`
+- `test:unit`: `bun test tests/unit`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

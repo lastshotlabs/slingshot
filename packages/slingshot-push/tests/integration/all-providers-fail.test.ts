@@ -313,9 +313,7 @@ describe('all-providers-fail contract (sendToUser)', () => {
     });
 
     // The router resolves, not throws.
-    await expect(
-      router.sendToUser('user-1', { title: 'No throw' }),
-    ).resolves.toEqual({
+    await expect(router.sendToUser('user-1', { title: 'No throw' })).resolves.toEqual({
       delivered: 0,
       attempted: 1,
       allFailed: true,
@@ -599,9 +597,13 @@ describe('provider timeout handling', () => {
     });
 
     // Override per-call with a longer timeout.
-    const result = await router.sendToUser('user-1', { title: 'Slow delivery' }, {
-      providerTimeoutMs: 100,
-    });
+    const result = await router.sendToUser(
+      'user-1',
+      { title: 'Slow delivery' },
+      {
+        providerTimeoutMs: 100,
+      },
+    );
 
     expect(result.delivered).toBe(1);
     expect(result.attempted).toBe(1);
@@ -622,7 +624,12 @@ describe('provider timeout handling', () => {
       },
     };
 
-    repos._topics.push({ id: 'timeout-topic', tenantId: '', name: 'timeout-topic', createdAt: new Date() });
+    repos._topics.push({
+      id: 'timeout-topic',
+      tenantId: '',
+      name: 'timeout-topic',
+      createdAt: new Date(),
+    });
     const sub = makeWebSubscription({ id: 'topic-sub-1' });
     repos._subscriptions.push(sub);
     repos._memberships.push({
@@ -642,9 +649,13 @@ describe('provider timeout handling', () => {
       topicFanoutBatchSize: 50,
     });
 
-    const result = await router.publishTopic('timeout-topic', { title: 'Batch timeout' }, {
-      providerTimeoutMs: 100,
-    });
+    const result = await router.publishTopic(
+      'timeout-topic',
+      { title: 'Batch timeout' },
+      {
+        providerTimeoutMs: 100,
+      },
+    );
 
     expect(result.delivered).toBe(1);
     expect(result.attempted).toBe(1);

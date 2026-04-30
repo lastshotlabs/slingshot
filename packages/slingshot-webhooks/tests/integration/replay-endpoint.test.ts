@@ -92,13 +92,10 @@ describe('webhook replay endpoint', () => {
       expect(deadDelivery.status).toBe('dead');
 
       // Replay the dead delivery.
-      const replayRes = await app.request(
-        `/webhooks/admin/deliveries/${deadDelivery.id}/replay`,
-        {
-          method: 'POST',
-          headers: adminHeaders(),
-        },
-      );
+      const replayRes = await app.request(`/webhooks/admin/deliveries/${deadDelivery.id}/replay`, {
+        method: 'POST',
+        headers: adminHeaders(),
+      });
       expect(replayRes.status).toBe(200);
       const replayBody = (await replayRes.json()) as {
         replayed: boolean;

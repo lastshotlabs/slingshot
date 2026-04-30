@@ -74,11 +74,18 @@ describe('mapTemporalStatus', () => {
     ];
 
     // All statuses must map to one of the four portable states
-    const validPortableStatuses = new Set(['pending', 'running', 'completed', 'failed', 'cancelled']);
+    const validPortableStatuses = new Set([
+      'pending',
+      'running',
+      'completed',
+      'failed',
+      'cancelled',
+    ]);
 
     for (const status of allKnown) {
       const mapped = mapTemporalStatus(status);
-      expect(validPortableStatuses.has(mapped),
+      expect(
+        validPortableStatuses.has(mapped),
         `Temporal status '${status}' mapped to '${mapped}' which is not a valid portable status`,
       ).toBe(true);
     }

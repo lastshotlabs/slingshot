@@ -39,11 +39,7 @@ export interface RetryOptions {
  * Full jitter spreads retry times uniformly over the interval, preventing
  * retry-storms when many callers fail simultaneously.
  */
-function computeDelayMs(
-  attempt: number,
-  baseDelayMs: number,
-  maxDelayMs: number,
-): number {
+function computeDelayMs(attempt: number, baseDelayMs: number, maxDelayMs: number): number {
   const exponential = Math.pow(2, attempt) * baseDelayMs;
   const capped = Math.min(exponential, maxDelayMs);
   return Math.random() * capped;
@@ -70,10 +66,7 @@ function computeDelayMs(
  * });
  * ```
  */
-export async function withRetry<T>(
-  fn: () => Promise<T>,
-  opts: RetryOptions = {},
-): Promise<T> {
+export async function withRetry<T>(fn: () => Promise<T>, opts: RetryOptions = {}): Promise<T> {
   const maxRetries = opts.maxRetries ?? 3;
   const baseDelayMs = opts.baseDelayMs ?? 200;
   const maxDelayMs = opts.maxDelayMs ?? 5_000;

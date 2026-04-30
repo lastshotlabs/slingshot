@@ -97,7 +97,7 @@ describe('parseMigrationVersion (exported)', () => {
 
 describe('createPostgresAdapter (docker)', () => {
   let pool: Pool;
-  let adapter: Awaited<ReturnType<typeof import('../../src/index.js')['createPostgresAdapter']>>;
+  let adapter: Awaited<ReturnType<(typeof import('../../src/index.js'))['createPostgresAdapter']>>;
 
   const itOrSkip = dockerAvailable ? test : test.skip;
 
@@ -223,9 +223,7 @@ describe('migrations (docker)', () => {
     try {
       await resetAuthSchema(freshPool);
       await createPostgresAdapter({ pool: freshPool });
-      const result = await freshPool.query(
-        'SELECT version FROM _slingshot_auth_schema_version',
-      );
+      const result = await freshPool.query('SELECT version FROM _slingshot_auth_schema_version');
       expect(result.rows.length).toBe(1);
       expect(result.rows[0].version).toBeGreaterThanOrEqual(2);
     } finally {
@@ -240,9 +238,7 @@ describe('migrations (docker)', () => {
     try {
       await resetAuthSchema(pool1);
       await createPostgresAdapter({ pool: pool1 });
-      const result1 = await pool1.query(
-        'SELECT version FROM _slingshot_auth_schema_version',
-      );
+      const result1 = await pool1.query('SELECT version FROM _slingshot_auth_schema_version');
       expect(result1.rows[0].version).toBeGreaterThanOrEqual(2);
     } finally {
       await pool1.end();
@@ -252,9 +248,7 @@ describe('migrations (docker)', () => {
     const pool2 = new Pool({ connectionString: CONNECTION, max: 2 });
     try {
       await createPostgresAdapter({ pool: pool2 });
-      const result2 = await pool2.query(
-        'SELECT version FROM _slingshot_auth_schema_version',
-      );
+      const result2 = await pool2.query('SELECT version FROM _slingshot_auth_schema_version');
       expect(result2.rows[0].version).toBeGreaterThanOrEqual(2);
     } finally {
       await pool2.end();

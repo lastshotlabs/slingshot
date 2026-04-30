@@ -9,9 +9,7 @@ import { nodeRuntime } from '../../src/index';
 
 describe('runtime-node HTTP server integration', () => {
   let stop:
-    | ((
-        opts?: boolean | { timeoutMs?: number; closeActiveConnections?: boolean },
-      ) => Promise<void>)
+    | ((opts?: boolean | { timeoutMs?: number; closeActiveConnections?: boolean }) => Promise<void>)
     | undefined;
   let port = 0;
 

@@ -38,10 +38,19 @@ export type {
   SearchCircuitBreakerHealth,
   SearchCircuitBreakerOptions,
 } from './searchCircuitBreaker';
+/**
+ * Circuit-breaker error class and factory for guarding search provider calls.
+ */
 export { SearchCircuitOpenError, createSearchCircuitBreaker } from './searchCircuitBreaker';
 
 // --- Retry ---
+/**
+ * Retry helpers for transient search backend operations.
+ */
 export { withRetry, isTransientError } from './retry';
+/**
+ * Retry policy options for transient search backend operations.
+ */
 export type { RetryOptions } from './retry';
 /**
  * Create an Elasticsearch-backed search provider.

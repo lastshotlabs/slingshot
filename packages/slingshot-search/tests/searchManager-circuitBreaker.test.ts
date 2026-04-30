@@ -9,10 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { isTransientError, withRetry } from '../src/retry';
-import {
-  SearchCircuitOpenError,
-  createSearchCircuitBreaker,
-} from '../src/searchCircuitBreaker';
+import { SearchCircuitOpenError, createSearchCircuitBreaker } from '../src/searchCircuitBreaker';
 
 // ============================================================================
 // Fake clock
@@ -24,7 +21,12 @@ interface FakeClock {
 }
 
 function makeClock(start = 0): FakeClock {
-  return { now: start, advance(ms) { this.now += ms; } };
+  return {
+    now: start,
+    advance(ms) {
+      this.now += ms;
+    },
+  };
 }
 
 // ============================================================================
@@ -128,7 +130,9 @@ describe('SearchCircuitBreaker', () => {
     clock.advance(600);
 
     // Half-open probe is admitted — but it fails.
-    await expect(cb.guard(() => Promise.reject(new Error('still down')))).rejects.toThrow('still down');
+    await expect(cb.guard(() => Promise.reject(new Error('still down')))).rejects.toThrow(
+      'still down',
+    );
     expect(cb.getHealth().state).toBe('open');
 
     // openedAt should now reflect the fresh cooldown from the failed probe.

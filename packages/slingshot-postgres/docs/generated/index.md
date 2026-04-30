@@ -30,7 +30,10 @@ bun add @lastshotlabs/slingshot-postgres
 ## Package Scripts
 
 - `build`: `tsc -p tsconfig.build.json`
+- `coverage`: `bun test --coverage`
 - `lint`: `eslint src/ --cache`
+- `test`: `bun test`
+- `test:docker`: `bun test tests/docker/`
 - `typecheck`: `tsc --noEmit`
 
 ## Dependencies

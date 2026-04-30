@@ -128,7 +128,7 @@ describe('createCircuitBreaker', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('closes the circuit from half_open when probe succeeds', async () => {
+  it('closes the circuit from half-open when probe succeeds', async () => {
     const failFn = async () => {
       throw new Error('fail');
     };
@@ -137,7 +137,7 @@ describe('createCircuitBreaker', () => {
     await breaker.execute(failFn);
     expect(breaker.state).toBe('open');
 
-    // Manually transition to half_open to simulate cooldown expiry
+    // Manually transition to half-open to simulate cooldown expiry
     // We do this by forcing state via open/close and timing
     // Instead, create a new breaker with a very short cooldown
     const shortBreaker = createCircuitBreaker({ failureThreshold: 2, cooldownMs: 50 });
@@ -148,8 +148,8 @@ describe('createCircuitBreaker', () => {
     // Wait for cooldown
     await new Promise(resolve => setTimeout(resolve, 60));
 
-    // State should auto-transition to half_open on access
-    expect(shortBreaker.state).toBe('half_open');
+    // State should auto-transition to half-open on access
+    expect(shortBreaker.state).toBe('half-open');
 
     // A successful probe should close the circuit
     const ok = await shortBreaker.execute(async () => 'probe ok');
@@ -157,7 +157,7 @@ describe('createCircuitBreaker', () => {
     expect(shortBreaker.state).toBe('closed');
   });
 
-  it('re-opens the circuit when a half_open probe fails', async () => {
+  it('re-opens the circuit when a half-open probe fails', async () => {
     const failFn = async () => {
       throw new Error('fail');
     };
@@ -168,7 +168,7 @@ describe('createCircuitBreaker', () => {
 
     // Wait for cooldown
     await new Promise(resolve => setTimeout(resolve, 60));
-    expect(shortBreaker.state).toBe('half_open');
+    expect(shortBreaker.state).toBe('half-open');
 
     // Probe fails — back to open
     const result = await shortBreaker.execute(failFn);

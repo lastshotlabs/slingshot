@@ -13,8 +13,8 @@ import type {
   PermissionRegistry,
   PermissionsAdapter,
 } from '@lastshotlabs/slingshot-core';
-import { createAdminPlugin } from '../../src/plugin';
 import { AdminCircuitOpenError } from '../../src/lib/circuitBreaker';
+import { createAdminPlugin } from '../../src/plugin';
 
 // ---------------------------------------------------------------------------
 // Stubs
@@ -121,9 +121,7 @@ describe('retry exhaustion on transient provider failures', () => {
       throw new Error('transient');
     });
 
-    const err = await withRetry(fn, { maxRetries: 2, baseDelayMs: 5 }).catch(
-      e => e,
-    );
+    const err = await withRetry(fn, { maxRetries: 2, baseDelayMs: 5 }).catch(e => e);
     expect(err).toBeInstanceOf(Error);
     expect((err as Error).message).toBe('transient');
     expect(fn).toHaveBeenCalledTimes(3); // initial + 2 retries

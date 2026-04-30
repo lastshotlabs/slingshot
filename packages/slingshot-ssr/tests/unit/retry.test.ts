@@ -79,7 +79,7 @@ describe('retry', () => {
     await expect(
       retry(fn, {
         ...defaultOpts,
-        isRetryable: (err) => err.message.includes('server'),
+        isRetryable: err => err.message.includes('server'),
       }),
     ).rejects.toThrow('server-error');
 
@@ -117,9 +117,7 @@ describe('retry', () => {
       throw new Error('fail');
     };
 
-    await expect(
-      retry(fn, { maxAttempts: 5, baseDelayMs: 5 }),
-    ).rejects.toThrow('fail');
+    await expect(retry(fn, { maxAttempts: 5, baseDelayMs: 5 })).rejects.toThrow('fail');
 
     // initial + 5 retries = 6 total calls
     expect(callCount).toBe(6);
@@ -140,9 +138,7 @@ describe('retry', () => {
       throw new Error('no retry');
     };
 
-    await expect(
-      retry(fn, { maxAttempts: 0, baseDelayMs: 10 }),
-    ).rejects.toThrow('no retry');
+    await expect(retry(fn, { maxAttempts: 0, baseDelayMs: 10 })).rejects.toThrow('no retry');
 
     // initial call only — no retries allowed
     expect(callCount).toBe(1);
@@ -156,9 +152,7 @@ describe('retry', () => {
     };
 
     const start = Date.now();
-    await expect(
-      retry(fn, { maxAttempts: 3, baseDelayMs: 50 }),
-    ).rejects.toThrow('fail');
+    await expect(retry(fn, { maxAttempts: 3, baseDelayMs: 50 })).rejects.toThrow('fail');
     const elapsed = Date.now() - start;
 
     // With baseDelayMs=50 and maxAttempts=3, the cumulative delay is:

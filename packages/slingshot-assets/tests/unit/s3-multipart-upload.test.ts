@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { s3Storage, type S3StorageAdapter } from '../../src/adapters/s3';
+import { type S3StorageAdapter, s3Storage } from '../../src/adapters/s3';
 
 describe('s3Storage multipart upload support', () => {
   function createAdapter(): S3StorageAdapter {

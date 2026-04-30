@@ -1,8 +1,8 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { Hono } from 'hono';
 import { createInProcessAdapter } from '@lastshotlabs/slingshot-core';
-import { createInboundRouter } from '../../src/routes/inbound';
 import { signPayload, verifySignature } from '../../src/lib/signing';
+import { createInboundRouter } from '../../src/routes/inbound';
 import type { InboundProvider } from '../../src/types/inbound';
 
 /**
@@ -48,10 +48,7 @@ describe('inbound webhook E2E — full signing round-trip', () => {
     bus.emit = emitMock;
 
     const app = new Hono();
-    app.route(
-      '/webhooks/inbound',
-      createInboundRouter([simulatedThirdPartyProvider], bus),
-    );
+    app.route('/webhooks/inbound', createInboundRouter([simulatedThirdPartyProvider], bus));
 
     const payload = { type: 'payment_intent.succeeded', id: 'pi_123', amount: 2000 };
     const bodyStr = JSON.stringify(payload);
@@ -83,10 +80,7 @@ describe('inbound webhook E2E — full signing round-trip', () => {
   it('rejects requests with an invalid signature', async () => {
     const bus = createInProcessAdapter();
     const app = new Hono();
-    app.route(
-      '/webhooks/inbound',
-      createInboundRouter([simulatedThirdPartyProvider], bus),
-    );
+    app.route('/webhooks/inbound', createInboundRouter([simulatedThirdPartyProvider], bus));
 
     const payload = { type: 'charge.refunded', id: 'ch_456' };
     const bodyStr = JSON.stringify(payload);
@@ -111,10 +105,7 @@ describe('inbound webhook E2E — full signing round-trip', () => {
   it('rejects requests with a missing signature header', async () => {
     const bus = createInProcessAdapter();
     const app = new Hono();
-    app.route(
-      '/webhooks/inbound',
-      createInboundRouter([simulatedThirdPartyProvider], bus),
-    );
+    app.route('/webhooks/inbound', createInboundRouter([simulatedThirdPartyProvider], bus));
 
     const res = await app.request('/webhooks/inbound/simulated-service', {
       method: 'POST',
@@ -128,10 +119,7 @@ describe('inbound webhook E2E — full signing round-trip', () => {
   it('rejects requests with a tampered body', async () => {
     const bus = createInProcessAdapter();
     const app = new Hono();
-    app.route(
-      '/webhooks/inbound',
-      createInboundRouter([simulatedThirdPartyProvider], bus),
-    );
+    app.route('/webhooks/inbound', createInboundRouter([simulatedThirdPartyProvider], bus));
 
     const originalBody = JSON.stringify({ type: 'payment_intent.succeeded', id: 'pi_789' });
     const signature = await signPayload(WEBHOOK_SECRET, originalBody);

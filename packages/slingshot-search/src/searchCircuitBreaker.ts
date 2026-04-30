@@ -92,9 +92,7 @@ export function createSearchCircuitBreaker(
 
   function getHealth(): SearchCircuitBreakerHealth {
     const nextProbeAt =
-      state === 'open' && openedAt !== undefined
-        ? openedAt + cooldownMs
-        : undefined;
+      state === 'open' && openedAt !== undefined ? openedAt + cooldownMs : undefined;
     return { state, consecutiveFailures, openedAt, nextProbeAt };
   }
 
@@ -134,10 +132,7 @@ export function createSearchCircuitBreaker(
 
   async function guard<T>(fn: () => Promise<T>): Promise<T> {
     if (!tryEnterHalfOpen()) {
-      const retryAfterMs =
-        openedAt !== undefined
-          ? Math.max(0, openedAt + cooldownMs - now())
-          : 0;
+      const retryAfterMs = openedAt !== undefined ? Math.max(0, openedAt + cooldownMs - now()) : 0;
       throw new SearchCircuitOpenError(
         `[slingshot-search:${providerKey}] Circuit breaker open after ` +
           `${consecutiveFailures} consecutive failures. Retrying in ` +

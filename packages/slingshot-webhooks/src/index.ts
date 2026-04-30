@@ -100,4 +100,8 @@ export { createSlidingWindowRateLimiter } from './lib/rateLimit';
 /**
  * Rate limiter contract and result types.
  */
-export type { RateLimiter, RateLimitResult, SlidingWindowRateLimiterOptions } from './lib/rateLimit';
+export type {
+  RateLimiter,
+  RateLimitResult,
+  SlidingWindowRateLimiterOptions,
+} from './lib/rateLimit';

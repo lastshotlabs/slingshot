@@ -68,7 +68,11 @@ export { createAdminCircuitBreaker, AdminCircuitOpenError } from './lib/circuitB
 /**
  * Circuit breaker health snapshot and interface types.
  */
-export type { AdminCircuitBreaker, AdminCircuitBreakerHealth, AdminCircuitBreakerOptions } from './lib/circuitBreaker';
+export type {
+  AdminCircuitBreaker,
+  AdminCircuitBreakerHealth,
+  AdminCircuitBreakerOptions,
+} from './lib/circuitBreaker';
 /**
  * Retry-with-backoff helper for transient provider failures.
  */

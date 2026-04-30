@@ -1,4 +1,4 @@
-import { getContext, publishPluginState } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger, getContext, publishPluginState } from '@lastshotlabs/slingshot-core';
 import type { PluginSetupContext, SlingshotPlugin } from '@lastshotlabs/slingshot-core';
 import {
   OrchestrationError,
@@ -9,6 +9,8 @@ import { ORCHESTRATION_PLUGIN_KEY } from './context';
 import { type SlingshotEventSink, createSlingshotEventSink } from './eventSink';
 import { createOrchestrationRouter } from './routes';
 import type { ConfigurableOrchestrationPluginOptions } from './types';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-orchestration-plugin' } });
 
 const DEFAULT_START_MAX_ATTEMPTS = 1;
 const DEFAULT_START_BACKOFF_MS = 1_000;
@@ -39,8 +41,8 @@ async function startAdapterWithRetry(
       lastError = error instanceof Error ? error : new Error(String(error));
       if (attempt < maxAttempts) {
         const delay = Math.min(backoffMs * 2 ** (attempt - 1), MAX_BACKOFF_CAP_MS);
-        console.warn(
-          `[orchestration] adapter.start() attempt ${attempt}/${maxAttempts} failed, retrying in ${delay}ms: ${lastError.message}`,
+        logger.warn(
+          `adapter.start() attempt ${attempt}/${maxAttempts} failed, retrying in ${delay}ms: ${lastError.message}`,
         );
         await sleep(delay);
       }

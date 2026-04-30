@@ -173,7 +173,7 @@ export function createSafeFetch(opts: SafeFetchOptions = {}): typeof fetch {
         const closeFn = dispatcher.close;
         if (typeof closeFn === 'function') void closeFn.call(dispatcher).catch(() => {});
       } catch {
-        // ignore
+        // Best-effort cleanup — dispatcher.close may not exist in all runtimes (e.g. Bun stubs)
       }
     }
   }) as typeof fetch;

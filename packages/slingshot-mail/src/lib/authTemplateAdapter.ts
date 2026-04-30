@@ -10,8 +10,11 @@
  * during that phase. Calling earlier will return an empty or partial map and produce
  * silent delivery failures.
  */
-import { getEmailTemplates } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger, getEmailTemplates } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import type { RawHtmlTemplate } from '../renderers/rawHtml';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-mail' } });
 
 /**
  * Returns a templates map suitable for `createRawHtmlRenderer` that contains all
@@ -28,7 +31,7 @@ export function adaptRegisteredTemplates(app: object): Promise<Record<string, Ra
   }
 
   if (Object.keys(result).length === 0) {
-    console.warn(
+    logger.warn(
       '[slingshot-mail] adaptRegisteredTemplates: no templates found — ensure this is called after all plugins have run setupPost()',
     );
   }

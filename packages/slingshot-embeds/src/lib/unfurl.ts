@@ -2,8 +2,8 @@ import type { UnfurlResult } from '../types';
 import { parseOgMetadata } from './htmlParser';
 import { resolveAndValidate } from './ssrfGuard';
 
-/** Maximum number of redirects to follow before aborting. */
-const MAX_REDIRECTS = 5;
+/** Default maximum number of redirects to follow before aborting. */
+const DEFAULT_MAX_REDIRECTS = 5;
 
 /**
  * Fetch a URL and extract structured OG/meta metadata.
@@ -25,12 +25,13 @@ const MAX_REDIRECTS = 5;
  */
 export async function unfurl(
   url: string,
-  config: { timeoutMs: number; maxResponseBytes: number },
+  config: { timeoutMs: number; maxResponseBytes: number; maxRedirects?: number },
 ): Promise<UnfurlResult> {
+  const maxRedirects = config.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   let currentUrl = url;
   let response!: Response;
 
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+  for (let hop = 0; hop <= maxRedirects; hop++) {
     const parsed = new URL(currentUrl);
     // Strip brackets from IPv6 literals for DNS resolution
     const hostname =
@@ -56,7 +57,7 @@ export async function unfurl(
       const location = response.headers.get('location');
       await response.body?.cancel();
       if (!location) break; // No Location header — treat as final response
-      if (hop === MAX_REDIRECTS) throw new Error('Too many redirects');
+      if (hop === maxRedirects) throw new Error('Too many redirects');
       currentUrl = new URL(location, currentUrl).toString();
       continue;
     }

@@ -11,7 +11,10 @@
 // created fresh per request.
 //
 // Edge compat: uses the same lazy getAls() pattern as actions/context.ts.
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import { getAsyncLocalStorageConstructor } from '../asyncLocalStorage';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-ssr' } });
 
 type AlsConstructor = typeof import('node:async_hooks').AsyncLocalStorage;
 
@@ -63,7 +66,7 @@ export function withAfterContext<T>(fn: () => Promise<T>): Promise<T> {
 export function buildAfterFn(): (callback: () => void | Promise<void>) => void {
   if (!afterStore) {
     return () => {
-      console.warn(
+      logger.warn(
         '[slingshot-ssr] after(): not supported in edge runtime (AsyncLocalStorage unavailable). ' +
           'Callback will not run.',
       );
@@ -72,7 +75,7 @@ export function buildAfterFn(): (callback: () => void | Promise<void>) => void {
   return (callback: () => void | Promise<void>) => {
     const queue = afterStore.getStore() as AfterQueue | undefined;
     if (!queue) {
-      console.warn(
+      logger.warn(
         '[slingshot-ssr] after(): called outside of a request context. ' +
           'Ensure it is called from within a load() function during SSR.',
       );
@@ -103,7 +106,7 @@ export async function drainAfterCallbacks(): Promise<void> {
     try {
       await cb();
     } catch (err) {
-      console.error('[slingshot-ssr] after() callback threw:', err);
+      logger.error('after() callback threw', { err: String(err) });
     }
   }
 }

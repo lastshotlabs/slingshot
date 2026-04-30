@@ -2,7 +2,7 @@
 import type { Hono } from 'hono';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
 import { buildCacheKey } from './cache';
-import { transformImage } from './transform';
+import { loadSharp, transformImage } from './transform';
 import type { ImageCacheAdapter, ImageFormat, ImagePluginConfig } from './types';
 import { ImageTransformError } from './types';
 
@@ -106,8 +106,11 @@ export function buildImageRouter(
   cache: ImageCacheAdapter,
 ): void {
   const routePrefix = config.routePrefix;
+  // Cache sharp reference per plugin instance (resolved once on first request)
+  let cachedSharp: Awaited<ReturnType<typeof loadSharp>> | undefined;
 
   app.get(routePrefix, async c => {
+    if (cachedSharp === undefined) cachedSharp = await loadSharp();
     const rawUrl = c.req.query('url') ?? '';
     const rawW = c.req.query('w') ?? '';
     const rawH = c.req.query('h');

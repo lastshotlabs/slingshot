@@ -4,9 +4,12 @@
 // Call `prerenderPprShells()` after the Vite build to pre-render the static
 // shells for all PPR-enabled routes. The resulting shells are stored in the
 // provided `PprCache` and served instantly at request time.
-
 // Avoid importing from 'react' directly — @types/react may not be in this
 // package's devDependencies. Use a structural type compatible with ReactElement.
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-ssr' } });
+
 type ReactElement = { type: unknown; props: unknown; key: string | null };
 
 // ─── Cross-repo structural types ──────────────────────────────────────────────
@@ -108,11 +111,11 @@ export async function prerenderPprShells(
   extractShell: (element: ReactElement) => Promise<PprShellShape>,
 ): Promise<void> {
   if (routes.length === 0) {
-    console.log('[slingshot-ssr] PPR: no routes to pre-render.');
+    logger.info('[slingshot-ssr] PPR: no routes to pre-render.');
     return;
   }
 
-  console.log(`[slingshot-ssr] PPR: pre-rendering ${routes.length} static shell(s)…`);
+  logger.info(`[slingshot-ssr] PPR: pre-rendering ${routes.length} static shell(s)…`);
 
   // Pre-render shells concurrently — each extraction is independent.
   const results = await Promise.allSettled(
@@ -121,9 +124,9 @@ export async function prerenderPprShells(
       cache.set(route.path, shell);
 
       if (shell.ok) {
-        console.log(`[slingshot-ssr] PPR: ✓ ${route.path} (${shell.shellHtml.length} bytes)`);
+        logger.info(`[slingshot-ssr] PPR: ✓ ${route.path} (${shell.shellHtml.length} bytes)`);
       } else {
-        console.warn(`[slingshot-ssr] PPR: ✗ ${route.path} — shell extraction failed`);
+        logger.warn(`[slingshot-ssr] PPR: ✗ ${route.path} — shell extraction failed`);
       }
 
       return { path: route.path, ok: shell.ok };
@@ -136,13 +139,13 @@ export async function prerenderPprShells(
       r.status === 'fulfilled' && r.value.ok,
   );
 
-  console.log(
+  logger.info(
     `[slingshot-ssr] PPR: pre-render complete — ${succeeded.length} succeeded, ${failed.length} failed.`,
   );
 
   if (failed.length > 0) {
     for (const failure of failed) {
-      console.error('[slingshot-ssr] PPR shell extraction rejected:', failure.reason);
+      logger.error('[slingshot-ssr] PPR shell extraction rejected:', failure.reason);
     }
   }
 }

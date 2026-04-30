@@ -139,7 +139,7 @@ describe('POST /auth/magic-link/request', () => {
     const payload = deliveryEvent!.payload as Record<string, string>;
     expect(payload.identifier).toBe('alice@example.com');
     expect(payload.token).toBeString();
-    expect(payload.link).toContain('https://app.example.com/auth/verify?token=');
+    expect(payload.link).toContain('https://app.example.com/auth/verify#token=');
   });
 
   test('does NOT emit delivery event for unregistered email', async () => {

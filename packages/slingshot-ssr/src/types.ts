@@ -272,7 +272,7 @@ export interface SsrLoadContext {
    * the published version.
    *
    * Draft mode is enabled via `POST /api/draft/enable` with the secret in
-   * the `X-Draft-Mode-Secret` header or request body, and disabled via
+   * the `X-Draft-Mode-Secret` header or JSON request body, and disabled via
    * `GET /api/draft/disable`.
    *
    * @returns A {@link DraftModeStatus} snapshot for this request.
@@ -1188,7 +1188,7 @@ export interface SsrPluginConfig {
    *
    * When set, the SSR plugin mounts `POST /api/draft/enable` and
    * `GET /api/draft/disable` endpoints. The enable endpoint requires the caller
-   * to supply the secret in the `X-Draft-Mode-Secret` header or request body —
+   * to supply the secret in the `X-Draft-Mode-Secret` header or JSON request body —
    * requests with a mismatched or absent secret receive 401.
    *
    * Set this to a long random string and keep it out of client-side code and URLs.

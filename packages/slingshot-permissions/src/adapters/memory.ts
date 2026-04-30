@@ -1,11 +1,19 @@
-import { DEFAULT_MAX_ENTRIES, evictOldestArray, validateGrant } from '@lastshotlabs/slingshot-core';
+import {
+  DEFAULT_MAX_ENTRIES,
+  createConsoleLogger,
+  evictOldestArray,
+  validateGrant,
+} from '@lastshotlabs/slingshot-core';
 import type {
   EvaluationScope,
+  Logger,
   PermissionGrant,
   SubjectRef,
   SubjectType,
   TestablePermissionsAdapter,
 } from '@lastshotlabs/slingshot-core';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-permissions' } });
 
 /**
  * Alias for `TestablePermissionsAdapter` returned by `createMemoryPermissionsAdapter`.
@@ -43,7 +51,7 @@ export function createMemoryPermissionsAdapter(options?: {
   maxEntries?: number;
 }): PermissionsMemoryAdapter {
   const maxEntries = options?.maxEntries ?? DEFAULT_MAX_ENTRIES;
-  console.warn('[slingshot] Memory permissions adapter is for development/testing only');
+  logger.warn('[slingshot] Memory permissions adapter is for development/testing only');
 
   const grants: PermissionGrant[] = [];
 

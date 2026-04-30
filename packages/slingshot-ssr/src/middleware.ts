@@ -244,7 +244,7 @@ export function buildSsrMiddleware(
   const hydrationHandling = config.hydrationMismatchHandling ?? 'warn-dev';
   if (isDevMode && hydrationHandling === 'warn-dev' && !hydrationWarningEmitted) {
     hydrationWarningEmitted = true;
-    console.warn(
+    logger.warn(
       '[slingshot-ssr] Dev mode: React hydration mismatches surface in the browser console. ' +
         'Common causes: Date.now()/Math.random() in render, locale-dependent formatting, or ' +
         'browser-only APIs without isomorphic guards. ' +
@@ -483,7 +483,10 @@ export function buildSsrMiddleware(
           });
         }
       } catch (err) {
-        console.error('[slingshot-ssr] renderer.resolve() error for', pathname, err);
+        logger.error('[slingshot-ssr] renderer.resolve() error', {
+          route: pathname,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
@@ -571,7 +574,10 @@ export function buildSsrMiddleware(
             }
           }
         } catch (err) {
-          console.error('[slingshot-ssr] global middleware error for', pathname, err);
+          logger.error('[slingshot-ssr] global middleware error', {
+            route: pathname,
+            error: err instanceof Error ? err.message : String(err),
+          });
         }
       }
     }
@@ -666,7 +672,10 @@ export function buildSsrMiddleware(
           }
         }
       } catch (err) {
-        console.error('[slingshot-ssr] middleware execution error for', pathname, err);
+        logger.error('[slingshot-ssr] middleware execution error', {
+          route: pathname,
+          error: err instanceof Error ? err.message : String(err),
+        });
         // Non-fatal: continue with render
       }
     }
@@ -750,7 +759,10 @@ export function buildSsrMiddleware(
         return c.html(overlay, 500);
       }
       // SSR is an enhancement — fall through to SPA on error (spec: error strategy)
-      console.error('[slingshot-ssr] Render error for', pathname, err);
+      logger.error('[slingshot-ssr] Render error', {
+        route: pathname,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return next();
     }
 

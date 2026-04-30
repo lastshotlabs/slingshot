@@ -1,5 +1,8 @@
 import type { MailRenderer, RenderResult } from '@lastshotlabs/slingshot-core';
-import { TemplateNotFoundError } from '@lastshotlabs/slingshot-core';
+import { TemplateNotFoundError, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-mail' } });
 
 // Minimal structural type for a React element. Avoids importing React directly
 // since @react-email/render is an optional peer dependency.
@@ -65,9 +68,9 @@ export function createReactEmailRenderer(config: ReactEmailRendererConfig): Mail
       const element = Component(data);
       const html = await renderFn(element);
       const text = await renderFn(element, { plainText: true }).catch((err: unknown) => {
-        console.warn(
-          `[slingshot-mail] react-email: plain-text render failed for template "${template}":`,
-          err instanceof Error ? err.message : String(err),
+        logger.warn(
+          `[slingshot-mail] react-email: plain-text render failed for template "${template}"`,
+          { error: err instanceof Error ? err.message : String(err) },
         );
         return undefined;
       });

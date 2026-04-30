@@ -219,11 +219,12 @@ function buildHandlerDeps(runtime: SessionRuntime): HandlerContextDeps {
         player.playerState = state;
       }
     },
-    // TODO(child-sessions): Stub — returns empty sessionId. Full implementation
-    // requires sessionAdapter and gameRegistry in SessionRuntimeDeps to create
-    // real child session entities and spawn child runtimes. Games that call
-    // createChildSession will receive { sessionId: '' } until this is wired.
-    createChildSession: () => Promise.resolve({ sessionId: '' }),
+    createChildSession: () => {
+      throw new Error(
+        '[slingshot-game-engine] createChildSession is not yet implemented. ' +
+          'Child session support requires sessionAdapter and gameRegistry in SessionRuntimeDeps.',
+      );
+    },
     getChildSessionResult: (id: string) =>
       Promise.resolve(getChildSessionResult(runtime.childSessionState, id) ?? null),
     log: runtime.log,

@@ -318,6 +318,7 @@ const magicLinkConfigSchema = z
   .object({
     ttlSeconds: positiveIntSchema.optional(),
     linkBaseUrl: httpUrlSchema.optional(),
+    tokenLocation: z.enum(['fragment', 'query']).optional(),
     store: z.enum(['memory', 'redis', 'sqlite', 'mongo']).optional(),
   })
   .loose();

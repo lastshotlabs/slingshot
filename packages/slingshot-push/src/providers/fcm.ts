@@ -1,7 +1,10 @@
 import { createPrivateKey, createSign } from 'node:crypto';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { FirebaseServiceAccount } from '../types/config';
 import type { PushSendResult } from '../types/models';
 import type { PushProvider } from './provider';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-push' } });
 
 function base64UrlEncode(input: Buffer | string): string {
   const buffer = Buffer.isBuffer(input) ? input : Buffer.from(input);
@@ -184,18 +187,16 @@ export function createFcmProvider(config: {
         const circuitTripped = consecutiveTokenFailures >= circuitThreshold;
         const isPermanent = authPermanent || circuitTripped;
 
-        console.error(
-          JSON.stringify({
-            code: 'fcm-oauth-failure',
-            project: config.serviceAccount.project_id,
-            providerIdempotencyKey: idempotencyKey,
-            statusCode,
-            consecutiveFailures: consecutiveTokenFailures,
-            circuitThreshold,
-            classification: isPermanent ? 'permanent' : 'transient',
-            error: errorMessage,
-          }),
-        );
+        logger.error('fcm-oauth-failure', {
+          code: 'fcm-oauth-failure',
+          project: config.serviceAccount.project_id,
+          providerIdempotencyKey: idempotencyKey,
+          statusCode,
+          consecutiveFailures: consecutiveTokenFailures,
+          circuitThreshold,
+          classification: isPermanent ? 'permanent' : 'transient',
+          error: errorMessage,
+        });
 
         if (isPermanent) {
           const result: PushSendResult = {

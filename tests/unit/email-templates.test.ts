@@ -64,14 +64,14 @@ describe('built-in templates', () => {
   test('emailVerification renders with documented variables', () => {
     const rendered = renderTemplate(templates.emailVerification, {
       appName: 'MyApp',
-      verificationLink: 'https://example.com/verify?token=abc',
+      verificationLink: 'https://example.com/verify#token=abc',
       expiryMinutes: '1440',
     });
     expect(rendered.subject).toBe('Verify your email');
     expect(rendered.html).toContain('MyApp');
-    expect(rendered.html).toContain('https://example.com/verify?token=abc');
+    expect(rendered.html).toContain('https://example.com/verify#token=abc');
     expect(rendered.html).toContain('1440');
-    expect(rendered.text).toContain('https://example.com/verify?token=abc');
+    expect(rendered.text).toContain('https://example.com/verify#token=abc');
     // No unreplaced placeholders for documented vars
     expect(rendered.html).not.toContain('{{appName}}');
     expect(rendered.html).not.toContain('{{verificationLink}}');
@@ -81,23 +81,23 @@ describe('built-in templates', () => {
   test('passwordReset renders with documented variables', () => {
     const rendered = renderTemplate(templates.passwordReset, {
       appName: 'MyApp',
-      resetLink: 'https://example.com/reset?token=xyz',
+      resetLink: 'https://example.com/reset#token=xyz',
       expiryMinutes: '60',
     });
     expect(rendered.subject).toBe('Reset your password');
-    expect(rendered.html).toContain('https://example.com/reset?token=xyz');
-    expect(rendered.text).toContain('https://example.com/reset?token=xyz');
+    expect(rendered.html).toContain('https://example.com/reset#token=xyz');
+    expect(rendered.text).toContain('https://example.com/reset#token=xyz');
     expect(rendered.html).not.toContain('{{resetLink}}');
   });
 
   test('magicLink renders with documented variables', () => {
     const rendered = renderTemplate(templates.magicLink, {
       appName: 'MyApp',
-      magicLink: 'https://example.com/magic?token=def',
+      magicLink: 'https://example.com/magic#token=def',
       expiryMinutes: '15',
     });
     expect(rendered.subject).toBe('Your sign-in link');
-    expect(rendered.html).toContain('https://example.com/magic?token=def');
+    expect(rendered.html).toContain('https://example.com/magic#token=def');
     expect(rendered.html).not.toContain('{{magicLink}}');
   });
 
@@ -128,11 +128,11 @@ describe('built-in templates', () => {
   test('accountDeletion renders with documented variables', () => {
     const rendered = renderTemplate(templates.accountDeletion, {
       appName: 'MyApp',
-      cancelLink: 'https://example.com/cancel?token=ghi',
+      cancelLink: 'https://example.com/cancel#token=ghi',
       gracePeriodHours: '24',
     });
     expect(rendered.subject).toBe('Account deletion scheduled');
-    expect(rendered.html).toContain('https://example.com/cancel?token=ghi');
+    expect(rendered.html).toContain('https://example.com/cancel#token=ghi');
     expect(rendered.html).toContain('24');
     expect(rendered.html).not.toContain('{{cancelLink}}');
     expect(rendered.html).not.toContain('{{gracePeriodHours}}');
@@ -142,12 +142,12 @@ describe('built-in templates', () => {
     const rendered = renderTemplate(templates.orgInvitation, {
       appName: 'MyApp',
       orgName: 'ACME Corp',
-      invitationLink: 'https://example.com/invite?token=jkl',
+      invitationLink: 'https://example.com/invite#token=jkl',
       expiryDays: '7',
     });
     expect(rendered.subject).toBe("You've been invited to join ACME Corp");
     expect(rendered.html).toContain('ACME Corp');
-    expect(rendered.html).toContain('https://example.com/invite?token=jkl');
+    expect(rendered.html).toContain('https://example.com/invite#token=jkl');
     expect(rendered.html).toContain('7');
     expect(rendered.html).not.toContain('{{orgName}}');
     expect(rendered.html).not.toContain('{{invitationLink}}');

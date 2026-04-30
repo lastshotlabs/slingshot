@@ -13,6 +13,9 @@
 // If the convention file does not exist, the route falls through to SSR/SPA.
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-ssr' } });
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -312,7 +315,7 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
           'Cache-Control': 'public, max-age=3600',
         });
       } catch (err) {
-        console.error('[slingshot-ssr] sitemap handler threw:', err);
+        logger.error('sitemap handler threw', { err: String(err) });
         return c.body('Internal Server Error', 500, {
           'Content-Type': 'text/plain',
         });
@@ -339,7 +342,7 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
           'Cache-Control': 'public, max-age=3600',
         });
       } catch (err) {
-        console.error('[slingshot-ssr] robots handler threw:', err);
+        logger.error('robots handler threw', { err: String(err) });
         return c.body('Internal Server Error', 500, {
           'Content-Type': 'text/plain',
         });
@@ -366,7 +369,7 @@ export function registerMetadataRoutes(app: unknown, serverRoutesDir: string): v
           'Cache-Control': 'public, max-age=3600',
         });
       } catch (err) {
-        console.error('[slingshot-ssr] manifest handler threw:', err);
+        logger.error('manifest handler threw', { err: String(err) });
         return c.body('Internal Server Error', 500, {
           'Content-Type': 'text/plain',
         });

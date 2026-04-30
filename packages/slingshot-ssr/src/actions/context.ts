@@ -21,7 +21,10 @@
 // injection) and `revalidatePath`/`revalidateTag` become silent no-ops with a
 // console warning, matching the behaviour declared by `supportsAsyncLocalStorage:
 // false` in `runtime-edge`.
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import { getAsyncLocalStorageConstructor } from '../asyncLocalStorage';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-ssr' } });
 
 // ─── Lazy ALS loader ─────────────────────────────────────────────────────────
 
@@ -127,7 +130,7 @@ export function withActionContext<T>(ctx: ActionContext, fn: () => Promise<T>): 
 export function revalidatePath(path: string): Promise<void> {
   if (!actionContextStore) {
     // Edge runtime: ALS unavailable — revalidation is a no-op.
-    console.warn(
+    logger.warn(
       '[slingshot-ssr] revalidatePath unavailable in edge runtime (AsyncLocalStorage not supported). ' +
         'Use tag-based ISR invalidation via the KV adapter instead.',
     );
@@ -179,7 +182,7 @@ export function revalidatePath(path: string): Promise<void> {
 export function revalidateTag(tag: string): Promise<void> {
   if (!actionContextStore) {
     // Edge runtime: ALS unavailable — revalidation is a no-op.
-    console.warn(
+    logger.warn(
       '[slingshot-ssr] revalidateTag unavailable in edge runtime (AsyncLocalStorage not supported). ' +
         'Use tag-based ISR invalidation via the KV adapter instead.',
     );

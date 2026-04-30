@@ -77,7 +77,7 @@ describe('createMailPlugin integration', () => {
           event: 'auth:delivery.password_reset',
           template: 'password_reset',
           dataMapper: (payload: any) => ({
-            resetLink: `https://app.example.com/reset?token=${payload.token}`,
+            resetLink: `https://app.example.com/reset#token=${payload.token}`,
           }),
           recipientMapper: (payload: any) => payload.email,
         },

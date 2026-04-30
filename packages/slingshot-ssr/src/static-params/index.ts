@@ -2,7 +2,10 @@
 import type { Dirent } from 'node:fs';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { GenerateStaticParams, SsrLoadContext, StaticParamSet } from '../types';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-ssr' } });
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -171,10 +174,9 @@ export async function scanStaticParams(routesDir: string): Promise<StaticRoute[]
       // Dynamic import — Bun resolves .ts natively at runtime.
       mod = (await import(filePath)) as Record<string, unknown>;
     } catch (err) {
-      console.warn(
-        `[slingshot-ssr/static-params] Failed to import ${filePath} — skipping.`,
-        err instanceof Error ? err.message : err,
-      );
+      logger.warn(`[slingshot-ssr/static-params] Failed to import ${filePath} — skipping.`, {
+        error: err instanceof Error ? err.message : String(err),
+      });
       continue;
     }
 
@@ -185,9 +187,9 @@ export async function scanStaticParams(routesDir: string): Promise<StaticRoute[]
     try {
       paramSets = await fn(ctx);
     } catch (err) {
-      console.warn(
+      logger.warn(
         `[slingshot-ssr/static-params] generateStaticParams() threw in ${filePath} — skipping.`,
-        err instanceof Error ? err.message : err,
+        { error: err instanceof Error ? err.message : String(err) },
       );
       continue;
     }

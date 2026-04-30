@@ -23,6 +23,36 @@ export interface MagicLinkRouterOptions {
   refreshTokens?: RefreshTokenConfig;
 }
 
+function createMagicLinkUrl(
+  linkBaseUrl: string | undefined,
+  token: string,
+  tokenLocation: MagicLinkConfig['tokenLocation'] = 'fragment',
+): string {
+  if (!linkBaseUrl) return token;
+
+  const url = new URL(linkBaseUrl);
+  if (tokenLocation === 'query') {
+    url.searchParams.set('token', token);
+    return url.toString();
+  }
+
+  const encodedToken = encodeURIComponent(token);
+  const existingHash = url.hash.startsWith('#') ? url.hash.slice(1) : url.hash;
+  if (!existingHash) {
+    url.hash = `token=${encodedToken}`;
+  } else if (existingHash.includes('?') || existingHash.includes('&')) {
+    url.hash = `${existingHash}&token=${encodedToken}`;
+  } else if (existingHash.includes('=') && !existingHash.startsWith('/')) {
+    const params = new URLSearchParams(existingHash);
+    params.set('token', token);
+    url.hash = params.toString();
+  } else {
+    url.hash = `${existingHash}?token=${encodedToken}`;
+  }
+
+  return url.toString();
+}
+
 /**
  * Creates the magic-link authentication router.
  *
@@ -32,7 +62,7 @@ export interface MagicLinkRouterOptions {
  *
  * @param options - Router configuration.
  * @param options.magicLink - Magic-link config, including `linkBaseUrl` (optional base URL
- *   prepended to the token to form the full click-to-login URL) and TTL settings.
+ *   used to form the full click-to-login URL), token placement, and TTL settings.
  * @param options.refreshTokens - Refresh-token config; controls whether a refresh-token
  *   cookie is issued alongside the access token.
  * @param runtime - The auth runtime context (adapter, event bus, repos, rate limiter, etc.).
@@ -50,6 +80,9 @@ export interface MagicLinkRouterOptions {
  * response time does not reveal account existence. The token is delivered via the
  * `auth:delivery.magic_link` event on the event bus. When `magicLink.linkBaseUrl` is set
  * the event payload includes the full clickable URL; otherwise only the raw token is included.
+ * By default the URL puts the token in the fragment (`#token=...`) so the browser does not
+ * send it to the web server in the request URL. Set `tokenLocation: 'query'` only for legacy
+ * clients that still read `?token=...`.
  *
  * `POST /auth/magic-link/verify` runs the same `preLogin` lifecycle hook as password,
  * OAuth, SAML, and passkey logins before creating a session. For email-primary apps it
@@ -145,7 +178,7 @@ export const createMagicLinkRouter = (
           try {
             const ttl = getConfig().magicLink?.ttlSeconds ?? 900;
             const token = await createMagicLinkToken(runtime.repos.magicLink, user.id, ttl);
-            const link = magicLink.linkBaseUrl ? `${magicLink.linkBaseUrl}?token=${token}` : token;
+            const link = createMagicLinkUrl(magicLink.linkBaseUrl, token, magicLink.tokenLocation);
             publishAuthEvent(runtime.events, 'auth:delivery.magic_link', {
               identifier,
               token,

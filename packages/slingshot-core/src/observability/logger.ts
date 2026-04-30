@@ -64,6 +64,7 @@ function makeLogger(minRank: number, base: LogFields | undefined): Logger {
     try {
       line = JSON.stringify(record);
     } catch {
+      // Circular or unserializable fields — emit degraded record with error marker
       line = JSON.stringify({ level, timestamp: record.timestamp, msg, error: 'unserializable' });
     }
     const sink =

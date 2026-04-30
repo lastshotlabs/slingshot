@@ -552,9 +552,8 @@ describe('createPushRouter — retry behavior', () => {
 
     expect(repos._deliveries[0]!.status).toBe('failed');
     expect(repos._deliveries[0]!.failureReason).toBe('transient');
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Provider threw'),
-      expect.any(Error),
+    expect(errorSpy.mock.calls.some(([line]) => String(line).includes('Provider threw'))).toBe(
+      true,
     );
     errorSpy.mockRestore();
   });
@@ -592,10 +591,11 @@ describe('createPushRouter — retry behavior', () => {
     expect(repos._deliveries[0]!.status).toBe('failed');
     expect(repos._deliveries[0]!.failureReason).toBe('repositoryFailure');
     expect(repos._deliveries[1]!.status).toBe('sent');
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Repository failure during fan-out'),
-      expect.any(Error),
-    );
+    expect(
+      errorSpy.mock.calls.some(([line]) =>
+        String(line).includes('Repository failure during fan-out'),
+      ),
+    ).toBe(true);
     errorSpy.mockRestore();
   });
 

@@ -131,6 +131,7 @@ export function toRouteHandler(
           body = parsed as Record<string, unknown>;
         }
       } catch {
+        // Invalid or empty JSON body — downstream Zod validation will reject if fields are required
         body = {};
       }
     }

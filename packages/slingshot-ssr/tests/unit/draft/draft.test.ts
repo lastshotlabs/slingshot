@@ -279,6 +279,21 @@ describe('buildDraftRouter()', () => {
     expect(response.headers.get('location')).toBe('/posts/draft-post');
   });
 
+  it('enable does not accept form-body secrets', async () => {
+    const app = new Hono();
+    app.route('/api/draft', buildDraftRouter(SECRET));
+
+    const response = await app.fetch(
+      new Request('http://localhost/api/draft/enable', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ secret: SECRET }),
+      }),
+      { redirect: 'manual' },
+    );
+    expect(response.status).toBe(401);
+  });
+
   it('disable clears the draft cookie and redirects to /', async () => {
     const app = new Hono();
     app.route('/api/draft', buildDraftRouter(SECRET));

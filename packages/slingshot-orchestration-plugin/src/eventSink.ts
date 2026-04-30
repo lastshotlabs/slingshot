@@ -1,5 +1,7 @@
-import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import { type SlingshotEventBus, createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { OrchestrationEventSink } from '@lastshotlabs/slingshot-orchestration';
+
+const loggerErr = createConsoleLogger({ base: { component: 'slingshot-orchestration-plugin' } });
 
 /**
  * Disposable orchestration event sink that bridges the orchestration runtime onto
@@ -43,7 +45,7 @@ export function createSlingshotEventSink(bus: SlingshotEventBus): SlingshotEvent
       try {
         bus.emit(name, payload);
       } catch (err) {
-        console.error('[slingshot-orchestration] eventSink.emit error:', err);
+        loggerErr.error('eventSink.emit error', { err: String(err) });
       }
     },
     subscribe(event, handler) {
@@ -61,7 +63,7 @@ export function createSlingshotEventSink(bus: SlingshotEventBus): SlingshotEvent
             (bus as unknown as { off: (e: string, h: unknown) => void }).off(event, handler);
           }
         } catch (err) {
-          console.error('[slingshot-orchestration] eventSink.unsubscribe error:', err);
+          loggerErr.error('eventSink.unsubscribe error', { err: String(err) });
         }
         unsubs.delete(unsubscribe);
       };
@@ -75,7 +77,7 @@ export function createSlingshotEventSink(bus: SlingshotEventBus): SlingshotEvent
         try {
           unsubscribe();
         } catch (err) {
-          console.error('[slingshot-orchestration] eventSink.dispose error:', err);
+          loggerErr.error('eventSink.dispose error', { err: String(err) });
         }
       }
       unsubs.clear();

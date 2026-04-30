@@ -46,3 +46,4 @@ export type {
 } from './peers/types';
 export { dispatchRequestSchema, dispatchResultSchema } from './routes/dispatchRoute.schema';
 export type { DispatchRequest, DispatchResult } from './routes/dispatchRoute.schema';
+export { verifyWebhookSignature } from './handlers/dispatchers/webhook';

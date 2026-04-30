@@ -43,6 +43,8 @@ export const embedsPluginConfigSchema = z.object({
   blockedDomains: z.array(z.string()).optional().default([]),
   /** Route mount path for the unfurl endpoint. Defaults to `"/embeds"`. */
   mountPath: z.string().startsWith('/').optional().default('/embeds'),
+  /** Maximum number of HTTP redirects to follow. Defaults to 5. */
+  maxRedirects: z.number().int().nonnegative().optional().default(5),
 });
 
 /**

@@ -226,10 +226,15 @@ export class InProcessAdapter implements SlingshotEventBus {
   private pendingHandlers = new Set<Promise<void>>();
   private readonly registry?: EventBusSerializationOptions['schemaRegistry'];
   private readonly validation: ValidationMode;
+  private readonly logger?: { error(msg: string, fields?: Record<string, unknown>): void };
 
-  constructor(serializationOpts?: EventBusSerializationOptions) {
+  constructor(
+    serializationOpts?: EventBusSerializationOptions,
+    logger?: { error(msg: string, fields?: Record<string, unknown>): void },
+  ) {
     this.registry = serializationOpts?.schemaRegistry;
     this.validation = serializationOpts?.validation ?? 'off';
+    this.logger = logger;
   }
 
   emit<K extends keyof SlingshotEventMap>(event: K, payload: SlingshotEventMap[K]): void {
@@ -251,13 +256,17 @@ export class InProcessAdapter implements SlingshotEventBus {
       try {
         result = fn(envelope as EventEnvelope);
       } catch (err) {
-        console.error(`[SlingshotEventBus] listener error on event "${event}":`, err);
+        const msg = `[SlingshotEventBus] listener error on event "${event}"`;
+        if (this.logger) this.logger.error(msg, { event, error: err });
+        else console.error(msg, err);
         continue;
       }
       const p = Promise.resolve(result);
       this.pendingHandlers.add(p);
       p.catch((err: unknown) => {
-        console.error(`[SlingshotEventBus] listener error on event "${event}":`, err);
+        const msg = `[SlingshotEventBus] listener error on event "${event}"`;
+        if (this.logger) this.logger.error(msg, { event, error: err });
+        else console.error(msg, err);
       }).finally(() => {
         this.pendingHandlers.delete(p);
       });

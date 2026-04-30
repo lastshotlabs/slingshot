@@ -129,8 +129,11 @@ describe('encryptField / decryptField', () => {
 });
 
 describe('isEncryptedField', () => {
-  test('returns true for 4-part dot-separated string', () => {
-    expect(isEncryptedField('k1.iv.ct.tag')).toBe(true);
+  test('returns true for valid encrypted envelope format', () => {
+    // keyId.base64url(16 chars IV).base64url(ciphertext).base64url(22 chars tag)
+    expect(isEncryptedField('k1.AAAAAAAAAAAAAAAA.Y2lwaGVydGV4dA.AAAAAAAAAAAAAAAAAAAAAA')).toBe(
+      true,
+    );
   });
 
   test('returns false for plain string', () => {
@@ -139,6 +142,14 @@ describe('isEncryptedField', () => {
 
   test('returns false for 3-part string', () => {
     expect(isEncryptedField('a.b.c')).toBe(false);
+  });
+
+  test('returns false for IP address (false positive regression)', () => {
+    expect(isEncryptedField('192.168.1.1')).toBe(false);
+  });
+
+  test('returns false for version string', () => {
+    expect(isEncryptedField('1.2.3.4')).toBe(false);
   });
 });
 

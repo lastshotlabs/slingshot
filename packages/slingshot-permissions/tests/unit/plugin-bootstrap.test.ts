@@ -429,7 +429,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
 
     const plugin = createPermissionsPlugin();
     const warn = spyOn(console, 'warn').mockImplementation(() => {});
-    const log = spyOn(console, 'log').mockImplementation(() => {});
+    const info = spyOn(console, 'info').mockImplementation(() => {});
 
     await plugin.seed?.(
       asNever({
@@ -459,7 +459,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
       effect: 'allow',
       grantedBy: 'manifest-seed',
     });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('Granted super-admin'));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('Granted super-admin'));
   });
 
   test('seed: skips users that already have a live super-admin grant', async () => {
@@ -489,7 +489,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     attachContext(app, ctx as never);
 
     const plugin = createPermissionsPlugin();
-    const log = spyOn(console, 'log').mockImplementation(() => {});
+    const info = spyOn(console, 'info').mockImplementation(() => {});
 
     await plugin.seed?.(
       asNever({
@@ -502,7 +502,7 @@ describe('slingshot-permissions bootstrap and plugin wiring', () => {
     );
 
     expect(createGrant).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('already has super-admin'));
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('already has super-admin'));
   });
 
   test('createPermissionsPlugin with groupResolver wires auth-backed group expansion', async () => {

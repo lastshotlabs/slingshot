@@ -222,6 +222,7 @@ export const defaultHook: NonNullable<OpenAPIHonoOptions<AppEnv>['defaultHook']>
     try {
       return c.json(formatter(result.error.issues, requestId), 400);
     } catch {
+      // Custom formatter threw — fall back to built-in formatter
       return c.json(defaultValidationErrorFormatter(result.error.issues, requestId), 400);
     }
   }

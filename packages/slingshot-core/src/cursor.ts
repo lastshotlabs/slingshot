@@ -58,6 +58,7 @@ export function decodeCursor<T extends object>(
     if (validate && !validate(parsed)) return null;
     return parsed as T;
   } catch {
+    // Malformed cursor — return null per contract (callers treat null as "start from beginning")
     return null;
   }
 }

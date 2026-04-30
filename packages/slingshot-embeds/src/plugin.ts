@@ -65,6 +65,7 @@ export function createEmbedsPlugin(rawConfig?: unknown): SlingshotPlugin {
         const result = await unfurl(targetUrl, {
           timeoutMs: frozenConfig.timeoutMs,
           maxResponseBytes: frozenConfig.maxResponseBytes,
+          maxRedirects: frozenConfig.maxRedirects,
         });
         cache.set(targetUrl, result);
         results.push(result);

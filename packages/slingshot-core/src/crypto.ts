@@ -209,7 +209,8 @@ export function decryptField(ciphertext: string, keyConfig: DataEncryptionKey[])
  * ```
  */
 export function isEncryptedField(value: string): boolean {
-  return value.split('.').length === 4;
+  // Encrypted envelope format: keyId.base64url(IV, 12 bytes = 16 chars).base64url(ciphertext).base64url(tag, 16 bytes = 22 chars)
+  return /^[^.]+\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{22}$/.test(value);
 }
 
 /**

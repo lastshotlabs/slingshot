@@ -29,15 +29,6 @@ async function readDraftSecret(c: Context): Promise<string | undefined> {
         return (body as { secret: string }).secret;
       }
     }
-
-    if (
-      contentType.includes('application/x-www-form-urlencoded') ||
-      contentType.includes('multipart/form-data')
-    ) {
-      const form = await c.req.formData();
-      const secret = form.get('secret');
-      if (typeof secret === 'string') return secret;
-    }
   } catch {
     return undefined;
   }
@@ -67,7 +58,7 @@ function secretsMatch(providedSecret: string | undefined, expectedSecret: string
  * Exposes two endpoints:
  *
  * - `POST /api/draft/enable` — validates the secret from the
- *   `X-Draft-Mode-Secret` header or request body, sets the draft mode cookie,
+ *   `X-Draft-Mode-Secret` header or JSON request body, sets the draft mode cookie,
  *   and redirects to `?redirect=<path>` (default: `/`). Returns 401 when the
  *   secret does not match.
  *
@@ -105,7 +96,7 @@ export function buildDraftRouter(secret: string): Hono {
   /**
    * POST /enable[?redirect=<path>]
    *
-   * Validates the provided header/body secret against the configured draft mode
+   * Validates the provided header/JSON-body secret against the configured draft mode
    * secret. On success, sets the draft mode cookie and redirects to the
    * `redirect` query parameter path (default: `/`). On failure, returns 401
    * Unauthorized.

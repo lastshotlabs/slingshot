@@ -41,7 +41,7 @@ function escapeHtml(str: string): string {
  *
  * const rendered = renderTemplate(templates.emailVerification, {
  *   appName: 'Acme',
- *   verificationLink: 'https://acme.com/auth/verify?token=abc',
+ *   verificationLink: 'https://acme.com/auth/verify#token=abc',
  *   expiryMinutes: 1440,
  * });
  * await mailer.send({ to: userEmail, ...rendered });
@@ -142,7 +142,7 @@ function linkFallback(href: string): string {
  *
  * const { subject, html, text } = renderTemplate(templates.passwordReset, {
  *   appName: 'Acme',
- *   resetLink: 'https://acme.com/auth/reset-password?token=xyz',
+ *   resetLink: 'https://acme.com/auth/reset-password#token=xyz',
  *   expiryMinutes: 60,
  * });
  */

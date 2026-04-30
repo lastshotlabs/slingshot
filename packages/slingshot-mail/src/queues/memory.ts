@@ -1,10 +1,17 @@
 import type { DynamicEventBus, MetricsEmitter } from '@lastshotlabs/slingshot-core';
-import { DEFAULT_MAX_ENTRIES, createNoopMetricsEmitter } from '@lastshotlabs/slingshot-core';
+import {
+  DEFAULT_MAX_ENTRIES,
+  createConsoleLogger,
+  createNoopMetricsEmitter,
+} from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import { classifyMailFailure, retryDelayFor } from '../lib/failureClassification';
 import type { MailMessage, MailProvider } from '../types/provider';
 import { MailSendError } from '../types/provider';
 import type { MailJob, MailQueue, MailQueueConfig } from '../types/queue';
 import { sendWithTimeout } from './sendWithTimeout';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-mail' } });
 
 /**
  * Creates an in-process, non-durable mail queue for development and testing.
@@ -28,7 +35,7 @@ import { sendWithTimeout } from './sendWithTimeout';
  * ```
  */
 export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
-  console.warn('[slingshot-mail] Memory queue is not durable — for development/testing only');
+  logger.warn('[slingshot-mail] Memory queue is not durable — for development/testing only');
   const maxAttempts = config?.maxAttempts ?? 3;
   const onDeadLetter = config?.onDeadLetter ?? null;
   const drainTimeoutMs = config?.drainTimeoutMs ?? 30_000;
@@ -254,7 +261,7 @@ export function createMemoryQueue(config?: MailQueueConfig): MailQueue {
           to: j.message.to,
           subject: j.message.subject,
         }));
-        console.warn(
+        logger.warn(
           `[slingshot-mail] drain() timed out after ${drainTimeoutMs}ms — ${remaining} job(s) still in flight`,
         );
         emit('mail:drain.timedOut', {

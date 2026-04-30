@@ -17,6 +17,7 @@ function readHeader(req: RequestLike, name: string): string | undefined {
   try {
     headerValue = req.headers.get(name);
   } catch {
+    // Request.headers.get() may throw in non-standard runtimes — fall through to fallback reader
     headerValue = null;
   }
   if (typeof headerValue === 'string') return headerValue;

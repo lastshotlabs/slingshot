@@ -1,5 +1,8 @@
 // packages/slingshot-ssr/src/static-params/prerender.ts
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { StaticRoute } from './index';
+
+const logger = createConsoleLogger({ base: { component: 'slingshot-ssr' } });
 
 // ─── Cache store ──────────────────────────────────────────────────────────────
 
@@ -92,7 +95,7 @@ export function buildConcreteUrl(routePath: string, params: Record<string, strin
         const name = catchAll[1];
         const value = paramLookup[name];
         if (value === undefined) {
-          console.warn(
+          logger.warn(
             `[slingshot-ssr/prerender] Missing catch-all param "${name}" for route "${routePath}" — segment left as-is.`,
           );
           return segment;
@@ -106,7 +109,7 @@ export function buildConcreteUrl(routePath: string, params: Record<string, strin
         const name = dynamic[1];
         const value = paramLookup[name];
         if (value === undefined) {
-          console.warn(
+          logger.warn(
             `[slingshot-ssr/prerender] Missing param "${name}" for route "${routePath}" — segment left as-is.`,
           );
           return segment;
@@ -163,9 +166,9 @@ export async function prerenderStaticRoutes(
         const html = await renderer(path);
         cache.set(path, html);
       } catch (err) {
-        console.warn(
+        logger.warn(
           `[slingshot-ssr/prerender] Failed to pre-render "${path}" (route: ${route.routePath}) — skipping.`,
-          err instanceof Error ? err.message : err,
+          { error: err instanceof Error ? err.message : String(err) },
         );
       }
     }

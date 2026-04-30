@@ -3,14 +3,21 @@ import type {
   SlingshotEventBus,
   SlingshotEventMap,
 } from '@lastshotlabs/slingshot-core';
-import { TemplateNotFoundError } from '@lastshotlabs/slingshot-core';
+import { TemplateNotFoundError, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import type { MailPluginConfig, MailSubscription } from '../types/config';
 import type { MailSubscriptionDrop } from '../types/config';
 import type { MailAddress, MailMessage } from '../types/provider';
 import type { MailQueue } from '../types/queue';
 import { resolveAndInterpolateSubject } from './subjectResolution';
 
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-mail' } });
+
 const DEFAULT_SUBSCRIPTION_ENQUEUE_TIMEOUT_MS = 30_000;
+
+function errorLogFields(err: unknown): { error: string } {
+  return { error: err instanceof Error ? err.message : String(err) };
+}
 
 /**
  * Thrown at plugin startup when a subscription's template cannot be found in the
@@ -65,7 +72,7 @@ async function notifySubscriptionDrop(
   try {
     await config.onSubscriptionDrop?.(drop);
   } catch (err) {
-    console.error('[slingshot-mail] onSubscriptionDrop callback failed:', err);
+    logger.error('[slingshot-mail] onSubscriptionDrop callback failed', errorLogFields(err));
   }
 }
 
@@ -133,7 +140,7 @@ export function wireSubscriptions(
           : (payload as Record<string, unknown>)['email'];
 
         if (!recipient) {
-          console.error(`[slingshot-mail] No recipient for event ${subscription.event}`);
+          logger.error(`[slingshot-mail] No recipient for event ${subscription.event}`);
           await notifySubscriptionDrop(config, {
             event: subscription.event,
             template: subscription.template,
@@ -171,7 +178,10 @@ export function wireSubscriptions(
             subscription.event,
           );
         } catch (err) {
-          console.error(`[slingshot-mail] Failed to enqueue event ${subscription.event}:`, err);
+          logger.error(
+            `[slingshot-mail] Failed to enqueue event ${subscription.event}`,
+            errorLogFields(err),
+          );
           await notifySubscriptionDrop(config, {
             event: subscription.event,
             template: subscription.template,
@@ -186,7 +196,7 @@ export function wireSubscriptions(
         }
       } catch (err) {
         if (err instanceof TemplateNotFoundError) {
-          console.error(
+          logger.error(
             `[slingshot-mail] Template not found for event ${subscription.event}: ${err.templateName}`,
           );
           await notifySubscriptionDrop(config, {
@@ -197,7 +207,10 @@ export function wireSubscriptions(
             error: err,
           });
         } else {
-          console.error(`[slingshot-mail] Error processing event ${subscription.event}:`, err);
+          logger.error(
+            `[slingshot-mail] Error processing event ${subscription.event}`,
+            errorLogFields(err),
+          );
           await notifySubscriptionDrop(config, {
             event: subscription.event,
             template: subscription.template,

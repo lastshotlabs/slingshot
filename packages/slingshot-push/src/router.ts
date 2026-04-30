@@ -1,5 +1,10 @@
 import type { MetricsEmitter } from '@lastshotlabs/slingshot-core';
-import { createNoopMetricsEmitter, sanitizeLogValue } from '@lastshotlabs/slingshot-core';
+import {
+  createConsoleLogger,
+  createNoopMetricsEmitter,
+  sanitizeLogValue,
+} from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import { PushRouterError } from './errors';
 import { buildProviderIdempotencyKey } from './lib/idempotency';
 import type { PushProvider } from './providers/provider';
@@ -11,6 +16,12 @@ import type {
   PushSubscriptionRecord,
   PushTopicMembershipRecord,
 } from './types/models';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-push' } });
+
+function errorLogFields(err: unknown): { error: string } {
+  return { error: err instanceof Error ? err.message : String(err) };
+}
 
 type RouterSubscriptionRecord = {
   readonly id: string;
@@ -427,9 +438,9 @@ export function createPushRouter(options: {
       } catch (err) {
         // subscription.id is server-generated but originates ultimately
         // from a registration request; sanitize before interpolating.
-        console.error(
+        logger.error(
           `[slingshot-push] Failed to create delivery for subscription="${sanitizeLogValue(subscription.id)}"`,
-          err,
+          errorLogFields(err),
         );
         options.bus?.emit('push:delivery.failed', {
           subscriptionId: subscription.id,
@@ -468,9 +479,9 @@ export function createPushRouter(options: {
               { idempotencyKey },
             );
           } catch (err) {
-            console.error(
+            logger.error(
               `[slingshot-push] Provider threw or timed out for platform="${sanitizeLogValue(platform)}" userId="${sanitizeLogValue(subscription.userId)}"`,
-              err,
+              errorLogFields(err),
             );
             result = {
               ok: false,
@@ -519,9 +530,9 @@ export function createPushRouter(options: {
             try {
               await options.repos.subscriptions.delete(subscription.id);
             } catch (delErr) {
-              console.error(
+              logger.error(
                 `[slingshot-push] Failed to delete invalid subscription="${sanitizeLogValue(subscription.id)}"`,
-                delErr,
+                errorLogFields(delErr),
               );
               options.bus?.emit('push:subscription.deletePending', {
                 subscriptionId: subscription.id,
@@ -538,9 +549,9 @@ export function createPushRouter(options: {
                 subscriptionId: subscription.id,
               });
             } catch (memErr) {
-              console.error(
+              logger.error(
                 `[slingshot-push] Failed to remove memberships for subscription="${sanitizeLogValue(subscription.id)}"`,
-                memErr,
+                errorLogFields(memErr),
               );
               options.bus?.emit('push:subscription.deletePending', {
                 subscriptionId: subscription.id,
@@ -642,9 +653,9 @@ export function createPushRouter(options: {
         }
       } catch (err) {
         const safeDeliveryId = sanitizeLogValue(delivery.id);
-        console.error(
+        logger.error(
           `[slingshot-push] Repository failure during fan-out for delivery="${safeDeliveryId}"`,
-          err,
+          errorLogFields(err),
         );
         try {
           await options.repos.deliveries.markFailed({
@@ -652,9 +663,9 @@ export function createPushRouter(options: {
             failureReason: 'repositoryFailure',
           });
         } catch (markErr) {
-          console.error(
+          logger.error(
             `[slingshot-push] Failed to mark delivery="${safeDeliveryId}" failed after repository error`,
-            markErr,
+            errorLogFields(markErr),
           );
         }
         options.bus?.emit('push:delivery.failed', {
@@ -674,9 +685,9 @@ export function createPushRouter(options: {
             failureReason: 'transient',
           });
         } catch (err) {
-          console.error(
+          logger.error(
             `[slingshot-push] Failed to mark delivery="${sanitizeLogValue(delivery.id)}" failed`,
-            err,
+            errorLogFields(err),
           );
         }
         options.bus?.emit('push:delivery.failed', {
@@ -784,7 +795,7 @@ export function createPushRouter(options: {
         if (memberships.length > topicMaxRecipients) {
           truncated = true;
           memberships = allMemberships.slice(0, topicMaxRecipients);
-          console.warn(
+          logger.warn(
             `[slingshot-push] Topic '${safeTopicName}' has ${totalMembers} members; truncating to topicMaxRecipients=${topicMaxRecipients}.`,
           );
           options.bus?.emit('push:topic.fanout.truncated', {
@@ -825,7 +836,7 @@ export function createPushRouter(options: {
             const subscriptions = subscriptionResults.filter(
               (s): s is RouterSubscriptionRecord => s !== null,
             );
-            console.info(
+            logger.info(
               `[slingshot-push] Topic '${safeTopicName}' batch ${batchIndex + 1}/${totalBatches} dispatched (size=${subscriptions.length}).`,
             );
             options.bus?.emit('push:topic.batch.dispatched', {

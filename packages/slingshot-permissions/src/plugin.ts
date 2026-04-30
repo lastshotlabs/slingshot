@@ -10,8 +10,8 @@ import type {
 import {
   PERMISSIONS_STATE_KEY,
   SUPER_ADMIN_ROLE,
+  createConsoleLogger,
   getPluginState,
-  noopLogger,
   publishPluginState,
   resolveRepoAsync,
 } from '@lastshotlabs/slingshot-core';
@@ -175,7 +175,8 @@ export function createPermissionsPlugin(
 ): SlingshotPlugin & { getHealth(): PermissionsHealth } {
   // Captured from setupMiddleware so getHealth() can return a non-trivial
   // snapshot without re-resolving the adapter.
-  const logger: Logger = config?.logger ?? noopLogger;
+  const logger: Logger =
+    config?.logger ?? createConsoleLogger({ base: { plugin: 'slingshot-permissions' } });
   let evaluatorRef: EvaluatorWithHealth | undefined;
   let adapterNameRef: string | null = null;
   let adapterAvailable = false;
@@ -302,7 +303,7 @@ export function createPermissionsPlugin(
         const email = key.slice('superAdmin:'.length);
         const userId = seedState.get(`user:${email}`) as string | undefined;
         if (!userId) {
-          console.warn(
+          logger.warn(
             `[slingshot-permissions seed] superAdmin requested for '${email}' but no user ID found in seedState — grant skipped.`,
           );
           continue;
@@ -316,7 +317,7 @@ export function createPermissionsPlugin(
           g => g.roles.includes(SUPER_ADMIN_ROLE) && g.effect === 'allow' && !g.revokedAt,
         );
         if (alreadyAdmin) {
-          console.log(`[slingshot-permissions seed] '${email}' already has super-admin — skipped.`);
+          logger.info(`[slingshot-permissions seed] '${email}' already has super-admin — skipped.`);
           continue;
         }
         await permsState.adapter.createGrant({
@@ -329,7 +330,7 @@ export function createPermissionsPlugin(
           effect: 'allow',
           grantedBy: 'manifest-seed',
         });
-        console.log(`[slingshot-permissions seed] Granted super-admin to '${email}'.`);
+        logger.info(`[slingshot-permissions seed] Granted super-admin to '${email}'.`);
       }
     },
   };

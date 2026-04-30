@@ -97,6 +97,15 @@ export interface MagicLinkConfig {
   ttlSeconds?: number;
   /** Base URL for the magic link (e.g. "https://app.com/auth/magic"). */
   linkBaseUrl?: string;
+  /**
+   * Where to place the one-time token when `linkBaseUrl` is configured.
+   *
+   * Defaults to `"fragment"` so the token is not sent to the web server in the
+   * request URL, reducing exposure in access logs, reverse proxies, and Referer
+   * headers. Set to `"query"` only for legacy clients that still read
+   * `?token=...`.
+   */
+  tokenLocation?: 'fragment' | 'query';
   /** Store backend for magic link tokens. Defaults to the sessions store. */
   store?: 'memory' | 'redis' | 'sqlite' | 'mongo';
 }

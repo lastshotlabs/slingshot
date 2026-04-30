@@ -19,31 +19,26 @@ const FORMAT_CONTENT_TYPE: Record<Exclude<ImageFormat, 'original'>, string> = {
 // We capture only the constructor shape we need.
 type SharpConstructor = (input?: Buffer) => import('sharp').Sharp;
 
-let sharpFn: SharpConstructor | null | undefined = undefined;
-
 /**
- * Attempt to load the `sharp` module once. Subsequent calls use the cached result.
+ * Attempt to load the `sharp` module. Returns the constructor or null if unavailable.
+ * Callers should cache the result in their own closure to avoid repeated import attempts.
  * @internal
  */
-async function loadSharp(): Promise<SharpConstructor | null> {
-  if (sharpFn !== undefined) return sharpFn;
+export async function loadSharp(): Promise<SharpConstructor | null> {
   try {
-    // sharp exports as ESM default or as a CJS callable module
     const mod = await import('sharp');
-    // The module may be the function directly or have a `default` property
     const fn: SharpConstructor =
       'default' in mod && typeof mod.default === 'function'
         ? (mod.default as unknown as SharpConstructor)
         : (mod as unknown as SharpConstructor);
-    sharpFn = fn;
+    return fn;
   } catch {
     console.warn(
       '[slingshot-image] sharp is not installed. Images will be served without optimization. ' +
         'Install sharp for format conversion and resizing: bun add sharp',
     );
-    sharpFn = null;
+    return null;
   }
-  return sharpFn;
 }
 
 /**

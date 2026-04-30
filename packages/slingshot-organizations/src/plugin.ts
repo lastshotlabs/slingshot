@@ -6,6 +6,7 @@ import type {
   SlingshotPlugin,
 } from '@lastshotlabs/slingshot-core';
 import {
+  createConsoleLogger,
   deepFreeze,
   getActorId,
   getPluginState,
@@ -14,6 +15,7 @@ import {
   publishPluginState,
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';
 import { getOrganizationsAuthRuntime } from './lib/authRuntime';
 import {
@@ -261,6 +263,9 @@ function createInviteLookupRateLimit(args: {
 /**
  * Create the organizations plugin using the manifest-driven entity system.
  */
+
+const logger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-organizations' } });
+
 export function createOrganizationsPlugin(
   rawConfig: OrganizationsPluginConfig = {},
   deps: OrganizationsPluginDeps = {},
@@ -471,7 +476,7 @@ export function createOrganizationsPlugin(
       for (const seedOrg of orgs) {
         const existing = await orgService.getOrgBySlug(seedOrg.slug, seedOrg.tenantId);
         if (existing) {
-          console.log(
+          logger.info(
             `[slingshot-organizations seed] Org '${seedOrg.slug}' already exists — skipping.`,
           );
           continue;
@@ -483,20 +488,20 @@ export function createOrganizationsPlugin(
           tenantId: seedOrg.tenantId,
           metadata: seedOrg.metadata,
         });
-        console.log(
+        logger.info(
           `[slingshot-organizations seed] Created org '${seedOrg.slug}' (id: ${org.id}).`,
         );
 
         for (const member of seedOrg.members ?? []) {
           const userId = seedState.get(`user:${member.email}`) as string | undefined;
           if (!userId) {
-            console.warn(
+            logger.warn(
               `[slingshot-organizations seed] Member '${member.email}' for org '${seedOrg.slug}' not found in seedState — skipping.`,
             );
             continue;
           }
           await orgService.addOrgMember(org.id, userId, member.roles ?? [], 'manifest-seed');
-          console.log(
+          logger.info(
             `[slingshot-organizations seed] Added '${member.email}' to org '${seedOrg.slug}'.`,
           );
         }

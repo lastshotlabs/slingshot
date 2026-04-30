@@ -85,6 +85,7 @@ export function sanitizeLogValue(value: unknown): string {
   try {
     str = typeof value === 'string' ? value : String(value);
   } catch {
+    // Object has a throwing toString/valueOf — return placeholder rather than propagate
     return '<unstringifiable>';
   }
   if (!HEADER_FORBIDDEN.test(str)) return str;

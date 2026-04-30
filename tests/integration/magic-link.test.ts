@@ -81,7 +81,7 @@ describe('POST /auth/magic-link/request', () => {
     cleanup();
     expect(capturedToken).toBeString();
     expect(capturedIdentifier).toBe('magic@example.com');
-    expect(capturedLink).toContain('https://app.example.com/auth/magic?token=');
+    expect(capturedLink).toContain('https://app.example.com/auth/magic#token=');
     expect(capturedLink).toContain(capturedToken!);
   });
 
@@ -281,7 +281,50 @@ describe('magic link URL construction', () => {
     const token = await tokenPromise;
     cleanup();
 
-    expect(capturedLink).toBe(`https://app.example.com/auth/magic?token=${token}`);
+    expect(capturedLink).toBe(`https://app.example.com/auth/magic#token=${token}`);
+  });
+
+  test('legacy query token placement is explicit and preserves existing query params', async () => {
+    const queryTokenApp = await createTestApp(
+      {},
+      {
+        auth: {
+          enabled: true,
+          roles: ['user'],
+          defaultRole: 'user',
+          magicLink: {
+            linkBaseUrl: 'https://app.example.com/auth/magic?source=email',
+            tokenLocation: 'query',
+          },
+        },
+      },
+    );
+
+    let queryToken: string | undefined;
+    let queryLink: string | undefined;
+    let queryResolve: (t: string) => void;
+    const queryPromise = new Promise<string>(r => {
+      queryResolve = r;
+    });
+    const handler = (payload: { token: string; link: string }) => {
+      queryToken = payload.token;
+      queryLink = payload.link;
+      queryResolve(payload.token);
+    };
+    getBus(queryTokenApp).on('auth:delivery.magic_link', handler);
+
+    await queryTokenApp.request(
+      '/auth/register',
+      json({ email: 'querylink@example.com', password: 'password123' }),
+    );
+    await queryTokenApp.request(
+      '/auth/magic-link/request',
+      json({ identifier: 'querylink@example.com' }),
+    );
+    await queryPromise;
+    getBus(queryTokenApp).off('auth:delivery.magic_link', handler);
+
+    expect(queryLink).toBe(`https://app.example.com/auth/magic?source=email&token=${queryToken}`);
   });
 
   test('link equals token when linkBaseUrl is not set', async () => {

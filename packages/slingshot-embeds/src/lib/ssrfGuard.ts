@@ -160,7 +160,13 @@ export async function resolveAndValidate(hostname: string): Promise<ResolveValid
 
   let addresses: { address: string }[];
   try {
-    addresses = await Bun.dns.lookup(hostname);
+    if (typeof globalThis.Bun !== 'undefined' && globalThis.Bun.dns) {
+      addresses = await globalThis.Bun.dns.lookup(hostname);
+    } else {
+      const dns = await import('node:dns/promises');
+      const results = await dns.lookup(hostname, { all: true });
+      addresses = results.map(r => ({ address: r.address }));
+    }
   } catch {
     return { ok: false, reason: `DNS resolution failed for: ${hostname}` };
   }

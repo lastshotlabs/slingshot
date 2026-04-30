@@ -671,6 +671,8 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
           socket: import('node:stream').Duplex;
           head: Buffer;
           timer: ReturnType<typeof setTimeout>;
+          resolveUpgrade: () => void;
+          removeCloseListener: () => void;
           /** Atomic cleanup — see clearPendingUpgrade(). */
           cleanedUp: boolean;
         }
@@ -695,6 +697,8 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
         pending.cleanedUp = true;
         clearTimeout(pending.timer);
         pendingUpgrades.delete(key);
+        pending.removeCloseListener();
+        pending.resolveUpgrade();
         if (opts.destroySocket) {
           try {
             pending.socket.destroy();
@@ -768,7 +772,6 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
               timeoutMs: upgradeTimeoutMs,
               remoteAddress: remoteAddress ?? 'unknown',
             });
-            resolvePromise();
           }, upgradeTimeoutMs);
 
           // P-NODE-6: if the underlying socket closes before either the
@@ -777,7 +780,6 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
           // fire on a destroyed socket and emit a misleading timeout warn.
           const onSocketClose = (): void => {
             clearPendingUpgrade(key, { destroySocket: false });
-            resolvePromise();
           };
           socket.once('close', onSocketClose);
 
@@ -786,21 +788,16 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
             socket,
             head,
             timer,
-            cleanedUp: false,
-          });
-
-          // Stash a hook on the pending entry so the upgrade() call below
-          // can dispose its socket-close listener and resolve the promise.
-          // Keeping it inline avoids growing the public type.
-          (pendingUpgrades.get(key) as unknown as Record<string, unknown>).__resolveUpgrade =
-            (): void => {
+            resolveUpgrade: resolvePromise,
+            removeCloseListener() {
               try {
                 socket.removeListener('close', onSocketClose);
               } catch {
                 // ignore
               }
-              resolvePromise();
-            };
+            },
+            cleanedUp: false,
+          });
 
           const dummySocket = new Writable({
             write(_chunk: unknown, _encoding: string, cb: () => void) {
@@ -1085,8 +1082,6 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
           if (!pending) return false;
           // P-NODE-6: atomic cleanup — clears timer, removes from map, and
           // disposes the socket-close listener installed during upgrade.
-          const resolveUpgrade = (pending as unknown as Record<string, unknown>)
-            .__resolveUpgrade as (() => void) | undefined;
           clearPendingUpgrade(key, { destroySocket: false });
           try {
             wss.handleUpgrade(pending.req, pending.socket, pending.head, ws => {
@@ -1101,10 +1096,8 @@ function createNodeServer(runtimeOpts: ResolvedNodeRuntimeOptions): RuntimeServe
               message: err instanceof Error ? err.message : String(err),
               stack: err instanceof Error ? err.stack : undefined,
             });
-            resolveUpgrade?.();
             return false;
           }
-          resolveUpgrade?.();
           return true;
         },
         publish(channel: string, message: string, fromWs?: WsWebSocket): void {

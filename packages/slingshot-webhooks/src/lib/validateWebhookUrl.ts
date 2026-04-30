@@ -101,27 +101,45 @@ function validateIPv4(ip: string, [a, b]: [number, number, number, number]): voi
   }
   // 10.0.0.0/8 — private
   if (a === 10) {
-    throw new WebhookUrlValidationError(ip, `IP address "${ip}" is in a private range (10.0.0.0/8)`);
+    throw new WebhookUrlValidationError(
+      ip,
+      `IP address "${ip}" is in a private range (10.0.0.0/8)`,
+    );
   }
   // 127.0.0.0/8 — loopback
   if (a === 127) {
-    throw new WebhookUrlValidationError(ip, `IP address "${ip}" is in the loopback range (127.0.0.0/8)`);
+    throw new WebhookUrlValidationError(
+      ip,
+      `IP address "${ip}" is in the loopback range (127.0.0.0/8)`,
+    );
   }
   // 169.254.0.0/16 — link-local (AWS/GCP/Azure metadata 169.254.169.254)
   if (a === 169 && b === 254) {
-    throw new WebhookUrlValidationError(ip, `IP address "${ip}" is in the link-local range (169.254.0.0/16)`);
+    throw new WebhookUrlValidationError(
+      ip,
+      `IP address "${ip}" is in the link-local range (169.254.0.0/16)`,
+    );
   }
   // 172.16.0.0/12 — private
   if (a === 172 && b >= 16 && b <= 31) {
-    throw new WebhookUrlValidationError(ip, `IP address "${ip}" is in a private range (172.16.0.0/12)`);
+    throw new WebhookUrlValidationError(
+      ip,
+      `IP address "${ip}" is in a private range (172.16.0.0/12)`,
+    );
   }
   // 192.168.0.0/16 — private
   if (a === 192 && b === 168) {
-    throw new WebhookUrlValidationError(ip, `IP address "${ip}" is in a private range (192.168.0.0/16)`);
+    throw new WebhookUrlValidationError(
+      ip,
+      `IP address "${ip}" is in a private range (192.168.0.0/16)`,
+    );
   }
   // 100.64.0.0/10 — carrier-grade NAT (RFC 6598)
   if (a === 100 && b >= 64 && b <= 127) {
-    throw new WebhookUrlValidationError(ip, `IP address "${ip}" is in the carrier-grade NAT range (100.64.0.0/10)`);
+    throw new WebhookUrlValidationError(
+      ip,
+      `IP address "${ip}" is in the carrier-grade NAT range (100.64.0.0/10)`,
+    );
   }
   // 224.0.0.0/4 — multicast
   if (a >= 224 && a <= 239) {
@@ -147,12 +165,18 @@ function validateIPv6(ip: string): void {
 
   // fc00::/7 — IPv6 unique-local
   if (/^f[cd]/.test(firstHextet)) {
-    throw new WebhookUrlValidationError(ip, `IP address "${ip}" is in IPv6 unique-local (fc00::/7)`);
+    throw new WebhookUrlValidationError(
+      ip,
+      `IP address "${ip}" is in IPv6 unique-local (fc00::/7)`,
+    );
   }
 
   // fec0::/10 — deprecated IPv6 site-local (RFC 3879)
   if (/^fe[cdef]/.test(firstHextet) && firstHextet.length === 4) {
-    throw new WebhookUrlValidationError(ip, `IP address "${ip}" is in deprecated IPv6 site-local (fec0::/10)`);
+    throw new WebhookUrlValidationError(
+      ip,
+      `IP address "${ip}" is in deprecated IPv6 site-local (fec0::/10)`,
+    );
   }
 
   // ff00::/8 — IPv6 multicast

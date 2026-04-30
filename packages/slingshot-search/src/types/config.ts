@@ -7,8 +7,8 @@
 import type { Context } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '@lastshotlabs/slingshot-core';
-import type { AnySearchProviderConfig } from './provider';
 import { SearchConfigError } from '../errors/searchErrors';
+import type { AnySearchProviderConfig } from './provider';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();

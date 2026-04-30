@@ -1,9 +1,15 @@
-import { DEFAULT_MAX_ENTRIES, evictOldestArray, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import {
+  DEFAULT_MAX_ENTRIES,
+  createConsoleLogger,
+  evictOldestArray,
+} from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import type { WebhookJob, WebhookQueue } from '../types/queue';
 import { WebhookDeliveryError } from '../types/queue';
 
-const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-webhooks:memory-queue' } });
+const logger: Logger = createConsoleLogger({
+  base: { component: 'slingshot-webhooks:memory-queue' },
+});
 
 /**
  * Optional configuration for `createWebhookMemoryQueue`.

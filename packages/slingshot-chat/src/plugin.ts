@@ -306,7 +306,10 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
 
           if (reminderAdapterRef) {
             const remAdapter = reminderAdapterRef;
+            let reminderProcessing = false;
             reminderTimer = setInterval(async () => {
+              if (reminderProcessing) return;
+              reminderProcessing = true;
               try {
                 const claimed = await remAdapter.claimDueReminders({ limit: 100 });
                 for (const reminder of claimed) {
@@ -320,6 +323,8 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
                 }
               } catch {
                 // Silent - scheduler failures should not crash the process.
+              } finally {
+                reminderProcessing = false;
               }
             }, 30_000);
           }
@@ -327,7 +332,10 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
           if (messageAdapterRef && roomAdapterRef) {
             const msgAdapter = messageAdapterRef;
             const rmAdapter = roomAdapterRef;
+            let scheduledProcessing = false;
             scheduledTimer = setInterval(async () => {
+              if (scheduledProcessing) return;
+              scheduledProcessing = true;
               try {
                 const claimed = await msgAdapter.claimDueScheduledMessages({ limit: 100 });
                 for (const msg of claimed) {
@@ -342,10 +350,17 @@ export function createChatPlugin(rawConfig: ChatPluginConfig): SlingshotPlugin {
                       { id: msg.roomId },
                       { lastMessageAt: msg.createdAt, lastMessageId: msg.id },
                     )
-                    .catch(() => {});
+                    .catch((err: unknown) => {
+                      const message = err instanceof Error ? err.message : String(err);
+                      console.warn(
+                        `[slingshot-chat] Failed to update lastMessage for room ${msg.roomId}: ${message}`,
+                      );
+                    });
                 }
               } catch {
                 // Silent - scheduler failures should not crash the process.
+              } finally {
+                scheduledProcessing = false;
               }
             }, 30_000);
           }

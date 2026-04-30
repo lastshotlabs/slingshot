@@ -6,6 +6,7 @@ import type {
   StoreType,
 } from '@lastshotlabs/slingshot-core';
 import {
+  createConsoleLogger,
   createNoopMetricsEmitter,
   deepFreeze,
   defineEvent,
@@ -14,7 +15,6 @@ import {
   publishPluginState,
   resolveRepo,
   validatePluginConfig,
-  createConsoleLogger,
 } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { createEntityPlugin } from '@lastshotlabs/slingshot-entity';

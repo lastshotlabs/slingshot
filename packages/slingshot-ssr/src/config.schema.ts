@@ -202,9 +202,10 @@ export const ssrPluginConfigSchema = z.object({
   /**
    * Secret token for draft mode enable endpoint.
    *
-   * When set, the SSR plugin mounts `GET /api/draft/enable` and
-   * `GET /api/draft/disable`. The enable endpoint validates `?secret=` against
-   * this value. When omitted, the draft mode endpoints are not registered.
+   * When set, the SSR plugin mounts `POST /api/draft/enable` and
+   * `GET /api/draft/disable`. The enable endpoint validates the
+   * `X-Draft-Mode-Secret` header or request body against this value. When
+   * omitted, the draft mode endpoints are not registered.
    */
   draftModeSecret: z
     .string()

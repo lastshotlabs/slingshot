@@ -88,3 +88,12 @@ Lifecycle notes:
 - Prefer explicit queue names on tasks when you need workload isolation by domain, such as quoting, binding, document generation, or downstream carrier synchronization.
 - Keep Redis persistence and retention settings aligned with how long you expect run observability data to remain useful.
 - If you need strong human-in-the-loop signaling or workflow query semantics, move to the Temporal provider instead of layering those expectations onto BullMQ.
+
+## Architecture
+
+`src/adapter.ts` is the single source of truth for adapter behavior — it owns the lazy-start
+state machine, cancellation snapshot lifecycle, run-id caching, graceful drain, scheduling,
+and observability in one module. This is intentional: splitting these concerns would scatter
+the state transitions that must remain atomic (e.g. cancellation snapshot persistence and
+job removal, drain state and poller shutdown). Worker processors live in separate modules
+(`taskWorker.ts`, `workflowWorker.ts`) because they operate on independent lifecycles.

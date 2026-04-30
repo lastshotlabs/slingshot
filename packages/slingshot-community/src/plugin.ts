@@ -41,6 +41,33 @@ import { COMMUNITY_PLUGIN_STATE_KEY } from './types/state';
 
 type AdapterResult = BareEntityAdapter;
 
+/** Runtime check that an adapter exposes an `updateComponents` method. */
+function hasUpdateComponents(adapter: AdapterResult | undefined): adapter is AdapterResult & {
+  updateComponents(match: { id: string }, data: { components?: unknown }): Promise<unknown>;
+} {
+  return (
+    adapter != null && typeof (adapter as Record<string, unknown>).updateComponents === 'function'
+  );
+}
+
+/** Runtime check that an adapter exposes a typed `getById` returning member-like records. */
+function hasGetById(adapter: AdapterResult | undefined): adapter is AdapterResult & {
+  getById(id: string): Promise<{ role?: string; userId?: string; containerId?: string } | null>;
+} {
+  return adapter != null && typeof (adapter as Record<string, unknown>).getById === 'function';
+}
+
+/**
+ * Runtime check that an object behaves like an EventBus with an `on` method.
+ * The entity plugin's `setupPost` bus may not carry full type information, so
+ * this verifies the shape at runtime instead of using `as unknown as`.
+ */
+function hasBusOn(bus: unknown): bus is {
+  on(event: string, handler: (payload: Record<string, unknown>) => void | Promise<void>): void;
+} {
+  return bus != null && typeof (bus as Record<string, unknown>).on === 'function';
+}
+
 function toNotificationText(value: unknown, fallback = ''): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
@@ -80,27 +107,17 @@ function buildInteractionsPeer(
     },
     async updateComponents(kind, id, components) {
       if (kind === 'community:thread') {
-        const adapter = threadRef() as
-          | (AdapterResult & {
-              updateComponents(
-                match: { id: string },
-                data: { components?: unknown },
-              ): Promise<unknown>;
-            })
-          | undefined;
-        await adapter?.updateComponents({ id }, { components });
+        const adapter = threadRef();
+        if (hasUpdateComponents(adapter)) {
+          await adapter.updateComponents({ id }, { components });
+        }
         return;
       }
       if (kind === 'community:reply') {
-        const adapter = replyRef() as
-          | (AdapterResult & {
-              updateComponents(
-                match: { id: string },
-                data: { components?: unknown },
-              ): Promise<unknown>;
-            })
-          | undefined;
-        await adapter?.updateComponents({ id }, { components });
+        const adapter = replyRef();
+        if (hasUpdateComponents(adapter)) {
+          await adapter.updateComponents({ id }, { components });
+        }
       }
     },
   };
@@ -351,17 +368,15 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
       grantManagerRef.handler = createGrantManagerMiddleware({
         permissionsAdapter: permissions.adapter,
         getMemberById: async memberId => {
-          const adapter = memberAdapterRef as
-            | {
-                getById(id: string): Promise<{
-                  role?: string;
-                  userId?: string;
-                  containerId?: string;
-                } | null>;
-              }
-            | undefined;
-          if (!adapter) return null;
-          return await adapter.getById(memberId);
+          if (!hasGetById(memberAdapterRef)) return null;
+          const result = await memberAdapterRef.getById(memberId);
+          if (!result || typeof result !== 'object') return null;
+          const record = result as Record<string, unknown>;
+          return {
+            role: typeof record.role === 'string' ? record.role : undefined,
+            userId: typeof record.userId === 'string' ? record.userId : undefined,
+            containerId: typeof record.containerId === 'string' ? record.containerId : undefined,
+          };
         },
       });
       const memberJoinGuard = createMemberJoinGuardMiddleware();
@@ -370,6 +385,18 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
         scoring: scoringConfig,
         permissionsAdapter: permissions.adapter,
         onAdaptersCaptured: adapters => {
+          // The concrete adapter types from the manifest runtime don't structurally
+          // overlap with BareEntityAdapter, making the intermediate `unknown` cast
+          // necessary. We add runtime assertions to verify the CRUD contract holds.
+          if (typeof adapters.thread?.getById !== 'function') {
+            throw new Error('[slingshot-community] Thread adapter missing getById');
+          }
+          if (typeof adapters.reply?.getById !== 'function') {
+            throw new Error('[slingshot-community] Reply adapter missing getById');
+          }
+          if (typeof adapters.member?.getById !== 'function') {
+            throw new Error('[slingshot-community] Member adapter missing getById');
+          }
           threadAdapterRef = adapters.thread as unknown as AdapterResult;
           replyAdapterRef = adapters.reply as unknown as AdapterResult;
           memberAdapterRef = adapters.member as unknown as AdapterResult;
@@ -432,16 +459,11 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
             builder,
           });
 
-          type DynamicBus = {
-            on(
-              event: string,
-              handler: (payload: Record<string, unknown>) => void | Promise<void>,
-            ): void;
-          };
-          const dynamicBus = postBus as unknown as DynamicBus;
+          if (!hasBusOn(postBus)) return;
 
-          dynamicBus.on('community:reply.created', async payload => {
-            const replyId = (payload.id ?? payload.replyId) as string | undefined;
+          postBus.on('community:reply.created', async payload => {
+            const replyPayload = payload as typeof payload & { replyId?: string };
+            const replyId = replyPayload.id ?? replyPayload.replyId;
             const actorId = payload.authorId as string | undefined;
             const threadId = payload.threadId as string | undefined;
             if (!replyId || !actorId || !threadId || !threadAdapterRef) return;
@@ -470,6 +492,11 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
 
           function buildMentionDeps(): NotifyMentionsDeps | null {
             if (!threadAdapterRef || !replyAdapterRef) return null;
+            // Runtime guard: verify getById is callable before using the adapters.
+            // The double cast is necessary because BareEntityAdapter and
+            // EntityAdapter<Thread/Reply> don't structurally overlap in the TS
+            // type system, even though at runtime they satisfy the same contract.
+            if (!hasGetById(threadAdapterRef) || !hasGetById(replyAdapterRef)) return null;
             return {
               builder,
               threadAdapter: threadAdapterRef as unknown as NotifyMentionsDeps['threadAdapter'],
@@ -477,13 +504,13 @@ export function createCommunityPlugin(rawConfig: CommunityPluginConfig): Communi
             };
           }
 
-          dynamicBus.on('community:thread.created', async payload => {
+          postBus.on('community:thread.created', async payload => {
             const deps = buildMentionDeps();
             if (!deps) return;
             await notifyMentions(payload, deps, 'thread');
           });
 
-          dynamicBus.on('community:reply.created', async payload => {
+          postBus.on('community:reply.created', async payload => {
             const deps = buildMentionDeps();
             if (!deps) return;
             await notifyMentions(payload, deps, 'reply');

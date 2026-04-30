@@ -406,9 +406,7 @@ describe('kafkaConnectors', () => {
 
       // Handler ran despite commit failure
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('failed to commit offset'),
-      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('failed to commit offset'));
 
       // Second message succeeds end-to-end
       await consumer?.eachMessage?.({

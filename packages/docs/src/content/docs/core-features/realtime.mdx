@@ -46,7 +46,7 @@ events.register(
 Browser side:
 
 ```javascript
-const es = new EventSource('/events?token=...');
+const es = new EventSource('/events', { withCredentials: true });
 es.onmessage = event => {
   const data = JSON.parse(event.data);
   console.log('Live update:', data);
@@ -71,7 +71,8 @@ await createServer({
     endpoints: {
       '/ws/chat': {
         upgrade: async req => {
-          const token = new URL(req.url).searchParams.get('token');
+          const auth = req.headers.get('authorization');
+          const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : null;
           if (!token) return new Response('Unauthorized', { status: 401 });
           const userId = verifyToken(token);
           if (!userId) return new Response('Unauthorized', { status: 401 });
@@ -97,7 +98,7 @@ await createServer({
 Browser side:
 
 ```javascript
-const ws = new WebSocket('ws://localhost:3000/ws/chat?token=...');
+const ws = new WebSocket('ws://localhost:3000/ws/chat');
 ws.onmessage = event => console.log('Message:', event.data);
 ws.send(JSON.stringify({ text: 'Hello everyone' }));
 ```

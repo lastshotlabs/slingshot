@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { disableRoutesSchema } from '@lastshotlabs/slingshot-core';
+import { WebhookConfigError } from '../errors/webhookErrors';
 import type { DispatchOptions } from '../lib/dispatcher';
 import type { RateLimiter } from '../lib/rateLimit';
 import type { SecretEncryptor } from '../lib/secretCipher';
@@ -7,7 +8,6 @@ import { WEBHOOK_ROUTES } from '../routes/index';
 import type { WebhookAdapter } from './adapter';
 import type { InboundProvider } from './inbound';
 import type { WebhookQueue } from './queue';
-import { WebhookConfigError } from '../errors/webhookErrors';
 
 function normalizeMountPath(value: string): string {
   const trimmed = value.trim();

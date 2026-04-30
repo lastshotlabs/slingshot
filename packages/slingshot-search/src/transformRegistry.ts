@@ -24,7 +24,6 @@
  * });
  * ```
  */
-
 import { SearchTransformError } from './errors/searchErrors';
 
 /** Transform function signature: takes a raw document, returns the document to index. */

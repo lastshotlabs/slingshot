@@ -1003,15 +1003,35 @@ export function createEntityPlugin(pluginConfig: EntityPluginConfig): EntityPlug
               const { items } = await adapter.list({ filter, limit: 1000 });
 
               if (cascade.batch.action === 'delete') {
-                for (const item of items as Record<string, unknown>[]) {
-                  await adapter.delete(item[config._pkField] as string);
+                const BATCH_SIZE = 50;
+                const typedItems = items as Record<string, unknown>[];
+                for (let i = 0; i < typedItems.length; i += BATCH_SIZE) {
+                  const batch = typedItems.slice(i, i + BATCH_SIZE);
+                  const results = await Promise.allSettled(
+                    batch.map(item => adapter.delete(item[config._pkField] as string)),
+                  );
+                  for (const r of results) {
+                    if (r.status === 'rejected') {
+                      console.error(`[cascade:${config._storageName}] delete failed:`, r.reason);
+                    }
+                  }
                 }
               } else if (cascade.batch.set) {
                 // Resolve `param:foo` references in the set object against the
                 // event payload, mirroring the filter resolution above.
                 const resolvedSet = resolveFilterParams(cascade.batch.set, payload);
-                for (const item of items as Record<string, unknown>[]) {
-                  await adapter.update(item[config._pkField] as string, resolvedSet);
+                const BATCH_SIZE = 50;
+                const typedItems = items as Record<string, unknown>[];
+                for (let i = 0; i < typedItems.length; i += BATCH_SIZE) {
+                  const batch = typedItems.slice(i, i + BATCH_SIZE);
+                  const results = await Promise.allSettled(
+                    batch.map(item => adapter.update(item[config._pkField] as string, resolvedSet)),
+                  );
+                  for (const r of results) {
+                    if (r.status === 'rejected') {
+                      console.error(`[cascade:${config._storageName}] update failed:`, r.reason);
+                    }
+                  }
                 }
               }
             };

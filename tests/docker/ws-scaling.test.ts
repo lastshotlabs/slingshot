@@ -225,7 +225,10 @@ describe('WS scaling — two-instance fanout (docker)', () => {
 
     // Connect authenticated client to instance A and subscribe to the presence-enabled room
     const receivedOnA: string[] = [];
-    const wsA = new WebSocket(`${serverA.wsUrl}${WS_ENDPOINT}?token=${encodeURIComponent(tokenA)}`);
+    const wsA = new WebSocket(`${serverA.wsUrl}${WS_ENDPOINT}`, {
+      // @ts-expect-error Bun accepts header init here; DOM WebSocket typings only expose protocols.
+      headers: { 'x-user-token': tokenA },
+    });
 
     await new Promise<void>((resolve, reject) => {
       wsA.onopen = () => resolve();
@@ -257,7 +260,10 @@ describe('WS scaling — two-instance fanout (docker)', () => {
     // Connect a second authenticated client to instance B and subscribe to the same room.
     // Instance B will emit a presence_join that should fan out through the
     // Redis transport and reach instance A's subscriber.
-    const wsB = new WebSocket(`${serverB.wsUrl}${WS_ENDPOINT}?token=${encodeURIComponent(tokenB)}`);
+    const wsB = new WebSocket(`${serverB.wsUrl}${WS_ENDPOINT}`, {
+      // @ts-expect-error Bun accepts header init here; DOM WebSocket typings only expose protocols.
+      headers: { 'x-user-token': tokenB },
+    });
     await new Promise<void>((resolve, reject) => {
       wsB.onopen = () => resolve();
       wsB.onerror = e => reject(e);

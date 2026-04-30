@@ -12,7 +12,9 @@ import { WEBHOOKS_PLUGIN_STATE_KEY } from '../types/public';
 import type { WebhookJob, WebhookQueue } from '../types/queue';
 import { WebhookDeliveryError } from '../types/queue';
 
-const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-webhooks:bullmq-queue' } });
+const logger: Logger = createConsoleLogger({
+  base: { component: 'slingshot-webhooks:bullmq-queue' },
+});
 
 /**
  * Configuration for `createBullMQWebhookQueue`.
@@ -120,7 +122,9 @@ async function loadBullMQModule(): Promise<{
     const interop = bullmq as unknown as typeof bullmq & { default?: typeof bullmq };
     namespace = interop.default ?? bullmq;
   } catch {
-    throw new WebhookConfigError('BullMQ webhook queue requires bullmq to be installed. Run: bun add bullmq');
+    throw new WebhookConfigError(
+      'BullMQ webhook queue requires bullmq to be installed. Run: bun add bullmq',
+    );
   }
 
   const { Queue, Worker, UnrecoverableError } = namespace;
@@ -144,12 +148,16 @@ async function loadIORedisModule(): Promise<typeof Redis> {
     const ioredis = await import('ioredis');
     namespace = ioredis as { default?: typeof Redis; Redis?: typeof Redis };
   } catch {
-    throw new WebhookConfigError('BullMQ webhook queue requires ioredis to be installed. Run: bun add ioredis');
+    throw new WebhookConfigError(
+      'BullMQ webhook queue requires ioredis to be installed. Run: bun add ioredis',
+    );
   }
 
   const IORedis = namespace.default ?? namespace.Redis;
   if (typeof IORedis !== 'function') {
-    throw new WebhookConfigError('BullMQ webhook queue requires ioredis to export a Redis constructor');
+    throw new WebhookConfigError(
+      'BullMQ webhook queue requires ioredis to export a Redis constructor',
+    );
   }
 
   return IORedis;
@@ -190,7 +198,8 @@ export function createBullMQWebhookQueue(config: BullMQWebhookQueueConfig): Webh
   return {
     name: 'bullmq',
     async enqueue(jobInput: Omit<WebhookJob, 'id' | 'createdAt'>): Promise<string> {
-      if (!queue) throw new WebhookStateError('BullMQ webhook queue not started - call start() first');
+      if (!queue)
+        throw new WebhookStateError('BullMQ webhook queue not started - call start() first');
       const job = await queue.add('deliver', jobInput, {
         attempts: maxAttempts,
         backoff: { type: 'exponential', delay: retryBaseDelayMs },

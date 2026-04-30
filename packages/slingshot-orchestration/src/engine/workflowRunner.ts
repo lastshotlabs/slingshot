@@ -1,5 +1,6 @@
 import { generateRunId } from '../adapter';
 import { OrchestrationError } from '../errors';
+import { logger } from '../internal/logger';
 import type {
   AnyResolvedTask,
   AnyResolvedWorkflow,
@@ -65,11 +66,11 @@ function safeEmit<TName extends keyof OrchestrationEventMap>(
     const result = eventSink.emit(name, payload);
     if (result && typeof (result as Promise<void>).catch === 'function') {
       (result as Promise<void>).catch(err => {
-        console.error(`[orchestration] eventSink.emit error (${label}):`, err);
+        logger.error(`eventSink.emit error (${label})`, { err: String(err) });
       });
     }
   } catch (err) {
-    console.error(`[orchestration] eventSink.emit error (${label}):`, err);
+    logger.error(`eventSink.emit error (${label})`, { err: String(err) });
   }
 }
 
@@ -89,7 +90,7 @@ function reportWorkflowHookError(options: {
     });
     return;
   }
-  console.error(`[orchestration] workflow ${options.hook} hook failed`, options.error);
+  logger.error(`workflow ${options.hook} hook failed`, { err: String(options.error) });
 }
 
 interface HookConfigShape<TFn> {

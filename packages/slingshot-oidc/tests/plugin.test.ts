@@ -1,18 +1,31 @@
-import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { AUTH_PLUGIN_STATE_KEY } from '@lastshotlabs/slingshot-core';
 
 let runtimeConfig: Record<string, unknown> = {};
 const routeCalls: Array<{ base: string; router: unknown }> = [];
 
-// Only mock slingshot-auth to control the auth runtime context.
-// slingshot-core and local modules are used as-is to avoid cross-test contamination.
-mock.module('@lastshotlabs/slingshot-auth', () => ({
-  getAuthRuntimeContext: () => ({ config: runtimeConfig }),
-}));
+function setupContext(): never {
+  return {
+    app: {
+      pluginState: new Map([
+        [
+          AUTH_PLUGIN_STATE_KEY,
+          {
+            adapter: {},
+            config: runtimeConfig,
+          },
+        ],
+      ]),
+      route(base: string, router: unknown) {
+        routeCalls.push({ base, router });
+      },
+    },
+  } as never;
+}
 
 afterEach(() => {
   runtimeConfig = {};
   routeCalls.length = 0;
-  mock.restore();
 });
 
 describe('slingshot-oidc plugin', () => {
@@ -21,15 +34,7 @@ describe('slingshot-oidc plugin', () => {
     const { createOidcPlugin } = await import('../src/plugin');
     const plugin = createOidcPlugin();
 
-    expect(() =>
-      plugin.setupRoutes?.({
-        app: {
-          route(base: string, router: unknown) {
-            routeCalls.push({ base, router });
-          },
-        },
-      } as never),
-    ).toThrow('OIDC is not configured');
+    expect(() => plugin.setupRoutes?.(setupContext())).toThrow('OIDC is not configured');
     expect(routeCalls).toEqual([]);
   });
 
@@ -40,15 +45,7 @@ describe('slingshot-oidc plugin', () => {
     const { createOidcPlugin } = await import('../src/plugin');
     const plugin = createOidcPlugin();
 
-    expect(() =>
-      plugin.setupRoutes?.({
-        app: {
-          route(base: string, router: unknown) {
-            routeCalls.push({ base, router });
-          },
-        },
-      } as never),
-    ).toThrow('signing key');
+    expect(() => plugin.setupRoutes?.(setupContext())).toThrow('signing key');
     expect(routeCalls).toEqual([]);
   });
 
@@ -64,13 +61,7 @@ describe('slingshot-oidc plugin', () => {
     const { createOidcPlugin } = await import('../src/plugin');
     const plugin = createOidcPlugin();
 
-    plugin.setupRoutes?.({
-      app: {
-        route(base: string, router: unknown) {
-          routeCalls.push({ base, router });
-        },
-      },
-    } as never);
+    plugin.setupRoutes?.(setupContext());
 
     expect(routeCalls).toHaveLength(1);
     expect(routeCalls[0]?.base).toBe('/');

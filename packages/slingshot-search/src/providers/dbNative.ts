@@ -8,12 +8,12 @@
  * Suitable for dev/test and small deployments. For production use with large
  * datasets, plug in Meilisearch, Typesense, Elasticsearch, or Algolia.
  */
+import { SearchIndexNotFoundError, SearchPaginationError } from '../errors/searchErrors';
 import type { SearchProvider } from '../types/provider';
 import type { SearchHealthResult, SearchIndexSettings } from '../types/provider';
 import type { SearchQuery, SearchSort, SuggestQuery } from '../types/query';
 import type { FacetStats, SearchHit, SearchResponse, SuggestResponse } from '../types/response';
 import { computeFacets } from './facets';
-import { SearchIndexNotFoundError, SearchPaginationError } from '../errors/searchErrors';
 import { evaluateFilter, getNestedValue, haversineDistance } from './filterEval';
 import { stringifyDocumentId, stringifySearchValue } from './stringify';
 import {

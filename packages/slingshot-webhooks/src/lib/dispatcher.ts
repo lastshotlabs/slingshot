@@ -10,12 +10,12 @@ import {
   sanitizeHeaderValue,
 } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
-
-const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-webhooks' } });
 import { WebhookDeliveryError } from '../types/queue';
 import type { WebhookJob } from '../types/queue';
 import { signPayload } from './signing';
 import { validateWebhookIp, validateWebhookUrl } from './validateWebhookUrl';
+
+const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-webhooks' } });
 
 /**
  * Dispatch options for {@link deliverWebhook}.

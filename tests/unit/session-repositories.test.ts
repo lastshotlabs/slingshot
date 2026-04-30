@@ -334,7 +334,14 @@ describe('Redis session repository', () => {
 
     await createSession(repo, 'user1', 'access-1', sessionId, undefined, config);
     await setRefreshToken(repo, sessionId, oldRefresh, config);
-    await rotateRefreshToken(repo, sessionId, oldRefresh, 'refresh-after-replay', 'access-2', config);
+    await rotateRefreshToken(
+      repo,
+      sessionId,
+      oldRefresh,
+      'refresh-after-replay',
+      'access-2',
+      config,
+    );
 
     const oldLookupTtl = redis.ttlMs(`refreshtoken:${appName}:${hashToken(oldRefresh)}`);
     expect(oldLookupTtl).not.toBeNull();

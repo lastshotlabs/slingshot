@@ -341,7 +341,7 @@ export function createBullMQOrchestrationAdapter(
   const {
     eventSink,
     workflowConcurrency,
-    logger,
+    logger: legacyLogger,
     structuredLogger: rawStructuredLogger,
     ...parsedInput
   } = rawOptions;
@@ -430,8 +430,8 @@ export function createBullMQOrchestrationAdapter(
           evictedRunId: oldest,
           cacheSize: runIdToJobId.size,
         };
-        if (logger) {
-          logger.warn(payload);
+        if (legacyLogger) {
+          legacyLogger.warn(payload);
         } else {
           console.warn('[slingshot-orchestration-bullmq] runId cache eviction', payload);
         }
@@ -1042,8 +1042,8 @@ export function createBullMQOrchestrationAdapter(
         scannedCount: jobs.length,
         maxScan: RUN_ID_SCAN_LIMIT,
       };
-      if (logger) {
-        logger.warn(payload);
+      if (legacyLogger) {
+        legacyLogger.warn(payload);
       } else {
         console.warn('[slingshot-orchestration-bullmq] runId scan miss', payload);
       }

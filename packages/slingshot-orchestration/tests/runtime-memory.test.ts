@@ -187,8 +187,7 @@ describe('memory orchestration runtime', () => {
       const run = await runtime.getRun(handle.id);
       expect(run?.status).toBe('failed');
       expect(consoleError).toHaveBeenCalledWith(
-        '[orchestration] workflow onStart hook failed',
-        expect.objectContaining({ message: 'hook exploded' }),
+        expect.stringContaining('workflow onStart hook failed'),
       );
     } finally {
       consoleError.mockRestore();

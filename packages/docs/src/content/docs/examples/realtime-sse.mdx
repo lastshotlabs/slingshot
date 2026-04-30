@@ -11,7 +11,7 @@ Slingshot's SSE support bridges the event bus to browser clients. Events from pl
 
 1. Your entities and plugins emit events to the internal event bus
 2. SSE endpoints subscribe to the bus and forward client-safe events to connected clients
-3. Clients connect with a JWT and receive a filtered stream
+3. Clients connect with a session cookie or bearer token and receive a filtered stream
 
 Only events whose registry definitions include `exposure: ['client-safe']` reach clients. Endpoint
 filters can narrow that set further, but they cannot widen it beyond the registry-approved event
@@ -121,11 +121,11 @@ Events without `exposure: ['client-safe']` — including `blog:post.deleted`, in
 
 ## Consuming SSE from the browser
 
-The native `EventSource` API doesn't support custom headers. Pass the JWT as a query parameter instead — the `upgrade` handler reads it from the URL:
+The native `EventSource` API doesn't support custom headers. For browser clients, prefer
+cookie-backed sessions so the token stays out of URLs, logs, and browser history:
 
 ```typescript
-// Pass the token as a query parameter
-const es = new EventSource(`/__sse/activity?token=${encodeURIComponent(token)}`);
+const es = new EventSource('/__sse/activity', { withCredentials: true });
 
 es.addEventListener('blog:post.created', event => {
   const post = JSON.parse(event.data);
@@ -143,29 +143,16 @@ es.onerror = () => {
 };
 ```
 
-Update the `upgrade` handler to read the token from the query string:
+Cookie-based sessions work without query parameters because browsers send cookies automatically
+with `EventSource` requests. If your endpoint uses bearer tokens instead of cookies, use a
+fetch-based SSE client that can set the `Authorization` header, or connect from a non-browser
+client:
 
 ```typescript
-export async function sseUpgrade(req: Request) {
-  const token = new URL(req.url).searchParams.get('token');
-  if (!token) return new Response('Unauthorized', { status: 401 });
-  const userId = verifyToken(token);
-  if (!userId) return new Response('Unauthorized', { status: 401 });
-  return {
-    actor: {
-      id: userId,
-      kind: 'user' as const,
-      tenantId: null,
-      sessionId: null,
-      roles: null,
-      claims: {},
-    },
-    requestTenantId: null,
-  };
-}
+const response = await fetch('/__sse/activity', {
+  headers: { authorization: `Bearer ${token}` },
+});
 ```
-
-Cookie-based sessions work without the query param — browsers send cookies automatically with `EventSource` requests.
 
 ## Per-user filtering
 

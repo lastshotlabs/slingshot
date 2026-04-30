@@ -6,7 +6,7 @@ export class WebhookUrlValidationError extends SlingshotError {
   readonly reason: string;
 
   constructor(url: string, reason: string) {
-    super('WEBHOOK_URL_INVALID', `Invalid webhook URL: ${reason}`,);
+    super('WEBHOOK_URL_INVALID', `Invalid webhook URL: ${reason}`);
     this.name = 'WebhookUrlValidationError';
     this.url = url;
     this.reason = reason;

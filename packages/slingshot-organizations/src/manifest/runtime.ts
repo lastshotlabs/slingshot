@@ -643,7 +643,8 @@ export function createOrganizationsManifestRuntime(args: {
           const prior = await inviteIdempotencyAdapter.get(key);
           if (prior?.payload) return prior.payload as Record<string, unknown>;
           const result = await doCreate();
-          const { token: _token, ...cached } = result;
+          const cached = { ...result };
+          delete cached.token;
           await inviteIdempotencyAdapter.set(key, cached, inviteIdempotencyTtlMs);
           return result;
         }

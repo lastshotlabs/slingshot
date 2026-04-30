@@ -210,6 +210,7 @@ export function searchViaProvider(
         const decoded = decodeCursor(cursor);
         offset = typeof decoded.offset === 'number' ? decoded.offset : 0;
       } catch {
+        // Malformed cursor — fall back to offset 0.
         offset = 0;
       }
     }

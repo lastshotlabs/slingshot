@@ -3,9 +3,9 @@
  *
  * Evaluates filter AST nodes against in-memory documents.
  */
-import type { SearchFilter, SearchFilterCondition } from '../types/query';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
+import type { SearchFilter, SearchFilterCondition } from '../types/query';
 
 const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-search:filterEval' } });
 

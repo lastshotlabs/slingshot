@@ -484,8 +484,9 @@ export function createMongoEntityAdapter<Entity, CreateInput, UpdateInput>(
     async clear() {
       try {
         await getModel().deleteMany({});
-      } catch {
-        /* best-effort */
+      } catch (err) {
+        // best-effort clear — log so connection or schema issues are visible
+        console.error(`[entity:${config._storageName}] clear() failed:`, err);
       }
     },
 

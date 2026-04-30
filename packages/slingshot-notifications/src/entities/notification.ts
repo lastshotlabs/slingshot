@@ -1,9 +1,11 @@
-import { defineEntity, field, index, createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import { createConsoleLogger, defineEntity, field, index } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
 import { defineOperations, op } from '@lastshotlabs/slingshot-entity';
 import type { NotificationRecord } from '../types';
 
-const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-notifications:entity' } });
+const logger: Logger = createConsoleLogger({
+  base: { component: 'slingshot-notifications:entity' },
+});
 
 function toDate(value: Date | string | null | undefined): Date | null {
   if (value == null) return null;

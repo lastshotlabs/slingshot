@@ -271,8 +271,9 @@ export interface SsrLoadContext {
    * Use this to fetch unpublished/draft content from your CMS instead of
    * the published version.
    *
-   * Draft mode is enabled via `GET /api/draft/enable?secret=<token>` and
-   * disabled via `GET /api/draft/disable`.
+   * Draft mode is enabled via `POST /api/draft/enable` with the secret in
+   * the `X-Draft-Mode-Secret` header or request body, and disabled via
+   * `GET /api/draft/disable`.
    *
    * @returns A {@link DraftModeStatus} snapshot for this request.
    *
@@ -1185,12 +1186,12 @@ export interface SsrPluginConfig {
   /**
    * Secret token for draft mode enable endpoint.
    *
-   * When set, the SSR plugin mounts `GET /api/draft/enable` and
+   * When set, the SSR plugin mounts `POST /api/draft/enable` and
    * `GET /api/draft/disable` endpoints. The enable endpoint requires the caller
-   * to supply `?secret=<draftModeSecret>` — requests with a mismatched or absent
-   * secret receive 401.
+   * to supply the secret in the `X-Draft-Mode-Secret` header or request body —
+   * requests with a mismatched or absent secret receive 401.
    *
-   * Set this to a long random string and keep it out of client-side code.
+   * Set this to a long random string and keep it out of client-side code and URLs.
    * A good approach is to read it from an environment variable:
    * `draftModeSecret: process.env.DRAFT_MODE_SECRET`.
    *

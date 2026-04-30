@@ -174,10 +174,21 @@ describe('buildDraftRouter()', () => {
     const app = new Hono();
     app.route('/api/draft', buildDraftRouter(SECRET));
 
-    const response = await app.fetch(new Request('http://localhost/api/draft/enable'));
+    const response = await app.fetch(
+      new Request('http://localhost/api/draft/enable', { method: 'POST' }),
+    );
     expect(response.status).toBe(401);
     const body = (await response.json()) as { error: string };
     expect(body.error).toBe('Unauthorized');
+  });
+
+  it('enable rejects GET requests without setting draft mode', async () => {
+    const app = new Hono();
+    app.route('/api/draft', buildDraftRouter(SECRET));
+
+    const response = await app.fetch(new Request('http://localhost/api/draft/enable'));
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('POST');
   });
 
   it('enable returns 401 when secret is wrong', async () => {
@@ -185,9 +196,24 @@ describe('buildDraftRouter()', () => {
     app.route('/api/draft', buildDraftRouter(SECRET));
 
     const response = await app.fetch(
-      new Request('http://localhost/api/draft/enable?secret=wrong-secret'),
+      new Request('http://localhost/api/draft/enable', {
+        method: 'POST',
+        headers: { 'x-draft-mode-secret': 'wrong-secret' },
+      }),
     );
     expect(response.status).toBe(401);
+  });
+
+  it('enable rejects secrets in the URL', async () => {
+    const app = new Hono();
+    app.route('/api/draft', buildDraftRouter(SECRET));
+
+    const response = await app.fetch(
+      new Request(`http://localhost/api/draft/enable?secret=${SECRET}`),
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toBe('Draft mode secret must not be sent in the URL');
   });
 
   it('enable sets draft cookie and redirects to / by default', async () => {
@@ -195,7 +221,10 @@ describe('buildDraftRouter()', () => {
     app.route('/api/draft', buildDraftRouter(SECRET));
 
     const response = await app.fetch(
-      new Request(`http://localhost/api/draft/enable?secret=${SECRET}`),
+      new Request('http://localhost/api/draft/enable', {
+        method: 'POST',
+        headers: { 'x-draft-mode-secret': SECRET },
+      }),
       { redirect: 'manual' },
     );
     expect(response.status).toBe(302);
@@ -209,7 +238,10 @@ describe('buildDraftRouter()', () => {
     app.route('/api/draft', buildDraftRouter(SECRET));
 
     const response = await app.fetch(
-      new Request(`http://localhost/api/draft/enable?secret=${SECRET}&redirect=/posts/draft-post`),
+      new Request('http://localhost/api/draft/enable?redirect=/posts/draft-post', {
+        method: 'POST',
+        headers: { 'x-draft-mode-secret': SECRET },
+      }),
       { redirect: 'manual' },
     );
     expect(response.status).toBe(302);
@@ -221,11 +253,30 @@ describe('buildDraftRouter()', () => {
     app.route('/api/draft', buildDraftRouter(SECRET));
 
     const response = await app.fetch(
-      new Request(`http://localhost/api/draft/enable?secret=${SECRET}&redirect=https://evil.com`),
+      new Request('http://localhost/api/draft/enable?redirect=https://evil.com', {
+        method: 'POST',
+        headers: { 'x-draft-mode-secret': SECRET },
+      }),
       { redirect: 'manual' },
     );
     expect(response.status).toBe(302);
     expect(response.headers.get('location')).toBe('/');
+  });
+
+  it('enable accepts the secret from a JSON request body', async () => {
+    const app = new Hono();
+    app.route('/api/draft', buildDraftRouter(SECRET));
+
+    const response = await app.fetch(
+      new Request('http://localhost/api/draft/enable?redirect=/posts/draft-post', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ secret: SECRET }),
+      }),
+      { redirect: 'manual' },
+    );
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('/posts/draft-post');
   });
 
   it('disable clears the draft cookie and redirects to /', async () => {

@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { createRoute, createRouter, errorResponse } from '@lastshotlabs/slingshot-core';
 import type { SlingshotEventBus } from '@lastshotlabs/slingshot-core';
+import { WebhookInboundConfigError } from '../errors/webhookErrors';
 import type { RateLimiter } from '../lib/rateLimit';
 import { createSlidingWindowRateLimiter } from '../lib/rateLimit';
 import type { InboundProvider } from '../types/inbound';
 import { WEBHOOK_ROUTE_TAGS, WebhookErrorResponseSchema } from './_shared';
-import { WebhookInboundConfigError } from '../errors/webhookErrors';
 
 const InboundResponse = z.object({ received: z.boolean() });
 

@@ -24,6 +24,7 @@ export async function safeReadJsonBody(c: Context): Promise<Record<string, unkno
     const body: unknown = await c.req.json();
     return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : null;
   } catch {
+    // Request body is not valid JSON — treat as absent.
     return null;
   }
 }

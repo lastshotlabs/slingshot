@@ -50,3 +50,55 @@ instead of embedding provider SDK calls throughout the codebase.
 - `src/types/config.ts`
 - `src/providers/*`
 - `src/queues/*`
+
+## Provider Setup Examples
+
+**Resend:**
+
+```ts
+import {
+  createMailPlugin,
+  createRawHtmlRenderer,
+  createResendProvider,
+} from '@lastshotlabs/slingshot-mail';
+
+const mail = createMailPlugin({
+  provider: createResendProvider({ apiKey: process.env.RESEND_API_KEY! }),
+  renderer: createRawHtmlRenderer({
+    templates: {
+      welcome: {
+        subject: 'Welcome',
+        html: '<p>Hello {{name}}</p>',
+      },
+    },
+  }),
+  from: 'app@example.com',
+});
+```
+
+**SendGrid:**
+
+```ts
+import { createSendgridProvider } from '@lastshotlabs/slingshot-mail';
+
+const provider = createSendgridProvider({ apiKey: process.env.SENDGRID_API_KEY! });
+```
+
+**AWS SES:**
+
+```ts
+import { createSesProvider } from '@lastshotlabs/slingshot-mail';
+
+const provider = createSesProvider({ region: 'us-east-1' });
+// Credentials resolved via the AWS SDK credential chain (env, IAM, etc.)
+```
+
+**Postmark:**
+
+```ts
+import { createPostmarkProvider } from '@lastshotlabs/slingshot-mail';
+
+const provider = createPostmarkProvider({ serverToken: process.env.POSTMARK_SERVER_TOKEN! });
+```
+
+All providers implement the same `MailProvider` contract — swap them without changing callers.

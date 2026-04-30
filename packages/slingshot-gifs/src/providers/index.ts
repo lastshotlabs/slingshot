@@ -13,13 +13,13 @@ import { createTenorProvider } from './tenor';
  * @throws {Error} If `config.provider` is not a recognised provider name.
  */
 export function resolveGifProvider(config: GifsPluginConfig): GifProvider {
-  const { apiKey, rating, limit } = config;
+  const { apiKey, rating, limit, fetchTimeoutMs } = config;
 
   switch (config.provider) {
     case 'giphy':
-      return createGiphyProvider({ apiKey, rating, limit });
+      return createGiphyProvider({ apiKey, rating, limit, fetchTimeoutMs });
     case 'tenor':
-      return createTenorProvider({ apiKey, rating, limit });
+      return createTenorProvider({ apiKey, rating, limit, fetchTimeoutMs });
     default:
       throw new Error(
         `[slingshot-gifs] Unknown GIF provider "${config.provider as string}". ` +

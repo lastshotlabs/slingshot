@@ -859,9 +859,7 @@ export function createSearchManager(config: SearchManagerConfig): SearchManager 
         // Find entity state by index name (could be entity storage name or index name)
         const state = [...entityStates.values()].find(s => s.indexName === entry.indexName);
         if (!state) {
-          throw new SearchConfigError(
-            `Unknown index '${entry.indexName}' in federated search`,
-          );
+          throw new SearchConfigError(`Unknown index '${entry.indexName}' in federated search`);
         }
 
         const searchQuery: SearchQuery = {

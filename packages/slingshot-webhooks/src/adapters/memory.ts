@@ -1,8 +1,8 @@
 import type { PaginatedResult } from '@lastshotlabs/slingshot-core';
+import { WebhookDeliveryTransitionError, WebhookRuntimeError } from '../errors/webhookErrors';
 import type { WebhookAdapter } from '../types/adapter';
 import type { DeliveryStatus, WebhookDelivery, WebhookEndpoint } from '../types/models';
 import { WebhookDeliveryVersionConflict } from '../types/models';
-import { WebhookDeliveryTransitionError, WebhookRuntimeError } from '../errors/webhookErrors';
 
 const VALID_TRANSITIONS: Readonly<Record<DeliveryStatus, readonly DeliveryStatus[]>> = {
   pending: ['delivered', 'failed', 'dead'],

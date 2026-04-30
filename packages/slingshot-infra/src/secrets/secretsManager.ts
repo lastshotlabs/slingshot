@@ -144,8 +144,11 @@ export function createSecretsManager(
               existingVars[key] = res.Parameter.Value;
               pulled.push(key);
             }
-          } catch {
-            // Parameter doesn't exist, skip
+          } catch (err: unknown) {
+            console.warn(
+              `[slingshot-infra] SSM parameter '${paramName}' not found during pull — skipping key '${key}'.`,
+              err instanceof Error ? err.message : err,
+            );
           }
         }
       } else if (config.provider === 'file') {
@@ -185,7 +188,11 @@ export function createSecretsManager(
               }),
             );
             found.push(key);
-          } catch {
+          } catch (err: unknown) {
+            console.warn(
+              `[slingshot-infra] SSM parameter '${paramName}' not found during check — marking key '${key}' as missing.`,
+              err instanceof Error ? err.message : err,
+            );
             missing.push(key);
           }
         }
@@ -239,25 +246,61 @@ function resolveEnvFile(appRoot: string, stageName: string): string {
  *
  * @remarks
  * Parsing rules:
- * - Blank lines are skipped.
+ * - Blank lines are skipped (unless inside a multi-line quoted value).
  * - Lines whose first non-whitespace character is `#` are treated as comments
  *   and skipped.
  * - Lines without an `=` character are skipped.
  * - The key is the substring before the first `=`, trimmed of whitespace.
  * - The value is the substring after the first `=`, trimmed of whitespace.
  * - Values wrapped in matching double or single quotes have the quotes stripped.
+ * - Multi-line values: if a value starts with `"` or `'` but the closing quote
+ *   is not on the same line, subsequent lines are accumulated until the matching
+ *   closing quote is found. Newlines within the value are preserved.
  * - Duplicate keys: the last occurrence wins (standard `.env` behaviour).
  */
 function parseEnvFile(content: string): Record<string, string> {
   const vars: Record<string, string> = {};
-  for (const line of content.split('\n')) {
+  const lines = content.split('\n');
+
+  let multiLineKey: string | null = null;
+  let multiLineQuote: string | null = null;
+  let multiLineBuffer: string[] = [];
+
+  for (const line of lines) {
+    // If we're in a multi-line value, accumulate until the closing quote.
+    if (multiLineKey !== null && multiLineQuote !== null) {
+      if (line.endsWith(multiLineQuote)) {
+        // Found the closing quote — finish the multi-line value.
+        multiLineBuffer.push(line.slice(0, -1));
+        vars[multiLineKey] = multiLineBuffer.join('\n');
+        multiLineKey = null;
+        multiLineQuote = null;
+        multiLineBuffer = [];
+      } else {
+        multiLineBuffer.push(line);
+      }
+      continue;
+    }
+
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
     const eqIdx = trimmed.indexOf('=');
     if (eqIdx === -1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
     let value = trimmed.slice(eqIdx + 1).trim();
-    // Strip surrounding quotes
+
+    // Check for multi-line quoted values: starts with quote but doesn't end with it.
+    if (
+      (value.startsWith('"') && !value.endsWith('"')) ||
+      (value.startsWith("'") && !value.endsWith("'"))
+    ) {
+      multiLineKey = key;
+      multiLineQuote = value[0];
+      multiLineBuffer = [value.slice(1)];
+      continue;
+    }
+
+    // Strip surrounding quotes for single-line values.
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
@@ -266,6 +309,7 @@ function parseEnvFile(content: string): Record<string, string> {
     }
     vars[key] = value;
   }
+
   return vars;
 }
 

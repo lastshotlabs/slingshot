@@ -11,6 +11,7 @@
  * Elasticsearch operations are synchronous for most document/search APIs,
  * so `waitForTask` is a no-op.
  */
+import { SearchProviderError } from '../errors/searchErrors';
 import type { SearchProvider } from '../types/provider';
 import type {
   ElasticsearchProviderConfig,
@@ -21,7 +22,6 @@ import type {
 import type { SearchFilter, SearchQuery, SearchSort, SuggestQuery } from '../types/query';
 import type { SearchHit, SearchResponse, SuggestResponse } from '../types/response';
 import { stringifyDocumentId, stringifySearchValue } from './stringify';
-import { SearchProviderError } from '../errors/searchErrors';
 
 // ============================================================================
 // Internal HTTP client

@@ -11,6 +11,9 @@
  * Algolia operations return task IDs for indexing mutations; search is
  * synchronous.
  */
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+import { SearchProviderError } from '../errors/searchErrors';
 import type { SearchProvider } from '../types/provider';
 import type {
   AlgoliaProviderConfig,
@@ -21,9 +24,6 @@ import type {
 import type { SearchFilter, SearchQuery, SuggestQuery } from '../types/query';
 import type { SearchHit, SearchResponse, SuggestResponse } from '../types/response';
 import { stringifyDocumentId, stringifySearchValue } from './stringify';
-import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
-import type { Logger } from '@lastshotlabs/slingshot-core';
-import { SearchProviderError } from '../errors/searchErrors';
 
 const logger: Logger = createConsoleLogger({ base: { provider: 'slingshot-search:algolia' } });
 

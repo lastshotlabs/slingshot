@@ -36,12 +36,12 @@ function buildApp(
   app.use('*', async (c, next) => {
     c.set(
       'actor',
-        Object.freeze({
-          id: userId,
-          kind: actorKind,
-          tenantId: null,
-          sessionId,
-          roles: null,
+      Object.freeze({
+        id: userId,
+        kind: actorKind,
+        tenantId: null,
+        sessionId,
+        roles: null,
         claims: {},
       }),
     );

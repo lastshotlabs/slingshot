@@ -1487,10 +1487,9 @@ export function createKafkaConnectors(
                   try {
                     alreadySeen = await dedupStore.has(messageId);
                   } catch (dedupErr) {
-                    logger.warn(
-                      '[KafkaConnectors] dedupStore.has() threw; treating as miss:',
-                      { err: errToString(dedupErr) },
-                    );
+                    logger.warn('[KafkaConnectors] dedupStore.has() threw; treating as miss:', {
+                      err: errToString(dedupErr),
+                    });
                   }
                   if (alreadySeen) {
                     inboundDeduped += 1;
@@ -1633,10 +1632,9 @@ export function createKafkaConnectors(
                       try {
                         await dedupStore.set(messageId, dedupTtlMs);
                       } catch (dedupErr) {
-                        logger.warn(
-                          '[KafkaConnectors] dedupStore.set() threw; continuing:',
-                          { err: errToString(dedupErr) },
-                        );
+                        logger.warn('[KafkaConnectors] dedupStore.set() threw; continuing:', {
+                          err: errToString(dedupErr),
+                        });
                       }
                     }
                     await trackedCommit(topic, partition, message);

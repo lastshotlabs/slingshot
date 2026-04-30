@@ -8,6 +8,9 @@
  * Implements the full `SearchProvider` interface including lifecycle, index
  * management, document operations, search, suggest, and task monitoring.
  */
+import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
+import type { Logger } from '@lastshotlabs/slingshot-core';
+import { SearchProviderError } from '../errors/searchErrors';
 import type { SearchProvider } from '../types/provider';
 import type {
   MeilisearchProviderConfig,
@@ -20,9 +23,6 @@ import type {
 import type { SearchFilter, SearchQuery, SearchSort, SuggestQuery } from '../types/query';
 import type { SearchHit, SearchResponse, SuggestResponse } from '../types/response';
 import { stringifySearchValue } from './stringify';
-import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
-import type { Logger } from '@lastshotlabs/slingshot-core';
-import { SearchProviderError } from '../errors/searchErrors';
 
 const logger: Logger = createConsoleLogger({ base: { provider: 'slingshot-search:meilisearch' } });
 
@@ -949,9 +949,7 @@ export function createMeilisearchProvider(config: MeilisearchProviderConfig): Se
     async connect(): Promise<void> {
       const { data } = await http.get<{ status: string }>('/health');
       if (data.status !== 'available') {
-        throw new SearchProviderError(
-          `Health check failed: status = ${data.status}`,
-        );
+        throw new SearchProviderError(`Health check failed: status = ${data.status}`);
       }
     },
 
@@ -1219,9 +1217,7 @@ export function createMeilisearchProvider(config: MeilisearchProviderConfig): Se
         await new Promise(resolve => setTimeout(resolve, pollInterval));
       }
 
-      throw new SearchProviderError(
-        `Task ${taskId} timed out after ${timeoutMs}ms`,
-      );
+      throw new SearchProviderError(`Task ${taskId} timed out after ${timeoutMs}ms`);
     },
   };
 

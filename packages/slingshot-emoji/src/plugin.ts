@@ -110,9 +110,15 @@ export function createEmojiPlugin(rawConfig: unknown): SlingshotPlugin {
 
       // Shortcode validation middleware — runs before the entity create route handler.
       // Registered here so it is always ahead of the entity plugin's route registration.
+      //
+      // To avoid double-consuming the request body (which can fail with non-buffered
+      // bodies), we parse JSON once and store it on the context via `c.set('parsedBody', …)`.
+      // The entity handler can then read from `c.get('parsedBody')` instead of calling
+      // `c.req.json()` again.
       app.use(mountPath, async (c, next) => {
         if (c.req.method !== 'POST') return next();
         const rawBody: unknown = await c.req.json().catch(() => null);
+        c.set('parsedBody' as never, rawBody as never);
         const shortcode =
           rawBody != null && typeof rawBody === 'object' && 'shortcode' in rawBody
             ? (rawBody as { shortcode: unknown }).shortcode

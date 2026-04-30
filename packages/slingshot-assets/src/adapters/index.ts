@@ -34,15 +34,17 @@ function parseLocalStorageConfig(
   config: Readonly<Record<string, unknown>> | undefined,
 ): LocalStorageConfig {
   if (!config || typeof config !== 'object') {
-    throw new Error('[slingshot-assets] local storage requires a config object with a string `directory`');
+    throw new Error(
+      '[slingshot-assets] local storage requires a config object with a string `directory`',
+    );
   }
   const parsed = localStorageConfigSchema.safeParse(config);
   if (!parsed.success) {
     throw new Error(`[slingshot-assets] local storage config invalid: ${parsed.error.message}`);
   }
-  const { fs: _fs, ...rest } = parsed.data;
   return {
-    ...rest,
+    directory: parsed.data.directory,
+    ...(parsed.data.baseUrl !== undefined ? { baseUrl: parsed.data.baseUrl } : {}),
     ...(typeof config['fs'] === 'object' && config['fs'] !== null
       ? { fs: config['fs'] as LocalStorageConfig['fs'] }
       : {}),
@@ -53,7 +55,9 @@ function parseS3StorageConfig(
   config: Readonly<Record<string, unknown>> | undefined,
 ): S3StorageConfig {
   if (!config || typeof config !== 'object') {
-    throw new Error('[slingshot-assets] s3 storage requires a config object with a string `bucket`');
+    throw new Error(
+      '[slingshot-assets] s3 storage requires a config object with a string `bucket`',
+    );
   }
   const parsed = s3StorageConfigSchema.safeParse(config);
   if (!parsed.success) {

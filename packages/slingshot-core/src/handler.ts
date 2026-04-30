@@ -2,6 +2,7 @@ import { type ZodTypeAny, z } from 'zod';
 import type { SlingshotContext } from './context/slingshotContext';
 import { ValidationError } from './errors';
 import { ANONYMOUS_ACTOR, type Actor } from './identity';
+import type { Logger } from './observability/logger';
 
 /**
  * Resolve the canonical {@link Actor} from a {@link HandlerMeta} object.
@@ -213,6 +214,8 @@ export interface HandlerConfig<
   guards?: readonly Guard<TInput>[];
   /** After hooks to run sequentially once the handler returns a validated output. */
   after?: readonly AfterHook<TInput, z.output<TOutput>>[];
+  /** Optional structured logger for handler lifecycle errors. */
+  logger?: Pick<Logger, 'error'>;
   /**
    * Core handler function that processes validated input and returns the output.
    *
@@ -267,7 +270,7 @@ export interface SlingshotHandler<
    * @throws {ValidationError} When input or output fails schema validation.
    * @throws {HandlerError} When a guard or the handler signals a structured failure.
    */
-  invoke(raw: z.input<TInput>, opts: InvokeOpts): Promise<z.output<TOutput>>;
+  invoke(raw: unknown, opts: InvokeOpts): Promise<z.output<TOutput>>;
 }
 
 function defaultMeta(meta: Partial<HandlerMeta> | undefined): HandlerMeta {
@@ -377,7 +380,15 @@ export function defineHandler<TInput extends ZodTypeAny, TOutput extends ZodType
         try {
           await hook({ ...args, output });
         } catch (error) {
-          console.error(`[handler:${config.name}] after hook failed:`, error);
+          const message = error instanceof Error ? error.message : String(error);
+          if (config.logger) {
+            config.logger.error('After hook failed', {
+              handler: config.name,
+              error: message,
+            });
+          } else {
+            console.error(`[handler:${config.name}] after hook failed:`, error);
+          }
         }
       }
 

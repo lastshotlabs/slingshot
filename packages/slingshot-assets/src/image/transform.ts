@@ -1,7 +1,7 @@
-import type { ImageFormat, ImageTransformOptions, ImageTransformResult } from './types';
-import { ImageTransformError, ImageTransformTimeoutError } from './types';
 import { createConsoleLogger } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
+import type { ImageFormat, ImageTransformOptions, ImageTransformResult } from './types';
+import { ImageTransformError, ImageTransformTimeoutError } from './types';
 
 const logger: Logger = createConsoleLogger({ base: { component: 'slingshot-assets' } });
 

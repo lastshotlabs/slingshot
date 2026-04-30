@@ -19,6 +19,7 @@ function readSnapshotFile(filePath: string): EntitySnapshot | null {
     const raw = readFileSync(filePath, 'utf-8');
     return JSON.parse(raw) as EntitySnapshot;
   } catch {
+    // File does not exist or contains invalid JSON — treat as no snapshot.
     return null;
   }
 }

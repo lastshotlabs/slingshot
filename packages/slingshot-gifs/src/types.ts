@@ -78,6 +78,8 @@ export interface GifsPluginConfig {
   limit?: number;
   /** Route mount path for the GIF endpoints. Defaults to '/gifs'. */
   mountPath?: string;
+  /** Timeout in milliseconds for upstream provider fetch calls. Defaults to 10000 (10s). */
+  fetchTimeoutMs?: number;
 }
 
 /**
@@ -92,4 +94,5 @@ export const gifsPluginConfigSchema = z.object({
   rating: z.string().optional(),
   limit: z.number().int().positive().optional().default(25),
   mountPath: z.string().startsWith('/').optional().default('/gifs'),
+  fetchTimeoutMs: z.number().int().positive().optional().default(10_000),
 });

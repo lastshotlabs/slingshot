@@ -4,8 +4,9 @@
  * Reads from multiple sources (potentially different entities),
  * merges results using a specified strategy.
  */
+import { toSnakeCase } from '../../lib/naming';
 import type { ResolvedEntityConfig } from '../../types/entity';
-import type { DeriveOpConfig } from '../../types/operations';
+import type { DeriveOpConfig, DeriveSource } from '../../types/operations';
 import type { Backend } from '../filter';
 
 /**
@@ -25,10 +26,12 @@ import type { Backend } from '../filter';
  * - `memory` / `redis`: fully generated — iterates each source's records in JS
  *   using `store.values()` (memory) or `scanAllKeys()` (redis), applies `where`
  *   conditions and optional `traverse` lookups.
- * - `sqlite` / `postgres` / `mongo`: emits stub placeholders with `TODO: query
- *   {source.from}` comments — these require manual completion in the generated
- *   adapter since cross-entity queries depend on runtime adapter composition
- *   that is not available at code-generation time.
+ * - `sqlite`: emits one `SELECT` per source with `?`-placeholder WHERE clauses,
+ *   then merges all source arrays in JS.
+ * - `postgres`: emits one `SELECT` per source with `$N` positional parameters,
+ *   then merges in JS.
+ * - `mongo`: emits one `Model.find()` per source with a filter object, then
+ *   merges in JS. Primary key fields map to `_id`.
  *
  * @param opName - Operation name as declared in the entity config.
  * @param op - The derive operation config (sources array, merge strategy,
@@ -67,9 +70,11 @@ export function generateDerive(
     case 'redis':
       return generateDeriveInProcess(opName, op, entity, paramList, mergeCode);
     case 'sqlite':
+      return generateDeriveSqlite(opName, op, entity, paramList, mergeCode);
     case 'postgres':
+      return generateDerivePostgres(opName, op, entity, paramList, mergeCode);
     case 'mongo':
-      return generateDeriveGeneric(opName, op, entity, backend, paramList, mergeCode);
+      return generateDeriveMongo(opName, op, entity, paramList, mergeCode);
   }
 }
 
@@ -157,21 +162,202 @@ ${sourceBlocks.join('\n')}
     }`;
 }
 
-function generateDeriveGeneric(
+// ---------------------------------------------------------------------------
+// Helpers for SQL/Mongo source query generation
+// ---------------------------------------------------------------------------
+
+function sqliteWhereClause(source: DeriveSource): { where: string; binds: string[] } {
+  const conditions: string[] = [];
+  const binds: string[] = [];
+  for (const [field, value] of Object.entries(source.where)) {
+    const col = toSnakeCase(field);
+    if (value === null) {
+      conditions.push(`${col} IS NULL`);
+    } else if (value.startsWith('param:')) {
+      conditions.push(`${col} = ?`);
+      binds.push(value.slice(6));
+    } else {
+      conditions.push(`${col} = '${value.replace(/'/g, "''")}'`);
+    }
+  }
+  return { where: conditions.join(' AND '), binds };
+}
+
+function postgresWhereClause(
+  source: DeriveSource,
+  startIdx: number,
+): { where: string; binds: string[]; nextIdx: number } {
+  const conditions: string[] = [];
+  const binds: string[] = [];
+  let idx = startIdx;
+  for (const [field, value] of Object.entries(source.where)) {
+    const col = toSnakeCase(field);
+    if (value === null) {
+      conditions.push(`${col} IS NULL`);
+    } else if (value.startsWith('param:')) {
+      idx++;
+      conditions.push(`${col} = $${idx}`);
+      binds.push(value.slice(6));
+    } else {
+      conditions.push(`${col} = '${value.replace(/'/g, "''")}'`);
+    }
+  }
+  return { where: conditions.join(' AND '), binds, nextIdx: idx };
+}
+
+function mongoQueryObject(source: DeriveSource, entity: ResolvedEntityConfig): string {
+  const parts = Object.entries(source.where).map(([field, value]) => {
+    const mongoField = entity.fields[field]?.primary ? '_id' : field;
+    if (value === null) return `${mongoField}: null`;
+    if (value.startsWith('param:')) return `${mongoField}: ${value.slice(6)}`;
+    return `${mongoField}: '${value}'`;
+  });
+  return `{ ${parts.join(', ')} }`;
+}
+
+// ---------------------------------------------------------------------------
+// SQLite derive
+// ---------------------------------------------------------------------------
+
+function generateDeriveSqlite(
   opName: string,
   op: DeriveOpConfig,
   _entity: ResolvedEntityConfig,
-  backend: Backend,
   paramList: string,
   mergeCode: string,
 ): string {
-  // For SQL/Mongo backends, derive ops run multiple queries and merge in JS
-  // This is the general-purpose approach; optimized backends could use JOINs
   const sourceArrays = op.sources.map((_, i) => `source${i}`);
 
+  const sourceBlocks = op.sources.map((source, i) => {
+    const { where, binds } = sqliteWhereClause(source);
+    const selectCol = source.select ? toSnakeCase(source.select) : '*';
+    const queryStr = `SELECT ${selectCol} FROM ${source.from} WHERE ${where}`;
+    const bindList = binds.length > 0 ? binds.join(', ') : '';
+
+    if (source.traverse) {
+      const tCol = toSnakeCase(source.traverse.on);
+      const tSelectCol = toSnakeCase(source.traverse.select);
+      return `      // Source ${i + 1}: ${source.from} -> traverse to ${source.traverse.to}
+      const _srcRows${i} = db.query(\`${queryStr}\`).all(${bindList});
+      const source${i} = [];
+      for (const _sr of _srcRows${i}) {
+        const _fk = _sr['${tCol}'];
+        const _tr = db.query(\`SELECT ${tSelectCol} FROM ${source.traverse.to} WHERE ${toSnakeCase(source.traverse.to.replace(/s$/, '_id'))} = ?\`).get(_fk);
+        if (_tr) source${i}.push(_tr['${tSelectCol}']);
+      }`;
+    }
+
+    if (source.select) {
+      return `      // Source ${i + 1}: ${source.from}
+      const source${i} = db.query(\`${queryStr}\`).all(${bindList}).map(r => r['${toSnakeCase(source.select)}']);`;
+    }
+
+    return `      // Source ${i + 1}: ${source.from}
+      const source${i} = db.query(\`${queryStr}\`).all(${bindList}).map(r => fromRow(r));`;
+  });
+
   return `    async ${opName}(${paramList}) {
-      // Multi-source derive — runs ${op.sources.length} queries and merges results
-      ${op.sources.map((source, i) => `const source${i} = []; // TODO: query ${source.from}`).join('\n      ')}
+      ensureTable();
+${sourceBlocks.join('\n')}
+      const sourceResults = [${sourceArrays.join(', ')}];
+      ${mergeCode}
+      return merged;
+    }`;
+}
+
+// ---------------------------------------------------------------------------
+// Postgres derive
+// ---------------------------------------------------------------------------
+
+function generateDerivePostgres(
+  opName: string,
+  op: DeriveOpConfig,
+  _entity: ResolvedEntityConfig,
+  paramList: string,
+  mergeCode: string,
+): string {
+  const sourceArrays = op.sources.map((_, i) => `source${i}`);
+
+  const sourceBlocks = op.sources.map((source, i) => {
+    const { where, binds } = postgresWhereClause(source, 0);
+    const selectCol = source.select ? toSnakeCase(source.select) : '*';
+    const queryStr = `SELECT ${selectCol} FROM ${source.from} WHERE ${where}`;
+    const bindList = binds.length > 0 ? `[${binds.join(', ')}]` : '[]';
+
+    if (source.traverse) {
+      const tCol = toSnakeCase(source.traverse.on);
+      const tSelectCol = toSnakeCase(source.traverse.select);
+      return `      // Source ${i + 1}: ${source.from} -> traverse to ${source.traverse.to}
+      const _srcResult${i} = await pool.query(\`${queryStr}\`, ${bindList});
+      const source${i} = [];
+      for (const _sr of _srcResult${i}.rows) {
+        const _fk = _sr['${tCol}'];
+        const _tr = await pool.query(\`SELECT ${tSelectCol} FROM ${source.traverse.to} WHERE id = $1\`, [_fk]);
+        if (_tr.rows[0]) source${i}.push(_tr.rows[0]['${tSelectCol}']);
+      }`;
+    }
+
+    if (source.select) {
+      return `      // Source ${i + 1}: ${source.from}
+      const _r${i} = await pool.query(\`${queryStr}\`, ${bindList});
+      const source${i} = _r${i}.rows.map(r => r['${toSnakeCase(source.select)}']);`;
+    }
+
+    return `      // Source ${i + 1}: ${source.from}
+      const _r${i} = await pool.query(\`${queryStr}\`, ${bindList});
+      const source${i} = _r${i}.rows.map(r => fromRow(r));`;
+  });
+
+  return `    async ${opName}(${paramList}) {
+      await ensureTable();
+${sourceBlocks.join('\n')}
+      const sourceResults = [${sourceArrays.join(', ')}];
+      ${mergeCode}
+      return merged;
+    }`;
+}
+
+// ---------------------------------------------------------------------------
+// Mongo derive
+// ---------------------------------------------------------------------------
+
+function generateDeriveMongo(
+  opName: string,
+  op: DeriveOpConfig,
+  entity: ResolvedEntityConfig,
+  paramList: string,
+  mergeCode: string,
+): string {
+  const sourceArrays = op.sources.map((_, i) => `source${i}`);
+
+  const sourceBlocks = op.sources.map((source, i) => {
+    const query = mongoQueryObject(source, entity);
+
+    if (source.traverse) {
+      return `      // Source ${i + 1}: ${source.from} -> traverse to ${source.traverse.to}
+      const _srcDocs${i} = await getModel().find(${query}).lean();
+      const source${i} = [];
+      for (const _sd of _srcDocs${i}) {
+        const _fk = _sd['${source.traverse.on}'];
+        const _td = await getModel().findOne({ _id: _fk }).lean();
+        if (_td) source${i}.push(_td['${source.traverse.select}']);
+      }`;
+    }
+
+    if (source.select) {
+      return `      // Source ${i + 1}: ${source.from}
+      const _docs${i} = await getModel().find(${query}).lean();
+      const source${i} = _docs${i}.map(d => d['${source.select}']);`;
+    }
+
+    return `      // Source ${i + 1}: ${source.from}
+      const _docs${i} = await getModel().find(${query}).lean();
+      const source${i} = _docs${i}.map(d => fromMongoDoc(d));`;
+  });
+
+  return `    async ${opName}(${paramList}) {
+      const Model = getModel();
+${sourceBlocks.join('\n')}
       const sourceResults = [${sourceArrays.join(', ')}];
       ${mergeCode}
       return merged;

@@ -1,5 +1,4 @@
 import { HTTPException } from 'hono/http-exception';
-import { WebhookPaginationError, WebhookRuntimeError } from '../errors/webhookErrors';
 import type {
   EventDefinition,
   EventDefinitionRegistry,
@@ -20,6 +19,7 @@ import {
   createEntityPluginHookRegistry,
 } from '@lastshotlabs/slingshot-entity';
 import type { BareEntityAdapter } from '@lastshotlabs/slingshot-entity';
+import { WebhookPaginationError, WebhookRuntimeError } from '../errors/webhookErrors';
 import { matchGlob } from '../lib/globMatch';
 import type { SecretEncryptor } from '../lib/secretCipher';
 import { createSecretCipher, wrapSecretEncryptor } from '../lib/secretCipher';
@@ -1253,9 +1253,7 @@ export function createWebhooksManifestRuntime(
       ...adapter,
       create: async (input: unknown) => {
         if (!definitionsRef) {
-          throw new WebhookRuntimeError(
-            'event definitions are not ready for endpoint writes',
-          );
+          throw new WebhookRuntimeError('event definitions are not ready for endpoint writes');
         }
         const normalized = normalizeEndpointCreateInput(
           input as Record<string, unknown>,
@@ -1277,9 +1275,7 @@ export function createWebhooksManifestRuntime(
       },
       update: async (id: string, input: unknown, filter?: Record<string, unknown>) => {
         if (!definitionsRef) {
-          throw new WebhookRuntimeError(
-            'event definitions are not ready for endpoint writes',
-          );
+          throw new WebhookRuntimeError('event definitions are not ready for endpoint writes');
         }
         const existing = (await base.getById(id)) as EndpointRecord | null;
         if (!existing) {

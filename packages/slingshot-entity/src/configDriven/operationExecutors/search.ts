@@ -46,6 +46,7 @@ function paginateResults(
       const decoded = decodeCursor(cursor);
       startIdx = typeof decoded.offset === 'number' ? decoded.offset : 0;
     } catch {
+      // Malformed cursor — fall back to the start of the result set.
       startIdx = 0;
     }
   }

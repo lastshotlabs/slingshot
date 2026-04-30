@@ -21,6 +21,7 @@ import {
   validatePluginConfig,
 } from '@lastshotlabs/slingshot-core';
 import type { Logger } from '@lastshotlabs/slingshot-core';
+import { WebhookConfigError, WebhookRuntimeError } from './errors/webhookErrors';
 import type { DispatchOptions } from './lib/dispatcher';
 import { deliverWebhook } from './lib/dispatcher';
 import { wireEventSubscriptions } from './lib/eventWiring';
@@ -28,7 +29,6 @@ import { logWebhookEvent } from './lib/log';
 import type { GovernedWebhookRuntime } from './manifest/runtime';
 import { createWebhookMemoryQueue } from './queues/memory';
 import { createInboundRouter } from './routes/inbound';
-import { WebhookConfigError, WebhookRuntimeError } from './errors/webhookErrors';
 import { WEBHOOK_ROUTES } from './routes/index';
 import type { WebhookAdapter } from './types/adapter';
 import type { WebhookPluginConfig } from './types/config';
@@ -438,7 +438,9 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
                 'allowPlaintextSecrets: true if storage encryption is handled externally.',
             );
           }
-          const pluginLogger: Logger = createConsoleLogger({ base: { plugin: 'slingshot-webhooks' } });
+          const pluginLogger: Logger = createConsoleLogger({
+            base: { plugin: 'slingshot-webhooks' },
+          });
           pluginLogger.warn(
             '[slingshot-webhooks] no secret encryption is configured. Endpoint secrets ' +
               'will be stored as plaintext. Set secretEncryptionKey to a base64 32-byte AES key, ' +

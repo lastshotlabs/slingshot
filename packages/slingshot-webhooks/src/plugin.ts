@@ -37,6 +37,8 @@ import type { InboundProvider } from './types/inbound';
 import { WEBHOOKS_PLUGIN_STATE_KEY } from './types/public';
 import type { WebhookJob, WebhookQueue } from './types/queue';
 import { WebhookDeliveryError } from './types/queue';
+import type { RateLimiter } from './lib/rateLimit';
+import { createSlidingWindowRateLimiter } from './lib/rateLimit';
 
 /**
  * Path-param validator for webhook endpoint IDs.
@@ -431,6 +433,9 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
         runtimeAdapter = config.adapter;
       } else {
         if (!config.secretEncryptionKey && !config.encryptor) {
+          const pluginLogger: Logger = createConsoleLogger({
+            base: { plugin: 'slingshot-webhooks' },
+          });
           if (process.env.NODE_ENV === 'production') {
             if (!config.allowPlaintextSecrets) {
               throw new WebhookConfigError(
@@ -445,9 +450,6 @@ export function createWebhookPlugin(rawConfig: WebhookPluginConfig): SlingshotPl
                 'encryption is handled externally (e.g. encrypted DB, KMS).',
             );
           }
-          const pluginLogger: Logger = createConsoleLogger({
-            base: { plugin: 'slingshot-webhooks' },
-          });
           pluginLogger.warn(
             '[slingshot-webhooks] no secret encryption is configured. Endpoint secrets ' +
               'will be stored as plaintext. Set secretEncryptionKey to a base64 32-byte AES key, ' +
